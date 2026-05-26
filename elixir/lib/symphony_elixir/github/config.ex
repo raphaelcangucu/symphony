@@ -6,6 +6,8 @@ defmodule SymphonyElixir.GitHub.Config do
   @behaviour SymphonyElixir.TrackerConfig
 
   @default_label_prefix "symphony"
+  @default_status_field "Symphony State"
+  @default_admission_label "symphony"
 
   @spec repo() :: String.t() | nil
   def repo do
@@ -40,6 +42,66 @@ defmodule SymphonyElixir.GitHub.Config do
     end
   end
 
+  @spec project_mode() :: String.t()
+  def project_mode do
+    case get_in(project_section(), ["mode"]) do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> "auto"
+          trimmed -> trimmed
+        end
+
+      _ ->
+        "auto"
+    end
+  end
+
+  @spec project_title() :: String.t()
+  def project_title do
+    case get_in(project_section(), ["title"]) do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> "Symphony"
+          trimmed -> trimmed
+        end
+
+      _ ->
+        "Symphony"
+    end
+  end
+
+  @spec project_id() :: String.t() | nil
+  def project_id do
+    trim_string(get_in(project_section(), ["id"]))
+  end
+
+  @spec project_number() :: integer() | nil
+  def project_number do
+    case get_in(project_section(), ["number"]) do
+      n when is_integer(n) ->
+        n
+
+      n when is_binary(n) ->
+        case Integer.parse(String.trim(n)) do
+          {parsed, ""} -> parsed
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @spec status_field() :: String.t()
+  def status_field do
+    trim_string(section_value("status_field")) || @default_status_field
+  end
+
+  @spec admission_label() :: String.t()
+  def admission_label do
+    trim_string(section_value("admission_label")) || @default_admission_label
+  end
+
   @impl SymphonyElixir.TrackerConfig
   def validate! do
     cond do
@@ -57,6 +119,22 @@ defmodule SymphonyElixir.GitHub.Config do
   defp section_value(key) do
     Map.get(SymphonyElixir.Config.section("github"), key)
   end
+
+  defp project_section do
+    case section_value("project") do
+      %{} = map -> map
+      _ -> %{}
+    end
+  end
+
+  defp trim_string(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp trim_string(_value), do: nil
 
   defp normalize_secret(value) when is_binary(value) do
     case String.trim(value) do
