@@ -96,7 +96,7 @@ defmodule SymphonyElixir.GitHub.Config do
         {:error, "GitHub repo missing — set github.repo in WORKFLOW.md"}
 
       true ->
-        :ok
+        SymphonyElixir.GitHub.Bootstrap.ensure_project()
     end
   end
 
