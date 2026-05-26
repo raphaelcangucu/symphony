@@ -2,6 +2,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
   use SymphonyElixir.TestSupport
 
   alias SymphonyElixir.GitHub.Client
+  alias SymphonyElixir.GitHub.ProjectMetadata
   alias SymphonyElixir.Workflow
 
   setup do
@@ -15,167 +16,548 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github",
       tracker_repo: "owner/repo",
-      tracker_label_prefix: "sym"
+      tracker_label_prefix: "sym",
+      tracker_active_states: ["Todo", "In Progress"],
+      tracker_terminal_states: ["Done"]
     )
 
     :ok
   end
 
-  describe "fetch_candidate_issues/1" do
-    test "returns normalized issues from GitHub API" do
-      request_fun = fn %{method: :get, url: url, token: token} ->
-        assert token == "test-gh-token"
-        assert url =~ "/repos/owner/repo/issues"
-        assert url =~ "state=open"
+  describe "fetch_candidate_issues/1 (GraphQL)" do
+    setup do
+      tmp = System.tmp_dir!() |> Path.join("sym-gh-poll-#{:erlang.unique_integer()}")
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
 
-        # Each label is queried separately; return issue only for sym:todo
-        if url =~ "sym:todo" or url =~ "sym%3Atodo" do
-          {:ok,
-           %{
-             status: 200,
-             body: [
-               %{
-                 "number" => 42,
-                 "title" => "Fix the bug",
-                 "body" => "Something is broken",
-                 "html_url" => "https://github.com/owner/repo/issues/42",
-                 "labels" => [
-                   %{"name" => "sym:todo"},
-                   %{"name" => "priority:1"}
-                 ],
-                 "assignee" => %{"login" => "dev1"},
-                 "created_at" => "2025-01-01T00:00:00Z",
-                 "updated_at" => "2025-01-02T00:00:00Z"
-               }
-             ]
-           }}
-        else
-          {:ok, %{status: 200, body: []}}
-        end
-      end
+      ProjectMetadata.write!(tmp, %{
+        "project_id" => "PVT_abc",
+        "project_number" => 1,
+        "project_url" => "https://github.com/owner/repo/projects/1",
+        "status_field_id" => "PVTSSF_x",
+        "status_field_name" => "Symphony State",
+        "state_options" => %{
+          "Todo" => "opt-todo",
+          "In Progress" => "opt-inprog",
+          "Done" => "opt-done"
+        },
+        "bootstrapped_at" => "2026-05-24T00:00:00Z"
+      })
 
-      assert {:ok, [issue]} = Client.fetch_candidate_issues(request_fun: request_fun)
-      assert issue.id == "42"
-      assert issue.identifier == "42"
-      assert issue.title == "Fix the bug"
-      assert issue.description == "Something is broken"
-      assert issue.state == "todo"
-      assert issue.priority == 1
-      assert issue.assignee_id == "dev1"
-      assert issue.url == "https://github.com/owner/repo/issues/42"
+      %{base_dir: tmp}
     end
 
-    test "deduplicates issues across labels" do
-      request_fun = fn %{method: :get} ->
-        {:ok,
-         %{
-           status: 200,
-           body: [
-             %{
-               "number" => 42,
-               "title" => "Dup",
-               "body" => nil,
-               "html_url" => "https://github.com/owner/repo/issues/42",
-               "labels" => [%{"name" => "sym:todo"}],
-               "assignee" => nil,
-               "created_at" => "2025-01-01T00:00:00Z",
-               "updated_at" => "2025-01-01T00:00:00Z"
-             }
-           ]
-         }}
-      end
-
-      assert {:ok, [_single]} = Client.fetch_candidate_issues(request_fun: request_fun)
-    end
-
-    test "returns error on API failure" do
-      request_fun = fn _ ->
-        {:ok, %{status: 401}}
-      end
-
-      assert {:error, {:github_api_status, 401}} =
-               Client.fetch_candidate_issues(request_fun: request_fun)
-    end
-
-    test "returns error when token is missing" do
-      System.delete_env("GITHUB_TOKEN")
-      assert {:error, :missing_github_token} = Client.fetch_candidate_issues()
-    end
-  end
-
-  describe "fetch_issues_by_states/2" do
-    test "returns empty list for empty states" do
-      assert {:ok, []} = Client.fetch_issues_by_states([])
-    end
-
-    test "fetches issues by state labels" do
-      request_fun = fn %{method: :get, url: url} ->
-        assert url =~ "labels="
-        assert url =~ "sym:todo" or url =~ "sym%3Atodo"
-
-        {:ok,
-         %{
-           status: 200,
-           body: [
-             %{
-               "number" => 1,
-               "title" => "Task",
-               "body" => nil,
-               "html_url" => "https://github.com/owner/repo/issues/1",
-               "labels" => [%{"name" => "sym:todo"}],
-               "assignee" => nil,
-               "created_at" => "2025-01-01T00:00:00Z",
-               "updated_at" => "2025-01-01T00:00:00Z"
-             }
-           ]
-         }}
-      end
-
-      assert {:ok, issues} = Client.fetch_issues_by_states(["todo"], request_fun: request_fun)
-      assert length(issues) == 1
-      assert hd(issues).id == "1"
-      assert hd(issues).state == "todo"
-    end
-  end
-
-  describe "fetch_issue_states_by_ids/2" do
-    test "returns empty list for empty ids" do
-      assert {:ok, []} = Client.fetch_issue_states_by_ids([])
-    end
-
-    test "fetches individual issues by number" do
-      request_fun = fn %{method: :get, url: url} ->
-        assert url =~ "/repos/owner/repo/issues/42"
+    test "returns issues whose Symphony State is in active_states", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        assert payload["query"] =~ "SymphonyGitHubPollItems"
+        assert payload["variables"]["projectId"] == "PVT_abc"
+        assert payload["variables"]["first"] == 50
 
         {:ok,
          %{
            status: 200,
            body: %{
-             "number" => 42,
-             "title" => "Issue",
-             "body" => "desc",
-             "html_url" => "https://github.com/owner/repo/issues/42",
-             "labels" => [%{"name" => "sym:in-progress"}],
-             "assignee" => nil,
-             "created_at" => "2025-01-01T00:00:00Z",
-             "updated_at" => "2025-01-01T00:00:00Z"
+             "data" => %{
+               "node" => %{
+                 "items" => %{
+                   "nodes" => [
+                     build_project_item_fixture(%{
+                       item_id: "PVTI_1",
+                       issue_node_id: "I_1",
+                       number: 11,
+                       title: "Active todo",
+                       repo: "owner/repo",
+                       state_name: "Todo"
+                     }),
+                     build_project_item_fixture(%{
+                       item_id: "PVTI_2",
+                       issue_node_id: "I_2",
+                       number: 22,
+                       title: "Done issue",
+                       repo: "owner/repo",
+                       state_name: "Done"
+                     }),
+                     build_project_item_fixture(%{
+                       item_id: "PVTI_3",
+                       issue_node_id: "I_3",
+                       number: 33,
+                       title: "In progress",
+                       repo: "owner/repo",
+                       state_name: "In Progress"
+                     })
+                   ],
+                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, issues} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+
+      assert length(issues) == 2
+
+      [todo_issue, in_progress_issue] = issues
+      assert todo_issue.id == "I_1"
+      assert todo_issue.identifier == "11"
+      assert todo_issue.title == "Active todo"
+      assert todo_issue.state == "Todo"
+      assert todo_issue.url == "https://github.com/owner/repo/issues/11"
+      assert todo_issue.assigned_to_worker == true
+      assert todo_issue.blocked_by == []
+      assert todo_issue.branch_name == nil
+
+      assert in_progress_issue.id == "I_3"
+      assert in_progress_issue.state == "In Progress"
+    end
+
+    test "excludes items from other repos", %{base_dir: base_dir} do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "node" => %{
+                 "items" => %{
+                   "nodes" => [
+                     build_project_item_fixture(%{
+                       item_id: "PVTI_1",
+                       issue_node_id: "I_1",
+                       number: 1,
+                       title: "Other repo",
+                       repo: "other/repo",
+                       state_name: "Todo"
+                     })
+                   ],
+                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, []} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+    end
+
+    test "skips non-Issue content (DraftIssue, PullRequest)", %{base_dir: base_dir} do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "node" => %{
+                 "items" => %{
+                   "nodes" => [
+                     %{
+                       "id" => "PVTI_dr",
+                       "content" => %{"__typename" => "DraftIssue"},
+                       "fieldValues" => %{"nodes" => []}
+                     },
+                     build_project_item_fixture(%{
+                       item_id: "PVTI_pr",
+                       issue_node_id: "PR_1",
+                       number: 5,
+                       title: "Pull",
+                       repo: "owner/repo",
+                       state_name: "Todo",
+                       content_typename: "PullRequest"
+                     })
+                   ],
+                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, []} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+    end
+
+    test "skips items whose Symphony State field value is absent", %{base_dir: base_dir} do
+      request_fun = fn _payload, _headers ->
+        item =
+          build_project_item_fixture(%{
+            item_id: "PVTI_nostate",
+            issue_node_id: "I_nostate",
+            number: 7,
+            title: "Stateless",
+            repo: "owner/repo",
+            state_name: "Todo"
+          })
+
+        item_without_state = Map.put(item, "fieldValues", %{"nodes" => []})
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "node" => %{
+                 "items" => %{
+                   "nodes" => [item_without_state],
+                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, []} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+    end
+
+    test "paginates through multiple pages", %{base_dir: base_dir} do
+      counter = :counters.new(1, [])
+
+      request_fun = fn payload, _headers ->
+        :counters.add(counter, 1, 1)
+        page = :counters.get(counter, 1)
+
+        case page do
+          1 ->
+            assert is_nil(payload["variables"]["after"])
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_p1",
+                           issue_node_id: "I_p1",
+                           number: 1,
+                           title: "Page1",
+                           repo: "owner/repo",
+                           state_name: "Todo"
+                         })
+                       ],
+                       "pageInfo" => %{"hasNextPage" => true, "endCursor" => "cursor-1"}
+                     }
+                   }
+                 }
+               }
+             }}
+
+          2 ->
+            assert payload["variables"]["after"] == "cursor-1"
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_p2",
+                           issue_node_id: "I_p2",
+                           number: 2,
+                           title: "Page2",
+                           repo: "owner/repo",
+                           state_name: "In Progress"
+                         })
+                       ],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, issues} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+
+      assert length(issues) == 2
+      assert Enum.map(issues, & &1.identifier) == ["1", "2"]
+    end
+
+    test "normalizes labels excluding priority and admission_label", %{base_dir: base_dir} do
+      request_fun = fn _payload, _headers ->
+        item =
+          build_project_item_fixture(%{
+            item_id: "PVTI_lbl",
+            issue_node_id: "I_lbl",
+            number: 99,
+            title: "Labeled",
+            repo: "owner/repo",
+            state_name: "Todo",
+            labels: [
+              %{"name" => "Bug"},
+              %{"name" => "priority:2"},
+              %{"name" => "symphony"}
+            ]
+          })
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "node" => %{
+                 "items" => %{
+                   "nodes" => [item],
+                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                 }
+               }
+             }
            }
          }}
       end
 
       assert {:ok, [issue]} =
-               Client.fetch_issue_states_by_ids(["42"], request_fun: request_fun)
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
 
-      assert issue.id == "42"
-      assert issue.state == "in-progress"
+      assert issue.priority == 2
+      assert issue.labels == ["bug"]
     end
 
-    test "skips 404 issues" do
-      request_fun = fn _ ->
-        {:ok, %{status: 404}}
+    test "returns :missing_project_metadata when cache absent" do
+      other_tmp = System.tmp_dir!() |> Path.join("sym-gh-empty-#{:erlang.unique_integer()}")
+      File.mkdir_p!(other_tmp)
+      on_exit(fn -> File.rm_rf!(other_tmp) end)
+
+      assert {:error, :missing_project_metadata} =
+               Client.fetch_candidate_issues(
+                 base_dir: other_tmp,
+                 request_fun: fn _, _ -> flunk("GraphQL should not be invoked when cache missing") end
+               )
+    end
+
+    test "returns error when token missing", %{base_dir: base_dir} do
+      System.delete_env("GITHUB_TOKEN")
+
+      assert {:error, :missing_github_token} =
+               Client.fetch_candidate_issues(
+                 base_dir: base_dir,
+                 request_fun: fn _, _ -> flunk("GraphQL should not be invoked without token") end
+               )
+    end
+  end
+
+  describe "fetch_issues_by_states/2 (GraphQL)" do
+    setup do
+      tmp = System.tmp_dir!() |> Path.join("sym-gh-states-#{:erlang.unique_integer()}")
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      ProjectMetadata.write!(tmp, %{
+        "project_id" => "PVT_abc",
+        "project_number" => 1,
+        "project_url" => "https://github.com/owner/repo/projects/1",
+        "status_field_id" => "PVTSSF_x",
+        "status_field_name" => "Symphony State",
+        "state_options" => %{
+          "Todo" => "opt-todo",
+          "In Progress" => "opt-inprog",
+          "Done" => "opt-done"
+        },
+        "bootstrapped_at" => "2026-05-24T00:00:00Z"
+      })
+
+      %{base_dir: tmp}
+    end
+
+    test "returns empty list for empty states" do
+      assert {:ok, []} = Client.fetch_issues_by_states([])
+    end
+
+    test "filters items by the provided state list", %{base_dir: base_dir} do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "node" => %{
+                 "items" => %{
+                   "nodes" => [
+                     build_project_item_fixture(%{
+                       item_id: "PVTI_done",
+                       issue_node_id: "I_done",
+                       number: 1,
+                       title: "Done",
+                       repo: "owner/repo",
+                       state_name: "Done"
+                     }),
+                     build_project_item_fixture(%{
+                       item_id: "PVTI_todo",
+                       issue_node_id: "I_todo",
+                       number: 2,
+                       title: "Todo",
+                       repo: "owner/repo",
+                       state_name: "Todo"
+                     })
+                   ],
+                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                 }
+               }
+             }
+           }
+         }}
       end
 
-      assert {:ok, []} = Client.fetch_issue_states_by_ids(["999"], request_fun: request_fun)
+      assert {:ok, [issue]} =
+               Client.fetch_issues_by_states(["Done"],
+                 base_dir: base_dir,
+                 request_fun: request_fun
+               )
+
+      assert issue.id == "I_done"
+      assert issue.state == "Done"
+    end
+  end
+
+  describe "fetch_issue_states_by_ids/2 (GraphQL)" do
+    setup do
+      tmp = System.tmp_dir!() |> Path.join("sym-gh-by-ids-#{:erlang.unique_integer()}")
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      ProjectMetadata.write!(tmp, %{
+        "project_id" => "PVT_abc",
+        "project_number" => 1,
+        "project_url" => "https://github.com/owner/repo/projects/1",
+        "status_field_id" => "PVTSSF_x",
+        "status_field_name" => "Symphony State",
+        "state_options" => %{"Todo" => "opt-todo", "Done" => "opt-done"},
+        "bootstrapped_at" => "2026-05-24T00:00:00Z"
+      })
+
+      %{base_dir: tmp}
+    end
+
+    test "returns empty list for empty ids" do
+      assert {:ok, []} = Client.fetch_issue_states_by_ids([])
+    end
+
+    test "extracts Symphony State scoped to project from projectItems", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        assert payload["query"] =~ "SymphonyGitHubIssuesByIds"
+        assert payload["variables"]["ids"] == ["I_42"]
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "nodes" => [
+                 %{
+                   "__typename" => "Issue",
+                   "id" => "I_42",
+                   "number" => 42,
+                   "title" => "Track me",
+                   "body" => "desc",
+                   "url" => "https://github.com/owner/repo/issues/42",
+                   "state" => "OPEN",
+                   "repository" => %{"nameWithOwner" => "owner/repo"},
+                   "assignees" => %{"nodes" => [%{"login" => "dev1"}]},
+                   "labels" => %{"nodes" => []},
+                   "createdAt" => "2026-01-01T00:00:00Z",
+                   "updatedAt" => "2026-01-02T00:00:00Z",
+                   "projectItems" => %{
+                     "nodes" => [
+                       %{
+                         "id" => "PVTI_other",
+                         "project" => %{"id" => "PVT_other"},
+                         "fieldValues" => %{
+                           "nodes" => [
+                             %{
+                               "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                               "name" => "Backlog",
+                               "field" => %{
+                                 "id" => "PVTSSF_other",
+                                 "name" => "Symphony State"
+                               }
+                             }
+                           ]
+                         }
+                       },
+                       %{
+                         "id" => "PVTI_ours",
+                         "project" => %{"id" => "PVT_abc"},
+                         "fieldValues" => %{
+                           "nodes" => [
+                             %{
+                               "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                               "name" => "In Progress",
+                               "field" => %{
+                                 "id" => "PVTSSF_x",
+                                 "name" => "Symphony State"
+                               }
+                             }
+                           ]
+                         }
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+           }
+         }}
+      end
+
+      assert {:ok, [issue]} =
+               Client.fetch_issue_states_by_ids(["I_42"],
+                 base_dir: base_dir,
+                 request_fun: request_fun
+               )
+
+      assert issue.id == "I_42"
+      assert issue.identifier == "42"
+      assert issue.state == "In Progress"
+      assert issue.assignee_id == "dev1"
+    end
+
+    test "skips nodes outside the configured repo", %{base_dir: base_dir} do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "nodes" => [
+                 %{
+                   "__typename" => "Issue",
+                   "id" => "I_other",
+                   "number" => 1,
+                   "title" => "Foreign",
+                   "body" => "",
+                   "url" => "https://github.com/other/repo/issues/1",
+                   "state" => "OPEN",
+                   "repository" => %{"nameWithOwner" => "other/repo"},
+                   "assignees" => %{"nodes" => []},
+                   "labels" => %{"nodes" => []},
+                   "createdAt" => "2026-01-01T00:00:00Z",
+                   "updatedAt" => "2026-01-01T00:00:00Z",
+                   "projectItems" => %{"nodes" => []}
+                 }
+               ]
+             }
+           }
+         }}
+      end
+
+      assert {:ok, []} =
+               Client.fetch_issue_states_by_ids(["I_other"],
+                 base_dir: base_dir,
+                 request_fun: request_fun
+               )
     end
   end
 
@@ -208,7 +590,6 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         :ets.insert(calls, {:count, n + 1})
 
         case {req.method, n} do
-          # GET issue
           {:get, 0} ->
             {:ok,
              %{
@@ -218,17 +599,14 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                }
              }}
 
-          # DELETE old label
           {:delete, 1} ->
             assert req.url =~ "sym:todo" or req.url =~ "sym%3Atodo"
             {:ok, %{status: 200}}
 
-          # POST new label
           {:post, 2} ->
             assert req.body == %{"labels" => ["sym:done"]}
             {:ok, %{status: 200}}
 
-          # PATCH close
           {:patch, 3} ->
             assert req.body == %{"state" => "closed"}
             {:ok, %{status: 200}}
@@ -349,5 +727,43 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       assert {:error, :github_unknown_payload} =
                Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
     end
+  end
+
+  defp build_project_item_fixture(opts) do
+    content_typename = Map.get(opts, :content_typename, "Issue")
+
+    content =
+      if content_typename == "Issue" do
+        %{
+          "__typename" => "Issue",
+          "id" => opts.issue_node_id,
+          "number" => opts.number,
+          "title" => opts.title,
+          "body" => Map.get(opts, :body, ""),
+          "url" => "https://github.com/#{opts.repo}/issues/#{opts.number}",
+          "state" => "OPEN",
+          "repository" => %{"nameWithOwner" => opts.repo},
+          "assignees" => %{"nodes" => Map.get(opts, :assignees, [])},
+          "labels" => %{"nodes" => Map.get(opts, :labels, [])},
+          "createdAt" => "2026-01-01T00:00:00Z",
+          "updatedAt" => "2026-01-02T00:00:00Z"
+        }
+      else
+        %{"__typename" => content_typename}
+      end
+
+    %{
+      "id" => opts.item_id,
+      "content" => content,
+      "fieldValues" => %{
+        "nodes" => [
+          %{
+            "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+            "name" => opts.state_name,
+            "field" => %{"id" => "PVTSSF_x", "name" => "Symphony State"}
+          }
+        ]
+      }
+    }
   end
 end
