@@ -683,6 +683,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  "data" => %{
                    "node" => %{
                      "id" => "I_kw_99",
+                     "state" => "CLOSED",
                      "projectItems" => %{
                        "nodes" => [
                          %{"id" => "PVTI_99", "project" => %{"id" => "PVT_abc"}}
@@ -751,6 +752,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  "data" => %{
                    "node" => %{
                      "id" => "I_kw_77",
+                     "state" => "OPEN",
                      "projectItems" => %{
                        "nodes" => [
                          %{"id" => "PVTI_77", "project" => %{"id" => "PVT_abc"}}
@@ -778,6 +780,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
 
           payload["query"] =~ "SymphonyGitHubCloseIssue" ->
             assert payload["variables"]["issueId"] == "I_kw_77"
+            assert payload["query"] =~ "stateReason: COMPLETED"
 
             {:ok,
              %{
@@ -819,6 +822,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
              "data" => %{
                "node" => %{
                  "id" => "I_kw_42",
+                 "state" => "OPEN",
                  "projectItems" => %{
                    "nodes" => [
                      %{"id" => "PVTI_other", "project" => %{"id" => "PVT_other"}}
@@ -846,6 +850,128 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                Client.update_issue_state("I_kw_99", "Todo",
                  base_dir: empty_dir,
                  request_fun: fn _, _ -> flunk("unreachable") end
+               )
+    end
+
+    test "skips reopenIssue when issue already open and transitioning to active", %{
+      base_dir: base_dir
+    } do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubResolveItem" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "id" => "I_kw_55",
+                     "state" => "OPEN",
+                     "projectItems" => %{
+                       "nodes" => [%{"id" => "PVTI_55", "project" => %{"id" => "PVT_abc"}}]
+                     }
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubSetState" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_55"}}
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHub" ->
+            flunk("must not call close/reopen for already-open active transition: #{payload["query"]}")
+        end
+      end
+
+      assert :ok =
+               Client.update_issue_state("I_kw_55", "In Progress",
+                 base_dir: base_dir,
+                 request_fun: request_fun
+               )
+    end
+
+    test "skips closeIssue when issue already closed and transitioning to terminal", %{
+      base_dir: base_dir
+    } do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubResolveItem" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "id" => "I_kw_55",
+                     "state" => "CLOSED",
+                     "projectItems" => %{
+                       "nodes" => [%{"id" => "PVTI_55", "project" => %{"id" => "PVT_abc"}}]
+                     }
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubSetState" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_55"}}
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHub" ->
+            flunk("must not call close/reopen for already-closed terminal transition")
+        end
+      end
+
+      assert :ok =
+               Client.update_issue_state("I_kw_55", "Done",
+                 base_dir: base_dir,
+                 request_fun: request_fun
+               )
+    end
+
+    test "propagates graphql error from set state", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubResolveItem" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "id" => "I_kw_99",
+                     "state" => "OPEN",
+                     "projectItems" => %{
+                       "nodes" => [%{"id" => "PVTI_99", "project" => %{"id" => "PVT_abc"}}]
+                     }
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubSetState" ->
+            {:ok, %{status: 200, body: %{"errors" => [%{"message" => "field locked"}]}}}
+        end
+      end
+
+      assert {:error, {:github_graphql_errors, [%{"message" => "field locked"}]}} =
+               Client.update_issue_state("I_kw_99", "In Progress",
+                 base_dir: base_dir,
+                 request_fun: request_fun
                )
     end
   end

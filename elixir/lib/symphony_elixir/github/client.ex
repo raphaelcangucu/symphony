@@ -126,6 +126,7 @@ defmodule SymphonyElixir.GitHub.Client do
     node(id: $issueId) {
       ... on Issue {
         id
+        state
         projectItems(first: $first) {
           nodes {
             id
@@ -155,6 +156,8 @@ defmodule SymphonyElixir.GitHub.Client do
   }
   """
 
+  # TODO(github-projects-v2): allow per-state stateReason mapping (NOT_PLANNED, DUPLICATE)
+  # once user-facing API is added.
   @close_issue_mutation """
   mutation SymphonyGitHubCloseIssue($issueId: ID!) {
     closeIssue(input: { issueId: $issueId, stateReason: COMPLETED }) {
@@ -226,13 +229,15 @@ defmodule SymphonyElixir.GitHub.Client do
   def update_issue_state(issue_id, state_name, opts \\ [])
       when is_binary(issue_id) and is_binary(state_name) do
     base_dir = Keyword.get(opts, :base_dir, File.cwd!())
+    client = client_module(opts)
     graphql_opts = forward_graphql_opts(opts)
 
     with {:ok, metadata} <- ProjectMetadata.read(base_dir),
          {:ok, option_id} <- lookup_state_option_id(metadata, state_name),
-         {:ok, item_id} <- resolve_project_item_id(issue_id, metadata["project_id"], graphql_opts),
-         :ok <- set_project_state(metadata, item_id, option_id, graphql_opts) do
-      transition_open_state(issue_id, state_name, graphql_opts)
+         {:ok, item_id, current_open_state} <-
+           resolve_project_item(client, issue_id, metadata["project_id"], graphql_opts),
+         :ok <- set_project_state(client, metadata, item_id, option_id, graphql_opts) do
+      transition_open_state(client, issue_id, state_name, current_open_state, graphql_opts)
     end
   end
 
@@ -591,40 +596,53 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
-  defp resolve_project_item_id(issue_id, project_id, graphql_opts)
-       when is_binary(issue_id) and is_binary(project_id) do
+  defp client_module(opts) do
+    Keyword.get(opts, :client_module, __MODULE__)
+  end
+
+  defp resolve_project_item(client, issue_id, project_id, graphql_opts)
+       when is_atom(client) and is_binary(issue_id) and is_binary(project_id) do
     variables = %{"issueId" => issue_id, "first" => @resolve_item_page_size}
 
-    case graphql(@resolve_item_query, variables, graphql_opts) do
-      {:ok, body} ->
-        case extract_project_item_id(body, project_id) do
-          {:ok, _id} = ok -> ok
-          :not_found -> {:error, {:issue_not_in_project, issue_id}}
+    case client.graphql(@resolve_item_query, variables, graphql_opts) do
+      {:ok,
+       %{
+         "data" => %{
+           "node" => %{
+             "id" => _,
+             "state" => current_state,
+             "projectItems" => %{"nodes" => nodes}
+           }
+         }
+       }}
+      when is_binary(current_state) ->
+        case find_item_id(nodes, project_id) do
+          nil -> {:error, {:issue_not_in_project, issue_id}}
+          item_id -> {:ok, item_id, current_state}
         end
 
-      {:error, _} = error ->
-        error
+      {:ok, %{"data" => %{"node" => nil}}} ->
+        {:error, {:issue_not_found, issue_id}}
+
+      {:ok, body} ->
+        {:error, {:resolve_item_unexpected, body}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
-  defp extract_project_item_id(%{"data" => %{"node" => node}}, project_id) when is_map(node) do
-    items = get_in(node, ["projectItems", "nodes"]) || []
-
-    matching =
-      Enum.find(items, fn
-        %{"project" => %{"id" => id}} -> id == project_id
-        _ -> false
-      end)
-
-    case matching do
-      %{"id" => item_id} when is_binary(item_id) -> {:ok, item_id}
-      _ -> :not_found
-    end
+  defp find_item_id(nodes, project_id) do
+    nodes
+    |> List.wrap()
+    |> Enum.find_value(fn
+      %{"id" => id, "project" => %{"id" => ^project_id}} -> id
+      _ -> nil
+    end)
   end
 
-  defp extract_project_item_id(_body, _project_id), do: :not_found
-
-  defp set_project_state(metadata, item_id, option_id, graphql_opts) do
+  defp set_project_state(client, metadata, item_id, option_id, graphql_opts)
+       when is_atom(client) do
     variables = %{
       "projectId" => metadata["project_id"],
       "itemId" => item_id,
@@ -632,29 +650,35 @@ defmodule SymphonyElixir.GitHub.Client do
       "optionId" => option_id
     }
 
-    case graphql(@set_state_mutation, variables, graphql_opts) do
+    case client.graphql(@set_state_mutation, variables, graphql_opts) do
       {:ok, _body} -> :ok
       {:error, _} = error -> error
     end
   end
 
-  defp transition_open_state(issue_id, state_name, graphql_opts) do
+  defp transition_open_state(client, issue_id, state_name, current_open_state, graphql_opts)
+       when is_atom(client) do
     cond do
-      terminal_state?(state_name) -> close_issue(issue_id, graphql_opts)
-      active_state?(state_name) -> reopen_issue(issue_id, graphql_opts)
-      true -> :ok
+      terminal_state?(state_name) and current_open_state == "OPEN" ->
+        close_issue(client, issue_id, graphql_opts)
+
+      active_state?(state_name) and current_open_state == "CLOSED" ->
+        reopen_issue(client, issue_id, graphql_opts)
+
+      true ->
+        :ok
     end
   end
 
-  defp close_issue(issue_id, graphql_opts) do
-    case graphql(@close_issue_mutation, %{"issueId" => issue_id}, graphql_opts) do
+  defp close_issue(client, issue_id, graphql_opts) when is_atom(client) do
+    case client.graphql(@close_issue_mutation, %{"issueId" => issue_id}, graphql_opts) do
       {:ok, _body} -> :ok
       {:error, _} = error -> error
     end
   end
 
-  defp reopen_issue(issue_id, graphql_opts) do
-    case graphql(@reopen_issue_mutation, %{"issueId" => issue_id}, graphql_opts) do
+  defp reopen_issue(client, issue_id, graphql_opts) when is_atom(client) do
+    case client.graphql(@reopen_issue_mutation, %{"issueId" => issue_id}, graphql_opts) do
       {:ok, _body} -> :ok
       {:error, _} = error -> error
     end
