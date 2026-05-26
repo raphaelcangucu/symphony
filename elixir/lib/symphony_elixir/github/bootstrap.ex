@@ -9,7 +9,7 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.GitHub
-  alias SymphonyElixir.GitHub.{Client, ProjectMetadata}
+  alias SymphonyElixir.GitHub.{Client, ProjectMetadata, RepoSpec}
 
   @owner_id_query """
   query SymphonyGitHubResolveOwner($owner: String!, $name: String!) {
@@ -105,7 +105,7 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
     status_field_name = GitHub.Config.status_field()
     repo = GitHub.Config.repo()
 
-    with {:ok, {owner, name}} <- split_repo(repo),
+    with {:ok, {owner, name}} <- RepoSpec.split(repo),
          {:ok, owner_id} <- resolve_owner_id(client, owner, name),
          {:ok, project} <- create_project(client, owner_id, title),
          :ok <- log_created_project(project),
@@ -263,15 +263,6 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
     :ok
   rescue
     e in [File.Error] -> {:error, {:write_metadata, Exception.message(e)}}
-  end
-
-  defp split_repo(nil), do: {:error, :missing_github_repo}
-
-  defp split_repo(repo) when is_binary(repo) do
-    case String.split(repo, "/", parts: 2) do
-      [owner, name] when owner != "" and name != "" -> {:ok, {owner, name}}
-      _ -> {:error, {:invalid_github_repo, repo}}
-    end
   end
 
   defp client_module(opts) do

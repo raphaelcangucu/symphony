@@ -17,7 +17,7 @@ defmodule SymphonyElixir.GitHub.Client do
 
   require Logger
   alias SymphonyElixir.{Config, GitHub, Issue}
-  alias SymphonyElixir.GitHub.ProjectMetadata
+  alias SymphonyElixir.GitHub.{ProjectMetadata, RepoSpec}
 
   @graphql_endpoint "https://api.github.com/graphql"
   @max_error_body_log_bytes 1_000
@@ -156,8 +156,9 @@ defmodule SymphonyElixir.GitHub.Client do
   }
   """
 
-  # TODO(github-projects-v2): allow per-state stateReason mapping (NOT_PLANNED, DUPLICATE)
-  # once user-facing API is added.
+  # `stateReason: COMPLETED` is fixed for now. Per-state mapping
+  # (NOT_PLANNED, DUPLICATE) can be added by extending Config or
+  # ProjectMetadata if needed.
   @close_issue_mutation """
   mutation SymphonyGitHubCloseIssue($issueId: ID!) {
     closeIssue(input: { issueId: $issueId, stateReason: COMPLETED }) {
@@ -653,7 +654,7 @@ defmodule SymphonyElixir.GitHub.Client do
   defp do_admit_labeled_issues(client, metadata, repo, first_active, graphql_opts) do
     label = GitHub.Config.admission_label()
 
-    with {:ok, {owner, name}} <- split_repo(repo),
+    with {:ok, {owner, name}} <- RepoSpec.split(repo),
          {:ok, candidates} <-
            fetch_admission_candidates(client, owner, name, label, graphql_opts),
          {:ok, missing} <-
@@ -855,15 +856,6 @@ defmodule SymphonyElixir.GitHub.Client do
 
       {:error, reason} ->
         {:error, reason}
-    end
-  end
-
-  defp split_repo(nil), do: {:error, :missing_github_repo}
-
-  defp split_repo(repo) when is_binary(repo) do
-    case String.split(repo, "/", parts: 2) do
-      [owner, name] when owner != "" and name != "" -> {:ok, {owner, name}}
-      _ -> {:error, {:invalid_github_repo, repo}}
     end
   end
 

@@ -16,7 +16,6 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github",
       tracker_repo: "owner/repo",
-      tracker_label_prefix: "sym",
       tracker_active_states: ["Todo", "In Progress"],
       tracker_terminal_states: ["Done"]
     )

@@ -23,8 +23,7 @@ defmodule SymphonyElixir.GitHub.TrackerTest do
 
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "github",
-      tracker_repo: "owner/repo",
-      tracker_label_prefix: "sym"
+      tracker_repo: "owner/repo"
     )
 
     on_exit(fn ->

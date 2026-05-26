@@ -5,7 +5,8 @@ defmodule SymphonyElixir.GitHub.Config do
 
   @behaviour SymphonyElixir.TrackerConfig
 
-  @default_label_prefix "symphony"
+  alias SymphonyElixir.GitHub.Bootstrap
+
   @default_status_field "Symphony State"
   @default_admission_label "symphony"
   @default_project_mode "auto"
@@ -28,20 +29,6 @@ defmodule SymphonyElixir.GitHub.Config do
   @spec token() :: String.t() | nil
   def token do
     normalize_secret(System.get_env("GITHUB_TOKEN"))
-  end
-
-  @spec label_prefix() :: String.t()
-  def label_prefix do
-    case section_value("label_prefix") do
-      value when is_binary(value) ->
-        case String.trim(value) do
-          "" -> @default_label_prefix
-          trimmed -> trimmed
-        end
-
-      _ ->
-        @default_label_prefix
-    end
   end
 
   @spec project_mode() :: String.t()
@@ -96,7 +83,7 @@ defmodule SymphonyElixir.GitHub.Config do
         {:error, "GitHub repo missing — set github.repo in WORKFLOW.md"}
 
       true ->
-        SymphonyElixir.GitHub.Bootstrap.ensure_project()
+        Bootstrap.ensure_project()
     end
   end
 

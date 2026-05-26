@@ -42,8 +42,18 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
      part of the URL. When creating a workflow based on this repo, note that it depends on
      non-standard Linear issue statuses: "Rework", "Human Review", and "Merging". You can
      customize them in Team Settings → Workflow in Linear.
-   - **GitHub**: Set `tracker.repo` to `owner/repo` and optionally `tracker.label_prefix` (default:
-     `symphony`). Issues are tracked via labels like `symphony:todo`, `symphony:in-progress`, etc.
+   - **GitHub**: Set `tracker.repo` to `owner/repo`. Symphony bootstraps a repo-level
+     GitHub Project v2 named `Symphony` (configurable via `github.project.title`) on
+     first run and tracks issue state through a custom single-select field called
+     `Symphony State` whose options come from `tracker.active_states` and
+     `tracker.terminal_states`. Local project metadata is cached in
+     `.symphony/github-project.json` (gitignored).
+
+     Issues are admitted to the board automatically when they carry the
+     `symphony` label (configurable via `github.admission_label`). New labeled
+     issues are added on the next poll and started in the first active state.
+
+     Required `GITHUB_TOKEN` scopes: `repo` (read+write) and `project` (read+write).
 6. Follow the instructions below to install the required runtime dependencies and start the service.
 
 ## Prerequisites
@@ -137,8 +147,13 @@ Minimal example (GitHub + Claude):
 ---
 tracker:
   kind: github
+github:
   repo: your-org/your-repo
-  label_prefix: symphony
+  project:
+    mode: auto   # auto = bootstrap a new project; existing = use github.project.id
+    title: Symphony
+  status_field: Symphony State
+  admission_label: symphony
 workspace:
   root: ~/code/workspaces
 hooks:

@@ -189,17 +189,27 @@ hooks:
     git clone --depth 1 git@github.com:owner/repo.git .
 ```
 
-## GitHub Issues Label Setup
+## GitHub Projects v2 Setup
 
-Symphony manages issue state using labels with the `symphony:` prefix.
-The following labels must be created in the repository beforehand:
+### GitHub Projects v2 board not created
 
-- `symphony:todo` - Waiting to be worked on
-- `symphony:in-progress` - Currently being worked on
-- `symphony:done` - Completed (issue is automatically closed)
-- `symphony:cancelled` - Cancelled (issue is automatically closed)
+Symphony bootstraps a project automatically on startup. If
+`.symphony/github-project.json` is missing or stale:
 
-If you changed the `label_prefix`, create labels with the corresponding prefix.
+1. Check that `GITHUB_TOKEN` has `project` scope (read+write).
+2. Delete `.symphony/github-project.json` and restart Symphony to retry.
+3. If a partial bootstrap left an orphan project on GitHub, the log will
+   print its URL. You can delete it on github.com or reuse it by setting
+   `github.project.mode: existing` and `github.project.id: <node-id>` in
+   `WORKFLOW.md`.
+
+### Issues are not picked up
+
+1. Confirm the issue is OPEN in the repo.
+2. Confirm the issue carries the `symphony` label (or the value configured
+   in `github.admission_label`).
+3. Wait one poll cycle (default 30s) for admission and state initialization.
+4. Check the orchestrator log for `Admission failed for issue ...` warnings.
 
 ## Checking Logs
 
@@ -219,8 +229,10 @@ symphony --logs-root /path/to/logs WORKFLOW.md
 
 1. Verify that `GITHUB_TOKEN` or `LINEAR_API_KEY` is set
 2. Verify that `github.repo` is in `owner/repo` format
-3. Check that the repository has issues with the `symphony:todo` or `symphony:in-progress` label
-4. Confirm the token has access to the target repository
+3. Confirm new issues carry the `symphony` admission label (or the value
+   configured in `github.admission_label`)
+4. Confirm the token has access to the target repository and the `project`
+   scope when using the GitHub tracker
 
 ### The agent keeps retrying in a loop
 

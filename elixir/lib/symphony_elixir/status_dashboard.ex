@@ -7,6 +7,7 @@ defmodule SymphonyElixir.StatusDashboard do
   require Logger
 
   alias SymphonyElixir.{Config, HttpServer, Tracker}
+  alias SymphonyElixir.GitHub.ProjectMetadata
   alias SymphonyElixir.Orchestrator
   alias SymphonyElixirWeb.ObservabilityPubSub
 
@@ -418,7 +419,13 @@ defmodule SymphonyElixir.StatusDashboard do
     end
   end
 
-  defp project_url("github", repo), do: "https://github.com/#{repo}/issues"
+  defp project_url("github", repo) do
+    case ProjectMetadata.read() do
+      {:ok, %{"project_url" => url}} when is_binary(url) -> url
+      _ -> "https://github.com/#{repo}/issues"
+    end
+  end
+
   defp project_url(_, slug), do: "https://linear.app/project/#{slug}/issues"
 
   defp format_project_refresh_line(%{checking?: true}) do

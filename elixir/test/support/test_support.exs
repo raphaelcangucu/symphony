@@ -104,7 +104,6 @@ defmodule SymphonyElixir.TestSupport do
           tracker_active_states: ["Todo", "In Progress"],
           tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"],
           tracker_repo: nil,
-          tracker_label_prefix: nil,
           github_project_mode: nil,
           github_project_title: nil,
           github_project_id: nil,
@@ -214,29 +213,13 @@ defmodule SymphonyElixir.TestSupport do
 
   defp tracker_backend_yaml("github", config) do
     repo = Keyword.get(config, :tracker_repo)
-    label_prefix = Keyword.get(config, :tracker_label_prefix)
-    project_mode = Keyword.get(config, :github_project_mode)
-    project_title = Keyword.get(config, :github_project_title)
-    project_id = Keyword.get(config, :github_project_id)
-    project_number = Keyword.get(config, :github_project_number)
     status_field = Keyword.get(config, :github_status_field)
     admission_label = Keyword.get(config, :github_admission_label)
-
-    project_lines =
-      [
-        project_mode && "    mode: #{yaml_value(project_mode)}",
-        project_title && "    title: #{yaml_value(project_title)}",
-        project_id && "    id: #{yaml_value(project_id)}",
-        project_number && "    number: #{yaml_value(project_number)}"
-      ]
-      |> Enum.reject(&is_nil/1)
-
-    project_section = if project_lines == [], do: nil, else: ["  project:" | project_lines] |> Enum.join("\n")
+    project_section = github_project_yaml(config)
 
     [
       "github:",
       repo && "  repo: #{yaml_value(repo)}",
-      label_prefix && "  label_prefix: #{yaml_value(label_prefix)}",
       status_field && "  status_field: #{yaml_value(status_field)}",
       admission_label && "  admission_label: #{yaml_value(admission_label)}",
       project_section
@@ -248,6 +231,27 @@ defmodule SymphonyElixir.TestSupport do
   defp tracker_backend_yaml("memory", _config), do: "memory: {}"
   defp tracker_backend_yaml(nil, _config), do: nil
   defp tracker_backend_yaml(_kind, _config), do: nil
+
+  defp github_project_yaml(config) do
+    mode = Keyword.get(config, :github_project_mode)
+    title = Keyword.get(config, :github_project_title)
+    id = Keyword.get(config, :github_project_id)
+    number = Keyword.get(config, :github_project_number)
+
+    lines =
+      [
+        mode && "    mode: #{yaml_value(mode)}",
+        title && "    title: #{yaml_value(title)}",
+        id && "    id: #{yaml_value(id)}",
+        number && "    number: #{yaml_value(number)}"
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    case lines do
+      [] -> nil
+      _ -> ["  project:" | lines] |> Enum.join("\n")
+    end
+  end
 
   defp agent_backend_yaml("codex", config) do
     command = Keyword.get(config, :command)

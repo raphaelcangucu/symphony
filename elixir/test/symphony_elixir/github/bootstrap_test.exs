@@ -246,6 +246,20 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
       refute match?({:ok, _}, ProjectMetadata.read(base_dir))
     end
 
+    test "rejects unsupported project mode", %{base_dir: base_dir} do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        github_project_mode: "manual"
+      )
+
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: UnusedMock)
+
+      assert message =~ "Unsupported github.project.mode"
+      assert message =~ "manual"
+    end
+
     test "fails cleanly when existing project_id points to missing node", %{base_dir: base_dir} do
       write_workflow_file!(Workflow.workflow_file_path(),
         tracker_kind: "github",

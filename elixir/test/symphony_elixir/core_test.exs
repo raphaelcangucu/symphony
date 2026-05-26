@@ -800,7 +800,7 @@ defmodule SymphonyElixir.CoreTest do
       description: "Users can't log in",
       state: "todo",
       url: "https://github.com/org/repo/issues/42",
-      labels: ["symphony:todo"]
+      labels: ["enhancement"]
     }
 
     prompt = PromptBuilder.build_prompt(issue)

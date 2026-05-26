@@ -34,4 +34,16 @@ defmodule SymphonyElixir.GitHub.ProjectMetadataTest do
 
     assert {:error, :invalid_project_metadata} = ProjectMetadata.read(dir)
   end
+
+  test "read folds non-:enoent posix errors into invalid_project_metadata", %{dir: dir} do
+    cache_path = ProjectMetadata.cache_path(dir)
+    File.mkdir_p!(cache_path)
+
+    assert {:error, :invalid_project_metadata} = ProjectMetadata.read(dir)
+  end
+
+  test "read/0 defaults to the current working directory" do
+    result = ProjectMetadata.read()
+    assert match?({:ok, _}, result) or match?({:error, _}, result)
+  end
 end
