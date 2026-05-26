@@ -174,9 +174,65 @@ defmodule SymphonyElixir.GitHub.Client do
   }
   """
 
+  @admission_issues_query """
+  query SymphonyGitHubAdmissionIssues(
+    $owner: String!,
+    $name: String!,
+    $label: String!,
+    $first: Int!,
+    $after: String
+  ) {
+    repository(owner: $owner, name: $name) {
+      issues(states: [OPEN], labels: [$label], first: $first, after: $after) {
+        nodes {
+          id
+          number
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+  """
+
+  @project_item_content_ids_query """
+  query SymphonyGitHubProjectContentIds(
+    $projectId: ID!,
+    $first: Int!,
+    $after: String
+  ) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        items(first: $first, after: $after) {
+          nodes {
+            id
+            content {
+              ... on Issue { id }
+              ... on PullRequest { id }
+              ... on DraftIssue { id }
+            }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+  """
+
+  @add_item_mutation """
+  mutation SymphonyGitHubAddItem($projectId: ID!, $contentId: ID!) {
+    addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+      item { id }
+    }
+  }
+  """
+
   @spec fetch_candidate_issues(keyword()) :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_candidate_issues(opts \\ []) when is_list(opts) do
-    with {:ok, metadata, repo} <- prepare_project_context(opts) do
+    client = client_module(opts)
+    graphql_opts = forward_graphql_opts(opts)
+
+    with {:ok, metadata, repo} <- prepare_project_context(opts),
+         :ok <- admit_labeled_issues(client, metadata, repo, graphql_opts) do
       do_poll_project_items(metadata, repo, Config.active_states(), opts)
     end
   end
@@ -191,7 +247,11 @@ defmodule SymphonyElixir.GitHub.Client do
         {:ok, []}
 
       _ ->
-        with {:ok, metadata, repo} <- prepare_project_context(opts) do
+        client = client_module(opts)
+        graphql_opts = forward_graphql_opts(opts)
+
+        with {:ok, metadata, repo} <- prepare_project_context(opts),
+             :ok <- admit_labeled_issues(client, metadata, repo, graphql_opts) do
           do_poll_project_items(metadata, repo, normalized, opts)
         end
     end
@@ -576,6 +636,218 @@ defmodule SymphonyElixir.GitHub.Client do
 
   defp forward_graphql_opts(opts) do
     Keyword.take(opts, [:request_fun, :operation_name])
+  end
+
+  # -- Admission helpers ------------------------------------------------------
+
+  defp admit_labeled_issues(client, metadata, repo, graphql_opts) do
+    case Config.active_states() do
+      [first_active | _] ->
+        do_admit_labeled_issues(client, metadata, repo, first_active, graphql_opts)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp do_admit_labeled_issues(client, metadata, repo, first_active, graphql_opts) do
+    label = GitHub.Config.admission_label()
+
+    with {:ok, {owner, name}} <- split_repo(repo),
+         {:ok, candidates} <-
+           fetch_admission_candidates(client, owner, name, label, graphql_opts),
+         {:ok, missing} <-
+           resolve_missing_admissions(client, metadata, candidates, graphql_opts),
+         :ok <- admit_each(client, metadata, missing, first_active, graphql_opts) do
+      :ok
+    else
+      {:error, :missing_github_token} = error -> error
+      {:error, reason} -> {:error, {:admission_failed, reason}}
+    end
+  end
+
+  defp resolve_missing_admissions(_client, _metadata, [], _graphql_opts), do: {:ok, []}
+
+  defp resolve_missing_admissions(client, metadata, candidates, graphql_opts) do
+    case fetch_project_content_ids(client, metadata["project_id"], graphql_opts) do
+      {:ok, existing} -> {:ok, candidates -- existing}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp fetch_admission_candidates(client, owner, name, label, graphql_opts) do
+    fetch_admission_candidates_page(client, owner, name, label, nil, [], graphql_opts)
+  end
+
+  defp fetch_admission_candidates_page(client, owner, name, label, after_cursor, acc, graphql_opts) do
+    variables = %{
+      "owner" => owner,
+      "name" => name,
+      "label" => label,
+      "first" => @project_item_page_size,
+      "after" => after_cursor
+    }
+
+    case client.graphql(@admission_issues_query, variables, graphql_opts) do
+      {:ok, body} ->
+        case decode_admission_page(body) do
+          {:ok, ids, %{has_next_page: true, end_cursor: cursor}}
+          when is_binary(cursor) and cursor != "" ->
+            fetch_admission_candidates_page(
+              client,
+              owner,
+              name,
+              label,
+              cursor,
+              prepend_nodes(ids, acc),
+              graphql_opts
+            )
+
+          {:ok, ids, %{has_next_page: false}} ->
+            {:ok, finalize_nodes(prepend_nodes(ids, acc))}
+
+          {:ok, _ids, %{has_next_page: true}} ->
+            {:error, :github_missing_end_cursor}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp decode_admission_page(%{
+         "data" => %{
+           "repository" => %{
+             "issues" => %{
+               "nodes" => nodes,
+               "pageInfo" => %{"hasNextPage" => has_next, "endCursor" => cursor}
+             }
+           }
+         }
+       })
+       when is_list(nodes) do
+    ids =
+      Enum.flat_map(nodes, fn
+        %{"id" => id} when is_binary(id) -> [id]
+        _ -> []
+      end)
+
+    {:ok, ids, %{has_next_page: has_next == true, end_cursor: cursor}}
+  end
+
+  defp decode_admission_page(%{"data" => %{"repository" => nil}}),
+    do: {:error, :github_repo_not_found}
+
+  defp decode_admission_page(_body), do: {:error, :github_unknown_payload}
+
+  defp fetch_project_content_ids(client, project_id, graphql_opts) do
+    fetch_project_content_ids_page(client, project_id, nil, [], graphql_opts)
+  end
+
+  defp fetch_project_content_ids_page(client, project_id, after_cursor, acc, graphql_opts) do
+    variables = %{
+      "projectId" => project_id,
+      "first" => @project_item_page_size,
+      "after" => after_cursor
+    }
+
+    case client.graphql(@project_item_content_ids_query, variables, graphql_opts) do
+      {:ok, body} ->
+        case decode_project_content_page(body) do
+          {:ok, ids, %{has_next_page: true, end_cursor: cursor}}
+          when is_binary(cursor) and cursor != "" ->
+            fetch_project_content_ids_page(
+              client,
+              project_id,
+              cursor,
+              prepend_nodes(ids, acc),
+              graphql_opts
+            )
+
+          {:ok, ids, %{has_next_page: false}} ->
+            {:ok, finalize_nodes(prepend_nodes(ids, acc))}
+
+          {:ok, _ids, %{has_next_page: true}} ->
+            {:error, :github_missing_end_cursor}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp decode_project_content_page(%{
+         "data" => %{
+           "node" => %{
+             "items" => %{
+               "nodes" => nodes,
+               "pageInfo" => %{"hasNextPage" => has_next, "endCursor" => cursor}
+             }
+           }
+         }
+       })
+       when is_list(nodes) do
+    ids =
+      Enum.flat_map(nodes, fn
+        %{"content" => %{"id" => id}} when is_binary(id) -> [id]
+        _ -> []
+      end)
+
+    {:ok, ids, %{has_next_page: has_next == true, end_cursor: cursor}}
+  end
+
+  defp decode_project_content_page(%{"data" => %{"node" => nil}}),
+    do: {:error, :github_project_not_found}
+
+  defp decode_project_content_page(_body), do: {:error, :github_unknown_payload}
+
+  defp admit_each(_client, _metadata, [], _first_active, _graphql_opts), do: :ok
+
+  defp admit_each(client, metadata, [issue_id | rest], first_active, graphql_opts) do
+    case admit_one(client, metadata, issue_id, first_active, graphql_opts) do
+      :ok -> admit_each(client, metadata, rest, first_active, graphql_opts)
+      {:error, _} = error -> error
+    end
+  end
+
+  defp admit_one(client, metadata, issue_id, first_active, graphql_opts) do
+    with {:ok, item_id} <-
+           add_project_item(client, metadata["project_id"], issue_id, graphql_opts),
+         {:ok, option_id} <- lookup_state_option_id(metadata, first_active) do
+      set_project_state(client, metadata, item_id, option_id, graphql_opts)
+    end
+  end
+
+  defp add_project_item(client, project_id, content_id, graphql_opts)
+       when is_atom(client) and is_binary(project_id) and is_binary(content_id) do
+    variables = %{"projectId" => project_id, "contentId" => content_id}
+
+    case client.graphql(@add_item_mutation, variables, graphql_opts) do
+      {:ok, %{"data" => %{"addProjectV2ItemById" => %{"item" => %{"id" => item_id}}}}}
+      when is_binary(item_id) ->
+        {:ok, item_id}
+
+      {:ok, body} ->
+        {:error, {:add_item_unexpected, body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp split_repo(nil), do: {:error, :missing_github_repo}
+
+  defp split_repo(repo) when is_binary(repo) do
+    case String.split(repo, "/", parts: 2) do
+      [owner, name] when owner != "" and name != "" -> {:ok, {owner, name}}
+      _ -> {:error, {:invalid_github_repo, repo}}
+    end
   end
 
   # -- GraphQL write helpers --------------------------------------------------

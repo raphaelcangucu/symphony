@@ -49,49 +49,54 @@ defmodule SymphonyElixir.GitHub.ClientTest do
 
     test "returns issues whose Symphony State is in active_states", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
-        assert payload["query"] =~ "SymphonyGitHubPollItems"
-        assert payload["variables"]["projectId"] == "PVT_abc"
-        assert payload["variables"]["first"] == 50
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
 
-        {:ok,
-         %{
-           status: 200,
-           body: %{
-             "data" => %{
-               "node" => %{
-                 "items" => %{
-                   "nodes" => [
-                     build_project_item_fixture(%{
-                       item_id: "PVTI_1",
-                       issue_node_id: "I_1",
-                       number: 11,
-                       title: "Active todo",
-                       repo: "owner/repo",
-                       state_name: "Todo"
-                     }),
-                     build_project_item_fixture(%{
-                       item_id: "PVTI_2",
-                       issue_node_id: "I_2",
-                       number: 22,
-                       title: "Done issue",
-                       repo: "owner/repo",
-                       state_name: "Done"
-                     }),
-                     build_project_item_fixture(%{
-                       item_id: "PVTI_3",
-                       issue_node_id: "I_3",
-                       number: 33,
-                       title: "In progress",
-                       repo: "owner/repo",
-                       state_name: "In Progress"
-                     })
-                   ],
-                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            assert payload["variables"]["projectId"] == "PVT_abc"
+            assert payload["variables"]["first"] == 50
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_1",
+                           issue_node_id: "I_1",
+                           number: 11,
+                           title: "Active todo",
+                           repo: "owner/repo",
+                           state_name: "Todo"
+                         }),
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_2",
+                           issue_node_id: "I_2",
+                           number: 22,
+                           title: "Done issue",
+                           repo: "owner/repo",
+                           state_name: "Done"
+                         }),
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_3",
+                           issue_node_id: "I_3",
+                           number: 33,
+                           title: "In progress",
+                           repo: "owner/repo",
+                           state_name: "In Progress"
+                         })
+                       ],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
                  }
                }
-             }
-           }
-         }}
+             }}
+        end
       end
 
       assert {:ok, issues} =
@@ -114,118 +119,12 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     end
 
     test "excludes items from other repos", %{base_dir: base_dir} do
-      request_fun = fn _payload, _headers ->
-        {:ok,
-         %{
-           status: 200,
-           body: %{
-             "data" => %{
-               "node" => %{
-                 "items" => %{
-                   "nodes" => [
-                     build_project_item_fixture(%{
-                       item_id: "PVTI_1",
-                       issue_node_id: "I_1",
-                       number: 1,
-                       title: "Other repo",
-                       repo: "other/repo",
-                       state_name: "Todo"
-                     })
-                   ],
-                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
-                 }
-               }
-             }
-           }
-         }}
-      end
-
-      assert {:ok, []} =
-               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
-    end
-
-    test "skips non-Issue content (DraftIssue, PullRequest)", %{base_dir: base_dir} do
-      request_fun = fn _payload, _headers ->
-        {:ok,
-         %{
-           status: 200,
-           body: %{
-             "data" => %{
-               "node" => %{
-                 "items" => %{
-                   "nodes" => [
-                     %{
-                       "id" => "PVTI_dr",
-                       "content" => %{"__typename" => "DraftIssue"},
-                       "fieldValues" => %{"nodes" => []}
-                     },
-                     build_project_item_fixture(%{
-                       item_id: "PVTI_pr",
-                       issue_node_id: "PR_1",
-                       number: 5,
-                       title: "Pull",
-                       repo: "owner/repo",
-                       state_name: "Todo",
-                       content_typename: "PullRequest"
-                     })
-                   ],
-                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
-                 }
-               }
-             }
-           }
-         }}
-      end
-
-      assert {:ok, []} =
-               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
-    end
-
-    test "skips items whose Symphony State field value is absent", %{base_dir: base_dir} do
-      request_fun = fn _payload, _headers ->
-        item =
-          build_project_item_fixture(%{
-            item_id: "PVTI_nostate",
-            issue_node_id: "I_nostate",
-            number: 7,
-            title: "Stateless",
-            repo: "owner/repo",
-            state_name: "Todo"
-          })
-
-        item_without_state = Map.put(item, "fieldValues", %{"nodes" => []})
-
-        {:ok,
-         %{
-           status: 200,
-           body: %{
-             "data" => %{
-               "node" => %{
-                 "items" => %{
-                   "nodes" => [item_without_state],
-                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
-                 }
-               }
-             }
-           }
-         }}
-      end
-
-      assert {:ok, []} =
-               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
-    end
-
-    test "paginates through multiple pages", %{base_dir: base_dir} do
-      counter = :counters.new(1, [])
-
       request_fun = fn payload, _headers ->
-        :counters.add(counter, 1, 1)
-        page = :counters.get(counter, 1)
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
 
-        case page do
-          1 ->
-            assert is_nil(payload["variables"]["after"])
-
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
             {:ok,
              %{
                status: 200,
@@ -235,39 +134,12 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                      "items" => %{
                        "nodes" => [
                          build_project_item_fixture(%{
-                           item_id: "PVTI_p1",
-                           issue_node_id: "I_p1",
+                           item_id: "PVTI_1",
+                           issue_node_id: "I_1",
                            number: 1,
-                           title: "Page1",
-                           repo: "owner/repo",
+                           title: "Other repo",
+                           repo: "other/repo",
                            state_name: "Todo"
-                         })
-                       ],
-                       "pageInfo" => %{"hasNextPage" => true, "endCursor" => "cursor-1"}
-                     }
-                   }
-                 }
-               }
-             }}
-
-          2 ->
-            assert payload["variables"]["after"] == "cursor-1"
-
-            {:ok,
-             %{
-               status: 200,
-               body: %{
-                 "data" => %{
-                   "node" => %{
-                     "items" => %{
-                       "nodes" => [
-                         build_project_item_fixture(%{
-                           item_id: "PVTI_p2",
-                           issue_node_id: "I_p2",
-                           number: 2,
-                           title: "Page2",
-                           repo: "owner/repo",
-                           state_name: "In Progress"
                          })
                        ],
                        "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
@@ -279,6 +151,163 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         end
       end
 
+      assert {:ok, []} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+    end
+
+    test "skips non-Issue content (DraftIssue, PullRequest)", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [
+                         %{
+                           "id" => "PVTI_dr",
+                           "content" => %{"__typename" => "DraftIssue"},
+                           "fieldValues" => %{"nodes" => []}
+                         },
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_pr",
+                           issue_node_id: "PR_1",
+                           number: 5,
+                           title: "Pull",
+                           repo: "owner/repo",
+                           state_name: "Todo",
+                           content_typename: "PullRequest"
+                         })
+                       ],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, []} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+    end
+
+    test "skips items whose Symphony State field value is absent", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            item =
+              build_project_item_fixture(%{
+                item_id: "PVTI_nostate",
+                issue_node_id: "I_nostate",
+                number: 7,
+                title: "Stateless",
+                repo: "owner/repo",
+                state_name: "Todo"
+              })
+
+            item_without_state = Map.put(item, "fieldValues", %{"nodes" => []})
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [item_without_state],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, []} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+    end
+
+    test "paginates through multiple pages", %{base_dir: base_dir} do
+      counter = :counters.new(1, [])
+
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            :counters.add(counter, 1, 1)
+            page = :counters.get(counter, 1)
+
+            case page do
+              1 ->
+                assert is_nil(payload["variables"]["after"])
+
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{
+                     "data" => %{
+                       "node" => %{
+                         "items" => %{
+                           "nodes" => [
+                             build_project_item_fixture(%{
+                               item_id: "PVTI_p1",
+                               issue_node_id: "I_p1",
+                               number: 1,
+                               title: "Page1",
+                               repo: "owner/repo",
+                               state_name: "Todo"
+                             })
+                           ],
+                           "pageInfo" => %{"hasNextPage" => true, "endCursor" => "cursor-1"}
+                         }
+                       }
+                     }
+                   }
+                 }}
+
+              2 ->
+                assert payload["variables"]["after"] == "cursor-1"
+
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{
+                     "data" => %{
+                       "node" => %{
+                         "items" => %{
+                           "nodes" => [
+                             build_project_item_fixture(%{
+                               item_id: "PVTI_p2",
+                               issue_node_id: "I_p2",
+                               number: 2,
+                               title: "Page2",
+                               repo: "owner/repo",
+                               state_name: "In Progress"
+                             })
+                           ],
+                           "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                         }
+                       }
+                     }
+                   }
+                 }}
+            end
+        end
+      end
+
       assert {:ok, issues} =
                Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
 
@@ -287,36 +316,42 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     end
 
     test "normalizes labels excluding priority and admission_label", %{base_dir: base_dir} do
-      request_fun = fn _payload, _headers ->
-        item =
-          build_project_item_fixture(%{
-            item_id: "PVTI_lbl",
-            issue_node_id: "I_lbl",
-            number: 99,
-            title: "Labeled",
-            repo: "owner/repo",
-            state_name: "Todo",
-            labels: [
-              %{"name" => "Bug"},
-              %{"name" => "priority:2"},
-              %{"name" => "symphony"}
-            ]
-          })
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
 
-        {:ok,
-         %{
-           status: 200,
-           body: %{
-             "data" => %{
-               "node" => %{
-                 "items" => %{
-                   "nodes" => [item],
-                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            item =
+              build_project_item_fixture(%{
+                item_id: "PVTI_lbl",
+                issue_node_id: "I_lbl",
+                number: 99,
+                title: "Labeled",
+                repo: "owner/repo",
+                state_name: "Todo",
+                labels: [
+                  %{"name" => "Bug"},
+                  %{"name" => "priority:2"},
+                  %{"name" => "symphony"}
+                ]
+              })
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [item],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
                  }
                }
-             }
-           }
-         }}
+             }}
+        end
       end
 
       assert {:ok, [issue]} =
@@ -327,30 +362,36 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     end
 
     test "returns :github_missing_end_cursor when hasNextPage is true but cursor is nil", %{base_dir: base_dir} do
-      request_fun = fn _payload, _headers ->
-        {:ok,
-         %{
-           status: 200,
-           body: %{
-             "data" => %{
-               "node" => %{
-                 "items" => %{
-                   "nodes" => [
-                     build_project_item_fixture(%{
-                       item_id: "PVTI_1",
-                       issue_node_id: "I_1",
-                       number: 1,
-                       title: "Stuck",
-                       repo: "owner/repo",
-                       state_name: "Todo"
-                     })
-                   ],
-                   "pageInfo" => %{"hasNextPage" => true, "endCursor" => nil}
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_1",
+                           issue_node_id: "I_1",
+                           number: 1,
+                           title: "Stuck",
+                           repo: "owner/repo",
+                           state_name: "Todo"
+                         })
+                       ],
+                       "pageInfo" => %{"hasNextPage" => true, "endCursor" => nil}
+                     }
+                   }
                  }
                }
-             }
-           }
-         }}
+             }}
+        end
       end
 
       assert {:error, :github_missing_end_cursor} =
@@ -377,6 +418,248 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  base_dir: base_dir,
                  request_fun: fn _, _ -> flunk("GraphQL should not be invoked without token") end
                )
+    end
+  end
+
+  describe "fetch_candidate_issues/1 admission" do
+    setup do
+      tmp = System.tmp_dir!() |> Path.join("sym-gh-admit-#{:erlang.unique_integer()}")
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      ProjectMetadata.write!(tmp, %{
+        "project_id" => "PVT_abc",
+        "project_number" => 1,
+        "status_field_id" => "PVTSSF_x",
+        "status_field_name" => "Symphony State",
+        "state_options" => %{
+          "Todo" => "opt-todo",
+          "In Progress" => "opt-inprog",
+          "Done" => "opt-done"
+        },
+        "bootstrapped_at" => "2026-05-24T00:00:00Z"
+      })
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "owner/repo",
+        tracker_active_states: ["Todo", "In Progress"],
+        tracker_terminal_states: ["Done"]
+      )
+
+      %{base_dir: tmp}
+    end
+
+    test "admits labeled issues not on the board", %{base_dir: base_dir} do
+      {:ok, calls} = Agent.start_link(fn -> [] end)
+
+      request_fun = fn payload, _headers ->
+        Agent.update(calls, &[payload["query"] | &1])
+
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            assert payload["variables"]["owner"] == "owner"
+            assert payload["variables"]["name"] == "repo"
+            assert payload["variables"]["label"] == "symphony"
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "repository" => %{
+                     "issues" => %{
+                       "nodes" => [
+                         %{"id" => "I_already", "number" => 1},
+                         %{"id" => "I_new", "number" => 2}
+                       ],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubProjectContentIds" ->
+            assert payload["variables"]["projectId"] == "PVT_abc"
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [
+                         %{"id" => "PVTI_x", "content" => %{"id" => "I_already"}}
+                       ],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubAddItem" ->
+            assert payload["variables"]["contentId"] == "I_new"
+            assert payload["variables"]["projectId"] == "PVT_abc"
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "addProjectV2ItemById" => %{"item" => %{"id" => "PVTI_new"}}
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubSetState" ->
+            vars = payload["variables"]
+            assert vars["projectId"] == "PVT_abc"
+            assert vars["itemId"] == "PVTI_new"
+            assert vars["fieldId"] == "PVTSSF_x"
+            assert vars["optionId"] == "opt-todo"
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_new"}}
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_x",
+                           issue_node_id: "I_already",
+                           number: 1,
+                           title: "Existing",
+                           repo: "owner/repo",
+                           state_name: "Todo"
+                         }),
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_new",
+                           issue_node_id: "I_new",
+                           number: 2,
+                           title: "Newly admitted",
+                           repo: "owner/repo",
+                           state_name: "Todo"
+                         })
+                       ],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, issues} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+
+      assert length(issues) == 2
+      assert issues |> Enum.map(& &1.id) |> Enum.sort() == ["I_already", "I_new"]
+
+      operations = Agent.get(calls, & &1)
+
+      assert Enum.any?(operations, &(&1 =~ "SymphonyGitHubAddItem"))
+
+      refute Enum.any?(operations, fn q ->
+               q =~ "SymphonyGitHubAddItem" and q =~ "I_already"
+             end),
+             "must not re-admit I_already"
+
+      Agent.stop(calls)
+    end
+
+    test "no-op when no labeled issues exist", %{base_dir: base_dir} do
+      {:ok, calls} = Agent.start_link(fn -> [] end)
+
+      request_fun = fn payload, _headers ->
+        Agent.update(calls, &[payload["query"] | &1])
+
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "repository" => %{
+                     "issues" => %{
+                       "nodes" => [],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubProjectContentIds" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, []} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+
+      operations = Agent.get(calls, & &1)
+      refute Enum.any?(operations, &(&1 =~ "SymphonyGitHubAddItem"))
+
+      Agent.stop(calls)
+    end
+
+    test "propagates error from admission step", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            {:ok, %{status: 200, body: %{"errors" => [%{"message" => "rate limited"}]}}}
+        end
+      end
+
+      assert {:error, {:admission_failed, {:github_graphql_errors, [%{"message" => "rate limited"}]}}} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
     end
   end
 
@@ -408,38 +691,44 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     end
 
     test "filters items by the provided state list", %{base_dir: base_dir} do
-      request_fun = fn _payload, _headers ->
-        {:ok,
-         %{
-           status: 200,
-           body: %{
-             "data" => %{
-               "node" => %{
-                 "items" => %{
-                   "nodes" => [
-                     build_project_item_fixture(%{
-                       item_id: "PVTI_done",
-                       issue_node_id: "I_done",
-                       number: 1,
-                       title: "Done",
-                       repo: "owner/repo",
-                       state_name: "Done"
-                     }),
-                     build_project_item_fixture(%{
-                       item_id: "PVTI_todo",
-                       issue_node_id: "I_todo",
-                       number: 2,
-                       title: "Todo",
-                       repo: "owner/repo",
-                       state_name: "Todo"
-                     })
-                   ],
-                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_done",
+                           issue_node_id: "I_done",
+                           number: 1,
+                           title: "Done",
+                           repo: "owner/repo",
+                           state_name: "Done"
+                         }),
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_todo",
+                           issue_node_id: "I_todo",
+                           number: 2,
+                           title: "Todo",
+                           repo: "owner/repo",
+                           state_name: "Todo"
+                         })
+                       ],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
                  }
                }
-             }
-           }
-         }}
+             }}
+        end
       end
 
       assert {:ok, [issue]} =
@@ -1083,6 +1372,23 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       assert {:error, :github_unknown_payload} =
                Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
     end
+  end
+
+  defp empty_admission_response do
+    {:ok,
+     %{
+       status: 200,
+       body: %{
+         "data" => %{
+           "repository" => %{
+             "issues" => %{
+               "nodes" => [],
+               "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+             }
+           }
+         }
+       }
+     }}
   end
 
   defp build_project_item_fixture(opts) do
