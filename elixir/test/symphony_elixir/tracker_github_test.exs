@@ -12,6 +12,7 @@ defmodule SymphonyElixir.GitHub.TrackerTest do
     def fetch_issue_states_by_ids(ids), do: {:ok, Enum.map(ids, fn id -> %Issue{id: id} end)}
     def create_comment(_id, _body), do: :ok
     def update_issue_state(_id, _state), do: :ok
+    def graphql(_query, _variables, _opts \\ []), do: {:error, :graphql_not_mocked}
   end
 
   setup do

@@ -208,5 +208,65 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
 
       assert message =~ "Invalid GitHub project metadata"
     end
+
+    test "leaves caller actionable when field creation fails after project creation", %{base_dir: base_dir} do
+      defmodule OrphanMock do
+        def graphql(query, _variables, _opts \\ []) do
+          cond do
+            query =~ "SymphonyGitHubResolveOwner" ->
+              {:ok, %{"data" => %{"repository" => %{"owner" => %{"id" => "OWNER_ID"}}}}}
+
+            query =~ "SymphonyGitHubCreateProject" ->
+              {:ok,
+               %{
+                 "data" => %{
+                   "createProjectV2" => %{
+                     "projectV2" => %{
+                       "id" => "PVT_orphan",
+                       "number" => 9,
+                       "url" => "https://github.com/users/raphaelcangucu/projects/9"
+                     }
+                   }
+                 }
+               }}
+
+            query =~ "SymphonyGitHubCreateField" ->
+              {:error, {:github_api_status, 422}}
+          end
+        end
+      end
+
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: OrphanMock)
+
+      assert message =~ "https://github.com/users/raphaelcangucu/projects/9"
+      assert message =~ "field creation failed"
+      assert message =~ "github.project.mode=existing"
+
+      refute match?({:ok, _}, ProjectMetadata.read(base_dir))
+    end
+
+    test "fails cleanly when existing project_id points to missing node", %{base_dir: base_dir} do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        github_project_mode: "existing",
+        github_project_id: "PVT_missing"
+      )
+
+      defmodule MissingNodeMock do
+        def graphql(query, _variables, _opts \\ []) do
+          cond do
+            query =~ "SymphonyGitHubReadProject" ->
+              {:ok, %{"data" => %{"node" => nil}}}
+          end
+        end
+      end
+
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: MissingNodeMock)
+
+      assert message =~ "GitHub project bootstrap failed"
+    end
   end
 end

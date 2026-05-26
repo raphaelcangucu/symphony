@@ -108,7 +108,8 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
     with {:ok, {owner, name}} <- split_repo(repo),
          {:ok, owner_id} <- resolve_owner_id(client, owner, name),
          {:ok, project} <- create_project(client, owner_id, title),
-         {:ok, field} <- create_status_field(client, project["id"], status_field_name),
+         :ok <- log_created_project(project),
+         {:ok, field} <- create_status_field(client, project["id"], status_field_name, project),
          metadata <- build_metadata(project, field),
          :ok <- write_metadata(base_dir, metadata) do
       Logger.info("GitHub Project bootstrapped: #{project["url"]}")
@@ -116,6 +117,12 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
     else
       {:error, reason} -> {:error, "GitHub project bootstrap failed: #{format_error(reason)}"}
     end
+  end
+
+  defp log_created_project(project) do
+    url = project["url"]
+    Logger.info("GitHub Project created (id=#{project["id"]} url=#{url}); creating Symphony State field…")
+    :ok
   end
 
   defp bootstrap_existing(opts) do
@@ -166,7 +173,7 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
     end
   end
 
-  defp create_status_field(client, project_id, name) do
+  defp create_status_field(client, project_id, name, project) do
     options = build_option_inputs()
 
     variables = %{
@@ -187,10 +194,10 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
         {:ok, field}
 
       {:ok, body} ->
-        {:error, {:create_field_unexpected, body}}
+        {:error, {:create_field_unexpected, project["url"], body}}
 
       {:error, reason} ->
-        {:error, reason}
+        {:error, {:create_field_failed, project["url"], reason}}
     end
   end
 
@@ -273,6 +280,33 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
       module when is_atom(module) -> module
     end
   end
+
+  defp format_error({:github_graphql_errors, errors}) when is_list(errors) do
+    messages =
+      errors
+      |> Enum.map(&Map.get(&1, "message"))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join("; ")
+
+    case messages do
+      "" -> "GitHub GraphQL error: #{inspect(errors)}"
+      _ -> "GitHub GraphQL error: #{messages}"
+    end
+  end
+
+  defp format_error({:github_api_status, status}), do: "GitHub API status #{status}"
+
+  defp format_error({:github_api_request, reason}),
+    do: "GitHub API request failed: #{inspect(reason)}"
+
+  defp format_error({:owner_lookup_unexpected, %{"data" => %{"repository" => nil}}}),
+    do: "GitHub repository not found — verify github.repo in WORKFLOW.md"
+
+  defp format_error({:create_field_failed, url, reason}),
+    do: "Project was created at #{url} but Symphony State field creation failed (#{format_error(reason)}). Delete the project on GitHub or set github.project.mode=existing with github.project.id."
+
+  defp format_error({:create_field_unexpected, url, body}),
+    do: "Project was created at #{url} but Symphony State field response was unexpected: #{inspect(body)}. Delete the project on GitHub or set github.project.mode=existing with github.project.id."
 
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)
