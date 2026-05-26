@@ -26,4 +26,12 @@ defmodule SymphonyElixir.GitHub.ProjectMetadataTest do
   test "read returns error when file missing", %{dir: dir} do
     assert {:error, :missing_project_metadata} = ProjectMetadata.read(dir)
   end
+
+  test "read returns invalid_project_metadata for malformed json", %{dir: dir} do
+    cache_path = ProjectMetadata.cache_path(dir)
+    File.mkdir_p!(Path.dirname(cache_path))
+    File.write!(cache_path, "{not json")
+
+    assert {:error, :invalid_project_metadata} = ProjectMetadata.read(dir)
+  end
 end

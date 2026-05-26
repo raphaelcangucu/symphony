@@ -21,8 +21,10 @@ defmodule SymphonyElixir.GitHub.ProjectMetadata do
       {:error, :enoent} ->
         {:error, :missing_project_metadata}
 
-      {:error, reason} ->
-        {:error, reason}
+      {:error, _posix} ->
+        # Fold any non-:enoent posix error (e.g. :eacces, :eisdir) into
+        # :invalid_project_metadata so the public contract stays narrow.
+        {:error, :invalid_project_metadata}
     end
   end
 
