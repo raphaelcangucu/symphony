@@ -661,6 +661,183 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       assert {:error, {:admission_failed, {:github_graphql_errors, [%{"message" => "rate limited"}]}}} =
                Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
     end
+
+    test "logs per-issue admission failure and continues poll", %{base_dir: base_dir} do
+      log =
+        capture_log(fn ->
+          request_fun = fn payload, _headers ->
+            cond do
+              payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{
+                     "data" => %{
+                       "repository" => %{
+                         "issues" => %{
+                           "nodes" => [
+                             %{"id" => "I_fails", "number" => 1},
+                             %{"id" => "I_ok", "number" => 2}
+                           ],
+                           "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                         }
+                       }
+                     }
+                   }
+                 }}
+
+              payload["query"] =~ "SymphonyGitHubProjectContentIds" ->
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{
+                     "data" => %{
+                       "node" => %{
+                         "items" => %{
+                           "nodes" => [],
+                           "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                         }
+                       }
+                     }
+                   }
+                 }}
+
+              payload["query"] =~ "SymphonyGitHubAddItem" ->
+                content_id = payload["variables"]["contentId"]
+
+                cond do
+                  content_id == "I_fails" ->
+                    {:ok, %{status: 200, body: %{"errors" => [%{"message" => "rate limited"}]}}}
+
+                  content_id == "I_ok" ->
+                    {:ok,
+                     %{
+                       status: 200,
+                       body: %{"data" => %{"addProjectV2ItemById" => %{"item" => %{"id" => "PVTI_ok"}}}}
+                     }}
+                end
+
+              payload["query"] =~ "SymphonyGitHubSetState" ->
+                assert payload["variables"]["itemId"] == "PVTI_ok"
+
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{
+                     "data" => %{"updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_ok"}}}
+                   }
+                 }}
+
+              payload["query"] =~ "SymphonyGitHubPollItems" ->
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{
+                     "data" => %{
+                       "node" => %{
+                         "items" => %{
+                           "nodes" => [
+                             build_project_item_fixture(%{
+                               item_id: "PVTI_ok",
+                               issue_node_id: "I_ok",
+                               number: 2,
+                               title: "Admitted ok",
+                               repo: "owner/repo",
+                               state_name: "Todo"
+                             })
+                           ],
+                           "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                         }
+                       }
+                     }
+                   }
+                 }}
+            end
+          end
+
+          assert {:ok, issues} =
+                   Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+
+          assert length(issues) == 1
+          assert hd(issues).id == "I_ok"
+        end)
+
+      assert log =~ "Admission failed for issue I_fails"
+      assert log =~ "Admitted issue I_ok"
+    end
+
+    test "logs orphan when set_project_state fails after add_project_item", %{base_dir: base_dir} do
+      log =
+        capture_log(fn ->
+          request_fun = fn payload, _headers ->
+            cond do
+              payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{
+                     "data" => %{
+                       "repository" => %{
+                         "issues" => %{
+                           "nodes" => [%{"id" => "I_orphan", "number" => 3}],
+                           "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                         }
+                       }
+                     }
+                   }
+                 }}
+
+              payload["query"] =~ "SymphonyGitHubProjectContentIds" ->
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{
+                     "data" => %{
+                       "node" => %{
+                         "items" => %{
+                           "nodes" => [],
+                           "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                         }
+                       }
+                     }
+                   }
+                 }}
+
+              payload["query"] =~ "SymphonyGitHubAddItem" ->
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{"data" => %{"addProjectV2ItemById" => %{"item" => %{"id" => "PVTI_orphan"}}}}
+                 }}
+
+              payload["query"] =~ "SymphonyGitHubSetState" ->
+                {:ok, %{status: 200, body: %{"errors" => [%{"message" => "field locked"}]}}}
+
+              payload["query"] =~ "SymphonyGitHubPollItems" ->
+                {:ok,
+                 %{
+                   status: 200,
+                   body: %{
+                     "data" => %{
+                       "node" => %{
+                         "items" => %{
+                           "nodes" => [],
+                           "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                         }
+                       }
+                     }
+                   }
+                 }}
+            end
+          end
+
+          assert {:ok, []} =
+                   Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+        end)
+
+      assert log =~ "Admitted issue I_orphan (project item PVTI_orphan)"
+      assert log =~ "Symphony State setup failed"
+    end
   end
 
   describe "fetch_issues_by_states/2 (GraphQL)" do

@@ -657,13 +657,19 @@ defmodule SymphonyElixir.GitHub.Client do
          {:ok, candidates} <-
            fetch_admission_candidates(client, owner, name, label, graphql_opts),
          {:ok, missing} <-
-           resolve_missing_admissions(client, metadata, candidates, graphql_opts),
-         :ok <- admit_each(client, metadata, missing, first_active, graphql_opts) do
-      :ok
+           resolve_missing_admissions(client, metadata, candidates, graphql_opts) do
+      run_admissions(client, metadata, missing, first_active, graphql_opts)
     else
       {:error, :missing_github_token} = error -> error
       {:error, reason} -> {:error, {:admission_failed, reason}}
     end
+  end
+
+  defp run_admissions(_client, _metadata, [], _first_active, _graphql_opts), do: :ok
+
+  defp run_admissions(client, metadata, missing, first_active, graphql_opts) do
+    Logger.debug(fn -> "Admitting #{length(missing)} issue(s) to Symphony board" end)
+    admit_each(client, metadata, missing, first_active, graphql_opts)
   end
 
   defp resolve_missing_admissions(_client, _metadata, [], _graphql_opts), do: {:ok, []}
@@ -807,20 +813,31 @@ defmodule SymphonyElixir.GitHub.Client do
 
   defp decode_project_content_page(_body), do: {:error, :github_unknown_payload}
 
-  defp admit_each(_client, _metadata, [], _first_active, _graphql_opts), do: :ok
+  defp admit_each(client, metadata, missing, first_active, graphql_opts) do
+    Enum.each(missing, fn issue_id ->
+      case admit_one(client, metadata, issue_id, first_active, graphql_opts) do
+        :ok ->
+          Logger.info("Admitted issue #{issue_id} to Symphony board")
 
-  defp admit_each(client, metadata, [issue_id | rest], first_active, graphql_opts) do
-    case admit_one(client, metadata, issue_id, first_active, graphql_opts) do
-      :ok -> admit_each(client, metadata, rest, first_active, graphql_opts)
-      {:error, _} = error -> error
-    end
+        {:error, {:orphan_state_failure, item_id, reason}} ->
+          Logger.error("Admitted issue #{issue_id} (project item #{item_id}) but Symphony State setup failed: #{inspect(reason)}. Item will be retried on next poll if it remains stateless.")
+
+        {:error, reason} ->
+          Logger.warning("Admission failed for issue #{issue_id}: #{inspect(reason)}")
+      end
+    end)
+
+    :ok
   end
 
   defp admit_one(client, metadata, issue_id, first_active, graphql_opts) do
     with {:ok, item_id} <-
            add_project_item(client, metadata["project_id"], issue_id, graphql_opts),
          {:ok, option_id} <- lookup_state_option_id(metadata, first_active) do
-      set_project_state(client, metadata, item_id, option_id, graphql_opts)
+      case set_project_state(client, metadata, item_id, option_id, graphql_opts) do
+        :ok -> :ok
+        {:error, reason} -> {:error, {:orphan_state_failure, item_id, reason}}
+      end
     end
   end
 
