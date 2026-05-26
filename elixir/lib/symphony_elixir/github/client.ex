@@ -7,6 +7,8 @@ defmodule SymphonyElixir.GitHub.Client do
   alias SymphonyElixir.{GitHub, Issue}
 
   @base_url "https://api.github.com"
+  @graphql_endpoint "https://api.github.com/graphql"
+  @max_error_body_log_bytes 1_000
 
   @spec fetch_candidate_issues(keyword()) :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_candidate_issues(opts \\ []) do
@@ -67,6 +69,38 @@ defmodule SymphonyElixir.GitHub.Client do
       issue_url = "#{@base_url}/repos/#{owner}/#{repo}/issues/#{issue_number}"
 
       do_update_issue_state(request_fun, token, issue_url, owner, repo, issue_number, prefix, state_name)
+    end
+  end
+
+  @spec graphql(String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def graphql(query, variables \\ %{}, opts \\ [])
+      when is_binary(query) and is_map(variables) and is_list(opts) do
+    payload = build_graphql_payload(query, variables, Keyword.get(opts, :operation_name))
+    request_fun = Keyword.get(opts, :request_fun, &post_graphql_request/2)
+
+    with {:ok, token} <- require_token(),
+         headers = graphql_headers(token),
+         {:ok, %{status: 200, body: body}} <- request_fun.(payload, headers),
+         {:ok, decoded} <- decode_graphql_response(body) do
+      {:ok, decoded}
+    else
+      {:error, :missing_github_token} = error ->
+        error
+
+      {:ok, response} ->
+        Logger.error(
+          "GitHub GraphQL request failed status=#{response.status}" <>
+            github_error_context(payload, response)
+        )
+
+        {:error, {:github_api_status, response.status}}
+
+      {:error, {:github_graphql_errors, _} = err} ->
+        {:error, err}
+
+      {:error, reason} ->
+        Logger.error("GitHub GraphQL request failed: #{inspect(reason)}")
+        {:error, {:github_api_request, reason}}
     end
   end
 
@@ -306,5 +340,83 @@ defmodule SymphonyElixir.GitHub.Client do
       {"Accept", "application/vnd.github+json"},
       {"X-GitHub-Api-Version", "2022-11-28"}
     ]
+  end
+
+  defp graphql_headers(token) do
+    [
+      {"Authorization", "Bearer #{token}"},
+      {"Content-Type", "application/json"},
+      {"Accept", "application/vnd.github+json"},
+      {"X-GitHub-Api-Version", "2022-11-28"}
+    ]
+  end
+
+  defp build_graphql_payload(query, variables, operation_name) do
+    %{
+      "query" => query,
+      "variables" => variables
+    }
+    |> maybe_put_operation_name(operation_name)
+  end
+
+  defp maybe_put_operation_name(payload, operation_name) when is_binary(operation_name) do
+    case String.trim(operation_name) do
+      "" -> payload
+      trimmed -> Map.put(payload, "operationName", trimmed)
+    end
+  end
+
+  defp maybe_put_operation_name(payload, _operation_name), do: payload
+
+  defp post_graphql_request(payload, headers) do
+    Req.post(@graphql_endpoint,
+      headers: headers,
+      json: payload,
+      connect_options: [timeout: 30_000]
+    )
+  end
+
+  defp decode_graphql_response(%{"errors" => errors}) when is_list(errors) and errors != [] do
+    {:error, {:github_graphql_errors, errors}}
+  end
+
+  defp decode_graphql_response(body) when is_map(body), do: {:ok, body}
+  defp decode_graphql_response(_body), do: {:error, :github_unknown_payload}
+
+  defp github_error_context(payload, response) when is_map(payload) do
+    operation_name =
+      case Map.get(payload, "operationName") do
+        name when is_binary(name) and name != "" -> " operation=#{name}"
+        _ -> ""
+      end
+
+    body =
+      response
+      |> Map.get(:body)
+      |> summarize_error_body()
+
+    operation_name <> " body=" <> body
+  end
+
+  defp summarize_error_body(body) when is_binary(body) do
+    body
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+    |> truncate_error_body()
+    |> inspect()
+  end
+
+  defp summarize_error_body(body) do
+    body
+    |> inspect(limit: 20, printable_limit: @max_error_body_log_bytes)
+    |> truncate_error_body()
+  end
+
+  defp truncate_error_body(body) when is_binary(body) do
+    if byte_size(body) > @max_error_body_log_bytes do
+      binary_part(body, 0, @max_error_body_log_bytes) <> "...<truncated>"
+    else
+      body
+    end
   end
 end

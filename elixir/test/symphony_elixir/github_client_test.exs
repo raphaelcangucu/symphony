@@ -241,4 +241,93 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       assert :ok = Client.update_issue_state("42", "Done", request_fun: request_fun)
     end
   end
+
+  describe "graphql/3" do
+    test "returns body on HTTP 200 with no errors" do
+      request_fun = fn payload, headers ->
+        assert payload["query"] =~ "viewer"
+        assert payload["variables"] == %{}
+        assert {"Authorization", "Bearer test-gh-token"} in headers
+        assert {"Content-Type", "application/json"} in headers
+        assert {"X-GitHub-Api-Version", "2022-11-28"} in headers
+
+        {:ok, %{status: 200, body: %{"data" => %{"viewer" => %{"login" => "octocat"}}}}}
+      end
+
+      assert {:ok, body} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+
+      assert get_in(body, ["data", "viewer", "login"]) == "octocat"
+    end
+
+    test "passes variables through" do
+      request_fun = fn payload, _headers ->
+        assert payload["variables"] == %{"id" => "X_1"}
+        {:ok, %{status: 200, body: %{"data" => %{}}}}
+      end
+
+      assert {:ok, _} =
+               Client.graphql(
+                 "query($id: ID!) { node(id: $id) { id } }",
+                 %{"id" => "X_1"},
+                 request_fun: request_fun
+               )
+    end
+
+    test "sets operationName when provided" do
+      request_fun = fn payload, _headers ->
+        assert payload["operationName"] == "GetViewer"
+        {:ok, %{status: 200, body: %{"data" => %{}}}}
+      end
+
+      assert {:ok, _} =
+               Client.graphql(
+                 "query GetViewer { viewer { login } }",
+                 %{},
+                 request_fun: request_fun,
+                 operation_name: "GetViewer"
+               )
+    end
+
+    test "returns :github_graphql_errors when response has top-level errors" do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           body: %{"errors" => [%{"message" => "field unknown"}]}
+         }}
+      end
+
+      assert {:error, {:github_graphql_errors, [%{"message" => "field unknown"}]}} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+    end
+
+    test "returns :github_api_status on non-200 HTTP" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 401, body: %{"message" => "Bad credentials"}}}
+      end
+
+      assert {:error, {:github_api_status, 401}} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+    end
+
+    test "returns :github_api_request on transport error" do
+      request_fun = fn _payload, _headers ->
+        {:error, :nxdomain}
+      end
+
+      assert {:error, {:github_api_request, :nxdomain}} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+    end
+
+    test "returns :missing_github_token when token absent" do
+      prev = System.get_env("GITHUB_TOKEN")
+      System.delete_env("GITHUB_TOKEN")
+
+      on_exit(fn -> restore_env("GITHUB_TOKEN", prev) end)
+
+      assert {:error, :missing_github_token} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: fn _, _ -> flunk("unreachable") end)
+    end
+  end
 end
