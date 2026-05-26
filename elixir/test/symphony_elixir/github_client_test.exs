@@ -329,5 +329,25 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       assert {:error, :missing_github_token} =
                Client.graphql("query { viewer { login } }", %{}, request_fun: fn _, _ -> flunk("unreachable") end)
     end
+
+    test "treats empty errors list as success" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 200, body: %{"data" => %{"viewer" => %{"login" => "octocat"}}, "errors" => []}}}
+      end
+
+      assert {:ok, body} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+
+      assert get_in(body, ["data", "viewer", "login"]) == "octocat"
+    end
+
+    test "returns :github_unknown_payload when body is not a map" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 200, body: "unexpected string body"}}
+      end
+
+      assert {:error, :github_unknown_payload} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+    end
   end
 end

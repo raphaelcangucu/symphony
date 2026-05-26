@@ -98,6 +98,9 @@ defmodule SymphonyElixir.GitHub.Client do
       {:error, {:github_graphql_errors, _} = err} ->
         {:error, err}
 
+      {:error, :github_unknown_payload} = error ->
+        error
+
       {:error, reason} ->
         Logger.error("GitHub GraphQL request failed: #{inspect(reason)}")
         {:error, {:github_api_request, reason}}
