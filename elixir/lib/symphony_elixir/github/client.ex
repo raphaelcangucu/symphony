@@ -2,24 +2,27 @@ defmodule SymphonyElixir.GitHub.Client do
   @moduledoc """
   GitHub client used by the GitHub tracker adapter.
 
-  Read paths (`fetch_candidate_issues/1`, `fetch_issues_by_states/2`,
-  `fetch_issue_states_by_ids/2`) use GraphQL against a repo-scoped
-  GitHub Projects v2 board. Project metadata (project ID, status
-  field ID/name, option map) is loaded from `.symphony/github-project.json`,
-  which `SymphonyElixir.GitHub.Bootstrap` writes on first start.
+  All read and write paths run against the GitHub GraphQL API and the
+  repo-scoped GitHub Projects v2 board configured by
+  `SymphonyElixir.GitHub.Bootstrap`. Project metadata (project ID,
+  status field ID/name, option map) is loaded from
+  `.symphony/github-project.json`.
 
-  Write paths (`update_issue_state/3`, `create_comment/3`) still use
-  the REST API; they are rewritten in a later task.
+  Reads (`fetch_candidate_issues/1`, `fetch_issues_by_states/2`,
+  `fetch_issue_states_by_ids/2`) query `projectV2.items` and filter on
+  the configured `Symphony State` single-select field. Writes
+  (`update_issue_state/3`, `create_comment/3`) issue GraphQL mutations
+  against issue node IDs (no REST routes, no label juggling).
   """
 
   require Logger
   alias SymphonyElixir.{Config, GitHub, Issue}
   alias SymphonyElixir.GitHub.ProjectMetadata
 
-  @base_url "https://api.github.com"
   @graphql_endpoint "https://api.github.com/graphql"
   @max_error_body_log_bytes 1_000
   @project_item_page_size 50
+  @resolve_item_page_size 20
 
   @poll_items_query """
   query SymphonyGitHubPollItems($projectId: ID!, $first: Int!, $after: String) {
@@ -110,6 +113,64 @@ defmodule SymphonyElixir.GitHub.Client do
   }
   """
 
+  @add_comment_mutation """
+  mutation SymphonyGitHubAddComment($subjectId: ID!, $body: String!) {
+    addComment(input: { subjectId: $subjectId, body: $body }) {
+      commentEdge { node { id } }
+    }
+  }
+  """
+
+  @resolve_item_query """
+  query SymphonyGitHubResolveItem($issueId: ID!, $first: Int!) {
+    node(id: $issueId) {
+      ... on Issue {
+        id
+        projectItems(first: $first) {
+          nodes {
+            id
+            project { id }
+          }
+        }
+      }
+    }
+  }
+  """
+
+  @set_state_mutation """
+  mutation SymphonyGitHubSetState(
+    $projectId: ID!,
+    $itemId: ID!,
+    $fieldId: ID!,
+    $optionId: String!
+  ) {
+    updateProjectV2ItemFieldValue(input: {
+      projectId: $projectId
+      itemId: $itemId
+      fieldId: $fieldId
+      value: { singleSelectOptionId: $optionId }
+    }) {
+      projectV2Item { id }
+    }
+  }
+  """
+
+  @close_issue_mutation """
+  mutation SymphonyGitHubCloseIssue($issueId: ID!) {
+    closeIssue(input: { issueId: $issueId, stateReason: COMPLETED }) {
+      issue { id state }
+    }
+  }
+  """
+
+  @reopen_issue_mutation """
+  mutation SymphonyGitHubReopenIssue($issueId: ID!) {
+    reopenIssue(input: { issueId: $issueId }) {
+      issue { id state }
+    }
+  }
+  """
+
   @spec fetch_candidate_issues(keyword()) :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_candidate_issues(opts \\ []) when is_list(opts) do
     with {:ok, metadata, repo} <- prepare_project_context(opts) do
@@ -150,37 +211,28 @@ defmodule SymphonyElixir.GitHub.Client do
   end
 
   @spec create_comment(String.t(), String.t(), keyword()) :: :ok | {:error, term()}
-  def create_comment(issue_number, body, opts \\ [])
-      when is_binary(issue_number) and is_binary(body) do
-    with {:ok, {owner, repo}} <- parse_repo(),
-         {:ok, token} <- require_token() do
-      request_fun = Keyword.get(opts, :request_fun, &default_request_fun/1)
-      url = "#{@base_url}/repos/#{owner}/#{repo}/issues/#{issue_number}/comments"
+  def create_comment(issue_id, body, opts \\ [])
+      when is_binary(issue_id) and is_binary(body) do
+    variables = %{"subjectId" => issue_id, "body" => body}
+    graphql_opts = forward_graphql_opts(opts)
 
-      case request_fun.(%{method: :post, url: url, token: token, body: %{"body" => body}}) do
-        {:ok, %{status: status}} when status in [200, 201] ->
-          :ok
-
-        {:ok, %{status: status}} ->
-          Logger.error("GitHub create_comment failed status=#{status}")
-          {:error, {:github_api_status, status}}
-
-        {:error, reason} ->
-          {:error, {:github_api_request, reason}}
-      end
+    case graphql(@add_comment_mutation, variables, graphql_opts) do
+      {:ok, _body} -> :ok
+      {:error, _} = error -> error
     end
   end
 
   @spec update_issue_state(String.t(), String.t(), keyword()) :: :ok | {:error, term()}
-  def update_issue_state(issue_number, state_name, opts \\ [])
-      when is_binary(issue_number) and is_binary(state_name) do
-    with {:ok, {owner, repo}} <- parse_repo(),
-         {:ok, token} <- require_token() do
-      prefix = GitHub.Config.label_prefix()
-      request_fun = Keyword.get(opts, :request_fun, &default_request_fun/1)
-      issue_url = "#{@base_url}/repos/#{owner}/#{repo}/issues/#{issue_number}"
+  def update_issue_state(issue_id, state_name, opts \\ [])
+      when is_binary(issue_id) and is_binary(state_name) do
+    base_dir = Keyword.get(opts, :base_dir, File.cwd!())
+    graphql_opts = forward_graphql_opts(opts)
 
-      do_update_issue_state(request_fun, token, issue_url, owner, repo, issue_number, prefix, state_name)
+    with {:ok, metadata} <- ProjectMetadata.read(base_dir),
+         {:ok, option_id} <- lookup_state_option_id(metadata, state_name),
+         {:ok, item_id} <- resolve_project_item_id(issue_id, metadata["project_id"], graphql_opts),
+         :ok <- set_project_state(metadata, item_id, option_id, graphql_opts) do
+      transition_open_state(issue_id, state_name, graphql_opts)
     end
   end
 
@@ -521,64 +573,102 @@ defmodule SymphonyElixir.GitHub.Client do
     Keyword.take(opts, [:request_fun, :operation_name])
   end
 
-  # -- REST helpers (used by update_issue_state and create_comment) ----------
+  # -- GraphQL write helpers --------------------------------------------------
 
-  defp do_update_issue_state(request_fun, token, issue_url, owner, repo, issue_number, prefix, state_name) do
-    new_label = "#{prefix}:#{normalize_state(state_name)}"
+  defp lookup_state_option_id(metadata, state_name) do
+    options =
+      case Map.get(metadata, "state_options") do
+        %{} = map -> map
+        _ -> %{}
+      end
 
-    case request_fun.(%{method: :get, url: issue_url, token: token}) do
-      {:ok, %{status: 200, body: issue_body}} ->
-        swap_labels(request_fun, token, owner, repo, issue_number, issue_body, prefix, new_label)
-        maybe_close_issue(request_fun, token, issue_url, state_name)
-        :ok
+    case Map.get(options, state_name) do
+      option_id when is_binary(option_id) and option_id != "" ->
+        {:ok, option_id}
 
-      {:ok, %{status: status}} ->
-        {:error, {:github_api_status, status}}
-
-      {:error, reason} ->
-        {:error, {:github_api_request, reason}}
+      _ ->
+        {:error, {:unknown_state, state_name}}
     end
   end
 
-  defp swap_labels(request_fun, token, owner, repo, issue_number, issue_body, prefix, new_label) do
-    issue_body
-    |> Map.get("labels", [])
-    |> Enum.map(&Map.get(&1, "name", ""))
-    |> Enum.filter(&String.starts_with?(&1, "#{prefix}:"))
-    |> Enum.each(fn label ->
-      url = "#{@base_url}/repos/#{owner}/#{repo}/issues/#{issue_number}/labels/#{URI.encode(label)}"
-      request_fun.(%{method: :delete, url: url, token: token})
-    end)
+  defp resolve_project_item_id(issue_id, project_id, graphql_opts)
+       when is_binary(issue_id) and is_binary(project_id) do
+    variables = %{"issueId" => issue_id, "first" => @resolve_item_page_size}
 
-    add_url = "#{@base_url}/repos/#{owner}/#{repo}/issues/#{issue_number}/labels"
-    request_fun.(%{method: :post, url: add_url, token: token, body: %{"labels" => [new_label]}})
-  end
-
-  defp maybe_close_issue(request_fun, token, issue_url, state_name) do
-    if normalize_state(state_name) in ["done", "cancelled"] do
-      request_fun.(%{method: :patch, url: issue_url, token: token, body: %{"state" => "closed"}})
-    end
-  end
-
-  defp normalize_state(state_name) do
-    state_name
-    |> String.trim()
-    |> String.downcase()
-    |> String.replace(" ", "-")
-  end
-
-  defp parse_repo do
-    case GitHub.Config.repo() do
-      nil ->
-        {:error, :missing_github_repo}
-
-      repo_string ->
-        case String.split(repo_string, "/") do
-          [owner, repo] -> {:ok, {owner, repo}}
-          _ -> {:error, {:invalid_github_repo, repo_string}}
+    case graphql(@resolve_item_query, variables, graphql_opts) do
+      {:ok, body} ->
+        case extract_project_item_id(body, project_id) do
+          {:ok, _id} = ok -> ok
+          :not_found -> {:error, {:issue_not_in_project, issue_id}}
         end
+
+      {:error, _} = error ->
+        error
     end
   end
+
+  defp extract_project_item_id(%{"data" => %{"node" => node}}, project_id) when is_map(node) do
+    items = get_in(node, ["projectItems", "nodes"]) || []
+
+    matching =
+      Enum.find(items, fn
+        %{"project" => %{"id" => id}} -> id == project_id
+        _ -> false
+      end)
+
+    case matching do
+      %{"id" => item_id} when is_binary(item_id) -> {:ok, item_id}
+      _ -> :not_found
+    end
+  end
+
+  defp extract_project_item_id(_body, _project_id), do: :not_found
+
+  defp set_project_state(metadata, item_id, option_id, graphql_opts) do
+    variables = %{
+      "projectId" => metadata["project_id"],
+      "itemId" => item_id,
+      "fieldId" => metadata["status_field_id"],
+      "optionId" => option_id
+    }
+
+    case graphql(@set_state_mutation, variables, graphql_opts) do
+      {:ok, _body} -> :ok
+      {:error, _} = error -> error
+    end
+  end
+
+  defp transition_open_state(issue_id, state_name, graphql_opts) do
+    cond do
+      terminal_state?(state_name) -> close_issue(issue_id, graphql_opts)
+      active_state?(state_name) -> reopen_issue(issue_id, graphql_opts)
+      true -> :ok
+    end
+  end
+
+  defp close_issue(issue_id, graphql_opts) do
+    case graphql(@close_issue_mutation, %{"issueId" => issue_id}, graphql_opts) do
+      {:ok, _body} -> :ok
+      {:error, _} = error -> error
+    end
+  end
+
+  defp reopen_issue(issue_id, graphql_opts) do
+    case graphql(@reopen_issue_mutation, %{"issueId" => issue_id}, graphql_opts) do
+      {:ok, _body} -> :ok
+      {:error, _} = error -> error
+    end
+  end
+
+  defp terminal_state?(state_name) when is_binary(state_name) do
+    state_name in Config.terminal_states()
+  end
+
+  defp active_state?(state_name) when is_binary(state_name) do
+    state_name in Config.active_states()
+  end
+
+  # -- Shared helpers ---------------------------------------------------------
 
   defp require_token do
     case GitHub.Config.token() do
@@ -597,30 +687,6 @@ defmodule SymphonyElixir.GitHub.Client do
   end
 
   defp parse_datetime(_), do: nil
-
-  defp default_request_fun(%{method: :get, url: url, token: token}) do
-    Req.get(url, headers: github_headers(token), connect_options: [timeout: 30_000])
-  end
-
-  defp default_request_fun(%{method: :post, url: url, token: token, body: body}) do
-    Req.post(url, headers: github_headers(token), json: body, connect_options: [timeout: 30_000])
-  end
-
-  defp default_request_fun(%{method: :patch, url: url, token: token, body: body}) do
-    Req.patch(url, headers: github_headers(token), json: body, connect_options: [timeout: 30_000])
-  end
-
-  defp default_request_fun(%{method: :delete, url: url, token: token}) do
-    Req.delete(url, headers: github_headers(token), connect_options: [timeout: 30_000])
-  end
-
-  defp github_headers(token) do
-    [
-      {"Authorization", "Bearer #{token}"},
-      {"Accept", "application/vnd.github+json"},
-      {"X-GitHub-Api-Version", "2022-11-28"}
-    ]
-  end
 
   defp graphql_headers(token) do
     [

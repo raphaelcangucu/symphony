@@ -592,62 +592,261 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     end
   end
 
-  describe "create_comment/3" do
-    test "creates a comment on an issue" do
-      request_fun = fn %{method: :post, url: url, body: body} ->
-        assert url =~ "/repos/owner/repo/issues/42/comments"
-        assert body == %{"body" => "Hello!"}
-        {:ok, %{status: 201}}
+  describe "create_comment/3 (GraphQL)" do
+    test "posts addComment mutation with issue node id and body" do
+      request_fun = fn payload, _headers ->
+        assert payload["query"] =~ "SymphonyGitHubAddComment"
+        assert payload["variables"] == %{"subjectId" => "I_kw_42", "body" => "Hello"}
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "addComment" => %{"commentEdge" => %{"node" => %{"id" => "IC_1"}}}
+             }
+           }
+         }}
       end
 
-      assert :ok = Client.create_comment("42", "Hello!", request_fun: request_fun)
+      assert :ok =
+               Client.create_comment("I_kw_42", "Hello", request_fun: request_fun)
     end
 
-    test "returns error on failure" do
-      request_fun = fn _ -> {:ok, %{status: 403}} end
+    test "returns error tuple on graphql failure" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 401, body: %{"message" => "Bad credentials"}}}
+      end
 
-      assert {:error, {:github_api_status, 403}} =
-               Client.create_comment("42", "Hello!", request_fun: request_fun)
+      assert {:error, {:github_api_status, 401}} =
+               Client.create_comment("I_kw_42", "Hello", request_fun: request_fun)
+    end
+
+    test "returns error tuple when graphql payload reports errors" do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           body: %{"errors" => [%{"message" => "Issue not found"}]}
+         }}
+      end
+
+      assert {:error, {:github_graphql_errors, [%{"message" => "Issue not found"}]}} =
+               Client.create_comment("I_kw_missing", "Hello", request_fun: request_fun)
     end
   end
 
-  describe "update_issue_state/3" do
-    test "swaps labels and closes terminal issues" do
-      calls = :ets.new(:calls, [:set, :public])
-      :ets.insert(calls, {:count, 0})
+  describe "update_issue_state/3 (GraphQL)" do
+    setup do
+      tmp = System.tmp_dir!() |> Path.join("sym-gh-update-#{:erlang.unique_integer()}")
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
 
-      request_fun = fn req ->
-        [{:count, n}] = :ets.lookup(calls, :count)
-        :ets.insert(calls, {:count, n + 1})
+      ProjectMetadata.write!(tmp, %{
+        "project_id" => "PVT_abc",
+        "project_number" => 1,
+        "status_field_id" => "PVTSSF_x",
+        "status_field_name" => "Symphony State",
+        "state_options" => %{
+          "Todo" => "opt-todo",
+          "In Progress" => "opt-inprog",
+          "Done" => "opt-done",
+          "Cancelled" => "opt-cancel"
+        },
+        "bootstrapped_at" => "2026-05-24T00:00:00Z"
+      })
 
-        case {req.method, n} do
-          {:get, 0} ->
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "owner/repo",
+        tracker_active_states: ["Todo", "In Progress"],
+        tracker_terminal_states: ["Done", "Cancelled"]
+      )
+
+      %{base_dir: tmp}
+    end
+
+    test "updates Symphony State and reopens for active states", %{base_dir: base_dir} do
+      seq = :counters.new(1, [])
+
+      request_fun = fn payload, _headers ->
+        :counters.add(seq, 1, 1)
+
+        cond do
+          payload["query"] =~ "SymphonyGitHubResolveItem" ->
+            assert payload["variables"]["issueId"] == "I_kw_99"
+
             {:ok,
              %{
                status: 200,
                body: %{
-                 "labels" => [%{"name" => "sym:todo"}, %{"name" => "other"}]
+                 "data" => %{
+                   "node" => %{
+                     "id" => "I_kw_99",
+                     "projectItems" => %{
+                       "nodes" => [
+                         %{"id" => "PVTI_99", "project" => %{"id" => "PVT_abc"}}
+                       ]
+                     }
+                   }
+                 }
                }
              }}
 
-          {:delete, 1} ->
-            assert req.url =~ "sym:todo" or req.url =~ "sym%3Atodo"
-            {:ok, %{status: 200}}
+          payload["query"] =~ "SymphonyGitHubSetState" ->
+            vars = payload["variables"]
+            assert vars["projectId"] == "PVT_abc"
+            assert vars["itemId"] == "PVTI_99"
+            assert vars["fieldId"] == "PVTSSF_x"
+            assert vars["optionId"] == "opt-inprog"
 
-          {:post, 2} ->
-            assert req.body == %{"labels" => ["sym:done"]}
-            {:ok, %{status: 200}}
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "updateProjectV2ItemFieldValue" => %{
+                     "projectV2Item" => %{"id" => "PVTI_99"}
+                   }
+                 }
+               }
+             }}
 
-          {:patch, 3} ->
-            assert req.body == %{"state" => "closed"}
-            {:ok, %{status: 200}}
+          payload["query"] =~ "SymphonyGitHubReopenIssue" ->
+            assert payload["variables"]["issueId"] == "I_kw_99"
 
-          _ ->
-            {:ok, %{status: 200}}
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "reopenIssue" => %{"issue" => %{"id" => "I_kw_99", "state" => "OPEN"}}
+                 }
+               }
+             }}
         end
       end
 
-      assert :ok = Client.update_issue_state("42", "Done", request_fun: request_fun)
+      assert :ok =
+               Client.update_issue_state("I_kw_99", "In Progress",
+                 base_dir: base_dir,
+                 request_fun: request_fun
+               )
+
+      assert :counters.get(seq, 1) == 3
+    end
+
+    test "closes issue for terminal states", %{base_dir: base_dir} do
+      seq = :counters.new(1, [])
+
+      request_fun = fn payload, _headers ->
+        :counters.add(seq, 1, 1)
+
+        cond do
+          payload["query"] =~ "SymphonyGitHubResolveItem" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "id" => "I_kw_77",
+                     "projectItems" => %{
+                       "nodes" => [
+                         %{"id" => "PVTI_77", "project" => %{"id" => "PVT_abc"}}
+                       ]
+                     }
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubSetState" ->
+            assert payload["variables"]["optionId"] == "opt-done"
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "updateProjectV2ItemFieldValue" => %{
+                     "projectV2Item" => %{"id" => "PVTI_77"}
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubCloseIssue" ->
+            assert payload["variables"]["issueId"] == "I_kw_77"
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "closeIssue" => %{"issue" => %{"id" => "I_kw_77", "state" => "CLOSED"}}
+                 }
+               }
+             }}
+        end
+      end
+
+      assert :ok =
+               Client.update_issue_state("I_kw_77", "Done",
+                 base_dir: base_dir,
+                 request_fun: request_fun
+               )
+
+      assert :counters.get(seq, 1) == 3
+    end
+
+    test "returns error for unknown state", %{base_dir: base_dir} do
+      assert {:error, {:unknown_state, "Limbo"}} =
+               Client.update_issue_state("I_kw_99", "Limbo",
+                 base_dir: base_dir,
+                 request_fun: fn _, _ -> flunk("unreachable") end
+               )
+    end
+
+    test "returns error when issue not in project", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        assert payload["query"] =~ "SymphonyGitHubResolveItem"
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "node" => %{
+                 "id" => "I_kw_42",
+                 "projectItems" => %{
+                   "nodes" => [
+                     %{"id" => "PVTI_other", "project" => %{"id" => "PVT_other"}}
+                   ]
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:error, {:issue_not_in_project, "I_kw_42"}} =
+               Client.update_issue_state("I_kw_42", "Todo",
+                 base_dir: base_dir,
+                 request_fun: request_fun
+               )
+    end
+
+    test "returns :missing_project_metadata when cache absent" do
+      empty_dir = System.tmp_dir!() |> Path.join("sym-update-empty-#{:erlang.unique_integer()}")
+      File.mkdir_p!(empty_dir)
+      on_exit(fn -> File.rm_rf!(empty_dir) end)
+
+      assert {:error, :missing_project_metadata} =
+               Client.update_issue_state("I_kw_99", "Todo",
+                 base_dir: empty_dir,
+                 request_fun: fn _, _ -> flunk("unreachable") end
+               )
     end
   end
 
