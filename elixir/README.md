@@ -42,7 +42,7 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
      part of the URL. When creating a workflow based on this repo, note that it depends on
      non-standard Linear issue statuses: "Rework", "Human Review", and "Merging". You can
      customize them in Team Settings → Workflow in Linear.
-   - **GitHub**: Set `tracker.repo` to `owner/repo`. Symphony bootstraps a repo-level
+   - **GitHub**: Set `github.repo` to `owner/repo`. Symphony bootstraps a repo-level
      GitHub Project v2 named `Symphony` (configurable via `github.project.title`) on
      first run and tracks issue state through a custom single-select field called
      `Symphony State` whose options come from `tracker.active_states` and
