@@ -88,7 +88,7 @@ defmodule SymphonyElixir.GitHub.Client do
         labels(first: 20) { nodes { name } }
         createdAt
         updatedAt
-        projectItems(first: 5) {
+        projectItems(first: 20) {
           nodes {
             id
             project { id }
@@ -411,18 +411,16 @@ defmodule SymphonyElixir.GitHub.Client do
   end
 
   defp extract_priority_from_labels(label_names) do
-    Enum.find_value(label_names, fn name ->
-      case Regex.run(~r/^priority:(\d+)$/i, name) do
-        [_, n] ->
-          case Integer.parse(n) do
-            {priority, ""} -> priority
-            _ -> nil
-          end
+    Enum.find_value(label_names, &parse_priority_label/1)
+  end
 
-        _ ->
-          nil
-      end
-    end)
+  defp parse_priority_label(name) do
+    with [_, n] <- Regex.run(~r/^priority:(\d+)$/i, name),
+         {priority, ""} <- Integer.parse(n) do
+      priority
+    else
+      _ -> nil
+    end
   end
 
   defp extract_status_value(%{"fieldValues" => %{"nodes" => nodes}}, status_field_name)
@@ -457,16 +455,7 @@ defmodule SymphonyElixir.GitHub.Client do
 
     case graphql(@issues_by_ids_query, %{"ids" => ids}, graphql_opts) do
       {:ok, %{"data" => %{"nodes" => nodes}}} when is_list(nodes) ->
-        issues =
-          nodes
-          |> Enum.flat_map(fn node ->
-            case build_issue_from_node(node, project_id, status_field_name, repo) do
-              nil -> []
-              issue -> [issue]
-            end
-          end)
-
-        {:ok, issues}
+        {:ok, build_issues_from_nodes(nodes, project_id, status_field_name, repo)}
 
       {:ok, _body} ->
         {:error, :github_unknown_payload}
@@ -474,6 +463,15 @@ defmodule SymphonyElixir.GitHub.Client do
       {:error, _} = error ->
         error
     end
+  end
+
+  defp build_issues_from_nodes(nodes, project_id, status_field_name, repo) do
+    Enum.flat_map(nodes, fn node ->
+      case build_issue_from_node(node, project_id, status_field_name, repo) do
+        nil -> []
+        issue -> [issue]
+      end
+    end)
   end
 
   defp build_issue_from_node(%{"__typename" => "Issue"} = node, project_id, status_field_name, repo) do

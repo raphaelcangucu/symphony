@@ -326,6 +326,37 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       assert issue.labels == ["bug"]
     end
 
+    test "returns :github_missing_end_cursor when hasNextPage is true but cursor is nil", %{base_dir: base_dir} do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "node" => %{
+                 "items" => %{
+                   "nodes" => [
+                     build_project_item_fixture(%{
+                       item_id: "PVTI_1",
+                       issue_node_id: "I_1",
+                       number: 1,
+                       title: "Stuck",
+                       repo: "owner/repo",
+                       state_name: "Todo"
+                     })
+                   ],
+                   "pageInfo" => %{"hasNextPage" => true, "endCursor" => nil}
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:error, :github_missing_end_cursor} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+    end
+
     test "returns :missing_project_metadata when cache absent" do
       other_tmp = System.tmp_dir!() |> Path.join("sym-gh-empty-#{:erlang.unique_integer()}")
       File.mkdir_p!(other_tmp)
