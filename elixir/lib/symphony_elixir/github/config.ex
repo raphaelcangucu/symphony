@@ -8,6 +8,8 @@ defmodule SymphonyElixir.GitHub.Config do
   @default_label_prefix "symphony"
   @default_status_field "Symphony State"
   @default_admission_label "symphony"
+  @default_project_mode "auto"
+  @default_project_title "Symphony"
 
   @spec repo() :: String.t() | nil
   def repo do
@@ -44,30 +46,12 @@ defmodule SymphonyElixir.GitHub.Config do
 
   @spec project_mode() :: String.t()
   def project_mode do
-    case get_in(project_section(), ["mode"]) do
-      value when is_binary(value) ->
-        case String.trim(value) do
-          "" -> "auto"
-          trimmed -> trimmed
-        end
-
-      _ ->
-        "auto"
-    end
+    trim_string(get_in(project_section(), ["mode"])) || @default_project_mode
   end
 
   @spec project_title() :: String.t()
   def project_title do
-    case get_in(project_section(), ["title"]) do
-      value when is_binary(value) ->
-        case String.trim(value) do
-          "" -> "Symphony"
-          trimmed -> trimmed
-        end
-
-      _ ->
-        "Symphony"
-    end
+    trim_string(get_in(project_section(), ["title"])) || @default_project_title
   end
 
   @spec project_id() :: String.t() | nil
@@ -75,15 +59,15 @@ defmodule SymphonyElixir.GitHub.Config do
     trim_string(get_in(project_section(), ["id"]))
   end
 
-  @spec project_number() :: integer() | nil
+  @spec project_number() :: pos_integer() | nil
   def project_number do
     case get_in(project_section(), ["number"]) do
-      n when is_integer(n) ->
+      n when is_integer(n) and n > 0 ->
         n
 
       n when is_binary(n) ->
         case Integer.parse(String.trim(n)) do
-          {parsed, ""} -> parsed
+          {parsed, ""} when parsed > 0 -> parsed
           _ -> nil
         end
 

@@ -79,4 +79,54 @@ defmodule SymphonyElixir.GitHub.ConfigTest do
       assert Config.admission_label() == "agent"
     end
   end
+
+  describe "project getters edge cases" do
+    test "project_number/0 accepts string integer" do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        github_project_number: "42"
+      )
+
+      assert Config.project_number() == 42
+    end
+
+    test "project_number/0 returns nil for non-numeric string" do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        github_project_number: "abc"
+      )
+
+      assert Config.project_number() == nil
+    end
+
+    test "project_number/0 returns nil for zero or negative" do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        github_project_number: 0
+      )
+
+      assert Config.project_number() == nil
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        github_project_number: -5
+      )
+
+      assert Config.project_number() == nil
+    end
+
+    test "status_field/0 falls back when value is whitespace" do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        github_status_field: "   "
+      )
+
+      assert Config.status_field() == "Symphony State"
+    end
+  end
 end
