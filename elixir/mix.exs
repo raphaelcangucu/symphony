@@ -23,6 +23,8 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixir.SpecsCheck,
           SymphonyElixir.Orchestrator,
           SymphonyElixir.Orchestrator.State,
+          # TODO: add tests for ensure_utf8/1 unicode fallback path
+          SymphonyElixir.PromptBuilder,
           SymphonyElixir.AgentRunner,
           SymphonyElixir.CLI,
           SymphonyElixir.CodingAgent,

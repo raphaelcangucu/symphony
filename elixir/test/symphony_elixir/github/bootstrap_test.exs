@@ -111,6 +111,190 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
     end
   end
 
+  defmodule GraphQLErrorMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:error, {:github_graphql_errors, [%{"message" => "rate limited"}, %{"message" => "try again"}]}}
+      end
+    end
+  end
+
+  defmodule GraphQLEmptyMessageMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:error, {:github_graphql_errors, [%{"code" => "rate_limit"}]}}
+      end
+    end
+  end
+
+  defmodule ApiStatusMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:error, {:github_api_status, 500}}
+      end
+    end
+  end
+
+  defmodule ApiRequestMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:error, {:github_api_request, :nxdomain}}
+      end
+    end
+  end
+
+  defmodule OwnerNilMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:ok, %{"data" => %{"repository" => nil}}}
+      end
+    end
+  end
+
+  defmodule WeirdOwnerMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:ok, %{"data" => %{"repository" => %{"owner" => %{}}}}}
+      end
+    end
+  end
+
+  defmodule BinaryErrorMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:error, "owner lookup boom"}
+      end
+    end
+  end
+
+  defmodule MalformedCreateMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:ok, %{"data" => %{"repository" => %{"owner" => %{"id" => "OWNER_Z"}}}}}
+
+        query =~ "SymphonyGitHubCreateProject" ->
+          {:ok, %{"data" => %{"createProjectV2" => %{"projectV2" => %{}}}}}
+      end
+    end
+  end
+
+  defmodule CreateProjectErrorMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:ok, %{"data" => %{"repository" => %{"owner" => %{"id" => "OWNER_A"}}}}}
+
+        query =~ "SymphonyGitHubCreateProject" ->
+          {:error, {:github_api_status, 403}}
+      end
+    end
+  end
+
+  defmodule CreateFieldUnexpectedMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:ok, %{"data" => %{"repository" => %{"owner" => %{"id" => "OWNER_X"}}}}}
+
+        query =~ "SymphonyGitHubCreateProject" ->
+          {:ok,
+           %{
+             "data" => %{
+               "createProjectV2" => %{
+                 "projectV2" => %{
+                   "id" => "PVT_x",
+                   "number" => 1,
+                   "url" => "https://github.com/users/x/projects/1"
+                 }
+               }
+             }
+           }}
+
+        query =~ "SymphonyGitHubCreateField" ->
+          {:ok,
+           %{
+             "data" => %{
+               "createProjectV2Field" => %{"projectV2Field" => %{"unexpected" => true}}
+             }
+           }}
+      end
+    end
+  end
+
+  defmodule MalformedOptionAutoMock do
+    @moduledoc """
+    Exercises the success path through `build_metadata/2` where the
+    GraphQL field response contains an option entry with non-binary
+    name/id values. The reducer must skip the malformed entry and keep
+    well-formed entries in `state_options`.
+    """
+
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubResolveOwner" ->
+          {:ok, %{"data" => %{"repository" => %{"owner" => %{"id" => "OWNER_M"}}}}}
+
+        query =~ "SymphonyGitHubCreateProject" ->
+          {:ok,
+           %{
+             "data" => %{
+               "createProjectV2" => %{
+                 "projectV2" => %{
+                   "id" => "PVT_m",
+                   "number" => 4,
+                   "url" => "https://github.com/users/m/projects/4"
+                 }
+               }
+             }
+           }}
+
+        query =~ "SymphonyGitHubCreateField" ->
+          {:ok,
+           %{
+             "data" => %{
+               "createProjectV2Field" => %{
+                 "projectV2Field" => %{
+                   "id" => "PVTSSF_m",
+                   "name" => "Symphony State",
+                   "options" => [
+                     %{"id" => "opt-todo", "name" => "Todo"},
+                     %{"id" => nil, "name" => nil},
+                     %{"id" => "opt-done", "name" => "Done"}
+                   ]
+                 }
+               }
+             }
+           }}
+      end
+    end
+  end
+
+  defmodule ExistingFailMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubReadProject" ->
+          {:error, {:github_api_status, 502}}
+      end
+    end
+  end
+
+  defmodule ExistingMalformedMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubReadProject" ->
+          {:ok, %{"data" => %{"node" => %{"id" => "PVT_specified", "field" => nil}}}}
+      end
+    end
+  end
+
   describe "ensure_project/1 with mode=auto and no cache" do
     test "creates project + field and writes metadata", %{base_dir: base_dir} do
       Process.put(:bootstrap_test_pid, self())
@@ -281,6 +465,177 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
                Bootstrap.ensure_project(base_dir: base_dir, client_module: MissingNodeMock)
 
       assert message =~ "GitHub project bootstrap failed"
+    end
+  end
+
+  describe "format_error/1 via end-to-end errors" do
+    test "formats github_graphql_errors with concatenated messages", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: GraphQLErrorMock)
+
+      assert message =~ "GitHub GraphQL error: rate limited; try again"
+    end
+
+    test "formats github_graphql_errors with no messages by inspecting the list", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: GraphQLEmptyMessageMock)
+
+      assert message =~ "GitHub GraphQL error: ["
+      assert message =~ "rate_limit"
+    end
+
+    test "formats github_api_status", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: ApiStatusMock)
+
+      assert message =~ "GitHub API status 500"
+    end
+
+    test "formats github_api_request", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: ApiRequestMock)
+
+      assert message =~ "GitHub API request failed: :nxdomain"
+    end
+
+    test "formats owner_lookup_unexpected as repository not found", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: OwnerNilMock)
+
+      assert message =~ "GitHub repository not found"
+    end
+
+    test "surfaces resolve_owner_id {:ok, body} via generic inspect", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: WeirdOwnerMock)
+
+      assert message =~ "GitHub project bootstrap failed"
+      assert message =~ "owner_lookup_unexpected"
+    end
+
+    test "formats binary reason verbatim through bootstrap_auto", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: BinaryErrorMock)
+
+      assert message =~ "GitHub project bootstrap failed: owner lookup boom"
+    end
+  end
+
+  describe "create_project failure paths" do
+    test "surfaces create_project_unexpected when projectV2 is missing id", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: MalformedCreateMock)
+
+      assert message =~ "GitHub project bootstrap failed"
+      assert message =~ "create_project_unexpected"
+    end
+
+    test "surfaces graphql {:error, reason} returned from create_project", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: CreateProjectErrorMock)
+
+      assert message =~ "GitHub project bootstrap failed"
+      assert message =~ "GitHub API status 403"
+    end
+  end
+
+  describe "create_status_field unexpected body" do
+    test "formats create_field_unexpected with project url and inspected body", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: CreateFieldUnexpectedMock)
+
+      assert message =~ "https://github.com/users/x/projects/1"
+      assert message =~ "Symphony State field response was unexpected"
+    end
+  end
+
+  describe "build_metadata fallback" do
+    test "skips malformed option entries and records well-formed states", %{base_dir: base_dir} do
+      assert :ok =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: MalformedOptionAutoMock)
+
+      assert {:ok, metadata} = ProjectMetadata.read(base_dir)
+      assert metadata["state_options"]["Todo"] == "opt-todo"
+      assert metadata["state_options"]["Done"] == "opt-done"
+      refute Map.has_key?(metadata["state_options"], nil)
+    end
+  end
+
+  describe "write_metadata rescue" do
+    test "surfaces File.Error from ProjectMetadata.write! as a formatted error", %{base_dir: base_dir} do
+      cache_dir = Path.join(base_dir, ".symphony")
+      File.mkdir_p!(cache_dir)
+      File.chmod!(cache_dir, 0o555)
+      on_exit(fn -> File.chmod(cache_dir, 0o755) end)
+
+      Process.put(:bootstrap_test_pid, self())
+
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: AutoMock)
+
+      assert message =~ "GitHub project bootstrap failed"
+      assert message =~ "write_metadata"
+      assert message =~ "permission denied"
+    end
+  end
+
+  describe "bootstrap_existing error paths" do
+    setup %{base_dir: base_dir} do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        github_project_mode: "existing",
+        github_project_id: "PVT_specified"
+      )
+
+      %{base_dir: base_dir}
+    end
+
+    test "surfaces graphql error during load_existing_project", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: ExistingFailMock)
+
+      assert message =~ "GitHub project bootstrap failed"
+      assert message =~ "GitHub API status 502"
+    end
+
+    test "surfaces existing_project_unexpected when payload is malformed", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: ExistingMalformedMock)
+
+      assert message =~ "GitHub project bootstrap failed"
+      assert message =~ "existing_project_unexpected"
+    end
+  end
+
+  describe "client_module/1 application env fallback" do
+    setup %{base_dir: base_dir} do
+      previous = Application.get_env(:symphony_elixir, :github_client_module)
+      Application.put_env(:symphony_elixir, :github_client_module, FailMock)
+
+      on_exit(fn ->
+        case previous do
+          nil -> Application.delete_env(:symphony_elixir, :github_client_module)
+          value -> Application.put_env(:symphony_elixir, :github_client_module, value)
+        end
+      end)
+
+      %{base_dir: base_dir}
+    end
+
+    test "uses Application env when client_module opt is omitted", %{base_dir: base_dir} do
+      assert {:error, message} = Bootstrap.ensure_project(base_dir: base_dir)
+      assert message =~ "GitHub project bootstrap failed"
+      assert message =~ "GitHub API status 401"
+    end
+
+    test "defaults base_dir to cwd when ensure_project/0 is called without opts",
+         %{base_dir: base_dir} do
+      File.cd!(base_dir, fn ->
+        assert {:error, message} = Bootstrap.ensure_project()
+        assert message =~ "GitHub project bootstrap failed"
+        assert message =~ "GitHub API status 401"
+      end)
     end
   end
 end
