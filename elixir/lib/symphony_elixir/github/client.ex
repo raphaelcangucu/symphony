@@ -521,7 +521,6 @@ defmodule SymphonyElixir.GitHub.Client do
     end)
   end
 
-  defp downcase_safe(nil), do: nil
   defp downcase_safe(value) when is_binary(value), do: String.downcase(value)
 
   defp priority_label?(label) when is_binary(label) do
