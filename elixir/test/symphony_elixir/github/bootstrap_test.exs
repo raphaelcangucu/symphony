@@ -103,7 +103,7 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
                  "id" => "PVT_existing",
                  "number" => 3,
                  "url" => "https://github.com/users/raphaelcangucu/projects/3",
-                 "field" => %{
+                 "symphonyField" => %{
                    "id" => "PVTSSF_existing",
                    "name" => "Symphony State",
                    "options" => [
@@ -111,6 +111,14 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
                      %{"id" => "opt-inprog", "name" => "In Progress"},
                      %{"id" => "opt-done", "name" => "Done"},
                      %{"id" => "opt-cancel", "name" => "Cancelled"}
+                   ]
+                 },
+                 "nativeField" => %{
+                   "id" => "PVTSSF_native",
+                   "name" => "Status",
+                   "options" => [
+                     %{"id" => "nat-todo", "name" => "Todo"},
+                     %{"id" => "nat-inprog", "name" => "In Progress"}
                    ]
                  }
                }
@@ -386,7 +394,7 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
     def graphql(query, _variables, _opts \\ []) do
       cond do
         query =~ "SymphonyGitHubReadProject" ->
-          {:ok, %{"data" => %{"node" => %{"id" => "PVT_specified", "field" => nil}}}}
+          {:ok, %{"data" => %{"node" => %{"id" => "PVT_specified", "symphonyField" => nil}}}}
       end
     end
   end
@@ -462,6 +470,8 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
       assert {:ok, metadata} = ProjectMetadata.read(base_dir)
       assert metadata["project_id"] == "PVT_existing"
       assert metadata["state_options"]["Todo"] == "opt-todo"
+      assert metadata["native_status_field_id"] == "PVTSSF_native"
+      assert metadata["native_state_options"]["In Progress"] == "nat-inprog"
     end
 
     test "fails when project_id missing", %{base_dir: base_dir} do

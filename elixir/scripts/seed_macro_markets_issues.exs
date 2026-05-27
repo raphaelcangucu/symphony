@@ -4,15 +4,18 @@
 # Usage:
 #   mix run scripts/seed_macro_markets_issues.exs -- \
 #     "Todo|First smoke task" \
-#     "In Progress|Assignee filter check"
+#     "Todo|codex|Explicit codex task" \
+#     "Todo|claude|Explicit claude task"
 #
-# Requires .symphony/github-project.json (from bootstrap_macro_markets.exs) or
-# GITHUB_TOKEN + WORKFLOW with github.project.id set.
+# Optional middle segment: codex | claude (omit for base `symphony` → default Codex).
+#
+# Requires .symphony/github-project.json (from bootstrap_macro_markets.exs).
 
-alias SymphonyElixir.GitHub.{Client, ProjectMetadata}
+alias SymphonyElixir.{AgentRouting, GitHub.Client, GitHub.ProjectMetadata}
+
+{:ok, _} = Application.ensure_all_started(:req)
 
 repo = "clouapp/front"
-admission_label = "symphony"
 
 create_issue = """
 mutation($repoId: ID!, $title: String!) {
@@ -63,16 +66,29 @@ query($owner: String!, $name: String!) {
 }
 """
 
-tasks =
-  System.argv()
-  |> Enum.map(fn arg ->
-    case String.split(arg, "|", parts: 2) do
-      [state, title] -> {String.trim(state), String.trim(title)}
-      _ -> System.halt("Each arg must be STATE|Title, got: #{inspect(arg)}")
-    end
-  end)
+parse_task = fn arg ->
+  case String.split(arg, "|") do
+    [state, title] ->
+      {String.trim(state), :default, String.trim(title)}
 
-if tasks == [], do: System.halt("Provide at least one STATE|Title argument")
+    [state, agent, title] ->
+      {String.trim(state), String.trim(agent) |> String.downcase() |> String.to_atom(), String.trim(title)}
+
+    _ ->
+      System.halt("Each arg must be STATE|Title or STATE|codex|Title or STATE|claude|Title, got: #{inspect(arg)}")
+  end
+end
+
+routing_label = fn
+  :default -> AgentRouting.symphony_label()
+  :codex -> "symphony:codex"
+  :claude -> "symphony:claude"
+  other -> System.halt("Unknown agent #{inspect(other)} — use codex, claude, or omit")
+end
+
+tasks = System.argv() |> Enum.map(parse_task)
+
+if tasks == [], do: System.halt("Provide at least one task argument")
 
 with {:ok, metadata} <- ProjectMetadata.read(),
      project_id = metadata["project_id"],
@@ -83,43 +99,43 @@ with {:ok, metadata} <- ProjectMetadata.read(),
        Client.graphql(repo_id_query, %{"owner" => owner, "name" => name}),
      {:ok, %{"data" => %{"repository" => %{"labels" => %{"nodes" => label_nodes}}}}} <-
        Client.graphql(labels_query, %{"owner" => owner, "name" => name}) do
-  symphony_label_id =
-    label_nodes
-    |> Enum.find_value(fn %{"name" => n, "id" => id} ->
-      if String.downcase(n) == admission_label, do: id
-    end)
+  label_id_by_name =
+    Map.new(label_nodes, fn %{"name" => n, "id" => id} -> {String.downcase(n), id} end)
 
-  if is_nil(symphony_label_id) do
-    IO.puts(:stderr, "Label #{admission_label} not found on #{repo} — create it on GitHub first")
-    System.halt(1)
-  end
-
-  Enum.each(tasks, fn {state, title} ->
+  Enum.each(tasks, fn {state, agent, title} ->
+    label_name = routing_label.(agent) |> String.downcase()
+    label_id = Map.get(label_id_by_name, label_name)
     option_id = Map.get(state_options, state)
 
-    if is_nil(option_id) do
-      IO.puts(:stderr, "Unknown state #{inspect(state)} — not in project metadata")
-    else
-      with {:ok, %{"data" => %{"createIssue" => %{"issue" => issue}}}} <-
-             Client.graphql(create_issue, %{"repoId" => repo_id, "title" => title}),
-           {:ok, %{"data" => %{"addProjectV2ItemById" => %{"item" => %{"id" => item_id}}}}} <-
-             Client.graphql(add_item, %{"projectId" => project_id, "contentId" => issue["id"]}),
-           {:ok, _} <-
-             Client.graphql(set_state, %{
-               "projectId" => project_id,
-               "itemId" => item_id,
-               "fieldId" => field_id,
-               "optionId" => option_id
-             }),
-           {:ok, _} <-
-             Client.graphql(label_issue, %{
-               "issueId" => issue["id"],
-               "labelIds" => [symphony_label_id]
-             }) do
-        IO.puts("Created #{repo}##{issue["number"]} [#{state}] #{title}")
-      else
-        {:error, reason} -> IO.puts(:stderr, "Failed #{title}: #{inspect(reason)}")
-      end
+    cond do
+      is_nil(label_id) ->
+        IO.puts(:stderr, "Label #{label_name} not found on #{repo} — create it on GitHub first")
+        System.halt(1)
+
+      is_nil(option_id) ->
+        IO.puts(:stderr, "Unknown state #{inspect(state)} — not in project metadata")
+
+      true ->
+        with {:ok, %{"data" => %{"createIssue" => %{"issue" => issue}}}} <-
+               Client.graphql(create_issue, %{"repoId" => repo_id, "title" => title}),
+             {:ok, %{"data" => %{"addProjectV2ItemById" => %{"item" => %{"id" => item_id}}}}} <-
+               Client.graphql(add_item, %{"projectId" => project_id, "contentId" => issue["id"]}),
+             {:ok, _} <-
+               Client.graphql(set_state, %{
+                 "projectId" => project_id,
+                 "itemId" => item_id,
+                 "fieldId" => field_id,
+                 "optionId" => option_id
+               }),
+             {:ok, _} <-
+               Client.graphql(label_issue, %{
+                 "issueId" => issue["id"],
+                 "labelIds" => [label_id]
+               }) do
+          IO.puts("Created #{repo}##{issue["number"]} [#{state}] [#{label_name}] #{title}")
+        else
+          {:error, reason} -> IO.puts(:stderr, "Failed #{title}: #{inspect(reason)}")
+        end
     end
   end)
 else

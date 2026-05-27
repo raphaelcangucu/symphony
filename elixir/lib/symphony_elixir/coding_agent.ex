@@ -11,22 +11,26 @@ defmodule SymphonyElixir.CodingAgent do
   @callback normalize_event(map()) :: map()
 
   @spec adapter() :: module()
-  def adapter do
-    case Config.agent_kind() do
-      "codex" -> SymphonyElixir.Codex.CodingAgent
-      _ -> SymphonyElixir.Claude.CodingAgent
-    end
-  end
+  def adapter, do: adapter_for(Config.agent_kind())
 
-  @spec start_session(Path.t()) :: {:ok, map()} | {:error, term()}
-  def start_session(workspace), do: adapter().start_session(workspace)
+  @spec adapter_for(String.t() | nil) :: module()
+  def adapter_for("codex"), do: SymphonyElixir.Codex.CodingAgent
+  def adapter_for("claude"), do: SymphonyElixir.Claude.CodingAgent
+  def adapter_for(_), do: adapter_for(Config.default_agent_kind())
+
+  @spec start_session(Path.t(), String.t() | nil) :: {:ok, map()} | {:error, term()}
+  def start_session(workspace, agent_kind \\ nil),
+    do: adapter_for(agent_kind).start_session(workspace)
 
   @spec run_turn(map(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
-  def run_turn(session, prompt, issue, opts \\ []), do: adapter().run_turn(session, prompt, issue, opts)
+  def run_turn(session, prompt, issue, opts \\ []) do
+    agent_kind = Keyword.get(opts, :agent_kind, Map.get(issue, :agent_kind))
+    adapter_for(agent_kind).run_turn(session, prompt, issue, opts)
+  end
 
-  @spec stop_session(map()) :: :ok
-  def stop_session(session), do: adapter().stop_session(session)
+  @spec stop_session(map(), String.t() | nil) :: :ok
+  def stop_session(session, agent_kind \\ nil), do: adapter_for(agent_kind).stop_session(session)
 
-  @spec normalize_event(map()) :: map()
-  def normalize_event(event), do: adapter().normalize_event(event)
+  @spec normalize_event(map(), String.t() | nil) :: map()
+  def normalize_event(event, agent_kind \\ nil), do: adapter_for(agent_kind).normalize_event(event)
 end

@@ -51,13 +51,24 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
   """
 
   @existing_project_query """
-  query SymphonyGitHubReadProject($projectId: ID!, $statusFieldName: String!) {
+  query SymphonyGitHubReadProject(
+    $projectId: ID!,
+    $statusFieldName: String!,
+    $nativeStatusFieldName: String!
+  ) {
     node(id: $projectId) {
       ... on ProjectV2 {
         id
         number
         url
-        field(name: $statusFieldName) {
+        symphonyField: field(name: $statusFieldName) {
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+            options { id name }
+          }
+        }
+        nativeField: field(name: $nativeStatusFieldName) {
           ... on ProjectV2SingleSelectField {
             id
             name
@@ -142,8 +153,9 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
         {:error, "github.project.mode is \"existing\" but github.project.id is not set in WORKFLOW.md"}
 
       project_id ->
-        with {:ok, project, field} <- load_existing_project(client, project_id, status_field_name),
-             metadata <- build_metadata(project, field),
+        with {:ok, project, field, native_field} <-
+               load_existing_project(client, project_id, status_field_name),
+             metadata <- build_metadata(project, field, native_field),
              :ok <- write_metadata(base_dir, metadata),
              :ok <- post_bootstrap_validate(base_dir, metadata, opts) do
           Logger.info("GitHub Project metadata cached: #{project["url"]}")
@@ -210,17 +222,25 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
   end
 
   defp load_existing_project(client, project_id, status_field_name) do
+    native_status_field_name = GitHub.Config.native_status_field()
+
     case client.graphql(@existing_project_query, %{
            "projectId" => project_id,
-           "statusFieldName" => status_field_name
+           "statusFieldName" => status_field_name,
+           "nativeStatusFieldName" => native_status_field_name
          }) do
       {:ok,
        %{
          "data" => %{
-           "node" => %{"id" => _, "field" => %{"id" => _, "options" => _} = field} = project
+           "node" =>
+             %{
+               "id" => _,
+               "symphonyField" => %{"id" => _, "options" => _} = field
+             } = project
          }
        }} ->
-        {:ok, project, field}
+        native_field = Map.get(project, "nativeField")
+        {:ok, project, field, native_field}
 
       {:ok, body} ->
         {:error, {:existing_project_unexpected, body}}
@@ -231,9 +251,7 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
   end
 
   defp build_option_inputs do
-    state_names = Config.active_states() ++ Config.terminal_states()
-
-    state_names
+    Config.field_states()
     |> Enum.uniq()
     |> Enum.map(fn name ->
       %{
@@ -244,27 +262,40 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
     end)
   end
 
-  defp build_metadata(project, field) do
-    options = field["options"] || []
-
-    state_options =
-      Enum.reduce(options, %{}, fn opt, acc ->
-        case {opt["name"], opt["id"]} do
-          {name, id} when is_binary(name) and is_binary(id) -> Map.put(acc, name, id)
-          _ -> acc
-        end
-      end)
-
+  defp build_metadata(project, field, native_field \\ nil) do
     %{
       "project_id" => project["id"],
       "project_number" => project["number"],
       "project_url" => project["url"],
       "status_field_id" => field["id"],
       "status_field_name" => field["name"],
-      "state_options" => state_options,
+      "state_options" => field_options_to_map(field),
       "bootstrapped_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
+    |> maybe_put_native_status_metadata(native_field)
   end
+
+  defp maybe_put_native_status_metadata(metadata, %{"id" => id, "name" => name, "options" => options})
+       when is_binary(id) and is_binary(name) and is_list(options) do
+    Map.merge(metadata, %{
+      "native_status_field_id" => id,
+      "native_status_field_name" => name,
+      "native_state_options" => field_options_to_map(%{"options" => options})
+    })
+  end
+
+  defp maybe_put_native_status_metadata(metadata, _native_field), do: metadata
+
+  defp field_options_to_map(%{"options" => options}) when is_list(options) do
+    Enum.reduce(options, %{}, fn opt, acc ->
+      case {opt["name"], opt["id"]} do
+        {name, id} when is_binary(name) and is_binary(id) -> Map.put(acc, name, id)
+        _ -> acc
+      end
+    end)
+  end
+
+  defp field_options_to_map(_field), do: %{}
 
   defp write_metadata(base_dir, metadata) do
     ProjectMetadata.write!(base_dir, metadata)

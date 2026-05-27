@@ -459,7 +459,14 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
             assert payload["variables"]["owner"] == "owner"
             assert payload["variables"]["name"] == "repo"
-            assert payload["variables"]["label"] == "symphony"
+            assert payload["variables"]["label"] in ["symphony", "symphony:codex", "symphony:claude"]
+
+            nodes =
+              if payload["variables"]["label"] == "symphony" do
+                [%{"id" => "I_already", "number" => 1}, %{"id" => "I_new", "number" => 2}]
+              else
+                []
+              end
 
             {:ok,
              %{
@@ -468,10 +475,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  "data" => %{
                    "repository" => %{
                      "issues" => %{
-                       "nodes" => [
-                         %{"id" => "I_already", "number" => 1},
-                         %{"id" => "I_new", "number" => 2}
-                       ],
+                       "nodes" => nodes,
                        "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
                      }
                    }
@@ -1118,6 +1122,14 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           "Done" => "opt-done",
           "Cancelled" => "opt-cancel"
         },
+        "native_status_field_id" => "PVTSSF_native",
+        "native_status_field_name" => "Status",
+        "native_state_options" => %{
+          "Todo" => "nat-todo",
+          "In Progress" => "nat-inprog",
+          "Done" => "nat-done",
+          "Cancelled" => "nat-cancel"
+        },
         "bootstrapped_at" => "2026-05-24T00:00:00Z"
       })
 
@@ -1163,8 +1175,11 @@ defmodule SymphonyElixir.GitHub.ClientTest do
             vars = payload["variables"]
             assert vars["projectId"] == "PVT_abc"
             assert vars["itemId"] == "PVTI_99"
-            assert vars["fieldId"] == "PVTSSF_x"
-            assert vars["optionId"] == "opt-inprog"
+
+            case vars["fieldId"] do
+              "PVTSSF_x" -> assert vars["optionId"] == "opt-inprog"
+              "PVTSSF_native" -> assert vars["optionId"] == "nat-inprog"
+            end
 
             {:ok,
              %{
@@ -1199,7 +1214,66 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  request_fun: request_fun
                )
 
-      assert :counters.get(seq, 1) == 3
+      assert :counters.get(seq, 1) == 4
+    end
+
+    test "syncs native Status field when configured", %{base_dir: base_dir} do
+      set_state_calls = :counters.new(1, [])
+
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubResolveItem" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "id" => "I_kw_99",
+                     "state" => "OPEN",
+                     "projectItems" => %{
+                       "nodes" => [
+                         %{"id" => "PVTI_99", "project" => %{"id" => "PVT_abc"}}
+                       ]
+                     }
+                   }
+                 }
+               }
+             }}
+
+          payload["query"] =~ "SymphonyGitHubSetState" ->
+            :counters.add(set_state_calls, 1, 1)
+            vars = payload["variables"]
+
+            case vars["fieldId"] do
+              "PVTSSF_native" -> assert vars["optionId"] == "nat-inprog"
+              "PVTSSF_x" -> assert vars["optionId"] == "opt-inprog"
+            end
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "updateProjectV2ItemFieldValue" => %{
+                     "projectV2Item" => %{"id" => "PVTI_99"}
+                   }
+                 }
+               }
+             }}
+
+          true ->
+            flunk("unexpected query: #{payload["query"]}")
+        end
+      end
+
+      assert :ok =
+               Client.update_issue_state("I_kw_99", "In Progress",
+                 base_dir: base_dir,
+                 request_fun: request_fun
+               )
+
+      assert :counters.get(set_state_calls, 1) == 2
     end
 
     test "closes issue for terminal states", %{base_dir: base_dir} do
@@ -1229,7 +1303,10 @@ defmodule SymphonyElixir.GitHub.ClientTest do
              }}
 
           payload["query"] =~ "SymphonyGitHubSetState" ->
-            assert payload["variables"]["optionId"] == "opt-done"
+            case payload["variables"]["fieldId"] do
+              "PVTSSF_x" -> assert payload["variables"]["optionId"] == "opt-done"
+              "PVTSSF_native" -> assert payload["variables"]["optionId"] == "nat-done"
+            end
 
             {:ok,
              %{
@@ -1265,7 +1342,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  request_fun: request_fun
                )
 
-      assert :counters.get(seq, 1) == 3
+      assert :counters.get(seq, 1) == 4
     end
 
     test "returns error for unknown state", %{base_dir: base_dir} do
@@ -1583,6 +1660,93 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       %{base_dir: tmp}
     end
 
+    test "routes by symphony agent labels", %{base_dir: base_dir} do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "owner/repo",
+        agent_kind: "codex"
+      )
+
+      request_fun =
+        poll_with_items([
+          build_project_item_fixture(%{
+            item_id: "PVTI_1",
+            issue_node_id: "I_1",
+            number: 1,
+            title: "Codex tag",
+            repo: "owner/repo",
+            state_name: "Todo",
+            labels: [%{"name" => "symphony:codex"}]
+          }),
+          build_project_item_fixture(%{
+            item_id: "PVTI_2",
+            issue_node_id: "I_2",
+            number: 2,
+            title: "Base symphony",
+            repo: "owner/repo",
+            state_name: "Todo",
+            labels: [%{"name" => "symphony"}]
+          }),
+          build_project_item_fixture(%{
+            item_id: "PVTI_3",
+            issue_node_id: "I_3",
+            number: 3,
+            title: "Claude only workflow",
+            repo: "owner/repo",
+            state_name: "Todo",
+            labels: [%{"name" => "symphony:claude"}]
+          }),
+          build_project_item_fixture(%{
+            item_id: "PVTI_4",
+            issue_node_id: "I_4",
+            number: 4,
+            title: "No tag",
+            repo: "owner/repo",
+            state_name: "Todo",
+            labels: [%{"name" => "bug"}]
+          })
+        ])
+
+      assert {:ok, issues} = Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+
+      codex_tagged = Enum.find(issues, &(&1.identifier == "1"))
+      base = Enum.find(issues, &(&1.identifier == "2"))
+      claude_tagged = Enum.find(issues, &(&1.identifier == "3"))
+      none = Enum.find(issues, &(&1.identifier == "4"))
+
+      assert codex_tagged.assigned_to_worker
+      assert codex_tagged.agent_kind == "codex"
+      assert base.assigned_to_worker
+      assert base.agent_kind == "codex"
+      refute claude_tagged.assigned_to_worker
+      refute none.assigned_to_worker
+    end
+
+    test "routes symphony:claude when claude section is configured", %{base_dir: base_dir} do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "owner/repo",
+        agent_kind: "claude"
+      )
+
+      request_fun =
+        poll_with_items([
+          build_project_item_fixture(%{
+            item_id: "PVTI_1",
+            issue_node_id: "I_1",
+            number: 1,
+            title: "Claude",
+            repo: "owner/repo",
+            state_name: "Todo",
+            labels: [%{"name" => "symphony:claude"}]
+          })
+        ])
+
+      assert {:ok, [issue]} = Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+      assert issue.assigned_to_worker
+      assert issue.agent_kind == "claude"
+    end
+
     test "assignee me sets assigned_to_worker from viewer cache", %{base_dir: base_dir} do
       write_workflow_file!(Workflow.workflow_file_path(),
         tracker_kind: "github",
@@ -1649,6 +1813,59 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     end
   end
 
+  describe "issue_has_open_pull_request?/2" do
+    test "returns true when closedByPullRequestsReferences includes OPEN" do
+      request_fun = fn payload, _headers ->
+        assert payload["query"] =~ "SymphonyGitHubIssueOpenPRs"
+        assert payload["variables"]["number"] == 501
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       %{"state" => "MERGED"},
+                       %{"state" => "OPEN"}
+                     ]
+                   }
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, true} =
+               Client.issue_has_open_pull_request?(501, request_fun: request_fun)
+    end
+
+    test "returns false when no open pull requests reference the issue" do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [%{"state" => "MERGED"}]
+                   }
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, false} = Client.issue_has_open_pull_request?("42", request_fun: request_fun)
+    end
+  end
+
   defp poll_with_items(nodes) do
     fn payload, _headers ->
       cond do
@@ -1689,7 +1906,10 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           "state" => "OPEN",
           "repository" => %{"nameWithOwner" => opts.repo},
           "assignees" => %{"nodes" => Map.get(opts, :assignees, [])},
-          "labels" => %{"nodes" => Map.get(opts, :labels, [])},
+          "labels" => %{
+            "nodes" =>
+              Map.get(opts, :labels, [%{"name" => "symphony"}])
+          },
           "linkedBranches" => %{"nodes" => Map.get(opts, :linked_branches, [])},
           "trackedInIssues" => %{"nodes" => Map.get(opts, :tracked_in_issues, [])},
           "createdAt" => "2026-01-01T00:00:00Z",

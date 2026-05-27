@@ -185,4 +185,57 @@ defmodule SymphonyElixir.GitHub.StateReconciliationTest do
     assert message =~ "Legacy"
     assert message =~ "project item"
   end
+
+  defmodule AddBacklogMock do
+    def graphql(query, variables, _opts) do
+      cond do
+        String.contains?(query, "SymphonyGitHubItemsUsage") ->
+          {:ok, empty_items_page()}
+
+        String.contains?(query, "SymphonyGitHubUpdateField") ->
+          names = get_in(variables, ["input", "singleSelectOptions"]) |> Enum.map(& &1["name"])
+          assert "Backlog" in names
+
+          {:ok,
+           %{
+             "data" => %{
+               "updateProjectV2Field" => %{
+                 "projectV2Field" => %{
+                   "options" => [
+                     %{"id" => "opt_backlog", "name" => "Backlog"},
+                     %{"id" => "opt_todo", "name" => "Todo"},
+                     %{"id" => "opt_done", "name" => "Done"}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        true ->
+          raise "unexpected query: #{query}"
+      end
+    end
+
+    defp empty_items_page do
+      %{
+        "data" => %{
+          "node" => %{
+            "items" => %{"nodes" => [], "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}}
+          }
+        }
+      }
+    end
+  end
+
+  test "reconcile adds field_states such as Backlog that are not active or terminal", %{dir: dir} do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github",
+      tracker_repo: "clouapp/front",
+      tracker_field_states: ["Backlog", "Todo", "Done"],
+      tracker_active_states: ["Todo"],
+      tracker_terminal_states: ["Done"]
+    )
+
+    assert :ok = StateReconciliation.reconcile(dir, @metadata, client_module: AddBacklogMock)
+  end
 end

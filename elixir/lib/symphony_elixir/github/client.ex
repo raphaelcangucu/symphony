@@ -16,7 +16,7 @@ defmodule SymphonyElixir.GitHub.Client do
   """
 
   require Logger
-  alias SymphonyElixir.{Config, GitHub, Issue}
+  alias SymphonyElixir.{AgentRouting, Config, GitHub, Issue}
   alias SymphonyElixir.GitHub.{Blockers, ProjectMetadata, RepoSpec, Viewer}
 
   @graphql_endpoint "https://api.github.com/graphql"
@@ -182,6 +182,18 @@ defmodule SymphonyElixir.GitHub.Client do
   }
   """
 
+  @open_prs_query """
+  query SymphonyGitHubIssueOpenPRs($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) {
+      issue(number: $number) {
+        closedByPullRequestsReferences(first: 30) {
+          nodes { state }
+        }
+      }
+    }
+  }
+  """
+
   # `stateReason: COMPLETED` is fixed for now. Per-state mapping
   # (NOT_PLANNED, DUPLICATE) can be added by extending Config or
   # ProjectMetadata if needed.
@@ -326,8 +338,44 @@ defmodule SymphonyElixir.GitHub.Client do
          {:ok, option_id} <- lookup_state_option_id(metadata, state_name),
          {:ok, item_id, current_open_state} <-
            resolve_project_item(client, issue_id, metadata["project_id"], graphql_opts),
-         :ok <- set_project_state(client, metadata, item_id, option_id, graphql_opts) do
+         :ok <-
+           set_project_state(client, metadata, item_id, option_id, state_name, graphql_opts) do
       transition_open_state(client, issue_id, state_name, current_open_state, graphql_opts)
+    end
+  end
+
+  @doc """
+  Returns whether the issue has at least one open pull request that references it.
+  """
+  @spec issue_has_open_pull_request?(integer() | String.t(), keyword()) ::
+          {:ok, boolean()} | {:error, term()}
+  def issue_has_open_pull_request?(issue_number, opts \\ []) do
+    with {:ok, {owner, name}} <- RepoSpec.split(GitHub.Config.repo()),
+         number when is_integer(number) <- parse_issue_number(issue_number) do
+      client = client_module(opts)
+      graphql_opts = forward_graphql_opts(opts)
+
+      variables = %{"owner" => owner, "name" => name, "number" => number}
+
+      case client.graphql(@open_prs_query, variables, graphql_opts) do
+        {:ok, %{"data" => %{"repository" => %{"issue" => %{} = issue}}}} ->
+          {:ok, issue_has_open_pr_references?(issue)}
+
+        {:ok, %{"data" => %{"repository" => %{"issue" => nil}}}} ->
+          {:ok, false}
+
+        {:ok, body} ->
+          {:error, {:open_pr_lookup_unexpected, body}}
+
+        {:error, _} = error ->
+          error
+      end
+    else
+      {:error, _} = error ->
+        error
+
+      _ ->
+        {:error, :invalid_issue_number}
     end
   end
 
@@ -510,6 +558,7 @@ defmodule SymphonyElixir.GitHub.Client do
   defp build_issue_from_content(content, item, status_field_name, default_repo, assignee_filter) do
     raw_labels = extract_raw_label_names(content)
     assignee_login = extract_first_assignee_login(content)
+    agent_kind = resolve_issue_agent_kind(raw_labels)
 
     %Issue{
       id: content["id"],
@@ -523,7 +572,9 @@ defmodule SymphonyElixir.GitHub.Client do
       assignee_id: assignee_login,
       blocked_by: extract_blockers(content, default_repo),
       labels: filter_visible_labels(raw_labels),
-      assigned_to_worker: assigned_to_worker?(assignee_login, assignee_filter),
+      agent_kind: agent_kind,
+      assigned_to_worker:
+        not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
       created_at: parse_datetime(content["createdAt"]),
       updated_at: parse_datetime(content["updatedAt"])
     }
@@ -548,13 +599,11 @@ defmodule SymphonyElixir.GitHub.Client do
   defp extract_first_assignee_login(_content), do: nil
 
   defp filter_visible_labels(label_names) do
-    admission = GitHub.Config.admission_label() |> downcase_safe()
-
     label_names
-    |> Enum.map(&String.downcase/1)
     |> Enum.reject(fn label ->
-      label == admission or priority_label?(label)
+      AgentRouting.symphony_label?(label) or priority_label?(label)
     end)
+    |> Enum.map(&String.downcase/1)
   end
 
   defp downcase_safe(value) when is_binary(value), do: String.downcase(value)
@@ -645,6 +694,7 @@ defmodule SymphonyElixir.GitHub.Client do
 
       raw_labels = extract_raw_label_names(node)
       assignee_login = extract_first_assignee_login(node)
+      agent_kind = resolve_issue_agent_kind(raw_labels)
 
       %Issue{
         id: node["id"],
@@ -658,7 +708,9 @@ defmodule SymphonyElixir.GitHub.Client do
         assignee_id: assignee_login,
         blocked_by: extract_blockers(node, repo),
         labels: filter_visible_labels(raw_labels),
-        assigned_to_worker: assigned_to_worker?(assignee_login, assignee_filter),
+        agent_kind: agent_kind,
+        assigned_to_worker:
+          not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
         created_at: parse_datetime(node["createdAt"]),
         updated_at: parse_datetime(node["updatedAt"])
       }
@@ -719,6 +771,14 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
+  defp resolve_issue_agent_kind(label_names) when is_list(label_names) do
+    AgentRouting.resolve_agent_kind(
+      label_names,
+      Config.configured_agent_kinds(),
+      Config.default_agent_kind()
+    )
+  end
+
   defp assigned_to_worker?(_assignee_login, nil), do: true
 
   defp assigned_to_worker?(assignee_login, %{match_values: match_values})
@@ -759,17 +819,30 @@ defmodule SymphonyElixir.GitHub.Client do
   end
 
   defp do_admit_labeled_issues(client, metadata, repo, first_active, graphql_opts) do
-    label = GitHub.Config.admission_label()
+    labels = AgentRouting.admission_labels()
 
     with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, candidates} <-
-           fetch_admission_candidates(client, owner, name, label, graphql_opts),
+         {:ok, candidates} <- fetch_admission_candidates_for_labels(client, owner, name, labels, graphql_opts),
          {:ok, missing} <-
            resolve_missing_admissions(client, metadata, candidates, graphql_opts) do
       run_admissions(client, metadata, missing, first_active, graphql_opts)
     else
       {:error, :missing_github_token} = error -> error
       {:error, reason} -> {:error, {:admission_failed, reason}}
+    end
+  end
+
+  defp fetch_admission_candidates_for_labels(client, owner, name, labels, graphql_opts) do
+    labels
+    |> Enum.reduce_while({:ok, []}, fn label, {:ok, acc} ->
+      case fetch_admission_candidates(client, owner, name, label, graphql_opts) do
+        {:ok, ids} -> {:cont, {:ok, acc ++ ids}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, ids} -> {:ok, Enum.uniq(ids)}
+      error -> error
     end
   end
 
@@ -942,7 +1015,7 @@ defmodule SymphonyElixir.GitHub.Client do
     with {:ok, item_id} <-
            add_project_item(client, metadata["project_id"], issue_id, graphql_opts),
          {:ok, option_id} <- lookup_state_option_id(metadata, first_active) do
-      case set_project_state(client, metadata, item_id, option_id, graphql_opts) do
+      case set_project_state(client, metadata, item_id, option_id, first_active, graphql_opts) do
         :ok -> :ok
         {:error, reason} -> {:error, {:orphan_state_failure, item_id, reason}}
       end
@@ -1029,12 +1102,28 @@ defmodule SymphonyElixir.GitHub.Client do
     end)
   end
 
-  defp set_project_state(client, metadata, item_id, option_id, graphql_opts)
+  defp set_project_state(client, metadata, item_id, option_id, state_name, graphql_opts)
+       when is_atom(client) do
+    with :ok <-
+           set_field_value(
+             client,
+             metadata["project_id"],
+             item_id,
+             metadata["status_field_id"],
+             option_id,
+             graphql_opts
+           ),
+         :ok <- sync_native_status_field(client, metadata, item_id, state_name, graphql_opts) do
+      :ok
+    end
+  end
+
+  defp set_field_value(client, project_id, item_id, field_id, option_id, graphql_opts)
        when is_atom(client) do
     variables = %{
-      "projectId" => metadata["project_id"],
+      "projectId" => project_id,
       "itemId" => item_id,
-      "fieldId" => metadata["status_field_id"],
+      "fieldId" => field_id,
       "optionId" => option_id
     }
 
@@ -1043,6 +1132,70 @@ defmodule SymphonyElixir.GitHub.Client do
       {:error, _} = error -> error
     end
   end
+
+  defp sync_native_status_field(client, metadata, item_id, state_name, graphql_opts)
+       when is_atom(client) do
+    if GitHub.Config.sync_native_status?() do
+      with field_id when is_binary(field_id) <- Map.get(metadata, "native_status_field_id"),
+           {:ok, native_option_id} <- lookup_native_state_option_id(metadata, state_name) do
+        set_field_value(
+          client,
+          metadata["project_id"],
+          item_id,
+          field_id,
+          native_option_id,
+          graphql_opts
+        )
+      else
+        _ -> :ok
+      end
+    else
+      :ok
+    end
+  end
+
+  defp lookup_native_state_option_id(metadata, state_name) do
+    case Map.get(metadata, "native_state_options") do
+      %{} = options ->
+        case Map.get(options, state_name) do
+          option_id when is_binary(option_id) and option_id != "" -> {:ok, option_id}
+          _ -> {:error, :unknown_native_state}
+        end
+
+      _ ->
+        {:error, :missing_native_state_options}
+    end
+  end
+
+  defp issue_has_open_pr_references?(%{"closedByPullRequestsReferences" => %{"nodes" => nodes}}) do
+    nodes
+    |> List.wrap()
+    |> Enum.any?(fn
+      %{"state" => "OPEN"} -> true
+      _ -> false
+    end)
+  end
+
+  defp issue_has_open_pr_references?(_issue), do: false
+
+  defp parse_issue_number(number) when is_integer(number) and number > 0, do: number
+
+  defp parse_issue_number(number) when is_binary(number) do
+    number
+    |> String.trim()
+    |> case do
+      "" ->
+        {:error, :invalid_issue_number}
+
+      trimmed ->
+        case Integer.parse(trimmed) do
+          {parsed, ""} when parsed > 0 -> parsed
+          _ -> {:error, :invalid_issue_number}
+        end
+    end
+  end
+
+  defp parse_issue_number(_), do: {:error, :invalid_issue_number}
 
   defp transition_open_state(client, issue_id, state_name, current_open_state, graphql_opts)
        when is_atom(client) do

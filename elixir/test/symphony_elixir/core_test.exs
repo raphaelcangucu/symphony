@@ -33,6 +33,22 @@ defmodule SymphonyElixir.CoreTest do
     assert Config.active_states() == ["Todo", "Review"]
 
     write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_active_states: ["Todo"],
+      tracker_terminal_states: ["Done"],
+      tracker_field_states: ["Backlog", "Todo", "Done"]
+    )
+
+    assert Config.field_states() == ["Backlog", "Todo", "Done"]
+    assert Config.field_states() == Config.field_states()
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_active_states: ["Todo", "In Progress"],
+      tracker_terminal_states: ["Done"]
+    )
+
+    assert Config.field_states() == ["Todo", "In Progress", "Done"]
+
+    write_workflow_file!(Workflow.workflow_file_path(),
       tracker_api_token: "token",
       tracker_project_slug: nil
     )

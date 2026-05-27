@@ -45,17 +45,27 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
    - **GitHub**: Set `github.repo` to `owner/repo`. Symphony bootstraps a repo-level
      GitHub Project v2 named `Symphony` (configurable via `github.project.title`) on
      first run and tracks issue state through a custom single-select field called
-     `Symphony State` whose options come from `tracker.active_states` and
-     `tracker.terminal_states`. Local project metadata is cached in
+     `Symphony State` whose options come from `tracker.field_states` when set,
+     otherwise `tracker.active_states` plus `tracker.terminal_states`. Use
+     `field_states` to include board-only options such as `Backlog` that are not
+     polled. Local project metadata is cached in
      `.symphony/github-project.json` (gitignored).
 
-     Issues are admitted to the board automatically when they carry the
-     `symphony` label (configurable via `github.admission_label`). New labeled
-     issues are added on the next poll and started in the first active state.
+     Issues are admitted when they carry `symphony`, `symphony:codex`, or
+     `symphony:claude` (base label configurable via `github.admission_label`,
+     default `symphony`). Agent routing:
 
-     Optional `github.assignee` filters which issues are routed to the worker
-     (`assigned_to_worker`). Use a GitHub login or `"me"` (resolved via
-     `viewer { login }` and cached in `.symphony/github-project.json`).
+     | Label | Agent |
+     |-------|--------|
+     | `symphony:codex` | Codex |
+     | `symphony:claude` | Claude |
+     | `symphony` | WORKFLOW default (Codex when `codex:` is configured) |
+
+     The WORKFLOW must include a `codex:` and/or `claude:` section for the
+     targeted agent. New labeled issues are added on the next poll.
+
+     Optional `github.assignee` further restricts routing (GitHub login or `"me"`).
+     Omit `assignee` to route by label only.
 
      Blockers are parsed from `trackedInIssues` and from issue-body lines such as
      `Blocked by #42` or `Depends on clouapp/front#12`. Linked PR branches populate

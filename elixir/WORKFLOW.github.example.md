@@ -7,14 +7,26 @@ github:
   status_field: Symphony State
   admission_label: symphony
 tracker:
+  field_states:
+    - Backlog
+    - Todo
+    - In Progress
+    - Human Review
+    - Rework
+    - Merging
+    - Done
+    - Cancelled
+    - Duplicate
   active_states:
     - Todo
     - In Progress
+    - Human Review
     - Merging
     - Rework
   terminal_states:
     - Done
     - Cancelled
+    - Duplicate
 polling:
   interval_ms: 5000
 workspace:

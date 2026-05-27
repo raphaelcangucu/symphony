@@ -74,9 +74,7 @@ defmodule SymphonyElixir.GitHub.StateReconciliation do
   end
 
   defp desired_states do
-    (Config.active_states() ++ Config.terminal_states())
-    |> Enum.map(&to_string/1)
-    |> Enum.uniq()
+    Config.field_states()
   end
 
   defp check_removed_states_in_use(client, project_id, field_id, status_field_name, cached_options, desired, project_url, opts) do

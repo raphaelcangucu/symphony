@@ -103,6 +103,7 @@ defmodule SymphonyElixir.TestSupport do
           tracker_assignee: nil,
           tracker_active_states: ["Todo", "In Progress"],
           tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"],
+          tracker_field_states: nil,
           tracker_repo: nil,
           github_project_mode: nil,
           github_project_title: nil,
@@ -143,6 +144,7 @@ defmodule SymphonyElixir.TestSupport do
     tracker_kind = Keyword.get(config, :tracker_kind)
     tracker_active_states = Keyword.get(config, :tracker_active_states)
     tracker_terminal_states = Keyword.get(config, :tracker_terminal_states)
+    tracker_field_states = Keyword.get(config, :tracker_field_states)
     agent_kind = Keyword.get(config, :agent_kind)
     poll_interval_ms = Keyword.get(config, :poll_interval_ms)
     workspace_root = Keyword.get(config, :workspace_root)
@@ -170,6 +172,7 @@ defmodule SymphonyElixir.TestSupport do
         "---",
         tracker_backend_yaml(tracker_kind, config),
         "tracker:",
+        tracker_field_states_yaml(tracker_field_states),
         "  active_states: #{yaml_value(tracker_active_states)}",
         "  terminal_states: #{yaml_value(tracker_terminal_states)}",
         "polling:",
@@ -230,6 +233,9 @@ defmodule SymphonyElixir.TestSupport do
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
   end
+
+  defp tracker_field_states_yaml(nil), do: nil
+  defp tracker_field_states_yaml(states), do: "  field_states: #{yaml_value(states)}"
 
   defp tracker_backend_yaml("memory", _config), do: "memory: {}"
   defp tracker_backend_yaml(nil, _config), do: nil

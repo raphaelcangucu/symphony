@@ -7,16 +7,23 @@
 
 alias SymphonyElixir.GitHub.Client
 
+{:ok, _} = Application.ensure_all_started(:req)
+
 repo = "clouapp/front"
 project_title = "Macro Markets"
 status_field = "Symphony State"
+
+# Keep in sync with WORKFLOW.macromarkets.example.md `tracker.field_states`.
 states = [
+  "Backlog",
   "Todo",
   "In Progress",
-  "Merging",
+  "Human Review",
   "Rework",
+  "Merging",
   "Done",
-  "Cancelled"
+  "Cancelled",
+  "Duplicate"
 ]
 
 owner_query = """

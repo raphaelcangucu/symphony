@@ -37,6 +37,18 @@ defmodule SymphonyElixir.Config do
                                  terminal_states: [
                                    type: {:list, :string},
                                    default: @default_terminal_states
+                                 ],
+                                 field_states: [
+                                   type: {:list, :string},
+                                   default: []
+                                 ],
+                                 dispatch_states: [
+                                   type: {:list, :string},
+                                   default: []
+                                 ],
+                                 wait_states: [
+                                   type: {:list, :string},
+                                   default: []
                                  ]
                                ]
                              ],
@@ -164,11 +176,77 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:tracker, :terminal_states])
   end
 
+  @doc """
+  All states provisioned on the GitHub `Symphony State` field.
+
+  Defaults to `active_states` plus `terminal_states` (unique, order preserved).
+  Use `field_states` in WORKFLOW when the board needs options such as `Backlog`
+  that are not polled or dispatched.
+  """
+  @spec field_states() :: [String.t()]
+  def field_states do
+    case field_states_from_workflow() do
+      [] -> (active_states() ++ terminal_states()) |> Enum.uniq()
+      states -> states
+    end
+  end
+
+  defp field_states_from_workflow do
+    validated_workflow_options()
+    |> get_in([:tracker, :field_states])
+    |> case do
+      states when is_list(states) -> states |> Enum.map(&to_string/1) |> Enum.uniq()
+      _ -> []
+    end
+  end
+
+  @doc """
+  States that may start a new agent run. Defaults to `active_states/0`.
+  """
+  @spec dispatch_states() :: [String.t()]
+  def dispatch_states do
+    case get_in(validated_workflow_options(), [:tracker, :dispatch_states]) do
+      states when is_list(states) and states != [] ->
+        states |> Enum.map(&to_string/1) |> Enum.uniq()
+
+      _ ->
+        active_states()
+    end
+  end
+
+  @doc """
+  Active states where an existing run should stop after the current turn (e.g. Human Review).
+  """
+  @spec wait_states() :: [String.t()]
+  def wait_states do
+    get_in(validated_workflow_options(), [:tracker, :wait_states])
+    |> case do
+      states when is_list(states) -> states |> Enum.map(&to_string/1) |> Enum.uniq()
+      _ -> []
+    end
+  end
+
   @spec agent_kind() :: String.t()
-  def agent_kind do
-    case detect_sections(@agent_sections) do
-      [] -> "claude"
-      [kind | _] -> kind
+  def agent_kind, do: default_agent_kind()
+
+  @spec configured_agent_kinds() :: [String.t()]
+  def configured_agent_kinds do
+    detect_sections(@agent_sections)
+  end
+
+  @doc """
+  Default agent when an issue only has the base `symphony` label.
+
+  Prefers Codex when the WORKFLOW configures it; otherwise the first configured agent.
+  """
+  @spec default_agent_kind() :: String.t()
+  def default_agent_kind do
+    kinds = configured_agent_kinds()
+
+    cond do
+      "codex" in kinds -> "codex"
+      kinds != [] -> List.first(kinds)
+      true -> "claude"
     end
   end
 
@@ -288,8 +366,9 @@ defmodule SymphonyElixir.Config do
   @spec validate!() :: :ok | {:error, String.t()}
   def validate! do
     with {:ok, _workflow} <- current_workflow(),
-         :ok <- tracker_config_module().validate!() do
-      agent_config_module().validate!()
+         :ok <- tracker_config_module().validate!(),
+         :ok <- validate_configured_agents!() do
+      :ok
     else
       {:error, reason} when is_binary(reason) ->
         {:error, reason}
@@ -298,6 +377,25 @@ defmodule SymphonyElixir.Config do
         {:error, "Invalid WORKFLOW.md: #{inspect(reason)}"}
     end
   end
+
+  defp validate_configured_agents! do
+    case configured_agent_kinds() do
+      [] ->
+        {:error, "No agent configured — add a codex: or claude: section to WORKFLOW.md"}
+
+      kinds ->
+        Enum.reduce_while(kinds, :ok, fn kind, :ok ->
+          case validate_agent_kind!(kind) do
+            :ok -> {:cont, :ok}
+            {:error, _} = error -> {:halt, error}
+          end
+        end)
+    end
+  end
+
+  defp validate_agent_kind!("codex"), do: SymphonyElixir.Codex.Config.validate!()
+  defp validate_agent_kind!("claude"), do: SymphonyElixir.Claude.Config.validate!()
+  defp validate_agent_kind!(other), do: {:error, "Unknown agent kind #{inspect(other)} in WORKFLOW.md"}
 
   defp tracker_config_module do
     case tracker_kind() do
@@ -341,6 +439,9 @@ defmodule SymphonyElixir.Config do
     %{}
     |> put_if_present(:active_states, csv_value(Map.get(section, "active_states")))
     |> put_if_present(:terminal_states, csv_value(Map.get(section, "terminal_states")))
+    |> put_if_present(:field_states, csv_value(Map.get(section, "field_states")))
+    |> put_if_present(:dispatch_states, csv_value(Map.get(section, "dispatch_states")))
+    |> put_if_present(:wait_states, csv_value(Map.get(section, "wait_states")))
   end
 
   defp extract_polling_options(section) do

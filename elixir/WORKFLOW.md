@@ -2,17 +2,30 @@
 linear:
   project_slug: "symphony-0c79b11b75ea"
 tracker:
-  active_states:
+  field_states:
+    - Backlog
     - Todo
     - In Progress
-    - Merging
+    - Human Review
     - Rework
-  terminal_states:
-    - Closed
+    - Merging
+    - Done
     - Cancelled
     - Canceled
     - Duplicate
+    - Closed
+  active_states:
+    - Todo
+    - In Progress
+    - Human Review
+    - Merging
+    - Rework
+  terminal_states:
     - Done
+    - Cancelled
+    - Canceled
+    - Duplicate
+    - Closed
 polling:
   interval_ms: 5000
 workspace:
