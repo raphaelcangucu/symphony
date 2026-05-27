@@ -61,10 +61,29 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
                }
              }
            }}
+
+        query =~ "SymphonyGitHubItemsUsage" ->
+          {:ok, empty_items_page()}
+
+        query =~ "SymphonyGitHubViewer" ->
+          {:ok, %{"data" => %{"viewer" => %{"login" => "bootstrap-tester"}}}}
       end
     end
 
     defp self_pid, do: Process.get(:bootstrap_test_pid)
+
+    defp empty_items_page do
+      %{
+        "data" => %{
+          "node" => %{
+            "items" => %{
+              "nodes" => [],
+              "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+            }
+          }
+        }
+      }
+    end
   end
 
   defmodule NoCallMock do
@@ -89,13 +108,54 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
                    "name" => "Symphony State",
                    "options" => [
                      %{"id" => "opt-todo", "name" => "Todo"},
-                     %{"id" => "opt-done", "name" => "Done"}
+                     %{"id" => "opt-inprog", "name" => "In Progress"},
+                     %{"id" => "opt-done", "name" => "Done"},
+                     %{"id" => "opt-cancel", "name" => "Cancelled"}
                    ]
                  }
                }
              }
            }}
+
+        query =~ "SymphonyGitHubItemsUsage" ->
+          {:ok, empty_items_page()}
+
+        query =~ "SymphonyGitHubViewer" ->
+          {:ok, %{"data" => %{"viewer" => %{"login" => "existing-user"}}}}
+
+        query =~ "SymphonyGitHubUpdateField" ->
+          {:ok,
+           %{
+             "data" => %{
+               "updateProjectV2Field" => %{
+                 "projectV2Field" => %{
+                   "options" => [
+                     %{"id" => "opt-todo", "name" => "Todo"},
+                     %{"id" => "opt-inprog", "name" => "In Progress"},
+                     %{"id" => "opt-done", "name" => "Done"},
+                     %{"id" => "opt-cancel", "name" => "Cancelled"}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        true ->
+          {:error, {:unexpected_query, query}}
       end
+    end
+
+    defp empty_items_page do
+      %{
+        "data" => %{
+          "node" => %{
+            "items" => %{
+              "nodes" => [],
+              "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+            }
+          }
+        }
+      }
     end
   end
 
@@ -273,7 +333,43 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
                }
              }
            }}
+
+        query =~ "SymphonyGitHubItemsUsage" ->
+          {:ok, empty_items_page()}
+
+        query =~ "SymphonyGitHubUpdateField" ->
+          {:ok,
+           %{
+             "data" => %{
+               "updateProjectV2Field" => %{
+                 "projectV2Field" => %{
+                   "options" => [
+                     %{"id" => "opt-todo", "name" => "Todo"},
+                     %{"id" => "opt-inprog", "name" => "In Progress"},
+                     %{"id" => "opt-done", "name" => "Done"},
+                     %{"id" => "opt-cancel", "name" => "Cancelled"}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        query =~ "SymphonyGitHubViewer" ->
+          {:ok, %{"data" => %{"viewer" => %{"login" => "malformed-test"}}}}
       end
+    end
+
+    defp empty_items_page do
+      %{
+        "data" => %{
+          "node" => %{
+            "items" => %{
+              "nodes" => [],
+              "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+            }
+          }
+        }
+      }
     end
   end
 
@@ -331,8 +427,16 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
       ProjectMetadata.write!(base_dir, %{
         "project_id" => "PVT_existing",
         "project_number" => 1,
+        "project_url" => "https://github.com/orgs/test/projects/1",
         "status_field_id" => "PVTSSF_existing",
-        "state_options" => %{"Todo" => "opt-1"},
+        "status_field_name" => "Symphony State",
+        "state_options" => %{
+          "Todo" => "opt-1",
+          "In Progress" => "opt-2",
+          "Done" => "opt-3",
+          "Cancelled" => "opt-4"
+        },
+        "viewer_login" => "cached-user",
         "bootstrapped_at" => "2026-01-01T00:00:00Z"
       })
 

@@ -1567,6 +1567,113 @@ defmodule SymphonyElixir.GitHub.ClientTest do
      }}
   end
 
+  describe "parity fields (assignee, branch, blockers)" do
+    setup do
+      tmp = System.tmp_dir!() |> Path.join("sym-gh-parity-#{:erlang.unique_integer()}")
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      ProjectMetadata.write!(tmp, %{
+        "project_id" => "PVT_abc",
+        "status_field_name" => "Symphony State",
+        "state_options" => %{"Todo" => "opt-todo"},
+        "viewer_login" => "worker"
+      })
+
+      %{base_dir: tmp}
+    end
+
+    test "assignee me sets assigned_to_worker from viewer cache", %{base_dir: base_dir} do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "owner/repo",
+        github_assignee: "me"
+      )
+
+      request_fun =
+        poll_with_items([
+          build_project_item_fixture(%{
+            item_id: "PVTI_1",
+            issue_node_id: "I_1",
+            number: 1,
+            title: "Mine",
+            repo: "owner/repo",
+            state_name: "Todo",
+            assignees: [%{"login" => "worker"}]
+          }),
+          build_project_item_fixture(%{
+            item_id: "PVTI_2",
+            issue_node_id: "I_2",
+            number: 2,
+            title: "Other",
+            repo: "owner/repo",
+            state_name: "Todo",
+            assignees: [%{"login" => "someone-else"}]
+          })
+        ])
+
+      assert {:ok, issues} = Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+      assert length(issues) == 2
+      mine = Enum.find(issues, &(&1.identifier == "1"))
+      other = Enum.find(issues, &(&1.identifier == "2"))
+      assert mine.assigned_to_worker
+      refute other.assigned_to_worker
+    end
+
+    test "populates branch_name and blocked_by", %{base_dir: base_dir} do
+      request_fun =
+        poll_with_items([
+          build_project_item_fixture(%{
+            item_id: "PVTI_1",
+            issue_node_id: "I_1",
+            number: 5,
+            title: "Linked",
+            repo: "owner/repo",
+            state_name: "Todo",
+            linked_branches: [%{"ref" => %{"name" => "feat/parity"}}],
+            body: "Blocked by #9",
+            tracked_in_issues: [
+              %{
+                "id" => "I_blocker",
+                "number" => 9,
+                "state" => "OPEN",
+                "repository" => %{"nameWithOwner" => "owner/repo"}
+              }
+            ]
+          })
+        ])
+
+      assert {:ok, [issue]} = Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+      assert issue.branch_name == "feat/parity"
+      assert [%{identifier: "owner/repo#9"} | _] = issue.blocked_by
+    end
+  end
+
+  defp poll_with_items(nodes) do
+    fn payload, _headers ->
+      cond do
+        payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          empty_admission_response()
+
+        payload["query"] =~ "SymphonyGitHubPollItems" ->
+          {:ok,
+           %{
+             status: 200,
+             body: %{
+               "data" => %{
+                 "node" => %{
+                   "items" => %{
+                     "nodes" => nodes,
+                     "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                   }
+                 }
+               }
+             }
+           }}
+      end
+    end
+  end
+
   defp build_project_item_fixture(opts) do
     content_typename = Map.get(opts, :content_typename, "Issue")
 
@@ -1583,6 +1690,8 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           "repository" => %{"nameWithOwner" => opts.repo},
           "assignees" => %{"nodes" => Map.get(opts, :assignees, [])},
           "labels" => %{"nodes" => Map.get(opts, :labels, [])},
+          "linkedBranches" => %{"nodes" => Map.get(opts, :linked_branches, [])},
+          "trackedInIssues" => %{"nodes" => Map.get(opts, :tracked_in_issues, [])},
           "createdAt" => "2026-01-01T00:00:00Z",
           "updatedAt" => "2026-01-02T00:00:00Z"
         }

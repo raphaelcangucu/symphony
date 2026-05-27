@@ -78,6 +78,31 @@ defmodule SymphonyElixir.GitHub.ConfigTest do
     test "admission_label/0 reads explicit value" do
       assert Config.admission_label() == "agent"
     end
+
+    test "assignee/0 reads explicit value" do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "clouapp/front",
+        github_assignee: "me"
+      )
+
+      assert Config.assignee() == "me"
+    end
+  end
+
+  describe "assignee/0" do
+    setup do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "clouapp/front"
+      )
+
+      :ok
+    end
+
+    test "returns nil when unset" do
+      assert Config.assignee() == nil
+    end
   end
 
   describe "project getters edge cases" do

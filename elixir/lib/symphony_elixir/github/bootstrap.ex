@@ -9,7 +9,7 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.GitHub
-  alias SymphonyElixir.GitHub.{Client, ProjectMetadata, RepoSpec}
+  alias SymphonyElixir.GitHub.{Client, ProjectMetadata, RepoSpec, StateReconciliation, Viewer}
 
   @owner_id_query """
   query SymphonyGitHubResolveOwner($owner: String!, $name: String!) {
@@ -79,8 +79,8 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
     base_dir = Keyword.get(opts, :base_dir, File.cwd!())
 
     case ProjectMetadata.read(base_dir) do
-      {:ok, _metadata} ->
-        :ok
+      {:ok, metadata} ->
+        post_bootstrap_validate(base_dir, metadata, opts)
 
       {:error, :missing_project_metadata} ->
         run_bootstrap(opts)
@@ -111,11 +111,18 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
          :ok <- log_created_project(project),
          {:ok, field} <- create_status_field(client, project["id"], status_field_name, project),
          metadata <- build_metadata(project, field),
-         :ok <- write_metadata(base_dir, metadata) do
+         :ok <- write_metadata(base_dir, metadata),
+         :ok <- post_bootstrap_validate(base_dir, metadata, opts) do
       Logger.info("GitHub Project bootstrapped: #{project["url"]}")
       :ok
     else
       {:error, reason} -> {:error, "GitHub project bootstrap failed: #{format_error(reason)}"}
+    end
+  end
+
+  defp post_bootstrap_validate(base_dir, metadata, opts) do
+    with :ok <- StateReconciliation.reconcile(base_dir, metadata, opts) do
+      Viewer.ensure_cached(base_dir, opts)
     end
   end
 
@@ -137,7 +144,8 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
       project_id ->
         with {:ok, project, field} <- load_existing_project(client, project_id, status_field_name),
              metadata <- build_metadata(project, field),
-             :ok <- write_metadata(base_dir, metadata) do
+             :ok <- write_metadata(base_dir, metadata),
+             :ok <- post_bootstrap_validate(base_dir, metadata, opts) do
           Logger.info("GitHub Project metadata cached: #{project["url"]}")
           :ok
         else

@@ -3,23 +3,15 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
 
   alias SymphonyElixir.Codex.DynamicTool
 
-  test "tool_specs advertises the linear_graphql input contract" do
-    assert [
-             %{
-               "description" => description,
-               "inputSchema" => %{
-                 "properties" => %{
-                   "query" => _,
-                   "variables" => _
-                 },
-                 "required" => ["query"],
-                 "type" => "object"
-               },
-               "name" => "linear_graphql"
-             }
-           ] = DynamicTool.tool_specs()
+  test "tool_specs advertises linear_graphql and github_graphql" do
+    names = Enum.map(DynamicTool.tool_specs(), & &1["name"])
+    assert "linear_graphql" in names
+    assert "github_graphql" in names
 
-    assert description =~ "Linear"
+    linear = Enum.find(DynamicTool.tool_specs(), &(&1["name"] == "linear_graphql"))
+    assert linear["description"] =~ "Linear"
+    github = Enum.find(DynamicTool.tool_specs(), &(&1["name"] == "github_graphql"))
+    assert github["description"] =~ "GitHub"
   end
 
   test "unsupported tools return a failure payload with the supported tool list" do
@@ -37,7 +29,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert Jason.decode!(text) == %{
              "error" => %{
                "message" => ~s(Unsupported dynamic tool: "not_a_real_tool".),
-               "supportedTools" => ["linear_graphql"]
+               "supportedTools" => ["linear_graphql", "github_graphql"]
              }
            }
   end
@@ -374,5 +366,52 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
                "text" => ":ok"
              }
            ] = response["contentItems"]
+  end
+
+  test "github_graphql returns successful GraphQL responses" do
+    response =
+      DynamicTool.execute(
+        "github_graphql",
+        %{"query" => "query { viewer { login } }"},
+        github_client: fn query, variables, _opts ->
+          assert query =~ "viewer"
+          assert variables == %{}
+          {:ok, %{"data" => %{"viewer" => %{"login" => "octocat"}}}}
+        end
+      )
+
+    assert response["success"] == true
+  end
+
+  test "github_graphql reports missing token" do
+    response =
+      DynamicTool.execute(
+        "github_graphql",
+        %{"query" => "query { viewer { login } }"},
+        github_client: fn _, _, _ -> {:error, :missing_github_token} end
+      )
+
+    assert response["success"] == false
+
+    assert [
+             %{
+               "text" => text
+             }
+           ] = response["contentItems"]
+
+    assert Jason.decode!(text)["error"]["message"] =~ "GITHUB_TOKEN"
+  end
+
+  test "github_graphql reports HTTP status errors" do
+    response =
+      DynamicTool.execute(
+        "github_graphql",
+        %{"query" => "query { viewer { login } }"},
+        github_client: fn _, _, _ -> {:error, {:github_api_status, 500}} end
+      )
+
+    assert response["success"] == false
+    text = hd(response["contentItems"])["text"]
+    assert Jason.decode!(text)["error"]["message"] =~ "500"
   end
 end

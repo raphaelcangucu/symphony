@@ -203,6 +203,24 @@ Symphony bootstraps a project automatically on startup. If
    `github.project.mode: existing` and `github.project.id: <node-id>` in
    `WORKFLOW.md`.
 
+### WORKFLOW state removed but still in use
+
+Symphony halts startup when `WORKFLOW.md` drops a `Symphony State` option that
+project items still use:
+
+1. Open the project URL from the error message.
+2. Move affected items to another column/state.
+3. Restart Symphony (unused options can remain on the field; Symphony does not
+   delete them via API).
+
+Adding a **new** state to `tracker.active_states` or `tracker.terminal_states`
+is applied automatically on startup via `updateProjectV2Field`.
+
+### `github.assignee: me` fails at startup
+
+Ensure `.symphony/github-project.json` exists and includes `viewer_login`, or
+delete the cache and restart so bootstrap can resolve `viewer { login }`.
+
 ### Issues are not picked up
 
 1. Confirm the issue is OPEN in the repo.

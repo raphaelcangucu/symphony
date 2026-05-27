@@ -73,6 +73,20 @@ defmodule SymphonyElixir.GitHub.Config do
     trim_string(section_value("admission_label")) || @default_admission_label
   end
 
+  @spec assignee() :: String.t() | nil
+  def assignee do
+    case section_value("assignee") do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> nil
+          trimmed -> trimmed
+        end
+
+      _ ->
+        nil
+    end
+  end
+
   @impl SymphonyElixir.TrackerConfig
   def validate! do
     cond do

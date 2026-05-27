@@ -17,7 +17,7 @@ defmodule SymphonyElixir.GitHub.Client do
 
   require Logger
   alias SymphonyElixir.{Config, GitHub, Issue}
-  alias SymphonyElixir.GitHub.{ProjectMetadata, RepoSpec}
+  alias SymphonyElixir.GitHub.{Blockers, ProjectMetadata, RepoSpec, Viewer}
 
   @graphql_endpoint "https://api.github.com/graphql"
   @max_error_body_log_bytes 1_000
@@ -48,6 +48,19 @@ defmodule SymphonyElixir.GitHub.Client do
                 }
                 labels(first: 20) {
                   nodes { name }
+                }
+                linkedBranches(first: 1) {
+                  nodes { ref { name } }
+                }
+                trackedInIssues(first: 20) {
+                  nodes {
+                    ... on Issue {
+                      id
+                      number
+                      state
+                      repository { nameWithOwner }
+                    }
+                  }
                 }
                 createdAt
                 updatedAt
@@ -89,6 +102,19 @@ defmodule SymphonyElixir.GitHub.Client do
         repository { nameWithOwner }
         assignees(first: 1) { nodes { login } }
         labels(first: 20) { nodes { name } }
+        linkedBranches(first: 1) {
+          nodes { ref { name } }
+        }
+        trackedInIssues(first: 20) {
+          nodes {
+            ... on Issue {
+              id
+              number
+              state
+              repository { nameWithOwner }
+            }
+          }
+        }
         createdAt
         updatedAt
         projectItems(first: 20) {
@@ -232,9 +258,10 @@ defmodule SymphonyElixir.GitHub.Client do
     client = client_module(opts)
     graphql_opts = forward_graphql_opts(opts)
 
-    with {:ok, metadata, repo} <- prepare_project_context(opts),
+    with {:ok, assignee_filter} <- routing_assignee_filter(opts),
+         {:ok, metadata, repo} <- prepare_project_context(opts),
          :ok <- admit_labeled_issues(client, metadata, repo, graphql_opts) do
-      do_poll_project_items(metadata, repo, Config.active_states(), opts)
+      do_poll_project_items(metadata, repo, Config.active_states(), assignee_filter, opts)
     end
   end
 
@@ -251,9 +278,10 @@ defmodule SymphonyElixir.GitHub.Client do
         client = client_module(opts)
         graphql_opts = forward_graphql_opts(opts)
 
-        with {:ok, metadata, repo} <- prepare_project_context(opts),
+        with {:ok, assignee_filter} <- routing_assignee_filter(opts),
+             {:ok, metadata, repo} <- prepare_project_context(opts),
              :ok <- admit_labeled_issues(client, metadata, repo, graphql_opts) do
-          do_poll_project_items(metadata, repo, normalized, opts)
+          do_poll_project_items(metadata, repo, normalized, assignee_filter, opts)
         end
     end
   end
@@ -268,8 +296,9 @@ defmodule SymphonyElixir.GitHub.Client do
         {:ok, []}
 
       _ ->
-        with {:ok, metadata, repo} <- prepare_project_context(opts) do
-          do_fetch_issues_by_ids(ids, metadata, repo, opts)
+        with {:ok, assignee_filter} <- routing_assignee_filter(opts),
+             {:ok, metadata, repo} <- prepare_project_context(opts) do
+          do_fetch_issues_by_ids(ids, metadata, repo, assignee_filter, opts)
         end
     end
   end
@@ -362,7 +391,7 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
-  defp do_poll_project_items(metadata, repo, state_names, opts) do
+  defp do_poll_project_items(metadata, repo, state_names, assignee_filter, opts) do
     project_id = metadata["project_id"]
     status_field_name = metadata["status_field_name"] || GitHub.Config.status_field()
     state_set = MapSet.new(state_names)
@@ -372,7 +401,7 @@ defmodule SymphonyElixir.GitHub.Client do
       {:ok, items} ->
         issues =
           items
-          |> build_candidate_records(status_field_name)
+          |> build_candidate_records(status_field_name, repo, assignee_filter)
           |> filter_candidate_records(repo, state_set)
 
         {:ok, issues}
@@ -436,11 +465,13 @@ defmodule SymphonyElixir.GitHub.Client do
 
   defp finalize_nodes(acc) when is_list(acc), do: Enum.reverse(acc)
 
-  defp build_candidate_records(items, status_field_name) do
+  defp build_candidate_records(items, status_field_name, default_repo, assignee_filter) do
     Enum.flat_map(items, fn item ->
       case extract_issue_content(item) do
         {:ok, content} ->
-          issue = build_issue_from_content(content, item, status_field_name)
+          issue =
+            build_issue_from_content(content, item, status_field_name, default_repo, assignee_filter)
+
           repo = get_in(content, ["repository", "nameWithOwner"])
           [{issue, repo}]
 
@@ -467,13 +498,18 @@ defmodule SymphonyElixir.GitHub.Client do
 
   defp normalize_project_item(item, status_field_name) do
     case extract_issue_content(item) do
-      {:ok, content} -> build_issue_from_content(content, item, status_field_name)
-      :skip -> nil
+      {:ok, content} ->
+        repo = get_in(content, ["repository", "nameWithOwner"]) || ""
+        build_issue_from_content(content, item, status_field_name, repo, nil)
+
+      :skip ->
+        nil
     end
   end
 
-  defp build_issue_from_content(content, item, status_field_name) do
+  defp build_issue_from_content(content, item, status_field_name, default_repo, assignee_filter) do
     raw_labels = extract_raw_label_names(content)
+    assignee_login = extract_first_assignee_login(content)
 
     %Issue{
       id: content["id"],
@@ -482,12 +518,12 @@ defmodule SymphonyElixir.GitHub.Client do
       description: content["body"],
       priority: extract_priority_from_labels(raw_labels),
       state: extract_status_value(item, status_field_name),
-      branch_name: nil,
+      branch_name: extract_linked_branch_name(content),
       url: content["url"],
-      assignee_id: extract_first_assignee_login(content),
-      blocked_by: [],
+      assignee_id: assignee_login,
+      blocked_by: extract_blockers(content, default_repo),
       labels: filter_visible_labels(raw_labels),
-      assigned_to_worker: true,
+      assigned_to_worker: assigned_to_worker?(assignee_login, assignee_filter),
       created_at: parse_datetime(content["createdAt"]),
       updated_at: parse_datetime(content["updatedAt"])
     }
@@ -565,14 +601,14 @@ defmodule SymphonyElixir.GitHub.Client do
 
   # -- by-id helpers -----------------------------------------------------------
 
-  defp do_fetch_issues_by_ids(ids, metadata, repo, opts) do
+  defp do_fetch_issues_by_ids(ids, metadata, repo, assignee_filter, opts) do
     project_id = metadata["project_id"]
     status_field_name = metadata["status_field_name"] || GitHub.Config.status_field()
     graphql_opts = forward_graphql_opts(opts)
 
     case graphql(@issues_by_ids_query, %{"ids" => ids}, graphql_opts) do
       {:ok, %{"data" => %{"nodes" => nodes}}} when is_list(nodes) ->
-        {:ok, build_issues_from_nodes(nodes, project_id, status_field_name, repo)}
+        {:ok, build_issues_from_nodes(nodes, project_id, status_field_name, repo, assignee_filter)}
 
       {:ok, _body} ->
         {:error, :github_unknown_payload}
@@ -582,16 +618,22 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
-  defp build_issues_from_nodes(nodes, project_id, status_field_name, repo) do
+  defp build_issues_from_nodes(nodes, project_id, status_field_name, repo, assignee_filter) do
     Enum.flat_map(nodes, fn node ->
-      case build_issue_from_node(node, project_id, status_field_name, repo) do
+      case build_issue_from_node(node, project_id, status_field_name, repo, assignee_filter) do
         nil -> []
         issue -> [issue]
       end
     end)
   end
 
-  defp build_issue_from_node(%{"__typename" => "Issue"} = node, project_id, status_field_name, repo) do
+  defp build_issue_from_node(
+         %{"__typename" => "Issue"} = node,
+         project_id,
+         status_field_name,
+         repo,
+         assignee_filter
+       ) do
     if get_in(node, ["repository", "nameWithOwner"]) == repo do
       project_item = find_project_item(node, project_id)
 
@@ -602,6 +644,7 @@ defmodule SymphonyElixir.GitHub.Client do
         end
 
       raw_labels = extract_raw_label_names(node)
+      assignee_login = extract_first_assignee_login(node)
 
       %Issue{
         id: node["id"],
@@ -610,19 +653,84 @@ defmodule SymphonyElixir.GitHub.Client do
         description: node["body"],
         priority: extract_priority_from_labels(raw_labels),
         state: state,
-        branch_name: nil,
+        branch_name: extract_linked_branch_name(node),
         url: node["url"],
-        assignee_id: extract_first_assignee_login(node),
-        blocked_by: [],
+        assignee_id: assignee_login,
+        blocked_by: extract_blockers(node, repo),
         labels: filter_visible_labels(raw_labels),
-        assigned_to_worker: true,
+        assigned_to_worker: assigned_to_worker?(assignee_login, assignee_filter),
         created_at: parse_datetime(node["createdAt"]),
         updated_at: parse_datetime(node["updatedAt"])
       }
     end
   end
 
-  defp build_issue_from_node(_node, _project_id, _status_field_name, _repo), do: nil
+  defp build_issue_from_node(_node, _project_id, _status_field_name, _repo, _assignee_filter),
+    do: nil
+
+  defp extract_linked_branch_name(content) do
+    case get_in(content, ["linkedBranches", "nodes"]) do
+      [%{"ref" => %{"name" => name}} | _] when is_binary(name) and name != "" -> name
+      _ -> nil
+    end
+  end
+
+  defp extract_blockers(content, default_repo) when is_binary(default_repo) do
+    tracked = Blockers.from_tracked(content)
+    parsed = Blockers.from_body(Map.get(content, "body"), default_repo)
+    Blockers.merge(tracked, parsed)
+  end
+
+  defp routing_assignee_filter(opts) do
+    base_dir = Keyword.get(opts, :base_dir, File.cwd!())
+
+    case GitHub.Config.assignee() do
+      nil ->
+        {:ok, nil}
+
+      assignee ->
+        build_assignee_filter(assignee, base_dir)
+    end
+  end
+
+  defp build_assignee_filter(assignee, base_dir) when is_binary(assignee) do
+    case normalize_assignee_match_value(assignee) do
+      nil ->
+        {:ok, nil}
+
+      "me" ->
+        case Viewer.cached_login(base_dir) do
+          login when is_binary(login) ->
+            {:ok, %{configured_assignee: "me", match_values: MapSet.new([login])}}
+
+          _ ->
+            {:error, :missing_github_viewer_login}
+        end
+
+      normalized ->
+        {:ok, %{configured_assignee: assignee, match_values: MapSet.new([normalized])}}
+    end
+  end
+
+  defp normalize_assignee_match_value(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      normalized -> String.downcase(normalized)
+    end
+  end
+
+  defp assigned_to_worker?(_assignee_login, nil), do: true
+
+  defp assigned_to_worker?(assignee_login, %{match_values: match_values})
+       when is_struct(match_values, MapSet) do
+    case assignee_login do
+      login when is_binary(login) ->
+        MapSet.member?(match_values, String.downcase(login))
+
+      _ ->
+        false
+    end
+  end
 
   defp find_project_item(%{"projectItems" => %{"nodes" => items}}, project_id)
        when is_list(items) and is_binary(project_id) do

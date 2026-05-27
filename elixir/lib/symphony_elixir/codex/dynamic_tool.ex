@@ -3,20 +3,20 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   Executes client-side tool calls requested by Codex app-server turns.
   """
 
-  alias SymphonyElixir.Linear.Client
+  alias SymphonyElixir.GitHub.Client, as: GitHubClient
+  alias SymphonyElixir.Linear.Client, as: LinearClient
 
   @linear_graphql_tool "linear_graphql"
-  @linear_graphql_description """
-  Execute a raw GraphQL query or mutation against Linear using Symphony's configured auth.
-  """
-  @linear_graphql_input_schema %{
+  @github_graphql_tool "github_graphql"
+
+  @graphql_input_schema %{
     "type" => "object",
     "additionalProperties" => false,
     "required" => ["query"],
     "properties" => %{
       "query" => %{
         "type" => "string",
-        "description" => "GraphQL query or mutation document to execute against Linear."
+        "description" => "GraphQL query or mutation document to execute."
       },
       "variables" => %{
         "type" => ["object", "null"],
@@ -26,11 +26,22 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   }
 
+  @linear_graphql_description """
+  Execute a raw GraphQL query or mutation against Linear using Symphony's configured auth.
+  """
+
+  @github_graphql_description """
+  Execute a raw GraphQL query or mutation against GitHub using Symphony's configured GITHUB_TOKEN.
+  """
+
   @spec execute(String.t() | nil, term(), keyword()) :: map()
   def execute(tool, arguments, opts \\ []) do
     case tool do
       @linear_graphql_tool ->
         execute_linear_graphql(arguments, opts)
+
+      @github_graphql_tool ->
+        execute_github_graphql(arguments, opts)
 
       other ->
         failure_response(%{
@@ -48,39 +59,53 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       %{
         "name" => @linear_graphql_tool,
         "description" => @linear_graphql_description,
-        "inputSchema" => @linear_graphql_input_schema
+        "inputSchema" => @graphql_input_schema
+      },
+      %{
+        "name" => @github_graphql_tool,
+        "description" => @github_graphql_description,
+        "inputSchema" => @graphql_input_schema
       }
     ]
   end
 
   defp execute_linear_graphql(arguments, opts) do
-    linear_client = Keyword.get(opts, :linear_client, &Client.graphql/3)
+    linear_client = Keyword.get(opts, :linear_client, &LinearClient.graphql/3)
 
-    with {:ok, query, variables} <- normalize_linear_graphql_arguments(arguments),
+    with {:ok, query, variables} <- normalize_graphql_arguments(arguments),
          {:ok, response} <- linear_client.(query, variables, []) do
       graphql_response(response)
     else
       {:error, reason} ->
-        failure_response(tool_error_payload(reason))
+        failure_response(linear_tool_error_payload(reason))
     end
   end
 
-  defp normalize_linear_graphql_arguments(arguments) when is_binary(arguments) do
+  defp execute_github_graphql(arguments, opts) do
+    github_client = Keyword.get(opts, :github_client, &GitHubClient.graphql/3)
+
+    with {:ok, query, variables} <- normalize_graphql_arguments(arguments),
+         {:ok, response} <- github_client.(query, variables, []) do
+      graphql_response(response)
+    else
+      {:error, reason} ->
+        failure_response(github_tool_error_payload(reason))
+    end
+  end
+
+  defp normalize_graphql_arguments(arguments) when is_binary(arguments) do
     case String.trim(arguments) do
       "" -> {:error, :missing_query}
       query -> {:ok, query, %{}}
     end
   end
 
-  defp normalize_linear_graphql_arguments(arguments) when is_map(arguments) do
+  defp normalize_graphql_arguments(arguments) when is_map(arguments) do
     case normalize_query(arguments) do
       {:ok, query} ->
         case normalize_variables(arguments) do
-          {:ok, variables} ->
-            {:ok, query, variables}
-
-          {:error, reason} ->
-            {:error, reason}
+          {:ok, variables} -> {:ok, query, variables}
+          {:error, reason} -> {:error, reason}
         end
 
       {:error, reason} ->
@@ -88,7 +113,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     end
   end
 
-  defp normalize_linear_graphql_arguments(_arguments), do: {:error, :invalid_arguments}
+  defp normalize_graphql_arguments(_arguments), do: {:error, :invalid_arguments}
 
   defp normalize_query(arguments) do
     case Map.get(arguments, "query") || Map.get(arguments, :query) do
@@ -147,7 +172,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
 
   defp encode_payload(payload), do: inspect(payload)
 
-  defp tool_error_payload(:missing_query) do
+  defp linear_tool_error_payload(:missing_query) do
     %{
       "error" => %{
         "message" => "`linear_graphql` requires a non-empty `query` string."
@@ -155,7 +180,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
-  defp tool_error_payload(:invalid_arguments) do
+  defp linear_tool_error_payload(:invalid_arguments) do
     %{
       "error" => %{
         "message" => "`linear_graphql` expects either a GraphQL query string or an object with `query` and optional `variables`."
@@ -163,7 +188,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
-  defp tool_error_payload(:invalid_variables) do
+  defp linear_tool_error_payload(:invalid_variables) do
     %{
       "error" => %{
         "message" => "`linear_graphql.variables` must be a JSON object when provided."
@@ -171,7 +196,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
-  defp tool_error_payload(:missing_linear_api_token) do
+  defp linear_tool_error_payload(:missing_linear_api_token) do
     %{
       "error" => %{
         "message" => "Symphony is missing Linear auth. Set `linear.api_key` in `WORKFLOW.md` or export `LINEAR_API_KEY`."
@@ -179,7 +204,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
-  defp tool_error_payload({:linear_api_status, status}) do
+  defp linear_tool_error_payload({:linear_api_status, status}) do
     %{
       "error" => %{
         "message" => "Linear GraphQL request failed with HTTP #{status}.",
@@ -188,7 +213,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
-  defp tool_error_payload({:linear_api_request, reason}) do
+  defp linear_tool_error_payload({:linear_api_request, reason}) do
     %{
       "error" => %{
         "message" => "Linear GraphQL request failed before receiving a successful response.",
@@ -197,10 +222,69 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
-  defp tool_error_payload(reason) do
+  defp linear_tool_error_payload(reason) do
     %{
       "error" => %{
         "message" => "Linear GraphQL tool execution failed.",
+        "reason" => inspect(reason)
+      }
+    }
+  end
+
+  defp github_tool_error_payload(:missing_query) do
+    %{
+      "error" => %{
+        "message" => "`github_graphql` requires a non-empty `query` string."
+      }
+    }
+  end
+
+  defp github_tool_error_payload(:invalid_arguments) do
+    %{
+      "error" => %{
+        "message" => "`github_graphql` expects either a GraphQL query string or an object with `query` and optional `variables`."
+      }
+    }
+  end
+
+  defp github_tool_error_payload(:invalid_variables) do
+    %{
+      "error" => %{
+        "message" => "`github_graphql.variables` must be a JSON object when provided."
+      }
+    }
+  end
+
+  defp github_tool_error_payload(:missing_github_token) do
+    %{
+      "error" => %{
+        "message" => "Symphony is missing GitHub auth. Set GITHUB_TOKEN with repo and project scopes."
+      }
+    }
+  end
+
+  defp github_tool_error_payload({:github_api_status, status}) do
+    %{
+      "error" => %{
+        "message" => "GitHub GraphQL request failed with HTTP #{status}.",
+        "status" => status
+      }
+    }
+  end
+
+  defp github_tool_error_payload({:github_api_request, reason}) do
+    %{
+      "error" => %{
+        "message" => "GitHub GraphQL request failed before receiving a successful response.",
+        "reason" => inspect(reason)
+      }
+    }
+  end
+
+  defp github_tool_error_payload(reason) do
+    %{
+      "error" => %{
+        "message" => "GitHub GraphQL tool execution failed.",
         "reason" => inspect(reason)
       }
     }

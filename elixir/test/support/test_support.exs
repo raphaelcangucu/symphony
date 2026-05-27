@@ -110,6 +110,7 @@ defmodule SymphonyElixir.TestSupport do
           github_project_number: nil,
           github_status_field: nil,
           github_admission_label: nil,
+          github_assignee: nil,
           agent_kind: "codex",
           poll_interval_ms: 30_000,
           workspace_root: Path.join(System.tmp_dir!(), "symphony_workspaces"),
@@ -215,11 +216,13 @@ defmodule SymphonyElixir.TestSupport do
     repo = Keyword.get(config, :tracker_repo)
     status_field = Keyword.get(config, :github_status_field)
     admission_label = Keyword.get(config, :github_admission_label)
+    assignee = Keyword.get(config, :github_assignee)
     project_section = github_project_yaml(config)
 
     [
       "github:",
       repo && "  repo: #{yaml_value(repo)}",
+      assignee && "  assignee: #{yaml_value(assignee)}",
       status_field && "  status_field: #{yaml_value(status_field)}",
       admission_label && "  admission_label: #{yaml_value(admission_label)}",
       project_section

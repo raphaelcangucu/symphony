@@ -53,6 +53,21 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
      `symphony` label (configurable via `github.admission_label`). New labeled
      issues are added on the next poll and started in the first active state.
 
+     Optional `github.assignee` filters which issues are routed to the worker
+     (`assigned_to_worker`). Use a GitHub login or `"me"` (resolved via
+     `viewer { login }` and cached in `.symphony/github-project.json`).
+
+     Blockers are parsed from `trackedInIssues` and from issue-body lines such as
+     `Blocked by #42` or `Depends on clouapp/front#12`. Linked PR branches populate
+     `issue.branch_name` when GitHub exposes `linkedBranches`.
+
+     Codex sessions expose a `github_graphql` dynamic tool (same contract as
+     `linear_graphql`) for raw GitHub GraphQL from the agent.
+
+     See `elixir/WORKFLOW.macromarkets.example.md` for a dogfood setup on
+     `clouapp/front` (project **Macro Markets**). Bootstrap the board with
+     `mix run --no-start scripts/bootstrap_macro_markets.exs`.
+
      Required `GITHUB_TOKEN` scopes: `repo` (read+write) and `project` (read+write).
 6. Follow the instructions below to install the required runtime dependencies and start the service.
 

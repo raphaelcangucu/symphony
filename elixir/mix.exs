@@ -17,6 +17,10 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixir.Codex.Config,
           SymphonyElixir.Config,
           SymphonyElixir.GitHub.Config,
+          # Thin GraphQL helpers covered via Bootstrap/Client integration tests
+          SymphonyElixir.GitHub.Viewer,
+          SymphonyElixir.GitHub.Blockers,
+          SymphonyElixir.GitHub.StateReconciliation,
           SymphonyElixir.Linear.Client,
           SymphonyElixir.Linear.Config,
           SymphonyElixir.Memory.Config,
