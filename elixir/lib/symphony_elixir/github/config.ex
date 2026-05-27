@@ -10,6 +10,8 @@ defmodule SymphonyElixir.GitHub.Config do
   @default_status_field "Symphony State"
   @default_native_status_field "Status"
   @default_admission_label "symphony"
+  @default_comment_context_limit 25
+  @max_comment_context_limit 50
   @default_project_mode "auto"
   @default_project_title "Symphony"
 
@@ -86,6 +88,23 @@ defmodule SymphonyElixir.GitHub.Config do
   @spec admission_label() :: String.t()
   def admission_label do
     trim_string(section_value("admission_label")) || @default_admission_label
+  end
+
+  @spec comment_context_limit() :: pos_integer()
+  def comment_context_limit do
+    case section_value("comment_context_limit") do
+      n when is_integer(n) and n > 0 ->
+        min(n, @max_comment_context_limit)
+
+      n when is_binary(n) ->
+        case Integer.parse(String.trim(n)) do
+          {parsed, ""} when parsed > 0 -> min(parsed, @max_comment_context_limit)
+          _ -> @default_comment_context_limit
+        end
+
+      _ ->
+        @default_comment_context_limit
+    end
   end
 
   @spec assignee() :: String.t() | nil

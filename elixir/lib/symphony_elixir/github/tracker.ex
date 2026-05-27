@@ -25,6 +25,20 @@ defmodule SymphonyElixir.GitHub.Tracker do
     {% else %}
     No description provided.
     {% endif %}
+
+    {% if issue.comments.size > 0 %}
+    ## Recent discussion (issue + PR)
+
+    Symphony injected the latest comments below. On **Rework**, treat human feedback here as required input before coding. Use `gh issue view` / `gh pr view` for full threads.
+
+    {% for comment in issue.comments %}
+    ---
+    **{{ comment.author }}** ({{ comment.source }}) — {{ comment.created_at }}
+
+    {{ comment.body }}
+
+    {% endfor %}
+    {% endif %}
     """
   end
 

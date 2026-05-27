@@ -1627,6 +1627,20 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     end
   end
 
+  defp empty_pr_discussion_response do
+    {:ok,
+     %{
+       status: 200,
+       body: %{
+         "data" => %{
+           "repository" => %{
+             "issue" => %{"closedByPullRequestsReferences" => %{"nodes" => []}}
+           }
+         }
+       }
+     }}
+  end
+
   defp empty_admission_response do
     {:ok,
      %{
@@ -1872,6 +1886,9 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
           empty_admission_response()
 
+        payload["query"] =~ "SymphonyGitHubIssuePRDiscussion" ->
+          empty_pr_discussion_response()
+
         payload["query"] =~ "SymphonyGitHubPollItems" ->
           {:ok,
            %{
@@ -1912,6 +1929,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           },
           "linkedBranches" => %{"nodes" => Map.get(opts, :linked_branches, [])},
           "trackedInIssues" => %{"nodes" => Map.get(opts, :tracked_in_issues, [])},
+          "comments" => %{"nodes" => Map.get(opts, :comments, [])},
           "createdAt" => "2026-01-01T00:00:00Z",
           "updatedAt" => "2026-01-02T00:00:00Z"
         }

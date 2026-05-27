@@ -17,7 +17,7 @@ defmodule SymphonyElixir.GitHub.Client do
 
   require Logger
   alias SymphonyElixir.{AgentRouting, Config, GitHub, Issue}
-  alias SymphonyElixir.GitHub.{Blockers, ProjectMetadata, RepoSpec, Viewer}
+  alias SymphonyElixir.GitHub.{Blockers, IssueDiscussion, ProjectMetadata, RepoSpec, Viewer}
 
   @graphql_endpoint "https://api.github.com/graphql"
   @max_error_body_log_bytes 1_000
@@ -60,6 +60,13 @@ defmodule SymphonyElixir.GitHub.Client do
                       state
                       repository { nameWithOwner }
                     }
+                  }
+                }
+                comments(last: 30) {
+                  nodes {
+                    author { login }
+                    body
+                    createdAt
                   }
                 }
                 createdAt
@@ -113,6 +120,13 @@ defmodule SymphonyElixir.GitHub.Client do
               state
               repository { nameWithOwner }
             }
+          }
+        }
+        comments(last: 30) {
+          nodes {
+            author { login }
+            body
+            createdAt
           }
         }
         createdAt
@@ -451,6 +465,7 @@ defmodule SymphonyElixir.GitHub.Client do
           items
           |> build_candidate_records(status_field_name, repo, assignee_filter)
           |> filter_candidate_records(repo, state_set)
+          |> IssueDiscussion.enrich_issues(repo, opts)
 
         {:ok, issues}
 
@@ -572,6 +587,7 @@ defmodule SymphonyElixir.GitHub.Client do
       assignee_id: assignee_login,
       blocked_by: extract_blockers(content, default_repo),
       labels: filter_visible_labels(raw_labels),
+      comments: IssueDiscussion.parse_issue_comments(content),
       agent_kind: agent_kind,
       assigned_to_worker:
         not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
@@ -657,7 +673,12 @@ defmodule SymphonyElixir.GitHub.Client do
 
     case graphql(@issues_by_ids_query, %{"ids" => ids}, graphql_opts) do
       {:ok, %{"data" => %{"nodes" => nodes}}} when is_list(nodes) ->
-        {:ok, build_issues_from_nodes(nodes, project_id, status_field_name, repo, assignee_filter)}
+        issues =
+          nodes
+          |> build_issues_from_nodes(project_id, status_field_name, repo, assignee_filter)
+          |> IssueDiscussion.enrich_issues(repo, opts)
+
+        {:ok, issues}
 
       {:ok, _body} ->
         {:error, :github_unknown_payload}
@@ -708,6 +729,7 @@ defmodule SymphonyElixir.GitHub.Client do
         assignee_id: assignee_login,
         blocked_by: extract_blockers(node, repo),
         labels: filter_visible_labels(raw_labels),
+        comments: IssueDiscussion.parse_issue_comments(node),
         agent_kind: agent_kind,
         assigned_to_worker:
           not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
