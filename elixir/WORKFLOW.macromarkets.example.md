@@ -37,7 +37,7 @@ workspace:
   root: ~/code/macro-markets-workspaces
 hooks:
   after_create: |
-    git clone --depth 1 https://github.com/clouapp/front .
+    git clone --depth 1 -b homolog https://github.com/clouapp/front .
 agent:
   max_concurrent_agents: 5
   max_turns: 20
@@ -52,6 +52,16 @@ claude:
 ---
 
 You are working on GitHub issue `{{ issue.identifier }}` in the **Macro Markets** board (`clouapp/front`).
+
+Read and follow **`AGENTS.md`** in the workspace root (integration branch, PR base, lint, and unit tests).
+
+## Integration branch (`homolog`)
+
+- The repo integration branch is **`homolog`**, not `master` or `main`.
+- Workspaces are cloned from `homolog` via `hooks.after_create`.
+- Before handoff, merge latest integration: `git fetch origin && git merge origin/homolog`.
+- Open PRs against **`homolog`**: `gh pr create --base homolog --title "…"`.
+- On **Rework**, sync with `origin/homolog` and address review feedback; do not target `master` for PRs.
 
 ## Agent routing (GitHub labels)
 
@@ -72,24 +82,24 @@ Symphony updates **both** `Symphony State` and the built-in GitHub **Status** fi
 | In Progress | Active implementation |
 | Human Review | PR ready; poll for human decision — **no further coding turns** |
 | Rework | Address review feedback |
-| Merging | Follow `.codex/skills/land/SKILL.md` |
+| Merging | Follow `.codex/skills/land/SKILL.md` (merge target branch is **`homolog`**) |
 | Done / Cancelled / Duplicate | Terminal |
 
 Use a single `## Codex Workpad` comment for progress. Blockers: `Blocked by #N` or `Depends on clouapp/front#N`.
 
 Raw GitHub GraphQL: `github_graphql` (same shape as `linear_graphql`).
 
-## Tests and validation (agent responsibility)
+## Tests and validation (mandatory)
 
-Symphony does **not** run your test suite automatically. **You** (the coding agent) are responsible for validation before handoff, following the same bar as `WORKFLOW.md`:
+Symphony does **not** run your test suite automatically. **You** must validate before **Human Review**, per `AGENTS.md` and [`.cursor/rules/testing-standards.mdc`](.cursor/rules/testing-standards.mdc):
 
-- Treat any ticket-authored `Validation`, `Test Plan`, or `Testing` section as required acceptance input; mirror it in the workpad.
-- Run targeted tests for the scope you changed (`clouapp/front` conventions: use the repo’s existing scripts, e.g. lint/typecheck/test commands documented in the repo README or package scripts).
-- Record commands and outcomes in the workpad **Validation** section (`targeted tests: <command>`).
+- Treat ticket `Validation`, `Test Plan`, or `Testing` sections as required; mirror them in the workpad.
+- For every changed component, hook, or util: add or update Vitest tests under `tests/` (mirror `src/`).
+- Run lint when touching TS/TSX: `npm run lint`.
+- Run unit tests: `npm run test:unit` (or targeted: `npm run test:unit -- tests/...`).
+- Record in workpad **Validation**: `targeted tests: <command>` and outcome.
 - Do **not** move to **Human Review** until:
   - Acceptance criteria are met
-  - Validation/tests are green for the latest commit
-  - A PR is open, linked on the issue, and checks are green where applicable
+  - `npm run test:unit` passes for the latest commit
+  - PR is open against **`homolog`**, linked on the issue, and CI/checks are green where applicable
 - In **Human Review**, do not implement; wait and poll for human feedback.
-
-Project-specific test commands belong in the **issue description** or linked docs for `clouapp/front`; this WORKFLOW states the policy, not every command.
