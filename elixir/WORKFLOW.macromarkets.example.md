@@ -39,6 +39,46 @@ workspace:
 hooks:
   after_create: |
     git clone --depth 1 -b homolog https://github.com/clouapp/front .
+    cat > .env.local <<ENV
+    # Local ------------------------------------------------------------------------------------------- #
+    # APP
+    APP_ENV=dev
+    NEXT_PUBLIC_DEFAULT_LANGUAGE=en
+    NEXT_PUBLIC_ENABLE_PERSISTED_QUERIES=true
+
+    # GRAPHQL
+    NEXT_PUBLIC_API_URL=https://acp.macro.markets
+    NEXT_PUBLIC_USE_API_PROXY=true
+
+    # TURNSTILE
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+    NEXT_PRIVATE_TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+
+    # MEILISEARCH
+    NEXT_PUBLIC_MEILISEARCH_BASE_URL=http://localhost:9115
+    NEXT_PUBLIC_MEILISEARCH_KEY=masterKey
+
+    # LARAVEL REVERB
+    NEXT_PUBLIC_PUSHER_APP_KEY=app-key
+    NEXT_PUBLIC_PUSHER_CLUSTER=mt1
+    NEXT_PUBLIC_PUSHER_WS_HOST=localhost
+    NEXT_PUBLIC_PUSHER_WS_PORT=8080
+    NEXT_PUBLIC_PUSHER_WSS_PORT=443
+    NEXT_PUBLIC_PUSHER_FORCE_TLS=false
+    NEXT_PUBLIC_REVERB_APP_ID=app-id
+    NEXT_PUBLIC_REVERB_APP_SECRET=app-secret
+
+    # TENOR
+    NEXT_PUBLIC_TENOR_MEDIA_HOST=media.tenor.com
+
+    NEXT_PUBLIC_GIT_BRANCH=homolog
+    NEXT_PUBLIC_GIT_COMMIT=local
+    NEXT_PUBLIC_GIT_TAG=none
+    NEXT_PUBLIC_BUILD_TIME=local
+
+    CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-85869ee1df284e998701dafe6e734c5d}
+    CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+    ENV
 agent:
   max_concurrent_agents: 5
   max_turns: 20
