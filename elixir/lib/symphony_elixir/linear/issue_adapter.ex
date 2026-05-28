@@ -14,17 +14,18 @@ defmodule SymphonyElixir.Linear.IssueAdapter do
   def list_issues(%Project{} = project, _filters) do
     project_id = Map.fetch!(project.tracker_config, "project_id")
 
-    with {:ok, response} <-
-           client().graphql(Query.list_issues_query(), %{"projectId" => project_id}, []) do
-      issues =
-        response
-        |> get_in(["data", "project", "issues", "nodes"])
-        |> List.wrap()
-        |> Enum.map(&Query.normalize_issue(&1, project.slug))
+    case client().graphql(Query.list_issues_query(), %{"projectId" => project_id}, []) do
+      {:ok, response} ->
+        issues =
+          response
+          |> get_in(["data", "project", "issues", "nodes"])
+          |> List.wrap()
+          |> Enum.map(&Query.normalize_issue(&1, project.slug))
 
-      {:ok, issues}
-    else
-      error -> {:error, map_error(error)}
+        {:ok, issues}
+
+      error ->
+        {:error, map_error(error)}
     end
   end
 
@@ -42,10 +43,8 @@ defmodule SymphonyElixir.Linear.IssueAdapter do
   def list_statuses(%Project{} = project) do
     project_id = Map.fetch!(project.tracker_config, "project_id")
 
-    with {:ok, response} <-
-           client().graphql(Query.team_states_query(), %{"projectId" => project_id}, []) do
-      {:ok, Query.team_states(response)}
-    else
+    case client().graphql(Query.team_states_query(), %{"projectId" => project_id}, []) do
+      {:ok, response} -> {:ok, Query.team_states(response)}
       error -> {:error, map_error(error)}
     end
   end

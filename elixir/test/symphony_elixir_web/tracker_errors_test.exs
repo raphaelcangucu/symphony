@@ -4,8 +4,6 @@ defmodule SymphonyElixirWeb.TrackerErrorsTest do
   import Phoenix.ConnTest
   alias SymphonyElixirWeb.TrackerErrors
 
-  @endpoint SymphonyElixirWeb.Endpoint
-
   test "maps missing_credentials to 503" do
     conn = TrackerErrors.render(build_conn(), :missing_credentials)
     assert json_response(conn, 503)["error"]["code"] == "tracker_credentials_missing"

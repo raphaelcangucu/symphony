@@ -6,6 +6,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   alias SymphonyElixir.GitHub.Client
   alias SymphonyElixir.GitHub.IssueAdapter.Query
   alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.Tracker.IssueDTO
 
   @page_size 50
 
@@ -16,26 +17,27 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   def list_issues(%Project{} = project, _filters) do
     %{project_id: project_id, status_field: status_field} = config(project)
 
-    with {:ok, response} <-
-           client().graphql(
-             Query.list_items_query(),
-             %{
-               "projectId" => project_id,
-               "first" => @page_size,
-               "after" => nil
-             },
-             []
-           ) do
-      issues =
-        response
-        |> get_in(["data", "node", "items", "nodes"])
-        |> List.wrap()
-        |> Enum.map(&Query.normalize_item(&1, status_field, project.slug))
-        |> Enum.reject(&is_nil/1)
+    case client().graphql(
+           Query.list_items_query(),
+           %{
+             "projectId" => project_id,
+             "first" => @page_size,
+             "after" => nil
+           },
+           []
+         ) do
+      {:ok, response} ->
+        issues =
+          response
+          |> get_in(["data", "node", "items", "nodes"])
+          |> List.wrap()
+          |> Enum.map(&Query.normalize_item(&1, status_field, project.slug))
+          |> Enum.reject(&is_nil/1)
 
-      {:ok, issues}
-    else
-      error -> {:error, map_error(error)}
+        {:ok, issues}
+
+      error ->
+        {:error, map_error(error)}
     end
   end
 
@@ -53,10 +55,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   def list_statuses(%Project{} = project) do
     %{project_id: project_id} = config(project)
 
-    with {:ok, response} <-
-           client().graphql(Query.status_options_query(), %{"projectId" => project_id}, []) do
-      {:ok, Query.status_options(response)}
-    else
+    case client().graphql(Query.status_options_query(), %{"projectId" => project_id}, []) do
+      {:ok, response} -> {:ok, Query.status_options(response)}
       error -> {:error, map_error(error)}
     end
   end
@@ -89,7 +89,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
              []
            ) do
       {:ok,
-       SymphonyElixir.Tracker.IssueDTO.build(%{
+       IssueDTO.build(%{
          identifier: identifier,
          title: target_status,
          status: %{
