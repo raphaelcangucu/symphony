@@ -56,6 +56,12 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :create)
     delete("/projects/:project_slug/issues/:identifier/blockers/:blocker_identifier", BlockerController, :delete)
     post("/projects/:project_slug/issues/:identifier/terminal", TerminalController, :create)
+    get("/projects/:project_slug/dev_env/steps", DevEnvController, :index)
+    put("/projects/:project_slug/dev_env/steps", DevEnvController, :save)
+    post("/projects/:project_slug/dev_env/propose", DevEnvController, :propose)
+    post("/projects/:project_slug/dev_env/run", DevEnvController, :run)
+    post("/projects/:project_slug/dev_env/steps/:step_id/run", DevEnvController, :run_step)
+    get("/projects/:project_slug/dev_env/runs", DevEnvController, :runs)
   end
 
   scope "/", SymphonyElixirWeb do
