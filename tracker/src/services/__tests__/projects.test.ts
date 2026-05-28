@@ -109,9 +109,40 @@ describe("project service", () => {
       workflow_statuses: [{ name: "Todo", category: "active", position: 0, is_terminal: false }],
       repositories: [{ github_full_name: "clouapp/front", workspace_path: "frontend", role: "frontend" }],
       setup: { validation_commands: ["pnpm test"] },
+      tracker: { kind: "local", config: {} },
     });
     expect(project.repositories?.[0]).toMatchObject({ fullName: "clouapp/front", workspacePath: "frontend" });
     expect(project.setup?.validationCommands).toEqual(["pnpm test"]);
+  });
+
+  it("createWorkspaceProject sends tracker payload", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 1,
+          name: "Roadmap",
+          slug: "roadmap",
+          tracker_kind: "github",
+          tracker_config: { project_id: "PVT_1", project_number: 7 },
+        },
+      },
+    });
+
+    await createWorkspaceProject({
+      name: "Roadmap",
+      slug: "roadmap",
+      workflowStatuses: [],
+      repositories: [],
+      setup: {},
+      tracker: { kind: "github", config: { project_id: "PVT_1", project_number: 7, status_field: "Symphony State" } },
+    });
+
+    expect(post).toHaveBeenCalledWith(
+      "/api/tracker/v1/projects/workspace",
+      expect.objectContaining({
+        tracker: { kind: "github", config: { project_id: "PVT_1", project_number: 7, status_field: "Symphony State" } },
+      }),
+    );
   });
 
   it("trims the slug before getting a project", async () => {

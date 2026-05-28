@@ -6,11 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { GitHubProjectPicker } from "@/components/projects/GitHubProjectPicker";
+import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
+import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
 import { createWorkspaceProject } from "@/services/projects";
 import { listGitHubOwners, listGitHubRepositories, scanRepositories, suggestWorkspaceSetup } from "@/services/projectSetup";
 import type { WorkspaceSuggestion } from "@/types/project-setup";
 import type { GitHubOwner, RepositoryScan, WorkspaceRepository } from "@/types/repository";
-import type { Project } from "@/types/project";
+import type { Project, TrackerKind } from "@/types/project";
 
 interface ProjectWorkspaceWizardProps {
   onCreated?: (project: Project) => void;
@@ -18,6 +21,8 @@ interface ProjectWorkspaceWizardProps {
 
 export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProps) {
   const [open, setOpen] = useState(false);
+  const [trackerKind, setTrackerKind] = useState<TrackerKind>("local");
+  const [remoteConfig, setRemoteConfig] = useState<Record<string, unknown> | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [owner, setOwner] = useState("");
@@ -147,6 +152,37 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (trackerKind !== "local") {
+      if (!remoteConfig) {
+        toast.error("Select a remote project first");
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const project = await createWorkspaceProject({
+          name,
+          slug,
+          description: null,
+          workflowStatuses: [],
+          repositories: [],
+          setup: {},
+          tracker: { kind: trackerKind, config: remoteConfig },
+        });
+
+        onCreated?.(project);
+        reset();
+        setOpen(false);
+        toast.success("Project connected");
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : "Failed to connect project");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     if (!suggestion) return;
 
     setSubmitting(true);
@@ -179,6 +215,8 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
   }
 
   function reset() {
+    setTrackerKind("local");
+    setRemoteConfig(null);
     setName("");
     setSlug("");
     setOwner("");
@@ -203,11 +241,61 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
           <DialogDescription>Discover GitHub repositories, scan local paths, and create a multi-repo tracker workspace.</DialogDescription>
         </DialogHeader>
         <form className="space-y-5" onSubmit={handleSubmit}>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Tracker source</p>
+            <TrackerSourcePicker
+              value={trackerKind}
+              onChange={(kind) => {
+                setTrackerKind(kind);
+                setRemoteConfig(null);
+              }}
+            />
+          </div>
+
           <div className="grid gap-3 md:grid-cols-2">
             <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" autoFocus />
             <Input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="project-slug" />
           </div>
 
+          {trackerKind === "github" ? (
+            <div className="space-y-3 rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">GitHub Project v2 board</p>
+                <p className="text-xs text-muted-foreground">Pick a board this token can access. Issues stay in GitHub.</p>
+              </div>
+              <GitHubProjectPicker
+                onSelect={(project) =>
+                  setRemoteConfig({
+                    repo: project.repoNameWithOwner ?? "",
+                    project_id: project.id,
+                    project_number: project.number,
+                    status_field: "Symphony State",
+                  })
+                }
+              />
+            </div>
+          ) : null}
+
+          {trackerKind === "linear" ? (
+            <div className="space-y-3 rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">Linear project</p>
+                <p className="text-xs text-muted-foreground">Pick a project this token can access. Issues stay in Linear.</p>
+              </div>
+              <LinearProjectPicker
+                onSelect={(project) =>
+                  setRemoteConfig({
+                    project_id: project.id,
+                    team_id: project.team.id,
+                    project_slug: project.slugId,
+                  })
+                }
+              />
+            </div>
+          ) : null}
+
+          {trackerKind === "local" ? (
+          <>
           <div className="space-y-3 rounded-lg border p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -347,19 +435,29 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
               <pre className="max-h-32 overflow-auto rounded bg-background p-2 text-xs">{suggestion.afterCreateHook}</pre>
             </div>
           ) : null}
+          </>
+          ) : null}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!suggestion || submitting}>
-              {submitting ? "Creating..." : "Create workspace project"}
+            <Button
+              type="submit"
+              disabled={submitting || (trackerKind === "local" ? !suggestion : !remoteConfig)}
+            >
+              {submitButtonLabel(trackerKind, submitting)}
             </Button>
           </div>
         </form>
       </DialogContent>
     </Dialog>
   );
+}
+
+function submitButtonLabel(trackerKind: TrackerKind, submitting: boolean): string {
+  if (trackerKind === "local") return submitting ? "Creating..." : "Create workspace project";
+  return submitting ? "Connecting..." : "Connect project";
 }
 
 function withRepositoryDefaults(repository: WorkspaceRepository): WorkspaceRepository {
