@@ -31,7 +31,7 @@ Deliver a single, single‑user viewer identity for the local Symphony deploymen
 4. Block the app at the token gate when `GITHUB_TOKEN` is missing or invalid.
 5. Persist `creator` on every `local_tracker_issues` row.
 6. Add backend filters `q`, `assignee`, `creator` to `GET /projects/:slug/issues`, resolving `me` server‑side.
-7. Add a Linear‑style filter bar plus `/` (focus search) and `Cmd+K` (filter palette) on the board.
+7. Add a Linear‑style **right‑side filter drawer** (collapsible, opened via a `Filters` button in the board header) plus `/` (open drawer + focus search) and `Cmd+K` (filter palette) on the board.
 8. Honour `tracker.assignee: me` in the local tracker adapter for orchestrator dispatch.
 
 Auto‑assignment of `assignee` is **not** part of this slice: when the operator creates an issue through the UI, only `creator` is set server‑side; `assignee` remains whatever the request provides (typically `nil`).
@@ -63,7 +63,7 @@ Out of scope for this slice:
 | Creator field | New nullable `creator` column on `local_tracker_issues` |
 | `me` resolution | Backend translates `me` → `viewer.login` per request |
 | Filter persistence | URL query string only (`?q&assignee&creator`) |
-| Filter UX | Header filter bar + `Cmd+K` palette + `/` to focus search |
+| Filter UX | Collapsible right-side drawer (Linear-style), toggled by a `Filters` button in the board header. Closed by default. `Cmd+K` palette + `/` focus the search input when the drawer is open. |
 | Local adapter assignee filter | `LocalTracker.Tracker` honours `tracker.assignee: me` |
 
 ---
@@ -283,17 +283,23 @@ In `TokenGatePage.tsx`:
 - The token is *not* persisted in localStorage on viewer failure. The user stays on the gate.
 - Add a small "Retry" button that re‑runs the gate flow.
 
-### 7.4 Board filters
+### 7.4 Board filters (right-side drawer)
 
-New component `tracker/src/components/board/BoardFilters.tsx`:
+New component `tracker/src/components/board/BoardFiltersDrawer.tsx`, built on the existing shadcn `Sheet` primitive (`tracker/src/components/ui/sheet.tsx`, `side="right"`).
 
-- Layout: left → search input; right → assignee and creator dropdowns, plus a "Clear" link when any filter is active.
-- Search input debounced 250ms before pushing into the URL.
-- Assignee/creator dropdowns:
-  - Top option: "Me" (resolves to viewer login, shown as `@viewer.githubLogin`).
-  - Below: distinct logins observed on the currently loaded issues (deduped, alphabetical).
-  - "Any" clears that filter.
-- Renders nothing assignee/creator‑related when `useViewer().status !== "ready"`.
+- A `Filters` button lives in the board header (`ProjectHeader` for the board page; equivalent slot for the list view). The button shows the active filter count as a badge (e.g. `Filters · 2`).
+- Click the button → `Sheet` opens from the right. Closed by default. Open state is **not** persisted: each page load starts closed; activating any filter does not auto-open the drawer.
+- Drawer layout (top → bottom):
+  - Header: title `Filters` + close button (already provided by `Sheet`).
+  - Section 1 — `Search`: `Input` with `placeholder="Search issues..."` (debounced 250ms before pushing into the URL).
+  - Section 2 — `Assignee`: dropdown (`DropdownMenu`) listing:
+    - "Any" (clears).
+    - "Me" (resolves to viewer login; only shown when `useViewer().status === "ready"`).
+    - Distinct logins observed in the currently loaded issues (deduped, alphabetical).
+  - Section 3 — `Creator`: same shape as Assignee.
+  - Footer: `Clear all filters` button (only enabled when any filter is set).
+- The drawer is presentational only: all state lives in `URLSearchParams`. Closing the drawer leaves the filters in effect (they persist in the URL).
+- The board renders results filtered by the URL params regardless of whether the drawer is open. The drawer is a control surface, not a data source.
 
 URL contract (single source of truth):
 
@@ -303,7 +309,7 @@ URL contract (single source of truth):
 | `assignee` | Login literal or `me` |
 | `creator` | Login literal or `me` |
 
-Reading: `const [params, setParams] = useSearchParams();` from `react-router-dom`. Local component state mirrors the URL for the debounced search input.
+Reading: `const [params, setParams] = useSearchParams();` from `react-router-dom`. Local component state inside the drawer mirrors the URL for the debounced search input.
 
 ### 7.5 `useIssueBoard` refactor
 
@@ -331,18 +337,21 @@ export async function listIssues(projectSlug: string, filters?: IssueListFilters
 
 ### 7.7 Command palette and hotkeys
 
-Install `cmdk` (already idiomatic with shadcn) if absent. Wire into `BoardPage`:
+Install `cmdk` (already idiomatic with shadcn) if absent. Wire into the board page:
 
 - Global keydown listener (scoped to the project routes):
-  - `/` (when not in an input) → focus the search input.
   - `Cmd+K` / `Ctrl+K` → open `<CommandDialog>`.
+  - `/` (when not in an input) → open the drawer **and** focus the search input.
 - Palette items (Slice A):
-  - "Search issues…" (focus input).
-  - "Filter: Assigned to me" (sets `assignee=me`).
-  - "Filter: Created by me" (sets `creator=me`).
+  - "Open filters" (opens the drawer).
+  - "Search issues…" (opens the drawer and focuses the search input).
+  - "Filter: Assigned to me" (sets `assignee=me`; drawer state untouched).
+  - "Filter: Created by me" (sets `creator=me`; drawer state untouched).
   - "Clear filters" (drops all three params from URL).
 
 The palette is intentionally minimal; expansion (priority, labels, blockers) is future work, not part of any later MVP slice in this plan.
+
+The palette communicates with the drawer through a tiny shared state hook (`useBoardFiltersDrawer()` exposing `{ open, setOpen, focusSearch }`). Both the palette and the header `Filters` button toggle it.
 
 ### 7.8 Issue creation UI
 
@@ -417,8 +426,10 @@ Files:
 - `tracker/src/components/auth/__tests__/ViewerProvider.test.tsx`
 - `tracker/src/pages/__tests__/TokenGatePage.test.tsx`
   - Block on viewer failure; do not persist token; show retry.
-- `tracker/src/components/board/__tests__/BoardFilters.test.tsx`
-  - URL sync, debounce, dropdown options, "Me" injection, palette interactions.
+- `tracker/src/components/board/__tests__/BoardFiltersDrawer.test.tsx`
+  - Drawer opens via header button; URL sync; debounced search; dropdown options; "Me" injection; close button leaves filters in place; "Clear all filters" resets URL.
+- `tracker/src/components/board/__tests__/BoardPaletteShortcuts.test.tsx`
+  - `Cmd+K` opens the palette; `/` opens the drawer and focuses search; "Filter: Assigned to me" / "Created by me" actions update URL.
 - `tracker/src/services/__tests__/issues.test.ts`
   - `listIssues` URL params, backward compatible no‑filter call.
 - `tracker/src/hooks/__tests__/useIssueBoard.test.ts`
@@ -431,8 +442,8 @@ Files:
 1. `GET /api/tracker/v1/viewer` returns the operator's GitHub login, name, and avatar URL when `GITHUB_TOKEN` is valid.
 2. The token gate blocks the application when `GITHUB_TOKEN` is missing or invalid and shows an actionable message.
 3. `local_tracker_issues.creator` is populated for every issue created through the tracker API.
-4. The board exposes a filter bar with search, assignee, and creator; filters reflect into the URL and survive copy/paste.
-5. `Cmd+K` opens a command palette with at least the four Slice A actions; `/` focuses the search input.
+4. The board exposes a `Filters` button in the header that opens a right‑side drawer containing search, assignee, and creator controls; filters reflect into the URL and survive copy/paste.
+5. `Cmd+K` opens a command palette with at least the five Slice A actions; `/` opens the drawer and focuses the search input.
 6. The local tracker adapter honours `tracker.assignee: me` for orchestrator dispatch.
 7. `make all` is green on the slice branch; frontend tests pass.
 8. Existing simple/wizard project flows continue to work unchanged.

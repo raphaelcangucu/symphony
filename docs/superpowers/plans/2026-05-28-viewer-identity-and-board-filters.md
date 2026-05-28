@@ -63,17 +63,21 @@ Expected: branch exists, working tree clean (existing pre-staged tracker changes
 | Modify | `tracker/src/services/issues.ts` | Filters param |
 | Modify | `tracker/src/hooks/useIssueBoard.ts` | Accept filters, post-filter websocket events |
 | Create | `tracker/src/lib/issueFilters.ts` | `filtersFromSearchParams`, `applyFilters` helper |
-| Create | `tracker/src/components/board/BoardFilters.tsx` | Search input + Assignee + Creator |
-| Create | `tracker/src/components/board/BoardPaletteShortcuts.tsx` | `/` and `Cmd+K` shortcuts + `cmdk` `CommandDialog` |
-| Modify | `tracker/src/pages/ProjectBoardPage.tsx` | Mount `BoardFilters` + shortcuts |
-| Modify | `tracker/src/pages/ProjectListPage.tsx` | Mount `BoardFilters` for `/projects/:slug/list` view |
+| Create | `tracker/src/components/board/BoardFiltersDrawer.tsx` | Right-side `Sheet` containing search + assignee + creator |
+| Create | `tracker/src/components/board/BoardFiltersTrigger.tsx` | Header button "Filters · N" that toggles the drawer |
+| Create | `tracker/src/components/board/useBoardFiltersDrawer.ts` | Tiny zustand-free hook (`useState` + ref) shared by trigger, drawer, palette |
+| Create | `tracker/src/components/board/BoardPaletteShortcuts.tsx` | `/` and `Cmd+K` shortcuts + `cmdk` `CommandDialog`; talks to drawer hook |
+| Modify | `tracker/src/components/layout/ProjectHeader.tsx` | Mount `<BoardFiltersTrigger />` in the existing header |
+| Modify | `tracker/src/pages/ProjectBoardPage.tsx` | Mount `<BoardFiltersDrawer />` + shortcuts, pass filters to `useIssueBoard` |
+| Modify | `tracker/src/pages/ProjectListPage.tsx` | Same wiring for the list view |
 | Modify | `tracker/package.json` | Add `cmdk` |
 | Create | `tracker/src/services/__tests__/viewer.test.ts` | |
 | Create | `tracker/src/components/auth/__tests__/ViewerProvider.test.tsx` | |
 | Modify | `tracker/src/pages/__tests__/TokenGatePage.test.tsx` (create if absent) | |
 | Modify | `tracker/src/services/__tests__/issues.test.ts` (create if absent) | |
 | Modify | `tracker/src/hooks/__tests__/useIssueBoard.test.tsx` (create if absent) | |
-| Create | `tracker/src/components/board/__tests__/BoardFilters.test.tsx` | |
+| Create | `tracker/src/components/board/__tests__/BoardFiltersDrawer.test.tsx` | |
+| Create | `tracker/src/components/board/__tests__/BoardPaletteShortcuts.test.tsx` | |
 | Create | `tracker/src/lib/__tests__/issueFilters.test.ts` | |
 
 ---
@@ -2055,15 +2059,19 @@ git commit -m "feat(tracker): post-filter issues with URL filters and viewer-awa
 
 ---
 
-## Task 11 — `BoardFilters` component
+## Task 11 — Right-side `BoardFiltersDrawer` + header trigger
 
 **Files:**
-- Create: `tracker/src/components/board/BoardFilters.tsx`
-- Create: `tracker/src/components/board/__tests__/BoardFilters.test.tsx`
+- Create: `tracker/src/components/board/useBoardFiltersDrawer.ts`
+- Create: `tracker/src/components/board/BoardFiltersDrawer.tsx`
+- Create: `tracker/src/components/board/BoardFiltersTrigger.tsx`
+- Create: `tracker/src/components/board/__tests__/BoardFiltersDrawer.test.tsx`
 
-- [ ] **Step 11.1: Write the failing test**
+The drawer reuses the existing shadcn `Sheet` primitive at `tracker/src/components/ui/sheet.tsx` (`side="right"`). All three new components share a single React context hook `useBoardFiltersDrawer` so the header trigger, the drawer body, and the command palette (Task 12) all read/write the same `{ open, focusSearchSignal }` state.
 
-Create `tracker/src/components/board/__tests__/BoardFilters.test.tsx`:
+- [ ] **Step 11.1: Write the failing drawer test**
+
+Create `tracker/src/components/board/__tests__/BoardFiltersDrawer.test.tsx`:
 
 ```tsx
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -2071,17 +2079,20 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useSearchParams } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { BoardFilters } from "@/components/board/BoardFilters";
+import { BoardFiltersDrawer } from "@/components/board/BoardFiltersDrawer";
+import { BoardFiltersDrawerProvider } from "@/components/board/useBoardFiltersDrawer";
+import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { ViewerProvider } from "@/components/auth/ViewerProvider";
 import * as viewerService from "@/services/viewer";
 
 function Harness() {
   const [params] = useSearchParams();
   return (
-    <>
-      <BoardFilters knownLogins={["alice", "bob"]} />
+    <BoardFiltersDrawerProvider>
+      <BoardFiltersTrigger />
+      <BoardFiltersDrawer knownLogins={["alice", "bob"]} />
       <output data-testid="params">{params.toString()}</output>
-    </>
+    </BoardFiltersDrawerProvider>
   );
 }
 
@@ -2103,52 +2114,161 @@ function renderHarness() {
   );
 }
 
-describe("BoardFilters", () => {
+describe("BoardFiltersDrawer", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("debounces the search input and pushes ?q=", async () => {
+  it("is closed by default and opens via the header trigger", async () => {
+    renderHarness();
+    await waitFor(() => expect(screen.getByRole("button", { name: /filters/i })).toBeInTheDocument());
+
+    expect(screen.queryByPlaceholderText(/search issues/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
+
+    expect(await screen.findByPlaceholderText(/search issues/i)).toBeInTheDocument();
+  });
+
+  it("debounces the search input into ?q=", async () => {
     vi.useFakeTimers();
     renderHarness();
-    await waitFor(() => expect(screen.getByPlaceholderText(/search issues/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /filters/i })).toBeInTheDocument());
 
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
     fireEvent.change(screen.getByPlaceholderText(/search issues/i), { target: { value: "login" } });
-
     vi.advanceTimersByTime(260);
 
     await waitFor(() => expect(screen.getByTestId("params").textContent).toContain("q=login"));
     vi.useRealTimers();
   });
 
-  it("applies assignee=me when 'Assigned to me' is picked", async () => {
+  it("applies assignee=me from the dropdown", async () => {
     renderHarness();
-    await waitFor(() => expect(screen.getByText(/assignee/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /filters/i })).toBeInTheDocument());
 
-    await userEvent.click(screen.getByText(/assignee/i));
-    await userEvent.click(screen.getByText(/^me$/i));
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
+    await userEvent.click(screen.getByRole("button", { name: /assignee/i }));
+    await userEvent.click(screen.getByText(/^Me$/));
 
     expect(screen.getByTestId("params").textContent).toContain("assignee=me");
   });
 
-  it("clears all filters", async () => {
+  it("clears all filters but keeps the drawer open", async () => {
     renderHarness();
-    await waitFor(() => expect(screen.getByPlaceholderText(/search issues/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /filters/i })).toBeInTheDocument());
 
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
     fireEvent.change(screen.getByPlaceholderText(/search issues/i), { target: { value: "x" } });
-    await userEvent.click(screen.getByRole("button", { name: /clear filters/i }));
+    await userEvent.click(screen.getByRole("button", { name: /clear all filters/i }));
 
     expect(screen.getByTestId("params").textContent).toBe("");
+    expect(screen.getByPlaceholderText(/search issues/i)).toBeInTheDocument();
+  });
+
+  it("trigger badge reflects the active filter count", async () => {
+    renderHarness();
+    await waitFor(() => expect(screen.getByRole("button", { name: /filters/i })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
+    fireEvent.change(screen.getByPlaceholderText(/search issues/i), { target: { value: "login" } });
+    // advance debounce
+    await waitFor(() => expect(screen.getByTestId("params").textContent).toContain("q="));
+
+    expect(screen.getByRole("button", { name: /filters/i })).toHaveTextContent("Filters · 1");
   });
 });
 ```
 
 - [ ] **Step 11.2: Run, expect failure**
 
-Run: `cd tracker && npm run test -- BoardFilters`
+Run: `cd tracker && npm run test -- BoardFiltersDrawer`
 Expected: module not found.
 
-- [ ] **Step 11.3: Implement `BoardFilters`**
+- [ ] **Step 11.3: Implement the shared drawer hook**
 
-Create `tracker/src/components/board/BoardFilters.tsx`:
+Create `tracker/src/components/board/useBoardFiltersDrawer.ts`:
+
+```ts
+import { ReactNode, createContext, useCallback, useContext, useMemo, useState } from "react";
+
+interface DrawerState {
+  open: boolean;
+  focusSearchSignal: number;
+}
+
+interface DrawerContextValue extends DrawerState {
+  setOpen: (next: boolean) => void;
+  openAndFocusSearch: () => void;
+}
+
+const DrawerContext = createContext<DrawerContextValue | null>(null);
+
+interface BoardFiltersDrawerProviderProps {
+  children: ReactNode;
+}
+
+export function BoardFiltersDrawerProvider({ children }: BoardFiltersDrawerProviderProps) {
+  const [state, setState] = useState<DrawerState>({ open: false, focusSearchSignal: 0 });
+
+  const setOpen = useCallback((next: boolean) => {
+    setState((current) => ({ ...current, open: next }));
+  }, []);
+
+  const openAndFocusSearch = useCallback(() => {
+    setState((current) => ({ open: true, focusSearchSignal: current.focusSearchSignal + 1 }));
+  }, []);
+
+  const value = useMemo<DrawerContextValue>(
+    () => ({ ...state, setOpen, openAndFocusSearch }),
+    [state, setOpen, openAndFocusSearch],
+  );
+
+  return <DrawerContext.Provider value={value}>{children}</DrawerContext.Provider>;
+}
+
+export function useBoardFiltersDrawer(): DrawerContextValue {
+  const ctx = useContext(DrawerContext);
+  if (!ctx) throw new Error("useBoardFiltersDrawer must be used inside BoardFiltersDrawerProvider");
+  return ctx;
+}
+```
+
+Note: this file mixes JSX and `.ts`. Rename it to `.tsx` if your project's TS config enforces it; the existing `hooks/useProjectChannel.ts` uses `.ts` despite returning JSX-less code. If your project enforces no-JSX in `.ts`, switch the extension to `.tsx`.
+
+- [ ] **Step 11.4: Implement the trigger button**
+
+Create `tracker/src/components/board/BoardFiltersTrigger.tsx`:
+
+```tsx
+import { ListFilter } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+
+import { Button } from "@/components/ui/button";
+import { useBoardFiltersDrawer } from "./useBoardFiltersDrawer";
+
+const TRACKED_KEYS = ["q", "assignee", "creator"] as const;
+
+export function BoardFiltersTrigger() {
+  const { setOpen, open } = useBoardFiltersDrawer();
+  const [searchParams] = useSearchParams();
+  const activeCount = TRACKED_KEYS.reduce((acc, key) => {
+    const value = searchParams.get(key);
+    return acc + (value && value.trim() ? 1 : 0);
+  }, 0);
+
+  const label = activeCount === 0 ? "Filters" : `Filters · ${activeCount}`;
+
+  return (
+    <Button variant="outline" size="sm" onClick={() => setOpen(!open)}>
+      <ListFilter className="h-4 w-4" />
+      {label}
+    </Button>
+  );
+}
+```
+
+- [ ] **Step 11.5: Implement the drawer body**
+
+Create `tracker/src/components/board/BoardFiltersDrawer.tsx`:
 
 ```tsx
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -2158,6 +2278,15 @@ import { useViewer } from "@/components/auth/ViewerProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -2166,51 +2295,70 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import { useBoardFiltersDrawer } from "./useBoardFiltersDrawer";
+
 const DEBOUNCE_MS = 250;
 
-interface BoardFiltersProps {
+interface BoardFiltersDrawerProps {
   knownLogins?: string[];
 }
 
-export function BoardFilters({ knownLogins = [] }: BoardFiltersProps) {
+export function BoardFiltersDrawer({ knownLogins = [] }: BoardFiltersDrawerProps) {
+  const { open, setOpen, focusSearchSignal } = useBoardFiltersDrawer();
   const [searchParams, setSearchParams] = useSearchParams();
   const { viewer, status } = useViewer();
   const viewerLogin = viewer?.githubLogin ?? null;
 
   const [searchDraft, setSearchDraft] = useState(searchParams.get("q") ?? "");
   const debounceRef = useRef<number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setSearchDraft(searchParams.get("q") ?? "");
   }, [searchParams]);
 
+  useEffect(() => {
+    if (focusSearchSignal > 0) {
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    }
+  }, [focusSearchSignal, open]);
+
   function commitSearch(next: string) {
-    setSearchParams((current) => {
-      const params = new URLSearchParams(current);
-      const trimmed = next.trim();
-      if (trimmed) params.set("q", trimmed);
-      else params.delete("q");
-      return params;
-    }, { replace: true });
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        const trimmed = next.trim();
+        if (trimmed) params.set("q", trimmed);
+        else params.delete("q");
+        return params;
+      },
+      { replace: true },
+    );
   }
 
   function setFilter(key: "assignee" | "creator", value: string | null) {
-    setSearchParams((current) => {
-      const params = new URLSearchParams(current);
-      if (value) params.set(key, value);
-      else params.delete(key);
-      return params;
-    }, { replace: true });
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        if (value) params.set(key, value);
+        else params.delete(key);
+        return params;
+      },
+      { replace: true },
+    );
   }
 
   function clearFilters() {
-    setSearchParams((current) => {
-      const params = new URLSearchParams(current);
-      params.delete("q");
-      params.delete("assignee");
-      params.delete("creator");
-      return params;
-    }, { replace: true });
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        params.delete("q");
+        params.delete("assignee");
+        params.delete("creator");
+        return params;
+      },
+      { replace: true },
+    );
     setSearchDraft("");
   }
 
@@ -2227,171 +2375,306 @@ export function BoardFilters({ knownLogins = [] }: BoardFiltersProps) {
   const logins = useMemo(() => Array.from(new Set(knownLogins.filter(Boolean))).sort(), [knownLogins]);
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Input
-        data-testid="board-filters-search"
-        value={searchDraft}
-        onChange={(event) => onSearchChange(event.target.value)}
-        placeholder="Search issues..."
-        className="w-72"
-      />
-      <FilterDropdown
-        label={`Assignee${assignee ? `: ${assignee === "me" ? "Me" : assignee}` : ""}`}
-        viewerLogin={showViewerOptions ? viewerLogin : null}
-        logins={logins}
-        onSelect={(value) => setFilter("assignee", value)}
-        onClear={() => setFilter("assignee", null)}
-        labelType="assignee"
-      />
-      <FilterDropdown
-        label={`Creator${creator ? `: ${creator === "me" ? "Me" : creator}` : ""}`}
-        viewerLogin={showViewerOptions ? viewerLogin : null}
-        logins={logins}
-        onSelect={(value) => setFilter("creator", value)}
-        onClear={() => setFilter("creator", null)}
-        labelType="creator"
-      />
-      {hasAny ? (
-        <Button variant="ghost" size="sm" onClick={clearFilters}>
-          Clear filters
-        </Button>
-      ) : null}
-    </div>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetContent side="right" className="flex h-full flex-col gap-6 sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Filters</SheetTitle>
+          <SheetDescription>Search and narrow issues by assignee or creator.</SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-5 overflow-auto">
+          <div className="space-y-2">
+            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Search</label>
+            <Input
+              data-testid="board-filters-search"
+              ref={searchInputRef}
+              value={searchDraft}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Search issues..."
+            />
+          </div>
+
+          <FilterSection
+            label="Assignee"
+            currentValue={assignee}
+            viewerLogin={showViewerOptions ? viewerLogin : null}
+            logins={logins}
+            onSelect={(value) => setFilter("assignee", value)}
+            onClear={() => setFilter("assignee", null)}
+          />
+
+          <FilterSection
+            label="Creator"
+            currentValue={creator}
+            viewerLogin={showViewerOptions ? viewerLogin : null}
+            logins={logins}
+            onSelect={(value) => setFilter("creator", value)}
+            onClear={() => setFilter("creator", null)}
+          />
+        </div>
+
+        <SheetFooter className="mt-auto flex flex-row items-center justify-between gap-2 sm:justify-between">
+          <Button variant="ghost" size="sm" disabled={!hasAny} onClick={clearFilters}>
+            Clear all filters
+          </Button>
+          <SheetClose asChild>
+            <Button size="sm">Done</Button>
+          </SheetClose>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-interface FilterDropdownProps {
-  label: string;
+interface FilterSectionProps {
+  label: "Assignee" | "Creator";
+  currentValue: string | null;
   viewerLogin: string | null;
   logins: string[];
-  labelType: "assignee" | "creator";
   onSelect: (value: string) => void;
   onClear: () => void;
 }
 
-function FilterDropdown({ label, viewerLogin, logins, onSelect, onClear, labelType }: FilterDropdownProps) {
+function FilterSection({ label, currentValue, viewerLogin, logins, onSelect, onClear }: FilterSectionProps) {
+  const renderLabel = currentValue ? `${label}: ${currentValue === "me" ? "Me" : currentValue}` : `${label}: Any`;
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">{label}</Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuLabel>{labelType === "assignee" ? "Assignee" : "Creator"}</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => onClear()}>Any</DropdownMenuItem>
-        {viewerLogin ? (
-          <DropdownMenuItem onSelect={() => onSelect("me")}>Me</DropdownMenuItem>
-        ) : null}
-        <DropdownMenuSeparator />
-        {logins.length === 0 ? (
-          <DropdownMenuItem disabled>No known logins</DropdownMenuItem>
-        ) : (
-          logins.map((login) => (
-            <DropdownMenuItem key={login} onSelect={() => onSelect(login)}>@{login}</DropdownMenuItem>
-          ))
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="space-y-2">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="w-full justify-start">
+            {renderLabel}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuLabel>{label}</DropdownMenuLabel>
+          <DropdownMenuItem onSelect={() => onClear()}>Any</DropdownMenuItem>
+          {viewerLogin ? <DropdownMenuItem onSelect={() => onSelect("me")}>Me</DropdownMenuItem> : null}
+          <DropdownMenuSeparator />
+          {logins.length === 0 ? (
+            <DropdownMenuItem disabled>No known logins</DropdownMenuItem>
+          ) : (
+            logins.map((login) => (
+              <DropdownMenuItem key={login} onSelect={() => onSelect(login)}>
+                @{login}
+              </DropdownMenuItem>
+            ))
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 ```
 
-- [ ] **Step 11.4: Run, expect PASS**
+If `tracker/src/components/ui/dropdown-menu.tsx` does not yet exist, add it via shadcn primitives (the project already pulls `@radix-ui/react-dropdown-menu`, and `components.json` is configured). If for any reason you cannot use the shadcn helper, the fallback is to consume `@radix-ui/react-dropdown-menu` primitives directly.
 
-Run: `cd tracker && npm run test -- BoardFilters`
-Expected: 3 tests pass.
+- [ ] **Step 11.6: Run, expect PASS**
 
-- [ ] **Step 11.5: Commit**
+Run: `cd tracker && npm run test -- BoardFiltersDrawer`
+Expected: 5 tests pass.
+
+- [ ] **Step 11.7: Commit**
 
 ```bash
 cd /home/raphaelcangucu/symphony
-git add tracker/src/components/board/BoardFilters.tsx tracker/src/components/board/__tests__/BoardFilters.test.tsx
-git commit -m "feat(tracker): add Linear-style board filters with URL sync"
+git add tracker/src/components/board/useBoardFiltersDrawer.ts tracker/src/components/board/BoardFiltersDrawer.tsx tracker/src/components/board/BoardFiltersTrigger.tsx tracker/src/components/board/__tests__/BoardFiltersDrawer.test.tsx
+git commit -m "feat(tracker): collapsible right-side board filter drawer with URL sync"
 ```
 
 ---
 
-## Task 12 — Command palette + hotkeys
+## Task 12 — Command palette + hotkeys (drives the drawer)
 
 **Files:**
 - Modify: `tracker/package.json` (add `cmdk`)
 - Create: `tracker/src/components/board/BoardPaletteShortcuts.tsx`
+- Create: `tracker/src/components/board/__tests__/BoardPaletteShortcuts.test.tsx`
+
+The palette must operate on the same `useBoardFiltersDrawer()` state from Task 11 so the drawer reacts to its actions.
 
 - [ ] **Step 12.1: Install `cmdk`**
 
 Run: `cd tracker && npm install cmdk@latest`
 Expected: `cmdk` appears in `dependencies`. Commit the `package.json`/`package-lock.json` update with this task's commit.
 
-- [ ] **Step 12.2: Create the component**
+- [ ] **Step 12.2: Write the failing test**
+
+Create `tracker/src/components/board/__tests__/BoardPaletteShortcuts.test.tsx`:
+
+```tsx
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes, useSearchParams } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
+import { BoardFiltersDrawer } from "@/components/board/BoardFiltersDrawer";
+import { BoardFiltersDrawerProvider } from "@/components/board/useBoardFiltersDrawer";
+import { ViewerProvider } from "@/components/auth/ViewerProvider";
+import * as viewerService from "@/services/viewer";
+
+function Harness() {
+  const [params] = useSearchParams();
+  return (
+    <BoardFiltersDrawerProvider>
+      <BoardPaletteShortcuts />
+      <BoardFiltersDrawer />
+      <output data-testid="params">{params.toString()}</output>
+    </BoardFiltersDrawerProvider>
+  );
+}
+
+function renderHarness() {
+  vi.spyOn(viewerService, "fetchViewer").mockResolvedValueOnce({
+    githubLogin: "octocat",
+    name: null,
+    avatarUrl: null,
+  });
+
+  return render(
+    <MemoryRouter initialEntries={["/projects/x/board"]}>
+      <ViewerProvider>
+        <Routes>
+          <Route path="/projects/:projectSlug/board" element={<Harness />} />
+        </Routes>
+      </ViewerProvider>
+    </MemoryRouter>,
+  );
+}
+
+describe("BoardPaletteShortcuts", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opens the palette via Cmd+K", async () => {
+    renderHarness();
+    await waitFor(() => expect(document.body).toBeInTheDocument());
+
+    await userEvent.keyboard("{Meta>}k{/Meta}");
+
+    expect(await screen.findByPlaceholderText(/type a command/i)).toBeInTheDocument();
+  });
+
+  it("opens the drawer and focuses search when '/' is pressed", async () => {
+    renderHarness();
+    await waitFor(() => expect(document.body).toBeInTheDocument());
+
+    await userEvent.keyboard("/");
+
+    expect(await screen.findByPlaceholderText(/search issues/i)).toHaveFocus();
+  });
+
+  it("'Filter: Assigned to me' sets assignee=me", async () => {
+    renderHarness();
+    await waitFor(() => expect(document.body).toBeInTheDocument());
+
+    await userEvent.keyboard("{Meta>}k{/Meta}");
+    await userEvent.click(await screen.findByText(/Assigned to me/i));
+
+    expect(screen.getByTestId("params").textContent).toContain("assignee=me");
+  });
+
+  it("'Clear filters' resets URL params", async () => {
+    renderHarness();
+    await waitFor(() => expect(document.body).toBeInTheDocument());
+
+    await userEvent.keyboard("{Meta>}k{/Meta}");
+    await userEvent.click(await screen.findByText(/Assigned to me/i));
+    await userEvent.keyboard("{Meta>}k{/Meta}");
+    await userEvent.click(await screen.findByText(/Clear filters/i));
+
+    expect(screen.getByTestId("params").textContent).toBe("");
+  });
+});
+```
+
+- [ ] **Step 12.3: Run, expect failure**
+
+Run: `cd tracker && npm run test -- BoardPaletteShortcuts`
+Expected: module not found.
+
+- [ ] **Step 12.4: Implement the palette component**
 
 Create `tracker/src/components/board/BoardPaletteShortcuts.tsx`:
 
 ```tsx
-import { useEffect, useState } from "react";
+import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "cmdk";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "cmdk";
-
 import { useViewer } from "@/components/auth/ViewerProvider";
+import { useBoardFiltersDrawer } from "./useBoardFiltersDrawer";
 
-interface BoardPaletteShortcutsProps {
-  searchInputId?: string;
-}
-
-export function BoardPaletteShortcuts({ searchInputId = "board-filters-search" }: BoardPaletteShortcutsProps) {
-  const [open, setOpen] = useState(false);
+export function BoardPaletteShortcuts() {
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [, setSearchParams] = useSearchParams();
   const { viewer } = useViewer();
+  const { setOpen: setDrawerOpen, openAndFocusSearch } = useBoardFiltersDrawer();
 
   useEffect(() => {
     function handler(event: KeyboardEvent) {
-      const tagName = (event.target as HTMLElement | null)?.tagName?.toLowerCase();
-      const insideInput = tagName === "input" || tagName === "textarea";
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      const insideInput = tagName === "input" || tagName === "textarea" || target?.isContentEditable;
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setOpen((prev) => !prev);
+        setPaletteOpen((prev) => !prev);
         return;
       }
 
       if (event.key === "/" && !insideInput) {
         event.preventDefault();
-        document.querySelector<HTMLInputElement>(`[data-testid="${searchInputId}"]`)?.focus();
+        openAndFocusSearch();
       }
     }
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [searchInputId]);
+  }, [openAndFocusSearch]);
 
-  function applyFilter(action: "assignee_me" | "creator_me" | "clear" | "focus_search") {
-    setOpen(false);
-    if (action === "focus_search") {
-      document.querySelector<HTMLInputElement>(`[data-testid="${searchInputId}"]`)?.focus();
+  const closePalette = useCallback(() => setPaletteOpen(false), []);
+
+  function applyFilter(action: "assignee_me" | "creator_me" | "clear" | "open_drawer" | "focus_search") {
+    closePalette();
+
+    if (action === "open_drawer") {
+      setDrawerOpen(true);
       return;
     }
 
-    setSearchParams((current) => {
-      const params = new URLSearchParams(current);
-      if (action === "assignee_me") params.set("assignee", "me");
-      if (action === "creator_me") params.set("creator", "me");
-      if (action === "clear") {
-        params.delete("assignee");
-        params.delete("creator");
-        params.delete("q");
-      }
-      return params;
-    }, { replace: true });
+    if (action === "focus_search") {
+      openAndFocusSearch();
+      return;
+    }
+
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        if (action === "assignee_me") params.set("assignee", "me");
+        if (action === "creator_me") params.set("creator", "me");
+        if (action === "clear") {
+          params.delete("assignee");
+          params.delete("creator");
+          params.delete("q");
+        }
+        return params;
+      },
+      { replace: true },
+    );
   }
 
   if (!viewer) return null;
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
+    <CommandDialog open={paletteOpen} onOpenChange={setPaletteOpen}>
       <Command>
         <CommandInput placeholder="Type a command..." />
         <CommandList>
           <CommandEmpty>No matching command.</CommandEmpty>
           <CommandGroup heading="Filters">
+            <CommandItem onSelect={() => applyFilter("open_drawer")}>Open filters</CommandItem>
             <CommandItem onSelect={() => applyFilter("focus_search")}>Search issues...</CommandItem>
             <CommandItem onSelect={() => applyFilter("assignee_me")}>Filter: Assigned to me</CommandItem>
             <CommandItem onSelect={() => applyFilter("creator_me")}>Filter: Created by me</CommandItem>
@@ -2404,88 +2687,120 @@ export function BoardPaletteShortcuts({ searchInputId = "board-filters-search" }
 }
 ```
 
-Note: this version uses `cmdk` primitives directly because `shadcn` `command.tsx` may not be present. If `tracker/src/components/ui/command.tsx` already exists (shadcn install), prefer the shadcn imports instead of raw `cmdk`.
+If `tracker/src/components/ui/command.tsx` (shadcn) exists, prefer those imports for visual consistency; otherwise the raw `cmdk` primitives above suffice for Slice A.
 
-- [ ] **Step 12.3: Run smoke test (manual unit check)**
+- [ ] **Step 12.5: Run, expect PASS**
 
-Run: `cd tracker && npm run lint && npm run test`
-Expected: existing tests + new viewer/issues/filters tests all pass; no type errors. (No dedicated test for this component in Slice A; manual verification covers it.)
+Run: `cd tracker && npm run test -- BoardPaletteShortcuts`
+Expected: 4 tests pass.
 
-- [ ] **Step 12.4: Commit**
+- [ ] **Step 12.6: Commit**
 
 ```bash
 cd /home/raphaelcangucu/symphony
-git add tracker/package.json tracker/package-lock.json tracker/src/components/board/BoardPaletteShortcuts.tsx
-git commit -m "feat(tracker): add board command palette with hotkeys"
+git add tracker/package.json tracker/package-lock.json tracker/src/components/board/BoardPaletteShortcuts.tsx tracker/src/components/board/__tests__/BoardPaletteShortcuts.test.tsx
+git commit -m "feat(tracker): board command palette drives the filter drawer"
 ```
 
 ---
 
-## Task 13 — Wire `BoardFilters` + palette into the pages
+## Task 13 — Wire drawer + trigger + palette into the pages
 
 **Files:**
+- Modify: `tracker/src/components/layout/ProjectHeader.tsx` (mount `<BoardFiltersTrigger />`)
 - Modify: `tracker/src/pages/ProjectBoardPage.tsx`
 - Modify: `tracker/src/pages/ProjectListPage.tsx`
 
-- [ ] **Step 13.1: Read `tracker/src/pages/ProjectBoardPage.tsx`**
+The shared `BoardFiltersDrawerProvider` must wrap the trigger, the drawer, and the palette. Mounting the provider at the page level is simplest because the trigger lives in the header (which is rendered by the page).
 
-Run: open via the Read tool. Identify where issues are currently rendered (probably calling `useIssueBoard`). The board page must:
+- [ ] **Step 13.1: Read the existing files first**
 
-1. Read the URL filter state via `filtersFromSearchParams(searchParams)`.
-2. Pass the filters to `useIssueBoard`.
-3. Build `knownLogins` from `useIssueBoard().issues` (raw list before filtering): collect `issue.assignee` and `issue.creator`, drop nulls/duplicates.
-4. Render `<BoardFilters knownLogins={knownLogins} />` above the board, and `<BoardPaletteShortcuts />` once.
+Run via the Read tool:
+- `tracker/src/components/layout/ProjectHeader.tsx`
+- `tracker/src/pages/ProjectBoardPage.tsx`
+- `tracker/src/pages/ProjectListPage.tsx`
 
-Example delta (apply by reading the existing page first):
+Identify where the page mounts `<ProjectHeader />` and where it renders the issue area. Note any existing right-side controls inside the header where the new `Filters` button should sit (typically near the "New issue" / theme buttons).
+
+- [ ] **Step 13.2: Embed the trigger in the header**
+
+Modify `tracker/src/components/layout/ProjectHeader.tsx` — add an opt-in slot:
+
+```tsx
+import { ReactNode } from "react";
+
+interface ProjectHeaderProps {
+  projectSlug: string;
+  onIssueCreated?: (...args: unknown[]) => void;
+  rightSlot?: ReactNode;
+}
+
+// inside the JSX, render `{rightSlot}` next to existing right-aligned buttons
+```
+
+If `ProjectHeader` already accepts arbitrary children or its right-side region is fixed, prefer wrapping the existing right-aligned region with a fragment that includes `{rightSlot}` before the existing buttons. Keep the change minimal; no behaviour change when `rightSlot` is omitted.
+
+- [ ] **Step 13.3: Mount the provider + drawer + palette + trigger on the board page**
+
+Modify `tracker/src/pages/ProjectBoardPage.tsx`:
 
 ```tsx
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { BoardFilters } from "@/components/board/BoardFilters";
+import {
+  BoardFiltersDrawer,
+} from "@/components/board/BoardFiltersDrawer";
+import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
+import { BoardFiltersDrawerProvider } from "@/components/board/useBoardFiltersDrawer";
 import { filtersFromSearchParams } from "@/lib/issueFilters";
 
-export function ProjectBoardPage() {
-  // ... existing setup
-  const [searchParams] = useSearchParams();
-  const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
-  const { issues, board, loading, error } = useIssueBoard(projectSlug, filters, statuses);
+// ... inside the component
+const [searchParams] = useSearchParams();
+const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
+const { issues, filteredIssues, board, loading, error } = useIssueBoard(projectSlug, filters, statuses);
 
-  const knownLogins = useMemo(() => {
-    const set = new Set<string>();
-    for (const issue of issues) {
-      if (issue.assignee) set.add(issue.assignee);
-      if (issue.creator) set.add(issue.creator);
-    }
-    return Array.from(set);
-  }, [issues]);
+const knownLogins = useMemo(() => {
+  const set = new Set<string>();
+  for (const issue of issues) {
+    if (issue.assignee) set.add(issue.assignee);
+    if (issue.creator) set.add(issue.creator);
+  }
+  return Array.from(set);
+}, [issues]);
 
-  return (
-    <>
-      <BoardFilters knownLogins={knownLogins} />
-      <BoardPaletteShortcuts />
-      {/* existing board rendering using `board` */}
-    </>
-  );
-}
+return (
+  <BoardFiltersDrawerProvider>
+    <ProjectHeader
+      projectSlug={projectSlug}
+      onIssueCreated={...}
+      rightSlot={<BoardFiltersTrigger />}
+    />
+    <BoardFiltersDrawer knownLogins={knownLogins} />
+    <BoardPaletteShortcuts />
+    {/* existing board rendering uses `board` and `filteredIssues` */}
+  </BoardFiltersDrawerProvider>
+);
 ```
 
-- [ ] **Step 13.2: Repeat for the list view inside `ProjectListPage.tsx`**
+- [ ] **Step 13.4: Repeat for the list view in `ProjectListPage.tsx`**
 
-Same pattern. The list view component currently lives inside `ProjectListPage.tsx`. Mount `<BoardFilters />` and pass filters into `useIssueBoard`.
+The list view component (inside `ProjectListPage.tsx`) also renders issues for a single project. Wrap it in `BoardFiltersDrawerProvider`, pass `filters` into `useIssueBoard`, and mount the same three components (trigger via header `rightSlot`, drawer, palette).
 
-- [ ] **Step 13.3: Verify**
+The index `/projects` view that lists *projects* (not issues) must remain unchanged — the drawer is project-scoped, not for the projects index.
+
+- [ ] **Step 13.5: Verify**
 
 Run: `cd tracker && npm run lint && npm run test && npm run build`
-Expected: all green.
+Expected: all green. If `useIssueBoard` consumers in any test still pass the legacy signature without `filters`, the default value `{}` keeps them compatible (Task 10 made `filters` optional).
 
-- [ ] **Step 13.4: Commit**
+- [ ] **Step 13.6: Commit**
 
 ```bash
 cd /home/raphaelcangucu/symphony
-git add tracker/src/pages/ProjectBoardPage.tsx tracker/src/pages/ProjectListPage.tsx
-git commit -m "feat(tracker): mount board filters and palette on board and list views"
+git add tracker/src/components/layout/ProjectHeader.tsx tracker/src/pages/ProjectBoardPage.tsx tracker/src/pages/ProjectListPage.tsx
+git commit -m "feat(tracker): mount filter drawer, trigger, and palette on board/list views"
 ```
 
 ---
@@ -2514,7 +2829,8 @@ Steps:
 6. Unset `GITHUB_TOKEN`, restart server, retry token gate, observe the block.
 7. With viewer ready, create an issue from the UI — verify the response contains `creator = <your_login>`.
 8. Use `?assignee=me` in the URL — verify only your issues appear; same for `creator=me`.
-9. Type `/` → search input focused. `Cmd+K` → palette opens.
+9. Click the `Filters` button in the board header → drawer opens from the right. Pick "Me" in `Assignee` → URL gains `assignee=me`. Close the drawer → filter persists.
+10. Type `/` → drawer opens and search input is focused. `Cmd+K` → palette opens with the 5 actions; selecting "Filter: Assigned to me" updates the URL without forcing the drawer open.
 
 - [ ] **Step 14.4: Push branch**
 
@@ -2553,10 +2869,10 @@ The PR creation step is intentionally manual — wait for the user to ask before
 | 7.1 Frontend viewer service | Task 7 |
 | 7.2 `ViewerProvider` + hook | Task 8 |
 | 7.3 Token gate flow | Task 8 |
-| 7.4 `BoardFilters` | Task 11 |
+| 7.4 `BoardFiltersDrawer` + trigger | Task 11 |
 | 7.5 `useIssueBoard` refactor | Task 10 |
 | 7.6 `listIssues` filters | Task 9 |
-| 7.7 Palette and hotkeys | Task 12 |
+| 7.7 Palette + hotkeys (drives drawer) | Task 12 |
 | 7.8 Issue creation reads `creator` from response | Task 7 (mapper) |
 
 ### Placeholder scan
