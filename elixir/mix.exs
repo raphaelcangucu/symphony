@@ -76,6 +76,8 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixirWeb.Presenter,
           SymphonyElixirWeb.TerminalChannel,
           SymphonyElixirWeb.Tracker.BlockerController,
+          # retry/2 spawns a real git-shelling clone worker; cannot be deterministically unit-tested
+          SymphonyElixirWeb.Tracker.CloneJobController,
           SymphonyElixirWeb.Tracker.CommentController,
           SymphonyElixirWeb.Tracker.DevEnvController,
           SymphonyElixirWeb.Tracker.GitHubController,

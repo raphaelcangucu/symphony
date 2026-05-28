@@ -62,6 +62,13 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/dev_env/run", DevEnvController, :run)
     post("/projects/:project_slug/dev_env/steps/:step_id/run", DevEnvController, :run_step)
     get("/projects/:project_slug/dev_env/runs", DevEnvController, :runs)
+    post("/templates/import", TemplateController, :import)
+    resources("/templates", TemplateController, only: [:index, :create, :show, :update, :delete], param: "slug")
+    get("/templates/:slug/export", TemplateController, :export)
+    post("/templates/:template_slug/instantiate", TemplateController, :instantiate)
+    post("/projects/:project_slug/save_as_template", TemplateController, :save_as_template)
+    get("/projects/:project_slug/clone_jobs", CloneJobController, :index)
+    post("/projects/:project_slug/clone_jobs/:id/retry", CloneJobController, :retry)
   end
 
   scope "/", SymphonyElixirWeb do

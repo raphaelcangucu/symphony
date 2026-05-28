@@ -23,6 +23,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :issue_not_found), do: not_found(conn, "issue_not_found", "Issue not found")
   def render(conn, :status_not_found), do: not_found(conn, "status_not_found", "Status not found")
   def render(conn, :blocker_not_found), do: not_found(conn, "blocker_not_found", "Blocker not found")
+  def render(conn, :template_not_found), do: not_found(conn, "template_not_found", "Template not found")
 
   def render(conn, :missing_github_token) do
     error(conn, 503, "github_token_missing", "GITHUB_TOKEN is not configured on the Symphony server.")
