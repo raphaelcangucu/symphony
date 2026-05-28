@@ -251,6 +251,35 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert first_project_issue.status.name == "Todo"
   end
 
+  describe "create_issue/2 with creator" do
+    setup do
+      {:ok, project} = Context.ensure_project(%{name: "T", slug: "creator-project"})
+      {:ok, project: project}
+    end
+
+    test "persists the creator field when provided", %{project: _project} do
+      assert {:ok, issue} =
+               Context.create_issue("creator-project", %{
+                 title: "An issue",
+                 description: "with creator",
+                 status: "Todo",
+                 creator: "octocat"
+               })
+
+      assert issue.creator == "octocat"
+    end
+
+    test "leaves creator nil when omitted" do
+      assert {:ok, issue} =
+               Context.create_issue("creator-project", %{
+                 title: "Issue without creator",
+                 status: "Todo"
+               })
+
+      assert issue.creator == nil
+    end
+  end
+
   test "returns explicit not found errors" do
     assert {:error, :project_not_found} = Context.create_issue("missing", %{title: "No project"})
     assert {:error, :project_not_found} = Context.move_issue("missing", "MAC-1", %{status: "Todo"})

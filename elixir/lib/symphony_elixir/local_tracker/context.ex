@@ -766,6 +766,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
       "priority",
       :assignee_id,
       "assignee_id",
+      :creator,
+      "creator",
       :worker_id,
       "worker_id",
       :branch_name,

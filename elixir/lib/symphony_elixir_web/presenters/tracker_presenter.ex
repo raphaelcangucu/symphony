@@ -75,6 +75,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       priority: issue.priority,
       position: issue.position,
       assignee_id: issue.assignee_id,
+      creator: issue.creator,
       worker_id: issue.worker_id,
       branch_name: issue.branch_name,
       url: issue.url,
