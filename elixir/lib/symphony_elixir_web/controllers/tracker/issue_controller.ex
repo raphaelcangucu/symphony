@@ -5,24 +5,33 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   alias Plug.Conn
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
 
   @spec index(Conn.t(), map()) :: Conn.t()
-  def index(conn, %{"project_slug" => project_slug}) do
-    case Context.get_project(project_slug) do
-      {:ok, _project} ->
-        issues = Context.list_issues(project_slug)
-        json(conn, %{data: Enum.map(issues, &TrackerPresenter.issue/1)})
-
+  def index(conn, %{"project_slug" => project_slug} = params) do
+    with {:ok, _project} <- Context.get_project(project_slug),
+         {:ok, filters} <- build_filters(params) do
+      issues = Context.list_issues(project_slug, filters)
+      json(conn, %{data: Enum.map(issues, &TrackerPresenter.issue/1)})
+    else
       {:error, :project_not_found} ->
         TrackerErrors.render(conn, :project_not_found)
+
+      {:error, viewer_error} ->
+        TrackerErrors.render(conn, viewer_error)
     end
   end
 
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"project_slug" => project_slug} = params) do
-    case Context.create_issue(project_slug, Map.delete(params, "project_slug")) do
+    attrs =
+      params
+      |> Map.delete("project_slug")
+      |> maybe_inject_creator()
+
+    case Context.create_issue(project_slug, attrs) do
       {:ok, issue} ->
         conn
         |> put_status(:created)
@@ -60,4 +69,49 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
+
+  defp build_filters(params) do
+    with {:ok, assignee} <- resolve_me(Map.get(params, "assignee")),
+         {:ok, creator} <- resolve_me(Map.get(params, "creator")) do
+      filters =
+        []
+        |> put_filter(:search, trim_or_nil(Map.get(params, "q")))
+        |> put_filter(:assignee, assignee)
+        |> put_filter(:creator, creator)
+
+      {:ok, filters}
+    end
+  end
+
+  defp put_filter(opts, _key, nil), do: opts
+  defp put_filter(opts, _key, ""), do: opts
+  defp put_filter(opts, key, value), do: Keyword.put(opts, key, value)
+
+  defp resolve_me(nil), do: {:ok, nil}
+  defp resolve_me(""), do: {:ok, nil}
+
+  defp resolve_me("me") do
+    case Viewer.current() do
+      {:ok, %{login: login}} -> {:ok, login}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp resolve_me(value) when is_binary(value), do: {:ok, value}
+
+  defp maybe_inject_creator(attrs) do
+    case Viewer.current() do
+      {:ok, %{login: login}} -> Map.put_new(attrs, "creator", login)
+      {:error, _reason} -> attrs
+    end
+  end
+
+  defp trim_or_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp trim_or_nil(_), do: nil
 end

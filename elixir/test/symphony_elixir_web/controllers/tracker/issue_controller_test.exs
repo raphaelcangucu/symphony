@@ -147,6 +147,110 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
            }
   end
 
+  describe "index filters" do
+    setup do
+      unless Process.whereis(SymphonyElixir.LocalTracker.Viewer.Server) do
+        {:ok, _pid} = start_supervised(SymphonyElixir.LocalTracker.Viewer.Server)
+      end
+
+      SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+
+      {:ok, _project} = Context.ensure_project(%{name: "F", slug: "filtered"})
+
+      {:ok, _} =
+        Context.create_issue("filtered", %{
+          title: "ABC",
+          status: "Todo",
+          assignee_id: "alice",
+          creator: "alice"
+        })
+
+      {:ok, _} =
+        Context.create_issue("filtered", %{
+          title: "XYZ",
+          status: "Todo",
+          assignee_id: "bob",
+          creator: "bob"
+        })
+
+      :ok
+    end
+
+    test "filters by assignee query param" do
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/filtered/issues?assignee=alice")
+
+      assert %{"data" => [%{"title" => "ABC"}]} = json_response(conn, 200)
+    end
+
+    test "filters by creator query param" do
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/filtered/issues?creator=bob")
+
+      assert %{"data" => [%{"title" => "XYZ"}]} = json_response(conn, 200)
+    end
+
+    test "filters by q (keyword)" do
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/filtered/issues?q=ABC")
+
+      assert %{"data" => [%{"title" => "ABC"}]} = json_response(conn, 200)
+    end
+
+    test "resolves assignee=me to the viewer login" do
+      SymphonyElixir.LocalTracker.Viewer.put_cached(%{login: "alice", name: "Alice", avatar_url: nil})
+
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/filtered/issues?assignee=me")
+
+      assert %{"data" => [%{"title" => "ABC"}]} = json_response(conn, 200)
+    end
+
+    test "returns 503 when assignee=me but viewer unavailable" do
+      System.delete_env("GITHUB_TOKEN")
+      SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/filtered/issues?assignee=me")
+
+      assert %{"error" => %{"code" => "github_token_missing"}} = json_response(conn, 503)
+    end
+  end
+
+  describe "create issue with viewer creator" do
+    setup do
+      unless Process.whereis(SymphonyElixir.LocalTracker.Viewer.Server) do
+        {:ok, _pid} = start_supervised(SymphonyElixir.LocalTracker.Viewer.Server)
+      end
+
+      SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+      {:ok, _project} = Context.ensure_project(%{name: "C", slug: "creator-route"})
+      :ok
+    end
+
+    test "fills creator from cached viewer login" do
+      SymphonyElixir.LocalTracker.Viewer.put_cached(%{login: "octocat", name: nil, avatar_url: nil})
+
+      conn =
+        authorized_conn()
+        |> post("/api/tracker/v1/projects/creator-route/issues", %{
+          "title" => "From API",
+          "status" => "Todo"
+        })
+
+      assert %{"data" => %{"creator" => "octocat"}} = json_response(conn, 201)
+    end
+
+    test "still creates issue (creator nil) when viewer unavailable" do
+      System.delete_env("GITHUB_TOKEN")
+      SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+
+      conn =
+        authorized_conn()
+        |> post("/api/tracker/v1/projects/creator-route/issues", %{
+          "title" => "From API no viewer",
+          "status" => "Todo"
+        })
+
+      assert %{"data" => %{"creator" => nil}} = json_response(conn, 201)
+    end
+  end
+
   defp authorized_conn do
     build_conn()
     |> put_req_header("authorization", "Bearer secret")
