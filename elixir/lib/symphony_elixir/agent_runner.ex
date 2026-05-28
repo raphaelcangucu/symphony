@@ -151,9 +151,7 @@ defmodule SymphonyElixir.AgentRunner do
             {:done, refreshed_issue}
 
           open_pr_should_stop_turns?(refreshed_issue) ->
-            Logger.info(
-              "Stopping agent turns for #{issue_context(refreshed_issue)}: open pull request while still in In Progress"
-            )
+            Logger.info("Stopping agent turns for #{issue_context(refreshed_issue)}: open pull request while still in In Progress")
 
             {:done, refreshed_issue}
 

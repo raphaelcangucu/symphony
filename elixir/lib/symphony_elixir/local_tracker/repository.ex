@@ -38,9 +38,7 @@ defmodule SymphonyElixir.LocalTracker.Repository do
       :scan_summary
     ])
     |> validate_required([:project_id, :github_full_name, :workspace_path, :role])
-    |> validate_format(:workspace_path, ~r/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*$/,
-      message: "must be a relative workspace path"
-    )
+    |> validate_format(:workspace_path, ~r/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*$/, message: "must be a relative workspace path")
     |> validate_no_parent_traversal(:workspace_path)
     |> unique_constraint([:project_id, :workspace_path])
   end
