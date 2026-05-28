@@ -20,6 +20,9 @@ defmodule SymphonyElixir.LocalTracker.TemplateYaml do
       "validation_commands" => WorkspaceTemplate.validation_commands_list(template),
       "workflow_statuses" => WorkspaceTemplate.workflow_statuses_list(template),
       "after_create_hook" => template.after_create_hook,
+      "before_run_hook" => template.before_run_hook,
+      "after_run_hook" => template.after_run_hook,
+      "before_remove_hook" => template.before_remove_hook,
       "prompt_template" => template.prompt_template,
       "dev_env_markdown" => template.dev_env_markdown,
       "metadata" => template.metadata || %{},
@@ -85,7 +88,8 @@ defmodule SymphonyElixir.LocalTracker.TemplateYaml do
     if String.contains?(value, "\n") do
       "|\n" <> (value |> String.split("\n") |> Enum.map_join("\n", &("  " <> &1)))
     else
-      ~s("#{String.replace(value, "\"", "\\\"")}")
+      escaped = value |> String.replace("\\", "\\\\") |> String.replace("\"", "\\\"")
+      ~s("#{escaped}")
     end
   end
 

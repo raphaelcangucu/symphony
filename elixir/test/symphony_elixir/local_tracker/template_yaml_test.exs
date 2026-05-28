@@ -96,4 +96,44 @@ defmodule SymphonyElixir.LocalTracker.TemplateYamlTest do
     assert decoded["metadata"]["nested"] == %{"deep" => "value"}
     assert decoded["metadata"]["items"] == ["one", %{"k" => "v"}]
   end
+
+  test "encode escapes backslashes so they survive a round-trip" do
+    template = %WorkspaceTemplate{
+      slug: "backslash",
+      name: "Backslash",
+      validation_commands: %{},
+      workflow_statuses: %{},
+      metadata: %{"path" => "C:\\work\\api", "regex" => "ends-with-backslash\\"},
+      repositories: []
+    }
+
+    yaml = TemplateYaml.encode(template)
+
+    assert {:ok, decoded} = TemplateYaml.decode(yaml)
+    assert decoded["metadata"]["path"] == "C:\\work\\api"
+    assert decoded["metadata"]["regex"] == "ends-with-backslash\\"
+  end
+
+  test "export_yaml round-trips all hook fields" do
+    {:ok, template} = Templates.import_yaml(@yaml)
+
+    {:ok, updated} =
+      Templates.update_template(template.slug, %{
+        "before_run_hook" => "echo before-run",
+        "after_run_hook" => "echo after-run",
+        "before_remove_hook" => "echo before-remove"
+      })
+
+    assert updated.before_run_hook == "echo before-run"
+
+    assert {:ok, exported} = Templates.export_yaml("gamba")
+
+    Repo.query!("delete from local_tracker_workspace_template_repositories")
+    Repo.query!("delete from local_tracker_workspace_templates")
+
+    assert {:ok, reimported} = Templates.import_yaml(exported)
+    assert reimported.before_run_hook == "echo before-run"
+    assert reimported.after_run_hook == "echo after-run"
+    assert reimported.before_remove_hook == "echo before-remove"
+  end
 end
