@@ -145,6 +145,85 @@ defmodule SymphonyElixir.LocalTracker.TemplatesTest do
     assert [%{github_full_name: "g/api"}] = fetched.repositories
   end
 
+  test "instantiate_template creates project, repos, and clone jobs" do
+    {:ok, _template} =
+      Templates.create_template(%{
+        "name" => "Gamba",
+        "slug" => "gamba",
+        "workflow_statuses" => [%{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false}],
+        "repositories" => [
+          %{"github_full_name" => "g/api", "clone_url" => "https://github.com/g/api.git", "workspace_path" => "{{slug}}/api", "role" => "backend"}
+        ]
+      })
+
+    assert {:ok, project} = Templates.instantiate_template("gamba", %{"name" => "Gamba One", "slug" => "gamba-one"})
+    assert project.slug == "gamba-one"
+
+    [repo] = Context.list_repositories("gamba-one")
+    assert repo.workspace_path == "gamba-one/api"
+
+    jobs = Templates.list_clone_jobs("gamba-one")
+    assert length(jobs) == 1
+    assert hd(jobs).status == "pending"
+  end
+
+  test "instantiate_template skips statuses for github tracker" do
+    {:ok, _template} =
+      Templates.create_template(%{
+        "name" => "Remote",
+        "slug" => "remote-tpl",
+        "workflow_statuses" => [%{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false}],
+        "repositories" => []
+      })
+
+    assert {:ok, _project} =
+             Templates.instantiate_template("remote-tpl", %{
+               "name" => "R",
+               "slug" => "r-remote",
+               "tracker" => %{"kind" => "github", "config" => %{"repo" => "o/r", "project_id" => "PVT_1"}}
+             })
+
+    assert Context.list_statuses("r-remote") == []
+  end
+
+  test "start_clone_jobs triggers the starter for each enqueued job" do
+    {:ok, _template} =
+      Templates.create_template(%{
+        "name" => "Cloner",
+        "slug" => "cloner",
+        "repositories" => [
+          %{"github_full_name" => "g/api", "clone_url" => "https://github.com/g/api.git", "workspace_path" => "{{slug}}/api", "role" => "backend"}
+        ]
+      })
+
+    {:ok, _project} = Templates.instantiate_template("cloner", %{"name" => "Cloner One", "slug" => "cloner-one"})
+
+    [job] = Templates.list_clone_jobs("cloner-one")
+    test_pid = self()
+
+    assert :ok = Templates.start_clone_jobs("cloner-one", fn id -> send(test_pid, {:started, id}) end)
+    assert_received {:started, started_id}
+    assert started_id == job.id
+  end
+
+  test "start_clone_jobs returns ok for a project with no clone jobs" do
+    {:ok, _template} =
+      Templates.create_template(%{"name" => "Empty", "slug" => "empty-tpl", "repositories" => []})
+
+    {:ok, _project} = Templates.instantiate_template("empty-tpl", %{"name" => "Empty One", "slug" => "empty-one"})
+
+    assert Templates.list_clone_jobs("empty-one") == []
+    assert :ok = Templates.start_clone_jobs("empty-one")
+  end
+
+  test "start_clone_jobs returns error for unknown project" do
+    assert {:error, :project_not_found} = Templates.start_clone_jobs("nope", fn _ -> :ok end)
+  end
+
+  test "list_clone_jobs returns empty list for unknown project" do
+    assert Templates.list_clone_jobs("nope") == []
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

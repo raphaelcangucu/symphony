@@ -3,9 +3,14 @@ defmodule SymphonyElixir.LocalTracker.Templates do
 
   import Ecto.Query
 
+  alias SymphonyElixir.Config
+
   alias SymphonyElixir.LocalTracker.{
+    CloneJob,
+    CloneSupervisor,
     Context,
     Repository,
+    TemplateSubstitution,
     TemplateYaml,
     WorkspaceTemplate,
     WorkspaceTemplateRepository
@@ -48,14 +53,16 @@ defmodule SymphonyElixir.LocalTracker.Templates do
   @spec update_template(String.t(), map()) :: {:ok, WorkspaceTemplate.t()} | {:error, error()}
   def update_template(slug, attrs) do
     with {:ok, template} <- get_template(slug) do
-      Repo.transaction(fn ->
-        with {:ok, updated} <- template |> WorkspaceTemplate.changeset(attrs) |> Repo.update(),
-             :ok <- replace_repositories(updated, attr(attrs, :repositories, nil)) do
-          Repo.preload(updated, :repositories, force: true)
-        else
-          {:error, reason} -> Repo.rollback(reason)
-        end
-      end)
+      Repo.transaction(fn -> apply_template_update(template, attrs) end)
+    end
+  end
+
+  defp apply_template_update(template, attrs) do
+    with {:ok, updated} <- template |> WorkspaceTemplate.changeset(attrs) |> Repo.update(),
+         :ok <- replace_repositories(updated, attr(attrs, :repositories, nil)) do
+      Repo.preload(updated, :repositories, force: true)
+    else
+      {:error, reason} -> Repo.rollback(reason)
     end
   end
 
@@ -102,6 +109,52 @@ defmodule SymphonyElixir.LocalTracker.Templates do
   def export_yaml(slug) do
     with {:ok, template} <- get_template(slug) do
       {:ok, TemplateYaml.encode(template)}
+    end
+  end
+
+  @spec instantiate_template(String.t(), map()) :: {:ok, map()} | {:error, error()}
+  def instantiate_template(template_slug, attrs) when is_map(attrs) do
+    with {:ok, template} <- get_template(template_slug) do
+      vars = substitution_vars(attrs)
+      tracker = attr(attrs, :tracker, %{"kind" => "local", "config" => %{}})
+      remote? = attr(tracker, :kind, "local") in ["github", "linear"]
+
+      project_attrs = %{
+        "name" => attr(attrs, :name),
+        "slug" => attr(attrs, :slug),
+        "description" => template.description,
+        "tracker" => tracker,
+        "workflow_statuses" => maybe_statuses(template, remote?),
+        "repositories" => template_repositories(template, vars),
+        "setup" => maybe_setup(template, vars, remote?)
+      }
+
+      with {:ok, project} <- Context.create_workspace_project(project_attrs),
+           {:ok, _jobs} <- enqueue_clone_jobs(project) do
+        {:ok, project}
+      end
+    end
+  end
+
+  @spec start_clone_jobs(String.t(), (term() -> term())) :: :ok | {:error, :project_not_found}
+  def start_clone_jobs(project_slug, starter \\ &CloneSupervisor.start_job/1) do
+    with {:ok, _project} <- Context.get_project(project_slug) do
+      project_slug
+      |> list_clone_jobs()
+      |> Enum.each(fn job -> starter.(job.id) end)
+
+      :ok
+    end
+  end
+
+  @spec list_clone_jobs(String.t()) :: [CloneJob.t()]
+  def list_clone_jobs(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        Repo.all(from(j in CloneJob, where: j.project_id == ^project.id, order_by: [asc: j.id], preload: [:repository]))
+
+      _ ->
+        []
     end
   end
 
@@ -169,7 +222,57 @@ defmodule SymphonyElixir.LocalTracker.Templates do
     Map.new(map, fn {k, v} -> {to_string(k), v} end)
   end
 
+  defp attr(attrs, key), do: attr(attrs, key, nil)
+
   defp attr(attrs, key, default) do
     Map.get(attrs, key, Map.get(attrs, to_string(key), default))
+  end
+
+  defp substitution_vars(attrs) do
+    %{slug: attr(attrs, :slug), name: attr(attrs, :name), workspace_root: Config.workspace_root()}
+  end
+
+  defp maybe_statuses(_template, true), do: []
+  defp maybe_statuses(template, false), do: WorkspaceTemplate.workflow_statuses_list(template)
+
+  defp maybe_setup(_template, _vars, true), do: %{}
+
+  defp maybe_setup(template, vars, false) do
+    %{
+      "after_create_hook" => TemplateSubstitution.apply(template.after_create_hook, vars),
+      "prompt_template" => TemplateSubstitution.apply(template.prompt_template, vars),
+      "validation_commands" => WorkspaceTemplate.validation_commands_list(template),
+      "workflow_config" => %{},
+      "scan_summary" => %{}
+    }
+  end
+
+  defp template_repositories(template, vars) do
+    Enum.map(template.repositories, fn repo ->
+      %{
+        "github_full_name" => repo.github_full_name,
+        "clone_url" => TemplateSubstitution.apply(repo.clone_url, vars),
+        "default_branch" => repo.default_branch,
+        "selected_branch" => repo.default_branch,
+        "workspace_path" => TemplateSubstitution.apply(repo.workspace_path, vars),
+        "role" => repo.role,
+        "scan_summary" => %{}
+      }
+    end)
+  end
+
+  defp enqueue_clone_jobs(project) do
+    repositories = Context.list_repositories(project.slug)
+
+    repositories
+    |> Enum.reduce_while({:ok, []}, fn repo, {:ok, acc} ->
+      %CloneJob{}
+      |> CloneJob.changeset(%{project_id: project.id, repository_id: repo.id, status: "pending"})
+      |> Repo.insert()
+      |> case do
+        {:ok, job} -> {:cont, {:ok, [job | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 end
