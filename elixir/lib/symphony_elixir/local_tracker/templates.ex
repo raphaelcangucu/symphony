@@ -6,6 +6,7 @@ defmodule SymphonyElixir.LocalTracker.Templates do
   alias SymphonyElixir.LocalTracker.{
     Context,
     Repository,
+    TemplateYaml,
     WorkspaceTemplate,
     WorkspaceTemplateRepository
   }
@@ -87,6 +88,20 @@ defmodule SymphonyElixir.LocalTracker.Templates do
       }
 
       create_template(attrs)
+    end
+  end
+
+  @spec import_yaml(binary()) :: {:ok, WorkspaceTemplate.t()} | {:error, :invalid_yaml | Ecto.Changeset.t()}
+  def import_yaml(yaml) when is_binary(yaml) do
+    with {:ok, attrs} <- TemplateYaml.decode(yaml) do
+      create_template(attrs)
+    end
+  end
+
+  @spec export_yaml(String.t()) :: {:ok, binary()} | {:error, :template_not_found}
+  def export_yaml(slug) do
+    with {:ok, template} <- get_template(slug) do
+      {:ok, TemplateYaml.encode(template)}
     end
   end
 
