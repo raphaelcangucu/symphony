@@ -79,6 +79,45 @@ defmodule SymphonyElixir.Terminal.Registry do
     tmux.capture_pane(session_name(project_slug, issue_identifier))
   end
 
+  @spec project_session_name(String.t()) :: String.t()
+  def project_session_name(project_slug) when is_binary(project_slug) do
+    "sym-devenv-#{safe_segment(project_slug, "project")}"
+  end
+
+  @spec open_project_session(String.t(), keyword()) :: {:ok, session()} | {:error, String.t()}
+  def open_project_session(project_slug, opts \\ []) when is_binary(project_slug) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    cwd = Keyword.get(opts, :cwd) || default_project_cwd(project_slug)
+    session_name = project_session_name(project_slug)
+
+    with :ok <- ensure_tmux_available(tmux),
+         :ok <- File.mkdir_p(cwd),
+         :ok <- ensure_session(tmux, session_name, cwd),
+         {:ok, output} <- capture_output(tmux, session_name) do
+      {:ok,
+       %{
+         project_slug: project_slug,
+         issue_identifier: "__devenv__",
+         session_name: session_name,
+         cwd: cwd,
+         state: "running",
+         output: output
+       }}
+    end
+  end
+
+  @spec send_input_project(String.t(), String.t(), keyword()) :: :ok | {:error, String.t()}
+  def send_input_project(project_slug, data, opts \\ []) when is_binary(project_slug) and is_binary(data) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.send_keys(project_session_name(project_slug), data)
+  end
+
+  @spec capture_project(String.t(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
+  def capture_project(project_slug, opts \\ []) when is_binary(project_slug) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.capture_pane(project_session_name(project_slug))
+  end
+
   defp ensure_tmux_available(tmux) do
     if tmux.available?(), do: :ok, else: {:error, "tmux is not available"}
   end
@@ -109,6 +148,10 @@ defmodule SymphonyElixir.Terminal.Registry do
 
   defp project_slug(%{project: %{slug: slug}}) when is_binary(slug), do: slug
   defp project_slug(_issue), do: "local"
+
+  defp default_project_cwd(project_slug) do
+    Path.join(SymphonyElixir.Config.workspace_root(), project_slug)
+  end
 
   defp safe_segment(value, fallback) do
     value
