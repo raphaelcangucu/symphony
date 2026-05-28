@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.LocalTracker.ContextTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.{Context, ProjectSetup}
   alias SymphonyElixir.Repo
 
   setup do
@@ -28,6 +28,90 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
              "Rework",
              "Done"
            ]
+  end
+
+  test "archive_project hides project from default list and include_archived returns it" do
+    {:ok, _project} = Context.ensure_project(%{"name" => "Archive Me", "slug" => "archive-me"})
+
+    assert {:ok, archived} = Context.archive_project("archive-me")
+    assert archived.archived_at
+    refute Enum.any?(Context.list_projects(), &(&1.slug == "archive-me"))
+    assert Enum.any?(Context.list_projects(include_archived: true), &(&1.slug == "archive-me"))
+  end
+
+  test "restore_project returns archived project to default list" do
+    {:ok, _project} = Context.ensure_project(%{"name" => "Restore Me", "slug" => "restore-me"})
+    {:ok, _archived} = Context.archive_project("restore-me")
+
+    assert {:ok, restored} = Context.restore_project("restore-me")
+    refute restored.archived_at
+    assert Enum.any?(Context.list_projects(), &(&1.slug == "restore-me"))
+  end
+
+  test "delete_project rejects active project and deletes archived project" do
+    {:ok, _project} = Context.ensure_project(%{"name" => "Delete Me", "slug" => "delete-me"})
+
+    assert {:error, :project_not_archived} = Context.delete_project("delete-me")
+    {:ok, _archived} = Context.archive_project("delete-me")
+    assert {:ok, deleted} = Context.delete_project("delete-me")
+    assert deleted.slug == "delete-me"
+    assert {:error, :project_not_found} = Context.get_project("delete-me")
+  end
+
+  test "create_workspace_project persists repositories, custom statuses, and setup metadata" do
+    assert {:ok, project} =
+             Context.create_workspace_project(%{
+               "name" => "Macro Markets",
+               "slug" => "macro-markets",
+               "description" => "Multi-repo workspace",
+               "workflow_statuses" => [
+                 %{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false},
+                 %{"name" => "Review", "category" => "wait", "position" => 1, "is_terminal" => false},
+                 %{"name" => "Done", "category" => "terminal", "position" => 2, "is_terminal" => true}
+               ],
+               "repositories" => [
+                 %{
+                   "github_full_name" => "clouapp/front",
+                   "clone_url" => "https://github.com/clouapp/front.git",
+                   "default_branch" => "homolog",
+                   "selected_branch" => "homolog",
+                   "workspace_path" => "frontend",
+                   "role" => "frontend",
+                   "scan_summary" => %{"stack" => ["node"], "validation_commands" => ["npm test"]}
+                 },
+                 %{
+                   "github_full_name" => "clouapp/api",
+                   "clone_url" => "https://github.com/clouapp/api.git",
+                   "default_branch" => "main",
+                   "selected_branch" => "main",
+                   "workspace_path" => "backend",
+                   "role" => "backend",
+                   "scan_summary" => %{"stack" => ["elixir"], "validation_commands" => ["mix test"]}
+                 }
+               ],
+               "setup" => %{
+                 "workflow_config" => %{"active_states" => ["Todo"], "terminal_states" => ["Done"]},
+                 "after_create_hook" => "git clone https://github.com/clouapp/front.git frontend",
+                 "prompt_template" => "Use frontend/ and backend/.",
+                 "validation_commands" => ["npm test", "mix test"],
+                 "scan_summary" => %{"repository_count" => 2}
+               }
+             })
+
+    assert project.slug == "macro-markets"
+    assert Enum.map(Context.list_statuses(project.slug), & &1.name) == ["Todo", "Review", "Done"]
+
+    repositories =
+      Repo.query!(
+        "select github_full_name, workspace_path, role from local_tracker_repositories order by workspace_path"
+      ).rows
+
+    assert repositories == [
+             ["clouapp/api", "backend", "backend"],
+             ["clouapp/front", "frontend", "frontend"]
+           ]
+
+    assert %ProjectSetup{validation_commands: %{"commands" => ["npm test", "mix test"]}} = Repo.one(ProjectSetup)
   end
 
   test "create_issue creates the next identifier and stores requested status" do
@@ -199,6 +283,8 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
           "local_tracker_comments",
           "local_tracker_issues",
           "local_tracker_workflow_statuses",
+          "local_tracker_project_setups",
+          "local_tracker_repositories",
           "local_tracker_projects"
         ] do
       Repo.query!("delete from #{table}")

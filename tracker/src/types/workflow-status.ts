@@ -1,13 +1,6 @@
-export type WorkflowStatusName =
-  | "Backlog"
-  | "Todo"
-  | "In Progress"
-  | "Human Review"
-  | "Merging"
-  | "Rework"
-  | "Done";
+export type WorkflowStatusName = string;
 
-export type WorkflowStatusCategory = "backlog" | "unstarted" | "started" | "completed" | "canceled" | "active";
+export type WorkflowStatusCategory = "backlog" | "unstarted" | "started" | "completed" | "canceled" | "active" | "wait" | "terminal";
 
 export interface WorkflowStatus {
   id: string;

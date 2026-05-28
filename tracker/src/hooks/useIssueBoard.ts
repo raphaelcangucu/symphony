@@ -29,7 +29,7 @@ function upsertIssue(issues: Issue[], issue: Issue): Issue[] {
   return issues.map((item, itemIndex) => (itemIndex === index ? issue : item));
 }
 
-export function useIssueBoard(projectSlug: string): UseIssueBoardResult {
+export function useIssueBoard(projectSlug: string, statuses?: WorkflowStatusName[]): UseIssueBoardResult {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,15 +52,15 @@ export function useIssueBoard(projectSlug: string): UseIssueBoardResult {
     void refetch();
   }, [refetch]);
 
-  const board = useMemo(() => buildBoardState(issues), [issues]);
+  const board = useMemo(() => buildBoardState(issues, statuses), [issues, statuses]);
 
   const moveIssueOptimistically = useCallback(
     async (identifier: string, status: WorkflowStatusName, position: number) => {
-      const previousBoard = buildBoardState(issues);
-      const sourceStatus = findIssueStatus(previousBoard, identifier);
+      const previousBoard = buildBoardState(issues, statuses);
+      const sourceStatus = findIssueStatus(previousBoard, identifier, statuses);
       if (!sourceStatus) return;
 
-      const nextBoard = moveIssueLocally(previousBoard, identifier, status, position);
+      const nextBoard = moveIssueLocally(previousBoard, identifier, status, position, statuses);
       setIssues(flattenBoardState(nextBoard));
 
       try {
@@ -72,7 +72,7 @@ export function useIssueBoard(projectSlug: string): UseIssueBoardResult {
         toast.error(message);
       }
     },
-    [issues, projectSlug],
+    [issues, projectSlug, statuses],
   );
 
   useProjectChannel(projectSlug, (event, payload) => {

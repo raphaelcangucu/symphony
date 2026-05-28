@@ -1,18 +1,47 @@
 defmodule SymphonyElixirWeb.TrackerPresenter do
   @moduledoc "JSON DTOs for the local tracker API and realtime payloads."
 
-  alias SymphonyElixir.LocalTracker.{Comment, IssueRecord, IssueRelation, Project, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{Comment, IssueRecord, IssueRelation, Project, ProjectSetup, Repository, WorkflowStatus}
 
-  @spec project(Project.t(), [WorkflowStatus.t()] | nil) :: map()
-  def project(%Project{} = project, statuses \\ nil) do
+  @spec project(Project.t(), [WorkflowStatus.t()] | nil, [Repository.t()] | nil, ProjectSetup.t() | nil) :: map()
+  def project(%Project{} = project, statuses \\ nil, repositories \\ nil, setup \\ nil) do
     %{
       id: project.id,
       name: project.name,
       slug: project.slug,
       description: project.description,
       statuses: statuses && Enum.map(statuses, &status/1),
+      repositories: repositories && Enum.map(repositories, &repository/1),
+      setup: setup && project_setup(setup),
       inserted_at: iso8601(project.inserted_at),
       updated_at: iso8601(project.updated_at)
+    }
+  end
+
+  @spec repository(Repository.t()) :: map()
+  def repository(%Repository{} = repository) do
+    %{
+      id: repository.id,
+      github_full_name: repository.github_full_name,
+      clone_url: repository.clone_url,
+      default_branch: repository.default_branch,
+      selected_branch: repository.selected_branch,
+      local_path: repository.local_path,
+      workspace_path: repository.workspace_path,
+      role: repository.role,
+      scan_summary: repository.scan_summary
+    }
+  end
+
+  @spec project_setup(ProjectSetup.t()) :: map()
+  def project_setup(%ProjectSetup{} = setup) do
+    %{
+      id: setup.id,
+      workflow_config: setup.workflow_config,
+      after_create_hook: setup.after_create_hook,
+      prompt_template: setup.prompt_template,
+      validation_commands: Map.get(setup.validation_commands || %{}, "commands", []),
+      scan_summary: setup.scan_summary
     }
   end
 

@@ -38,6 +38,19 @@ describe("board-utils", () => {
     expect(board.Done).toEqual([]);
   });
 
+  it("builds custom workflow columns from project statuses", () => {
+    const board = buildBoardState(
+      [
+        issue({ identifier: "MAC-1", status: "Review", position: 0 }),
+        issue({ identifier: "MAC-2", status: "Todo", position: 0 }),
+      ],
+      ["Todo", "Review", "Done"],
+    );
+
+    expect(Object.keys(board)).toEqual(["Todo", "Review", "Done"]);
+    expect(board.Review.map((item) => item.identifier)).toEqual(["MAC-1"]);
+  });
+
   it("moves an issue between columns without mutating the original board", () => {
     const board = buildBoardState([
       issue({ identifier: "MAC-1", status: "Todo", position: 0 }),

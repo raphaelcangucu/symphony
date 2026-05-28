@@ -16,30 +16,30 @@ import type { WorkflowStatusName } from "@/types/workflow-status";
 
 import { BoardColumn } from "./BoardColumn";
 import {
-  DEFAULT_WORKFLOW_STATUSES,
   type BoardState,
   findIssueStatus,
   isWorkflowStatusName,
   parseDragIssueId,
+  workflowStatusNames,
 } from "./board-utils";
 import { IssueCard } from "./IssueCard";
 
 interface BoardViewProps {
   board: BoardState;
+  statuses?: WorkflowStatusName[];
   onSelectIssue: (issue: Issue) => void;
   onMoveIssue: (identifier: string, status: WorkflowStatusName, position: number) => Promise<void> | void;
 }
 
-export function BoardView({ board, onSelectIssue, onMoveIssue }: BoardViewProps) {
+export function BoardView({ board, statuses, onSelectIssue, onMoveIssue }: BoardViewProps) {
   const [activeIdentifier, setActiveIdentifier] = useState<string | null>(null);
   const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 8 } }), useSensor(TouchSensor));
+  const statusNames = useMemo(() => workflowStatusNames(statuses ?? Object.keys(board)), [board, statuses]);
 
   const activeIssue = useMemo(() => {
     if (!activeIdentifier) return null;
-    return DEFAULT_WORKFLOW_STATUSES.flatMap((status) => board[status]).find(
-      (issue) => issue.identifier === activeIdentifier,
-    );
-  }, [activeIdentifier, board]);
+    return statusNames.flatMap((status) => board[status] ?? []).find((issue) => issue.identifier === activeIdentifier);
+  }, [activeIdentifier, board, statusNames]);
 
   function handleDragStart(event: DragStartEvent) {
     setActiveIdentifier(parseDragIssueId(event.active.id));
@@ -51,10 +51,10 @@ export function BoardView({ board, onSelectIssue, onMoveIssue }: BoardViewProps)
     if (!identifier || !event.over) return;
 
     const overId = String(event.over.id);
-    const currentStatus = findIssueStatus(board, identifier);
-    const targetStatus = isWorkflowStatusName(overId)
+    const currentStatus = findIssueStatus(board, identifier, statusNames);
+    const targetStatus = isWorkflowStatusName(overId, statusNames)
       ? overId
-      : findIssueStatus(board, parseDragIssueId(overId) ?? "");
+      : findIssueStatus(board, parseDragIssueId(overId) ?? "", statusNames);
 
     if (!currentStatus || !targetStatus) return;
 
@@ -73,8 +73,8 @@ export function BoardView({ board, onSelectIssue, onMoveIssue }: BoardViewProps)
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex h-[calc(100vh-4rem)] gap-4 overflow-x-auto p-6">
-        {DEFAULT_WORKFLOW_STATUSES.map((status) => (
-          <BoardColumn key={status} status={status} issues={board[status]} onSelectIssue={onSelectIssue} />
+        {statusNames.map((status) => (
+          <BoardColumn key={status} status={status} issues={board[status] ?? []} onSelectIssue={onSelectIssue} />
         ))}
       </div>
       <DragOverlay>{activeIssue ? <IssueCard issue={activeIssue} onSelect={onSelectIssue} dragOverlay /> : null}</DragOverlay>

@@ -25,34 +25,40 @@ export function parseDragIssueId(id: unknown): string | null {
   return id.startsWith(ISSUE_DRAG_PREFIX) ? id.slice(ISSUE_DRAG_PREFIX.length) : id;
 }
 
-export function isWorkflowStatusName(value: string): value is WorkflowStatusName {
-  return DEFAULT_WORKFLOW_STATUSES.includes(value as WorkflowStatusName);
+export function workflowStatusNames(statuses?: readonly WorkflowStatusName[]): WorkflowStatusName[] {
+  return statuses && statuses.length > 0 ? [...statuses] : [...DEFAULT_WORKFLOW_STATUSES];
 }
 
-export function emptyBoardState(): BoardState {
-  return DEFAULT_WORKFLOW_STATUSES.reduce((accumulator, status) => {
+export function isWorkflowStatusName(value: string, statuses?: readonly WorkflowStatusName[]): value is WorkflowStatusName {
+  return workflowStatusNames(statuses).includes(value as WorkflowStatusName);
+}
+
+export function emptyBoardState(statuses?: readonly WorkflowStatusName[]): BoardState {
+  return workflowStatusNames(statuses).reduce((accumulator, status) => {
     accumulator[status] = [];
     return accumulator;
   }, {} as BoardState);
 }
 
-export function buildBoardState(issues: readonly Issue[]): BoardState {
-  const board = emptyBoardState();
+export function buildBoardState(issues: readonly Issue[], statuses?: readonly WorkflowStatusName[]): BoardState {
+  const statusNames = workflowStatusNames(statuses);
+  const board = emptyBoardState(statusNames);
+  const fallbackStatus = statusNames[0] ?? "Backlog";
 
   for (const issue of issues) {
-    const status = isWorkflowStatusName(issue.status) ? issue.status : "Backlog";
+    const status = isWorkflowStatusName(issue.status, statusNames) ? issue.status : fallbackStatus;
     board[status] = [...board[status], issue];
   }
 
-  for (const status of DEFAULT_WORKFLOW_STATUSES) {
+  for (const status of statusNames) {
     board[status] = [...board[status]].sort((left, right) => left.position - right.position);
   }
 
   return board;
 }
 
-export function findIssueStatus(board: BoardState, identifier: string): WorkflowStatusName | null {
-  for (const status of DEFAULT_WORKFLOW_STATUSES) {
+export function findIssueStatus(board: BoardState, identifier: string, statuses?: readonly WorkflowStatusName[]): WorkflowStatusName | null {
+  for (const status of workflowStatusNames(statuses ?? Object.keys(board))) {
     if (board[status].some((issue) => issue.identifier === identifier)) return status;
   }
   return null;
@@ -63,24 +69,26 @@ export function moveIssueLocally(
   identifier: string,
   targetStatus: WorkflowStatusName,
   targetIndex: number,
+  statuses?: readonly WorkflowStatusName[],
 ): BoardState {
   if (!identifier.trim()) throw new Error("identifier is required");
 
-  const sourceStatus = findIssueStatus(board, identifier);
+  const statusNames = workflowStatusNames(statuses ?? Object.keys(board));
+  const sourceStatus = findIssueStatus(board, identifier, statusNames);
   if (!sourceStatus) return board;
 
   const movingIssue = board[sourceStatus].find((issue) => issue.identifier === identifier);
   if (!movingIssue) return board;
 
-  const next = emptyBoardState();
-  for (const status of DEFAULT_WORKFLOW_STATUSES) {
+  const next = emptyBoardState(statusNames);
+  for (const status of statusNames) {
     next[status] = board[status].filter((issue) => issue.identifier !== identifier);
   }
 
   const boundedIndex = Math.max(0, Math.min(targetIndex, next[targetStatus].length));
   next[targetStatus].splice(boundedIndex, 0, { ...movingIssue, status: targetStatus });
 
-  for (const status of DEFAULT_WORKFLOW_STATUSES) {
+  for (const status of statusNames) {
     next[status] = next[status].map((issue, position) => ({ ...issue, position }));
   }
 
@@ -88,5 +96,5 @@ export function moveIssueLocally(
 }
 
 export function flattenBoardState(board: BoardState): Issue[] {
-  return DEFAULT_WORKFLOW_STATUSES.flatMap((status) => board[status]);
+  return Object.keys(board).flatMap((status) => board[status]);
 }

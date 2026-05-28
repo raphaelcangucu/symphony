@@ -2,6 +2,7 @@ import { FolderKanban, KeyRound, ListTodo } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { clearTrackerToken } from "@/config";
@@ -80,18 +81,21 @@ export function ProjectSidebar() {
         ))}
       </div>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mt-4 justify-start text-muted-foreground"
-        onClick={() => {
-          clearTrackerToken();
-          window.location.assign("/token");
-        }}
-      >
-        <KeyRound className="h-4 w-4" />
-        Reset token
-      </Button>
+      <div className="mt-4 flex items-center gap-2">
+        <ThemeToggle />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex-1 justify-start text-muted-foreground"
+          onClick={() => {
+            clearTrackerToken();
+            window.location.assign("/token");
+          }}
+        >
+          <KeyRound className="h-4 w-4" />
+          Reset token
+        </Button>
+      </div>
     </aside>
   );
 }

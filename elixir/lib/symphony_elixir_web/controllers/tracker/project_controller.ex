@@ -28,6 +28,23 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
     end
   end
 
+  @spec workspace(Conn.t(), map()) :: Conn.t()
+  def workspace(conn, params) do
+    case Context.create_workspace_project(params) do
+      {:ok, project} ->
+        statuses = Context.list_statuses(project.slug)
+        repositories = Context.list_repositories(project.slug)
+        setup = Context.get_project_setup(project.slug)
+
+        conn
+        |> put_status(:created)
+        |> json(%{data: TrackerPresenter.project(project, statuses, repositories, setup)})
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+    end
+  end
+
   @spec show(Conn.t(), map()) :: Conn.t()
   def show(conn, %{"id" => project_slug}) do
     case Context.get_project(project_slug) do

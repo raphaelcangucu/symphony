@@ -13,9 +13,11 @@ defmodule SymphonyElixir.LocalTracker.Project do
     field(:slug, :string)
     field(:description, :string)
 
+    has_many(:repositories, SymphonyElixir.LocalTracker.Repository)
     has_many(:statuses, WorkflowStatus)
     has_many(:issues, IssueRecord)
     has_many(:labels, Label)
+    has_one(:setup, SymphonyElixir.LocalTracker.ProjectSetup)
 
     timestamps(type: :utc_datetime_usec)
   end

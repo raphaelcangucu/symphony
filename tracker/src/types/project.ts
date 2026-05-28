@@ -1,4 +1,6 @@
 import type { WorkflowStatus } from "./workflow-status";
+import type { ProjectSetup } from "./project-setup";
+import type { WorkspaceRepository } from "./repository";
 
 export interface Project {
   id: string;
@@ -7,6 +9,8 @@ export interface Project {
   description: string | null;
   issueCount?: number;
   workflowStatuses?: WorkflowStatus[];
+  repositories?: WorkspaceRepository[];
+  setup?: ProjectSetup | null;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -12,6 +12,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
     IssueRecord,
     IssueRelation,
     Project,
+    ProjectSetup,
+    Repository,
     Seeds,
     WorkflowStatus
   }
@@ -40,6 +42,21 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec create_workspace_project(map()) :: {:ok, Project.t()} | {:error, Ecto.Changeset.t()}
+  def create_workspace_project(attrs) when is_map(attrs) do
+    Repo.transaction(fn ->
+      with {:ok, project} <- insert_project(project_attrs(attrs)),
+           {:ok, _statuses} <- insert_workspace_statuses(project, attr(attrs, :workflow_statuses, [])),
+           {:ok, _repositories} <- insert_workspace_repositories(project, attr(attrs, :repositories, [])),
+           {:ok, _setup} <- insert_workspace_setup(project, attr(attrs, :setup, %{})) do
+        Broadcaster.project_changed("project_created", project)
+        project
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
   @spec list_projects() :: [Project.t()]
   def list_projects do
     Project
@@ -58,6 +75,28 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
       %Project{} = project ->
         statuses_for_project(project.id)
+    end
+  end
+
+  @spec list_repositories(String.t()) :: [Repository.t()]
+  def list_repositories(project_slug) when is_binary(project_slug) do
+    case Repo.get_by(Project, slug: project_slug) do
+      nil ->
+        []
+
+      %Project{} = project ->
+        Repository
+        |> where([repository], repository.project_id == ^project.id)
+        |> order_by([repository], asc: repository.workspace_path)
+        |> Repo.all()
+    end
+  end
+
+  @spec get_project_setup(String.t()) :: ProjectSetup.t() | nil
+  def get_project_setup(project_slug) when is_binary(project_slug) do
+    case Repo.get_by(Project, slug: project_slug) do
+      nil -> nil
+      %Project{} = project -> Repo.get_by(ProjectSetup, project_id: project.id)
     end
   end
 
@@ -246,7 +285,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   defp create_project_with_default_statuses(attrs) do
     Repo.transaction(fn ->
-      with {:ok, project} <- %Project{} |> Project.changeset(attrs) |> Repo.insert(),
+      with {:ok, project} <- insert_project(attrs),
            {:ok, project} <- ensure_default_statuses(project) do
         Broadcaster.project_changed("project_created", project)
         project
@@ -254,6 +293,116 @@ defmodule SymphonyElixir.LocalTracker.Context do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  defp insert_project(attrs) do
+    %Project{}
+    |> Project.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  defp insert_workspace_statuses(%Project{} = project, statuses) do
+    statuses
+    |> normalize_statuses()
+    |> Enum.reduce_while({:ok, []}, fn attrs, {:ok, acc} ->
+      attrs = Map.put(attrs, :project_id, project.id)
+
+      %WorkflowStatus{}
+      |> WorkflowStatus.changeset(attrs)
+      |> Repo.insert()
+      |> case do
+        {:ok, status} -> {:cont, {:ok, [status | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp insert_workspace_repositories(%Project{} = project, repositories) when is_list(repositories) do
+    repositories
+    |> Enum.map(&repository_attrs(project, &1))
+    |> Enum.reduce_while({:ok, []}, fn attrs, {:ok, acc} ->
+      %Repository{}
+      |> Repository.changeset(attrs)
+      |> Repo.insert()
+      |> case do
+        {:ok, repository} -> {:cont, {:ok, [repository | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp insert_workspace_repositories(_project, _repositories), do: {:error, workspace_changeset_error(:repositories)}
+
+  defp insert_workspace_setup(%Project{} = project, setup_attrs) when is_map(setup_attrs) do
+    %ProjectSetup{}
+    |> ProjectSetup.changeset(setup_attrs(project, setup_attrs))
+    |> Repo.insert()
+  end
+
+  defp insert_workspace_setup(_project, _setup_attrs), do: {:error, workspace_changeset_error(:setup)}
+
+  defp project_attrs(attrs) do
+    %{
+      name: attr(attrs, :name),
+      slug: attr(attrs, :slug),
+      description: attr(attrs, :description)
+    }
+  end
+
+  defp normalize_statuses([]), do: normalize_default_statuses()
+
+  defp normalize_statuses(statuses) when is_list(statuses) do
+    Enum.map(statuses, fn status ->
+      %{
+        name: attr(status, :name),
+        category: attr(status, :category, "active"),
+        position: attr(status, :position, 0),
+        is_terminal: attr(status, :is_terminal, false)
+      }
+    end)
+  end
+
+  defp normalize_statuses(_statuses), do: []
+
+  defp normalize_default_statuses do
+    Seeds.default_statuses()
+    |> Enum.with_index()
+    |> Enum.map(fn {{name, category, is_terminal}, position} ->
+      %{name: name, category: category, position: position, is_terminal: is_terminal}
+    end)
+  end
+
+  defp repository_attrs(%Project{} = project, attrs) when is_map(attrs) do
+    %{
+      project_id: project.id,
+      github_full_name: attr(attrs, :github_full_name),
+      clone_url: attr(attrs, :clone_url),
+      default_branch: attr(attrs, :default_branch),
+      selected_branch: attr(attrs, :selected_branch),
+      local_path: attr(attrs, :local_path),
+      workspace_path: attr(attrs, :workspace_path),
+      role: attr(attrs, :role),
+      scan_summary: attr(attrs, :scan_summary, %{})
+    }
+  end
+
+  defp setup_attrs(%Project{} = project, attrs) do
+    %{
+      project_id: project.id,
+      workflow_config: attr(attrs, :workflow_config, %{}),
+      after_create_hook: attr(attrs, :after_create_hook),
+      prompt_template: attr(attrs, :prompt_template),
+      validation_commands: validation_commands_attrs(attr(attrs, :validation_commands, [])),
+      scan_summary: attr(attrs, :scan_summary, %{})
+    }
+  end
+
+  defp validation_commands_attrs(commands) when is_list(commands), do: %{"commands" => commands}
+  defp validation_commands_attrs(%{} = commands), do: commands
+  defp validation_commands_attrs(_commands), do: %{"commands" => []}
+
+  defp workspace_changeset_error(field) do
+    {%Project{}, %{field => ["is invalid"]}}
   end
 
   defp ensure_default_statuses(%Project{} = project) do

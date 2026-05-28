@@ -5,7 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { ListView } from "@/components/list/ListView";
-import { ProjectCreateDialog } from "@/components/projects/ProjectCreateDialog";
+import { ProjectWorkspaceWizard } from "@/components/projects/ProjectWorkspaceWizard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIssueBoard } from "@/hooks/useIssueBoard";
@@ -36,7 +36,7 @@ function ProjectsIndexPage() {
           <h1 className="text-xl font-semibold">Projects</h1>
           <p className="text-sm text-muted-foreground">Choose a local tracker project.</p>
         </div>
-        <ProjectCreateDialog onCreated={(project) => setProjects((current) => [...current, project])} />
+        <ProjectWorkspaceWizard onCreated={(project) => setProjects((current) => [...current, project])} />
       </div>
       {loading ? <Skeleton className="h-40" /> : null}
       {!loading && projects.length === 0 ? <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">No projects returned by the tracker API.</div> : null}
