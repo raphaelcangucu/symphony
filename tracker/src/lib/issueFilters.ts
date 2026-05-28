@@ -1,4 +1,5 @@
 import type { Issue } from "@/types/issue";
+import type { Viewer } from "@/types/viewer";
 
 export interface IssueFilters {
   search?: string;
@@ -47,4 +48,41 @@ function resolveMeFilters(filters: IssueFilters, viewerLogin: string | null): Is
     resolved.creator = viewerLogin ?? undefined;
   }
   return resolved;
+}
+
+export interface IssueClientFilters {
+  search?: string;
+  assignee?: string;
+  creator?: string;
+}
+
+export function filterIssuesClientSide(
+  issues: Issue[],
+  filters: IssueClientFilters,
+  viewer: Viewer | null,
+): Issue[] {
+  const search = filters.search?.trim().toLowerCase();
+  const assignee = resolveMe(filters.assignee, viewer);
+  const creator = resolveMe(filters.creator, viewer);
+
+  return issues.filter((issue) => {
+    if (search && !matchesSearch(issue, search)) return false;
+    if (assignee && issue.assignee !== assignee) return false;
+    if (creator && issue.creator !== creator) return false;
+    return true;
+  });
+}
+
+function matchesSearch(issue: Issue, term: string): boolean {
+  return (
+    issue.title.toLowerCase().includes(term) ||
+    issue.identifier.toLowerCase().includes(term) ||
+    (issue.description ?? "").toLowerCase().includes(term)
+  );
+}
+
+function resolveMe(value: string | undefined, viewer: Viewer | null): string | undefined {
+  if (!value) return undefined;
+  if (value === "me") return viewer?.githubLogin ?? undefined;
+  return value;
 }

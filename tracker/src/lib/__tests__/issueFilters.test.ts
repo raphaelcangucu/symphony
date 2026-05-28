@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { applyIssueFilters, filtersFromSearchParams, type IssueFilters } from "@/lib/issueFilters";
+import {
+  applyIssueFilters,
+  filterIssuesClientSide,
+  filtersFromSearchParams,
+  type IssueFilters,
+} from "@/lib/issueFilters";
 import type { Issue } from "@/types/issue";
+import type { Viewer } from "@/types/viewer";
 
 function issueFixture(overrides: Partial<Issue>): Issue {
   return {
@@ -76,5 +82,31 @@ describe("applyIssueFilters", () => {
     ];
 
     expect(applyIssueFilters(issues, { creator: "alice" }, viewerLogin).map((i) => i.id)).toEqual(["2"]);
+  });
+});
+
+describe("filterIssuesClientSide", () => {
+  const issues = [
+    issueFixture({ identifier: "#1", title: "Fix login", assignee: "octocat", creator: "alice" }),
+    issueFixture({ identifier: "#2", title: "Add logout", assignee: "bob", creator: "octocat" }),
+  ];
+
+  const viewer: Viewer = { githubLogin: "octocat", name: null, avatarUrl: null };
+
+  it("filters by search across title and identifier", () => {
+    expect(filterIssuesClientSide(issues, { search: "login" }, null).map((i) => i.identifier)).toEqual(["#1"]);
+  });
+
+  it("filters by assignee with me resolution", () => {
+    const result = filterIssuesClientSide(issues, { assignee: "me" }, viewer);
+    expect(result.map((i) => i.identifier)).toEqual(["#1"]);
+  });
+
+  it("filters by creator literal", () => {
+    expect(filterIssuesClientSide(issues, { creator: "octocat" }, null).map((i) => i.identifier)).toEqual(["#2"]);
+  });
+
+  it("returns all with empty filters", () => {
+    expect(filterIssuesClientSide(issues, {}, null)).toHaveLength(2);
   });
 });
