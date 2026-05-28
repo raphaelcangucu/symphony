@@ -27,7 +27,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Runner do
       {:error, reason} ->
         DevEnv.record_step_result(run, step, %{
           status: "failed",
-          output: error_text(reason),
+          output: reason,
           started_at: started_at,
           completed_at: DateTime.utc_now()
         })
@@ -39,7 +39,4 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Runner do
   defp command_line(%Step{command: command, working_dir: working_dir}) do
     "cd #{working_dir} && #{command}\n"
   end
-
-  defp error_text(reason) when is_binary(reason), do: reason
-  defp error_text(reason), do: inspect(reason)
 end

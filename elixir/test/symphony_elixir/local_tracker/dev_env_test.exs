@@ -49,4 +49,51 @@ defmodule SymphonyElixir.LocalTracker.DevEnvTest do
     {:ok, finished} = DevEnv.finish_run(run)
     assert finished.status in ["succeeded", "failed"]
   end
+
+  test "propose_steps returns a list for a project without repositories", %{project: _project} do
+    assert {:ok, steps} = DevEnv.propose_steps("p")
+    assert is_list(steps)
+  end
+
+  test "propose_steps maps the project's own repositories" do
+    {:ok, _project} =
+      Context.create_workspace_project(%{
+        "name" => "WithRepo",
+        "slug" => "withrepo",
+        "workflow_statuses" => [%{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false}],
+        "repositories" => [%{"github_full_name" => "o/r", "workspace_path" => "r", "role" => "service"}],
+        "setup" => %{}
+      })
+
+    assert {:ok, steps} = DevEnv.propose_steps("withrepo")
+    assert is_list(steps)
+  end
+
+  test "propose_steps returns project_not_found for an unknown project" do
+    assert DevEnv.propose_steps("does-not-exist") == {:error, :project_not_found}
+  end
+
+  test "list_steps and list_runs return [] for an unknown project" do
+    assert DevEnv.list_steps("does-not-exist") == []
+    assert DevEnv.list_runs("does-not-exist") == []
+  end
+
+  test "list_runs returns runs with preloaded step_runs", %{project: _project} do
+    {:ok, [step]} = DevEnv.save_steps("p", [%{"description" => "A", "command" => "a", "source" => "manual"}])
+    {:ok, run} = DevEnv.start_run("p")
+    {:ok, _step_run} = DevEnv.record_step_result(run, step, %{status: "succeeded", output: "ok"})
+
+    assert [loaded_run] = DevEnv.list_runs("p")
+    assert loaded_run.id == run.id
+    assert [%{status: "succeeded"}] = loaded_run.step_runs
+  end
+
+  test "save_steps returns a changeset error and rolls back on invalid input", %{project: _project} do
+    {:ok, _} = DevEnv.save_steps("p", [%{"description" => "keep", "command" => "keep", "source" => "manual"}])
+
+    assert {:error, %Ecto.Changeset{}} =
+             DevEnv.save_steps("p", [%{"description" => "x", "command" => nil, "source" => "manual"}])
+
+    assert DevEnv.list_steps("p") |> Enum.map(& &1.command) == ["keep"]
+  end
 end

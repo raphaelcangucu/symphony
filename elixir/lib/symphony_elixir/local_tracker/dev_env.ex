@@ -5,7 +5,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
-  alias SymphonyElixir.LocalTracker.DevEnv.{Proposer, ProposedStep, Run, Step, StepRun}
+  alias SymphonyElixir.LocalTracker.DevEnv.{ProposedStep, Proposer, Run, Step, StepRun}
   alias SymphonyElixir.Repo
 
   @type error :: :project_not_found | Ecto.Changeset.t()
@@ -37,21 +37,25 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
   @spec save_steps(String.t(), [map()]) :: {:ok, [Step.t()]} | {:error, error()}
   def save_steps(project_slug, steps) when is_list(steps) do
     with {:ok, project} <- Context.get_project(project_slug) do
-      Repo.transaction(fn ->
-        Repo.delete_all(from(s in Step, where: s.project_id == ^project.id))
+      Repo.transaction(fn -> replace_steps(project, steps) end)
+    end
+  end
 
-        steps
-        |> Enum.with_index()
-        |> Enum.reduce_while([], fn {attrs, index}, acc ->
-          changeset = Step.changeset(%Step{}, step_attrs(attrs, project.id, index))
+  defp replace_steps(project, steps) do
+    Repo.delete_all(from(s in Step, where: s.project_id == ^project.id))
 
-          case Repo.insert(changeset) do
-            {:ok, step} -> {:cont, [step | acc]}
-            {:error, reason} -> Repo.rollback(reason)
-          end
-        end)
-        |> Enum.reverse()
-      end)
+    steps
+    |> Enum.with_index()
+    |> Enum.reduce_while([], fn {attrs, index}, acc -> insert_step(project, attrs, index, acc) end)
+    |> Enum.reverse()
+  end
+
+  defp insert_step(project, attrs, index, acc) do
+    changeset = Step.changeset(%Step{}, step_attrs(attrs, project.id, index))
+
+    case Repo.insert(changeset) do
+      {:ok, step} -> {:cont, [step | acc]}
+      {:error, reason} -> Repo.rollback(reason)
     end
   end
 

@@ -31,14 +31,16 @@ defmodule SymphonyElixirWeb.Tracker.DevEnvController do
 
   @spec run(Conn.t(), map()) :: Conn.t()
   def run(conn, %{"project_slug" => project_slug}) do
-    with {:ok, run} <- DevEnv.start_run(project_slug) do
-      steps = DevEnv.list_steps(project_slug)
-      Enum.each(steps, fn step -> Runner.run_step(project_slug, run, step) end)
-      {:ok, finished} = DevEnv.finish_run(run)
-      reloaded = DevEnv.list_runs(project_slug) |> Enum.find(&(&1.id == finished.id)) || finished
-      conn |> put_status(:created) |> json(%{data: DevEnvPresenter.run(reloaded)})
-    else
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+    case DevEnv.start_run(project_slug) do
+      {:ok, run} ->
+        steps = DevEnv.list_steps(project_slug)
+        Enum.each(steps, fn step -> Runner.run_step(project_slug, run, step) end)
+        {:ok, finished} = DevEnv.finish_run(run)
+        reloaded = DevEnv.list_runs(project_slug) |> Enum.find(&(&1.id == finished.id)) || finished
+        conn |> put_status(:created) |> json(%{data: DevEnvPresenter.run(reloaded)})
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
     end
   end
 

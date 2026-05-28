@@ -8,6 +8,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.StepRun do
 
   @type t :: %__MODULE__{}
   @statuses ~w(pending running succeeded failed skipped)
+  @cast_fields ~w(run_id step_id description command status exit_code output started_at completed_at)a
 
   schema "local_tracker_dev_env_step_runs" do
     field(:description, :string)
@@ -26,7 +27,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.StepRun do
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(step_run, attrs) do
     step_run
-    |> cast(attrs, [:run_id, :step_id, :description, :command, :status, :exit_code, :output, :started_at, :completed_at])
+    |> cast(attrs, @cast_fields)
     |> validate_required([:run_id, :description, :command, :status])
     |> validate_inclusion(:status, @statuses)
   end

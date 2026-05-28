@@ -8,6 +8,18 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.HeuristicDiscoverer do
 
   @compose_files ~w(docker-compose.yml docker-compose.yaml compose.yml compose.yaml)
 
+  @install_markers [
+    {"mix.exs", "Fetch Elixir deps", "mix deps.get"},
+    {"pnpm-lock.yaml", "Install JS deps", "pnpm install"},
+    {"yarn.lock", "Install JS deps", "yarn install"},
+    {"package-lock.json", "Install JS deps", "npm ci"},
+    {"package.json", "Install JS deps", "npm install"},
+    {"requirements.txt", "Install Python deps", "pip install -r requirements.txt"},
+    {"Gemfile", "Install Ruby deps", "bundle install"},
+    {"go.mod", "Download Go modules", "go mod download"},
+    {"Cargo.toml", "Fetch Rust crates", "cargo fetch"}
+  ]
+
   @spec discover(Path.t()) :: [ProposedStep.t()]
   def discover(repo_root) when is_binary(repo_root) do
     [
@@ -38,18 +50,9 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.HeuristicDiscoverer do
   end
 
   defp install_step(root) do
-    cond do
-      File.exists?(Path.join(root, "mix.exs")) -> step("Fetch Elixir deps", "mix deps.get")
-      File.exists?(Path.join(root, "pnpm-lock.yaml")) -> step("Install JS deps", "pnpm install")
-      File.exists?(Path.join(root, "yarn.lock")) -> step("Install JS deps", "yarn install")
-      File.exists?(Path.join(root, "package-lock.json")) -> step("Install JS deps", "npm ci")
-      File.exists?(Path.join(root, "package.json")) -> step("Install JS deps", "npm install")
-      File.exists?(Path.join(root, "requirements.txt")) -> step("Install Python deps", "pip install -r requirements.txt")
-      File.exists?(Path.join(root, "Gemfile")) -> step("Install Ruby deps", "bundle install")
-      File.exists?(Path.join(root, "go.mod")) -> step("Download Go modules", "go mod download")
-      File.exists?(Path.join(root, "Cargo.toml")) -> step("Fetch Rust crates", "cargo fetch")
-      true -> nil
-    end
+    Enum.find_value(@install_markers, fn {file, description, command} ->
+      if File.exists?(Path.join(root, file)), do: step(description, command)
+    end)
   end
 
   defp exists_any?(root, names), do: Enum.any?(names, &File.exists?(Path.join(root, &1)))

@@ -50,4 +50,25 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ConventionReaderTest do
   test "returns :none when no convention file", %{root: root} do
     assert ConventionReader.read(root) == :none
   end
+
+  test "returns invalid_convention when top-level yaml is not a steps list", %{root: root} do
+    File.write!(Path.join(root, ".symphony/devenv.yaml"), "foo: bar\n")
+
+    assert ConventionReader.read(root) == {:error, :invalid_convention}
+  end
+
+  test "returns an error when yaml is malformed", %{root: root} do
+    File.write!(Path.join(root, ".symphony/devenv.yaml"), "steps: [a, b\n")
+
+    assert {:error, _reason} = ConventionReader.read(root)
+  end
+
+  test "returns invalid_convention when a step is missing its command", %{root: root} do
+    File.write!(Path.join(root, ".symphony/devenv.yaml"), """
+    steps:
+      - description: missing command
+    """)
+
+    assert ConventionReader.read(root) == {:error, :invalid_convention}
+  end
 end

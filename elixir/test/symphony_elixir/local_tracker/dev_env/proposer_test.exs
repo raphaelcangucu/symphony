@@ -30,6 +30,15 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ProposerTest do
     assert Enum.all?(steps, &(&1.working_dir == "web"))
   end
 
+  test "keeps a step's own working_dir instead of the repo workspace_path", %{root: root} do
+    File.mkdir_p!(Path.join(root, "api/.symphony"))
+    File.write!(Path.join(root, "api/.symphony/devenv.yaml"), "steps:\n  - command: make x\n    working_dir: sub\n")
+
+    steps = Proposer.propose(root, [%{workspace_path: "api", github_full_name: "g/api"}])
+
+    assert [%{command: "make x", working_dir: "sub"}] = steps
+  end
+
   test "merges multiple repos preserving order", %{root: root} do
     File.write!(Path.join(root, "api/mix.exs"), "x")
     File.write!(Path.join(root, "web/package.json"), "{}")

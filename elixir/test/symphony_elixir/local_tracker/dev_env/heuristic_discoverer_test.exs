@@ -32,4 +32,28 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.HeuristicDiscovererTest do
   test "returns empty list for an empty repo", %{root: root} do
     assert HeuristicDiscoverer.discover(root) == []
   end
+
+  @install_markers [
+    {"mix.exs", "mix deps.get"},
+    {"pnpm-lock.yaml", "pnpm install"},
+    {"yarn.lock", "yarn install"},
+    {"package-lock.json", "npm ci"},
+    {"package.json", "npm install"},
+    {"requirements.txt", "pip install -r requirements.txt"},
+    {"Gemfile", "bundle install"},
+    {"go.mod", "go mod download"},
+    {"Cargo.toml", "cargo fetch"}
+  ]
+
+  for {marker, command} <- @install_markers do
+    test "proposes `#{command}` when #{marker} present" do
+      root = Path.join(System.tmp_dir!(), "heur-marker-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(root)
+      on_exit(fn -> File.rm_rf!(root) end)
+      File.write!(Path.join(root, unquote(marker)), "x")
+
+      steps = HeuristicDiscoverer.discover(root)
+      assert Enum.any?(steps, &(&1.command == unquote(command)))
+    end
+  end
 end
