@@ -19,6 +19,7 @@ interface TemplateFormProps {
 }
 
 interface RepositoryFields {
+  uid: string;
   githubFullName: string;
   cloneUrl: string;
   defaultBranch: string;
@@ -26,8 +27,13 @@ interface RepositoryFields {
   role: string;
 }
 
+function generateUid(): string {
+  return crypto.randomUUID();
+}
+
 function toRepositoryFields(repository: WorkspaceTemplate["repositories"][number]): RepositoryFields {
   return {
+    uid: repository.id ?? generateUid(),
     githubFullName: repository.githubFullName,
     cloneUrl: repository.cloneUrl,
     defaultBranch: repository.defaultBranch ?? "",
@@ -37,7 +43,7 @@ function toRepositoryFields(repository: WorkspaceTemplate["repositories"][number
 }
 
 function emptyRepository(): RepositoryFields {
-  return { githubFullName: "", cloneUrl: "", defaultBranch: "", workspacePath: "", role: "" };
+  return { uid: generateUid(), githubFullName: "", cloneUrl: "", defaultBranch: "", workspacePath: "", role: "" };
 }
 
 function toRepositoryInput(fields: RepositoryFields): UpdateTemplateRepositoryInput {
@@ -144,28 +150,33 @@ export function TemplateForm({ template, onSaved }: TemplateFormProps) {
           <p className="text-sm text-muted-foreground">No repositories.</p>
         ) : (
           repositories.map((repository, index) => (
-            <div key={index} className="grid gap-2 rounded-md border p-3 md:grid-cols-2">
+            <div key={repository.uid} className="grid gap-2 rounded-md border p-3 md:grid-cols-2">
               <Input
+                aria-label="GitHub full name"
                 value={repository.githubFullName}
                 onChange={(event) => updateRepository(index, { githubFullName: event.target.value })}
                 placeholder="owner/repo"
               />
               <Input
+                aria-label="Clone URL"
                 value={repository.cloneUrl}
                 onChange={(event) => updateRepository(index, { cloneUrl: event.target.value })}
                 placeholder="Clone URL"
               />
               <Input
+                aria-label="Workspace path"
                 value={repository.workspacePath}
                 onChange={(event) => updateRepository(index, { workspacePath: event.target.value })}
                 placeholder="Workspace path"
               />
               <Input
+                aria-label="Default branch"
                 value={repository.defaultBranch}
                 onChange={(event) => updateRepository(index, { defaultBranch: event.target.value })}
                 placeholder="Default branch"
               />
               <Input
+                aria-label="Role"
                 value={repository.role}
                 onChange={(event) => updateRepository(index, { role: event.target.value })}
                 placeholder="Role (optional)"
