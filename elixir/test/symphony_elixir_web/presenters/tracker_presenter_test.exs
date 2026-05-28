@@ -29,4 +29,15 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
     assert json.creator == "octocat"
     assert json.project_slug == "remote"
   end
+
+  test "project/1 includes tracker_kind and tracker_config" do
+    project = %SymphonyElixir.LocalTracker.Project{
+      id: 1, name: "P", slug: "p", description: nil,
+      tracker_kind: "github", tracker_config: %{"project_id" => "PVT_1"}
+    }
+
+    json = SymphonyElixirWeb.TrackerPresenter.project(project)
+    assert json.tracker_kind == "github"
+    assert json.tracker_config == %{"project_id" => "PVT_1"}
+  end
 end

@@ -20,6 +20,8 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       name: project.name,
       slug: project.slug,
       description: project.description,
+      tracker_kind: project.tracker_kind,
+      tracker_config: project.tracker_config,
       statuses: statuses && Enum.map(statuses, &status/1),
       repositories: repositories && Enum.map(repositories, &repository/1),
       setup: setup && project_setup(setup),
