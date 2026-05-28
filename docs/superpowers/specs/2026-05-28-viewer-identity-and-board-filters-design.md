@@ -201,8 +201,8 @@ Query composition (Ecto, SQLite‑compatible):
   1. Trim the term; treat empty as no filter.
   2. Escape SQL `%`, `_`, `\` characters in the term (e.g. `String.replace(term, ~w(\\ % _), &"\\#{&1}")`) and use the `ESCAPE '\\'` clause to avoid wildcard injection.
   3. Combine the three columns with `OR`, lifted into a single `where` fragment.
-- `:assignee` → `where: i.assignee == ^value` (exact match).
-- `:creator` → `where: i.creator == ^value` (exact match).
+- `:assignee` → `where: i.assignee_id == ^value` (exact match against the existing `assignee_id` column).
+- `:creator` → `where: i.creator == ^value` (exact match against the new column).
 - No combined `OR` between distinct filters; the three filter categories AND together.
 
 `Context` never sees `me`; that is resolved in the controller.
@@ -223,9 +223,9 @@ Backward compat: when no params are passed, behaviour matches today.
 
 Add an assignee filter mirroring the GitHub adapter:
 
-- Introduce `SymphonyElixir.Config.tracker_assignee/0` reading the `tracker.assignee` key from `WORKFLOW.md` front matter (same path the GitHub adapter already uses via `GitHub.Config.assignee/0`). Returns `nil`, `"me"`, or a literal login string.
+- Introduce `SymphonyElixir.Config.local_assignee/0` reading the `local.assignee` key from `WORKFLOW.md` front matter via `Config.section("local")`. Returns `nil`, `"me"`, or a literal login string. This mirrors the pattern used by `Config.local_database_path/0` / `Config.local_project_slug/0`, and matches how `GitHub.Config.assignee/0` already reads `github.assignee`.
 - If the value is `"me"`, resolve via `Viewer.current/0`.
-- Build the query so `fetch_candidate_issues/0` only returns rows whose `assignee` matches.
+- Build the query so `fetch_candidate_issues/0` only returns rows whose `assignee_id` matches.
 - If the viewer cannot resolve while `assignee: me` is configured, log a warning with code `:viewer_unavailable_for_local_assignee_filter` and return `{:ok, []}` (do not crash the orchestrator).
 
 Specs and behaviour conformance for `@behaviour SymphonyElixir.Tracker` remain unchanged.
