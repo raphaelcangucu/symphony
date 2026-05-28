@@ -2,6 +2,20 @@ import Config
 
 config :phoenix, :json_library, Jason
 
+config :symphony_elixir, ecto_repos: [SymphonyElixir.Repo]
+
+local_tracker_database =
+  System.get_env("SYMPHONY_LOCAL_TRACKER_DATABASE") ||
+    Path.expand("../tmp/#{Mix.env()}-local-tracker.sqlite3", __DIR__)
+
+File.mkdir_p!(Path.dirname(local_tracker_database))
+
+config :symphony_elixir, SymphonyElixir.Repo,
+  database: local_tracker_database,
+  pool_size: String.to_integer(System.get_env("SYMPHONY_LOCAL_TRACKER_POOL_SIZE") || "5"),
+  stacktrace: Mix.env() in [:dev, :test],
+  show_sensitive_data_on_connection_error: Mix.env() in [:dev, :test]
+
 config :symphony_elixir, SymphonyElixirWeb.Endpoint,
   adapter: Bandit.PhoenixAdapter,
   url: [host: "localhost"],

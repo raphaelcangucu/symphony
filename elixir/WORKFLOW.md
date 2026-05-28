@@ -1,6 +1,13 @@
 ---
 linear:
   project_slug: "symphony-0c79b11b75ea"
+# To use the built-in local tracker instead of Linear/GitHub, remove the
+# `linear:`/`github:` section and uncomment:
+#
+# local:
+#   database_path: .symphony/tracker.sqlite3
+#   project_slug: symphony
+#   api_token_env: SYMPHONY_TRACKER_TOKEN
 tracker:
   field_states:
     - Backlog

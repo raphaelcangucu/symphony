@@ -86,6 +86,8 @@ defmodule SymphonyElixir.MixProject do
       {:bandit, "~> 1.8"},
       {:floki, ">= 0.30.0", only: :test},
       {:lazy_html, ">= 0.1.0", only: :test},
+      {:ecto_sql, "~> 3.13"},
+      {:ecto_sqlite3, "~> 0.20"},
       {:phoenix, "~> 1.8.0"},
       {:phoenix_html, "~> 4.2"},
       {:phoenix_live_view, "~> 1.1.0"},

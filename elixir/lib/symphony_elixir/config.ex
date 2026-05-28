@@ -22,7 +22,7 @@ defmodule SymphonyElixir.Config do
   @default_observability_render_interval_ms 16
   @default_server_host "127.0.0.1"
 
-  @tracker_sections ["linear", "github", "memory"]
+  @tracker_sections ["local", "linear", "github", "memory"]
   @agent_sections ["claude", "codex"]
 
   @workflow_options_schema NimbleOptions.new!(
@@ -174,6 +174,31 @@ defmodule SymphonyElixir.Config do
   @spec terminal_states() :: [String.t()]
   def terminal_states do
     get_in(validated_workflow_options(), [:tracker, :terminal_states])
+  end
+
+  @spec local_database_path() :: String.t()
+  def local_database_path do
+    section("local")
+    |> Map.get("database_path")
+    |> resolve_path_value(".symphony/tracker.sqlite3")
+  end
+
+  @spec local_project_slug() :: String.t() | nil
+  def local_project_slug do
+    section("local")
+    |> Map.get("project_slug")
+    |> trim_string()
+  end
+
+  @spec local_api_token_env() :: String.t()
+  def local_api_token_env do
+    section("local")
+    |> Map.get("api_token_env")
+    |> trim_string()
+    |> case do
+      nil -> "SYMPHONY_TRACKER_TOKEN"
+      value -> value
+    end
   end
 
   @doc """
@@ -399,6 +424,7 @@ defmodule SymphonyElixir.Config do
 
   defp tracker_config_module do
     case tracker_kind() do
+      "local" -> SymphonyElixir.LocalTracker.Config
       "linear" -> SymphonyElixir.Linear.Config
       "github" -> SymphonyElixir.GitHub.Config
       "memory" -> SymphonyElixir.Memory.Config
@@ -507,6 +533,15 @@ defmodule SymphonyElixir.Config do
   defp scalar_string_value(value) when is_float(value), do: to_string(value)
   defp scalar_string_value(value) when is_atom(value), do: Atom.to_string(value)
   defp scalar_string_value(_value), do: :omit
+
+  defp trim_string(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp trim_string(_value), do: nil
 
   defp binary_value(value, opts \\ [])
 

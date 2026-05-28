@@ -1,0 +1,45 @@
+defmodule SymphonyElixir.LocalTracker.MigrationsTest do
+  use ExUnit.Case, async: false
+
+  alias SymphonyElixir.Repo
+
+  setup_all do
+    migrate_repo()
+    :ok
+  end
+
+  test "local tracker tables exist" do
+    table_names =
+      Repo.query!("select name from sqlite_master where type = 'table'")
+      |> Map.fetch!(:rows)
+      |> List.flatten()
+
+    assert "local_tracker_projects" in table_names
+    assert "local_tracker_workflow_statuses" in table_names
+    assert "local_tracker_issues" in table_names
+    assert "local_tracker_comments" in table_names
+    assert "local_tracker_labels" in table_names
+    assert "local_tracker_issue_labels" in table_names
+    assert "local_tracker_issue_relations" in table_names
+    assert "local_tracker_activity_events" in table_names
+  end
+
+  test "local tracker indexes enforce project-scoped uniqueness" do
+    index_names =
+      Repo.query!("select name from sqlite_master where type = 'index'")
+      |> Map.fetch!(:rows)
+      |> List.flatten()
+
+    assert "local_tracker_projects_slug_index" in index_names
+    assert "local_tracker_workflow_statuses_project_id_name_index" in index_names
+    assert "local_tracker_issues_project_id_identifier_index" in index_names
+    assert "local_tracker_issue_relations_source_issue_id_target_issue_id_type_index" in index_names
+  end
+
+  defp migrate_repo do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(Repo, fn repo ->
+        Ecto.Migrator.run(repo, :up, all: true)
+      end)
+  end
+end

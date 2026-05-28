@@ -105,6 +105,9 @@ defmodule SymphonyElixir.TestSupport do
           tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"],
           tracker_field_states: nil,
           tracker_repo: nil,
+          local_database_path: nil,
+          local_project_slug: nil,
+          local_api_token_env: nil,
           github_project_mode: nil,
           github_project_title: nil,
           github_project_id: nil,
@@ -234,12 +237,26 @@ defmodule SymphonyElixir.TestSupport do
     |> Enum.join("\n")
   end
 
-  defp tracker_field_states_yaml(nil), do: nil
-  defp tracker_field_states_yaml(states), do: "  field_states: #{yaml_value(states)}"
+  defp tracker_backend_yaml("local", config) do
+    database_path = Keyword.get(config, :local_database_path)
+    project_slug = Keyword.get(config, :local_project_slug)
+    api_token_env = Keyword.get(config, :local_api_token_env)
+
+    [
+      "local:",
+      "  database_path: #{yaml_value(database_path)}",
+      "  project_slug: #{yaml_value(project_slug)}",
+      "  api_token_env: #{yaml_value(api_token_env)}"
+    ]
+    |> Enum.join("\n")
+  end
 
   defp tracker_backend_yaml("memory", _config), do: "memory: {}"
   defp tracker_backend_yaml(nil, _config), do: nil
   defp tracker_backend_yaml(_kind, _config), do: nil
+
+  defp tracker_field_states_yaml(nil), do: nil
+  defp tracker_field_states_yaml(states), do: "  field_states: #{yaml_value(states)}"
 
   defp github_project_yaml(config) do
     mode = Keyword.get(config, :github_project_mode)

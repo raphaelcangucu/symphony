@@ -15,6 +15,7 @@
 
 # Generated browser assets.
 /priv/static/assets/
+/priv/static/tracker/
 
 # Local runtime logs.
 /log/

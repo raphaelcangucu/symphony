@@ -79,6 +79,27 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
      `mix run --no-start scripts/bootstrap_macro_markets.exs`.
 
      Required `GITHUB_TOKEN` scopes: `repo` (read+write) and `project` (read+write).
+   - **Local tracker**: Add a top-level `local:` section to store issues in SQLite and set
+     `SYMPHONY_TRACKER_TOKEN` for the browser UI/API bearer token:
+
+     ```yaml
+     local:
+       database_path: .symphony/tracker.sqlite3
+       project_slug: macro-markets
+       api_token_env: SYMPHONY_TRACKER_TOKEN
+     tracker:
+       active_states:
+         - Todo
+         - In Progress
+         - Rework
+       terminal_states:
+         - Done
+         - Closed
+     ```
+
+     ```bash
+     export SYMPHONY_TRACKER_TOKEN="$(openssl rand -hex 24)"
+     ```
 6. Follow the instructions below to install the required runtime dependencies and start the service.
 
 ## Prerequisites
@@ -201,7 +222,8 @@ Notes:
 
 - If a value is missing, defaults are used.
 - **Tracker backends**: `linear`, `github` (default), `memory` (testing). Detected automatically
-  from which YAML section (`linear:`, `github:`, or `memory:`) is present in the front matter.
+  from which YAML section (`linear:`, `github:`, `local:`, or `memory:`) is present in the front
+  matter.
 - **Coding agent backends**: `codex`, `claude` (default). Detected automatically from which YAML
   section (`codex:` or `claude:`) is present in the front matter.
 - **Codex-specific policy settings** (only apply when using `codex:` backend):
@@ -244,6 +266,43 @@ codex:
 - If `WORKFLOW.md` is missing or has invalid YAML, startup and scheduling are halted until fixed.
 - `server.port` or CLI `--port` enables the optional Phoenix LiveView dashboard and JSON API at
   `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, and `/api/v1/refresh`.
+
+### Local Tracker Development
+
+The local tracker runs from the same Phoenix server as the dashboard/API and stores data in the
+SQLite path configured by `local.database_path`. The React app uses `SYMPHONY_TRACKER_TOKEN` as a
+bearer token for `/api/tracker/v1/*` and the tracker channel.
+
+```bash
+export SYMPHONY_TRACKER_TOKEN="$(openssl rand -hex 24)"
+mise exec -- mix ecto.create
+mise exec -- mix ecto.migrate
+```
+
+For frontend development, run Phoenix and Vite separately:
+
+```bash
+# Terminal 1
+cd elixir
+mise exec -- ./bin/symphony --port 4000 ./WORKFLOW.md
+
+# Terminal 2
+cd tracker
+npm install
+npm run dev
+```
+
+Vite serves the app under `/tracker/` and proxies `/api` plus `/socket` to Phoenix by default.
+For production/static serving, build the frontend:
+
+```bash
+cd tracker
+npm run build
+```
+
+The build writes to `elixir/priv/static/tracker`; when Phoenix is started with `--port`, `/tracker`
+and `/tracker/*` serve the SPA while existing dashboard routes and tracker API routes remain
+available.
 
 ## Web dashboard
 

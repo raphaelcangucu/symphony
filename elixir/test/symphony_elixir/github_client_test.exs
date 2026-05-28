@@ -197,7 +197,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
     end
 
-    test "skips items whose Symphony State field value is absent", %{base_dir: base_dir} do
+    test "falls back to native Status when Symphony State field value is absent", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
           payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
@@ -211,7 +211,106 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                 number: 7,
                 title: "Stateless",
                 repo: "owner/repo",
-                state_name: "Todo"
+                state_name: "Ignored",
+                labels: [%{"name" => "symphony:codex"}]
+              })
+
+            item_with_native_status =
+              Map.put(item, "fieldValues", %{
+                "nodes" => [
+                  %{
+                    "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                    "name" => "Todo",
+                    "field" => %{"id" => "PVTSSF_native", "name" => "Status"}
+                  }
+                ]
+              })
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [item_with_native_status],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, [issue]} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+
+      assert issue.identifier == "7"
+      assert issue.state == "Todo"
+      assert issue.agent_kind == "codex"
+    end
+
+    test "falls back to symphony state label when project state fields are absent", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            item =
+              build_project_item_fixture(%{
+                item_id: "PVTI_label_state",
+                issue_node_id: "I_label_state",
+                number: 8,
+                title: "Label state",
+                repo: "owner/repo",
+                state_name: "Ignored",
+                labels: [%{"name" => "symphony:todo"}, %{"name" => "symphony:codex"}]
+              })
+
+            item_without_project_state = Map.put(item, "fieldValues", %{"nodes" => []})
+
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [item_without_project_state],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, [issue]} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+
+      assert issue.identifier == "8"
+      assert issue.state == "Todo"
+      assert issue.agent_kind == "codex"
+    end
+
+    test "skips items with no Symphony State, native Status, or state label", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            item =
+              build_project_item_fixture(%{
+                item_id: "PVTI_nostate",
+                issue_node_id: "I_nostate",
+                number: 7,
+                title: "Stateless",
+                repo: "owner/repo",
+                state_name: "Ignored"
               })
 
             item_without_state = Map.put(item, "fieldValues", %{"nodes" => []})
@@ -1924,8 +2023,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           "repository" => %{"nameWithOwner" => opts.repo},
           "assignees" => %{"nodes" => Map.get(opts, :assignees, [])},
           "labels" => %{
-            "nodes" =>
-              Map.get(opts, :labels, [%{"name" => "symphony"}])
+            "nodes" => Map.get(opts, :labels, [%{"name" => "symphony"}])
           },
           "linkedBranches" => %{"nodes" => Map.get(opts, :linked_branches, [])},
           "trackedInIssues" => %{"nodes" => Map.get(opts, :tracked_in_issues, [])},

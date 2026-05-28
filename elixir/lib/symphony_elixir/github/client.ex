@@ -581,7 +581,7 @@ defmodule SymphonyElixir.GitHub.Client do
       title: content["title"],
       description: content["body"],
       priority: extract_priority_from_labels(raw_labels),
-      state: extract_status_value(item, status_field_name),
+      state: resolve_issue_state(item, status_field_name, raw_labels),
       branch_name: extract_linked_branch_name(content),
       url: content["url"],
       assignee_id: assignee_login,
@@ -589,8 +589,7 @@ defmodule SymphonyElixir.GitHub.Client do
       labels: filter_visible_labels(raw_labels),
       comments: IssueDiscussion.parse_issue_comments(content),
       agent_kind: agent_kind,
-      assigned_to_worker:
-        not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
+      assigned_to_worker: not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
       created_at: parse_datetime(content["createdAt"]),
       updated_at: parse_datetime(content["updatedAt"])
     }
@@ -622,8 +621,6 @@ defmodule SymphonyElixir.GitHub.Client do
     |> Enum.map(&String.downcase/1)
   end
 
-  defp downcase_safe(value) when is_binary(value), do: String.downcase(value)
-
   defp priority_label?(label) when is_binary(label) do
     Regex.match?(~r/^priority:\d+$/, label)
   end
@@ -639,6 +636,12 @@ defmodule SymphonyElixir.GitHub.Client do
     else
       _ -> nil
     end
+  end
+
+  defp resolve_issue_state(item, status_field_name, label_names) do
+    extract_status_value(item, status_field_name) ||
+      extract_status_value(item, GitHub.Config.native_status_field()) ||
+      extract_state_from_labels(label_names)
   end
 
   defp extract_status_value(%{"fieldValues" => %{"nodes" => nodes}}, status_field_name)
@@ -659,6 +662,48 @@ defmodule SymphonyElixir.GitHub.Client do
   end
 
   defp extract_status_value(_item, _status_field_name), do: nil
+
+  defp extract_state_from_labels(label_names) when is_list(label_names) do
+    state_names_by_key =
+      configured_state_names()
+      |> Map.new(fn state_name -> {normalize_state_key(state_name), state_name} end)
+
+    Enum.find_value(label_names, fn label_name ->
+      with candidate when is_binary(candidate) <- extract_symphony_state_label(label_name),
+           state_name when is_binary(state_name) <-
+             Map.get(state_names_by_key, normalize_state_key(candidate)) do
+        state_name
+      else
+        _ -> nil
+      end
+    end)
+  end
+
+  defp extract_state_from_labels(_label_names), do: nil
+
+  defp configured_state_names do
+    (Config.field_states() ++ Config.active_states() ++ Config.terminal_states())
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+  end
+
+  defp extract_symphony_state_label(label_name) when is_binary(label_name) do
+    case String.split(String.trim(label_name), ":", parts: 2) do
+      ["symphony", state_name] when state_name != "" -> state_name
+      _ -> nil
+    end
+  end
+
+  defp extract_symphony_state_label(_label_name), do: nil
+
+  defp normalize_state_key(state_name) when is_binary(state_name) do
+    state_name
+    |> String.trim()
+    |> String.downcase()
+    |> String.replace(~r/[\s_-]+/, " ")
+  end
+
+  defp normalize_state_key(_state_name), do: ""
 
   defp format_identifier(number) when is_integer(number), do: Integer.to_string(number)
   defp format_identifier(number) when is_binary(number), do: number
@@ -707,13 +752,14 @@ defmodule SymphonyElixir.GitHub.Client do
     if get_in(node, ["repository", "nameWithOwner"]) == repo do
       project_item = find_project_item(node, project_id)
 
+      raw_labels = extract_raw_label_names(node)
+
       state =
         case project_item do
           nil -> nil
-          item -> extract_status_value(item, status_field_name)
+          item -> resolve_issue_state(item, status_field_name, raw_labels)
         end
 
-      raw_labels = extract_raw_label_names(node)
       assignee_login = extract_first_assignee_login(node)
       agent_kind = resolve_issue_agent_kind(raw_labels)
 
@@ -731,8 +777,7 @@ defmodule SymphonyElixir.GitHub.Client do
         labels: filter_visible_labels(raw_labels),
         comments: IssueDiscussion.parse_issue_comments(node),
         agent_kind: agent_kind,
-        assigned_to_worker:
-          not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
+        assigned_to_worker: not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
         created_at: parse_datetime(node["createdAt"]),
         updated_at: parse_datetime(node["updatedAt"])
       }

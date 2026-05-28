@@ -10,6 +10,13 @@ github:
   comment_context_limit: 30
   # Base label; issues with symphony, symphony:codex, or symphony:claude are admitted.
   admission_label: symphony
+# To dogfood the local tracker UI/API against this workflow instead of GitHub,
+# remove the `github:` section and uncomment:
+#
+# local:
+#   database_path: .symphony/tracker.sqlite3
+#   project_slug: macro-markets
+#   api_token_env: SYMPHONY_TRACKER_TOKEN
 tracker:
   field_states:
     - Backlog
