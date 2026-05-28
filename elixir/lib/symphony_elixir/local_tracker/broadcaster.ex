@@ -7,7 +7,8 @@ defmodule SymphonyElixir.LocalTracker.Broadcaster do
   @pubsub SymphonyElixir.PubSub
 
   @spec project_changed(String.t(), Project.t()) :: :ok
-  def project_changed(event_name, %Project{} = project) when event_name in ["project_created", "project_updated"] do
+  def project_changed(event_name, %Project{} = project)
+      when event_name in ["project_created", "project_updated", "project_archived", "project_restored"] do
     broadcast(project.slug, event_name, %{project: TrackerPresenter.project(project)})
   end
 
