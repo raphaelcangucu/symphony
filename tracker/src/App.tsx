@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Toaster } from "sonner";
 
+import { ViewerProvider } from "@/components/auth/ViewerProvider";
 import { Layout } from "@/components/layout/Layout";
 import { getTrackerToken } from "@/config";
 import { ProjectBoardPage } from "@/pages/ProjectBoardPage";
@@ -9,8 +11,8 @@ import { TokenGatePage } from "@/pages/TokenGatePage";
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
 
-function RequireToken() {
-  return getTrackerToken() ? <Outlet /> : <Navigate to="/token" replace />;
+function RequireToken({ children }: { children: ReactNode }) {
+  return getTrackerToken() ? <>{children}</> : <Navigate to="/token" replace />;
 }
 
 export function App() {
@@ -18,7 +20,15 @@ export function App() {
     <BrowserRouter basename={routerBasename}>
       <Routes>
         <Route path="/token" element={<TokenGatePage />} />
-        <Route element={<RequireToken />}>
+        <Route
+          element={
+            <RequireToken>
+              <ViewerProvider>
+                <Outlet />
+              </ViewerProvider>
+            </RequireToken>
+          }
+        >
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/projects" replace />} />
             <Route path="projects" element={<ProjectListPage />} />

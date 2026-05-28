@@ -5,8 +5,22 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { TRACKER_TOKEN_KEY, getTrackerToken, setTrackerToken } from "@/config";
+import { TRACKER_TOKEN_KEY, clearTrackerToken, getTrackerToken, setTrackerToken } from "@/config";
 import { validateTrackerToken } from "@/services/auth";
+import { ViewerNotConfiguredError, fetchViewer } from "@/services/viewer";
+
+function viewerErrorMessage(code: string): string {
+  switch (code) {
+    case "github_token_missing":
+      return "GITHUB_TOKEN is not configured on the Symphony server. Set it and restart Symphony.";
+    case "github_unauthorized":
+      return "GitHub rejected the configured GITHUB_TOKEN. Generate a new token with the required scopes.";
+    case "github_network_error":
+      return "Symphony could not reach GitHub. Check the server's connectivity and retry.";
+    default:
+      return "Symphony could not identify the operator. Check the server configuration.";
+  }
+}
 
 export function TokenGatePage() {
   const navigate = useNavigate();
@@ -29,6 +43,19 @@ export function TokenGatePage() {
     try {
       await validateTrackerToken(value);
       setTrackerToken(value);
+
+      try {
+        await fetchViewer();
+      } catch (cause) {
+        if (cause instanceof ViewerNotConfiguredError) {
+          clearTrackerToken();
+          setError(viewerErrorMessage(cause.code));
+          return;
+        }
+
+        throw cause;
+      }
+
       navigate("/projects", { replace: true });
     } catch {
       setError("Invalid tracker token.");
