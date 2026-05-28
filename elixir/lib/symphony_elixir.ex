@@ -19,6 +19,8 @@ defmodule SymphonyElixir.Application do
 
   use Application
 
+  alias SymphonyElixir.LocalTracker.Templates
+
   @impl true
   def start(_type, _args) do
     :ok = SymphonyElixir.LogFile.configure()
@@ -34,7 +36,7 @@ defmodule SymphonyElixir.Application do
            [
              fn ->
                try do
-                 SymphonyElixir.LocalTracker.Templates.import_builtins()
+                 Templates.import_builtins()
                rescue
                  _ -> :ok
                end

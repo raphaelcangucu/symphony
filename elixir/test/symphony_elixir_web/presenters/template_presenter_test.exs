@@ -16,7 +16,16 @@ defmodule SymphonyElixirWeb.TemplatePresenterTest do
       prompt_template: nil,
       dev_env_markdown: nil,
       metadata: %{},
-      repositories: [%WorkspaceTemplateRepository{id: 2, github_full_name: "g/api", clone_url: "u", workspace_path: "api", role: "backend", default_branch: "main"}]
+      repositories: [
+        %WorkspaceTemplateRepository{
+          id: 2,
+          github_full_name: "g/api",
+          clone_url: "u",
+          workspace_path: "api",
+          role: "backend",
+          default_branch: "main"
+        }
+      ]
     }
 
     json = TemplatePresenter.template(template)

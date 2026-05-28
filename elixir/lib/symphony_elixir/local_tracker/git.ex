@@ -37,8 +37,8 @@ defmodule SymphonyElixir.LocalTracker.Git do
   defp branch_args(nil), do: []
   defp branch_args(branch), do: ["--branch", branch]
 
-  # TODO: this embeds the token into the on-disk .git/config remote URL.
-  # Follow-up: move auth to GIT_ASKPASS or http.extraHeader so the token is not persisted.
+  # Known limitation: this embeds the token into the on-disk .git/config remote URL;
+  # follow-up: move auth to GIT_ASKPASS or http.extraHeader so the token is not persisted.
   defp authed_url(url) do
     token = System.get_env("GITHUB_TOKEN")
 
