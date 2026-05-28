@@ -23,6 +23,23 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :issue_not_found), do: not_found(conn, "issue_not_found", "Issue not found")
   def render(conn, :status_not_found), do: not_found(conn, "status_not_found", "Status not found")
   def render(conn, :blocker_not_found), do: not_found(conn, "blocker_not_found", "Blocker not found")
+
+  def render(conn, :missing_github_token) do
+    error(conn, 503, "github_token_missing", "GITHUB_TOKEN is not configured on the Symphony server.")
+  end
+
+  def render(conn, :unauthorized) do
+    error(conn, 401, "github_unauthorized", "GitHub rejected the configured GITHUB_TOKEN.")
+  end
+
+  def render(conn, {:network_error, _reason}) do
+    error(conn, 503, "github_network_error", "Failed to reach GitHub. Try again in a moment.")
+  end
+
+  def render(conn, {:malformed_response, _body}) do
+    error(conn, 502, "github_malformed_response", "GitHub returned an unexpected response.")
+  end
+
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
 
@@ -31,6 +48,12 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{error: %{code: "validation_failed", message: message, details: %{}}})
+  end
+
+  defp error(conn, status, code, message) do
+    conn
+    |> put_status(status)
+    |> json(%{error: %{code: code, message: message}})
   end
 
   defp not_found(conn, code, message) do

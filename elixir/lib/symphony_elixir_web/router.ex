@@ -37,6 +37,7 @@ defmodule SymphonyElixirWeb.Router do
   scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
     pipe_through(:tracker_api)
 
+    get("/viewer", ViewerController, :show)
     get("/github/owners", GitHubController, :owners)
     get("/github/owners/:owner/repositories", GitHubController, :repositories)
     post("/project_setup/scan", ProjectSetupController, :scan)
