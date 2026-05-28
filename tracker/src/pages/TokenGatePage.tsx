@@ -6,21 +6,35 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TRACKER_TOKEN_KEY, getTrackerToken, setTrackerToken } from "@/config";
+import { validateTrackerToken } from "@/services/auth";
 
 export function TokenGatePage() {
   const navigate = useNavigate();
   const [token, setToken] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
 
   if (getTrackerToken()) {
     return <Navigate to="/projects" replace />;
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = token.trim();
     if (!value) return;
-    setTrackerToken(value);
-    navigate("/projects", { replace: true });
+
+    setError(null);
+    setValidating(true);
+
+    try {
+      await validateTrackerToken(value);
+      setTrackerToken(value);
+      navigate("/projects", { replace: true });
+    } catch {
+      setError("Invalid tracker token.");
+    } finally {
+      setValidating(false);
+    }
   }
 
   return (
@@ -37,14 +51,18 @@ export function TokenGatePage() {
           <form className="space-y-4" onSubmit={handleSubmit}>
             <Input
               value={token}
-              onChange={(event) => setToken(event.target.value)}
+              onChange={(event) => {
+                setToken(event.target.value);
+                setError(null);
+              }}
               placeholder="Tracker token"
               type="password"
               autoFocus
             />
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <p className="text-xs text-muted-foreground">Stored locally as <code>{TRACKER_TOKEN_KEY}</code>.</p>
-            <Button type="submit" className="w-full" disabled={!token.trim()}>
-              Continue
+            <Button type="submit" className="w-full" disabled={!token.trim() || validating}>
+              {validating ? "Validating..." : "Continue"}
             </Button>
           </form>
         </CardContent>

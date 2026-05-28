@@ -1,6 +1,6 @@
 import axios from "axios";
 
-import { API_PREFIX, TRACKER_TOKEN_KEY, getTrackerToken } from "@/config";
+import { API_PREFIX, TRACKER_TOKEN_KEY, clearTrackerToken, getTrackerToken } from "@/config";
 
 export { TRACKER_TOKEN_KEY };
 
@@ -14,11 +14,39 @@ export const http = axios.create({
 
 http.interceptors.request.use((config) => {
   const token = getTrackerToken();
-  if (token) {
+  if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+http.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      clearTrackerToken();
+      redirectToTokenGate();
+    }
+
+    return Promise.reject(error);
+  },
+);
+
+function redirectToTokenGate(): void {
+  if (typeof window === "undefined") return;
+
+  const configuredBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const basePath = configuredBasePath || inferTrackerBasePath(window.location.pathname);
+  const tokenPath = `${basePath || ""}/token`;
+
+  if (window.location.pathname !== tokenPath) {
+    window.location.assign(tokenPath);
+  }
+}
+
+function inferTrackerBasePath(pathname: string): string {
+  return pathname === "/tracker" || pathname.startsWith("/tracker/") ? "/tracker" : "";
+}
 
 export function trackerPath(path: string): string {
   if (!path.startsWith("/")) {
