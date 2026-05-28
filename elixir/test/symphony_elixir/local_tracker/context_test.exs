@@ -280,6 +280,84 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     end
   end
 
+  describe "list_issues/2 filters" do
+    setup do
+      {:ok, project} = Context.ensure_project(%{name: "F", slug: "filter-project"})
+
+      {:ok, _i1} =
+        Context.create_issue("filter-project", %{
+          title: "Add dark mode",
+          description: "ui",
+          status: "Todo",
+          assignee_id: "alice",
+          creator: "alice"
+        })
+
+      {:ok, _i2} =
+        Context.create_issue("filter-project", %{
+          title: "Backend fix",
+          description: "API",
+          status: "Todo",
+          assignee_id: "bob",
+          creator: "alice"
+        })
+
+      {:ok, _i3} =
+        Context.create_issue("filter-project", %{
+          title: "Investigate Dark patterns",
+          description: nil,
+          status: "Todo",
+          assignee_id: nil,
+          creator: "carol"
+        })
+
+      {:ok, project: project}
+    end
+
+    test "search filter matches title, description, identifier (case-insensitive)" do
+      titles =
+        "filter-project"
+        |> Context.list_issues(search: "dark")
+        |> Enum.map(& &1.title)
+        |> Enum.sort()
+
+      assert titles == ["Add dark mode", "Investigate Dark patterns"]
+    end
+
+    test "assignee filter matches the assignee_id column exactly" do
+      assert ["Add dark mode"] =
+               "filter-project"
+               |> Context.list_issues(assignee: "alice")
+               |> Enum.map(& &1.title)
+    end
+
+    test "creator filter matches the creator column exactly" do
+      titles =
+        "filter-project"
+        |> Context.list_issues(creator: "alice")
+        |> Enum.map(& &1.title)
+        |> Enum.sort()
+
+      assert titles == ["Add dark mode", "Backend fix"]
+    end
+
+    test "filters AND together" do
+      assert [%{title: "Add dark mode"}] =
+               Context.list_issues("filter-project", search: "dark", assignee: "alice")
+    end
+
+    test "escapes SQL wildcards in search term" do
+      {:ok, _} =
+        Context.create_issue("filter-project", %{
+          title: "100% complete",
+          status: "Todo"
+        })
+
+      assert [%{title: "100% complete"}] =
+               Context.list_issues("filter-project", search: "100%")
+    end
+  end
+
   test "returns explicit not found errors" do
     assert {:error, :project_not_found} = Context.create_issue("missing", %{title: "No project"})
     assert {:error, :project_not_found} = Context.move_issue("missing", "MAC-1", %{status: "Todo"})

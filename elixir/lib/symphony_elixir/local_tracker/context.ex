@@ -133,12 +133,13 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
-  @spec list_issues(String.t()) :: [IssueRecord.t()]
-  def list_issues(project_slug) when is_binary(project_slug) do
+  @spec list_issues(String.t(), keyword()) :: [IssueRecord.t()]
+  def list_issues(project_slug, opts \\ []) when is_binary(project_slug) and is_list(opts) do
     case fetch_project(project_slug) do
       {:ok, project} ->
         IssueRecord
         |> where([issue], issue.project_id == ^project.id)
+        |> apply_issue_filters(opts)
         |> order_by([issue], asc: issue.position, asc: issue.id)
         |> preload(^@issue_preloads)
         |> Repo.all()
@@ -473,6 +474,57 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp maybe_active_projects(query, true), do: query
 
   defp maybe_active_projects(query, false), do: where(query, [project], is_nil(project.archived_at))
+
+  defp apply_issue_filters(query, opts) do
+    query
+    |> maybe_filter_search(Keyword.get(opts, :search))
+    |> maybe_filter_assignee(Keyword.get(opts, :assignee))
+    |> maybe_filter_creator(Keyword.get(opts, :creator))
+  end
+
+  defp maybe_filter_search(query, nil), do: query
+  defp maybe_filter_search(query, ""), do: query
+
+  defp maybe_filter_search(query, term) when is_binary(term) do
+    escaped = escape_like_term(term)
+    pattern = "%" <> escaped <> "%"
+
+    where(
+      query,
+      [issue],
+      fragment("? LIKE ? ESCAPE '\\'", issue.title, ^pattern) or
+        fragment("? LIKE ? ESCAPE '\\'", issue.description, ^pattern) or
+        fragment("? LIKE ? ESCAPE '\\'", issue.identifier, ^pattern)
+    )
+  end
+
+  defp maybe_filter_search(query, _other), do: query
+
+  defp maybe_filter_assignee(query, nil), do: query
+  defp maybe_filter_assignee(query, ""), do: query
+
+  defp maybe_filter_assignee(query, value) when is_binary(value) do
+    where(query, [issue], issue.assignee_id == ^value)
+  end
+
+  defp maybe_filter_assignee(query, _other), do: query
+
+  defp maybe_filter_creator(query, nil), do: query
+  defp maybe_filter_creator(query, ""), do: query
+
+  defp maybe_filter_creator(query, value) when is_binary(value) do
+    where(query, [issue], issue.creator == ^value)
+  end
+
+  defp maybe_filter_creator(query, _other), do: query
+
+  defp escape_like_term(term) do
+    term
+    |> String.trim()
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
+  end
 
   defp ensure_project_archived(%Project{archived_at: nil}), do: {:error, :project_not_archived}
 
