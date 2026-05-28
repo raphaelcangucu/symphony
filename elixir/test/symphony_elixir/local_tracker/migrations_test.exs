@@ -58,6 +58,14 @@ defmodule SymphonyElixir.LocalTracker.MigrationsTest do
     end
   end
 
+  test "dev env tables exist" do
+    migrate_repo()
+
+    for t <- ["local_tracker_dev_env_steps", "local_tracker_dev_env_runs", "local_tracker_dev_env_step_runs"] do
+      assert %{rows: _} = Repo.query!("SELECT 1 FROM #{t} LIMIT 1")
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
