@@ -9,8 +9,10 @@ defmodule SymphonyElixir.LocalTracker.Context do
     ActivityEvent,
     Broadcaster,
     Comment,
+    IssueLabel,
     IssueRecord,
     IssueRelation,
+    Label,
     Project,
     ProjectSetup,
     Repository,
@@ -57,15 +59,46 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end)
   end
 
-  @spec list_projects() :: [Project.t()]
-  def list_projects do
+  @spec list_projects(keyword()) :: [Project.t()]
+  def list_projects(opts \\ []) when is_list(opts) do
+    include_archived? = Keyword.get(opts, :include_archived, false)
+
     Project
+    |> maybe_active_projects(include_archived?)
     |> order_by([project], asc: project.name)
     |> Repo.all()
   end
 
   @spec get_project(String.t()) :: {:ok, Project.t()} | {:error, :project_not_found}
   def get_project(project_slug) when is_binary(project_slug), do: fetch_project(project_slug)
+
+  @spec archive_project(String.t()) :: {:ok, Project.t()} | {:error, missing_error()}
+  def archive_project(project_slug) when is_binary(project_slug) do
+    with {:ok, project} <- fetch_project(project_slug) do
+      project
+      |> Ecto.Changeset.change(archived_at: DateTime.utc_now())
+      |> Repo.update()
+      |> tap_project_event("project_archived")
+    end
+  end
+
+  @spec restore_project(String.t()) :: {:ok, Project.t()} | {:error, missing_error()}
+  def restore_project(project_slug) when is_binary(project_slug) do
+    with {:ok, project} <- fetch_project(project_slug) do
+      project
+      |> Ecto.Changeset.change(archived_at: nil)
+      |> Repo.update()
+      |> tap_project_event("project_restored")
+    end
+  end
+
+  @spec delete_project(String.t()) :: {:ok, Project.t()} | {:error, missing_error() | :project_not_archived}
+  def delete_project(project_slug) when is_binary(project_slug) do
+    with {:ok, project} <- fetch_project(project_slug),
+         :ok <- ensure_project_archived(project) do
+      delete_archived_project(project)
+    end
+  end
 
   @spec list_statuses(String.t()) :: [WorkflowStatus.t()]
   def list_statuses(project_slug) when is_binary(project_slug) do
@@ -436,6 +469,69 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   defp tap_project_event(result, _event_name), do: result
+
+  defp maybe_active_projects(query, true), do: query
+
+  defp maybe_active_projects(query, false), do: where(query, [project], is_nil(project.archived_at))
+
+  defp ensure_project_archived(%Project{archived_at: nil}), do: {:error, :project_not_archived}
+
+  defp ensure_project_archived(%Project{}), do: :ok
+
+  defp delete_archived_project(%Project{} = project) do
+    Repo.transaction(fn ->
+      delete_project_owned_rows(project.id)
+
+      case Repo.delete(project) do
+        {:ok, deleted_project} -> deleted_project
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp delete_project_owned_rows(project_id) do
+    issue_ids = project_issue_ids(project_id)
+    label_ids = project_label_ids(project_id)
+
+    delete_issue_owned_rows(issue_ids)
+    delete_project_label_links(label_ids)
+
+    Repo.delete_all(from(issue in IssueRecord, where: issue.project_id == ^project_id))
+    Repo.delete_all(from(label in Label, where: label.project_id == ^project_id))
+    Repo.delete_all(from(status in WorkflowStatus, where: status.project_id == ^project_id))
+    Repo.delete_all(from(repository in Repository, where: repository.project_id == ^project_id))
+    Repo.delete_all(from(setup in ProjectSetup, where: setup.project_id == ^project_id))
+  end
+
+  defp project_issue_ids(project_id) do
+    IssueRecord
+    |> where([issue], issue.project_id == ^project_id)
+    |> select([issue], issue.id)
+    |> Repo.all()
+  end
+
+  defp project_label_ids(project_id) do
+    Label
+    |> where([label], label.project_id == ^project_id)
+    |> select([label], label.id)
+    |> Repo.all()
+  end
+
+  defp delete_issue_owned_rows([]), do: :ok
+
+  defp delete_issue_owned_rows(issue_ids) do
+    Repo.delete_all(from(event in ActivityEvent, where: event.issue_id in ^issue_ids))
+    Repo.delete_all(from(comment in Comment, where: comment.issue_id in ^issue_ids))
+    Repo.delete_all(from(issue_label in IssueLabel, where: issue_label.issue_id in ^issue_ids))
+    Repo.delete_all(from(relation in IssueRelation, where: relation.source_issue_id in ^issue_ids))
+    Repo.delete_all(from(relation in IssueRelation, where: relation.target_issue_id in ^issue_ids))
+  end
+
+  defp delete_project_label_links([]), do: :ok
+
+  defp delete_project_label_links(label_ids) do
+    Repo.delete_all(from(issue_label in IssueLabel, where: issue_label.label_id in ^label_ids))
+  end
 
   defp statuses_for_project(project_id) do
     WorkflowStatus

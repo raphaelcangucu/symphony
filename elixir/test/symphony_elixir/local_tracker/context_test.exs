@@ -102,9 +102,7 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert Enum.map(Context.list_statuses(project.slug), & &1.name) == ["Todo", "Review", "Done"]
 
     repositories =
-      Repo.query!(
-        "select github_full_name, workspace_path, role from local_tracker_repositories order by workspace_path"
-      ).rows
+      Repo.query!("select github_full_name, workspace_path, role from local_tracker_repositories order by workspace_path").rows
 
     assert repositories == [
              ["clouapp/api", "backend", "backend"],
