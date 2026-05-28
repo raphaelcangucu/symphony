@@ -54,11 +54,44 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   }
   """
 
+  @update_field_value """
+  mutation SymphonyUiSetStatus($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+    updateProjectV2ItemFieldValue(input: {
+      projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+      value: { singleSelectOptionId: $optionId }
+    }) {
+      projectV2Item { id }
+    }
+  }
+  """
+
   @spec list_items_query() :: String.t()
   def list_items_query, do: @list_items
 
   @spec status_options_query() :: String.t()
   def status_options_query, do: @status_options
+
+  @spec update_field_value_mutation() :: String.t()
+  def update_field_value_mutation, do: @update_field_value
+
+  @spec resolve_field_and_option(map(), String.t(), String.t()) ::
+          {:ok, String.t(), String.t()} | {:error, :status_not_found}
+  def resolve_field_and_option(%{"data" => %{"node" => %{"fields" => %{"nodes" => nodes}}}}, status_field, option_name) do
+    nodes
+    |> Enum.find(fn n -> n["__typename"] == "ProjectV2SingleSelectField" and n["name"] == status_field end)
+    |> case do
+      %{"id" => field_id, "options" => options} ->
+        case Enum.find(options, &(&1["name"] == option_name)) do
+          %{"id" => option_id} -> {:ok, field_id, option_id}
+          _ -> {:error, :status_not_found}
+        end
+
+      _ ->
+        {:error, :status_not_found}
+    end
+  end
+
+  def resolve_field_and_option(_, _, _), do: {:error, :status_not_found}
 
   @spec normalize_item(map(), String.t(), String.t()) :: IssueDTO.t() | nil
   def normalize_item(%{"content" => %{"__typename" => "Issue"} = content} = item, status_field, project_slug) do

@@ -68,7 +68,43 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   def update_issue(%Project{} = _project, _identifier, _attrs), do: {:error, :not_supported_on_remote}
 
   @impl true
-  def move_issue(%Project{} = _project, _identifier, _attrs), do: {:error, :not_supported_on_remote}
+  def move_issue(%Project{} = project, identifier, attrs) do
+    %{project_id: project_id, status_field: status_field} = config(project)
+    item_id = Map.get(attrs, "item_id") || Map.get(attrs, :item_id) || identifier
+    target_status = Map.get(attrs, "status") || Map.get(attrs, "state") || Map.get(attrs, :status)
+
+    with {:ok, fields_response} <-
+           client().graphql(Query.status_options_query(), %{"projectId" => project_id}, []),
+         {:ok, field_id, option_id} <-
+           Query.resolve_field_and_option(fields_response, status_field, target_status),
+         {:ok, _} <-
+           client().graphql(
+             Query.update_field_value_mutation(),
+             %{
+               "projectId" => project_id,
+               "itemId" => item_id,
+               "fieldId" => field_id,
+               "optionId" => option_id
+             },
+             []
+           ) do
+      {:ok,
+       SymphonyElixir.Tracker.IssueDTO.build(%{
+         identifier: identifier,
+         title: target_status,
+         status: %{
+           name: target_status,
+           category: Query.category_for(target_status),
+           position: nil,
+           is_terminal: false
+         },
+         project_slug: project.slug
+       })}
+    else
+      {:error, :status_not_found} -> {:error, :status_not_found}
+      error -> {:error, map_error(error)}
+    end
+  end
 
   @impl true
   def list_comments(%Project{} = _project, _identifier), do: {:error, :not_supported_on_remote}

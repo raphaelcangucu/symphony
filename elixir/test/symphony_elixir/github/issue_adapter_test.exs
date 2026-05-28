@@ -77,4 +77,46 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     Application.put_env(:symphony_elixir, :github_client_module, UnauthorizedClientStub)
     assert {:error, :remote_unauthorized} = IssueAdapter.list_issues(project(), [])
   end
+
+  defmodule MoveClientStub do
+    def graphql(query, _vars, _opts) do
+      cond do
+        String.contains?(query, "fields(first") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "fields" => %{
+                   "nodes" => [
+                     %{
+                       "__typename" => "ProjectV2SingleSelectField",
+                       "id" => "FIELD_1",
+                       "name" => "Symphony State",
+                       "options" => [%{"id" => "OPT_DONE", "name" => "Done"}]
+                     }
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "updateProjectV2ItemFieldValue") ->
+          {:ok, %{"data" => %{"updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_1"}}}}}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
+  test "move_issue resolves option id and posts the mutation" do
+    Application.put_env(:symphony_elixir, :github_client_module, MoveClientStub)
+
+    assert {:ok, %{status: %{name: "Done"}}} =
+             IssueAdapter.move_issue(
+               %{project() | tracker_config: Map.put(project().tracker_config, "status_field", "Symphony State")},
+               "PVTI_1",
+               %{"status" => "Done", "item_id" => "PVTI_1"}
+             )
+  end
 end
