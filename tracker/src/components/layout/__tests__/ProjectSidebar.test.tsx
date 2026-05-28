@@ -21,6 +21,7 @@ const activeProject: Project = {
   slug: "active-project",
   description: "Shipping now",
   issueCount: 2,
+  tracker: { kind: "local", config: {} },
   archivedAt: null,
 };
 
@@ -30,6 +31,7 @@ const removedProject: Project = {
   slug: "removed-project",
   description: "No longer active",
   issueCount: 1,
+  tracker: { kind: "local", config: {} },
   archivedAt: null,
 };
 

@@ -1,7 +1,7 @@
 import type { Blocker, BlockerState, BlockerSummary } from "@/types/blocker";
 import type { Comment } from "@/types/comment";
 import type { Issue, IssuePriority } from "@/types/issue";
-import type { Project } from "@/types/project";
+import type { Project, TrackerKind } from "@/types/project";
 import type { ProjectSetup, WorkspaceSuggestion } from "@/types/project-setup";
 import type {
   ProjectRealtimeEventName,
@@ -120,6 +120,8 @@ export interface BackendProjectDto {
   workflowStatuses?: BackendWorkflowStatusDto[] | null;
   repositories?: BackendRepositoryDto[] | null;
   setup?: BackendProjectSetupDto | null;
+  tracker_kind?: string | null;
+  tracker_config?: Record<string, unknown> | null;
   inserted_at?: string | null;
   created_at?: string | null;
   createdAt?: string | null;
@@ -227,6 +229,10 @@ export function normalizeProject(dto: BackendProjectDto): Project {
     workflowStatuses: (dto.workflowStatuses ?? dto.statuses ?? []).map(normalizeWorkflowStatus),
     repositories: (dto.repositories ?? []).map(normalizeRepository),
     setup: dto.setup ? normalizeProjectSetup(dto.setup) : null,
+    tracker: {
+      kind: (dto.tracker_kind as TrackerKind) ?? "local",
+      config: dto.tracker_config ?? {},
+    },
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? undefined,
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? undefined,
     archivedAt: dto.archivedAt ?? dto.archived_at ?? null,

@@ -36,6 +36,7 @@ const activeProject: Project = {
   slug: "active-project",
   description: "Shipping now",
   issueCount: 2,
+  tracker: { kind: "local", config: {} },
   archivedAt: null,
 };
 
@@ -45,6 +46,7 @@ const archivedProject: Project = {
   slug: "archived-project",
   description: "On ice",
   issueCount: 1,
+  tracker: { kind: "local", config: {} },
   archivedAt: "2026-05-28T12:00:00Z",
 };
 
@@ -400,6 +402,7 @@ describe("ProjectListPage", () => {
       workflowStatuses: [{ id: "todo", name: "Todo", category: "active", position: 0, isTerminal: false }],
       repositories: [{ fullName: "clouapp/front", workspacePath: "frontend", role: "frontend" }],
       setup: { validationCommands: ["pnpm test"] },
+      tracker: { kind: "local", config: {} },
     });
 
     render(

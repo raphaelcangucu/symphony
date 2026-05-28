@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { http } from "@/services/http";
+import { normalizeProject, type BackendProjectDto } from "@/services/mappers";
 import {
   archiveProject,
   createProject,
@@ -281,5 +282,23 @@ describe("project service", () => {
     await expect(deleteProject("")).rejects.toThrow("projectSlug is required");
 
     expect(del).not.toHaveBeenCalled();
+  });
+});
+
+describe("normalizeProject tracker", () => {
+  it("defaults to local tracker", () => {
+    const dto = { id: 1, slug: "p", name: "P" } as BackendProjectDto;
+    expect(normalizeProject(dto).tracker).toEqual({ kind: "local", config: {} });
+  });
+
+  it("reads github tracker", () => {
+    const dto = {
+      id: 1,
+      slug: "p",
+      name: "P",
+      tracker_kind: "github",
+      tracker_config: { project_id: "PVT_1" },
+    } as unknown as BackendProjectDto;
+    expect(normalizeProject(dto).tracker).toEqual({ kind: "github", config: { project_id: "PVT_1" } });
   });
 });
