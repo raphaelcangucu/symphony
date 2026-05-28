@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -6,12 +7,14 @@ import { BoardFiltersDrawer } from "@/components/board/BoardFiltersDrawer";
 import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
 import { BoardFiltersDrawerProvider } from "@/components/board/useBoardFiltersDrawer";
+import { DevEnvPanel } from "@/components/devenv/DevEnvPanel";
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIssueBoard } from "@/hooks/useIssueBoard";
 import { useTrackerPolling } from "@/hooks/useTrackerPolling";
 import { filtersFromSearchParams } from "@/lib/issueFilters";
+import { cn } from "@/lib/utils";
 import { getProject } from "@/services/projects";
 import type { Issue } from "@/types/issue";
 import type { Project } from "@/types/project";
@@ -29,6 +32,7 @@ export function ProjectBoardPage() {
     statusNames,
   );
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [devEnvOpen, setDevEnvOpen] = useState(false);
 
   const trackerKind = project?.tracker?.kind ?? "local";
 
@@ -90,6 +94,24 @@ export function ProjectBoardPage() {
             onSelectIssue={setSelectedIssue}
             onMoveIssue={handleMoveIssue}
           />
+        ) : null}
+        {projectSlug ? (
+          <section className="border-t px-6 py-4">
+            <button
+              type="button"
+              onClick={() => setDevEnvOpen((open) => !open)}
+              aria-expanded={devEnvOpen}
+              className="flex w-full items-center justify-between gap-2 text-left text-sm font-semibold"
+            >
+              <span>Dev environment setup</span>
+              <ChevronDown className={cn("h-4 w-4 transition-transform", devEnvOpen ? "rotate-180" : "")} />
+            </button>
+            {devEnvOpen ? (
+              <div className="mt-4">
+                <DevEnvPanel projectSlug={projectSlug} />
+              </div>
+            ) : null}
+          </section>
         ) : null}
         <IssueDrawer
           projectSlug={projectSlug}

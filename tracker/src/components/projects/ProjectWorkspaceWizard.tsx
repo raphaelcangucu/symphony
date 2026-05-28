@@ -1,5 +1,6 @@
 import { Plus, RefreshCw } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ interface ProjectWorkspaceWizardProps {
 }
 
 export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProps) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [trackerKind, setTrackerKind] = useState<TrackerKind>("local");
   const [remoteConfig, setRemoteConfig] = useState<Record<string, unknown> | null>(null);
@@ -206,7 +208,12 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
       onCreated?.(project);
       reset();
       setOpen(false);
-      toast.success("Workspace project created");
+      toast.success("Workspace project created", {
+        action: {
+          label: "Set up dev env",
+          onClick: () => navigate(`/projects/${project.slug}/board`),
+        },
+      });
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Failed to create workspace project");
     } finally {
