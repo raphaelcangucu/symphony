@@ -28,7 +28,7 @@ defmodule SymphonyElixir.LocalTracker.Git do
 
     case System.cmd("git", args, stderr_to_stdout: true) do
       {_out, 0} -> {:ok, head_sha(dest)}
-      {out, _status} -> {:error, String.trim(out)}
+      {out, _status} -> {:error, strip_credentials(String.trim(out))}
     end
   rescue
     error in [ErlangError] -> {:error, "git not available: #{Exception.message(error)}"}
@@ -37,6 +37,8 @@ defmodule SymphonyElixir.LocalTracker.Git do
   defp branch_args(nil), do: []
   defp branch_args(branch), do: ["--branch", branch]
 
+  # TODO: this embeds the token into the on-disk .git/config remote URL.
+  # Follow-up: move auth to GIT_ASKPASS or http.extraHeader so the token is not persisted.
   defp authed_url(url) do
     token = System.get_env("GITHUB_TOKEN")
 
@@ -46,6 +48,12 @@ defmodule SymphonyElixir.LocalTracker.Git do
       url
     end
   end
+
+  defp strip_credentials(url) when is_binary(url) do
+    Regex.replace(~r{//[^/@]+@}, url, "//")
+  end
+
+  defp strip_credentials(other), do: other
 
   defp head_sha(dest) do
     case System.cmd("git", ["-C", dest, "rev-parse", "HEAD"], stderr_to_stdout: true) do
@@ -60,7 +68,7 @@ defmodule SymphonyElixir.LocalTracker.Git do
 
   defp remote_matches?(dest, url) do
     case System.cmd("git", ["-C", dest, "remote", "get-url", "origin"], stderr_to_stdout: true) do
-      {origin, 0} -> String.trim(origin) == url
+      {origin, 0} -> strip_credentials(String.trim(origin)) == strip_credentials(url)
       _ -> false
     end
   end
