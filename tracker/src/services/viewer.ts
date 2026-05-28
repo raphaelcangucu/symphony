@@ -1,0 +1,55 @@
+import axios from "axios";
+
+import { http, trackerPath, unwrapData } from "./http";
+import type { Viewer } from "@/types/viewer";
+
+interface BackendViewerDto {
+  github_login?: string | null;
+  githubLogin?: string | null;
+  name?: string | null;
+  avatar_url?: string | null;
+  avatarUrl?: string | null;
+}
+
+export class ViewerNotConfiguredError extends Error {
+  constructor(public code: string) {
+    super(code);
+    this.name = "ViewerNotConfiguredError";
+  }
+}
+
+export function normalizeViewer(dto: BackendViewerDto): Viewer {
+  const login = dto.githubLogin ?? dto.github_login ?? "";
+  if (!login.trim()) {
+    throw new Error("viewer payload missing github_login");
+  }
+
+  return {
+    githubLogin: login,
+    name: dto.name ?? null,
+    avatarUrl: dto.avatarUrl ?? dto.avatar_url ?? null,
+  };
+}
+
+const VIEWER_ERROR_CODES = new Set([
+  "github_token_missing",
+  "github_unauthorized",
+  "github_network_error",
+  "github_malformed_response",
+]);
+
+export async function fetchViewer(): Promise<Viewer> {
+  try {
+    const response = await http.get(trackerPath("/viewer"));
+    return normalizeViewer(unwrapData<BackendViewerDto>(response));
+  } catch (cause) {
+    if (axios.isAxiosError(cause) && cause.response) {
+      const code = (cause.response.data as { error?: { code?: string } } | undefined)?.error?.code;
+      if (code && VIEWER_ERROR_CODES.has(code)) {
+        throw new ViewerNotConfiguredError(code);
+      }
+    }
+
+    throw cause;
+  }
+}

@@ -21,6 +21,7 @@ export interface Issue {
   labels: string[];
   blockedBy: BlockerSummary[];
   assignee: string | null;
+  creator: string | null;
   createdAt: string;
   updatedAt: string;
 }

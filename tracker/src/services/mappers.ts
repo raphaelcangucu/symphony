@@ -125,6 +125,8 @@ export interface BackendProjectDto {
   createdAt?: string | null;
   updated_at?: string | null;
   updatedAt?: string | null;
+  archived_at?: string | null;
+  archivedAt?: string | null;
 }
 
 export interface BackendIssueDto {
@@ -142,6 +144,7 @@ export interface BackendIssueDto {
   blockedBy?: BackendBlockerSummaryDto[] | null;
   assignee?: string | null;
   assignee_id?: string | null;
+  creator?: string | null;
   inserted_at?: string | null;
   created_at?: string | null;
   createdAt?: string | null;
@@ -208,6 +211,7 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     labels: dto.labels ?? [],
     blockedBy: (dto.blockedBy ?? dto.blocked_by ?? []).map(normalizeBlockerSummary),
     assignee: dto.assignee ?? dto.assignee_id ?? null,
+    creator: dto.creator ?? null,
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };
@@ -225,6 +229,7 @@ export function normalizeProject(dto: BackendProjectDto): Project {
     setup: dto.setup ? normalizeProjectSetup(dto.setup) : null,
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? undefined,
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? undefined,
+    archivedAt: dto.archivedAt ?? dto.archived_at ?? null,
   };
 }
 
