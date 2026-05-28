@@ -142,6 +142,9 @@ defmodule SymphonyElixir.LocalTracker.Viewer do
   defp trim_or_nil(_), do: nil
 
   defp ttl_ms do
-    Application.get_env(:symphony_elixir, :viewer_cache_ttl_ms, @default_ttl_ms)
+    case Application.get_env(:symphony_elixir, :viewer_cache_ttl_ms, @default_ttl_ms) do
+      ttl when is_integer(ttl) -> ttl
+      _ -> @default_ttl_ms
+    end
   end
 end

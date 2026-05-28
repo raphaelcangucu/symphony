@@ -122,7 +122,14 @@ defmodule SymphonyElixir.LocalTracker.ViewerTest do
     test "re-resolves after cache entry expires" do
       previous_ttl = Application.get_env(:symphony_elixir, :viewer_cache_ttl_ms)
       Application.put_env(:symphony_elixir, :viewer_cache_ttl_ms, -1)
-      on_exit(fn -> Application.put_env(:symphony_elixir, :viewer_cache_ttl_ms, previous_ttl) end)
+
+      on_exit(fn ->
+        if previous_ttl == nil do
+          Application.delete_env(:symphony_elixir, :viewer_cache_ttl_ms)
+        else
+          Application.put_env(:symphony_elixir, :viewer_cache_ttl_ms, previous_ttl)
+        end
+      end)
 
       Viewer.put_cached(%{login: "stale", name: nil, avatar_url: nil})
 
