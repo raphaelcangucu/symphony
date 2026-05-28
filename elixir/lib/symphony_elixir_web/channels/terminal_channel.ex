@@ -11,6 +11,21 @@ defmodule SymphonyElixirWeb.TerminalChannel do
   @capture_delays_ms [50, 250, 750]
 
   @impl true
+  def join("terminal:devenv:" <> project_slug, _payload, socket)
+      when is_binary(project_slug) and project_slug != "" do
+    with :ok <- authorize(socket),
+         {:ok, session} <- Registry.open_project_session(project_slug) do
+      socket =
+        socket
+        |> assign(:project_slug, project_slug)
+        |> assign(:devenv, true)
+
+      {:ok, %{session: session_payload(session)}, socket}
+    else
+      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+    end
+  end
+
   def join("terminal:" <> topic_rest, %{"project_slug" => project_slug}, socket)
       when is_binary(project_slug) and project_slug != "" do
     with :ok <- authorize(socket),
@@ -30,6 +45,20 @@ defmodule SymphonyElixirWeb.TerminalChannel do
   def join(_topic, _payload, _socket), do: {:error, %{reason: "invalid_topic"}}
 
   @impl true
+  def handle_in("input", %{"data" => data}, %{assigns: %{devenv: true, project_slug: project_slug}} = socket)
+      when is_binary(data) do
+    case Registry.send_input_project(project_slug, data) do
+      :ok ->
+        push_devenv_capture(socket, project_slug)
+        Enum.each(@capture_delays_ms, fn d -> Process.send_after(self(), {:capture_devenv, project_slug}, d) end)
+        {:noreply, socket}
+
+      {:error, message} ->
+        push(socket, "error", %{message: message})
+        {:noreply, socket}
+    end
+  end
+
   def handle_in("input", %{"data" => data}, socket) when is_binary(data) do
     issue_identifier = socket.assigns.issue_identifier
     project_slug = socket.assigns.project_slug
@@ -51,7 +80,10 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     {:noreply, socket}
   end
 
-  @impl true
+  def handle_in("resize", _payload, %{assigns: %{devenv: true}} = socket) do
+    {:noreply, socket}
+  end
+
   def handle_in("resize", %{"cols" => cols, "rows" => rows}, socket) when is_integer(cols) and is_integer(rows) do
     issue_identifier = socket.assigns.issue_identifier
     project_slug = socket.assigns.project_slug
@@ -77,6 +109,11 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:capture_devenv, project_slug}, socket) do
+    push_devenv_capture(socket, project_slug)
+    {:noreply, socket}
+  end
+
   defp schedule_followup_captures(project_slug, issue_identifier) do
     Enum.each(@capture_delays_ms, fn delay_ms ->
       Process.send_after(self(), {:capture_terminal, project_slug, issue_identifier}, delay_ms)
@@ -85,6 +122,13 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
   defp push_capture(socket, project_slug, issue_identifier) do
     case Registry.capture(project_slug, issue_identifier) do
+      {:ok, output} -> push(socket, "output", %{data: output})
+      {:error, message} -> push(socket, "error", %{message: message})
+    end
+  end
+
+  defp push_devenv_capture(socket, project_slug) do
+    case Registry.capture_project(project_slug) do
       {:ok, output} -> push(socket, "output", %{data: output})
       {:error, message} -> push(socket, "error", %{message: message})
     end
