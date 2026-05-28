@@ -46,6 +46,18 @@ defmodule SymphonyElixir.LocalTracker.MigrationsTest do
     assert "tracker_config" in column_names
   end
 
+  test "workspace template tables exist" do
+    migrate_repo()
+
+    for table <- [
+          "local_tracker_workspace_templates",
+          "local_tracker_workspace_template_repositories",
+          "local_tracker_clone_jobs"
+        ] do
+      assert %{rows: _} = Repo.query!("SELECT 1 FROM #{table} LIMIT 1")
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
