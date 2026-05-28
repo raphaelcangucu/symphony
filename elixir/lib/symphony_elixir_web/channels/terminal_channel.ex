@@ -13,27 +13,17 @@ defmodule SymphonyElixirWeb.TerminalChannel do
   @impl true
   def join("terminal:" <> topic_rest, %{"project_slug" => project_slug}, socket)
       when is_binary(project_slug) and project_slug != "" do
-    if authorized?(socket) do
-      case parse_topic(topic_rest, project_slug) do
-        {:ok, issue_identifier} ->
-          case Registry.open_project_issue_session(project_slug, issue_identifier) do
-            {:ok, session} ->
-              socket =
-                socket
-                |> assign(:issue_identifier, issue_identifier)
-                |> assign(:project_slug, project_slug)
+    with :ok <- authorize(socket),
+         {:ok, issue_identifier} <- parse_topic(topic_rest, project_slug),
+         {:ok, session} <- Registry.open_project_issue_session(project_slug, issue_identifier) do
+      socket =
+        socket
+        |> assign(:issue_identifier, issue_identifier)
+        |> assign(:project_slug, project_slug)
 
-              {:ok, %{session: session_payload(session)}, socket}
-
-            {:error, reason} ->
-              {:error, %{reason: error_reason(reason)}}
-          end
-
-        {:error, reason} ->
-          {:error, %{reason: reason}}
-      end
+      {:ok, %{session: session_payload(session)}, socket}
     else
-      {:error, %{reason: "unauthorized"}}
+      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
     end
   end
 
@@ -113,7 +103,6 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
   defp error_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp error_reason(reason) when is_binary(reason), do: reason
-  defp error_reason(reason), do: inspect(reason)
 
   defp authorized?(%Socket{assigns: %{tracker_token_valid: true}}), do: true
 
@@ -123,18 +112,20 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
   defp authorized?(_socket), do: false
 
+  defp authorize(socket) do
+    if authorized?(socket), do: :ok, else: {:error, "unauthorized"}
+  end
+
   defp parse_topic(topic_rest, project_slug) do
     prefix = project_slug <> ":"
 
-    cond do
-      String.starts_with?(topic_rest, prefix) ->
-        case String.replace_prefix(topic_rest, prefix, "") do
-          "" -> {:error, "invalid_topic"}
-          issue_identifier -> {:ok, issue_identifier}
-        end
-
-      true ->
-        {:error, "invalid_topic"}
+    if String.starts_with?(topic_rest, prefix) do
+      case String.replace_prefix(topic_rest, prefix, "") do
+        "" -> {:error, "invalid_topic"}
+        issue_identifier -> {:ok, issue_identifier}
+      end
+    else
+      {:error, "invalid_topic"}
     end
   end
 end

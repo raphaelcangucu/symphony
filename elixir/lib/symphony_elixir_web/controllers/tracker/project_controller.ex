@@ -9,8 +9,10 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   alias SymphonyElixirWeb.TrackerPresenter
 
   @spec index(Conn.t(), map()) :: Conn.t()
-  def index(conn, _params) do
-    json(conn, %{data: Enum.map(Context.list_projects(), &TrackerPresenter.project/1)})
+  def index(conn, params) do
+    include_archived? = Map.get(params, "include_archived") == "true"
+    projects = Context.list_projects(include_archived: include_archived?)
+    json(conn, %{data: Enum.map(projects, &TrackerPresenter.project/1)})
   end
 
   @spec create(Conn.t(), map()) :: Conn.t()
@@ -54,6 +56,31 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
 
       {:error, :project_not_found} ->
         TrackerErrors.render(conn, :project_not_found)
+    end
+  end
+
+  @spec archive(Conn.t(), map()) :: Conn.t()
+  def archive(conn, %{"id" => project_slug}) do
+    case Context.archive_project(project_slug) do
+      {:ok, project} -> json(conn, %{data: TrackerPresenter.project(project)})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec restore(Conn.t(), map()) :: Conn.t()
+  def restore(conn, %{"id" => project_slug}) do
+    case Context.restore_project(project_slug) do
+      {:ok, project} -> json(conn, %{data: TrackerPresenter.project(project)})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec delete(Conn.t(), map()) :: Conn.t()
+  def delete(conn, %{"id" => project_slug}) do
+    case Context.delete_project(project_slug) do
+      {:ok, _project} -> send_resp(conn, :no_content, "")
+      {:error, :project_not_archived} -> TrackerErrors.validation(conn, "Project must be archived before permanent deletion")
+      {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 end

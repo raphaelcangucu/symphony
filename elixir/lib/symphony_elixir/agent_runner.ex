@@ -77,6 +77,8 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
+  # The turn loop carries session, issue, and injected test dependencies explicitly.
+  # credo:disable-for-next-line Credo.Check.Refactor.FunctionArity
   defp do_run_codex_turns(
          app_session,
          workspace,

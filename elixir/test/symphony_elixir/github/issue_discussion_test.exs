@@ -4,6 +4,19 @@ defmodule SymphonyElixir.GitHub.IssueDiscussionTest do
   alias SymphonyElixir.GitHub.IssueDiscussion
   alias SymphonyElixir.Issue
 
+  defmodule TestClient do
+    @moduledoc false
+
+    def graphql(query, variables, opts) do
+      request_fun = Keyword.fetch!(opts, :request_fun)
+
+      case request_fun.(%{"query" => query, "variables" => variables}, []) do
+        {:ok, %{status: 200, body: body}} -> {:ok, body}
+        {:error, _reason} = error -> error
+      end
+    end
+  end
+
   describe "parse_issue_comments/1" do
     test "maps issue comment nodes" do
       content = %{
@@ -87,7 +100,11 @@ defmodule SymphonyElixir.GitHub.IssueDiscussionTest do
          }}
       end
 
-      [enriched] = IssueDiscussion.enrich_issues([issue], "clouapp/front", request_fun: request_fun)
+      [enriched] =
+        IssueDiscussion.enrich_issues([issue], "clouapp/front",
+          client_module: TestClient,
+          request_fun: request_fun
+        )
 
       assert Enum.any?(enriched.comments, fn comment ->
                comment["source"] =~ "PR #503 review" and

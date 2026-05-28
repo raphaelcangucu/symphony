@@ -387,9 +387,6 @@ defmodule SymphonyElixir.GitHub.Client do
     else
       {:error, _} = error ->
         error
-
-      _ ->
-        {:error, :invalid_issue_number}
     end
   end
 
@@ -678,8 +675,6 @@ defmodule SymphonyElixir.GitHub.Client do
       end
     end)
   end
-
-  defp extract_state_from_labels(_label_names), do: nil
 
   defp configured_state_names do
     (Config.field_states() ++ Config.active_states() ++ Config.terminal_states())
@@ -1171,17 +1166,16 @@ defmodule SymphonyElixir.GitHub.Client do
 
   defp set_project_state(client, metadata, item_id, option_id, state_name, graphql_opts)
        when is_atom(client) do
-    with :ok <-
-           set_field_value(
-             client,
-             metadata["project_id"],
-             item_id,
-             metadata["status_field_id"],
-             option_id,
-             graphql_opts
-           ),
-         :ok <- sync_native_status_field(client, metadata, item_id, state_name, graphql_opts) do
-      :ok
+    case set_field_value(
+           client,
+           metadata["project_id"],
+           item_id,
+           metadata["status_field_id"],
+           option_id,
+           graphql_opts
+         ) do
+      :ok -> sync_native_status_field(client, metadata, item_id, state_name, graphql_opts)
+      {:error, _reason} = error -> error
     end
   end
 

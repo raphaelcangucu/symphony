@@ -1,7 +1,15 @@
 defmodule SymphonyElixirWeb.TrackerPresenter do
   @moduledoc "JSON DTOs for the local tracker API and realtime payloads."
 
-  alias SymphonyElixir.LocalTracker.{Comment, IssueRecord, IssueRelation, Project, ProjectSetup, Repository, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{
+    Comment,
+    IssueRecord,
+    IssueRelation,
+    Project,
+    ProjectSetup,
+    Repository,
+    WorkflowStatus
+  }
 
   @spec project(Project.t(), [WorkflowStatus.t()] | nil, [Repository.t()] | nil, ProjectSetup.t() | nil) :: map()
   def project(%Project{} = project, statuses \\ nil, repositories \\ nil, setup \\ nil) do
@@ -13,6 +21,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       statuses: statuses && Enum.map(statuses, &status/1),
       repositories: repositories && Enum.map(repositories, &repository/1),
       setup: setup && project_setup(setup),
+      archived_at: iso8601(project.archived_at),
       inserted_at: iso8601(project.inserted_at),
       updated_at: iso8601(project.updated_at)
     }

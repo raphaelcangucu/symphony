@@ -67,7 +67,8 @@ defmodule SymphonyElixir.Terminal.Registry do
 
   @spec resize(String.t(), String.t(), pos_integer(), pos_integer(), keyword()) :: :ok | {:error, String.t()}
   def resize(project_slug, issue_identifier, cols, rows, opts \\ [])
-      when is_binary(project_slug) and is_binary(issue_identifier) and is_integer(cols) and is_integer(rows) and cols > 0 and rows > 0 do
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_integer(cols) and
+             is_integer(rows) and cols > 0 and rows > 0 do
     tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
     tmux.resize(session_name(project_slug, issue_identifier), cols, rows)
   end

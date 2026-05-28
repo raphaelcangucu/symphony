@@ -38,27 +38,23 @@ defmodule SymphonyElixir.LocalTracker.WorkflowSuggester do
   end
 
   defp after_create_hook(repositories) do
-    repositories
-    |> Enum.map(fn repository ->
+    Enum.map_join(repositories, "\n", fn repository ->
       clone_url = attr(repository, :clone_url)
       branch = attr(repository, :selected_branch) || attr(repository, :default_branch) || "main"
       workspace_path = attr(repository, :workspace_path)
 
       "git clone --branch #{branch} #{clone_url} #{workspace_path}"
     end)
-    |> Enum.join("\n")
   end
 
   defp prompt_template(repositories) do
     repo_lines =
-      repositories
-      |> Enum.map(fn repository ->
+      Enum.map_join(repositories, "\n", fn repository ->
         role = attr(repository, :role)
         full_name = attr(repository, :github_full_name)
         workspace_path = attr(repository, :workspace_path)
         "- #{role}: #{full_name} at `#{workspace_path}/`"
       end)
-      |> Enum.join("\n")
 
     "You are working in a multi-repository Symphony workspace.\n\nRepositories:\n#{repo_lines}"
   end

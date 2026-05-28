@@ -4,6 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceSetupControllerTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
+  alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
   @endpoint SymphonyElixirWeb.Endpoint
@@ -167,6 +168,30 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceSetupControllerTest do
                "statuses" => [%{"name" => "Todo"}, %{"name" => "Done"}]
              }
            } = json_response(conn, 201)
+  end
+
+  test "archives restores and deletes a project through the API" do
+    Context.ensure_project(%{"name" => "Lifecycle", "slug" => "lifecycle"})
+
+    archive_conn = post(authorized_conn(), "/api/tracker/v1/projects/lifecycle/archive")
+    assert %{"data" => %{"slug" => "lifecycle", "archived_at" => archived_at}} = json_response(archive_conn, 200)
+    assert is_binary(archived_at)
+
+    default_list_conn = get(authorized_conn(), "/api/tracker/v1/projects")
+    refute Enum.any?(json_response(default_list_conn, 200)["data"], &(&1["slug"] == "lifecycle"))
+
+    archived_list_conn = get(authorized_conn(), "/api/tracker/v1/projects?include_archived=true")
+    assert Enum.any?(json_response(archived_list_conn, 200)["data"], &(&1["slug"] == "lifecycle"))
+
+    restore_conn = post(authorized_conn(), "/api/tracker/v1/projects/lifecycle/restore")
+    assert %{"data" => %{"archived_at" => nil}} = json_response(restore_conn, 200)
+
+    delete_active_conn = delete(authorized_conn(), "/api/tracker/v1/projects/lifecycle")
+    assert json_response(delete_active_conn, 422)["error"]["message"] =~ "archive"
+
+    post(authorized_conn(), "/api/tracker/v1/projects/lifecycle/archive")
+    delete_conn = delete(authorized_conn(), "/api/tracker/v1/projects/lifecycle")
+    assert response(delete_conn, 204) == ""
   end
 
   defp authorized_conn do

@@ -409,13 +409,17 @@ defmodule SymphonyElixir.Config do
         {:error, "No agent configured — add a codex: or claude: section to WORKFLOW.md"}
 
       kinds ->
-        Enum.reduce_while(kinds, :ok, fn kind, :ok ->
-          case validate_agent_kind!(kind) do
-            :ok -> {:cont, :ok}
-            {:error, _} = error -> {:halt, error}
-          end
-        end)
+        validate_agent_kinds(kinds)
     end
+  end
+
+  defp validate_agent_kinds(kinds) do
+    Enum.reduce_while(kinds, :ok, fn kind, :ok ->
+      case validate_agent_kind!(kind) do
+        :ok -> {:cont, :ok}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
   end
 
   defp validate_agent_kind!("codex"), do: SymphonyElixir.Codex.Config.validate!()
@@ -428,13 +432,6 @@ defmodule SymphonyElixir.Config do
       "linear" -> SymphonyElixir.Linear.Config
       "github" -> SymphonyElixir.GitHub.Config
       "memory" -> SymphonyElixir.Memory.Config
-    end
-  end
-
-  defp agent_config_module do
-    case agent_kind() do
-      "codex" -> SymphonyElixir.Codex.Config
-      "claude" -> SymphonyElixir.Claude.Config
     end
   end
 

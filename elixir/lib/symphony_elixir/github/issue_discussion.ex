@@ -3,7 +3,6 @@ defmodule SymphonyElixir.GitHub.IssueDiscussion do
   Loads recent issue and pull-request discussion for agent prompts.
   """
 
-  alias SymphonyElixir.GitHub
   alias SymphonyElixir.GitHub.{Client, Config, RepoSpec}
   alias SymphonyElixir.Issue
 

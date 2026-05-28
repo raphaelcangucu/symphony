@@ -10,7 +10,13 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
   @spec to_issue(IssueRecord.t()) :: Issue.t()
   def to_issue(%IssueRecord{} = record) do
     label_names = label_names(record)
-    agent_kind = AgentRouting.resolve_agent_kind(label_names, Config.configured_agent_kinds(), Config.default_agent_kind())
+
+    agent_kind =
+      AgentRouting.resolve_agent_kind(
+        label_names,
+        Config.configured_agent_kinds(),
+        Config.default_agent_kind()
+      )
 
     %Issue{
       id: to_string(record.id),
