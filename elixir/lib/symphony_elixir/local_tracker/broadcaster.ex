@@ -39,6 +39,12 @@ defmodule SymphonyElixir.LocalTracker.Broadcaster do
     })
   end
 
+  @spec clone_event(String.t(), String.t(), map()) :: :ok
+  def clone_event(project_slug, event_name, payload)
+      when is_binary(project_slug) and event_name in ["clone_started", "clone_succeeded", "clone_failed", "clone_skipped"] do
+    broadcast(project_slug, event_name, payload)
+  end
+
   @spec topic(String.t()) :: String.t()
   def topic(project_slug) when is_binary(project_slug), do: "project:#{project_slug}"
 

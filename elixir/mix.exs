@@ -50,6 +50,10 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixir.LocalTracker.Broadcaster,
           SymphonyElixir.LocalTracker.Context,
           SymphonyElixir.LocalTracker.GitHubDiscovery,
+          # Shells out to git; cannot be deterministically unit-tested
+          SymphonyElixir.LocalTracker.Git,
+          # DynamicSupervisor glue that starts a real git-shelling worker
+          SymphonyElixir.LocalTracker.CloneSupervisor,
           SymphonyElixir.LocalTracker.IssueMapper,
           SymphonyElixir.LocalTracker.RepositoryScanner,
           SymphonyElixir.LocalTracker.Tracker,
