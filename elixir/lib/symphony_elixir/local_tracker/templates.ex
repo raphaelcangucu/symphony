@@ -262,17 +262,15 @@ defmodule SymphonyElixir.LocalTracker.Templates do
   end
 
   defp enqueue_clone_jobs(project) do
-    repositories = Context.list_repositories(project.slug)
+    jobs =
+      project.slug
+      |> Context.list_repositories()
+      |> Enum.map(fn repo ->
+        %CloneJob{}
+        |> CloneJob.changeset(%{project_id: project.id, repository_id: repo.id, status: "pending"})
+        |> Repo.insert!()
+      end)
 
-    repositories
-    |> Enum.reduce_while({:ok, []}, fn repo, {:ok, acc} ->
-      %CloneJob{}
-      |> CloneJob.changeset(%{project_id: project.id, repository_id: repo.id, status: "pending"})
-      |> Repo.insert()
-      |> case do
-        {:ok, job} -> {:cont, {:ok, [job | acc]}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
+    {:ok, jobs}
   end
 end
