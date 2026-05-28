@@ -6,21 +6,19 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   alias Plug.Conn
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
+  alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug} = params) do
-    with {:ok, _project} <- Context.get_project(project_slug),
-         {:ok, filters} <- build_filters(params) do
-      issues = Context.list_issues(project_slug, filters)
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, filters} <- build_filters(params),
+         {:ok, issues} <- IssueAdapter.dispatch(project, :list_issues, [filters]) do
       json(conn, %{data: Enum.map(issues, &TrackerPresenter.issue/1)})
     else
-      {:error, :project_not_found} ->
-        TrackerErrors.render(conn, :project_not_found)
-
-      {:error, viewer_error} ->
-        TrackerErrors.render(conn, viewer_error)
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
@@ -31,21 +29,22 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       |> Map.delete("project_slug")
       |> maybe_inject_creator()
 
-    case Context.create_issue(project_slug, attrs) do
-      {:ok, issue} ->
-        conn
-        |> put_status(:created)
-        |> json(%{data: TrackerPresenter.issue(issue)})
-
-      {:error, reason} ->
-        TrackerErrors.render(conn, reason)
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]) do
+      conn
+      |> put_status(:created)
+      |> json(%{data: TrackerPresenter.issue(issue)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
   @spec show(Conn.t(), map()) :: Conn.t()
   def show(conn, %{"project_slug" => project_slug, "id" => identifier}) do
-    case Context.get_issue(project_slug, identifier) do
-      {:ok, issue} -> json(conn, %{data: TrackerPresenter.issue(issue)})
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      json(conn, %{data: TrackerPresenter.issue(issue)})
+    else
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
@@ -54,8 +53,10 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   def update(conn, %{"project_slug" => project_slug, "id" => identifier} = params) do
     attrs = Map.drop(params, ["project_slug", "id"])
 
-    case Context.update_issue(project_slug, identifier, attrs) do
-      {:ok, issue} -> json(conn, %{data: TrackerPresenter.issue(issue)})
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
+      json(conn, %{data: TrackerPresenter.issue(issue)})
+    else
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
@@ -64,8 +65,10 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   def move(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
     attrs = Map.drop(params, ["project_slug", "identifier"])
 
-    case Context.move_issue(project_slug, identifier, attrs) do
-      {:ok, issue} -> json(conn, %{data: TrackerPresenter.issue(issue)})
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, attrs]) do
+      json(conn, %{data: TrackerPresenter.issue(issue)})
+    else
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
