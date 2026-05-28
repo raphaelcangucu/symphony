@@ -154,7 +154,7 @@ defmodule SymphonyElixir.LocalTracker.Templates do
     Map.new(map, fn {k, v} -> {to_string(k), v} end)
   end
 
-  defp attr(attrs, key, default \\ nil) do
+  defp attr(attrs, key, default) do
     Map.get(attrs, key, Map.get(attrs, to_string(key), default))
   end
 end

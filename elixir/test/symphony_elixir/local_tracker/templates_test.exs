@@ -49,6 +49,102 @@ defmodule SymphonyElixir.LocalTracker.TemplatesTest do
     assert [%{workspace_path: "{{slug}}/api"}] = template.repositories
   end
 
+  test "save_project_as_template handles project without setup" do
+    {:ok, _project} = Context.ensure_project(%{"name" => "Bare", "slug" => "bare"})
+
+    assert {:ok, template} = Templates.save_project_as_template("bare", %{})
+    assert template.slug == "bare-template"
+    assert template.metadata["source"] == "saved_from_project"
+    assert template.after_create_hook == nil
+    assert WorkspaceTemplate.validation_commands_list(template) == []
+    assert template.repositories == []
+  end
+
+  test "update_template updates fields and replaces repositories" do
+    {:ok, _template} =
+      Templates.create_template(%{
+        "name" => "Orig",
+        "slug" => "orig",
+        "repositories" => [
+          %{"github_full_name" => "g/old", "clone_url" => "https://github.com/g/old.git", "workspace_path" => "old", "role" => "backend"}
+        ]
+      })
+
+    assert {:ok, updated} =
+             Templates.update_template("orig", %{
+               "name" => "Renamed",
+               "repositories" => [
+                 %{"github_full_name" => "g/new", "clone_url" => "https://github.com/g/new.git", "workspace_path" => "new", "role" => "frontend"}
+               ]
+             })
+
+    assert updated.name == "Renamed"
+    assert [%{github_full_name: "g/new", workspace_path: "new"}] = updated.repositories
+  end
+
+  test "update_template without repositories leaves existing repositories untouched" do
+    {:ok, _template} =
+      Templates.create_template(%{
+        "name" => "Keep",
+        "slug" => "keep",
+        "repositories" => [
+          %{"github_full_name" => "g/api", "clone_url" => "https://github.com/g/api.git", "workspace_path" => "api", "role" => "backend"}
+        ]
+      })
+
+    assert {:ok, updated} = Templates.update_template("keep", %{"description" => "now described"})
+    assert updated.description == "now described"
+    assert [%{github_full_name: "g/api", workspace_path: "api"}] = updated.repositories
+  end
+
+  test "update_template returns error for unknown slug" do
+    assert {:error, :template_not_found} = Templates.update_template("missing", %{"name" => "Nope"})
+  end
+
+  test "delete_template removes the template" do
+    {:ok, _template} = Templates.create_template(%{"name" => "Doomed", "slug" => "doomed"})
+
+    assert {:ok, _deleted} = Templates.delete_template("doomed")
+    assert {:error, :template_not_found} = Templates.get_template("doomed")
+  end
+
+  test "delete_template returns error for unknown slug" do
+    assert {:error, :template_not_found} = Templates.delete_template("missing")
+  end
+
+  test "create_template rolls back when a repository is invalid" do
+    assert {:error, %Ecto.Changeset{} = changeset} =
+             Templates.create_template(%{
+               "name" => "Bad",
+               "slug" => "bad",
+               "repositories" => [%{"github_full_name" => "g/bad", "workspace_path" => "bad"}]
+             })
+
+    assert changeset.errors[:clone_url]
+    assert {:error, :template_not_found} = Templates.get_template("bad")
+  end
+
+  test "update_template rolls back when a replacement repository is invalid" do
+    {:ok, _template} =
+      Templates.create_template(%{
+        "name" => "Upd",
+        "slug" => "upd",
+        "repositories" => [
+          %{"github_full_name" => "g/api", "clone_url" => "https://github.com/g/api.git", "workspace_path" => "api", "role" => "backend"}
+        ]
+      })
+
+    assert {:error, %Ecto.Changeset{} = changeset} =
+             Templates.update_template("upd", %{
+               "repositories" => [%{"github_full_name" => "g/bad", "workspace_path" => "bad"}]
+             })
+
+    assert changeset.errors[:clone_url]
+
+    assert {:ok, fetched} = Templates.get_template("upd")
+    assert [%{github_full_name: "g/api"}] = fetched.repositories
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
