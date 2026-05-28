@@ -108,6 +108,7 @@ defmodule SymphonyElixir.TestSupport do
           local_database_path: nil,
           local_project_slug: nil,
           local_api_token_env: nil,
+          local_assignee: nil,
           github_project_mode: nil,
           github_project_title: nil,
           github_project_id: nil,
@@ -241,13 +242,16 @@ defmodule SymphonyElixir.TestSupport do
     database_path = Keyword.get(config, :local_database_path)
     project_slug = Keyword.get(config, :local_project_slug)
     api_token_env = Keyword.get(config, :local_api_token_env)
+    assignee = Keyword.get(config, :local_assignee)
 
     [
       "local:",
       "  database_path: #{yaml_value(database_path)}",
       "  project_slug: #{yaml_value(project_slug)}",
-      "  api_token_env: #{yaml_value(api_token_env)}"
+      "  api_token_env: #{yaml_value(api_token_env)}",
+      assignee && "  assignee: #{yaml_value(assignee)}"
     ]
+    |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
   end
 

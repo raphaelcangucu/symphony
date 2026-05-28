@@ -201,6 +201,13 @@ defmodule SymphonyElixir.Config do
     end
   end
 
+  @spec local_assignee() :: String.t() | nil
+  def local_assignee do
+    section("local")
+    |> Map.get("assignee")
+    |> trim_string()
+  end
+
   @doc """
   All states provisioned on the GitHub `Symphony State` field.
 

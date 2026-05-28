@@ -5,7 +5,8 @@ defmodule SymphonyElixir.LocalTracker.TrackerTest do
     Context,
     IssueLabel,
     Label,
-    Tracker
+    Tracker,
+    Viewer
   }
 
   alias SymphonyElixir.Repo
@@ -127,6 +128,64 @@ defmodule SymphonyElixir.LocalTracker.TrackerTest do
     refreshed_blocked_issue = Enum.find(refreshed_issues, &(&1.identifier == blocked.identifier))
 
     assert Orchestrator.should_dispatch_issue_for_test(refreshed_blocked_issue, empty_orchestrator_state())
+  end
+
+  describe "fetch_candidate_issues/0 with local.assignee" do
+    setup do
+      unless Process.whereis(Viewer.Server) do
+        {:ok, _pid} = start_supervised(Viewer.Server)
+      end
+
+      Viewer.invalidate_cache()
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "local",
+        local_database_path: Path.join(System.tmp_dir!(), "local-tracker-test.sqlite3"),
+        local_project_slug: "assignee-filter",
+        local_assignee: "me",
+        tracker_active_states: ["Todo"],
+        tracker_terminal_states: ["Done"]
+      )
+
+      {:ok, _project} = Context.ensure_project(%{name: "AF", slug: "assignee-filter"})
+
+      {:ok, _} =
+        Context.create_issue("assignee-filter", %{
+          title: "Mine",
+          status: "Todo",
+          assignee_id: "octocat"
+        })
+
+      {:ok, _} =
+        Context.create_issue("assignee-filter", %{
+          title: "Theirs",
+          status: "Todo",
+          assignee_id: "another"
+        })
+
+      on_exit(fn -> Viewer.invalidate_cache() end)
+
+      :ok
+    end
+
+    test "returns only the viewer's issues when assignee=me" do
+      Viewer.put_cached(%{login: "octocat", name: nil, avatar_url: nil})
+
+      assert {:ok, issues} = Tracker.fetch_candidate_issues()
+      assert Enum.map(issues, & &1.title) == ["Mine"]
+    end
+
+    test "returns empty list and logs warning when viewer unavailable" do
+      System.delete_env("GITHUB_TOKEN")
+      Viewer.invalidate_cache()
+
+      log =
+        capture_log(fn ->
+          assert {:ok, []} = Tracker.fetch_candidate_issues()
+        end)
+
+      assert log =~ "viewer_unavailable_for_local_assignee_filter"
+    end
   end
 
   defp fetch_issue_from_project(_context_module, project_slug, identifiers) do

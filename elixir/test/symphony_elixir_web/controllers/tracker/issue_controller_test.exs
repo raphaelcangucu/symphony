@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.{Context, Viewer}
   alias SymphonyElixir.Repo
 
   @endpoint SymphonyElixirWeb.Endpoint
@@ -149,11 +149,11 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
 
   describe "index filters" do
     setup do
-      unless Process.whereis(SymphonyElixir.LocalTracker.Viewer.Server) do
-        {:ok, _pid} = start_supervised(SymphonyElixir.LocalTracker.Viewer.Server)
+      unless Process.whereis(Viewer.Server) do
+        {:ok, _pid} = start_supervised(Viewer.Server)
       end
 
-      SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+      Viewer.invalidate_cache()
 
       {:ok, _project} = Context.ensure_project(%{name: "F", slug: "filtered"})
 
@@ -195,7 +195,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     end
 
     test "resolves assignee=me to the viewer login" do
-      SymphonyElixir.LocalTracker.Viewer.put_cached(%{login: "alice", name: "Alice", avatar_url: nil})
+      Viewer.put_cached(%{login: "alice", name: "Alice", avatar_url: nil})
 
       conn = get(authorized_conn(), "/api/tracker/v1/projects/filtered/issues?assignee=me")
 
@@ -204,7 +204,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
 
     test "returns 503 when assignee=me but viewer unavailable" do
       System.delete_env("GITHUB_TOKEN")
-      SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+      Viewer.invalidate_cache()
 
       conn = get(authorized_conn(), "/api/tracker/v1/projects/filtered/issues?assignee=me")
 
@@ -214,17 +214,17 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
 
   describe "create issue with viewer creator" do
     setup do
-      unless Process.whereis(SymphonyElixir.LocalTracker.Viewer.Server) do
-        {:ok, _pid} = start_supervised(SymphonyElixir.LocalTracker.Viewer.Server)
+      unless Process.whereis(Viewer.Server) do
+        {:ok, _pid} = start_supervised(Viewer.Server)
       end
 
-      SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+      Viewer.invalidate_cache()
       {:ok, _project} = Context.ensure_project(%{name: "C", slug: "creator-route"})
       :ok
     end
 
     test "fills creator from cached viewer login" do
-      SymphonyElixir.LocalTracker.Viewer.put_cached(%{login: "octocat", name: nil, avatar_url: nil})
+      Viewer.put_cached(%{login: "octocat", name: nil, avatar_url: nil})
 
       conn =
         authorized_conn()
@@ -238,7 +238,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
 
     test "still creates issue (creator nil) when viewer unavailable" do
       System.delete_env("GITHUB_TOKEN")
-      SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+      Viewer.invalidate_cache()
 
       conn =
         authorized_conn()

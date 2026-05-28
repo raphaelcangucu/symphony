@@ -21,6 +21,8 @@ defmodule SymphonyElixir.MixProject do
           # Thin GraphQL helpers covered via Bootstrap/Client integration tests
           SymphonyElixir.GitHub.Bootstrap,
           SymphonyElixir.GitHub.Viewer,
+          SymphonyElixir.LocalTracker.Viewer,
+          SymphonyElixir.LocalTracker.Viewer.Server,
           SymphonyElixir.GitHub.Blockers,
           SymphonyElixir.GitHub.IssueDiscussion,
           SymphonyElixir.GitHub.StateReconciliation,

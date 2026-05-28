@@ -7,6 +7,8 @@ defmodule SymphonyElixir.LocalTracker.Tracker do
 
   import Ecto.Query
 
+  require Logger
+
   alias SymphonyElixir.{Config, Issue}
 
   alias SymphonyElixir.LocalTracker.{
@@ -15,7 +17,8 @@ defmodule SymphonyElixir.LocalTracker.Tracker do
     IssueMapper,
     IssueRecord,
     IssueRelation,
-    Project
+    Project,
+    Viewer
   }
 
   alias SymphonyElixir.Repo
@@ -59,22 +62,56 @@ defmodule SymphonyElixir.LocalTracker.Tracker do
 
   @spec fetch_issues_by_states([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_issues_by_states(states) when is_list(states) do
-    with {:ok, project} <- fetch_active_project() do
-      issues =
-        IssueRecord
-        |> where([issue], issue.project_id == ^project.id)
-        |> join(:inner, [issue], status in assoc(issue, :status))
-        |> where([_issue, status], status.name in ^states)
-        |> order_by([issue], asc: issue.inserted_at, asc: issue.id)
-        |> preload(^issue_preloads())
-        |> Repo.all()
-        |> IssueMapper.to_issues()
+    case resolve_assignee_filter() do
+      {:ok, assignee_filter} ->
+        with {:ok, project} <- fetch_active_project() do
+          issues =
+            IssueRecord
+            |> where([issue], issue.project_id == ^project.id)
+            |> join(:inner, [issue], status in assoc(issue, :status))
+            |> where([_issue, status], status.name in ^states)
+            |> maybe_filter_assignee(assignee_filter)
+            |> order_by([issue], asc: issue.inserted_at, asc: issue.id)
+            |> preload(^issue_preloads())
+            |> Repo.all()
+            |> IssueMapper.to_issues()
 
-      {:ok, issues}
+          {:ok, issues}
+        end
+
+      :empty ->
+        {:ok, []}
     end
   end
 
   def fetch_issues_by_states(_states), do: {:error, :invalid_states}
+
+  defp resolve_assignee_filter do
+    case Config.local_assignee() do
+      nil ->
+        {:ok, :any}
+
+      "me" ->
+        case Viewer.current() do
+          {:ok, %{login: login}} ->
+            {:ok, {:login, login}}
+
+          {:error, reason} ->
+            Logger.warning("viewer_unavailable_for_local_assignee_filter reason=#{inspect(reason)}")
+
+            :empty
+        end
+
+      login when is_binary(login) ->
+        {:ok, {:login, login}}
+    end
+  end
+
+  defp maybe_filter_assignee(query, :any), do: query
+
+  defp maybe_filter_assignee(query, {:login, login}) when is_binary(login) do
+    where(query, [issue, _status], issue.assignee_id == ^login)
+  end
 
   @spec fetch_issue_states_by_ids([String.t()]) :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_issue_states_by_ids(issue_ids) when is_list(issue_ids) do
