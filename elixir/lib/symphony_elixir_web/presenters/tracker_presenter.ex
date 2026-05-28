@@ -11,6 +11,8 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     WorkflowStatus
   }
 
+  alias SymphonyElixir.Tracker.IssueDTO
+
   @spec project(Project.t(), [WorkflowStatus.t()] | nil, [Repository.t()] | nil, ProjectSetup.t() | nil) :: map()
   def project(%Project{} = project, statuses \\ nil, repositories \\ nil, setup \\ nil) do
     %{
@@ -54,6 +56,17 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     }
   end
 
+  @spec status(map()) :: map()
+  def status(%{name: name} = status) when is_map_key(status, :category) do
+    %{
+      id: Map.get(status, :id),
+      name: name,
+      category: Map.get(status, :category),
+      position: Map.get(status, :position),
+      is_terminal: Map.get(status, :is_terminal, false)
+    }
+  end
+
   @spec status(WorkflowStatus.t()) :: map()
   def status(%WorkflowStatus{} = status) do
     %{
@@ -62,6 +75,31 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       category: status.category,
       position: status.position,
       is_terminal: status.is_terminal
+    }
+  end
+
+  @spec issue(IssueDTO.t()) :: map()
+  def issue(%IssueDTO{} = dto) do
+    %{
+      id: dto.id,
+      identifier: dto.identifier,
+      title: dto.title,
+      description: dto.description,
+      priority: dto.priority,
+      position: dto.position,
+      assignee_id: dto.assignee,
+      creator: dto.creator,
+      worker_id: nil,
+      branch_name: nil,
+      url: dto.url,
+      project_slug: dto.project_slug,
+      status: dto.status,
+      labels: dto.labels,
+      blocked_by: dto.blocked_by,
+      started_at: nil,
+      completed_at: nil,
+      inserted_at: dto.created_at,
+      updated_at: dto.updated_at
     }
   end
 
