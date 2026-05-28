@@ -34,6 +34,8 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixir.SpecsCheck,
           SymphonyElixir.Orchestrator,
           SymphonyElixir.Orchestrator.State,
+          # OTP boot/supervision wiring; rescue guard only fires on boot-time DB races
+          SymphonyElixir.Application,
           # TODO: add tests for ensure_utf8/1 unicode fallback path
           SymphonyElixir.PromptBuilder,
           SymphonyElixir.AgentRunner,

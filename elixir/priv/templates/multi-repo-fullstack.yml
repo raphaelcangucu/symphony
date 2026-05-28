@@ -1,0 +1,22 @@
+slug: multi-repo-fullstack
+name: Full-stack workspace
+description: Backend + frontend workspace with install + test steps.
+validation_commands:
+  - mix test
+  - pnpm test
+after_create_hook: |
+  cd {{workspace_root}}/{{slug}}/api && mix deps.get
+  cd {{workspace_root}}/{{slug}}/web && pnpm install
+repositories:
+  - github_full_name: your-org/api
+    clone_url: https://github.com/your-org/api.git
+    default_branch: main
+    workspace_path: api
+    role: backend
+  - github_full_name: your-org/web
+    clone_url: https://github.com/your-org/web.git
+    default_branch: main
+    workspace_path: web
+    role: frontend
+metadata:
+  source: builtin

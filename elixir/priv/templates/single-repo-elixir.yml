@@ -1,0 +1,15 @@
+slug: single-repo-elixir
+name: Single Elixir repo
+description: A single Elixir/Phoenix repository with mix test validation.
+validation_commands:
+  - mix test
+after_create_hook: |
+  cd {{workspace_root}}/{{slug}}/app && mix deps.get
+repositories:
+  - github_full_name: your-org/your-app
+    clone_url: https://github.com/your-org/your-app.git
+    default_branch: main
+    workspace_path: app
+    role: backend
+metadata:
+  source: builtin

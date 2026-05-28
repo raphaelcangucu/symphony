@@ -147,6 +147,24 @@ defmodule SymphonyElixir.LocalTracker.Templates do
     end
   end
 
+  @spec import_builtins() :: :ok
+  def import_builtins do
+    :symphony_elixir
+    |> :code.priv_dir()
+    |> Path.join("templates/*.yml")
+    |> Path.wildcard()
+    |> Enum.each(fn path ->
+      with {:ok, yaml} <- File.read(path),
+           {:ok, attrs} <- TemplateYaml.decode(yaml),
+           slug when is_binary(slug) <- Map.get(attrs, "slug"),
+           {:error, :template_not_found} <- get_template(slug) do
+        create_template(attrs)
+      end
+    end)
+
+    :ok
+  end
+
   @spec list_clone_jobs(String.t()) :: [CloneJob.t()]
   def list_clone_jobs(project_slug) do
     case Context.get_project(project_slug) do

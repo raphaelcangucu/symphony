@@ -27,6 +27,21 @@ defmodule SymphonyElixir.Application do
       {Phoenix.PubSub, name: SymphonyElixir.PubSub},
       SymphonyElixir.Repo,
       SymphonyElixir.LocalTracker.CloneSupervisor,
+      %{
+        id: :seed_builtin_templates,
+        start:
+          {Task, :start_link,
+           [
+             fn ->
+               try do
+                 SymphonyElixir.LocalTracker.Templates.import_builtins()
+               rescue
+                 _ -> :ok
+               end
+             end
+           ]},
+        restart: :temporary
+      },
       SymphonyElixir.LocalTracker.Viewer.Server,
       {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
       SymphonyElixir.WorkflowStore,

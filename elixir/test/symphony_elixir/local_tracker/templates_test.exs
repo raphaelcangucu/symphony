@@ -224,6 +224,18 @@ defmodule SymphonyElixir.LocalTracker.TemplatesTest do
     assert Templates.list_clone_jobs("nope") == []
   end
 
+  test "import_builtins seeds templates idempotently" do
+    assert :ok = Templates.import_builtins()
+    slugs = Templates.list_templates() |> Enum.map(& &1.slug)
+    assert "single-repo-elixir" in slugs
+    assert "multi-repo-fullstack" in slugs
+
+    # Idempotent: second run does not duplicate
+    assert :ok = Templates.import_builtins()
+    count = Templates.list_templates() |> Enum.count(&(&1.slug == "single-repo-elixir"))
+    assert count == 1
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
