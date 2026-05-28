@@ -372,6 +372,38 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert {:error, :issue_not_found} = Context.add_blocker("macro-markets", "MAC-1", "MAC-2")
   end
 
+  test "create_workspace_project stores github tracker and skips statuses" do
+    {:ok, project} =
+      Context.create_workspace_project(%{
+        "name" => "Remote GH",
+        "slug" => "remote-gh",
+        "tracker" => %{
+          "kind" => "github",
+          "config" => %{"repo" => "o/r", "project_id" => "PVT_1"}
+        },
+        "repositories" => [],
+        "setup" => %{}
+      })
+
+    assert project.tracker_kind == "github"
+    assert project.tracker_config["project_id"] == "PVT_1"
+    assert Context.list_statuses("remote-gh") == []
+  end
+
+  test "create_workspace_project defaults to local tracker" do
+    {:ok, project} =
+      Context.create_workspace_project(%{
+        "name" => "Local WS",
+        "slug" => "local-ws",
+        "workflow_statuses" => [%{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false}],
+        "repositories" => [%{"github_full_name" => "o/r", "workspace_path" => "r", "role" => "service"}],
+        "setup" => %{}
+      })
+
+    assert project.tracker_kind == "local"
+    assert Enum.any?(Context.list_statuses("local-ws"), &(&1.name == "Todo"))
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
