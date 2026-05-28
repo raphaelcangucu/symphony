@@ -40,6 +40,30 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     error(conn, 502, "github_malformed_response", "GitHub returned an unexpected response.")
   end
 
+  def render(conn, :missing_credentials),
+    do: error(conn, 503, "tracker_credentials_missing", "GITHUB_TOKEN / LINEAR_API_KEY missing on server")
+
+  def render(conn, :remote_unauthorized),
+    do: error(conn, 502, "tracker_unauthorized", "Remote tracker rejected the token (401)")
+
+  def render(conn, :remote_forbidden),
+    do: error(conn, 502, "tracker_forbidden", "Remote tracker forbade the request (403)")
+
+  def render(conn, :remote_rate_limited),
+    do: error(conn, 429, "tracker_rate_limited", "Remote tracker rate limit hit; retry later")
+
+  def render(conn, :remote_unavailable),
+    do: error(conn, 502, "tracker_unavailable", "Remote tracker unreachable; try again")
+
+  def render(conn, :not_supported_on_remote),
+    do: error(conn, 501, "tracker_not_supported", "This action is not supported on the remote tracker")
+
+  def render(conn, {:remote_validation, details}),
+    do: error(conn, 422, "tracker_validation_failed", "Remote tracker rejected the request", details)
+
+  def render(conn, {:adapter_error, _reason}),
+    do: error(conn, 500, "tracker_internal", "Tracker adapter error")
+
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
 
@@ -50,10 +74,13 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     |> json(%{error: %{code: "validation_failed", message: message, details: %{}}})
   end
 
-  defp error(conn, status, code, message) do
+  defp error(conn, status, code, message, details \\ nil) do
+    body = %{error: %{code: code, message: message}}
+    body = if details, do: put_in(body, [:error, :details], details), else: body
+
     conn
     |> put_status(status)
-    |> json(%{error: %{code: code, message: message}})
+    |> json(body)
   end
 
   defp not_found(conn, code, message) do

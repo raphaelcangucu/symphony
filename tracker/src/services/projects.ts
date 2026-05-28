@@ -1,4 +1,4 @@
-import type { Project } from "@/types/project";
+import type { Project, TrackerKind } from "@/types/project";
 import type { ProjectSetup } from "@/types/project-setup";
 import type { WorkspaceRepository } from "@/types/repository";
 import type { WorkflowStatus } from "@/types/workflow-status";
@@ -17,6 +17,7 @@ export interface CreateWorkspaceProjectInput extends CreateProjectInput {
   workflowStatuses: WorkflowStatus[];
   repositories: WorkspaceRepository[];
   setup: Partial<ProjectSetup>;
+  tracker?: { kind: TrackerKind; config: Record<string, unknown> };
 }
 
 export async function listProjects(options: { includeArchived?: boolean } = {}): Promise<Project[]> {
@@ -42,11 +43,14 @@ export async function createWorkspaceProject(input: CreateWorkspaceProjectInput)
   const name = input.name.trim();
   const slug = input.slug.trim();
   const description = input.description?.trim() || null;
+  const tracker = input.tracker ?? { kind: "local" as TrackerKind, config: {} };
 
   if (!name) throw new Error("Project name is required");
   if (!slug) throw new Error("Project slug is required");
-  if (input.workflowStatuses.length === 0) throw new Error("At least one workflow status is required");
-  if (input.repositories.length === 0) throw new Error("At least one repository is required");
+  if (tracker.kind === "local") {
+    if (input.workflowStatuses.length === 0) throw new Error("At least one workflow status is required");
+    if (input.repositories.length === 0) throw new Error("At least one repository is required");
+  }
 
   const response = await http.post(trackerPath("/projects/workspace"), {
     name,
@@ -66,6 +70,7 @@ export async function createWorkspaceProject(input: CreateWorkspaceProjectInput)
       validation_commands: input.setup.validationCommands,
       scan_summary: input.setup.scanSummary,
     }),
+    tracker,
   });
 
   return normalizeProject(unwrapData<BackendProjectDto>(response));

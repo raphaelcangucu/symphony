@@ -13,6 +13,8 @@ defmodule SymphonyElixir.LocalTracker.Project do
     field(:slug, :string)
     field(:description, :string)
     field(:archived_at, :utc_datetime_usec)
+    field(:tracker_kind, :string, default: "local")
+    field(:tracker_config, :map, default: %{})
 
     has_many(:repositories, SymphonyElixir.LocalTracker.Repository)
     has_many(:statuses, WorkflowStatus)
@@ -23,11 +25,50 @@ defmodule SymphonyElixir.LocalTracker.Project do
     timestamps(type: :utc_datetime_usec)
   end
 
+  @valid_tracker_kinds ~w(local github linear)
+
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(project, attrs) do
     project
-    |> cast(attrs, [:name, :slug, :description])
+    |> cast(attrs, [:name, :slug, :description, :tracker_kind, :tracker_config])
     |> validate_required([:name, :slug])
+    |> put_default_tracker_kind()
+    |> validate_inclusion(:tracker_kind, @valid_tracker_kinds)
+    |> validate_tracker_config()
     |> unique_constraint(:slug)
+  end
+
+  defp put_default_tracker_kind(changeset) do
+    case get_field(changeset, :tracker_kind) do
+      nil -> put_change(changeset, :tracker_kind, "local")
+      _ -> changeset
+    end
+  end
+
+  defp validate_tracker_config(changeset) do
+    case get_field(changeset, :tracker_kind) do
+      "github" -> validate_config_keys(changeset, ["repo", "project_id"])
+      "linear" -> validate_config_keys(changeset, ["project_id"])
+      _ -> changeset
+    end
+  end
+
+  defp validate_config_keys(changeset, required_keys) do
+    config = get_field(changeset, :tracker_config) || %{}
+
+    missing = Enum.reject(required_keys, &present_key?(config, &1))
+
+    if missing == [] do
+      changeset
+    else
+      add_error(changeset, :tracker_config, "missing keys: #{Enum.join(missing, ", ")}")
+    end
+  end
+
+  defp present_key?(config, key) do
+    case Map.get(config, key) do
+      value when is_binary(value) -> String.trim(value) != ""
+      value -> not is_nil(value)
+    end
   end
 end

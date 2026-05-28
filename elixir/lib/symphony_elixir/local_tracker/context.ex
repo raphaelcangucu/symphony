@@ -46,11 +46,14 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   @spec create_workspace_project(map()) :: {:ok, Project.t()} | {:error, Ecto.Changeset.t()}
   def create_workspace_project(attrs) when is_map(attrs) do
+    project_attributes = project_attrs(attrs)
+    remote? = project_attributes.tracker_kind in ["github", "linear"]
+
     Repo.transaction(fn ->
-      with {:ok, project} <- insert_project(project_attrs(attrs)),
-           {:ok, _statuses} <- insert_workspace_statuses(project, attr(attrs, :workflow_statuses, [])),
+      with {:ok, project} <- insert_project(project_attributes),
+           {:ok, _statuses} <- maybe_insert_statuses(project, attrs, remote?),
            {:ok, _repositories} <- insert_workspace_repositories(project, attr(attrs, :repositories, [])),
-           {:ok, _setup} <- insert_workspace_setup(project, attr(attrs, :setup, %{})) do
+           {:ok, _setup} <- maybe_insert_setup(project, attrs, remote?) do
         Broadcaster.project_changed("project_created", project)
         project
       else
@@ -58,6 +61,16 @@ defmodule SymphonyElixir.LocalTracker.Context do
       end
     end)
   end
+
+  defp maybe_insert_statuses(_project, _attrs, true), do: {:ok, []}
+
+  defp maybe_insert_statuses(project, attrs, false),
+    do: insert_workspace_statuses(project, attr(attrs, :workflow_statuses, []))
+
+  defp maybe_insert_setup(_project, _attrs, true), do: {:ok, nil}
+
+  defp maybe_insert_setup(project, attrs, false),
+    do: insert_workspace_setup(project, attr(attrs, :setup, %{}))
 
   @spec list_projects(keyword()) :: [Project.t()]
   def list_projects(opts \\ []) when is_list(opts) do
@@ -376,10 +389,14 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp insert_workspace_setup(_project, _setup_attrs), do: {:error, workspace_changeset_error(:setup)}
 
   defp project_attrs(attrs) do
+    tracker = attr(attrs, :tracker, %{})
+
     %{
       name: attr(attrs, :name),
       slug: attr(attrs, :slug),
-      description: attr(attrs, :description)
+      description: attr(attrs, :description),
+      tracker_kind: attr(tracker, :kind, "local"),
+      tracker_config: attr(tracker, :config, %{})
     }
   end
 

@@ -251,6 +251,67 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     end
   end
 
+  defmodule FakeRemoteAdapter do
+    @behaviour SymphonyElixir.Tracker.IssueAdapter
+    alias SymphonyElixir.Tracker.IssueDTO
+
+    def kind, do: :github
+
+    def list_issues(_project, _filters),
+      do:
+        {:ok,
+         [
+           IssueDTO.build(%{
+             identifier: "#1",
+             title: "Remote",
+             status: %{name: "Todo", category: "unstarted", position: 0, is_terminal: false},
+             project_slug: "remote"
+           })
+         ]}
+
+    def get_issue(_p, _i), do: {:error, :issue_not_found}
+    def create_issue(_p, _a), do: {:error, :not_supported_on_remote}
+    def update_issue(_p, _i, _a), do: {:error, :not_supported_on_remote}
+    def move_issue(_p, _i, _a), do: {:error, :not_supported_on_remote}
+    def list_statuses(_p), do: {:ok, []}
+    def list_comments(_p, _i), do: {:error, :not_supported_on_remote}
+    def add_comment(_p, _i, _b, _a), do: {:error, :not_supported_on_remote}
+  end
+
+  describe "remote project dispatch" do
+    setup do
+      Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => FakeRemoteAdapter})
+
+      {:ok, project} =
+        Context.create_workspace_project(%{
+          "name" => "Remote",
+          "slug" => "remote",
+          "tracker" => %{"kind" => "github", "config" => %{"repo" => "o/r", "project_id" => "PVT_1"}},
+          "repositories" => [],
+          "setup" => %{}
+        })
+
+      on_exit(fn -> Application.delete_env(:symphony_elixir, :issue_adapters) end)
+
+      %{project: project}
+    end
+
+    test "index dispatches to the remote adapter" do
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/remote/issues")
+      assert %{"data" => [%{"identifier" => "#1", "title" => "Remote"}]} = json_response(conn, 200)
+    end
+
+    test "create returns 501 for unsupported remote mutation" do
+      conn =
+        post(authorized_conn(), "/api/tracker/v1/projects/remote/issues", %{
+          "title" => "x",
+          "status" => "Todo"
+        })
+
+      assert json_response(conn, 501)["error"]["code"] == "tracker_not_supported"
+    end
+  end
+
   defp authorized_conn do
     build_conn()
     |> put_req_header("authorization", "Bearer secret")

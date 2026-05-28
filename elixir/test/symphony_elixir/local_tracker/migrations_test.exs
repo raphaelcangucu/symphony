@@ -36,6 +36,16 @@ defmodule SymphonyElixir.LocalTracker.MigrationsTest do
     assert "local_tracker_issue_relations_source_issue_id_target_issue_id_type_index" in index_names
   end
 
+  test "local_tracker_projects has tracker_kind and tracker_config columns" do
+    migrate_repo()
+
+    %{rows: rows} = Repo.query!("PRAGMA table_info(local_tracker_projects)")
+    column_names = Enum.map(rows, fn row -> Enum.at(row, 1) end)
+
+    assert "tracker_kind" in column_names
+    assert "tracker_config" in column_names
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

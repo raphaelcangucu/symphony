@@ -40,6 +40,8 @@ defmodule SymphonyElixirWeb.Router do
     get("/viewer", ViewerController, :show)
     get("/github/owners", GitHubController, :owners)
     get("/github/owners/:owner/repositories", GitHubController, :repositories)
+    post("/github/projects/discover", RemoteDiscoveryController, :github_discover)
+    post("/linear/projects/discover", RemoteDiscoveryController, :linear_discover)
     post("/project_setup/scan", ProjectSetupController, :scan)
     post("/project_setup/suggest", ProjectSetupController, :suggest)
     post("/projects/workspace", ProjectController, :workspace)
