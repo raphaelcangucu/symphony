@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
 
 import { BoardView } from "@/components/board/BoardView";
@@ -10,10 +10,12 @@ import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIssueBoard } from "@/hooks/useIssueBoard";
+import { useTrackerPolling } from "@/hooks/useTrackerPolling";
 import { filtersFromSearchParams } from "@/lib/issueFilters";
 import { getProject } from "@/services/projects";
 import type { Issue } from "@/types/issue";
 import type { Project } from "@/types/project";
+import type { WorkflowStatusName } from "@/types/workflow-status";
 
 export function ProjectBoardPage() {
   const { projectSlug = "" } = useParams();
@@ -21,12 +23,27 @@ export function ProjectBoardPage() {
   const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
   const [project, setProject] = useState<Project | null>(null);
   const statusNames = useMemo(() => project?.workflowStatuses?.map((status) => status.name), [project]);
-  const { issues, board, loading, error, moveIssueOptimistically, setIssues } = useIssueBoard(
+  const { issues, board, loading, error, refetch, moveIssueOptimistically, setIssues } = useIssueBoard(
     projectSlug,
     filters,
     statusNames,
   );
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+
+  const trackerKind = project?.tracker?.kind ?? "local";
+
+  useTrackerPolling({ kind: trackerKind, refetch });
+
+  const handleMoveIssue = useCallback(
+    (identifier: string, status: WorkflowStatusName, position: number) => {
+      if (trackerKind !== "local") {
+        const current = issues.find((issue) => issue.identifier === identifier);
+        if (current && current.status === status) return;
+      }
+      return moveIssueOptimistically(identifier, status, position);
+    },
+    [trackerKind, issues, moveIssueOptimistically],
+  );
 
   const knownLogins = useMemo(() => {
     const logins = new Set<string>();
@@ -51,6 +68,8 @@ export function ProjectBoardPage() {
           projectSlug={projectSlug}
           onIssueCreated={(issue) => setIssues((current) => [...current, issue])}
           rightSlot={<BoardFiltersTrigger />}
+          trackerKind={trackerKind}
+          onRefresh={refetch}
         />
         <BoardFiltersDrawer knownLogins={knownLogins} />
         <BoardPaletteShortcuts />
@@ -69,7 +88,7 @@ export function ProjectBoardPage() {
             board={board}
             statuses={statusNames}
             onSelectIssue={setSelectedIssue}
-            onMoveIssue={moveIssueOptimistically}
+            onMoveIssue={handleMoveIssue}
           />
         ) : null}
         <IssueDrawer
