@@ -7,14 +7,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GitHubProjectPicker } from "@/components/projects/GitHubProjectPicker";
 import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
 import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
 import { createWorkspaceProject } from "@/services/projects";
 import { listGitHubOwners, listGitHubRepositories, scanRepositories, suggestWorkspaceSetup } from "@/services/projectSetup";
+import { instantiateTemplate, listTemplates } from "@/services/templates";
 import type { WorkspaceSuggestion } from "@/types/project-setup";
 import type { GitHubOwner, RepositoryScan, WorkspaceRepository } from "@/types/repository";
 import type { Project, TrackerKind } from "@/types/project";
+import type { WorkspaceTemplate } from "@/types/template";
+
+type WizardTab = "template" | "scratch";
 
 interface ProjectWorkspaceWizardProps {
   onCreated?: (project: Project) => void;
@@ -23,6 +28,11 @@ interface ProjectWorkspaceWizardProps {
 export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProps) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<WizardTab>("scratch");
+  const [templates, setTemplates] = useState<WorkspaceTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<WorkspaceTemplate | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [templatesLoadAttempted, setTemplatesLoadAttempted] = useState(false);
   const [trackerKind, setTrackerKind] = useState<TrackerKind>("local");
   const [remoteConfig, setRemoteConfig] = useState<Record<string, unknown> | null>(null);
   const [name, setName] = useState("");
@@ -46,10 +56,31 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
     void handleLoadOwners();
   }, [loadingOwners, open, owners.length, ownersAutoLoadAttempted]);
 
+  useEffect(() => {
+    if (!open || loadingTemplates || templatesLoadAttempted) return;
+    setTemplatesLoadAttempted(true);
+    void handleLoadTemplates();
+  }, [loadingTemplates, open, templatesLoadAttempted]);
+
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
     if (!nextOpen) {
       setOwnersAutoLoadAttempted(false);
+      setTemplatesLoadAttempted(false);
+    }
+  }
+
+  async function handleLoadTemplates() {
+    setLoadingTemplates(true);
+    try {
+      const items = (await listTemplates()) ?? [];
+      setTemplates(items);
+      setActiveTab(items.length > 0 ? "template" : "scratch");
+    } catch (cause) {
+      setActiveTab("scratch");
+      toast.error(cause instanceof Error ? cause.message : "Failed to load templates");
+    } finally {
+      setLoadingTemplates(false);
     }
   }
 
@@ -221,7 +252,47 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
     }
   }
 
+  async function handleInstantiateTemplate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedTemplate) {
+      toast.error("Select a template first");
+      return;
+    }
+
+    const trimmedName = name.trim();
+    const trimmedSlug = slug.trim();
+    if (!trimmedName || !trimmedSlug) {
+      toast.error("Project name and slug are required");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const project = await instantiateTemplate(selectedTemplate.slug, {
+        name: trimmedName,
+        slug: trimmedSlug,
+        tracker: { kind: trackerKind, config: remoteConfig ?? {} },
+      });
+
+      onCreated?.(project);
+      reset();
+      setOpen(false);
+      toast.success("Project created from template", {
+        action: {
+          label: "Open board",
+          onClick: () => navigate(`/projects/${project.slug}/board`),
+        },
+      });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to create project from template");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function reset() {
+    setSelectedTemplate(null);
     setTrackerKind("local");
     setRemoteConfig(null);
     setName("");
@@ -247,6 +318,61 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
           <DialogTitle>Create workspace project</DialogTitle>
           <DialogDescription>Discover GitHub repositories, scan local paths, and create a multi-repo tracker workspace.</DialogDescription>
         </DialogHeader>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WizardTab)}>
+          <TabsList>
+            <TabsTrigger value="template">Start from a template</TabsTrigger>
+            <TabsTrigger value="scratch">Build from scratch</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="template">
+            <form className="space-y-5" onSubmit={handleInstantiateTemplate}>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Template</p>
+                <p className="text-xs text-muted-foreground">Pick a saved workspace template to clone its repositories and setup.</p>
+                {templates.length > 0 ? (
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {templates.map((template) => (
+                      <button
+                        type="button"
+                        key={template.id}
+                        onClick={() => setSelectedTemplate(template)}
+                        className={`flex flex-col gap-1 rounded-md border p-3 text-left transition hover:bg-muted/50 ${
+                          selectedTemplate?.id === template.id ? "border-primary bg-muted/40" : ""
+                        }`}
+                      >
+                        <span className="truncate text-sm font-medium">{template.name}</span>
+                        {template.description ? (
+                          <span className="block truncate text-xs text-muted-foreground">{template.description}</span>
+                        ) : (
+                          <span className="block truncate text-xs text-muted-foreground">{template.repositories.length} repositor{template.repositories.length === 1 ? "y" : "ies"}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">
+                    {loadingTemplates ? "Loading templates..." : "No templates saved yet."}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" />
+                <Input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="project-slug" />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitting || !selectedTemplate || !name.trim() || !slug.trim()}>
+                  {submitting ? "Creating..." : "Create from template"}
+                </Button>
+              </div>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="scratch">
         <form className="space-y-5" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <p className="text-sm font-medium">Tracker source</p>
@@ -457,6 +583,8 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
             </Button>
           </div>
         </form>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
