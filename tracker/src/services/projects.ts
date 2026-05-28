@@ -19,8 +19,10 @@ export interface CreateWorkspaceProjectInput extends CreateProjectInput {
   setup: Partial<ProjectSetup>;
 }
 
-export async function listProjects(): Promise<Project[]> {
-  const response = await http.get(trackerPath("/projects"));
+export async function listProjects(options: { includeArchived?: boolean } = {}): Promise<Project[]> {
+  const response = options.includeArchived
+    ? await http.get(trackerPath("/projects"), { params: { include_archived: "true" } })
+    : await http.get(trackerPath("/projects"));
   return unwrapData<BackendProjectDto[]>(response).map(normalizeProject);
 }
 
@@ -70,9 +72,32 @@ export async function createWorkspaceProject(input: CreateWorkspaceProjectInput)
 }
 
 export async function getProject(projectSlug: string): Promise<Project> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const response = await http.get(trackerPath(`/projects/${encodeURIComponent(projectSlug)}`));
+  const slug = requireProjectSlug(projectSlug);
+  const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}`));
   return normalizeProject(unwrapData<BackendProjectDto>(response));
+}
+
+export async function archiveProject(projectSlug: string): Promise<Project> {
+  const slug = requireProjectSlug(projectSlug);
+  const response = await http.post(trackerPath(`/projects/${encodeURIComponent(slug)}/archive`));
+  return normalizeProject(unwrapData<BackendProjectDto>(response));
+}
+
+export async function restoreProject(projectSlug: string): Promise<Project> {
+  const slug = requireProjectSlug(projectSlug);
+  const response = await http.post(trackerPath(`/projects/${encodeURIComponent(slug)}/restore`));
+  return normalizeProject(unwrapData<BackendProjectDto>(response));
+}
+
+export async function deleteProject(projectSlug: string): Promise<void> {
+  const slug = requireProjectSlug(projectSlug);
+  await http.delete(trackerPath(`/projects/${encodeURIComponent(slug)}`));
+}
+
+function requireProjectSlug(projectSlug: string): string {
+  const slug = projectSlug.trim();
+  if (!slug) throw new Error("projectSlug is required");
+  return slug;
 }
 
 function compactPayload(payload: Record<string, unknown>): Record<string, unknown> {

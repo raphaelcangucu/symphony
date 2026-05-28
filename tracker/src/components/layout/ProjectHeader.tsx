@@ -1,4 +1,5 @@
 import { LayoutDashboard, List } from "lucide-react";
+import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
 import { IssueCreateDialog } from "@/components/issues/IssueCreateDialog";
@@ -10,9 +11,10 @@ interface ProjectHeaderProps {
   projectSlug: string;
   title?: string;
   onIssueCreated?: (issue: Issue) => void;
+  rightSlot?: ReactNode;
 }
 
-export function ProjectHeader({ projectSlug, title, onIssueCreated }: ProjectHeaderProps) {
+export function ProjectHeader({ projectSlug, title, onIssueCreated, rightSlot }: ProjectHeaderProps) {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
       <div>
@@ -20,6 +22,7 @@ export function ProjectHeader({ projectSlug, title, onIssueCreated }: ProjectHea
         <p className="text-xs text-muted-foreground">{projectSlug}</p>
       </div>
       <div className="flex items-center gap-2">
+        {rightSlot}
         <Button variant="ghost" size="sm" asChild>
           <NavLink
             to={`/projects/${projectSlug}/board`}

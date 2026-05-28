@@ -13,4 +13,5 @@ export interface Project {
   setup?: ProjectSetup | null;
   createdAt?: string;
   updatedAt?: string;
+  archivedAt?: string | null;
 }

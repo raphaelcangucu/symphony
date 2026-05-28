@@ -41,7 +41,7 @@ function renderHarness() {
 
 describe("BoardPaletteShortcuts", () => {
   beforeAll(() => {
-    global.ResizeObserver = class ResizeObserver {
+    globalThis.ResizeObserver = class ResizeObserver {
       observe() {}
       unobserve() {}
       disconnect() {}

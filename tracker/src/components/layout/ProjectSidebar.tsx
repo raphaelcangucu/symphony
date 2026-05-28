@@ -1,11 +1,12 @@
 import { FolderKanban, KeyRound, ListTodo } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { clearTrackerToken } from "@/config";
+import { TRACKER_PROJECTS_CHANGED_EVENT } from "@/lib/projectEvents";
 import { cn } from "@/lib/utils";
 import { listProjects } from "@/services/projects";
 import type { Project } from "@/types/project";
@@ -13,18 +14,31 @@ import type { Project } from "@/types/project";
 export function ProjectSidebar() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     let active = true;
-    void listProjects()
-      .then((items) => {
-        if (active) setProjects(items);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+
+    const loadActiveProjects = () => {
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
+      const isCurrentRequest = () => active && requestId === requestIdRef.current;
+
+      void listProjects()
+        .then((items) => {
+          if (isCurrentRequest()) setProjects(items);
+        })
+        .finally(() => {
+          if (isCurrentRequest()) setLoading(false);
+        });
+    };
+
+    loadActiveProjects();
+    window.addEventListener(TRACKER_PROJECTS_CHANGED_EVENT, loadActiveProjects);
+
     return () => {
       active = false;
+      window.removeEventListener(TRACKER_PROJECTS_CHANGED_EVENT, loadActiveProjects);
     };
   }, []);
 

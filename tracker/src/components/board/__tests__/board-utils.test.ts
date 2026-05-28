@@ -21,6 +21,7 @@ function issue(overrides: Partial<Issue>): Issue {
     labels: overrides.labels ?? [],
     blockedBy: overrides.blockedBy ?? [],
     assignee: overrides.assignee ?? null,
+    creator: overrides.creator ?? null,
     createdAt: overrides.createdAt ?? "2026-05-27T00:00:00Z",
     updatedAt: overrides.updatedAt ?? "2026-05-27T00:00:00Z",
   };

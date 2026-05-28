@@ -1,9 +1,56 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { http } from "@/services/http";
-import { createProject, createWorkspaceProject } from "@/services/projects";
+import {
+  archiveProject,
+  createProject,
+  createWorkspaceProject,
+  deleteProject,
+  getProject,
+  listProjects,
+  restoreProject,
+} from "@/services/projects";
 
 describe("project service", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("lists active projects without query params by default", async () => {
+    const get = vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: {
+        data: [],
+      },
+    });
+
+    await listProjects();
+
+    expect(get).toHaveBeenCalledWith("/api/tracker/v1/projects");
+  });
+
+  it("lists archived projects when requested", async () => {
+    const get = vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: {
+        data: [
+          {
+            id: 1,
+            name: "Macro Markets",
+            slug: "macro-markets",
+            description: "Local tracker",
+            issue_count: 0,
+            statuses: [],
+            archived_at: "2026-05-28T14:00:00Z",
+          },
+        ],
+      },
+    });
+
+    const projects = await listProjects({ includeArchived: true });
+
+    expect(get).toHaveBeenCalledWith("/api/tracker/v1/projects", { params: { include_archived: "true" } });
+    expect(projects[0]).toMatchObject({ slug: "macro-markets", archivedAt: "2026-05-28T14:00:00Z" });
+  });
+
   it("creates a project through the tracker API", async () => {
     const post = vi.spyOn(http, "post").mockResolvedValueOnce({
       data: {
@@ -30,8 +77,6 @@ describe("project service", () => {
       description: "Local tracker",
     });
     expect(project).toMatchObject({ name: "Macro Markets", slug: "macro-markets" });
-
-    post.mockRestore();
   });
 
   it("creates a workspace project through the tracker API", async () => {
@@ -66,7 +111,175 @@ describe("project service", () => {
     });
     expect(project.repositories?.[0]).toMatchObject({ fullName: "clouapp/front", workspacePath: "frontend" });
     expect(project.setup?.validationCommands).toEqual(["pnpm test"]);
+  });
 
-    post.mockRestore();
+  it("trims the slug before getting a project", async () => {
+    const get = vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 1,
+          name: "Macro Markets",
+          slug: "macro-markets",
+        },
+      },
+    });
+
+    await getProject(" macro-markets ");
+
+    expect(get).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets");
+  });
+
+  it("rejects blank slugs before getting a project", async () => {
+    const get = vi.spyOn(http, "get");
+
+    await expect(getProject("   ")).rejects.toThrow("projectSlug is required");
+
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty slugs before getting a project", async () => {
+    const get = vi.spyOn(http, "get");
+
+    await expect(getProject("")).rejects.toThrow("projectSlug is required");
+
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("archives a project through the tracker API", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 1,
+          name: "Macro Markets",
+          slug: "macro-markets",
+          archived_at: "2026-05-28T14:00:00Z",
+        },
+      },
+    });
+
+    const project = await archiveProject("macro-markets");
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/archive");
+    expect(project).toMatchObject({ slug: "macro-markets", archivedAt: "2026-05-28T14:00:00Z" });
+  });
+
+  it("trims the slug before archiving a project", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 1,
+          name: "Macro Markets",
+          slug: "macro-markets",
+          archived_at: "2026-05-28T14:00:00Z",
+        },
+      },
+    });
+
+    await archiveProject(" macro-markets ");
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/archive");
+  });
+
+  it("rejects blank slugs before archiving a project", async () => {
+    const post = vi.spyOn(http, "post");
+
+    await expect(archiveProject("   ")).rejects.toThrow("projectSlug is required");
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty slugs before archiving a project", async () => {
+    const post = vi.spyOn(http, "post");
+
+    await expect(archiveProject("")).rejects.toThrow("projectSlug is required");
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("restores a project through the tracker API", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 1,
+          name: "Macro Markets",
+          slug: "macro-markets",
+          archived_at: null,
+        },
+      },
+    });
+
+    const project = await restoreProject("macro-markets");
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/restore");
+    expect(project).toMatchObject({ slug: "macro-markets", archivedAt: null });
+  });
+
+  it("trims the slug before restoring a project", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 1,
+          name: "Macro Markets",
+          slug: "macro-markets",
+          archived_at: null,
+        },
+      },
+    });
+
+    await restoreProject(" macro-markets ");
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/restore");
+  });
+
+  it("rejects blank slugs before restoring a project", async () => {
+    const post = vi.spyOn(http, "post");
+
+    await expect(restoreProject("   ")).rejects.toThrow("projectSlug is required");
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty slugs before restoring a project", async () => {
+    const post = vi.spyOn(http, "post");
+
+    await expect(restoreProject("")).rejects.toThrow("projectSlug is required");
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("deletes a project through the tracker API", async () => {
+    const del = vi.spyOn(http, "delete").mockResolvedValueOnce({
+      data: { data: null },
+    });
+
+    await deleteProject("macro-markets");
+
+    expect(del).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets");
+  });
+
+  it("trims the slug before deleting a project", async () => {
+    const del = vi.spyOn(http, "delete").mockResolvedValueOnce({
+      data: { data: null },
+    });
+
+    await deleteProject(" macro-markets ");
+
+    expect(del).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets");
+  });
+
+  it("rejects blank slugs before deleting a project", async () => {
+    const del = vi.spyOn(http, "delete");
+
+    await expect(deleteProject("   ")).rejects.toThrow("projectSlug is required");
+
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty slugs before deleting a project", async () => {
+    const del = vi.spyOn(http, "delete");
+
+    await expect(deleteProject("")).rejects.toThrow("projectSlug is required");
+
+    expect(del).not.toHaveBeenCalled();
   });
 });
