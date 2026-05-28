@@ -7,6 +7,8 @@ import { Layout } from "@/components/layout/Layout";
 import { getTrackerToken } from "@/config";
 import { ProjectBoardPage } from "@/pages/ProjectBoardPage";
 import { ProjectListPage } from "@/pages/ProjectListPage";
+import { TemplateEditPage } from "@/pages/TemplateEditPage";
+import { TemplateListPage } from "@/pages/TemplateListPage";
 import { TokenGatePage } from "@/pages/TokenGatePage";
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
@@ -34,6 +36,8 @@ export function App() {
             <Route path="projects" element={<ProjectListPage />} />
             <Route path="projects/:projectSlug/board" element={<ProjectBoardPage />} />
             <Route path="projects/:projectSlug/list" element={<ProjectListPage />} />
+            <Route path="templates" element={<TemplateListPage />} />
+            <Route path="templates/:slug" element={<TemplateEditPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/projects" replace />} />

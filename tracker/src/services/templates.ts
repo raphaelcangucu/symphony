@@ -90,6 +90,52 @@ export async function importTemplate(yaml: string): Promise<WorkspaceTemplate> {
   return normalizeTemplate(unwrapData<TemplateDto>(response));
 }
 
+export interface UpdateTemplateRepositoryInput {
+  githubFullName: string;
+  cloneUrl: string;
+  defaultBranch: string | null;
+  workspacePath: string;
+  role: string | null;
+}
+
+export interface UpdateTemplateInput {
+  name: string;
+  description: string | null;
+  validationCommands: string[];
+  afterCreateHook: string | null;
+  promptTemplate: string | null;
+  devEnvMarkdown: string | null;
+  repositories: UpdateTemplateRepositoryInput[];
+}
+
+function serializeUpdateInput(input: UpdateTemplateInput): Record<string, unknown> {
+  return {
+    name: input.name,
+    description: input.description,
+    validation_commands: input.validationCommands,
+    after_create_hook: input.afterCreateHook,
+    prompt_template: input.promptTemplate,
+    dev_env_markdown: input.devEnvMarkdown,
+    repositories: input.repositories.map((repo) => ({
+      github_full_name: repo.githubFullName,
+      clone_url: repo.cloneUrl,
+      default_branch: repo.defaultBranch,
+      workspace_path: repo.workspacePath,
+      role: repo.role,
+    })),
+  };
+}
+
+export async function updateTemplate(slug: string, input: UpdateTemplateInput): Promise<WorkspaceTemplate> {
+  const response = await http.patch(trackerPath(`/templates/${encodeURIComponent(slug)}`), serializeUpdateInput(input));
+  return normalizeTemplate(unwrapData<TemplateDto>(response));
+}
+
+export async function exportTemplate(slug: string): Promise<string> {
+  const response = await http.get(trackerPath(`/templates/${encodeURIComponent(slug)}/export`), { responseType: "text" });
+  return response.data as string;
+}
+
 export interface InstantiateTemplateInput {
   name: string;
   slug: string;
