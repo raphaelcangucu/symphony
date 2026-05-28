@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { useViewer } from "@/components/auth/ViewerProvider";
 import {
   buildBoardState,
   findIssueStatus,
   flattenBoardState,
   moveIssueLocally,
 } from "@/components/board/board-utils";
+import type { IssueFilters } from "@/lib/issueFilters";
+import { applyIssueFilters } from "@/lib/issueFilters";
 import { listIssues, moveIssue } from "@/services/issues";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
@@ -15,6 +18,7 @@ import { useProjectChannel } from "./useProjectChannel";
 
 export interface UseIssueBoardResult {
   issues: Issue[];
+  filteredIssues: Issue[];
   board: ReturnType<typeof buildBoardState>;
   loading: boolean;
   error: string | null;
@@ -29,7 +33,15 @@ function upsertIssue(issues: Issue[], issue: Issue): Issue[] {
   return issues.map((item, itemIndex) => (itemIndex === index ? issue : item));
 }
 
-export function useIssueBoard(projectSlug: string, statuses?: WorkflowStatusName[]): UseIssueBoardResult {
+export function useIssueBoard(
+  projectSlug: string,
+  filters: IssueFilters = {},
+  statuses?: WorkflowStatusName[],
+): UseIssueBoardResult {
+  const { viewer } = useViewer();
+  const viewerLogin = viewer?.githubLogin ?? null;
+  const { search, assignee, creator } = filters;
+
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,20 +51,25 @@ export function useIssueBoard(projectSlug: string, statuses?: WorkflowStatusName
     setLoading(true);
     setError(null);
     try {
-      setIssues(await listIssues(projectSlug));
+      setIssues(await listIssues(projectSlug, { search, assignee, creator }));
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Failed to load issues";
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [projectSlug]);
+  }, [projectSlug, search, assignee, creator]);
 
   useEffect(() => {
     void refetch();
   }, [refetch]);
 
-  const board = useMemo(() => buildBoardState(issues, statuses), [issues, statuses]);
+  const filteredIssues = useMemo(
+    () => applyIssueFilters(issues, { search, assignee, creator }, viewerLogin),
+    [issues, search, assignee, creator, viewerLogin],
+  );
+
+  const board = useMemo(() => buildBoardState(filteredIssues, statuses), [filteredIssues, statuses]);
 
   const moveIssueOptimistically = useCallback(
     async (identifier: string, status: WorkflowStatusName, position: number) => {
@@ -89,5 +106,5 @@ export function useIssueBoard(projectSlug: string, statuses?: WorkflowStatusName
     void refetch();
   });
 
-  return { issues, board, loading, error, refetch, moveIssueOptimistically, setIssues };
+  return { issues, filteredIssues, board, loading, error, refetch, moveIssueOptimistically, setIssues };
 }
