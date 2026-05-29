@@ -226,13 +226,21 @@ defmodule SymphonyElixir.LocalTracker.TemplatesTest do
 
   test "import_builtins seeds templates idempotently" do
     assert :ok = Templates.import_builtins()
-    slugs = Templates.list_templates() |> Enum.map(& &1.slug)
+    templates = Templates.list_templates()
+    slugs = Enum.map(templates, & &1.slug)
     assert "single-repo-elixir" in slugs
     assert "multi-repo-fullstack" in slugs
+    assert "macro-markets" in slugs
+
+    macro = Enum.find(templates, &(&1.slug == "macro-markets"))
+    repo_paths = macro.repositories |> Enum.map(& &1.workspace_path) |> Enum.sort()
+    assert repo_paths == ["back", "front"]
+    branches = macro.repositories |> Enum.map(& &1.default_branch) |> Enum.sort()
+    assert branches == ["dev", "homolog"]
 
     # Idempotent: second run does not duplicate
     assert :ok = Templates.import_builtins()
-    count = Templates.list_templates() |> Enum.count(&(&1.slug == "single-repo-elixir"))
+    count = Templates.list_templates() |> Enum.count(&(&1.slug == "macro-markets"))
     assert count == 1
   end
 

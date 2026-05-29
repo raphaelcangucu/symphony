@@ -1,0 +1,83 @@
+slug: macro-markets
+name: Macro Markets
+description: Macro Markets workspace — Next.js frontend (clouapp/front) + Laravel backend (clouapp/back).
+validation_commands:
+  - cd front && npm run lint
+  - cd front && npm run test:unit
+  - cd back && ./vibe test
+workflow_statuses:
+  - name: Backlog
+    category: backlog
+    position: 0
+    is_terminal: false
+  - name: Todo
+    category: active
+    position: 1
+    is_terminal: false
+  - name: In Progress
+    category: active
+    position: 2
+    is_terminal: false
+  - name: Human Review
+    category: wait
+    position: 3
+    is_terminal: false
+  - name: Rework
+    category: active
+    position: 4
+    is_terminal: false
+  - name: Merging
+    category: active
+    position: 5
+    is_terminal: false
+  - name: Done
+    category: terminal
+    position: 6
+    is_terminal: true
+  - name: Cancelled
+    category: terminal
+    position: 7
+    is_terminal: true
+  - name: Duplicate
+    category: terminal
+    position: 8
+    is_terminal: true
+repositories:
+  - github_full_name: clouapp/front
+    clone_url: https://github.com/clouapp/front.git
+    default_branch: homolog
+    workspace_path: front
+    role: frontend
+  - github_full_name: clouapp/back
+    clone_url: https://github.com/clouapp/back.git
+    default_branch: dev
+    workspace_path: back
+    role: backend
+prompt_template: |
+  You are working in the Macro Markets multi-repository workspace.
+
+  Repositories:
+  - frontend: clouapp/front at `front/` — integration branch `homolog`; open PRs with `gh pr create --base homolog`.
+  - backend: clouapp/back at `back/` — integration branch `dev`; open PRs with `gh pr create --base dev`.
+
+  A single issue may touch either or both repos. Issues and the Project board live on clouapp/front.
+
+  Tests before Human Review (only for repos you changed):
+  - frontend: `cd front && npm run lint && npm run test:unit`
+  - backend: `cd back && ./vibe test` (equivalently `vendor/bin/pest`)
+
+  Backend conventions: prefer `sail`/`vibe` over bare `php`; commit messages in English.
+dev_env_markdown: |
+  ## Frontend (front/)
+  1. `cd front && npm install`
+  2. `.env.local` is generated on clone (Next.js dev config).
+  3. `npm run dev`
+
+  ## Backend (back/)
+  1. `cd back && make install`   # composer install + sail:install + image pull/build (Docker)
+  2. `./vibe shared up`          # start shared services (pgsql/redis/...)
+  3. `./vibe up`                 # start the app container
+  4. `./vibe artisan migrate --seed`
+  5. `./vibe test`               # Pest
+metadata:
+  source: builtin
