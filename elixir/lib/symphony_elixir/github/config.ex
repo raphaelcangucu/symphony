@@ -7,8 +7,7 @@ defmodule SymphonyElixir.GitHub.Config do
 
   alias SymphonyElixir.GitHub.Bootstrap
 
-  @default_status_field "Symphony State"
-  @default_native_status_field "Status"
+  @default_status_field "Status"
   @default_admission_label "symphony"
   @default_comment_context_limit 25
   @max_comment_context_limit 50
@@ -69,20 +68,6 @@ defmodule SymphonyElixir.GitHub.Config do
   @spec status_field() :: String.t()
   def status_field do
     trim_string(section_value("status_field")) || @default_status_field
-  end
-
-  @spec native_status_field() :: String.t()
-  def native_status_field do
-    trim_string(section_value("native_status_field")) || @default_native_status_field
-  end
-
-  @spec sync_native_status?() :: boolean()
-  def sync_native_status? do
-    case section_value("sync_native_status") do
-      false -> false
-      "false" -> false
-      _ -> true
-    end
   end
 
   @spec admission_label() :: String.t()

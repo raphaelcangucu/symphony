@@ -86,7 +86,7 @@ defmodule SymphonyElixir.GitHub.StateReconciliation do
           {:cont, :ok}
 
         {:ok, count} ->
-          {:halt, {:error, "WORKFLOW removed state #{inspect(state_name)} but #{count} project item(s) still use it. Move them to another state in #{project_url}, then restart Symphony."}}
+          {:halt, {:error, "WORKFLOW removed Project Status option #{inspect(state_name)} but #{count} project item(s) still use it. Move them to another state in #{project_url}, then restart Symphony."}}
 
         {:error, reason} ->
           {:halt, {:error, "Failed to check project items for state #{inspect(state_name)}: #{inspect(reason)}"}}
@@ -230,7 +230,7 @@ defmodule SymphonyElixir.GitHub.StateReconciliation do
   end
 
   defp log_added_states(missing) do
-    Logger.info("Added Symphony State option(s) to GitHub project: #{Enum.join(missing, ", ")}")
+    Logger.info("Added Status option(s) to GitHub project: #{Enum.join(missing, ", ")}")
   end
 
   defp client_module(opts) do

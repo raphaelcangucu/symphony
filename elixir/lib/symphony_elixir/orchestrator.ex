@@ -105,14 +105,9 @@ defmodule SymphonyElixir.Orchestrator do
         state =
           case reason do
             :normal ->
-              Logger.info("Agent task completed for issue_id=#{issue_id} session_id=#{session_id}; scheduling active-state continuation check")
+              Logger.info("Agent task completed for issue_id=#{issue_id} session_id=#{session_id}; checking completion transition")
 
-              state
-              |> complete_issue(issue_id)
-              |> schedule_issue_retry(issue_id, 1, %{
-                identifier: running_entry.identifier,
-                delay_type: :continuation
-              })
+              apply_normal_completion(state, running_entry, issue_id)
 
             _ ->
               Logger.warning("Agent task exited for issue_id=#{issue_id} session_id=#{session_id} reason=#{inspect(reason)}; scheduling retry")
@@ -653,6 +648,53 @@ defmodule SymphonyElixir.Orchestrator do
       | completed: MapSet.put(state.completed, issue_id),
         retry_attempts: Map.delete(state.retry_attempts, issue_id)
     }
+  end
+
+  defp apply_normal_completion(%State{} = state, running_entry, issue_id) do
+    case apply_completion_transition(state, issue_id) do
+      {:transitioned, transitioned_state} ->
+        transitioned_state
+
+      result when result in [:not_configured, :not_visible] ->
+        state
+        |> complete_issue(issue_id)
+        |> schedule_issue_retry(issue_id, 1, %{
+          identifier: running_entry.identifier,
+          delay_type: :continuation
+        })
+
+      {:error, reason} ->
+        schedule_issue_retry(state, issue_id, next_retry_attempt_from_running(running_entry), %{
+          identifier: running_entry.identifier,
+          error: "completion transition failed: #{inspect(reason)}"
+        })
+    end
+  end
+
+  defp apply_completion_transition(%State{} = state, issue_id) do
+    transitions = Config.completion_transitions()
+
+    with true <- map_size(transitions) > 0,
+         {:ok, [%Issue{} = issue | _]} <- Tracker.fetch_issue_states_by_ids([issue_id]),
+         destination when is_binary(destination) <- Map.get(transitions, issue.state) do
+      case Tracker.update_issue_state(issue.id, destination) do
+        :ok ->
+          Logger.info("Moved issue after normal agent completion: #{issue_context(issue)} #{issue.state} -> #{destination}")
+
+          {:transitioned, release_issue_claim(complete_issue(state, issue_id), issue_id)}
+
+        {:error, reason} ->
+          Logger.warning("Failed to move issue after normal completion: #{issue_context(issue)} #{issue.state} -> #{destination}: #{inspect(reason)}")
+
+          {:error, reason}
+      end
+    else
+      false -> :not_configured
+      nil -> :not_configured
+      {:ok, []} -> :not_visible
+      {:ok, _other} -> :not_visible
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp schedule_issue_retry(%State{} = state, issue_id, attempt, metadata)

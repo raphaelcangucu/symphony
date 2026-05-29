@@ -86,6 +86,10 @@ defmodule SymphonyElixir.Config do
                                    type: {:map, :string, :pos_integer},
                                    default: %{}
                                  ],
+                                 completion_transitions: [
+                                   type: {:map, :string, :string},
+                                   default: %{}
+                                 ],
                                  turn_timeout_ms: [
                                    type: :integer,
                                    default: @default_agent_turn_timeout_ms
@@ -209,7 +213,7 @@ defmodule SymphonyElixir.Config do
   end
 
   @doc """
-  All states provisioned on the GitHub `Symphony State` field.
+  All states provisioned on the GitHub Project `Status` field.
 
   Defaults to `active_states` plus `terminal_states` (unique, order preserved).
   Use `field_states` in WORKFLOW when the board needs options such as `Backlog`
@@ -327,6 +331,19 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:agent, :max_turns])
   end
 
+  @doc """
+  State transitions applied after a normal agent run completes.
+
+  Maps a source workflow state to the destination state the issue should move to
+  once the agent process exits normally (for example `In Progress` -> `Human Review`).
+  Defaults to an empty map, which preserves the existing active-state continuation
+  behavior.
+  """
+  @spec completion_transitions() :: %{String.t() => String.t()}
+  def completion_transitions do
+    get_in(validated_workflow_options(), [:agent, :completion_transitions])
+  end
+
   @spec max_concurrent_agents_for_state(term()) :: pos_integer()
   def max_concurrent_agents_for_state(state_name) when is_binary(state_name) do
     state_limits = get_in(validated_workflow_options(), [:agent, :max_concurrent_agents_by_state])
@@ -398,6 +415,7 @@ defmodule SymphonyElixir.Config do
   @spec validate!() :: :ok | {:error, String.t()}
   def validate! do
     with {:ok, _workflow} <- current_workflow(),
+         :ok <- validate_completion_transitions!(),
          :ok <- tracker_config_module().validate!(),
          :ok <- validate_configured_agents!() do
       :ok
@@ -407,6 +425,24 @@ defmodule SymphonyElixir.Config do
 
       {:error, reason} ->
         {:error, "Invalid WORKFLOW.md: #{inspect(reason)}"}
+    end
+  end
+
+  defp validate_completion_transitions! do
+    allowed = MapSet.new(field_states())
+
+    invalid =
+      completion_transitions()
+      |> Enum.flat_map(fn {source, destination} -> [source, destination] end)
+      |> Enum.reject(&MapSet.member?(allowed, &1))
+      |> Enum.uniq()
+
+    case invalid do
+      [] ->
+        :ok
+
+      names ->
+        {:error, "agent.completion_transitions references states not in field_states: #{Enum.join(names, ", ")}"}
     end
   end
 
@@ -492,6 +528,10 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(
       :max_concurrent_agents_by_state,
       state_limits_value(Map.get(section, "max_concurrent_agents_by_state"))
+    )
+    |> put_if_present(
+      :completion_transitions,
+      string_map_value(Map.get(section, "completion_transitions"))
     )
     |> put_if_present(:turn_timeout_ms, integer_value(Map.get(section, "turn_timeout_ms")))
     |> put_if_present(:read_timeout_ms, integer_value(Map.get(section, "read_timeout_ms")))
@@ -660,6 +700,23 @@ defmodule SymphonyElixir.Config do
   end
 
   defp state_limits_value(_value), do: :omit
+
+  defp string_map_value(value) when is_map(value) do
+    value
+    |> Enum.reduce(%{}, fn
+      {key, val}, acc when is_binary(key) and is_binary(val) ->
+        case {String.trim(key), String.trim(val)} do
+          {"", _} -> acc
+          {_, ""} -> acc
+          {trimmed_key, trimmed_val} -> Map.put(acc, trimmed_key, trimmed_val)
+        end
+
+      {_key, _val}, acc ->
+        acc
+    end)
+  end
+
+  defp string_map_value(_value), do: :omit
 
   defp parse_integer(value) when is_integer(value), do: {:ok, value}
 

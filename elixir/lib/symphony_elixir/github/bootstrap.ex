@@ -1,13 +1,12 @@
 defmodule SymphonyElixir.GitHub.Bootstrap do
   @moduledoc """
-  Provisions a repo-level GitHub Project v2 with a `Symphony State`
-  single-select field on first startup. Idempotent: skipped when a
-  cached project metadata file already exists.
+  Provisions a repo-level GitHub Project v2 and caches the built-in
+  `Status` single-select field on first startup. Idempotent: skipped
+  when a cached project metadata file already exists.
   """
 
   require Logger
 
-  alias SymphonyElixir.Config
   alias SymphonyElixir.GitHub
   alias SymphonyElixir.GitHub.{Client, ProjectMetadata, RepoSpec, StateReconciliation, Viewer}
 
@@ -27,48 +26,17 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
   }
   """
 
-  @create_field_mutation """
-  mutation SymphonyGitHubCreateField(
-    $projectId: ID!,
-    $name: String!,
-    $options: [ProjectV2SingleSelectFieldOptionInput!]!
-  ) {
-    createProjectV2Field(input: {
-      projectId: $projectId
-      dataType: SINGLE_SELECT
-      name: $name
-      singleSelectOptions: $options
-    }) {
-      projectV2Field {
-        ... on ProjectV2SingleSelectField {
-          id
-          name
-          options { id name }
-        }
-      }
-    }
-  }
-  """
-
   @existing_project_query """
   query SymphonyGitHubReadProject(
     $projectId: ID!,
-    $statusFieldName: String!,
-    $nativeStatusFieldName: String!
+    $statusFieldName: String!
   ) {
     node(id: $projectId) {
       ... on ProjectV2 {
         id
         number
         url
-        symphonyField: field(name: $statusFieldName) {
-          ... on ProjectV2SingleSelectField {
-            id
-            name
-            options { id name }
-          }
-        }
-        nativeField: field(name: $nativeStatusFieldName) {
+        statusField: field(name: $statusFieldName) {
           ... on ProjectV2SingleSelectField {
             id
             name
@@ -118,9 +86,10 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
 
     with {:ok, {owner, name}} <- RepoSpec.split(repo),
          {:ok, owner_id} <- resolve_owner_id(client, owner, name),
-         {:ok, project} <- create_project(client, owner_id, title),
-         :ok <- log_created_project(project),
-         {:ok, field} <- create_status_field(client, project["id"], status_field_name, project),
+         {:ok, created} <- create_project(client, owner_id, title),
+         :ok <- log_created_project(created),
+         {:ok, project, field} <-
+           load_existing_project(client, created["id"], status_field_name),
          metadata <- build_metadata(project, field),
          :ok <- write_metadata(base_dir, metadata),
          :ok <- post_bootstrap_validate(base_dir, metadata, opts) do
@@ -138,8 +107,7 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
   end
 
   defp log_created_project(project) do
-    url = project["url"]
-    Logger.info("GitHub Project created (id=#{project["id"]} url=#{url}); creating Symphony State field…")
+    Logger.info("GitHub Project created (id=#{project["id"]} url=#{project["url"]}); caching Status field…")
     :ok
   end
 
@@ -153,9 +121,9 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
         {:error, "github.project.mode is \"existing\" but github.project.id is not set in WORKFLOW.md"}
 
       project_id ->
-        with {:ok, project, field, native_field} <-
+        with {:ok, project, field} <-
                load_existing_project(client, project_id, status_field_name),
-             metadata <- build_metadata(project, field, native_field),
+             metadata <- build_metadata(project, field),
              :ok <- write_metadata(base_dir, metadata),
              :ok <- post_bootstrap_validate(base_dir, metadata, opts) do
           Logger.info("GitHub Project metadata cached: #{project["url"]}")
@@ -193,41 +161,10 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
     end
   end
 
-  defp create_status_field(client, project_id, name, project) do
-    options = build_option_inputs()
-
-    variables = %{
-      "projectId" => project_id,
-      "name" => name,
-      "options" => options
-    }
-
-    case client.graphql(@create_field_mutation, variables) do
-      {:ok,
-       %{
-         "data" => %{
-           "createProjectV2Field" => %{
-             "projectV2Field" => %{"id" => _, "options" => _} = field
-           }
-         }
-       }} ->
-        {:ok, field}
-
-      {:ok, body} ->
-        {:error, {:create_field_unexpected, project["url"], body}}
-
-      {:error, reason} ->
-        {:error, {:create_field_failed, project["url"], reason}}
-    end
-  end
-
   defp load_existing_project(client, project_id, status_field_name) do
-    native_status_field_name = GitHub.Config.native_status_field()
-
     case client.graphql(@existing_project_query, %{
            "projectId" => project_id,
-           "statusFieldName" => status_field_name,
-           "nativeStatusFieldName" => native_status_field_name
+           "statusFieldName" => status_field_name
          }) do
       {:ok,
        %{
@@ -235,12 +172,14 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
            "node" =>
              %{
                "id" => _,
-               "symphonyField" => %{"id" => _, "options" => _} = field
+               "statusField" => %{"id" => _, "options" => _} = field
              } = project
          }
        }} ->
-        native_field = Map.get(project, "nativeField")
-        {:ok, project, field, native_field}
+        {:ok, project, field}
+
+      {:ok, %{"data" => %{"node" => %{"statusField" => nil}}}} ->
+        {:error, {:missing_status_field, status_field_name}}
 
       {:ok, body} ->
         {:error, {:existing_project_unexpected, body}}
@@ -250,19 +189,7 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
     end
   end
 
-  defp build_option_inputs do
-    Config.field_states()
-    |> Enum.uniq()
-    |> Enum.map(fn name ->
-      %{
-        "name" => name,
-        "color" => "GRAY",
-        "description" => name
-      }
-    end)
-  end
-
-  defp build_metadata(project, field, native_field \\ nil) do
+  defp build_metadata(project, field) do
     %{
       "project_id" => project["id"],
       "project_number" => project["number"],
@@ -272,19 +199,7 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
       "state_options" => field_options_to_map(field),
       "bootstrapped_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
-    |> maybe_put_native_status_metadata(native_field)
   end
-
-  defp maybe_put_native_status_metadata(metadata, %{"id" => id, "name" => name, "options" => options})
-       when is_binary(id) and is_binary(name) and is_list(options) do
-    Map.merge(metadata, %{
-      "native_status_field_id" => id,
-      "native_status_field_name" => name,
-      "native_state_options" => field_options_to_map(%{"options" => options})
-    })
-  end
-
-  defp maybe_put_native_status_metadata(metadata, _native_field), do: metadata
 
   defp field_options_to_map(%{"options" => options}) when is_list(options) do
     Enum.reduce(options, %{}, fn opt, acc ->
@@ -332,11 +247,9 @@ defmodule SymphonyElixir.GitHub.Bootstrap do
   defp format_error({:owner_lookup_unexpected, %{"data" => %{"repository" => nil}}}),
     do: "GitHub repository not found — verify github.repo in WORKFLOW.md"
 
-  defp format_error({:create_field_failed, url, reason}),
-    do: "Project was created at #{url} but Symphony State field creation failed (#{format_error(reason)}). Delete the project on GitHub or set github.project.mode=existing with github.project.id."
-
-  defp format_error({:create_field_unexpected, url, body}),
-    do: "Project was created at #{url} but Symphony State field response was unexpected: #{inspect(body)}. Delete the project on GitHub or set github.project.mode=existing with github.project.id."
+  defp format_error({:missing_status_field, name}),
+    do:
+      "GitHub Project #{inspect(name)} field not found or is not a single-select field. Add a single-select #{inspect(name)} field to the project (GitHub provides a built-in Status field by default)."
 
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)

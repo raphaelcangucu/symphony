@@ -104,6 +104,7 @@ defmodule SymphonyElixir.TestSupport do
           tracker_active_states: ["Todo", "In Progress"],
           tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"],
           tracker_field_states: nil,
+          tracker_wait_states: nil,
           tracker_repo: nil,
           local_database_path: nil,
           local_project_slug: nil,
@@ -123,6 +124,7 @@ defmodule SymphonyElixir.TestSupport do
           max_turns: 20,
           max_retry_backoff_ms: 300_000,
           max_concurrent_agents_by_state: %{},
+          agent_completion_transitions: nil,
           command: "codex app-server",
           codex_approval_policy: %{reject: %{sandbox_approval: true, rules: true, mcp_elicitations: true}},
           codex_thread_sandbox: "workspace-write",
@@ -149,6 +151,8 @@ defmodule SymphonyElixir.TestSupport do
     tracker_active_states = Keyword.get(config, :tracker_active_states)
     tracker_terminal_states = Keyword.get(config, :tracker_terminal_states)
     tracker_field_states = Keyword.get(config, :tracker_field_states)
+    tracker_wait_states = Keyword.get(config, :tracker_wait_states)
+    agent_completion_transitions = Keyword.get(config, :agent_completion_transitions)
     agent_kind = Keyword.get(config, :agent_kind)
     poll_interval_ms = Keyword.get(config, :poll_interval_ms)
     workspace_root = Keyword.get(config, :workspace_root)
@@ -179,6 +183,7 @@ defmodule SymphonyElixir.TestSupport do
         tracker_field_states_yaml(tracker_field_states),
         "  active_states: #{yaml_value(tracker_active_states)}",
         "  terminal_states: #{yaml_value(tracker_terminal_states)}",
+        tracker_wait_states_yaml(tracker_wait_states),
         "polling:",
         "  interval_ms: #{yaml_value(poll_interval_ms)}",
         "workspace:",
@@ -191,6 +196,7 @@ defmodule SymphonyElixir.TestSupport do
         "  turn_timeout_ms: #{yaml_value(agent_turn_timeout_ms)}",
         "  read_timeout_ms: #{yaml_value(agent_read_timeout_ms)}",
         "  stall_timeout_ms: #{yaml_value(agent_stall_timeout_ms)}",
+        agent_completion_transitions_yaml(agent_completion_transitions),
         agent_backend_yaml(agent_kind, config),
         hooks_yaml(hook_after_create, hook_before_run, hook_after_run, hook_before_remove, hook_timeout_ms),
         observability_yaml(observability_enabled, observability_refresh_ms, observability_render_interval_ms),
@@ -261,6 +267,15 @@ defmodule SymphonyElixir.TestSupport do
 
   defp tracker_field_states_yaml(nil), do: nil
   defp tracker_field_states_yaml(states), do: "  field_states: #{yaml_value(states)}"
+
+  defp tracker_wait_states_yaml(nil), do: nil
+  defp tracker_wait_states_yaml(states), do: "  wait_states: #{yaml_value(states)}"
+
+  defp agent_completion_transitions_yaml(nil), do: nil
+
+  defp agent_completion_transitions_yaml(transitions) when is_map(transitions) do
+    "  completion_transitions: #{yaml_value(transitions)}"
+  end
 
   defp github_project_yaml(config) do
     mode = Keyword.get(config, :github_project_mode)

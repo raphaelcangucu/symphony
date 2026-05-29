@@ -10,6 +10,29 @@ description: |
 
 Use this skill for GitHub Projects v2 work during Symphony sessions.
 
+## Symphony Project Status Setup
+
+Symphony expects the GitHub Project v2 `Status` single-select field to be the only workflow source of truth. Do not create or update a separate `Symphony State` field.
+
+Recommended `Status` options:
+- Backlog
+- Todo
+- In Progress
+- Human Review
+- Rework
+- Merging
+- Done
+- Cancelled
+- Duplicate
+
+Inspect a project:
+
+```bash
+gh api graphql -f query='query ProjectFields($org: String!, $number: Int!) { organization(login: $org) { projectV2(number: $number) { id title fields(first: 100) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } ... on ProjectV2Field { id name dataType } } } } } }' -F org=clouapp -F number=2
+```
+
+Before starting Symphony, confirm `Status` exists and contains every option listed above. If an option is missing, add it in GitHub Project settings or use a GraphQL `updateProjectV2Field` mutation that preserves the existing option ids and appends the missing names.
+
 ## Primary tool
 
 Use the GitHub CLI:

@@ -203,6 +203,123 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     assert is_integer(completed_state.agent_totals.seconds_running)
   end
 
+  test "normal agent completion applies the configured transition and releases the claim" do
+    issue_id = "issue-transition"
+
+    issue = %Issue{
+      id: issue_id,
+      identifier: "MT-700",
+      title: "Transition me",
+      description: "",
+      state: "In Progress",
+      url: "https://example.org/issues/MT-700"
+    }
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "memory",
+      tracker_field_states: ["Todo", "In Progress", "Human Review", "Done"],
+      tracker_active_states: ["Todo", "In Progress"],
+      tracker_wait_states: ["Human Review"],
+      tracker_terminal_states: ["Done"],
+      agent_completion_transitions: %{"In Progress" => "Human Review"}
+    )
+
+    Application.put_env(:symphony_elixir, :memory_tracker_issues, [issue])
+    Application.put_env(:symphony_elixir, :memory_tracker_recipient, self())
+
+    orchestrator_name = Module.concat(__MODULE__, :TransitionOrchestrator)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+    on_exit(fn -> if Process.alive?(pid), do: Process.exit(pid, :normal) end)
+
+    process_ref = make_ref()
+
+    running_entry = %{
+      pid: self(),
+      ref: process_ref,
+      identifier: issue.identifier,
+      issue: issue,
+      session_id: "thread-transition",
+      last_codex_message: nil,
+      last_codex_timestamp: nil,
+      last_codex_event: nil,
+      started_at: DateTime.utc_now()
+    }
+
+    :sys.replace_state(pid, fn state ->
+      state
+      |> Map.put(:running, %{issue_id => running_entry})
+      |> Map.put(:claimed, MapSet.put(state.claimed, issue_id))
+    end)
+
+    send(pid, {:DOWN, process_ref, :process, self(), :normal})
+
+    assert_receive {:memory_tracker_state_update, ^issue_id, "Human Review"}, 1_000
+
+    state = :sys.get_state(pid)
+    refute MapSet.member?(state.claimed, issue_id)
+    refute Map.has_key?(state.retry_attempts, issue_id)
+    refute Map.has_key?(state.running, issue_id)
+  end
+
+  test "non-normal agent exit does not apply a transition and schedules a retry" do
+    issue_id = "issue-no-transition"
+
+    issue = %Issue{
+      id: issue_id,
+      identifier: "MT-701",
+      title: "Do not transition",
+      description: "",
+      state: "In Progress",
+      url: "https://example.org/issues/MT-701"
+    }
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "memory",
+      tracker_field_states: ["Todo", "In Progress", "Human Review", "Done"],
+      tracker_active_states: ["Todo", "In Progress"],
+      tracker_wait_states: ["Human Review"],
+      tracker_terminal_states: ["Done"],
+      agent_completion_transitions: %{"In Progress" => "Human Review"}
+    )
+
+    Application.put_env(:symphony_elixir, :memory_tracker_issues, [issue])
+    Application.put_env(:symphony_elixir, :memory_tracker_recipient, self())
+
+    orchestrator_name = Module.concat(__MODULE__, :NoTransitionOrchestrator)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+    on_exit(fn -> if Process.alive?(pid), do: Process.exit(pid, :normal) end)
+
+    process_ref = make_ref()
+
+    running_entry = %{
+      pid: self(),
+      ref: process_ref,
+      identifier: issue.identifier,
+      issue: issue,
+      session_id: "thread-no-transition",
+      last_codex_message: nil,
+      last_codex_timestamp: nil,
+      last_codex_event: nil,
+      started_at: DateTime.utc_now()
+    }
+
+    :sys.replace_state(pid, fn state ->
+      state
+      |> Map.put(:running, %{issue_id => running_entry})
+      |> Map.put(:claimed, MapSet.put(state.claimed, issue_id))
+    end)
+
+    send(pid, {:DOWN, process_ref, :process, self(), :shutdown})
+
+    refute_receive {:memory_tracker_state_update, ^issue_id, _destination}, 200
+
+    state = :sys.get_state(pid)
+    assert Map.has_key?(state.retry_attempts, issue_id)
+    refute Map.has_key?(state.running, issue_id)
+  end
+
   test "orchestrator snapshot tracks turn completed usage when present" do
     issue_id = "issue-turn-completed-usage"
 

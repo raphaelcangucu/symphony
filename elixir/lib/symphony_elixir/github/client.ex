@@ -10,9 +10,10 @@ defmodule SymphonyElixir.GitHub.Client do
 
   Reads (`fetch_candidate_issues/1`, `fetch_issues_by_states/2`,
   `fetch_issue_states_by_ids/2`) query `projectV2.items` and filter on
-  the configured `Symphony State` single-select field. Writes
-  (`update_issue_state/3`, `create_comment/3`) issue GraphQL mutations
-  against issue node IDs (no REST routes, no label juggling).
+  the GitHub Project `Status` single-select field (the cached
+  `status_field_name`). Writes (`update_issue_state/3`,
+  `create_comment/3`) issue GraphQL mutations against issue node IDs
+  (no REST routes, no label juggling).
   """
 
   require Logger
@@ -635,10 +636,8 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
-  defp resolve_issue_state(item, status_field_name, label_names) do
-    extract_status_value(item, status_field_name) ||
-      extract_status_value(item, GitHub.Config.native_status_field()) ||
-      extract_state_from_labels(label_names)
+  defp resolve_issue_state(item, status_field_name, _label_names) do
+    extract_status_value(item, status_field_name)
   end
 
   defp extract_status_value(%{"fieldValues" => %{"nodes" => nodes}}, status_field_name)
@@ -659,46 +658,6 @@ defmodule SymphonyElixir.GitHub.Client do
   end
 
   defp extract_status_value(_item, _status_field_name), do: nil
-
-  defp extract_state_from_labels(label_names) when is_list(label_names) do
-    state_names_by_key =
-      configured_state_names()
-      |> Map.new(fn state_name -> {normalize_state_key(state_name), state_name} end)
-
-    Enum.find_value(label_names, fn label_name ->
-      with candidate when is_binary(candidate) <- extract_symphony_state_label(label_name),
-           state_name when is_binary(state_name) <-
-             Map.get(state_names_by_key, normalize_state_key(candidate)) do
-        state_name
-      else
-        _ -> nil
-      end
-    end)
-  end
-
-  defp configured_state_names do
-    (Config.field_states() ++ Config.active_states() ++ Config.terminal_states())
-    |> Enum.filter(&is_binary/1)
-    |> Enum.uniq()
-  end
-
-  defp extract_symphony_state_label(label_name) when is_binary(label_name) do
-    case String.split(String.trim(label_name), ":", parts: 2) do
-      ["symphony", state_name] when state_name != "" -> state_name
-      _ -> nil
-    end
-  end
-
-  defp extract_symphony_state_label(_label_name), do: nil
-
-  defp normalize_state_key(state_name) when is_binary(state_name) do
-    state_name
-    |> String.trim()
-    |> String.downcase()
-    |> String.replace(~r/[\s_-]+/, " ")
-  end
-
-  defp normalize_state_key(_state_name), do: ""
 
   defp format_identifier(number) when is_integer(number), do: Integer.to_string(number)
   defp format_identifier(number) when is_binary(number), do: number
@@ -1063,7 +1022,7 @@ defmodule SymphonyElixir.GitHub.Client do
           Logger.info("Admitted issue #{issue_id} to Symphony board")
 
         {:error, {:orphan_state_failure, item_id, reason}} ->
-          Logger.error("Admitted issue #{issue_id} (project item #{item_id}) but Symphony State setup failed: #{inspect(reason)}. Item will be retried on next poll if it remains stateless.")
+          Logger.error("Admitted issue #{issue_id} (project item #{item_id}) but Status setup failed: #{inspect(reason)}. Item will be retried on next poll if it remains stateless.")
 
         {:error, reason} ->
           Logger.warning("Admission failed for issue #{issue_id}: #{inspect(reason)}")
@@ -1164,19 +1123,16 @@ defmodule SymphonyElixir.GitHub.Client do
     end)
   end
 
-  defp set_project_state(client, metadata, item_id, option_id, state_name, graphql_opts)
+  defp set_project_state(client, metadata, item_id, option_id, _state_name, graphql_opts)
        when is_atom(client) do
-    case set_field_value(
-           client,
-           metadata["project_id"],
-           item_id,
-           metadata["status_field_id"],
-           option_id,
-           graphql_opts
-         ) do
-      :ok -> sync_native_status_field(client, metadata, item_id, state_name, graphql_opts)
-      {:error, _reason} = error -> error
-    end
+    set_field_value(
+      client,
+      metadata["project_id"],
+      item_id,
+      metadata["status_field_id"],
+      option_id,
+      graphql_opts
+    )
   end
 
   defp set_field_value(client, project_id, item_id, field_id, option_id, graphql_opts)
@@ -1191,40 +1147,6 @@ defmodule SymphonyElixir.GitHub.Client do
     case client.graphql(@set_state_mutation, variables, graphql_opts) do
       {:ok, _body} -> :ok
       {:error, _} = error -> error
-    end
-  end
-
-  defp sync_native_status_field(client, metadata, item_id, state_name, graphql_opts)
-       when is_atom(client) do
-    if GitHub.Config.sync_native_status?() do
-      with field_id when is_binary(field_id) <- Map.get(metadata, "native_status_field_id"),
-           {:ok, native_option_id} <- lookup_native_state_option_id(metadata, state_name) do
-        set_field_value(
-          client,
-          metadata["project_id"],
-          item_id,
-          field_id,
-          native_option_id,
-          graphql_opts
-        )
-      else
-        _ -> :ok
-      end
-    else
-      :ok
-    end
-  end
-
-  defp lookup_native_state_option_id(metadata, state_name) do
-    case Map.get(metadata, "native_state_options") do
-      %{} = options ->
-        case Map.get(options, state_name) do
-          option_id when is_binary(option_id) and option_id != "" -> {:ok, option_id}
-          _ -> {:error, :unknown_native_state}
-        end
-
-      _ ->
-        {:error, :missing_native_state_options}
     end
   end
 

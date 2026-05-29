@@ -205,7 +205,7 @@ Symphony bootstraps a project automatically on startup. If
 
 ### WORKFLOW state removed but still in use
 
-Symphony halts startup when `WORKFLOW.md` drops a `Symphony State` option that
+Symphony halts startup when `WORKFLOW.md` drops a Project `Status` option that
 project items still use:
 
 1. Open the project URL from the error message.

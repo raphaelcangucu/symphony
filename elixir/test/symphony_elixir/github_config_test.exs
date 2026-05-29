@@ -22,8 +22,8 @@ defmodule SymphonyElixir.GitHub.ConfigTest do
       assert Config.project_title() == "Symphony"
     end
 
-    test "status_field/0 defaults to Symphony State" do
-      assert Config.status_field() == "Symphony State"
+    test "status_field/0 defaults to Status" do
+      assert Config.status_field() == "Status"
     end
 
     test "admission_label/0 defaults to symphony" do
@@ -151,7 +151,67 @@ defmodule SymphonyElixir.GitHub.ConfigTest do
         github_status_field: "   "
       )
 
-      assert Config.status_field() == "Symphony State"
+      assert Config.status_field() == "Status"
+    end
+  end
+
+  describe "agent completion transitions" do
+    test "completion_transitions/0 returns normalized workflow map" do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        tracker_active_states: ["Todo", "In Progress", "Rework", "Merging"],
+        tracker_wait_states: ["Human Review"],
+        tracker_terminal_states: ["Done", "Cancelled"],
+        agent_completion_transitions: %{
+          "Todo" => "Human Review",
+          "In Progress" => "Human Review",
+          "Rework" => "Human Review",
+          "Merging" => "Done"
+        }
+      )
+
+      assert SymphonyElixir.Config.completion_transitions() == %{
+               "Todo" => "Human Review",
+               "In Progress" => "Human Review",
+               "Rework" => "Human Review",
+               "Merging" => "Done"
+             }
+    end
+
+    test "completion_transitions/0 defaults to empty map" do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony"
+      )
+
+      assert SymphonyElixir.Config.completion_transitions() == %{}
+    end
+
+    test "validate! rejects completion transition states outside field_states" do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "raphaelcangucu/symphony",
+        tracker_field_states: ["Todo", "In Progress", "Done"],
+        agent_completion_transitions: %{"In Progress" => "Human Review"}
+      )
+
+      assert {:error, message} = SymphonyElixir.Config.validate!()
+      assert message =~ "completion_transitions"
+      assert message =~ "Human Review"
+    end
+  end
+
+  describe "Macro Markets example workflow" do
+    test "uses Project Status and completion transitions instead of Symphony State" do
+      workflow_text = File.read!("WORKFLOW.macromarkets.example.md")
+
+      refute workflow_text =~ "status_field: Symphony State"
+      refute workflow_text =~ "native_status_field"
+      refute workflow_text =~ "sync_native_status"
+      assert workflow_text =~ "completion_transitions:"
+      assert workflow_text =~ "In Progress: Human Review"
+      assert workflow_text =~ "Rework: Human Review"
     end
   end
 end

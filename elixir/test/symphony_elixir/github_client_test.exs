@@ -34,7 +34,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         "project_number" => 1,
         "project_url" => "https://github.com/owner/repo/projects/1",
         "status_field_id" => "PVTSSF_x",
-        "status_field_name" => "Symphony State",
+        "status_field_name" => "Status",
         "state_options" => %{
           "Todo" => "opt-todo",
           "In Progress" => "opt-inprog",
@@ -46,7 +46,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       %{base_dir: tmp}
     end
 
-    test "returns issues whose Symphony State is in active_states", %{base_dir: base_dir} do
+    test "returns issues whose Status is in active_states", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
           payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
@@ -197,7 +197,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
     end
 
-    test "falls back to native Status when Symphony State field value is absent", %{base_dir: base_dir} do
+    test "uses Status over a stale conflicting field value when both exist", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
           payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
@@ -206,22 +206,27 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           payload["query"] =~ "SymphonyGitHubPollItems" ->
             item =
               build_project_item_fixture(%{
-                item_id: "PVTI_nostate",
-                issue_node_id: "I_nostate",
-                number: 7,
-                title: "Stateless",
+                item_id: "PVTI_rework",
+                issue_node_id: "I_rework",
+                number: 507,
+                title: "Rework item",
                 repo: "owner/repo",
-                state_name: "Ignored",
+                state_name: "Rework",
                 labels: [%{"name" => "symphony:codex"}]
               })
 
-            item_with_native_status =
+            item_with_conflict =
               Map.put(item, "fieldValues", %{
                 "nodes" => [
                   %{
                     "__typename" => "ProjectV2ItemFieldSingleSelectValue",
-                    "name" => "Todo",
-                    "field" => %{"id" => "PVTSSF_native", "name" => "Status"}
+                    "name" => "Rework",
+                    "field" => %{"id" => "PVTSSF_x", "name" => "Status"}
+                  },
+                  %{
+                    "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                    "name" => "Human Review",
+                    "field" => %{"id" => "PVTSSF_stale", "name" => "Symphony State"}
                   }
                 ]
               })
@@ -233,7 +238,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  "data" => %{
                    "node" => %{
                      "items" => %{
-                       "nodes" => [item_with_native_status],
+                       "nodes" => [item_with_conflict],
                        "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
                      }
                    }
@@ -243,60 +248,21 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         end
       end
 
-      assert {:ok, [issue]} =
-               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
-
-      assert issue.identifier == "7"
-      assert issue.state == "Todo"
-      assert issue.agent_kind == "codex"
-    end
-
-    test "falls back to symphony state label when project state fields are absent", %{base_dir: base_dir} do
-      request_fun = fn payload, _headers ->
-        cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
-            empty_admission_response()
-
-          payload["query"] =~ "SymphonyGitHubPollItems" ->
-            item =
-              build_project_item_fixture(%{
-                item_id: "PVTI_label_state",
-                issue_node_id: "I_label_state",
-                number: 8,
-                title: "Label state",
-                repo: "owner/repo",
-                state_name: "Ignored",
-                labels: [%{"name" => "symphony:todo"}, %{"name" => "symphony:codex"}]
-              })
-
-            item_without_project_state = Map.put(item, "fieldValues", %{"nodes" => []})
-
-            {:ok,
-             %{
-               status: 200,
-               body: %{
-                 "data" => %{
-                   "node" => %{
-                     "items" => %{
-                       "nodes" => [item_without_project_state],
-                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
-                     }
-                   }
-                 }
-               }
-             }}
-        end
-      end
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_repo: "owner/repo",
+        tracker_active_states: ["Todo", "In Progress", "Rework"],
+        tracker_terminal_states: ["Done"]
+      )
 
       assert {:ok, [issue]} =
                Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
 
-      assert issue.identifier == "8"
-      assert issue.state == "Todo"
-      assert issue.agent_kind == "codex"
+      assert issue.identifier == "507"
+      assert issue.state == "Rework"
     end
 
-    test "skips items with no Symphony State, native Status, or state label", %{base_dir: base_dir} do
+    test "skips items with no Status value", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
           payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
@@ -529,7 +495,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         "project_id" => "PVT_abc",
         "project_number" => 1,
         "status_field_id" => "PVTSSF_x",
-        "status_field_name" => "Symphony State",
+        "status_field_name" => "Status",
         "state_options" => %{
           "Todo" => "opt-todo",
           "In Progress" => "opt-inprog",
@@ -938,7 +904,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         end)
 
       assert log =~ "Admitted issue I_orphan (project item PVTI_orphan)"
-      assert log =~ "Symphony State setup failed"
+      assert log =~ "Status setup failed"
     end
   end
 
@@ -953,7 +919,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         "project_number" => 1,
         "project_url" => "https://github.com/owner/repo/projects/1",
         "status_field_id" => "PVTSSF_x",
-        "status_field_name" => "Symphony State",
+        "status_field_name" => "Status",
         "state_options" => %{
           "Todo" => "opt-todo",
           "In Progress" => "opt-inprog",
@@ -1032,7 +998,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         "project_number" => 1,
         "project_url" => "https://github.com/owner/repo/projects/1",
         "status_field_id" => "PVTSSF_x",
-        "status_field_name" => "Symphony State",
+        "status_field_name" => "Status",
         "state_options" => %{"Todo" => "opt-todo", "Done" => "opt-done"},
         "bootstrapped_at" => "2026-05-24T00:00:00Z"
       })
@@ -1044,7 +1010,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       assert {:ok, []} = Client.fetch_issue_states_by_ids([])
     end
 
-    test "extracts Symphony State scoped to project from projectItems", %{base_dir: base_dir} do
+    test "extracts Status scoped to project from projectItems", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         assert payload["query"] =~ "SymphonyGitHubIssuesByIds"
         assert payload["variables"]["ids"] == ["I_42"]
@@ -1078,10 +1044,10 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                              %{
                                "__typename" => "ProjectV2ItemFieldSingleSelectValue",
                                "name" => "Backlog",
-                               "field" => %{
-                                 "id" => "PVTSSF_other",
-                                 "name" => "Symphony State"
-                               }
+                              "field" => %{
+                                "id" => "PVTSSF_other",
+                                "name" => "Status"
+                              }
                              }
                            ]
                          }
@@ -1094,10 +1060,10 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                              %{
                                "__typename" => "ProjectV2ItemFieldSingleSelectValue",
                                "name" => "In Progress",
-                               "field" => %{
-                                 "id" => "PVTSSF_x",
-                                 "name" => "Symphony State"
-                               }
+                              "field" => %{
+                                "id" => "PVTSSF_x",
+                                "name" => "Status"
+                              }
                              }
                            ]
                          }
@@ -1214,20 +1180,12 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         "project_id" => "PVT_abc",
         "project_number" => 1,
         "status_field_id" => "PVTSSF_x",
-        "status_field_name" => "Symphony State",
+        "status_field_name" => "Status",
         "state_options" => %{
           "Todo" => "opt-todo",
           "In Progress" => "opt-inprog",
           "Done" => "opt-done",
           "Cancelled" => "opt-cancel"
-        },
-        "native_status_field_id" => "PVTSSF_native",
-        "native_status_field_name" => "Status",
-        "native_state_options" => %{
-          "Todo" => "nat-todo",
-          "In Progress" => "nat-inprog",
-          "Done" => "nat-done",
-          "Cancelled" => "nat-cancel"
         },
         "bootstrapped_at" => "2026-05-24T00:00:00Z"
       })
@@ -1242,8 +1200,9 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       %{base_dir: tmp}
     end
 
-    test "updates Symphony State and reopens for active states", %{base_dir: base_dir} do
+    test "updates the Status field once and reopens for active states", %{base_dir: base_dir} do
       seq = :counters.new(1, [])
+      set_state_calls = :counters.new(1, [])
 
       request_fun = fn payload, _headers ->
         :counters.add(seq, 1, 1)
@@ -1271,14 +1230,12 @@ defmodule SymphonyElixir.GitHub.ClientTest do
              }}
 
           payload["query"] =~ "SymphonyGitHubSetState" ->
+            :counters.add(set_state_calls, 1, 1)
             vars = payload["variables"]
             assert vars["projectId"] == "PVT_abc"
             assert vars["itemId"] == "PVTI_99"
-
-            case vars["fieldId"] do
-              "PVTSSF_x" -> assert vars["optionId"] == "opt-inprog"
-              "PVTSSF_native" -> assert vars["optionId"] == "nat-inprog"
-            end
+            assert vars["fieldId"] == "PVTSSF_x"
+            assert vars["optionId"] == "opt-inprog"
 
             {:ok,
              %{
@@ -1313,66 +1270,8 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  request_fun: request_fun
                )
 
-      assert :counters.get(seq, 1) == 4
-    end
-
-    test "syncs native Status field when configured", %{base_dir: base_dir} do
-      set_state_calls = :counters.new(1, [])
-
-      request_fun = fn payload, _headers ->
-        cond do
-          payload["query"] =~ "SymphonyGitHubResolveItem" ->
-            {:ok,
-             %{
-               status: 200,
-               body: %{
-                 "data" => %{
-                   "node" => %{
-                     "id" => "I_kw_99",
-                     "state" => "OPEN",
-                     "projectItems" => %{
-                       "nodes" => [
-                         %{"id" => "PVTI_99", "project" => %{"id" => "PVT_abc"}}
-                       ]
-                     }
-                   }
-                 }
-               }
-             }}
-
-          payload["query"] =~ "SymphonyGitHubSetState" ->
-            :counters.add(set_state_calls, 1, 1)
-            vars = payload["variables"]
-
-            case vars["fieldId"] do
-              "PVTSSF_native" -> assert vars["optionId"] == "nat-inprog"
-              "PVTSSF_x" -> assert vars["optionId"] == "opt-inprog"
-            end
-
-            {:ok,
-             %{
-               status: 200,
-               body: %{
-                 "data" => %{
-                   "updateProjectV2ItemFieldValue" => %{
-                     "projectV2Item" => %{"id" => "PVTI_99"}
-                   }
-                 }
-               }
-             }}
-
-          true ->
-            flunk("unexpected query: #{payload["query"]}")
-        end
-      end
-
-      assert :ok =
-               Client.update_issue_state("I_kw_99", "In Progress",
-                 base_dir: base_dir,
-                 request_fun: request_fun
-               )
-
-      assert :counters.get(set_state_calls, 1) == 2
+      assert :counters.get(set_state_calls, 1) == 1
+      assert :counters.get(seq, 1) == 3
     end
 
     test "closes issue for terminal states", %{base_dir: base_dir} do
@@ -1402,10 +1301,8 @@ defmodule SymphonyElixir.GitHub.ClientTest do
              }}
 
           payload["query"] =~ "SymphonyGitHubSetState" ->
-            case payload["variables"]["fieldId"] do
-              "PVTSSF_x" -> assert payload["variables"]["optionId"] == "opt-done"
-              "PVTSSF_native" -> assert payload["variables"]["optionId"] == "nat-done"
-            end
+            assert payload["variables"]["fieldId"] == "PVTSSF_x"
+            assert payload["variables"]["optionId"] == "opt-done"
 
             {:ok,
              %{
@@ -1441,7 +1338,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  request_fun: request_fun
                )
 
-      assert :counters.get(seq, 1) == 4
+      assert :counters.get(seq, 1) == 3
     end
 
     test "returns error for unknown state", %{base_dir: base_dir} do
@@ -1765,7 +1662,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
 
       ProjectMetadata.write!(tmp, %{
         "project_id" => "PVT_abc",
-        "status_field_name" => "Symphony State",
+        "status_field_name" => "Status",
         "state_options" => %{"Todo" => "opt-todo"},
         "viewer_login" => "worker"
       })
@@ -2043,7 +1940,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           %{
             "__typename" => "ProjectV2ItemFieldSingleSelectValue",
             "name" => opts.state_name,
-            "field" => %{"id" => "PVTSSF_x", "name" => "Symphony State"}
+            "field" => %{"id" => "PVTSSF_x", "name" => "Status"}
           }
         ]
       }

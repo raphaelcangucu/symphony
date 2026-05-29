@@ -116,7 +116,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
     %{
       project_id: Map.fetch!(cfg, "project_id"),
       repo: Map.get(cfg, "repo"),
-      status_field: Map.get(cfg, "status_field", "Symphony State")
+      status_field: Map.get(cfg, "status_field", "Status")
     }
   end
 

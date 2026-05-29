@@ -4,7 +4,6 @@ github:
   project:
     mode: auto
     title: Symphony
-  status_field: Symphony State
   admission_label: symphony
 tracker:
   field_states:
@@ -85,11 +84,11 @@ Work only in the provided repository copy. Do not touch any other path.
 
 ## Prerequisite: GitHub access
 
-The agent runs against GitHub Projects v2. `GITHUB_TOKEN` must be present and have the `repo` and `project` scopes. Symphony manages issue state through a custom single-select field called `Symphony State` whose options come from `tracker.active_states` and `tracker.terminal_states`. Project metadata is cached at `.symphony/github-project.json`.
+The agent runs against GitHub Projects v2. `GITHUB_TOKEN` must be present and have the `repo` and `project` scopes. Symphony manages issue state through the GitHub Project `Status` single-select field — the single source of truth — whose options come from `tracker.field_states` (or `tracker.active_states` plus `tracker.terminal_states` when `field_states` is unset). Project metadata is cached at `.symphony/github-project.json`.
 
 ## Default posture
 
-- Start by determining the issue's current `Symphony State`, then follow the matching flow.
+- Start by determining the issue's current Project `Status`, then follow the matching flow.
 - Use a single persistent `## Codex Workpad` issue comment as the source of truth for progress and handoff notes.
 - Move state only when the matching quality bar is met (see Status map and Completion bar below).
 - Operate autonomously end-to-end unless blocked by missing required tools, secrets, or permissions.
@@ -112,7 +111,7 @@ The agent runs against GitHub Projects v2. `GITHUB_TOKEN` must be present and ha
 ## Step 0: Determine current issue state and route
 
 1. Fetch the issue by `owner/repo#number`.
-2. Read the current `Symphony State`.
+2. Read the current Project `Status`.
 3. Route to the matching flow:
    - `Todo` -> immediately move to `In Progress`, then ensure the bootstrap workpad comment exists (create if missing), then start the execution flow.
    - `In Progress` -> continue execution from the existing workpad comment.

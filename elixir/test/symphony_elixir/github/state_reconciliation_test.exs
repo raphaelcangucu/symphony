@@ -8,7 +8,7 @@ defmodule SymphonyElixir.GitHub.StateReconciliationTest do
     "project_id" => "PVT_test",
     "project_url" => "https://github.com/orgs/clouapp/projects/1",
     "status_field_id" => "FIELD_1",
-    "status_field_name" => "Symphony State",
+    "status_field_name" => "Status",
     "state_options" => %{"Todo" => "opt_todo", "Done" => "opt_done"}
   }
 
@@ -79,7 +79,7 @@ defmodule SymphonyElixir.GitHub.StateReconciliationTest do
                       %{
                         "__typename" => "ProjectV2ItemFieldSingleSelectValue",
                         "name" => state_name,
-                        "field" => %{"id" => "FIELD_1", "name" => "Symphony State"}
+                        "field" => %{"id" => "FIELD_1", "name" => "Status"}
                       }
                     ]
                   }
@@ -155,7 +155,12 @@ defmodule SymphonyElixir.GitHub.StateReconciliationTest do
   end
 
   test "reconcile adds missing WORKFLOW states via updateProjectV2Field", %{dir: dir} do
-    assert :ok = StateReconciliation.reconcile(dir, @metadata, client_module: AddStateMock)
+    log =
+      capture_log(fn ->
+        assert :ok = StateReconciliation.reconcile(dir, @metadata, client_module: AddStateMock)
+      end)
+
+    assert log =~ "Added Status option(s)"
   end
 
   test "reconcile is no-op when WORKFLOW states already match cache", %{dir: dir} do
@@ -184,6 +189,8 @@ defmodule SymphonyElixir.GitHub.StateReconciliationTest do
     assert {:error, message} = StateReconciliation.reconcile(dir, metadata, client_module: InUseMock)
     assert message =~ "Legacy"
     assert message =~ "project item"
+    assert message =~ "Project Status"
+    assert message =~ "Move them to another state"
   end
 
   defmodule AddBacklogMock do

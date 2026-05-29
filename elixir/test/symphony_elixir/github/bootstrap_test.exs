@@ -43,14 +43,17 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
              }
            }}
 
-        query =~ "SymphonyGitHubCreateField" ->
+        query =~ "SymphonyGitHubReadProject" ->
           {:ok,
            %{
              "data" => %{
-               "createProjectV2Field" => %{
-                 "projectV2Field" => %{
+               "node" => %{
+                 "id" => "PVT_abc",
+                 "number" => 7,
+                 "url" => "https://github.com/users/raphaelcangucu/projects/7",
+                 "statusField" => %{
                    "id" => "PVTSSF_xyz",
-                   "name" => "Symphony State",
+                   "name" => "Status",
                    "options" => [
                      %{"id" => "opt-todo", "name" => "Todo"},
                      %{"id" => "opt-inprog", "name" => "In Progress"},
@@ -103,22 +106,14 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
                  "id" => "PVT_existing",
                  "number" => 3,
                  "url" => "https://github.com/users/raphaelcangucu/projects/3",
-                 "symphonyField" => %{
+                 "statusField" => %{
                    "id" => "PVTSSF_existing",
-                   "name" => "Symphony State",
+                   "name" => "Status",
                    "options" => [
                      %{"id" => "opt-todo", "name" => "Todo"},
                      %{"id" => "opt-inprog", "name" => "In Progress"},
                      %{"id" => "opt-done", "name" => "Done"},
                      %{"id" => "opt-cancel", "name" => "Cancelled"}
-                   ]
-                 },
-                 "nativeField" => %{
-                   "id" => "PVTSSF_native",
-                   "name" => "Status",
-                   "options" => [
-                     %{"id" => "nat-todo", "name" => "Todo"},
-                     %{"id" => "nat-inprog", "name" => "In Progress"}
                    ]
                  }
                }
@@ -266,7 +261,7 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
     end
   end
 
-  defmodule CreateFieldUnexpectedMock do
+  defmodule MissingStatusAutoMock do
     def graphql(query, _variables, _opts \\ []) do
       cond do
         query =~ "SymphonyGitHubResolveOwner" ->
@@ -286,13 +281,8 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
              }
            }}
 
-        query =~ "SymphonyGitHubCreateField" ->
-          {:ok,
-           %{
-             "data" => %{
-               "createProjectV2Field" => %{"projectV2Field" => %{"unexpected" => true}}
-             }
-           }}
+        query =~ "SymphonyGitHubReadProject" ->
+          {:ok, %{"data" => %{"node" => %{"id" => "PVT_x", "statusField" => nil}}}}
       end
     end
   end
@@ -324,14 +314,17 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
              }
            }}
 
-        query =~ "SymphonyGitHubCreateField" ->
+        query =~ "SymphonyGitHubReadProject" ->
           {:ok,
            %{
              "data" => %{
-               "createProjectV2Field" => %{
-                 "projectV2Field" => %{
+               "node" => %{
+                 "id" => "PVT_m",
+                 "number" => 4,
+                 "url" => "https://github.com/users/m/projects/4",
+                 "statusField" => %{
                    "id" => "PVTSSF_m",
-                   "name" => "Symphony State",
+                   "name" => "Status",
                    "options" => [
                      %{"id" => "opt-todo", "name" => "Todo"},
                      %{"id" => nil, "name" => nil},
@@ -394,13 +387,22 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
     def graphql(query, _variables, _opts \\ []) do
       cond do
         query =~ "SymphonyGitHubReadProject" ->
-          {:ok, %{"data" => %{"node" => %{"id" => "PVT_specified", "symphonyField" => nil}}}}
+          {:ok, %{"data" => %{"node" => %{"id" => "PVT_specified"}}}}
+      end
+    end
+  end
+
+  defmodule ExistingMissingStatusMock do
+    def graphql(query, _variables, _opts \\ []) do
+      cond do
+        query =~ "SymphonyGitHubReadProject" ->
+          {:ok, %{"data" => %{"node" => %{"id" => "PVT_specified", "statusField" => nil}}}}
       end
     end
   end
 
   describe "ensure_project/1 with mode=auto and no cache" do
-    test "creates project + field and writes metadata", %{base_dir: base_dir} do
+    test "creates project, resolves Status field, and writes metadata", %{base_dir: base_dir} do
       Process.put(:bootstrap_test_pid, self())
 
       assert :ok = Bootstrap.ensure_project(base_dir: base_dir, client_module: AutoMock)
@@ -413,19 +415,19 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
 
       assert project_query =~ "SymphonyGitHubCreateProject"
 
-      assert_received {:graphql, field_query, %{"projectId" => "PVT_abc", "name" => "Symphony State"} = field_vars, _}
+      assert_received {:graphql, read_query, %{"projectId" => "PVT_abc", "statusFieldName" => "Status"}, _}
 
-      assert field_query =~ "SymphonyGitHubCreateField"
-      assert is_list(field_vars["options"])
-      assert Enum.any?(field_vars["options"], &(&1["name"] == "In Progress"))
-      assert Enum.any?(field_vars["options"], &(&1["name"] == "Cancelled"))
+      assert read_query =~ "SymphonyGitHubReadProject"
 
       assert {:ok, metadata} = ProjectMetadata.read(base_dir)
       assert metadata["project_id"] == "PVT_abc"
       assert metadata["project_number"] == 7
       assert metadata["status_field_id"] == "PVTSSF_xyz"
+      assert metadata["status_field_name"] == "Status"
       assert metadata["state_options"]["Todo"] == "opt-todo"
       assert metadata["state_options"]["Cancelled"] == "opt-cancel"
+      refute Map.has_key?(metadata, "native_status_field_id")
+      refute Map.has_key?(metadata, "native_state_options")
       assert is_binary(metadata["bootstrapped_at"])
     end
   end
@@ -469,9 +471,10 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
 
       assert {:ok, metadata} = ProjectMetadata.read(base_dir)
       assert metadata["project_id"] == "PVT_existing"
+      assert metadata["status_field_name"] == "Status"
       assert metadata["state_options"]["Todo"] == "opt-todo"
-      assert metadata["native_status_field_id"] == "PVTSSF_native"
-      assert metadata["native_state_options"]["In Progress"] == "nat-inprog"
+      refute Map.has_key?(metadata, "native_status_field_id")
+      refute Map.has_key?(metadata, "native_state_options")
     end
 
     test "fails when project_id missing", %{base_dir: base_dir} do
@@ -507,39 +510,13 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
       assert message =~ "Invalid GitHub project metadata"
     end
 
-    test "leaves caller actionable when field creation fails after project creation", %{base_dir: base_dir} do
-      defmodule OrphanMock do
-        def graphql(query, _variables, _opts \\ []) do
-          cond do
-            query =~ "SymphonyGitHubResolveOwner" ->
-              {:ok, %{"data" => %{"repository" => %{"owner" => %{"id" => "OWNER_ID"}}}}}
-
-            query =~ "SymphonyGitHubCreateProject" ->
-              {:ok,
-               %{
-                 "data" => %{
-                   "createProjectV2" => %{
-                     "projectV2" => %{
-                       "id" => "PVT_orphan",
-                       "number" => 9,
-                       "url" => "https://github.com/users/raphaelcangucu/projects/9"
-                     }
-                   }
-                 }
-               }}
-
-            query =~ "SymphonyGitHubCreateField" ->
-              {:error, {:github_api_status, 422}}
-          end
-        end
-      end
-
+    test "surfaces missing Status field on auto-created project", %{base_dir: base_dir} do
       assert {:error, message} =
-               Bootstrap.ensure_project(base_dir: base_dir, client_module: OrphanMock)
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: MissingStatusAutoMock)
 
-      assert message =~ "https://github.com/users/raphaelcangucu/projects/9"
-      assert message =~ "field creation failed"
-      assert message =~ "github.project.mode=existing"
+      assert message =~ "GitHub project bootstrap failed"
+      assert message =~ "Status"
+      assert message =~ "single-select"
 
       refute match?({:ok, _}, ProjectMetadata.read(base_dir))
     end
@@ -653,16 +630,6 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
     end
   end
 
-  describe "create_status_field unexpected body" do
-    test "formats create_field_unexpected with project url and inspected body", %{base_dir: base_dir} do
-      assert {:error, message} =
-               Bootstrap.ensure_project(base_dir: base_dir, client_module: CreateFieldUnexpectedMock)
-
-      assert message =~ "https://github.com/users/x/projects/1"
-      assert message =~ "Symphony State field response was unexpected"
-    end
-  end
-
   describe "build_metadata fallback" do
     test "skips malformed option entries and records well-formed states", %{base_dir: base_dir} do
       assert :ok =
@@ -719,6 +686,15 @@ defmodule SymphonyElixir.GitHub.BootstrapTest do
 
       assert message =~ "GitHub project bootstrap failed"
       assert message =~ "existing_project_unexpected"
+    end
+
+    test "surfaces missing Status field on existing project", %{base_dir: base_dir} do
+      assert {:error, message} =
+               Bootstrap.ensure_project(base_dir: base_dir, client_module: ExistingMissingStatusMock)
+
+      assert message =~ "GitHub project bootstrap failed"
+      assert message =~ "Status"
+      assert message =~ "single-select"
     end
   end
 

@@ -44,11 +44,11 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
      customize them in Team Settings → Workflow in Linear.
    - **GitHub**: Set `github.repo` to `owner/repo`. Symphony bootstraps a repo-level
      GitHub Project v2 named `Symphony` (configurable via `github.project.title`) on
-     first run and tracks issue state through a custom single-select field called
-     `Symphony State` whose options come from `tracker.field_states` when set,
-     otherwise `tracker.active_states` plus `tracker.terminal_states`. Use
-     `field_states` to include board-only options such as `Backlog` that are not
-     polled. Local project metadata is cached in
+     first run and tracks issue state through the GitHub Project `Status`
+     single-select field — the single source of truth — whose options come from
+     `tracker.field_states` when set, otherwise `tracker.active_states` plus
+     `tracker.terminal_states`. Use `field_states` to include board-only options such
+     as `Backlog` that are not polled. Local project metadata is cached in
      `.symphony/github-project.json` (gitignored).
 
      Issues are admitted when they carry `symphony`, `symphony:codex`, or
@@ -198,7 +198,6 @@ github:
   project:
     mode: auto   # auto = bootstrap a new project; existing = use github.project.id
     title: Symphony
-  status_field: Symphony State
   admission_label: symphony
 workspace:
   root: ~/code/workspaces
