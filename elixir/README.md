@@ -273,23 +273,39 @@ The local tracker runs from the same Phoenix server as the dashboard/API and sto
 SQLite path configured by `local.database_path`. The React app uses `SYMPHONY_TRACKER_TOKEN` as a
 bearer token for `/api/tracker/v1/*` and the tracker channel.
 
+The simplest way to run the tracker locally is the resilient `make serve` target. It ensures
+dependencies and database migrations, injects a dev bearer token, and boots the app through Mix —
+which is required because the packaged escript (`bin/symphony`) cannot load the native SQLite
+driver NIF:
+
 ```bash
-export SYMPHONY_TRACKER_TOKEN="$(openssl rand -hex 24)"
-mise exec -- mix ecto.create
-mise exec -- mix ecto.migrate
+cd elixir
+make serve            # http://localhost:4000/tracker  (dev token: dev-local-token)
+make stop             # stop the running server
 ```
 
-For frontend development, run Phoenix and Vite separately:
+Override the token or port as needed:
 
 ```bash
-# Terminal 1
-cd elixir
-mise exec -- ./bin/symphony --port 4000 ./WORKFLOW.md
+SYMPHONY_TRACKER_TOKEN="$(openssl rand -hex 24)" make serve TRACKER_PORT=4001
+```
 
-# Terminal 2
-cd tracker
-npm install
-npm run dev
+Database migrations can also be run on their own:
+
+```bash
+make migrate                          # create db if needed + apply pending migrations
+make new-migration name=add_widgets   # generate a new migration file
+make rollback                         # roll back the last migration
+```
+
+For frontend hot-reload development, run the API and Vite separately:
+
+```bash
+# Terminal 1 — API + tracker
+cd elixir && make serve
+
+# Terminal 2 — Vite dev server
+cd tracker && npm install && npm run dev
 ```
 
 Vite serves the app under `/tracker/` and proxies `/api` plus `/socket` to Phoenix by default.
