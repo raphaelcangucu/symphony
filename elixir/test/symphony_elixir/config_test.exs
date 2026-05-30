@@ -43,6 +43,46 @@ defmodule SymphonyElixir.ConfigTest do
     end
   end
 
+  describe "editor config" do
+    test "defaults when the editor section is omitted" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      """)
+
+      refute SymphonyElixir.Config.editor_enabled?()
+      assert SymphonyElixir.Config.editor_binary() == "code-server"
+      assert SymphonyElixir.Config.editor_host() == "127.0.0.1"
+      assert SymphonyElixir.Config.editor_port() == 4002
+      assert SymphonyElixir.Config.editor_auth() == "none"
+      assert SymphonyElixir.Config.editor_password() == nil
+      assert SymphonyElixir.Config.editor_base_url() == "http://127.0.0.1:4002"
+    end
+
+    test "reads configured editor keys" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      editor:
+        enabled: true
+        binary: /opt/code-server/bin/code-server
+        host: 0.0.0.0
+        port: 5000
+        auth: password
+        password: hunter2
+        base_url: https://editor.example.com
+      """)
+
+      assert SymphonyElixir.Config.editor_enabled?()
+      assert SymphonyElixir.Config.editor_binary() == "/opt/code-server/bin/code-server"
+      assert SymphonyElixir.Config.editor_host() == "0.0.0.0"
+      assert SymphonyElixir.Config.editor_port() == 5000
+      assert SymphonyElixir.Config.editor_auth() == "password"
+      assert SymphonyElixir.Config.editor_password() == "hunter2"
+      assert SymphonyElixir.Config.editor_base_url() == "https://editor.example.com"
+    end
+  end
+
   defp load_workflow_with_front_matter(front_matter) do
     content = "---\n" <> front_matter <> "---\n"
     File.write!(Workflow.workflow_file_path(), content)

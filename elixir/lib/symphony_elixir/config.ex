@@ -23,6 +23,11 @@ defmodule SymphonyElixir.Config do
   @default_observability_heartbeat_interval_ms 5_000
   @default_observability_min_report_interval_ms 250
   @default_server_host "127.0.0.1"
+  @default_editor_enabled false
+  @default_editor_binary "code-server"
+  @default_editor_host "127.0.0.1"
+  @default_editor_port 4002
+  @default_editor_auth "none"
 
   @tracker_sections ["local", "linear", "github", "memory"]
   @agent_sections ["claude", "codex"]
@@ -152,6 +157,22 @@ defmodule SymphonyElixir.Config do
                                keys: [
                                  port: [type: {:or, [:non_neg_integer, nil]}, default: nil],
                                  host: [type: :string, default: @default_server_host]
+                               ]
+                             ],
+                             editor: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 enabled: [type: :boolean, default: @default_editor_enabled],
+                                 binary: [type: :string, default: @default_editor_binary],
+                                 host: [type: :string, default: @default_editor_host],
+                                 port: [type: :pos_integer, default: @default_editor_port],
+                                 auth: [
+                                   type: {:in, ["none", "password"]},
+                                   default: @default_editor_auth
+                                 ],
+                                 password: [type: {:or, [:string, nil]}, default: nil],
+                                 base_url: [type: {:or, [:string, nil]}, default: nil]
                                ]
                              ]
                            )
@@ -451,6 +472,44 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:server, :host])
   end
 
+  @spec editor_enabled?() :: boolean()
+  def editor_enabled? do
+    get_in(validated_workflow_options(), [:editor, :enabled])
+  end
+
+  @spec editor_binary() :: String.t()
+  def editor_binary do
+    get_in(validated_workflow_options(), [:editor, :binary])
+  end
+
+  @spec editor_host() :: String.t()
+  def editor_host do
+    get_in(validated_workflow_options(), [:editor, :host])
+  end
+
+  @spec editor_port() :: pos_integer()
+  def editor_port do
+    get_in(validated_workflow_options(), [:editor, :port])
+  end
+
+  @spec editor_auth() :: String.t()
+  def editor_auth do
+    get_in(validated_workflow_options(), [:editor, :auth])
+  end
+
+  @spec editor_password() :: String.t() | nil
+  def editor_password do
+    get_in(validated_workflow_options(), [:editor, :password])
+  end
+
+  @spec editor_base_url() :: String.t()
+  def editor_base_url do
+    case get_in(validated_workflow_options(), [:editor, :base_url]) do
+      url when is_binary(url) and url != "" -> String.trim_trailing(url, "/")
+      _ -> "http://#{editor_host()}:#{editor_port()}"
+    end
+  end
+
   @spec validate!() :: :ok | {:error, String.t()}
   def validate! do
     with {:ok, _workflow} <- current_workflow(),
@@ -536,7 +595,8 @@ defmodule SymphonyElixir.Config do
       agent: extract_agent_options(section_map(config, "agent")),
       hooks: extract_hooks_options(section_map(config, "hooks")),
       observability: extract_observability_options(section_map(config, "observability")),
-      server: extract_server_options(section_map(config, "server"))
+      server: extract_server_options(section_map(config, "server")),
+      editor: extract_editor_options(section_map(config, "editor"))
     }
   end
 
@@ -608,6 +668,17 @@ defmodule SymphonyElixir.Config do
     %{}
     |> put_if_present(:port, non_negative_integer_value(Map.get(section, "port")))
     |> put_if_present(:host, scalar_string_value(Map.get(section, "host")))
+  end
+
+  defp extract_editor_options(section) do
+    %{}
+    |> put_if_present(:enabled, boolean_value(Map.get(section, "enabled")))
+    |> put_if_present(:binary, binary_value(Map.get(section, "binary")))
+    |> put_if_present(:host, scalar_string_value(Map.get(section, "host")))
+    |> put_if_present(:port, positive_integer_value(Map.get(section, "port")))
+    |> put_if_present(:auth, scalar_string_value(Map.get(section, "auth")))
+    |> put_if_present(:password, scalar_string_value(Map.get(section, "password")))
+    |> put_if_present(:base_url, scalar_string_value(Map.get(section, "base_url")))
   end
 
   defp section_map(config, key) do
