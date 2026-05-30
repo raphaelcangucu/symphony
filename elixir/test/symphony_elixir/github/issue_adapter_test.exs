@@ -119,4 +119,128 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
                %{"status" => "Done", "item_id" => "PVTI_1"}
              )
   end
+
+  defmodule CreateClientStub do
+    def graphql(query, vars, _opts) do
+      cond do
+        String.contains?(query, "SymphonyUiRepoMetadata") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "id" => "REPO_1",
+                 "labels" => %{
+                   "nodes" => [
+                     %{"id" => "L1", "name" => "bug", "color" => "ff0000"},
+                     %{"id" => "AGC", "name" => "symphony:codex", "color" => nil}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiAssignableUsers") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "assignableUsers" => %{
+                   "nodes" => [%{"id" => "U1", "login" => "alice", "name" => "Alice", "avatarUrl" => nil}]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiStatusOptions") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "fields" => %{
+                   "nodes" => [
+                     %{
+                       "__typename" => "ProjectV2SingleSelectField",
+                       "id" => "FIELD_1",
+                       "name" => "Symphony State",
+                       "options" => [%{"id" => "OPT_TODO", "name" => "Todo"}]
+                     }
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiCreateIssue") ->
+          send(self(), {:create_input, vars["input"]})
+
+          {:ok,
+           %{
+             "data" => %{
+               "createIssue" => %{
+                 "issue" => %{"id" => "I_10", "number" => 10, "url" => "https://x/10", "title" => "New"}
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiAddProjectItem") ->
+          {:ok, %{"data" => %{"addProjectV2ItemById" => %{"item" => %{"id" => "PVTI_10"}}}}}
+
+        String.contains?(query, "SymphonyUiSetStatus") ->
+          {:ok, %{"data" => %{"updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_10"}}}}}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
+  describe "create_issue" do
+    setup do
+      Application.put_env(:symphony_elixir, :github_client_module, CreateClientStub)
+      :ok
+    end
+
+    test "creates issue, resolves agent label, adds to board, sets status" do
+      attrs = %{
+        "title" => "New",
+        "status" => "Todo",
+        "label_ids" => ["L1"],
+        "assignee_ids" => ["U1"],
+        "agent" => "codex"
+      }
+
+      assert {:ok, %IssueDTO{identifier: "#10", title: "New", url: "https://x/10", labels: labels}} =
+               IssueAdapter.create_issue(project(), attrs)
+
+      assert "bug" in labels
+      assert "symphony:codex" in labels
+
+      assert_received {:create_input, input}
+      assert input["repositoryId"] == "REPO_1"
+      assert input["assigneeIds"] == ["U1"]
+      assert "L1" in input["labelIds"]
+      assert "AGC" in input["labelIds"]
+    end
+
+    test "returns validation error when title is blank" do
+      assert {:error, {:remote_validation, %{title: ["is required"]}}} =
+               IssueAdapter.create_issue(project(), %{"title" => "  ", "status" => "Todo"})
+    end
+  end
+
+  describe "list_labels / list_assignable_users" do
+    setup do
+      Application.put_env(:symphony_elixir, :github_client_module, CreateClientStub)
+      :ok
+    end
+
+    test "list_labels returns repo labels" do
+      assert {:ok, labels} = IssueAdapter.list_labels(project())
+      assert Enum.any?(labels, &(&1.name == "bug" and &1.id == "L1"))
+    end
+
+    test "list_assignable_users returns assignable users" do
+      assert {:ok, [%{login: "alice", id: "U1"}]} = IssueAdapter.list_assignable_users(project())
+    end
+  end
 end

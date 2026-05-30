@@ -50,6 +50,23 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
   end
 
   @impl true
+  def list_labels(%Project{slug: slug}) do
+    labels =
+      slug
+      |> Context.list_issues([])
+      |> Enum.map(&to_dto/1)
+      |> Enum.flat_map(& &1.labels)
+      |> Enum.reject(&(is_nil(&1) or &1 == ""))
+      |> Enum.uniq()
+      |> Enum.map(fn name -> %{id: name, name: name, color: nil} end)
+
+    {:ok, labels}
+  end
+
+  @impl true
+  def list_assignable_users(%Project{} = _project), do: {:ok, []}
+
+  @impl true
   def list_comments(%Project{slug: slug}, identifier) do
     Context.list_comments(slug, identifier)
   end

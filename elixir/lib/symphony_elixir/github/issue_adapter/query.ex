@@ -65,6 +65,39 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   }
   """
 
+  @repo_metadata """
+  query SymphonyUiRepoMetadata($owner: String!, $name: String!) {
+    repository(owner: $owner, name: $name) {
+      id
+      labels(first: 100) { nodes { id name color } }
+    }
+  }
+  """
+
+  @assignable_users """
+  query SymphonyUiAssignableUsers($owner: String!, $name: String!) {
+    repository(owner: $owner, name: $name) {
+      assignableUsers(first: 100) { nodes { id login name avatarUrl } }
+    }
+  }
+  """
+
+  @create_issue """
+  mutation SymphonyUiCreateIssue($input: CreateIssueInput!) {
+    createIssue(input: $input) {
+      issue { id number url title }
+    }
+  }
+  """
+
+  @add_project_item """
+  mutation SymphonyUiAddProjectItem($projectId: ID!, $contentId: ID!) {
+    addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+      item { id }
+    }
+  }
+  """
+
   @spec list_items_query() :: String.t()
   def list_items_query, do: @list_items
 
@@ -73,6 +106,57 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
 
   @spec update_field_value_mutation() :: String.t()
   def update_field_value_mutation, do: @update_field_value
+
+  @spec repo_metadata_query() :: String.t()
+  def repo_metadata_query, do: @repo_metadata
+
+  @spec assignable_users_query() :: String.t()
+  def assignable_users_query, do: @assignable_users
+
+  @spec create_issue_mutation() :: String.t()
+  def create_issue_mutation, do: @create_issue
+
+  @spec add_project_item_mutation() :: String.t()
+  def add_project_item_mutation, do: @add_project_item
+
+  @spec repository_id(map()) :: {:ok, String.t()} | {:error, :repository_not_found}
+  def repository_id(%{"data" => %{"repository" => %{"id" => id}}}) when is_binary(id), do: {:ok, id}
+  def repository_id(_), do: {:error, :repository_not_found}
+
+  @spec labels(map()) :: [map()]
+  def labels(%{"data" => %{"repository" => %{"labels" => %{"nodes" => nodes}}}}) when is_list(nodes) do
+    Enum.map(nodes, fn node ->
+      %{id: node["id"], name: node["name"], color: node["color"]}
+    end)
+  end
+
+  def labels(_), do: []
+
+  @spec assignable_users(map()) :: [map()]
+  def assignable_users(%{"data" => %{"repository" => %{"assignableUsers" => %{"nodes" => nodes}}}})
+      when is_list(nodes) do
+    Enum.map(nodes, fn node ->
+      %{id: node["id"], login: node["login"], name: node["name"], avatar_url: node["avatarUrl"]}
+    end)
+  end
+
+  def assignable_users(_), do: []
+
+  @spec created_issue(map()) :: {:ok, map()} | {:error, :create_failed}
+  def created_issue(%{"data" => %{"createIssue" => %{"issue" => %{"id" => id} = issue}}})
+      when is_binary(id) do
+    {:ok, issue}
+  end
+
+  def created_issue(_), do: {:error, :create_failed}
+
+  @spec project_item_id(map()) :: {:ok, String.t()} | {:error, :add_item_failed}
+  def project_item_id(%{"data" => %{"addProjectV2ItemById" => %{"item" => %{"id" => id}}}})
+      when is_binary(id) do
+    {:ok, id}
+  end
+
+  def project_item_id(_), do: {:error, :add_item_failed}
 
   @spec resolve_field_and_option(map(), String.t(), String.t()) ::
           {:ok, String.t(), String.t()} | {:error, :status_not_found}

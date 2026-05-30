@@ -1,7 +1,12 @@
-import type { CreateIssueInput, Issue, MoveIssueInput } from "@/types/issue";
+import type { CreateIssueInput, Issue, IssueFormOptions, MoveIssueInput } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
-import { type BackendIssueDto, normalizeIssue } from "./mappers";
+import {
+  type BackendIssueDto,
+  type BackendIssueFormOptionsDto,
+  normalizeIssue,
+  normalizeIssueFormOptions,
+} from "./mappers";
 
 export interface IssueListFilters {
   search?: string;
@@ -37,11 +42,35 @@ export async function getIssue(projectSlug: string, identifier: string): Promise
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
 
+export async function getIssueFormOptions(projectSlug: string): Promise<IssueFormOptions> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  const response = await http.get(trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/form_options`));
+  return normalizeIssueFormOptions(unwrapData<BackendIssueFormOptionsDto>(response));
+}
+
 export async function createIssue(projectSlug: string, input: CreateIssueInput): Promise<Issue> {
   if (!projectSlug.trim()) throw new Error("projectSlug is required");
   if (!input.title.trim()) throw new Error("title is required");
-  const response = await http.post(trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues`), input);
+  const response = await http.post(
+    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues`),
+    serializeCreateInput(input),
+  );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}
+
+function serializeCreateInput(input: CreateIssueInput): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    title: input.title,
+    description: input.description ?? null,
+    status: input.status,
+  };
+
+  if (input.priority !== undefined && input.priority !== null) payload.priority = input.priority;
+  if (input.labelIds && input.labelIds.length > 0) payload.label_ids = input.labelIds;
+  if (input.assigneeIds && input.assigneeIds.length > 0) payload.assignee_ids = input.assigneeIds;
+  if (input.agent) payload.agent = input.agent;
+
+  return payload;
 }
 
 export async function moveIssue(projectSlug: string, identifier: string, input: MoveIssueInput): Promise<Issue> {

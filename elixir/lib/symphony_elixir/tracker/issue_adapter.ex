@@ -23,6 +23,19 @@ defmodule SymphonyElixir.Tracker.IssueAdapter do
           | {:remote_validation, map()}
           | {:adapter_error, term()}
 
+  @type label_option :: %{
+          required(:id) => String.t() | nil,
+          required(:name) => String.t(),
+          optional(:color) => String.t() | nil
+        }
+
+  @type user_option :: %{
+          required(:id) => String.t() | nil,
+          required(:login) => String.t() | nil,
+          optional(:name) => String.t() | nil,
+          optional(:avatar_url) => String.t() | nil
+        }
+
   @callback kind() :: :local | :github | :linear
   @callback list_issues(Project.t(), filters()) :: {:ok, [IssueDTO.t()]} | {:error, tracker_error()}
   @callback get_issue(Project.t(), String.t()) :: {:ok, IssueDTO.t()} | {:error, tracker_error()}
@@ -32,6 +45,8 @@ defmodule SymphonyElixir.Tracker.IssueAdapter do
   @callback move_issue(Project.t(), String.t(), map()) ::
               {:ok, IssueDTO.t()} | {:error, tracker_error()}
   @callback list_statuses(Project.t()) :: {:ok, [IssueDTO.status()]} | {:error, tracker_error()}
+  @callback list_labels(Project.t()) :: {:ok, [label_option()]} | {:error, tracker_error()}
+  @callback list_assignable_users(Project.t()) :: {:ok, [user_option()]} | {:error, tracker_error()}
   @callback list_comments(Project.t(), String.t()) :: {:ok, [map()]} | {:error, tracker_error()}
   @callback add_comment(Project.t(), String.t(), String.t(), map()) ::
               {:ok, map()} | {:error, tracker_error()}

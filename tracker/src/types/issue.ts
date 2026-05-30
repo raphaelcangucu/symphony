@@ -28,11 +28,42 @@ export interface Issue {
   updatedAt: string;
 }
 
+export type AgentKind = "codex" | "claude";
+
+export interface IssueLabelOption {
+  id: string | null;
+  name: string;
+  color: string | null;
+}
+
+export interface IssueAssigneeOption {
+  id: string | null;
+  login: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+export interface AgentOption {
+  value: AgentKind;
+  label: string;
+  default: boolean;
+}
+
+export interface IssueFormOptions {
+  labels: IssueLabelOption[];
+  assignees: IssueAssigneeOption[];
+  statuses: WorkflowStatusName[];
+  agents: AgentOption[];
+}
+
 export interface CreateIssueInput {
   title: string;
   description?: string | null;
   status: WorkflowStatusName;
   priority?: IssuePriority | null;
+  labelIds?: string[];
+  assigneeIds?: string[];
+  agent?: AgentKind | null;
 }
 
 export interface MoveIssueInput {

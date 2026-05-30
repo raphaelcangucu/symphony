@@ -229,6 +229,34 @@ delete the cache and restart so bootstrap can resolve `viewer { login }`.
 3. Wait one poll cycle (default 30s) for admission and state initialization.
 4. Check the orchestrator log for `Admission failed for issue ...` warnings.
 
+## Creating Issues From the Tracker UI
+
+The tracker "Create issue" modal creates issues for **local, GitHub, and Linear**
+projects. For GitHub and Linear the issue is created on the remote board, added to
+the configured project, and moved to the selected status.
+
+The modal lets you pick **labels**, **assignees**, and a **CLI agent** (Codex or
+Claude). The agent selector adds the `symphony:codex` / `symphony:claude` label;
+the chosen **Status** is the dispatch gate (e.g. create in `Todo` to have an agent
+start immediately, or in `Backlog` to only label it).
+
+### Create returns `501 tracker_not_supported`
+
+This was the previous behavior for remote trackers and now indicates a
+misconfiguration:
+
+1. Confirm the project's `tracker_kind` is `github` or `linear` (creation is not
+   supported for other kinds).
+2. Confirm `GITHUB_TOKEN` (issue write + `project` scope) or `LINEAR_API_KEY`
+   (write access) is set on the **Symphony server** process, not just your shell.
+
+### Labels or assignees are empty in the modal
+
+The option lists are fetched live from the remote (`GET
+/api/tracker/v1/projects/:slug/issues/form_options`). An empty list usually means
+the token cannot read repo labels / assignable users, or the GitHub repo / Linear
+team has none. Check the server log for a `tracker_*` error.
+
 ## Checking Logs
 
 Check the log files when diagnosing issues:

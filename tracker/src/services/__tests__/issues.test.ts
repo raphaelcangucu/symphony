@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { http } from "@/services/http";
-import { listIssues } from "@/services/issues";
+import { createIssue, getIssueFormOptions, listIssues } from "@/services/issues";
 
 describe("issues service filters", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -32,5 +32,83 @@ describe("issues service filters", () => {
     expect(get).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues", {
       params: { assignee: "alice" },
     });
+  });
+});
+
+describe("createIssue payload", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const createdDto = { id: 1, identifier: "#1", title: "Social login", status: "Todo" };
+
+  it("sends labels, assignees, and agent in snake_case", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: createdDto } });
+
+    await createIssue("macro-markets", {
+      title: "Social login",
+      description: "body",
+      status: "Todo",
+      priority: 2,
+      labelIds: ["L1", "L2"],
+      assigneeIds: ["U1"],
+      agent: "codex",
+    });
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues", {
+      title: "Social login",
+      description: "body",
+      status: "Todo",
+      priority: 2,
+      label_ids: ["L1", "L2"],
+      assignee_ids: ["U1"],
+      agent: "codex",
+    });
+  });
+
+  it("omits empty selectors", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: createdDto } });
+
+    await createIssue("macro-markets", {
+      title: "Social login",
+      description: null,
+      status: "Todo",
+      labelIds: [],
+      assigneeIds: [],
+      agent: null,
+    });
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues", {
+      title: "Social login",
+      description: null,
+      status: "Todo",
+    });
+  });
+});
+
+describe("getIssueFormOptions", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("normalizes labels, assignees, statuses, and agents", async () => {
+    vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: {
+        data: {
+          labels: [{ id: "L1", name: "bug", color: "ff0000" }, { name: "  " }],
+          assignees: [{ id: "U1", login: "alice", name: "Alice", avatar_url: "https://x/a.png" }],
+          statuses: [{ name: "Todo", category: "unstarted", position: 1, is_terminal: false }],
+          agents: [
+            { value: "codex", label: "Codex", default: true },
+            { value: "bogus", label: "Nope", default: false },
+          ],
+        },
+      },
+    });
+
+    const options = await getIssueFormOptions("macro-markets");
+
+    expect(options.labels).toEqual([{ id: "L1", name: "bug", color: "ff0000" }]);
+    expect(options.assignees).toEqual([
+      { id: "U1", login: "alice", name: "Alice", avatarUrl: "https://x/a.png" },
+    ]);
+    expect(options.statuses).toEqual(["Todo"]);
+    expect(options.agents).toEqual([{ value: "codex", label: "Codex", default: true }]);
   });
 });

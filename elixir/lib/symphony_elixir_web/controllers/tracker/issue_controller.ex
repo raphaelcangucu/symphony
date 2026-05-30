@@ -4,11 +4,14 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
+  alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
+
+  @agent_labels %{"codex" => "Codex", "claude" => "Claude"}
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug} = params) do
@@ -22,11 +25,31 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     end
   end
 
+  @spec form_options(Conn.t(), map()) :: Conn.t()
+  def form_options(conn, %{"project_slug" => project_slug}) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, labels} <- IssueAdapter.dispatch(project, :list_labels, []),
+         {:ok, users} <- IssueAdapter.dispatch(project, :list_assignable_users, []),
+         {:ok, statuses} <- IssueAdapter.dispatch(project, :list_statuses, []) do
+      json(conn, %{
+        data: %{
+          labels: Enum.map(labels, &present_label/1),
+          assignees: Enum.map(users, &present_user/1),
+          statuses: Enum.map(statuses, &TrackerPresenter.status/1),
+          agents: agent_options()
+        }
+      })
+    else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"project_slug" => project_slug} = params) do
     attrs =
       params
-      |> Map.delete("project_slug")
+      |> normalize_create_attrs()
       |> maybe_inject_creator()
 
     with {:ok, project} <- Context.get_project(project_slug),
@@ -101,6 +124,52 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   end
 
   defp resolve_me(value) when is_binary(value), do: {:ok, value}
+
+  defp normalize_create_attrs(params) do
+    label_ids = normalize_string_list(Map.get(params, "label_ids") || Map.get(params, "labels"))
+    assignee_ids = normalize_string_list(Map.get(params, "assignee_ids") || Map.get(params, "assignees"))
+
+    params
+    |> Map.take(["title", "description", "status", "priority"])
+    |> Map.put("label_ids", label_ids)
+    |> Map.put("assignee_ids", assignee_ids)
+    |> maybe_put_agent(Map.get(params, "agent"))
+  end
+
+  defp maybe_put_agent(attrs, agent) when agent in ["codex", "claude"], do: Map.put(attrs, "agent", agent)
+  defp maybe_put_agent(attrs, _agent), do: attrs
+
+  defp normalize_string_list(value) when is_list(value) do
+    value
+    |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
+    |> Enum.map(&String.trim/1)
+    |> Enum.uniq()
+  end
+
+  defp normalize_string_list(_value), do: []
+
+  defp agent_options do
+    default = Config.default_agent_kind()
+
+    Config.configured_agent_kinds()
+    |> Enum.filter(&Map.has_key?(@agent_labels, &1))
+    |> Enum.map(fn kind ->
+      %{value: kind, label: Map.fetch!(@agent_labels, kind), default: kind == default}
+    end)
+  end
+
+  defp present_label(label) when is_map(label) do
+    %{id: Map.get(label, :id), name: Map.get(label, :name), color: Map.get(label, :color)}
+  end
+
+  defp present_user(user) when is_map(user) do
+    %{
+      id: Map.get(user, :id),
+      login: Map.get(user, :login),
+      name: Map.get(user, :name),
+      avatar_url: Map.get(user, :avatar_url)
+    }
+  end
 
   defp maybe_inject_creator(attrs) do
     case Viewer.current() do

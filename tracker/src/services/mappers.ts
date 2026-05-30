@@ -1,6 +1,14 @@
 import type { Blocker, BlockerState, BlockerSummary } from "@/types/blocker";
 import type { Comment } from "@/types/comment";
-import type { Issue, IssuePriority } from "@/types/issue";
+import type {
+  AgentKind,
+  AgentOption,
+  Issue,
+  IssueAssigneeOption,
+  IssueFormOptions,
+  IssueLabelOption,
+  IssuePriority,
+} from "@/types/issue";
 import type { Project, TrackerKind } from "@/types/project";
 import type { ProjectSetup, WorkspaceSuggestion } from "@/types/project-setup";
 import type {
@@ -224,6 +232,63 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };
+}
+
+interface BackendLabelOptionDto {
+  id?: string | null;
+  name?: string | null;
+  color?: string | null;
+}
+
+interface BackendAssigneeOptionDto {
+  id?: string | null;
+  login?: string | null;
+  name?: string | null;
+  avatar_url?: string | null;
+  avatarUrl?: string | null;
+}
+
+interface BackendAgentOptionDto {
+  value?: string | null;
+  label?: string | null;
+  default?: boolean | null;
+}
+
+export interface BackendIssueFormOptionsDto {
+  labels?: BackendLabelOptionDto[] | null;
+  assignees?: BackendAssigneeOptionDto[] | null;
+  statuses?: BackendWorkflowStatusDto[] | null;
+  agents?: BackendAgentOptionDto[] | null;
+}
+
+export function normalizeIssueFormOptions(dto: BackendIssueFormOptionsDto): IssueFormOptions {
+  return {
+    labels: (dto.labels ?? []).flatMap(normalizeLabelOption),
+    assignees: (dto.assignees ?? []).map(normalizeAssigneeOption),
+    statuses: (dto.statuses ?? []).map((status) => normalizeStatusName(status.name ?? null)),
+    agents: (dto.agents ?? []).flatMap(normalizeAgentOption),
+  };
+}
+
+function normalizeLabelOption(dto: BackendLabelOptionDto): IssueLabelOption[] {
+  const name = dto.name?.trim();
+  if (!name) return [];
+  return [{ id: dto.id ?? null, name, color: dto.color ?? null }];
+}
+
+function normalizeAssigneeOption(dto: BackendAssigneeOptionDto): IssueAssigneeOption {
+  return {
+    id: dto.id ?? null,
+    login: dto.login ?? null,
+    name: dto.name ?? null,
+    avatarUrl: dto.avatarUrl ?? dto.avatar_url ?? null,
+  };
+}
+
+function normalizeAgentOption(dto: BackendAgentOptionDto): AgentOption[] {
+  if (dto.value !== "codex" && dto.value !== "claude") return [];
+  const value = dto.value as AgentKind;
+  return [{ value, label: dto.label?.trim() || value, default: dto.default ?? false }];
 }
 
 export function normalizeProject(dto: BackendProjectDto): Project {

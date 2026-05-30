@@ -273,7 +273,50 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     def create_issue(_p, _a), do: {:error, :not_supported_on_remote}
     def update_issue(_p, _i, _a), do: {:error, :not_supported_on_remote}
     def move_issue(_p, _i, _a), do: {:error, :not_supported_on_remote}
+
+    def list_statuses(_p),
+      do: {:ok, [%{name: "Todo", category: "unstarted", position: 0, is_terminal: false}]}
+
+    def list_labels(_p),
+      do: {:ok, [%{id: "L1", name: "bug", color: "ff0000"}, %{id: "L2", name: "symphony:codex", color: nil}]}
+
+    def list_assignable_users(_p),
+      do: {:ok, [%{id: "U1", login: "alice", name: "Alice", avatar_url: "https://example.test/a.png"}]}
+
+    def list_comments(_p, _i), do: {:error, :not_supported_on_remote}
+    def add_comment(_p, _i, _b, _a), do: {:error, :not_supported_on_remote}
+  end
+
+  defmodule FakeCreatingAdapter do
+    @behaviour SymphonyElixir.Tracker.IssueAdapter
+    alias SymphonyElixir.Tracker.IssueDTO
+
+    def kind, do: :github
+
+    def list_issues(_p, _f), do: {:ok, []}
+    def get_issue(_p, _i), do: {:error, :issue_not_found}
+
+    def create_issue(_p, attrs) do
+      {:ok,
+       IssueDTO.build(%{
+         identifier: "#42",
+         title: Map.get(attrs, "title"),
+         labels: Map.get(attrs, "label_ids", []),
+         status: %{
+           name: Map.get(attrs, "status"),
+           category: "unstarted",
+           position: 0,
+           is_terminal: false
+         },
+         project_slug: "remote-create"
+       })}
+    end
+
+    def update_issue(_p, _i, _a), do: {:error, :not_supported_on_remote}
+    def move_issue(_p, _i, _a), do: {:error, :not_supported_on_remote}
     def list_statuses(_p), do: {:ok, []}
+    def list_labels(_p), do: {:ok, []}
+    def list_assignable_users(_p), do: {:ok, []}
     def list_comments(_p, _i), do: {:error, :not_supported_on_remote}
     def add_comment(_p, _i, _b, _a), do: {:error, :not_supported_on_remote}
   end
@@ -309,6 +352,62 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
         })
 
       assert json_response(conn, 501)["error"]["code"] == "tracker_not_supported"
+    end
+
+    test "form_options returns labels, assignees, statuses, and agents" do
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/remote/issues/form_options")
+
+      assert %{
+               "data" => %{
+                 "labels" => labels,
+                 "assignees" => assignees,
+                 "statuses" => statuses,
+                 "agents" => agents
+               }
+             } = json_response(conn, 200)
+
+      assert Enum.any?(labels, &(&1["name"] == "bug"))
+      assert [%{"login" => "alice", "id" => "U1"}] = assignees
+      assert Enum.any?(statuses, &(&1["name"] == "Todo"))
+      assert is_list(agents)
+    end
+  end
+
+  describe "remote create dispatch" do
+    setup do
+      Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => FakeCreatingAdapter})
+
+      {:ok, project} =
+        Context.create_workspace_project(%{
+          "name" => "Remote Create",
+          "slug" => "remote-create",
+          "tracker" => %{"kind" => "github", "config" => %{"repo" => "o/r", "project_id" => "PVT_2"}},
+          "repositories" => [],
+          "setup" => %{}
+        })
+
+      on_exit(fn -> Application.delete_env(:symphony_elixir, :issue_adapters) end)
+
+      %{project: project}
+    end
+
+    test "create passes labels/assignees/agent through and returns the created issue" do
+      conn =
+        post(authorized_conn(), "/api/tracker/v1/projects/remote-create/issues", %{
+          "title" => "Social login first",
+          "status" => "Todo",
+          "label_ids" => ["L1"],
+          "assignee_ids" => ["U1"],
+          "agent" => "codex"
+        })
+
+      assert %{
+               "data" => %{
+                 "identifier" => "#42",
+                 "title" => "Social login first",
+                 "labels" => ["L1"]
+               }
+             } = json_response(conn, 201)
     end
   end
 

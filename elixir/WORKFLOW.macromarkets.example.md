@@ -7,6 +7,9 @@ github:
   comment_context_limit: 30
   # Base label; issues with symphony, symphony:codex, or symphony:claude are admitted.
   admission_label: symphony
+# The tracker UI can create issues directly on this GitHub board (the "New issue"
+# modal supports labels, assignees, and a Codex/Claude agent selector).
+#
 # To dogfood the local tracker UI/API against this workflow instead of GitHub,
 # remove the `github:` section and uncomment:
 #

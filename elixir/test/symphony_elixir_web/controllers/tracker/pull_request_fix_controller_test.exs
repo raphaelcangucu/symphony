@@ -19,6 +19,8 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestFixControllerTest do
     def create_issue(_p, _a), do: {:error, :not_supported_on_remote}
     def update_issue(_p, _i, _a), do: {:error, :not_supported_on_remote}
     def list_statuses(_p), do: {:ok, []}
+    def list_labels(_p), do: {:ok, []}
+    def list_assignable_users(_p), do: {:ok, []}
     def list_comments(_p, _i), do: {:ok, []}
 
     def add_comment(_p, _i, body, _a) do
