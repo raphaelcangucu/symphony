@@ -40,7 +40,13 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ConventionReader do
       "command" => Map.fetch!(map, "command"),
       "working_dir" => Map.get(map, "working_dir"),
       "source" => "convention",
-      "optional" => Map.get(map, "optional", false)
+      "optional" => Map.get(map, "optional", false),
+      "role" => Map.get(map, "role", "setup"),
+      "port_env" => Map.get(map, "port_env"),
+      "url_path" => Map.get(map, "url_path", "/"),
+      "ready_probe" => Map.get(map, "ready", Map.get(map, "ready_probe", "tcp")),
+      "ready_path" => Map.get(map, "ready_path", "/"),
+      "primary" => Map.get(map, "primary", false)
     })
   end
 

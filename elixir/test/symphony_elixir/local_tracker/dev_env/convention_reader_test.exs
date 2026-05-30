@@ -25,6 +25,29 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ConventionReaderTest do
     assert length(steps) == 2
   end
 
+  test "reads yaml serve fields", %{root: root} do
+    File.write!(Path.join(root, ".symphony/devenv.yaml"), """
+    steps:
+      - description: Front dev server
+        command: npm run dev
+        working_dir: front
+        role: serve
+        port_env: PORT
+        url_path: /
+        ready: http
+        ready_path: /health
+        primary: true
+    """)
+
+    assert {:ok, [step]} = ConventionReader.read(root)
+    assert step.role == "serve"
+    assert step.port_env == "PORT"
+    assert step.url_path == "/"
+    assert step.ready_probe == "http"
+    assert step.ready_path == "/health"
+    assert step.primary == true
+  end
+
   test "reads markdown convention fenced bash", %{root: root} do
     File.write!(Path.join(root, ".symphony/devenv.md"), """
     # Setup
