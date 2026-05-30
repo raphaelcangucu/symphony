@@ -68,7 +68,6 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixir.StatusDashboard,
           SymphonyElixir.LogFile,
           SymphonyElixir.Workspace,
-          SymphonyElixirWeb.DashboardLive,
           SymphonyElixirWeb.Endpoint,
           SymphonyElixirWeb.ErrorHTML,
           SymphonyElixirWeb.ErrorJSON,

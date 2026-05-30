@@ -4,12 +4,10 @@ defmodule SymphonyElixirWeb.Router do
   """
 
   use Phoenix.Router
-  import Phoenix.LiveView.Router
 
   pipeline :browser do
+    plug(:accepts, ["html"])
     plug(:fetch_session)
-    plug(:fetch_live_flash)
-    plug(:put_root_layout, html: {SymphonyElixirWeb.Layouts, :root})
     plug(:protect_from_forgery)
     plug(:put_secure_browser_headers)
   end
@@ -31,7 +29,7 @@ defmodule SymphonyElixirWeb.Router do
   scope "/", SymphonyElixirWeb do
     pipe_through(:browser)
 
-    live("/", DashboardLive, :index)
+    get("/", RootRedirectController, :index)
   end
 
   scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
@@ -80,7 +78,6 @@ defmodule SymphonyElixirWeb.Router do
   scope "/", SymphonyElixirWeb do
     get("/api/v1/state", ObservabilityApiController, :state)
 
-    match(:*, "/", ObservabilityApiController, :method_not_allowed)
     match(:*, "/api/v1/state", ObservabilityApiController, :method_not_allowed)
     post("/api/v1/refresh", ObservabilityApiController, :refresh)
     match(:*, "/api/v1/refresh", ObservabilityApiController, :method_not_allowed)
