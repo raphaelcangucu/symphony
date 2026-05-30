@@ -37,6 +37,7 @@ export function useIssueDevServers(
   const requestIdRef = useRef(0);
   const inFlightRef = useRef(false);
   const actionInFlightRef = useRef(false);
+  const actionGenerationRef = useRef(0);
   const hasLoadedRef = useRef(false);
 
   const hasIdentifiers = hasRequiredIdentifier(projectSlug) && hasRequiredIdentifier(issueIdentifier);
@@ -93,6 +94,7 @@ export function useIssueDevServers(
       }
 
       actionInFlightRef.current = true;
+      const actionGeneration = actionGenerationRef.current;
       const requestId = ++requestIdRef.current;
       inFlightRef.current = true;
       setLoading(true);
@@ -114,7 +116,9 @@ export function useIssueDevServers(
 
         setError(failureMessage);
       } finally {
-        actionInFlightRef.current = false;
+        if (actionGeneration === actionGenerationRef.current) {
+          actionInFlightRef.current = false;
+        }
 
         if (requestId === requestIdRef.current) {
           inFlightRef.current = false;
@@ -142,6 +146,7 @@ export function useIssueDevServers(
     requestIdRef.current += 1;
     hasLoadedRef.current = false;
     inFlightRef.current = false;
+    actionGenerationRef.current += 1;
     actionInFlightRef.current = false;
 
     if (!hasIdentifiers) {
@@ -156,6 +161,7 @@ export function useIssueDevServers(
     return () => {
       requestIdRef.current += 1;
       inFlightRef.current = false;
+      actionGenerationRef.current += 1;
       actionInFlightRef.current = false;
     };
   }, [hasIdentifiers, refresh]);

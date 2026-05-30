@@ -131,6 +131,52 @@ describe("useIssueDevServers", () => {
     });
   });
 
+  it("does not let a stale action clear the current issue action guard", async () => {
+    const issueAStart = createDeferred<IssueDevServersResponse>();
+    const issueBStart = createDeferred<IssueDevServersResponse>();
+    fetchIssueDevServers.mockResolvedValue(stoppedResponse);
+    startIssueDevServers.mockReturnValueOnce(issueAStart.promise).mockReturnValueOnce(issueBStart.promise);
+
+    const { rerender, result } = renderHook(
+      ({ issueIdentifier }) => useIssueDevServers("macro-markets", issueIdentifier),
+      { initialProps: { issueIdentifier: "MAC-1" } },
+    );
+
+    await waitFor(() => expect(result.current.data).toEqual(stoppedResponse));
+
+    let issueAStartPromise: Promise<void>;
+    act(() => {
+      issueAStartPromise = result.current.start();
+    });
+    expect(startIssueDevServers).toHaveBeenCalledWith("macro-markets", "MAC-1");
+
+    rerender({ issueIdentifier: "MAC-2" });
+    await waitFor(() => expect(fetchIssueDevServers).toHaveBeenCalledWith("macro-markets", "MAC-2"));
+
+    let issueBStartPromise: Promise<void>;
+    act(() => {
+      issueBStartPromise = result.current.start();
+    });
+    expect(startIssueDevServers).toHaveBeenCalledWith("macro-markets", "MAC-2");
+    expect(startIssueDevServers).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      issueAStart.resolve(startingResponse);
+      await issueAStartPromise;
+    });
+
+    act(() => {
+      void result.current.start();
+    });
+
+    expect(startIssueDevServers).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      issueBStart.resolve(startingResponse);
+      await issueBStartPromise;
+    });
+  });
+
   it("polls while a server is starting", async () => {
     vi.useFakeTimers();
     fetchIssueDevServers.mockResolvedValueOnce(startingResponse).mockResolvedValueOnce(readyResponse);
