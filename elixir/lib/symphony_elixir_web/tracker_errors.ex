@@ -65,6 +65,18 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :no_failing_checks),
     do: error(conn, 422, "no_failing_checks", "No failing checks found on the linked pull request(s).")
 
+  def render(conn, :update_branch_conflict),
+    do:
+      error(
+        conn,
+        422,
+        "update_branch_conflict",
+        "Could not update the branch automatically — resolve conflicts on GitHub, then retry."
+      )
+
+  def render(conn, :invalid_pr_number),
+    do: error(conn, 422, "invalid_pr_number", "Invalid pull request number.")
+
   def render(conn, {:adapter_error, _reason}),
     do: error(conn, 500, "tracker_internal", "Tracker adapter error")
 
