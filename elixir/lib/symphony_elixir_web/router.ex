@@ -38,6 +38,8 @@ defmodule SymphonyElixirWeb.Router do
     pipe_through(:tracker_api)
 
     get("/viewer", ViewerController, :show)
+    get("/observability", ObservabilityController, :index)
+    post("/observability/report", ObservabilityController, :report)
     get("/agent_executions", AgentExecutionController, :index)
     get("/github/owners", GitHubController, :owners)
     get("/github/owners/:owner/repositories", GitHubController, :repositories)
