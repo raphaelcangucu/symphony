@@ -1,18 +1,47 @@
-import { ArrowRight, ExternalLink, GitBranch } from "lucide-react";
+import { useState } from "react";
+import { ArrowDownToLine, ArrowRight, ExternalLink, GitBranch } from "lucide-react";
+import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { CommentCard, ReviewBadge } from "@/components/issues/issue-detail/CommentCard";
 import { Separator } from "@/components/ui/separator";
 import { cn, formatDateTime } from "@/lib/utils";
+import { updatePullRequestBranch } from "@/services/pullRequests";
 import type { PullRequest, PullRequestPipeline } from "@/types/pull-request";
 
 import { jobMeta, prStateMeta, rollupMeta, statusStateMeta } from "./pr-meta";
 
 interface PullRequestPanelProps {
   pullRequest: PullRequest;
+  projectSlug: string;
+  issueIdentifier: string;
+  onRefresh: () => void;
 }
 
-export function PullRequestPanel({ pullRequest: pr }: PullRequestPanelProps) {
+export function PullRequestPanel({
+  pullRequest: pr,
+  projectSlug,
+  issueIdentifier,
+  onRefresh,
+}: PullRequestPanelProps) {
+  const [updating, setUpdating] = useState(false);
+  const behind = pr.baseBehindBy ?? 0;
+  const canUpdate = behind > 0;
+
+  async function handleUpdateBranch() {
+    if (updating) return;
+    setUpdating(true);
+    try {
+      await updatePullRequestBranch(projectSlug, issueIdentifier, pr.number);
+      toast.success("Branch update started — following CI…");
+      onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not update the branch.");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
   const state = prStateMeta(pr.state);
   const StateIcon = state.Icon;
   const rollup = rollupMeta(pr.checksState);
@@ -58,17 +87,30 @@ export function PullRequestPanel({ pullRequest: pr }: PullRequestPanelProps) {
             {pr.updatedAt ? <span>Updated {formatDateTime(pr.updatedAt)}</span> : null}
           </div>
         </div>
-        {pr.url ? (
-          <a
-            href={pr.url}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Open
-          </a>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-2">
+          {canUpdate ? (
+            <button
+              type="button"
+              onClick={() => void handleUpdateBranch()}
+              disabled={updating}
+              className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/40 bg-blue-500/10 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-500/20 disabled:opacity-60 dark:text-blue-300"
+            >
+              <ArrowDownToLine className={cn("h-3.5 w-3.5", updating && "animate-pulse")} />
+              {updating ? "Updating…" : `Update branch (${behind} behind)`}
+            </button>
+          ) : null}
+          {pr.url ? (
+            <a
+              href={pr.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open
+            </a>
+          ) : null}
+        </div>
       </header>
 
       <div className="space-y-4 p-4">

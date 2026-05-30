@@ -121,7 +121,13 @@ export function PullRequestTab({
         </div>
       </div>
       {pullRequests.map((pr) => (
-        <PullRequestPanel key={pr.number} pullRequest={pr} />
+        <PullRequestPanel
+          key={pr.number}
+          pullRequest={pr}
+          projectSlug={projectSlug}
+          issueIdentifier={issue.identifier}
+          onRefresh={onRefresh}
+        />
       ))}
     </div>
   );
