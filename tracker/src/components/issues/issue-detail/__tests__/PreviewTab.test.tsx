@@ -36,7 +36,7 @@ describe("PreviewTab", () => {
       ]),
     );
 
-    const link = screen.getByRole("link", { name: /open preview/i });
+    const link = screen.getByRole("link", { name: /^open preview$/i });
     expect(link).toHaveAttribute("href", "http://127.0.0.1:5173");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", expect.stringContaining("noreferrer"));
@@ -46,6 +46,14 @@ describe("PreviewTab", () => {
     expect(screen.getByRole("button", { name: /^restart preview$/i })).toBeInTheDocument();
     expect(screen.getByText("web")).toBeInTheDocument();
     expect(screen.getByText("api")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^open api preview$/i })).toHaveAttribute(
+      "href",
+      "http://127.0.0.1:4000",
+    );
+    expect(screen.getByRole("link", { name: /^open web preview$/i })).toHaveAttribute(
+      "href",
+      "http://127.0.0.1:5173",
+    );
   });
 
   it("renders a disabled availability message", () => {
@@ -57,8 +65,29 @@ describe("PreviewTab", () => {
   it("renders provisioning status while a server is starting", () => {
     renderPreview(response([server({ status: "starting", url: null, port: null })]));
 
-    expect(screen.getByText(/preview is being provisioned/i)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/preview is being provisioned/i);
     expect(screen.getByText(/^starting$/i)).toBeInTheDocument();
+  });
+
+  it.each(["stopped", "crashed"] as const)("does not present a persisted %s URL as the ready preview", (status) => {
+    renderPreview(response([server({ status, url: "http://127.0.0.1:5173" })]));
+
+    expect(screen.queryByText(/preview is ready/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^open preview$/i })).not.toBeInTheDocument();
+  });
+
+  it("disables manual controls when previews are unavailable", () => {
+    renderPreview({ available: false, reason: "disabled", servers: [] });
+
+    expect(screen.getByRole("button", { name: /^start preview$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^stop preview$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^restart preview$/i })).toBeDisabled();
+  });
+
+  it("renders a lock unavailable reason message", () => {
+    renderPreview({ available: false, reason: "lock_unavailable", servers: [] });
+
+    expect(screen.getByText(/preview is already being changed/i)).toBeInTheDocument();
   });
 
   it("calls start when Start Preview is clicked", async () => {

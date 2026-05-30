@@ -21,10 +21,17 @@ const STATUS_BADGE_CLASS: Record<IssueDevServerStatus, string> = {
   stopped: "border-muted bg-muted text-muted-foreground",
 };
 
+const RETRYABLE_UNAVAILABLE_REASONS = new Set<IssueDevServerReason>([
+  "lock_unavailable",
+  "start_failed",
+  "restart_failed",
+  "crashed",
+]);
+
 export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
   const { data, error, loading, restart, start, stop } = useIssueDevServers(projectSlug, issueIdentifier);
   const primaryServer = selectPrimaryServer(data?.servers ?? []);
-  const primaryUrl = primaryServer?.url ?? null;
+  const primaryUrl = readyPreviewUrl(primaryServer);
   const hasRequiredIdentifiers = projectSlug.trim().length > 0 && issueIdentifier.trim().length > 0;
 
   if (!hasRequiredIdentifiers) {
@@ -37,7 +44,12 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
 
   if (loading && !data) {
     return (
-      <StateCallout icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Loading preview status...">
+      <StateCallout
+        ariaLive="polite"
+        icon={<Loader2 className="h-5 w-5 animate-spin" />}
+        role="status"
+        title="Loading preview status..."
+      >
         Checking dev-server availability for this issue.
       </StateCallout>
     );
@@ -61,6 +73,7 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
 
   const unavailableMessage = data.available ? null : availabilityMessage(data.reason);
   const provisioningMessage = data.available && !primaryUrl ? provisioningStatusMessage(primaryServer) : null;
+  const controlsDisabled = loading || !canRunManualActions(data.available, data.reason);
 
   return (
     <div className="space-y-4 text-sm">
@@ -83,7 +96,7 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
                 {loading ? " · refreshing status" : ""}
               </CardDescription>
             </div>
-            <PreviewControls loading={loading} onRestart={restart} onStart={start} onStop={stop} />
+            <PreviewControls disabled={controlsDisabled} onRestart={restart} onStart={start} onStop={stop} />
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -115,7 +128,12 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
           ) : null}
 
           {provisioningMessage ? (
-            <StateCallout icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Preview is being provisioned...">
+            <StateCallout
+              ariaLive="polite"
+              icon={<Loader2 className="h-5 w-5 animate-spin" />}
+              role="status"
+              title="Preview is being provisioned..."
+            >
               {provisioningMessage}
             </StateCallout>
           ) : null}
@@ -123,7 +141,11 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
           <section className="space-y-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dev Servers</h3>
             {data.servers.length === 0 ? (
-              <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              <p
+                aria-live="polite"
+                role="status"
+                className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
+              >
                 No dev servers have reported yet. Auto-start polling may still be provisioning the preview.
               </p>
             ) : (
@@ -141,27 +163,27 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
 }
 
 function PreviewControls({
-  loading,
+  disabled,
   onRestart,
   onStart,
   onStop,
 }: {
-  loading: boolean;
+  disabled: boolean;
   onRestart: () => Promise<void>;
   onStart: () => Promise<void>;
   onStop: () => Promise<void>;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" onClick={() => void onStart()} disabled={loading}>
+      <Button type="button" size="sm" onClick={() => void onStart()} disabled={disabled}>
         <Play className="h-3.5 w-3.5" />
         Start Preview
       </Button>
-      <Button type="button" size="sm" variant="outline" onClick={() => void onStop()} disabled={loading}>
+      <Button type="button" size="sm" variant="outline" onClick={() => void onStop()} disabled={disabled}>
         <Square className="h-3.5 w-3.5" />
         Stop Preview
       </Button>
-      <Button type="button" size="sm" variant="outline" onClick={() => void onRestart()} disabled={loading}>
+      <Button type="button" size="sm" variant="outline" onClick={() => void onRestart()} disabled={disabled}>
         <RotateCcw className="h-3.5 w-3.5" />
         Restart Preview
       </Button>
@@ -189,7 +211,7 @@ function ServerRow({ server }: { server: IssueDevServer }) {
           <Button asChild size="sm" variant="outline">
             <a href={server.url} target="_blank" rel="noreferrer noopener">
               <ExternalLink className="h-3.5 w-3.5" />
-              Open
+              Open {server.slug} preview
             </a>
           </Button>
         ) : (
@@ -201,19 +223,24 @@ function ServerRow({ server }: { server: IssueDevServer }) {
 }
 
 function StateCallout({
+  ariaLive,
   children,
   icon,
+  role,
   title,
   tone = "default",
 }: {
+  ariaLive?: "off" | "polite" | "assertive";
   children: React.ReactNode;
   icon?: React.ReactNode;
+  role?: "alert" | "status";
   title: string;
   tone?: "default" | "error" | "warning";
 }) {
   return (
     <div
-      role={tone === "error" ? "alert" : undefined}
+      aria-live={ariaLive}
+      role={role ?? (tone === "error" ? "alert" : undefined)}
       className={cn(
         "flex gap-3 rounded-lg border p-4 text-sm",
         tone === "default" && "border-dashed text-muted-foreground",
@@ -232,6 +259,22 @@ function StateCallout({
 
 function selectPrimaryServer(servers: IssueDevServer[]): IssueDevServer | null {
   return servers.find((server) => server.primary) ?? servers.find((server) => server.status === "ready") ?? servers[0] ?? null;
+}
+
+function readyPreviewUrl(server: IssueDevServer | null): string | null {
+  if (!server || server.status !== "ready" || !server.url) {
+    return null;
+  }
+
+  return server.url;
+}
+
+function canRunManualActions(available: boolean, reason: IssueDevServerReason): boolean {
+  if (available) {
+    return true;
+  }
+
+  return RETRYABLE_UNAVAILABLE_REASONS.has(reason);
 }
 
 function availabilityMessage(reason: IssueDevServerReason): { title: string; body: string } {
@@ -261,10 +304,25 @@ function availabilityMessage(reason: IssueDevServerReason): { title: string; bod
         title: "No free preview port",
         body: "Availability is blocked because the system could not reserve a free port for the dev server.",
       };
+    case "lock_unavailable":
+      return {
+        title: "Preview is already being changed",
+        body: "Another preview action is holding the lock. Manual controls remain available so you can retry after the current action finishes.",
+      };
+    case "start_failed":
+      return {
+        title: "Preview start failed",
+        body: "The last start request failed. Manual controls remain available so you can retry or restart after checking the server output.",
+      };
+    case "restart_failed":
+      return {
+        title: "Preview restart failed",
+        body: "The last restart request failed. Manual controls remain available so you can retry once the underlying issue is resolved.",
+      };
     case "crashed":
       return {
         title: "Preview crashed",
-        body: "Availability is blocked because the preview process crashed. Restart the preview after checking the server logs.",
+        body: "Availability is blocked because the preview process crashed. Manual controls remain available so you can restart after checking the server logs.",
       };
     default:
       return {
