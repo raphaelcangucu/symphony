@@ -195,6 +195,44 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Enum.uniq(session_names) == session_names
   end
 
+  test "reserved ports are visible before an instance reports its boot state" do
+    key = {"p", "1", "front"}
+
+    Manager.reserve_port_for_key(key, 4100)
+    on_exit(fn -> Manager.release_reservations([key]) end)
+
+    assert 4100 in Manager.live_ports()
+  end
+
+  test "start_for_issue rolls back when an instance immediately crashes during boot", %{project: project} do
+    enable_dev_server!(port_range: [4100, 4100], max_concurrent: 1)
+
+    workspace = SymphonyElixir.Workspace.path_for_issue("1")
+    File.rm_rf!(workspace)
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf(workspace) end)
+
+    start_supervised!(Manager)
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Broken",
+          command: "npm run dev",
+          role: "serve",
+          working_dir: "missing"
+        }
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert Manager.live_ports() == []
+  end
+
+  test "normalizes aborted global lock results" do
+    assert Manager.normalize_lock_result(:aborted) == {:error, :lock_unavailable}
+    assert Manager.normalize_lock_result({:ok, []}) == {:ok, []}
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
@@ -219,5 +257,34 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
 
   defp shell_quote(value) do
     "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
+  end
+
+  defp enable_dev_server!(opts) do
+    port_range = Keyword.fetch!(opts, :port_range)
+    max_concurrent = Keyword.fetch!(opts, :max_concurrent)
+    [first_port, last_port] = port_range
+
+    dev_server_yaml =
+      [
+        "",
+        "dev_server:",
+        "  enabled: true",
+        "  port_range:",
+        "    - #{first_port}",
+        "    - #{last_port}",
+        "  max_concurrent: #{max_concurrent}",
+        "  idle_timeout_ms: 60000",
+        "---",
+        ""
+      ]
+      |> Enum.join("\n")
+
+    updated =
+      Workflow.workflow_file_path()
+      |> File.read!()
+      |> String.replace(~r/\n---\n/, dev_server_yaml, global: false)
+
+    File.write!(Workflow.workflow_file_path(), updated)
+    assert :ok = SymphonyElixir.WorkflowStore.force_reload()
   end
 end

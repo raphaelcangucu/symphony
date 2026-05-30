@@ -16,8 +16,18 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   @registry Module.concat(__MODULE__, Registry)
   @instance_supervisor Module.concat(__MODULE__, InstanceSupervisor)
+  @reservation_table Module.concat(__MODULE__, PortReservations)
+  @initial_boot_timeout_ms 250
 
-  @type start_error :: :disabled | :workspace_missing | :no_serve_step | :capacity | term()
+  @type start_error ::
+          :disabled
+          | :workspace_missing
+          | :no_serve_step
+          | :capacity
+          | :no_free_port
+          | :crashed
+          | :lock_unavailable
+          | term()
   @type dev_server_map :: %{
           id: integer(),
           slug: String.t(),
@@ -36,6 +46,7 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   @impl true
   def init(_opts) do
+    ensure_reservation_table()
     mark_all_stopped_safely()
 
     children = [
@@ -51,9 +62,11 @@ defmodule SymphonyElixir.DevServer.Manager do
     identifier = canonical_identifier(identifier)
 
     if Config.dev_server_enabled?() do
-      :global.trans({__MODULE__, :start_for_issue}, fn ->
-        do_start_for_issue(project_slug, identifier)
-      end)
+      normalize_lock_result(
+        :global.trans({__MODULE__, :start_for_issue}, fn ->
+          do_start_for_issue(project_slug, identifier)
+        end)
+      )
     else
       {:error, :disabled}
     end
@@ -68,6 +81,10 @@ defmodule SymphonyElixir.DevServer.Manager do
     project_slug
     |> registered_instance_pids(identifier)
     |> Enum.each(&stop_instance/1)
+
+    project_slug
+    |> reservation_keys_for_issue(identifier)
+    |> release_reservations()
 
     :ok
   end
@@ -100,18 +117,25 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   @spec live_ports() :: [pos_integer()]
   def live_ports do
-    @registry
-    |> all_registered_pids()
-    |> Enum.flat_map(&instance_port/1)
-    |> Enum.uniq()
+    registry_ports =
+      @registry
+      |> all_registered_pids()
+      |> Enum.flat_map(&instance_port/1)
+
+    Enum.uniq(reserved_ports() ++ registry_ports)
   end
+
+  @doc false
+  @spec normalize_lock_result(:aborted | term()) :: {:error, :lock_unavailable} | term()
+  def normalize_lock_result(:aborted), do: {:error, :lock_unavailable}
+  def normalize_lock_result(result), do: result
 
   defp do_start_for_issue(project_slug, identifier) do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, workspace_path} <- issue_workspace_path(identifier),
          {:ok, serve_steps} <- serve_steps(project.slug, identifier),
          :ok <- ensure_capacity(serve_steps),
-         {:ok, reserved_steps} <- reserve_ports(serve_steps) do
+         {:ok, reserved_steps} <- reserve_ports(project.slug, identifier, serve_steps) do
       setup_issue_session(project.slug, identifier, workspace_path)
       start_instances(project, identifier, workspace_path, reserved_steps)
     end
@@ -135,7 +159,7 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp ensure_capacity(serve_steps) do
-    live_count = @registry |> all_registered_pids() |> length()
+    live_count = live_instance_count()
 
     if live_count + length(serve_steps) > Config.dev_server_max_concurrent() do
       {:error, :capacity}
@@ -144,14 +168,20 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp reserve_ports(serve_steps) do
+  defp reserve_ports(project_slug, identifier, serve_steps) do
     serve_steps
     |> Enum.reduce_while({:ok, []}, fn step, {:ok, reserved_steps} ->
-      claimed_ports = live_ports() ++ Enum.map(reserved_steps, fn {_step, port} -> port end)
+      claimed_ports = live_ports() ++ Enum.map(reserved_steps, fn {_step, port, _key} -> port end)
 
       case PortAllocator.allocate(Config.dev_server_port_range(), claimed_ports) do
-        {:ok, port} -> {:cont, {:ok, [{step, port} | reserved_steps]}}
-        {:error, _reason} -> {:halt, {:error, :no_free_port}}
+        {:ok, port} ->
+          key = {project_slug, identifier, Map.fetch!(step, :slug)}
+          reserve_port_for_key(key, port)
+          {:cont, {:ok, [{step, port, key} | reserved_steps]}}
+
+        {:error, _reason} ->
+          release_reserved_steps(reserved_steps)
+          {:halt, {:error, :no_free_port}}
       end
     end)
     |> case do
@@ -226,25 +256,33 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   defp start_instances(project, identifier, workspace_path, reserved_steps) do
     reserved_steps
-    |> Enum.reduce_while({:ok, []}, fn {step, port}, {:ok, pids} ->
-      case start_instance(project, identifier, workspace_path, step, port) do
+    |> Enum.reduce_while({:ok, []}, fn {step, port, key}, {:ok, started} ->
+      case start_instance(project, identifier, workspace_path, step, port, key) do
         {:ok, pid} ->
-          {:cont, {:ok, [pid | pids]}}
+          case await_initial_boot(pid) do
+            :ok ->
+              {:cont, {:ok, [{pid, key} | started]}}
+
+            {:error, reason} ->
+              stop_instance(pid)
+              release_reservations([key])
+              rollback_started_instances(started)
+              {:halt, {:error, reason}}
+          end
 
         {:error, reason} ->
-          rollback_started_instances(pids)
+          release_reservations([key])
+          rollback_started_instances(started)
           {:halt, {:error, reason}}
       end
     end)
     |> case do
-      {:ok, pids} -> {:ok, Enum.reverse(pids)}
+      {:ok, started} -> {:ok, started |> Enum.map(fn {pid, _key} -> pid end) |> Enum.reverse()}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp start_instance(project, identifier, workspace_path, step, port) do
-    key = {project.slug, identifier, Map.fetch!(step, :slug)}
-
+  defp start_instance(project, identifier, workspace_path, step, port, key) do
     opts = [
       registry_name: {:via, Registry, {@registry, key}},
       project_id: project.id,
@@ -258,7 +296,18 @@ defmodule SymphonyElixir.DevServer.Manager do
       port_allocator: fn _range, _claimed_ports -> {:ok, port} end
     ]
 
-    DynamicSupervisor.start_child(@instance_supervisor, instance_child_spec(key, opts))
+    case DynamicSupervisor.start_child(@instance_supervisor, instance_child_spec(key, opts)) do
+      {:ok, pid} ->
+        attach_reserved_pid(key, pid)
+        {:ok, pid}
+
+      {:ok, pid, _info} ->
+        attach_reserved_pid(key, pid)
+        {:ok, pid}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc false
@@ -420,6 +469,15 @@ defmodule SymphonyElixir.DevServer.Manager do
     |> Enum.map(fn {_key, pid} -> pid end)
   end
 
+  defp reservation_keys_for_issue(project_slug, identifier) do
+    reservation_entries()
+    |> Enum.filter(fn
+      {{^project_slug, ^identifier, _slug}, _port, _pid} -> true
+      _entry -> false
+    end)
+    |> Enum.map(fn {key, _port, _pid} -> key end)
+  end
+
   defp all_registered_pids(registry) do
     registry
     |> all_registry_entries()
@@ -440,8 +498,28 @@ defmodule SymphonyElixir.DevServer.Manager do
     :exit, _reason -> :ok
   end
 
-  defp rollback_started_instances(pids) do
-    Enum.each(pids, &stop_instance/1)
+  defp rollback_started_instances(started) do
+    Enum.each(started, fn {pid, key} ->
+      stop_instance(pid)
+      release_reservations([key])
+    end)
+  end
+
+  defp release_reserved_steps(reserved_steps) do
+    reserved_steps
+    |> Enum.map(fn {_step, _port, key} -> key end)
+    |> release_reservations()
+  end
+
+  defp await_initial_boot(pid) when is_pid(pid) do
+    task = Task.async(fn -> Instance.status(pid) end)
+
+    case Task.yield(task, @initial_boot_timeout_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, :crashed} -> {:error, :crashed}
+      {:ok, _status} -> :ok
+      {:exit, reason} -> {:error, reason}
+      nil -> :ok
+    end
   end
 
   defp instance_port(pid) when is_pid(pid) do
@@ -468,6 +546,95 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   defp shell_quote(value) do
     "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
+  end
+
+  @doc false
+  @spec reserve_port_for_key(term(), pos_integer()) :: :ok
+  def reserve_port_for_key(key, port) when is_integer(port) and port > 0 do
+    ensure_reservation_table()
+    :ets.insert(@reservation_table, {key, port, nil})
+    :ok
+  end
+
+  @doc false
+  @spec release_reservations([term()]) :: :ok
+  def release_reservations(keys) when is_list(keys) do
+    ensure_reservation_table()
+    Enum.each(keys, &:ets.delete(@reservation_table, &1))
+    :ok
+  end
+
+  def release_reservations(_keys), do: :ok
+
+  defp attach_reserved_pid(key, pid) when is_pid(pid) do
+    ensure_reservation_table()
+
+    case :ets.lookup(@reservation_table, key) do
+      [{^key, port, _old_pid}] -> :ets.insert(@reservation_table, {key, port, pid})
+      [] -> :ok
+    end
+
+    :ok
+  end
+
+  defp reserved_ports do
+    reservation_entries()
+    |> Enum.map(fn {_key, port, _pid} -> port end)
+  end
+
+  defp reservation_entries do
+    ensure_reservation_table()
+    cleanup_dead_reservations()
+    :ets.tab2list(@reservation_table)
+  end
+
+  defp cleanup_dead_reservations do
+    ensure_reservation_table()
+
+    @reservation_table
+    |> :ets.tab2list()
+    |> Enum.each(fn
+      {key, _port, pid} when is_pid(pid) ->
+        if Process.alive?(pid) do
+          :ok
+        else
+          :ets.delete(@reservation_table, key)
+        end
+
+      _entry ->
+        :ok
+    end)
+  end
+
+  defp live_instance_count do
+    registry_keys =
+      @registry
+      |> all_registry_entries()
+      |> Enum.map(fn {key, _pid} -> key end)
+
+    reservation_keys =
+      reservation_entries()
+      |> Enum.map(fn {key, _port, _pid} -> key end)
+
+    (registry_keys ++ reservation_keys)
+    |> MapSet.new()
+    |> MapSet.size()
+  end
+
+  defp ensure_reservation_table do
+    case :ets.whereis(@reservation_table) do
+      :undefined ->
+        try do
+          :ets.new(@reservation_table, [:named_table, :public, :set, read_concurrency: true])
+        rescue
+          ArgumentError -> :ok
+        end
+
+      _table ->
+        :ok
+    end
+
+    :ok
   end
 
   defp step_to_map(%_struct{} = step), do: Map.from_struct(step)
