@@ -8,7 +8,7 @@ defmodule SymphonyElixir.DevServer.PortAllocator do
   @spec allocate([pos_integer()], [pos_integer()]) :: {:ok, pos_integer()} | {:error, :no_free_port}
   def allocate([min, max], claimed)
       when is_integer(min) and is_integer(max) and min > 0 and max > 0 and min <= max and
-             is_list(claimed) do
+             max <= 65_535 and is_list(claimed) do
     claimed_set = MapSet.new(claimed)
 
     min..max//1

@@ -22,6 +22,10 @@ defmodule SymphonyElixir.DevServer.PortAllocatorTest do
     assert {:error, :no_free_port} = PortAllocator.allocate([-1, 1], [])
   end
 
+  test "errors when range exceeds TCP port bounds" do
+    assert {:error, :no_free_port} = PortAllocator.allocate([65_536, 65_536], [])
+  end
+
   test "skips a currently bound port" do
     {:ok, socket} = :gen_tcp.listen(0, [:binary, ip: {127, 0, 0, 1}, reuseaddr: true])
     {:ok, port} = :inet.port(socket)
