@@ -68,9 +68,21 @@ defmodule SymphonyElixir.DevServer.Instance do
     probe_starting(state, port)
   end
 
+  def handle_info({:probe, token}, %{probe_timer_ref: {_timer_ref, token}, status: :starting, port: port} = state)
+      when is_integer(port) do
+    probe_starting(%{state | probe_timer_ref: nil}, port)
+  end
+
   def handle_info(:probe, %{status: :ready, port: port} = state) when is_integer(port) do
     probe_ready(state, port)
   end
+
+  def handle_info({:probe, token}, %{probe_timer_ref: {_timer_ref, token}, status: :ready, port: port} = state)
+      when is_integer(port) do
+    probe_ready(%{state | probe_timer_ref: nil}, port)
+  end
+
+  def handle_info({:probe, _token}, state), do: {:noreply, state}
 
   def handle_info(:idle_timeout, %{status: :crashed} = state), do: {:noreply, state}
 
@@ -78,31 +90,42 @@ defmodule SymphonyElixir.DevServer.Instance do
     {:stop, :normal, %{state | status: :stopped, stop_requested: true}}
   end
 
+  def handle_info({:idle_timeout, token}, %{idle_timer_ref: {_timer_ref, token}, status: :crashed} = state) do
+    {:noreply, %{state | idle_timer_ref: nil}}
+  end
+
+  def handle_info({:idle_timeout, token}, %{idle_timer_ref: {_timer_ref, token}} = state) do
+    {:stop, :normal, %{state | status: :stopped, stop_requested: true, idle_timer_ref: nil}}
+  end
+
+  def handle_info({:idle_timeout, _token}, state), do: {:noreply, state}
+
   def handle_info(_message, state), do: {:noreply, state}
 
   @impl true
   def terminate(_reason, %{status: :crashed} = state) do
-    safe_kill(state)
+    cleanup_session(state)
     :ok
   end
 
   def terminate(_reason, %{status: :stopped, stop_requested: true} = state) do
-    case safe_kill(state) do
-      :ok -> persist_status(state, :stopped)
-      {:error, _reason} -> persist_status(state, :crashed)
-    end
+    mark_stopped(state)
+    :ok
+  end
 
+  def terminate(reason, state) when reason in [:normal, :shutdown] do
+    mark_stopped(state)
+    :ok
+  end
+
+  def terminate({:shutdown, _detail}, state) do
+    mark_stopped(state)
     :ok
   end
 
   def terminate(reason, state) do
     Logger.warning("Dev server terminated unexpectedly slug=#{state.slug} reason=#{inspect(reason)}")
-
-    case safe_kill(state) do
-      :ok -> persist_status(state, :crashed)
-      {:error, _reason} -> persist_status(state, :crashed)
-    end
-
+    mark_crashed(state)
     :ok
   end
 
@@ -139,6 +162,8 @@ defmodule SymphonyElixir.DevServer.Instance do
       primary: Map.get(step, :primary, false) || false,
       session_name: nil,
       probe_attempts: 0,
+      probe_timer_ref: nil,
+      idle_timer_ref: nil,
       stop_requested: false
     }
   end
@@ -150,7 +175,7 @@ defmodule SymphonyElixir.DevServer.Instance do
 
       {:error, reason} ->
         Logger.warning("Dev server port allocation failed slug=#{state.slug} reason=#{inspect(reason)}")
-        persist_status(%{state | status: :crashed}, :crashed)
+        mark_crashed(state)
     end
   end
 
@@ -163,7 +188,7 @@ defmodule SymphonyElixir.DevServer.Instance do
 
       {:error, reason} ->
         Logger.warning("Dev server working dir rejected slug=#{state.slug} reason=#{inspect(reason)}")
-        persist_status(%{state | port: port, url: url, status: :crashed}, :crashed)
+        mark_crashed(%{state | port: port, url: url})
     end
   end
 
@@ -174,7 +199,7 @@ defmodule SymphonyElixir.DevServer.Instance do
 
       {:error, reason} ->
         Logger.warning("Dev server tmux session failed slug=#{state.slug} reason=#{inspect(reason)}")
-        persist_status(%{state | port: port, url: url, status: :crashed}, :crashed)
+        mark_crashed(%{state | port: port, url: url})
     end
   end
 
@@ -188,17 +213,16 @@ defmodule SymphonyElixir.DevServer.Instance do
           state
           |> Map.merge(%{port: port, url: url, session_name: session_name, status: :starting})
           |> persist_status(:starting)
+          |> schedule_probe()
+          |> reset_idle_timer()
 
-        schedule_probe(state)
-        schedule_idle(state)
         state
 
       {:error, reason} ->
         Logger.warning("Dev server command send failed slug=#{state.slug} reason=#{inspect(reason)}")
 
         state = Map.merge(state, %{port: port, url: url, session_name: session_name, status: :crashed})
-        safe_kill(state)
-        persist_status(state, :crashed)
+        mark_crashed(state)
     end
   end
 
@@ -208,8 +232,13 @@ defmodule SymphonyElixir.DevServer.Instance do
 
     case state.probe.(@loopback_host, port, ready_probe, normalize_path(ready_path)) do
       :ok ->
-        state = persist_status(%{state | status: :ready, probe_attempts: 0}, :ready)
-        schedule_probe(state)
+        state =
+          state
+          |> Map.merge(%{status: :ready, probe_attempts: 0})
+          |> persist_status(:ready)
+          |> schedule_probe()
+          |> reset_idle_timer()
+
         {:noreply, state}
 
       {:error, reason} ->
@@ -223,12 +252,17 @@ defmodule SymphonyElixir.DevServer.Instance do
 
     case state.probe.(@loopback_host, port, ready_probe, normalize_path(ready_path)) do
       :ok ->
-        schedule_probe(state)
+        state =
+          state
+          |> Map.put(:probe_attempts, 0)
+          |> schedule_probe()
+          |> reset_idle_timer()
+
         {:noreply, state}
 
       {:error, reason} ->
         Logger.warning("Dev server post-ready probe failed slug=#{state.slug} reason=#{inspect(reason)}")
-        {:noreply, persist_status(%{state | status: :crashed}, :crashed)}
+        handle_probe_error(state, reason)
     end
   end
 
@@ -237,10 +271,9 @@ defmodule SymphonyElixir.DevServer.Instance do
 
     if attempts >= state.max_probe_attempts do
       Logger.warning("Dev server probe failed slug=#{state.slug} attempts=#{attempts} reason=#{inspect(reason)}")
-      {:noreply, persist_status(%{state | status: :crashed, probe_attempts: attempts}, :crashed)}
+      {:noreply, mark_crashed(%{state | probe_attempts: attempts})}
     else
-      schedule_probe(state)
-      {:noreply, %{state | probe_attempts: attempts}}
+      {:noreply, schedule_probe(%{state | probe_attempts: attempts})}
     end
   end
 
@@ -265,10 +298,65 @@ defmodule SymphonyElixir.DevServer.Instance do
     root = Path.expand(state.workspace_path)
     cwd = Path.expand(Path.join(root, state.working_dir || "."))
 
-    if cwd == root or String.starts_with?(cwd, root <> "/") do
-      {:ok, cwd}
+    with {:ok, root_realpath} <- realpath(root),
+         {:ok, cwd_realpath} <- realpath(cwd) do
+      if cwd_realpath == root_realpath or String.starts_with?(cwd_realpath, root_realpath <> "/") do
+        {:ok, cwd_realpath}
+      else
+        {:error, {:working_dir_outside_workspace, cwd_realpath, root_realpath}}
+      end
+    end
+  end
+
+  defp realpath(path) when is_binary(path) do
+    realpath(path, MapSet.new())
+  end
+
+  defp realpath(path, seen) when is_binary(path) do
+    path
+    |> Path.expand()
+    |> Path.split()
+    |> case do
+      ["/" | segments] -> resolve_realpath("/", segments, seen)
+      segments -> resolve_realpath("/", segments, seen)
+    end
+  end
+
+  defp resolve_realpath(resolved, [], _seen), do: {:ok, resolved}
+
+  defp resolve_realpath(resolved, [segment | rest], seen) do
+    candidate = Path.join(resolved, segment)
+
+    case File.lstat(candidate) do
+      {:ok, %File.Stat{type: :symlink}} ->
+        resolve_symlink(candidate, resolved, rest, seen)
+
+      {:ok, _stat} ->
+        resolve_realpath(candidate, rest, seen)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp resolve_symlink(candidate, parent, rest, seen) do
+    if MapSet.member?(seen, candidate) do
+      {:error, :eloop}
     else
-      {:error, {:working_dir_outside_workspace, cwd, root}}
+      seen = MapSet.put(seen, candidate)
+
+      with {:ok, target} <- File.read_link(candidate),
+           target_path = expand_symlink_target(target, parent),
+           {:ok, target_realpath} <- realpath(target_path, seen) do
+        resolve_realpath(target_realpath, rest, seen)
+      end
+    end
+  end
+
+  defp expand_symlink_target(target, parent) do
+    case Path.type(target) do
+      :absolute -> Path.expand(target)
+      _relative -> Path.expand(target, parent)
     end
   end
 
@@ -291,13 +379,49 @@ defmodule SymphonyElixir.DevServer.Instance do
   end
 
   defp schedule_probe(state) do
-    Process.send_after(self(), :probe, state.probe_interval_ms)
+    cancel_timer(state.probe_timer_ref)
+
+    token = make_ref()
+    timer_ref = Process.send_after(self(), {:probe, token}, state.probe_interval_ms)
+    %{state | probe_timer_ref: {timer_ref, token}}
+  end
+
+  defp reset_idle_timer(state) do
+    cancel_timer(state.idle_timer_ref)
+
+    token = make_ref()
+    timer_ref = Process.send_after(self(), {:idle_timeout, token}, state.idle_timeout_ms)
+    %{state | idle_timer_ref: {timer_ref, token}}
+  end
+
+  defp cancel_timers(state) do
+    cancel_timer(state.probe_timer_ref)
+    cancel_timer(state.idle_timer_ref)
+    %{state | probe_timer_ref: nil, idle_timer_ref: nil}
+  end
+
+  defp cancel_timer(nil), do: :ok
+
+  defp cancel_timer({timer_ref, _token}) do
+    Process.cancel_timer(timer_ref)
     :ok
   end
 
-  defp schedule_idle(state) do
-    Process.send_after(self(), :idle_timeout, state.idle_timeout_ms)
-    :ok
+  defp mark_crashed(state) do
+    state = cancel_timers(state)
+    cleanup_session(state)
+    persist_status(state, :crashed)
+  end
+
+  defp mark_stopped(%{status: :crashed} = state), do: mark_crashed(state)
+
+  defp mark_stopped(state) do
+    state = cancel_timers(state)
+
+    case cleanup_session(state) do
+      :ok -> persist_status(state, :stopped)
+      {:error, _reason} -> persist_status(state, :crashed)
+    end
   end
 
   defp persist_status(state, status) do
@@ -334,9 +458,9 @@ defmodule SymphonyElixir.DevServer.Instance do
     }
   end
 
-  defp safe_kill(%{session_name: nil}), do: :ok
+  defp cleanup_session(%{session_name: nil}), do: :ok
 
-  defp safe_kill(state) do
+  defp cleanup_session(state) do
     case state.tmux.kill_dev_session(state.project_slug, state.identifier, state.slug, []) do
       :ok ->
         :ok

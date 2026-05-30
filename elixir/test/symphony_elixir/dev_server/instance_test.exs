@@ -7,6 +7,7 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
 
   @test_process __MODULE__.TestProcess
   @identifier "#1"
+  @workspace_path "/tmp/symphony-instance-test"
 
   defmodule FakeTmux do
     def open_dev_session(project_slug, identifier, slug, cwd, _opts \\ []) do
@@ -48,6 +49,7 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
   setup do
     migrate_repo()
     clean_repo()
+    prepare_workspace!()
     register_test_process!()
 
     {:ok, project} =
@@ -58,6 +60,8 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
         "repositories" => [],
         "setup" => %{}
       })
+
+    on_exit(fn -> File.rm_rf!(@workspace_path) end)
 
     {:ok, project: project}
   end
@@ -101,6 +105,7 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
 
     assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
     assert row.status == "crashed"
+    assert_receive {:killed_dev_session, "p", @identifier, "front"}, 1_000
 
     assert :ok = Instance.stop(pid)
   end
@@ -163,7 +168,7 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
         project_id: project.id,
         project_slug: project.slug,
         identifier: @identifier,
-        workspace_path: "/tmp/symphony-instance-test",
+        workspace_path: @workspace_path,
         step: step(),
         idle_timeout_ms: 60_000,
         tmux: FakeTmux,
@@ -226,30 +231,116 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
     refute_received {:opened_dev_session, _, _, _, _}
   end
 
-  test "post-ready probe failure marks instance crashed", %{project: project} do
+  test "symlinked working dir escaping workspace persists crashed without opening tmux", %{project: project} do
+    outside = Path.join(System.tmp_dir!(), "symphony-instance-outside-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(outside)
+    on_exit(fn -> File.rm_rf!(outside) end)
+
+    link_path = Path.join(@workspace_path, "linked-outside")
+
+    case File.ln_s(outside, link_path) do
+      :ok ->
+        {:ok, pid} =
+          Instance.start_link(
+            instance_opts(project,
+              step: %{step() | working_dir: "linked-outside"},
+              port_allocator: fn _range, _claimed -> {:ok, 4123} end,
+              probe_interval_ms: 5
+            )
+          )
+
+        assert_eventually(fn -> Instance.status(pid) == :crashed end)
+
+        assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+        assert row.status == "crashed"
+        refute_received {:opened_dev_session, _, _, _, _}
+
+      {:error, reason} ->
+        assert reason in [:eacces, :eperm, :enotsup]
+    end
+  end
+
+  test "post-ready probe failures use max attempts threshold", %{project: project} do
     {:ok, probe_agent} = Agent.start_link(fn -> :ok end)
 
     {:ok, pid} =
       Instance.start_link(
         instance_opts(project,
           port_allocator: fn _range, _claimed -> {:ok, 4123} end,
+          max_probe_attempts: 2,
           probe: fn "127.0.0.1", 4123, "tcp", "/" ->
             Agent.get(probe_agent, fn status ->
               if status == :ok, do: :ok, else: {:error, :closed}
             end)
           end,
+          probe_interval_ms: 60_000
+        )
+      )
+
+    assert_receive {:sent_keys, "sym-dev-x", "PORT=4123 npm run dev\n"}, 1_000
+    send(pid, :probe)
+    assert_eventually(fn -> Instance.status(pid) == :ready end)
+
+    Agent.update(probe_agent, fn _status -> :fail end)
+    send(pid, :probe)
+    Process.sleep(25)
+    assert Instance.status(pid) == :ready
+
+    send(pid, :probe)
+    assert_eventually(fn -> Instance.status(pid) == :crashed end)
+
+    assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+    assert row.status == "crashed"
+    assert_receive {:killed_dev_session, "p", @identifier, "front"}, 1_000
+
+    assert :ok = Instance.stop(pid)
+  end
+
+  test "successful health confirmations reset idle timeout", %{project: project} do
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          port_allocator: fn _range, _claimed -> {:ok, 4123} end,
+          idle_timeout_ms: 80,
+          probe: fn "127.0.0.1", 4123, "tcp", "/" -> :ok end,
+          probe_interval_ms: 60_000
+        )
+      )
+
+    assert_receive {:sent_keys, "sym-dev-x", "PORT=4123 npm run dev\n"}, 1_000
+    send(pid, :probe)
+    assert_eventually(fn -> Instance.status(pid) == :ready end)
+
+    Process.sleep(50)
+    send(pid, :probe)
+    Process.sleep(50)
+
+    assert Process.alive?(pid)
+    assert Instance.status(pid) == :ready
+
+    assert :ok = Instance.stop(pid)
+  end
+
+  test "shutdown termination persists stopped when cleanup succeeds", %{project: project} do
+    previous_trap_exit = Process.flag(:trap_exit, true)
+    on_exit(fn -> Process.flag(:trap_exit, previous_trap_exit) end)
+
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          port_allocator: fn _range, _claimed -> {:ok, 4123} end,
+          probe: fn "127.0.0.1", 4123, "tcp", "/" -> :ok end,
           probe_interval_ms: 5
         )
       )
 
     assert_eventually(fn -> Instance.status(pid) == :ready end)
-    Agent.update(probe_agent, fn _status -> :fail end)
-    assert_eventually(fn -> Instance.status(pid) == :crashed end)
+    :ok = GenServer.stop(pid, :shutdown)
 
+    assert_receive {:EXIT, ^pid, :shutdown}, 1_000
+    assert_receive {:killed_dev_session, "p", @identifier, "front"}, 1_000
     assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
-    assert row.status == "crashed"
-
-    assert :ok = Instance.stop(pid)
+    assert row.status == "stopped"
   end
 
   defp step do
@@ -273,6 +364,11 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
 
     true = Process.register(self(), @test_process)
     :ok
+  end
+
+  defp prepare_workspace! do
+    File.rm_rf!(@workspace_path)
+    File.mkdir_p!(Path.join(@workspace_path, "front"))
   end
 
   defp assert_eventually(fun, attempts \\ 20)
