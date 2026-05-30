@@ -506,9 +506,13 @@ defmodule SymphonyElixir.Config do
   def editor_base_url do
     case get_in(validated_workflow_options(), [:editor, :base_url]) do
       url when is_binary(url) and url != "" -> String.trim_trailing(url, "/")
-      _ -> "http://#{editor_host()}:#{editor_port()}"
+      _ -> "http://#{browser_host(editor_host())}:#{editor_port()}"
     end
   end
+
+  defp browser_host("0.0.0.0"), do: "127.0.0.1"
+  defp browser_host("::"), do: "[::1]"
+  defp browser_host(host), do: host
 
   @spec validate!() :: :ok | {:error, String.t()}
   def validate! do

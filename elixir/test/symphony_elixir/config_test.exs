@@ -105,6 +105,32 @@ defmodule SymphonyElixir.ConfigTest do
 
       assert SymphonyElixir.Config.editor_base_url() == "http://127.0.0.1:4002"
     end
+
+    test "editor_base_url maps wildcard IPv4 bind host to loopback in fallback" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      editor:
+        host: 0.0.0.0
+        port: 4002
+      """)
+
+      assert SymphonyElixir.Config.editor_host() == "0.0.0.0"
+      assert SymphonyElixir.Config.editor_base_url() == "http://127.0.0.1:4002"
+    end
+
+    test "editor_base_url maps wildcard IPv6 bind host to bracketed loopback in fallback" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      editor:
+        host: "::"
+        port: 4002
+      """)
+
+      assert SymphonyElixir.Config.editor_host() == "::"
+      assert SymphonyElixir.Config.editor_base_url() == "http://[::1]:4002"
+    end
   end
 
   defp load_workflow_with_front_matter(front_matter) do
