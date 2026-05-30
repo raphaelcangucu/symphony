@@ -27,6 +27,7 @@ defmodule SymphonyElixir.Application do
 
     children = [
       {Phoenix.PubSub, name: SymphonyElixir.PubSub},
+      SymphonyElixir.Observability.Registry,
       SymphonyElixir.Repo,
       SymphonyElixir.LocalTracker.CloneSupervisor,
       %{
