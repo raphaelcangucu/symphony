@@ -9,13 +9,17 @@ defmodule SymphonyElixir.DevServer.Reconciler do
 
   use GenServer
 
+  alias Ecto.Association.NotLoaded
+
   require Logger
 
   alias SymphonyElixir.{Config, Tracker}
   alias SymphonyElixir.DevServer.Manager
   alias SymphonyElixir.GitHub.Config, as: GitHubConfig
   alias SymphonyElixir.GitHub.PullRequests
-  alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.LocalTracker.{Context, Project}
+
+  @fallback_poll_interval_ms 30_000
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) when is_list(opts) do
@@ -33,49 +37,100 @@ defmodule SymphonyElixir.DevServer.Reconciler do
     |> Enum.uniq()
   end
 
+  @doc false
+  @spec candidates([String.t()], [term()]) :: %{optional(atom()) => [String.t()]}
+  def candidates(auto_start_on, issues), do: candidates(auto_start_on, issues, [])
+
+  @doc false
+  @spec candidates([String.t()], [term()], keyword()) :: %{optional(atom()) => [String.t()]}
+  def candidates(auto_start_on, issues, opts)
+      when is_list(auto_start_on) and is_list(issues) and is_list(opts) do
+    requested = MapSet.new(auto_start_on)
+
+    %{}
+    |> maybe_put_human_review_candidates(requested, issues)
+    |> maybe_put_pull_request_candidates(requested, issues, opts)
+  end
+
+  @doc false
+  @spec project_slug_for(term()) :: String.t() | nil
+  def project_slug_for(issue), do: project_slug_for(issue, [])
+
+  @doc false
+  @spec project_slug_for(term(), keyword()) :: String.t() | nil
+  def project_slug_for(issue, opts) when is_list(opts) do
+    explicit_project_slug(issue) ||
+      project_slug_from_project_id(issue, opts) ||
+      local_project_slug(opts)
+  end
+
+  @doc false
+  @spec repo_for(term()) :: {:ok, String.t()} | {:error, term()}
+  def repo_for(issue), do: repo_for(issue, [])
+
+  @doc false
+  @spec repo_for(term(), keyword()) :: {:ok, String.t()} | {:error, term()}
+  def repo_for(issue, opts) when is_list(opts) do
+    case loaded_project(map_value(issue, :project)) do
+      nil -> repo_for_project_context(opts)
+      project -> repo_for_project(project)
+    end
+  end
+
   @impl true
   def init(_opts) do
-    schedule_tick()
+    schedule_tick_safely()
     {:ok, %{}}
   end
 
   @impl true
   def handle_info(:tick, state) do
-    if Config.dev_server_enabled?() do
-      run_cycle_safely()
-    end
+    run_tick_safely()
 
-    schedule_tick()
+    schedule_tick_safely()
     {:noreply, state}
   end
 
-  defp schedule_tick do
-    Process.send_after(self(), :tick, Config.poll_interval_ms())
-  end
-
-  defp run_cycle_safely do
-    run_cycle()
+  defp schedule_tick_safely do
+    Process.send_after(self(), :tick, poll_interval_ms())
   rescue
     exception ->
-      Logger.debug("Dev server reconciler cycle skipped reason=#{inspect(exception)}")
+      Logger.debug("Dev server reconciler tick scheduling skipped reason=#{inspect(exception)}")
   catch
     kind, reason ->
-      Logger.debug("Dev server reconciler cycle skipped reason=#{inspect({kind, reason})}")
+      Logger.debug("Dev server reconciler tick scheduling skipped reason=#{inspect({kind, reason})}")
+  end
+
+  defp run_tick_safely do
+    if Config.dev_server_enabled?() do
+      run_cycle()
+    end
+  rescue
+    exception ->
+      Logger.debug("Dev server reconciler tick skipped reason=#{inspect(exception)}")
+  catch
+    kind, reason ->
+      Logger.debug("Dev server reconciler tick skipped reason=#{inspect({kind, reason})}")
   end
 
   defp run_cycle do
-    wait_state_issues = fetch_wait_state_issues()
-    issue_index = issue_index(wait_state_issues)
+    auto_start_on = Config.dev_server_auto_start_on()
 
-    candidates = %{
-      human_review: issue_identifiers(wait_state_issues),
-      pull_request: pull_request_issue_identifiers(wait_state_issues)
-    }
+    if known_trigger_requested?(auto_start_on) do
+      wait_state_issues = fetch_wait_state_issues()
+      issue_index = issue_index(wait_state_issues)
 
-    Config.dev_server_auto_start_on()
-    |> reconcile(candidates)
-    |> Enum.each(&start_candidate(&1, issue_index))
+      auto_start_on
+      |> reconcile(candidates(auto_start_on, wait_state_issues))
+      |> Enum.each(&start_candidate(&1, issue_index))
+    end
   end
+
+  defp known_trigger_requested?(auto_start_on) when is_list(auto_start_on) do
+    Enum.any?(auto_start_on, &(&1 in ["human_review", "pull_request"]))
+  end
+
+  defp known_trigger_requested?(_auto_start_on), do: false
 
   defp fetch_wait_state_issues do
     case Config.wait_states() do
@@ -98,26 +153,45 @@ defmodule SymphonyElixir.DevServer.Reconciler do
     end
   end
 
-  defp pull_request_issue_identifiers(issues) do
+  defp maybe_put_human_review_candidates(candidates, requested, issues) do
+    if MapSet.member?(requested, "human_review") do
+      Map.put(candidates, :human_review, issue_identifiers(issues))
+    else
+      candidates
+    end
+  end
+
+  defp maybe_put_pull_request_candidates(candidates, requested, issues, opts) do
+    if MapSet.member?(requested, "pull_request") do
+      Map.put(candidates, :pull_request, pull_request_issue_identifiers(issues, opts))
+    else
+      candidates
+    end
+  end
+
+  defp pull_request_issue_identifiers(issues, opts) do
+    repo_resolver = Keyword.get(opts, :repo_resolver, &repo_for/1)
+    pull_request_reader = Keyword.get(opts, :pull_request_reader, &PullRequests.for_issue/2)
+
     issues
-    |> Enum.flat_map(&pull_request_issue_identifier/1)
+    |> Enum.flat_map(&pull_request_issue_identifier(&1, repo_resolver, pull_request_reader))
     |> Enum.uniq()
   end
 
-  defp pull_request_issue_identifier(issue) do
+  defp pull_request_issue_identifier(issue, repo_resolver, pull_request_reader) do
     case issue_identifier(issue) do
       nil ->
         []
 
       identifier ->
-        pull_request_issue_identifier(issue, identifier)
+        pull_request_issue_identifier(issue, identifier, repo_resolver, pull_request_reader)
     end
   end
 
-  defp pull_request_issue_identifier(issue, identifier) do
-    case repo_for_issue(issue) do
+  defp pull_request_issue_identifier(issue, identifier, repo_resolver, pull_request_reader) do
+    case resolve_repo(repo_resolver, issue) do
       {:ok, repo} ->
-        case PullRequests.for_issue(repo, identifier) do
+        case read_pull_requests(pull_request_reader, repo, identifier) do
           {:ok, [_ | _]} ->
             [identifier]
 
@@ -135,10 +209,33 @@ defmodule SymphonyElixir.DevServer.Reconciler do
     end
   end
 
-  defp repo_for_issue(issue) do
-    case map_value(issue, :project) do
-      nil -> configured_github_repo()
-      project -> repo_for_project(project)
+  defp resolve_repo(repo_resolver, issue) when is_function(repo_resolver, 1) do
+    repo_resolver.(issue)
+  rescue
+    exception -> {:error, exception}
+  catch
+    kind, reason -> {:error, {kind, reason}}
+  end
+
+  defp read_pull_requests(pull_request_reader, repo, identifier)
+       when is_function(pull_request_reader, 2) do
+    pull_request_reader.(repo, identifier)
+  rescue
+    exception -> {:error, exception}
+  catch
+    kind, reason -> {:error, {kind, reason}}
+  end
+
+  defp repo_for_project_context(opts) do
+    case local_project_slug(opts) do
+      nil ->
+        configured_github_repo(opts)
+
+      project_slug ->
+        case lookup_project(project_slug, opts) do
+          {:ok, project} -> repo_for_project(project)
+          {:error, _reason} -> configured_github_repo(opts)
+        end
     end
   end
 
@@ -154,11 +251,15 @@ defmodule SymphonyElixir.DevServer.Reconciler do
 
   defp repo_for_project(_project), do: {:error, :missing_github_repo}
 
-  defp configured_github_repo do
-    case Config.tracker_kind() do
-      "github" -> repo_from_tracker_config(%{"repo" => GitHubConfig.repo()})
+  defp configured_github_repo(opts) do
+    case tracker_kind(opts) do
+      "github" -> repo_from_tracker_config(%{"repo" => github_repo(opts)})
       kind -> {:error, {:unsupported_tracker_kind, kind}}
     end
+  rescue
+    exception -> {:error, exception}
+  catch
+    kind, reason -> {:error, {kind, reason}}
   end
 
   defp repo_from_tracker_config(config) when is_map(config) do
@@ -173,7 +274,7 @@ defmodule SymphonyElixir.DevServer.Reconciler do
   defp start_candidate(identifier, issue_index) do
     issue = Map.get(issue_index, identifier)
 
-    case project_slug_for_issue(issue) do
+    case project_slug_for(issue) do
       nil ->
         Logger.debug("Dev server auto-start skipped issue=#{identifier} reason=:missing_project_slug")
 
@@ -194,17 +295,31 @@ defmodule SymphonyElixir.DevServer.Reconciler do
       Logger.debug("Dev server auto-start skipped issue=#{identifier} reason=#{inspect({kind, reason})}")
   end
 
-  defp project_slug_for_issue(issue) do
-    explicit_project_slug(issue) || Config.local_project_slug()
-  end
-
   defp explicit_project_slug(nil), do: nil
 
   defp explicit_project_slug(issue) do
     case non_empty_string(map_value(issue, :project_slug)) do
-      nil -> issue |> map_value(:project) |> project_slug()
+      nil -> issue |> map_value(:project) |> loaded_project() |> project_slug()
       slug -> slug
     end
+  end
+
+  defp project_slug_from_project_id(issue, opts) do
+    with project_id when not is_nil(project_id) <- map_value(issue, :project_id),
+         lookup when is_function(lookup, 1) <- Keyword.get(opts, :project_lookup_by_id),
+         {:ok, project} <- lookup_project_by_id(lookup, project_id) do
+      project_slug(project)
+    else
+      _missing -> nil
+    end
+  end
+
+  defp lookup_project_by_id(lookup, project_id) do
+    lookup.(project_id)
+  rescue
+    exception -> {:error, exception}
+  catch
+    kind, reason -> {:error, {kind, reason}}
   end
 
   defp project_slug(project) do
@@ -238,6 +353,60 @@ defmodule SymphonyElixir.DevServer.Reconciler do
     |> map_value(:identifier)
     |> non_empty_string()
   end
+
+  defp lookup_project(project_slug, opts) do
+    project_lookup = Keyword.get(opts, :project_lookup, &Context.get_project/1)
+
+    project_lookup.(project_slug)
+  rescue
+    exception -> {:error, exception}
+  catch
+    kind, reason -> {:error, {kind, reason}}
+  end
+
+  defp local_project_slug(opts) do
+    if Keyword.has_key?(opts, :local_project_slug) do
+      opts
+      |> Keyword.get(:local_project_slug)
+      |> non_empty_string()
+    else
+      Config.local_project_slug()
+    end
+  rescue
+    _exception -> nil
+  catch
+    _kind, _reason -> nil
+  end
+
+  defp tracker_kind(opts) do
+    case Keyword.fetch(opts, :tracker_kind) do
+      {:ok, kind} -> kind
+      :error -> Config.tracker_kind()
+    end
+  end
+
+  defp github_repo(opts) do
+    case Keyword.fetch(opts, :github_repo) do
+      {:ok, repo_fun} when is_function(repo_fun, 0) -> repo_fun.()
+      {:ok, repo} -> repo
+      :error -> GitHubConfig.repo()
+    end
+  end
+
+  defp poll_interval_ms do
+    case Config.poll_interval_ms() do
+      interval when is_integer(interval) and interval > 0 -> interval
+      _invalid -> @fallback_poll_interval_ms
+    end
+  rescue
+    _exception -> @fallback_poll_interval_ms
+  catch
+    _kind, _reason -> @fallback_poll_interval_ms
+  end
+
+  defp loaded_project(nil), do: nil
+  defp loaded_project(%NotLoaded{}), do: nil
+  defp loaded_project(project), do: project
 
   defp map_value(value, key) when is_map(value) and is_atom(key) do
     Map.get(value, key) || Map.get(value, Atom.to_string(key))
