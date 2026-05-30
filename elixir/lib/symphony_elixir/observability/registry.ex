@@ -113,11 +113,11 @@ defmodule SymphonyElixir.Observability.Registry do
       status: :online,
       reported_at: DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
       monotonic_ms: System.monotonic_time(:millisecond),
-      counts: atomize_counts(Map.get(snapshot, "counts", %{})),
-      running: Map.get(snapshot, "running") || [],
-      retrying: Map.get(snapshot, "retrying") || [],
-      agent_totals: Map.get(snapshot, "agent_totals") || %{},
-      rate_limits: Map.get(snapshot, "rate_limits")
+      counts: atomize_counts(snapshot_get(snapshot, "counts") || %{}),
+      running: snapshot_get(snapshot, "running") || [],
+      retrying: snapshot_get(snapshot, "retrying") || [],
+      agent_totals: snapshot_get(snapshot, "agent_totals") || %{},
+      rate_limits: snapshot_get(snapshot, "rate_limits")
     }
   end
 
@@ -145,6 +145,12 @@ defmodule SymphonyElixir.Observability.Registry do
   end
 
   defp get(report, key), do: Map.get(report, key) || Map.get(report, String.to_atom(key))
+
+  defp snapshot_get(snapshot, key) when is_map(snapshot) do
+    Map.get(snapshot, key) || Map.get(snapshot, String.to_atom(key))
+  end
+
+  defp snapshot_get(_snapshot, _key), do: nil
 
   defp broadcast(state, event_name, payload) do
     case Process.whereis(state.pubsub) do

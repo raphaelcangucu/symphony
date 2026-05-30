@@ -81,6 +81,28 @@ defmodule SymphonyElixir.Observability.RegistryTest do
     assert entry.counts == %{running: 0, retrying: 0}
   end
 
+  test "extracts snapshot sub-fields from an atom-keyed snapshot (local delivery path)", %{name: name} do
+    atom_keyed = %{
+      "runtime_id" => "r1",
+      "label" => "proj",
+      "snapshot" => %{
+        generated_at: "2026-05-30T00:00:00Z",
+        counts: %{running: 2, retrying: 1},
+        running: [%{issue_identifier: "PROJ-1", state: "In Progress"}],
+        retrying: [%{issue_identifier: "PROJ-2", attempt: 1}],
+        agent_totals: %{input_tokens: 10, output_tokens: 20, total_tokens: 30, seconds_running: 5},
+        rate_limits: nil
+      }
+    }
+
+    assert :ok = Registry.put_report(name, atom_keyed)
+    assert [entry] = Registry.list(name)
+    assert entry.counts == %{running: 2, retrying: 1}
+    assert length(entry.running) == 1
+    assert length(entry.retrying) == 1
+    assert entry.agent_totals == %{input_tokens: 10, output_tokens: 20, total_tokens: 30, seconds_running: 5}
+  end
+
   test "broadcasts runtime_updated on report and runtime_removed on drop", %{name: name} do
     Phoenix.PubSub.subscribe(:registry_test_pubsub, "observability:global")
 
