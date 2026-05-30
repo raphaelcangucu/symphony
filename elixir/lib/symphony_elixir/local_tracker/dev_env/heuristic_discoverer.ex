@@ -7,6 +7,8 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.HeuristicDiscoverer do
   alias SymphonyElixir.LocalTracker.DevEnv.ProposedStep
 
   @compose_files ~w(docker-compose.yml docker-compose.yaml compose.yml compose.yaml)
+  @next_config_files ~w(next.config.js next.config.mjs next.config.ts)
+  @vite_config_files ~w(vite.config.js vite.config.ts vite.config.mjs)
 
   @install_markers [
     {"mix.exs", "Fetch Elixir deps", "mix deps.get"},
@@ -26,7 +28,8 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.HeuristicDiscoverer do
       mise_step(repo_root),
       env_step(repo_root),
       install_step(repo_root),
-      compose_step(repo_root)
+      compose_step(repo_root),
+      serve_step(repo_root)
     ]
     |> Enum.reject(&is_nil/1)
   end
@@ -55,7 +58,74 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.HeuristicDiscoverer do
     end)
   end
 
+  defp serve_step(root) do
+    cond do
+      next?(root) -> serve("Run Next.js dev server", "npm run dev", "PORT", "http")
+      vite?(root) -> serve("Run Vite dev server", "npm run dev", "PORT", "http")
+      phoenix?(root) -> serve("Run Phoenix server", "mix phx.server", "PORT", "http")
+      has_dev_script?(root) -> serve("Run dev server", "npm run dev", "PORT", "tcp")
+      true -> nil
+    end
+  end
+
+  defp next?(root), do: exists_any?(root, @next_config_files) or package_dependency?(root, "next")
+
+  defp vite?(root), do: exists_any?(root, @vite_config_files) or package_dependency?(root, "vite")
+
+  defp phoenix?(root) do
+    mix_path = Path.join(root, "mix.exs")
+
+    case File.read(mix_path) do
+      {:ok, contents} -> String.contains?(contents, ":phoenix")
+      {:error, _reason} -> false
+    end
+  end
+
+  defp package_dependency?(root, dependency_name) do
+    package = package_json(root)
+
+    dependency?(Map.get(package, "dependencies"), dependency_name) or
+      dependency?(Map.get(package, "devDependencies"), dependency_name)
+  end
+
+  defp dependency?(dependencies, dependency_name) when is_map(dependencies) do
+    Map.has_key?(dependencies, dependency_name)
+  end
+
+  defp dependency?(_dependencies, _dependency_name), do: false
+
+  defp has_dev_script?(root) do
+    scripts = Map.get(package_json(root), "scripts")
+
+    case scripts do
+      %{"dev" => dev_script} when is_binary(dev_script) -> String.trim(dev_script) != ""
+      _other -> false
+    end
+  end
+
+  defp package_json(root) do
+    with {:ok, contents} <- File.read(Path.join(root, "package.json")),
+         {:ok, package} when is_map(package) <- Jason.decode(contents) do
+      package
+    else
+      _error -> %{}
+    end
+  end
+
   defp exists_any?(root, names), do: Enum.any?(names, &File.exists?(Path.join(root, &1)))
+
+  defp serve(description, command, port_env, probe) do
+    ProposedStep.new(%{
+      description: description,
+      command: command,
+      source: "heuristic",
+      optional: true,
+      role: "serve",
+      port_env: port_env,
+      ready_probe: probe,
+      primary: true
+    })
+  end
 
   defp step(description, command, opts \\ []) do
     ProposedStep.new(%{
