@@ -54,7 +54,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
 
   test "list_for_issue returns persisted record maps ordered primary first", %{project: project} do
     {:ok, primary} =
-      DevServerRecord.upsert(project.id, "#1", "front", %{
+      DevServerRecord.upsert(project.id, "1", "front", %{
         working_dir: "front",
         port: 4101,
         url: "http://127.0.0.1:4101/",
@@ -64,7 +64,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
       })
 
     {:ok, secondary} =
-      DevServerRecord.upsert(project.id, "#1", "api", %{
+      DevServerRecord.upsert(project.id, "1", "api", %{
         working_dir: "api",
         port: 4102,
         url: "http://127.0.0.1:4102/",
@@ -100,6 +100,101 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert secondary_id == secondary.id
   end
 
+  test "list_for_issue canonicalizes identifiers", %{project: project} do
+    {:ok, row} =
+      DevServerRecord.upsert(project.id, "1", "front", %{
+        working_dir: "front",
+        port: 4101,
+        url: "http://127.0.0.1:4101/",
+        status: "ready",
+        primary: true,
+        session_name: "sym-dev-front"
+      })
+
+    assert [%{id: row_id, slug: "front"}] = Manager.list_for_issue(project.slug, "#1")
+    assert Manager.list_for_issue(project.slug, "#1") == Manager.list_for_issue(project.slug, "1")
+    assert row_id == row.id
+  end
+
+  test "instance child specs are temporary so manual stops do not restart" do
+    child_spec = Manager.instance_child_spec({:project, "1", "front"}, [])
+
+    assert %{
+             id: {SymphonyElixir.DevServer.Instance, {:project, "1", "front"}},
+             start: {SymphonyElixir.DevServer.Instance, :start_link, [[]]},
+             restart: :temporary,
+             type: :worker
+           } = child_spec
+  end
+
+  test "setup command skips working directories outside the workspace" do
+    workspace = Path.join(System.tmp_dir!(), "symphony-manager-workspace-#{System.unique_integer([:positive])}")
+    outside = Path.join(System.tmp_dir!(), "symphony-manager-outside-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(Path.join(workspace, "app"))
+    File.mkdir_p!(outside)
+
+    on_exit(fn ->
+      File.rm_rf(workspace)
+      File.rm_rf(outside)
+    end)
+
+    assert "cd #{shell_quote(Path.join(workspace, "app"))} && npm ci\n" ==
+             Manager.setup_command_for_workspace(workspace, %{
+               command: "npm ci",
+               working_dir: "app"
+             })
+
+    assert is_nil(
+             Manager.setup_command_for_workspace(workspace, %{
+               command: "npm ci",
+               working_dir: "../#{Path.basename(outside)}"
+             })
+           )
+  end
+
+  test "setup command skips symlinked working directories that escape the workspace" do
+    workspace = Path.join(System.tmp_dir!(), "symphony-manager-workspace-#{System.unique_integer([:positive])}")
+    outside = Path.join(System.tmp_dir!(), "symphony-manager-outside-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(workspace)
+    File.mkdir_p!(outside)
+
+    on_exit(fn ->
+      File.rm_rf(workspace)
+      File.rm_rf(outside)
+    end)
+
+    case File.ln_s(outside, Path.join(workspace, "linked-outside")) do
+      :ok ->
+        assert is_nil(
+                 Manager.setup_command_for_workspace(workspace, %{
+                   command: "npm ci",
+                   working_dir: "linked-outside"
+                 })
+               )
+
+      {:error, reason} ->
+        assert reason in [:eacces, :eperm, :enotsup]
+    end
+  end
+
+  test "unique_serve_steps avoids tmux session name collisions after sanitization" do
+    steps =
+      Manager.unique_serve_steps("p", "1", [
+        %{command: "npm run dev", working_dir: "apps/web", primary: true},
+        %{command: "npm run dev", working_dir: "apps_web", primary: false}
+      ])
+
+    session_names =
+      Enum.map(steps, fn step ->
+        SymphonyElixir.Terminal.Registry.dev_session_name("p", "1", step.slug)
+      end)
+
+    assert Enum.map(steps, & &1.slug) == ["apps/web", "apps_web-2"]
+    assert Enum.uniq(session_names) == session_names
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
@@ -120,5 +215,9 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
         ] do
       Repo.query!("delete from #{table}")
     end
+  end
+
+  defp shell_quote(value) do
+    "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
   end
 end

@@ -9,6 +9,7 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.DevServer.Instance
+  alias SymphonyElixir.DevServer.PortAllocator
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord}
   alias SymphonyElixir.Terminal.Registry, as: TerminalRegistry
   alias SymphonyElixir.Workspace
@@ -47,8 +48,12 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   @spec start_for_issue(String.t(), String.t()) :: {:ok, [pid()]} | {:error, start_error()}
   def start_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
+    identifier = canonical_identifier(identifier)
+
     if Config.dev_server_enabled?() do
-      do_start_for_issue(project_slug, identifier)
+      :global.trans({__MODULE__, :start_for_issue}, fn ->
+        do_start_for_issue(project_slug, identifier)
+      end)
     else
       {:error, :disabled}
     end
@@ -58,6 +63,8 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   @spec stop_for_issue(String.t(), String.t()) :: :ok
   def stop_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
+    identifier = canonical_identifier(identifier)
+
     project_slug
     |> registered_instance_pids(identifier)
     |> Enum.each(&stop_instance/1)
@@ -69,6 +76,7 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   @spec restart_for_issue(String.t(), String.t()) :: {:ok, [pid()]} | {:error, term()}
   def restart_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
+    identifier = canonical_identifier(identifier)
     :ok = stop_for_issue(project_slug, identifier)
     start_for_issue(project_slug, identifier)
   end
@@ -77,6 +85,8 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   @spec list_for_issue(String.t(), String.t()) :: [dev_server_map()]
   def list_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
+    identifier = canonical_identifier(identifier)
+
     with {:ok, project} <- Context.get_project(project_slug) do
       project.id
       |> DevServerRecord.list_for_issue(identifier)
@@ -99,15 +109,16 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp do_start_for_issue(project_slug, identifier) do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, workspace_path} <- issue_workspace_path(identifier),
-         {:ok, serve_steps} <- serve_steps(project.slug),
-         :ok <- ensure_capacity(serve_steps) do
-      setup_issue_session(project.slug, identifier)
-      start_instances(project, identifier, workspace_path, serve_steps)
+         {:ok, serve_steps} <- serve_steps(project.slug, identifier),
+         :ok <- ensure_capacity(serve_steps),
+         {:ok, reserved_steps} <- reserve_ports(serve_steps) do
+      setup_issue_session(project.slug, identifier, workspace_path)
+      start_instances(project, identifier, workspace_path, reserved_steps)
     end
   end
 
   defp issue_workspace_path(identifier) do
-    workspace_path = Workspace.path_for_issue(String.trim_leading(identifier, "#"))
+    workspace_path = Workspace.path_for_issue(identifier)
 
     if File.dir?(workspace_path) do
       {:ok, workspace_path}
@@ -116,10 +127,10 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp serve_steps(project_slug) do
+  defp serve_steps(project_slug, identifier) do
     case DevEnv.list_serve_steps(project_slug) do
       [] -> {:error, :no_serve_step}
-      steps -> {:ok, unique_serve_steps(steps)}
+      steps -> {:ok, unique_serve_steps(project_slug, identifier, steps)}
     end
   end
 
@@ -133,21 +144,37 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp setup_issue_session(project_slug, identifier) do
+  defp reserve_ports(serve_steps) do
+    serve_steps
+    |> Enum.reduce_while({:ok, []}, fn step, {:ok, reserved_steps} ->
+      claimed_ports = live_ports() ++ Enum.map(reserved_steps, fn {_step, port} -> port end)
+
+      case PortAllocator.allocate(Config.dev_server_port_range(), claimed_ports) do
+        {:ok, port} -> {:cont, {:ok, [{step, port} | reserved_steps]}}
+        {:error, _reason} -> {:halt, {:error, :no_free_port}}
+      end
+    end)
+    |> case do
+      {:ok, reserved_steps} -> {:ok, Enum.reverse(reserved_steps)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp setup_issue_session(project_slug, identifier, workspace_path) do
     setup_steps =
       project_slug
       |> DevEnv.list_steps()
       |> Enum.filter(&(&1.role == "setup"))
 
     if setup_steps != [] do
-      send_setup_steps(project_slug, identifier, setup_steps)
+      send_setup_steps(project_slug, identifier, workspace_path, setup_steps)
     end
   end
 
-  defp send_setup_steps(project_slug, identifier, setup_steps) do
+  defp send_setup_steps(project_slug, identifier, workspace_path, setup_steps) do
     case TerminalRegistry.open_project_issue_session(project_slug, identifier) do
       {:ok, _session} ->
-        Enum.each(setup_steps, &send_setup_step(project_slug, identifier, &1))
+        Enum.each(setup_steps, &send_setup_step(project_slug, identifier, workspace_path, &1))
 
       {:error, reason} ->
         Logger.warning("Dev server setup session unavailable project=#{project_slug} issue=#{identifier} reason=#{inspect(reason)}")
@@ -157,36 +184,56 @@ defmodule SymphonyElixir.DevServer.Manager do
       Logger.warning("Dev server setup session failed project=#{project_slug} issue=#{identifier} reason=#{inspect(error)}")
   end
 
-  defp send_setup_step(project_slug, identifier, step) do
-    data = setup_command(step)
+  defp send_setup_step(project_slug, identifier, workspace_path, step) do
+    case setup_command_for_workspace(workspace_path, step) do
+      nil ->
+        Logger.warning("Dev server setup command skipped project=#{project_slug} issue=#{identifier} reason=:unsafe_working_dir")
 
-    case TerminalRegistry.send_input(project_slug, identifier, data) do
-      :ok ->
-        :ok
+      data ->
+        case TerminalRegistry.send_input(project_slug, identifier, data) do
+          :ok ->
+            :ok
 
-      {:error, reason} ->
-        Logger.warning("Dev server setup command send failed project=#{project_slug} issue=#{identifier} reason=#{inspect(reason)}")
+          {:error, reason} ->
+            Logger.warning("Dev server setup command send failed project=#{project_slug} issue=#{identifier} reason=#{inspect(reason)}")
+        end
     end
   rescue
     error ->
       Logger.warning("Dev server setup command send failed project=#{project_slug} issue=#{identifier} reason=#{inspect(error)}")
   end
 
-  defp setup_command(step) do
-    command = Map.fetch!(step, :command)
+  @doc false
+  @spec setup_command_for_workspace(Path.t(), map() | struct()) :: String.t() | nil
+  def setup_command_for_workspace(workspace_path, step) when is_binary(workspace_path) do
+    step = step_to_map(step)
+    command = Map.get(step, :command)
 
-    case normalized_working_dir(Map.get(step, :working_dir)) do
-      nil -> command <> "\n"
-      working_dir -> "cd #{shell_quote(working_dir)} && #{command}\n"
+    with true <- is_binary(command) and String.trim(command) != "",
+         {:ok, root_realpath} <- realpath(workspace_path),
+         {:ok, cwd_realpath} <- setup_cwd_realpath(root_realpath, Map.get(step, :working_dir)),
+         :ok <- ensure_contained(cwd_realpath, root_realpath) do
+      case normalized_working_dir(Map.get(step, :working_dir)) do
+        nil -> command <> "\n"
+        _working_dir -> "cd #{shell_quote(cwd_realpath)} && #{command}\n"
+      end
+    else
+      _invalid -> nil
     end
   end
 
-  defp start_instances(project, identifier, workspace_path, serve_steps) do
-    serve_steps
-    |> Enum.reduce_while({:ok, []}, fn step, {:ok, pids} ->
-      case start_instance(project, identifier, workspace_path, step) do
-        {:ok, pid} -> {:cont, {:ok, [pid | pids]}}
-        {:error, reason} -> {:halt, {:error, reason}}
+  def setup_command_for_workspace(_workspace_path, _step), do: nil
+
+  defp start_instances(project, identifier, workspace_path, reserved_steps) do
+    reserved_steps
+    |> Enum.reduce_while({:ok, []}, fn {step, port}, {:ok, pids} ->
+      case start_instance(project, identifier, workspace_path, step, port) do
+        {:ok, pid} ->
+          {:cont, {:ok, [pid | pids]}}
+
+        {:error, reason} ->
+          rollback_started_instances(pids)
+          {:halt, {:error, reason}}
       end
     end)
     |> case do
@@ -195,7 +242,7 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp start_instance(project, identifier, workspace_path, step) do
+  defp start_instance(project, identifier, workspace_path, step, port) do
     key = {project.slug, identifier, Map.fetch!(step, :slug)}
 
     opts = [
@@ -207,22 +254,49 @@ defmodule SymphonyElixir.DevServer.Manager do
       step: step,
       base_url: Config.dev_server_base_url(),
       idle_timeout_ms: Config.dev_server_idle_timeout_ms(),
-      claimed_ports: live_ports()
+      claimed_ports: live_ports(),
+      port_allocator: fn _range, _claimed_ports -> {:ok, port} end
     ]
 
-    DynamicSupervisor.start_child(@instance_supervisor, {Instance, opts})
+    DynamicSupervisor.start_child(@instance_supervisor, instance_child_spec(key, opts))
   end
 
-  defp unique_serve_steps(steps) do
-    {_counts, steps} =
-      Enum.map_reduce(steps, %{}, fn step, counts ->
-        base_slug = serve_slug(Map.get(step, :working_dir))
-        count = Map.get(counts, base_slug, 0) + 1
-        slug = if count == 1, do: base_slug, else: "#{base_slug}-#{count}"
-        {put_step_slug(step, slug), Map.put(counts, base_slug, count)}
+  @doc false
+  @spec instance_child_spec(term(), keyword()) :: Supervisor.child_spec()
+  def instance_child_spec(key, opts) when is_list(opts) do
+    %{
+      id: {Instance, key},
+      start: {Instance, :start_link, [opts]},
+      restart: :temporary,
+      type: :worker
+    }
+  end
+
+  @doc false
+  @spec unique_serve_steps(String.t(), String.t(), [map() | struct()]) :: [map()]
+  def unique_serve_steps(project_slug, identifier, steps)
+      when is_binary(project_slug) and is_binary(identifier) and is_list(steps) do
+    {steps, _session_names} =
+      Enum.map_reduce(steps, MapSet.new(), fn step, session_names ->
+        base_slug = serve_slug(Map.get(step_to_map(step), :working_dir))
+        {slug, session_names} = unique_slug(project_slug, identifier, base_slug, session_names, 1)
+        {put_step_slug(step, slug), session_names}
       end)
 
     steps
+  end
+
+  def unique_serve_steps(_project_slug, _identifier, _steps), do: []
+
+  defp unique_slug(project_slug, identifier, base_slug, session_names, attempt) do
+    slug = if attempt == 1, do: base_slug, else: "#{base_slug}-#{attempt}"
+    session_name = TerminalRegistry.dev_session_name(project_slug, identifier, slug)
+
+    if MapSet.member?(session_names, session_name) do
+      unique_slug(project_slug, identifier, base_slug, session_names, attempt + 1)
+    else
+      {slug, MapSet.put(session_names, session_name)}
+    end
   end
 
   defp serve_slug(working_dir) do
@@ -234,7 +308,7 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   defp put_step_slug(step, slug) do
     step
-    |> Map.from_struct()
+    |> step_to_map()
     |> Map.take([
       :command,
       :working_dir,
@@ -256,6 +330,85 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp normalized_working_dir(_value), do: nil
+
+  defp setup_cwd_realpath(root_realpath, working_dir) do
+    case normalized_working_dir(working_dir) do
+      nil ->
+        {:ok, root_realpath}
+
+      working_dir ->
+        working_dir
+        |> expand_working_dir(root_realpath)
+        |> realpath()
+    end
+  end
+
+  defp expand_working_dir(working_dir, root_realpath) do
+    case Path.type(working_dir) do
+      :absolute -> Path.expand(working_dir)
+      _relative -> Path.expand(Path.join(root_realpath, working_dir))
+    end
+  end
+
+  defp ensure_contained(cwd_realpath, root_realpath) do
+    if cwd_realpath == root_realpath or String.starts_with?(cwd_realpath, root_realpath <> "/") do
+      :ok
+    else
+      {:error, {:working_dir_outside_workspace, cwd_realpath, root_realpath}}
+    end
+  end
+
+  defp realpath(path) when is_binary(path) do
+    realpath(path, MapSet.new())
+  end
+
+  defp realpath(path, seen) when is_binary(path) do
+    path
+    |> Path.expand()
+    |> Path.split()
+    |> case do
+      ["/" | segments] -> resolve_realpath("/", segments, seen)
+      segments -> resolve_realpath("/", segments, seen)
+    end
+  end
+
+  defp resolve_realpath(resolved, [], _seen), do: {:ok, resolved}
+
+  defp resolve_realpath(resolved, [segment | rest], seen) do
+    candidate = Path.join(resolved, segment)
+
+    case File.lstat(candidate) do
+      {:ok, %File.Stat{type: :symlink}} ->
+        resolve_symlink(candidate, resolved, rest, seen)
+
+      {:ok, _stat} ->
+        resolve_realpath(candidate, rest, seen)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp resolve_symlink(candidate, parent, rest, seen) do
+    if MapSet.member?(seen, candidate) do
+      {:error, :eloop}
+    else
+      seen = MapSet.put(seen, candidate)
+
+      with {:ok, target} <- File.read_link(candidate),
+           target_path = expand_symlink_target(target, parent),
+           {:ok, target_realpath} <- realpath(target_path, seen) do
+        resolve_realpath(target_realpath, rest, seen)
+      end
+    end
+  end
+
+  defp expand_symlink_target(target, parent) do
+    case Path.type(target) do
+      :absolute -> Path.expand(target)
+      _relative -> Path.expand(target, parent)
+    end
+  end
 
   defp registered_instance_pids(project_slug, identifier) do
     @registry
@@ -287,6 +440,10 @@ defmodule SymphonyElixir.DevServer.Manager do
     :exit, _reason -> :ok
   end
 
+  defp rollback_started_instances(pids) do
+    Enum.each(pids, &stop_instance/1)
+  end
+
   defp instance_port(pid) when is_pid(pid) do
     case :sys.get_state(pid, 100) do
       %{port: port} when is_integer(port) and port > 0 -> [port]
@@ -311,6 +468,14 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   defp shell_quote(value) do
     "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
+  end
+
+  defp step_to_map(%_struct{} = step), do: Map.from_struct(step)
+  defp step_to_map(step) when is_map(step), do: step
+  defp step_to_map(_step), do: %{}
+
+  defp canonical_identifier(identifier) when is_binary(identifier) do
+    String.trim_leading(identifier, "#")
   end
 
   defp mark_all_stopped_safely do
