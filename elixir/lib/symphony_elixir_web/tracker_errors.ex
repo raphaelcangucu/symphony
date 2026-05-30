@@ -77,6 +77,39 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :invalid_pr_number),
     do: error(conn, 422, "invalid_pr_number", "Invalid pull request number.")
 
+  def render(conn, :invalid_merge_method),
+    do: error(conn, 422, "invalid_merge_method", "Merge method must be merge, squash, or rebase.")
+
+  def render(conn, :pull_request_not_mergeable),
+    do:
+      error(
+        conn,
+        422,
+        "pull_request_not_mergeable",
+        "GitHub does not consider this pull request mergeable yet."
+      )
+
+  def render(conn, :pull_request_merge_conflict),
+    do: error(conn, 409, "pull_request_merge_conflict", "The pull request cannot be merged because it has conflicts.")
+
+  def render(conn, :pull_request_merge_blocked),
+    do:
+      error(
+        conn,
+        422,
+        "pull_request_merge_blocked",
+        "GitHub blocked the merge. Required checks, reviews, or branch rules may still be pending."
+      )
+
+  def render(conn, :pull_request_merge_forbidden),
+    do:
+      error(
+        conn,
+        403,
+        "pull_request_merge_forbidden",
+        "The configured GitHub token is not allowed to merge this pull request."
+      )
+
   def render(conn, {:adapter_error, _reason}),
     do: error(conn, 500, "tracker_internal", "Tracker adapter error")
 

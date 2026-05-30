@@ -41,7 +41,7 @@ describe("PullRequestPanel update branch", () => {
       <PullRequestPanel
         pullRequest={makePr({ baseBehindBy: 0 })}
         projectSlug="macro-markets"
-        issueIdentifier="#508"
+        issueIdentifier="508"
         onRefresh={() => {}}
       />,
     );
@@ -56,7 +56,7 @@ describe("PullRequestPanel update branch", () => {
       <PullRequestPanel
         pullRequest={makePr({ baseBehindBy: 1 })}
         projectSlug="macro-markets"
-        issueIdentifier="#508"
+        issueIdentifier="508"
         onRefresh={onRefresh}
       />,
     );
@@ -64,8 +64,80 @@ describe("PullRequestPanel update branch", () => {
     await userEvent.click(screen.getByRole("button", { name: /update branch/i }));
 
     await waitFor(() =>
-      expect(service.updatePullRequestBranch).toHaveBeenCalledWith("macro-markets", "#508", 509),
+      expect(service.updatePullRequestBranch).toHaveBeenCalledWith("macro-markets", "508", 509),
     );
     await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+  });
+
+  it("merges an open pull request with the selected method", async () => {
+    vi.mocked(service.mergePullRequest).mockResolvedValue({
+      merged: true,
+      method: "squash",
+      bypass: false,
+      issue: null,
+    });
+    const onRefresh = vi.fn();
+
+    render(
+      <PullRequestPanel
+        pullRequest={makePr({ state: "open" })}
+        projectSlug="macro-markets"
+        issueIdentifier="508"
+        onRefresh={onRefresh}
+      />,
+    );
+
+    await userEvent.selectOptions(screen.getByLabelText(/merge method/i), "squash");
+    await userEvent.click(screen.getByRole("button", { name: /^merge$/i }));
+
+    await waitFor(() =>
+      expect(service.mergePullRequest).toHaveBeenCalledWith("macro-markets", "508", 509, {
+        method: "squash",
+        bypass: false,
+      }),
+    );
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+  });
+
+  it("sends force merge intent", async () => {
+    vi.mocked(service.mergePullRequest).mockResolvedValue({
+      merged: true,
+      method: "rebase",
+      bypass: true,
+      issue: null,
+    });
+
+    render(
+      <PullRequestPanel
+        pullRequest={makePr({ state: "open" })}
+        projectSlug="macro-markets"
+        issueIdentifier="508"
+        onRefresh={() => {}}
+      />,
+    );
+
+    await userEvent.selectOptions(screen.getByLabelText(/merge method/i), "rebase");
+    await userEvent.click(screen.getByRole("button", { name: /force merge/i }));
+
+    await waitFor(() =>
+      expect(service.mergePullRequest).toHaveBeenCalledWith("macro-markets", "508", 509, {
+        method: "rebase",
+        bypass: true,
+      }),
+    );
+  });
+
+  it("hides merge actions when the pull request is not open", () => {
+    render(
+      <PullRequestPanel
+        pullRequest={makePr({ state: "merged", merged: true })}
+        projectSlug="macro-markets"
+        issueIdentifier="508"
+        onRefresh={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /^merge$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /force merge/i })).toBeNull();
   });
 });

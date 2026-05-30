@@ -55,8 +55,24 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
   defp normalize(attrs) do
     attrs
     |> Map.new(fn {k, v} -> {to_atom(k), v} end)
+    |> normalize_identifier()
     |> Map.put_new(:labels, [])
     |> Map.put_new(:blocked_by, [])
+  end
+
+  defp normalize_identifier(%{identifier: identifier} = attrs) when is_binary(identifier) do
+    Map.put(attrs, :identifier, strip_leading_hash(identifier))
+  end
+
+  defp normalize_identifier(attrs), do: attrs
+
+  defp strip_leading_hash(identifier) do
+    identifier
+    |> String.trim()
+    |> case do
+      "#" <> rest -> String.trim(rest)
+      trimmed -> trimmed
+    end
   end
 
   defp to_atom(key) when is_atom(key), do: key

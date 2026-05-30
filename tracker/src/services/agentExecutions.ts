@@ -1,4 +1,5 @@
 import type { AgentExecution, AgentExecutionStatus } from "@/types/agent-execution";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 
 import { http, trackerPath, unwrapData } from "./http";
 
@@ -48,7 +49,7 @@ export function normalizeAgentExecution(dto: BackendAgentExecutionDto): AgentExe
     : null;
 
   return {
-    issueIdentifier: dto.issueIdentifier ?? dto.issue_identifier ?? "",
+    issueIdentifier: normalizeIssueIdentifier(dto.issueIdentifier ?? dto.issue_identifier ?? ""),
     status: normalizeStatus(dto.status),
     sessionId: dto.sessionId ?? dto.session_id ?? null,
     lastEvent: dto.lastEvent ?? dto.last_event ?? null,

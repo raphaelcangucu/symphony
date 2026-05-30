@@ -98,6 +98,29 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   }
   """
 
+  @issue_node_id """
+  query SymphonyUiIssueNodeId($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) {
+      issue(number: $number) { id }
+    }
+  }
+  """
+
+  @resolve_project_item """
+  query SymphonyUiResolveProjectItem($issueId: ID!, $first: Int!) {
+    node(id: $issueId) {
+      ... on Issue {
+        projectItems(first: $first) {
+          nodes {
+            id
+            project { id }
+          }
+        }
+      }
+    }
+  }
+  """
+
   @spec list_items_query() :: String.t()
   def list_items_query, do: @list_items
 
@@ -118,6 +141,12 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
 
   @spec add_project_item_mutation() :: String.t()
   def add_project_item_mutation, do: @add_project_item
+
+  @spec issue_node_id_query() :: String.t()
+  def issue_node_id_query, do: @issue_node_id
+
+  @spec resolve_project_item_query() :: String.t()
+  def resolve_project_item_query, do: @resolve_project_item
 
   @spec repository_id(map()) :: {:ok, String.t()} | {:error, :repository_not_found}
   def repository_id(%{"data" => %{"repository" => %{"id" => id}}}) when is_binary(id), do: {:ok, id}
@@ -181,7 +210,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   def normalize_item(%{"content" => %{"__typename" => "Issue"} = content} = item, status_field, project_slug) do
     IssueDTO.build(%{
       id: content["id"],
-      identifier: "#" <> to_string(content["number"]),
+      identifier: to_string(content["number"]),
       title: content["title"],
       description: content["body"],
       url: content["url"],

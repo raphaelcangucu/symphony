@@ -8,7 +8,7 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
     dto =
       IssueDTO.build(%{
         id: "9",
-        identifier: "#9",
+        identifier: "9",
         title: "Remote issue",
         description: "body",
         priority: 2,
@@ -23,7 +23,7 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
 
     json = TrackerPresenter.issue(dto)
 
-    assert json.identifier == "#9"
+    assert json.identifier == "9"
     assert json.status == %{name: "In Progress", category: "started", position: 2, is_terminal: false}
     assert json.assignee_id == "octocat"
     assert json.creator == "octocat"

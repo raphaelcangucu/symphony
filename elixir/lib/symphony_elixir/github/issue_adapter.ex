@@ -109,10 +109,10 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   @impl true
   def move_issue(%Project{} = project, identifier, attrs) do
     %{project_id: project_id, status_field: status_field} = config(project)
-    item_id = Map.get(attrs, "item_id") || Map.get(attrs, :item_id) || identifier
     target_status = Map.get(attrs, "status") || Map.get(attrs, "state") || Map.get(attrs, :status)
 
-    with {:ok, fields_response} <-
+    with {:ok, item_id} <- resolve_move_item_id(project, project_id, identifier, attrs),
+         {:ok, fields_response} <-
            client().graphql(Query.status_options_query(), %{"projectId" => project_id}, []),
          {:ok, field_id, option_id} <-
            Query.resolve_field_and_option(fields_response, status_field, target_status),
@@ -281,6 +281,99 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
     end
   end
 
+  defp resolve_move_item_id(%Project{} = project, project_id, identifier, attrs) do
+    case Map.get(attrs, "item_id") || Map.get(attrs, :item_id) do
+      id when is_binary(id) and id != "" ->
+        {:ok, id}
+
+      _ ->
+        cond do
+          project_item_id?(identifier) ->
+            {:ok, identifier}
+
+          true ->
+            resolve_move_item_id_from_issue_number(project, project_id, identifier)
+        end
+    end
+  end
+
+  defp project_item_id?(id) when is_binary(id), do: String.starts_with?(id, "PVTI_")
+  defp project_item_id?(_), do: false
+
+  defp resolve_move_item_id_from_issue_number(%Project{} = project, project_id, identifier) do
+    %{repo: repo} = config(project)
+
+    with {:ok, {owner, name}} <- RepoSpec.split(repo),
+         {:ok, number} <- parse_issue_number(identifier),
+         {:ok, issue_node_id} <- fetch_issue_node_id(owner, name, number),
+         {:ok, item_id} <- fetch_project_item_id(issue_node_id, project_id) do
+      {:ok, item_id}
+    end
+  end
+
+  defp fetch_issue_node_id(owner, name, number) do
+    variables = %{"owner" => owner, "name" => name, "number" => number}
+
+    case client().graphql(Query.issue_node_id_query(), variables, []) do
+      {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => id}}}}} when is_binary(id) ->
+        {:ok, id}
+
+      {:ok, _payload} ->
+        {:error, :issue_not_found}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp fetch_project_item_id(issue_node_id, project_id) do
+    variables = %{"issueId" => issue_node_id, "first" => 50}
+
+    case client().graphql(Query.resolve_project_item_query(), variables, []) do
+      {:ok, %{"data" => %{"node" => %{"projectItems" => %{"nodes" => nodes}}}}} when is_list(nodes) ->
+        case find_project_item_id(nodes, project_id) do
+          id when is_binary(id) -> {:ok, id}
+          _ -> {:error, :issue_not_found}
+        end
+
+      {:ok, %{"data" => %{"node" => nil}}} ->
+        {:error, :issue_not_found}
+
+      {:ok, _payload} ->
+        {:error, :issue_not_found}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp find_project_item_id(nodes, project_id) do
+    nodes
+    |> List.wrap()
+    |> Enum.find_value(fn
+      %{"id" => id, "project" => %{"id" => ^project_id}} -> id
+      _ -> nil
+    end)
+  end
+
+  defp parse_issue_number(identifier) when is_binary(identifier) do
+    trimmed = String.trim(identifier)
+
+    case trimmed do
+      "#" <> rest -> parse_issue_digits(rest)
+      digits -> parse_issue_digits(digits)
+    end
+  end
+
+  defp parse_issue_number(_identifier), do: {:error, :invalid_issue_identifier}
+
+  defp parse_issue_digits(digits) do
+    case Integer.parse(String.trim(digits)) do
+      {number, ""} when number > 0 -> {:ok, number}
+      _ -> {:error, :invalid_issue_identifier}
+    end
+  end
+
   defp apply_status_target(_cfg, _item_id, nil), do: :ok
 
   defp apply_status_target(cfg, item_id, {field_id, option_id}) do
@@ -300,7 +393,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp build_created_dto(issue, %Project{} = project, attrs, labels, label_ids) do
     IssueDTO.build(%{
       id: issue["id"],
-      identifier: "#" <> to_string(issue["number"]),
+      identifier: to_string(issue["number"]),
       title: issue["title"] || Map.get(attrs, "title"),
       description: body(attrs),
       url: issue["url"],

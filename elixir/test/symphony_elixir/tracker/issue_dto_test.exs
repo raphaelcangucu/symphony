@@ -13,7 +13,7 @@ defmodule SymphonyElixir.Tracker.IssueDTOTest do
         project_slug: "demo"
       })
 
-    assert dto.identifier == "#42"
+    assert dto.identifier == "42"
     assert dto.title == "Hello"
     assert dto.status.name == "In Progress"
     assert dto.labels == []

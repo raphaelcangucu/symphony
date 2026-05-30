@@ -35,9 +35,56 @@ defmodule SymphonyElixir.Editor do
   end
 
   defp ensure_workspace(issue_identifier) do
-    path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
+    workspace_path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
 
-    if File.dir?(path), do: {:ok, path}, else: {:error, :workspace_missing}
+    if File.dir?(workspace_path) do
+      {:ok, resolve_editor_folder(workspace_path)}
+    else
+      {:error, :workspace_missing}
+    end
+  end
+
+  # Opens the buildable repo root inside a task workspace when hooks clone into
+  # subdirectories (e.g. macro-markets `front/`, `back/`, or legacy `repo/`).
+  defp resolve_editor_folder(workspace_path) do
+    repo_subdirs = ["front", "repo", "back"]
+
+    dev_roots =
+      repo_subdirs
+      |> Enum.filter(fn name ->
+        sub = Path.join(workspace_path, name)
+        File.dir?(sub) and dev_root?(sub)
+      end)
+      |> Enum.map(fn name -> {name, Path.join(workspace_path, name)} end)
+
+    case dev_roots do
+      [{_name, single_path}] ->
+        single_path
+
+      multiple when length(multiple) > 1 ->
+        write_multi_root_workspace(workspace_path, multiple)
+
+      [] ->
+        workspace_path
+    end
+  end
+
+  defp dev_root?(path) do
+    File.regular?(Path.join(path, "package.json")) or
+      File.regular?(Path.join(path, "composer.json"))
+  end
+
+  defp write_multi_root_workspace(workspace_path, named_paths) do
+    file = Path.join(workspace_path, ".symphony/editor.code-workspace")
+    File.mkdir_p!(Path.dirname(file))
+
+    folders =
+      Enum.map(named_paths, fn {name, abs_path} ->
+        %{"name" => name, "path" => abs_path}
+      end)
+
+    File.write!(file, Jason.encode!(%{"folders" => folders}, pretty: true))
+    file
   end
 
   defp build_url(path) do

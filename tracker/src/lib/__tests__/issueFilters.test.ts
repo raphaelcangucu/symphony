@@ -89,23 +89,23 @@ describe("applyIssueFilters", () => {
 
 describe("filterIssuesClientSide", () => {
   const issues = [
-    issueFixture({ identifier: "#1", title: "Fix login", assignee: "octocat", creator: "alice" }),
-    issueFixture({ identifier: "#2", title: "Add logout", assignee: "bob", creator: "octocat" }),
+    issueFixture({ identifier: "1", title: "Fix login", assignee: "octocat", creator: "alice" }),
+    issueFixture({ identifier: "2", title: "Add logout", assignee: "bob", creator: "octocat" }),
   ];
 
   const viewer: Viewer = { githubLogin: "octocat", name: null, avatarUrl: null };
 
   it("filters by search across title and identifier", () => {
-    expect(filterIssuesClientSide(issues, { search: "login" }, null).map((i) => i.identifier)).toEqual(["#1"]);
+    expect(filterIssuesClientSide(issues, { search: "login" }, null).map((i) => i.identifier)).toEqual(["1"]);
   });
 
   it("filters by assignee with me resolution", () => {
     const result = filterIssuesClientSide(issues, { assignee: "me" }, viewer);
-    expect(result.map((i) => i.identifier)).toEqual(["#1"]);
+    expect(result.map((i) => i.identifier)).toEqual(["1"]);
   });
 
   it("filters by creator literal", () => {
-    expect(filterIssuesClientSide(issues, { creator: "octocat" }, null).map((i) => i.identifier)).toEqual(["#2"]);
+    expect(filterIssuesClientSide(issues, { creator: "octocat" }, null).map((i) => i.identifier)).toEqual(["2"]);
   });
 
   it("returns all with empty filters", () => {

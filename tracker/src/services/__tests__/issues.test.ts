@@ -38,7 +38,7 @@ describe("issues service filters", () => {
 describe("createIssue payload", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  const createdDto = { id: 1, identifier: "#1", title: "Social login", status: "Todo" };
+  const createdDto = { id: 1, identifier: "1", title: "Social login", status: "Todo" };
 
   it("sends labels, assignees, and agent in snake_case", async () => {
     const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: createdDto } });

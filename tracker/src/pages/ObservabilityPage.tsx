@@ -1,7 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useObservability } from "@/hooks/useObservability";
+import { issuePath } from "@/lib/workspaceRoutes";
+import { listProjects } from "@/services/projects";
 import type { GlobalRunningRow, RuntimeObservability } from "@/types/observability";
+import type { Project } from "@/types/project";
+
+const ALL_PROJECTS = "__all__";
+
+interface RuntimeProject {
+  key: string;
+  label: string;
+  slug: string | null;
+}
+
+interface RuntimeView {
+  runtime: RuntimeObservability;
+  project: RuntimeProject;
+}
+
+interface ProjectRunningRow extends GlobalRunningRow {
+  projectKey: string;
+  projectLabel: string;
+  resolvedProjectSlug: string | null;
+}
 
 function formatRuntime(startedAt: string | null, nowMs: number): string {
   if (!startedAt) return "--";
@@ -11,19 +34,58 @@ function formatRuntime(startedAt: string | null, nowMs: number): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-function flattenRows(runtimes: RuntimeObservability[]): GlobalRunningRow[] {
-  return runtimes.flatMap((runtime) =>
+function flattenRows(runtimeViews: RuntimeView[]): ProjectRunningRow[] {
+  return runtimeViews.flatMap(({ runtime, project }) =>
     runtime.running.map((session) => ({
       ...session,
       runtimeId: runtime.runtimeId,
       runtimeLabel: runtime.label,
       projectSlug: runtime.projectSlug,
+      projectKey: project.key,
+      projectLabel: project.label,
+      resolvedProjectSlug: project.slug,
     })),
   );
 }
 
+function normalizeProjectKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function resolveRuntimeProject(runtime: RuntimeObservability, projects: Project[]): RuntimeProject {
+  const explicitSlug = runtime.projectSlug?.trim();
+  if (explicitSlug) return { key: explicitSlug, label: explicitSlug, slug: explicitSlug };
+
+  const matchedProject = findProjectForRuntime(runtime, projects);
+  if (matchedProject) return { key: matchedProject.slug, label: matchedProject.slug, slug: matchedProject.slug };
+
+  const fallbackLabel = runtime.label.trim() || runtime.runtimeId.trim() || "unknown";
+  return { key: `runtime:${runtime.runtimeId || fallbackLabel}`, label: fallbackLabel, slug: null };
+}
+
+function findProjectForRuntime(runtime: RuntimeObservability, projects: Project[]): Project | null {
+  const runtimeKey = normalizeProjectKey([runtime.label, runtime.runtimeId, runtime.sourceUrl ?? ""].join(" "));
+  if (!runtimeKey) return null;
+
+  return (
+    projects.find((project) => {
+      const slugKey = normalizeProjectKey(project.slug);
+      const nameKey = normalizeProjectKey(project.name);
+      return (slugKey.length > 0 && runtimeKey.includes(slugKey)) || (nameKey.length > 0 && runtimeKey.includes(nameKey));
+    }) ?? null
+  );
+}
+
+function projectOptions(runtimeViews: RuntimeView[]): Array<{ key: string; label: string }> {
+  return Array.from(new Map(runtimeViews.map(({ project }) => [project.key, project.label])).entries())
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function ObservabilityPage() {
   const { runtimes, loading } = useObservability();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState(ALL_PROJECTS);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -31,27 +93,78 @@ export function ObservabilityPage() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const rows = useMemo(() => flattenRows(runtimes), [runtimes]);
+  useEffect(() => {
+    let active = true;
+    void listProjects({ includeArchived: true })
+      .then((items) => {
+        if (active) setProjects(items);
+      })
+      .catch(() => {
+        if (active) setProjects([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const runtimeViews = useMemo<RuntimeView[]>(
+    () => runtimes.map((runtime) => ({ runtime, project: resolveRuntimeProject(runtime, projects) })),
+    [projects, runtimes],
+  );
+  const options = useMemo(() => projectOptions(runtimeViews), [runtimeViews]);
+
+  useEffect(() => {
+    if (selectedProject !== ALL_PROJECTS && !options.some((option) => option.key === selectedProject)) {
+      setSelectedProject(ALL_PROJECTS);
+    }
+  }, [options, selectedProject]);
+
+  const visibleRuntimeViews = useMemo(
+    () =>
+      selectedProject === ALL_PROJECTS
+        ? runtimeViews
+        : runtimeViews.filter(({ project }) => project.key === selectedProject),
+    [runtimeViews, selectedProject],
+  );
+  const rows = useMemo(() => flattenRows(visibleRuntimeViews), [visibleRuntimeViews]);
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-xl font-semibold">Observability</h1>
-        <p className="text-sm text-muted-foreground">Live runtime state across all reporting Symphony processes.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">Observability</h1>
+          <p className="text-sm text-muted-foreground">Live runtime state across all reporting Symphony processes.</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Project</span>
+          <select
+            value={selectedProject}
+            onChange={(event) => setSelectedProject(event.target.value)}
+            className="rounded-md border bg-background px-2 py-1 text-sm"
+          >
+            <option value={ALL_PROJECTS}>All projects</option>
+            {options.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {loading ? <p className="text-sm text-muted-foreground">Loading runtimes…</p> : null}
-      {!loading && runtimes.length === 0 ? (
+      {!loading && visibleRuntimeViews.length === 0 ? (
         <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          No runtimes are reporting yet.
+          {runtimes.length === 0 ? "No runtimes are reporting yet." : "No runtimes match this project filter."}
         </div>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {runtimes.map((runtime) => (
+        {visibleRuntimeViews.map(({ runtime, project }) => (
           <article key={runtime.runtimeId} className="rounded-lg border bg-card p-4">
             <div className="flex items-center justify-between">
-              <h2 className="truncate font-medium">{runtime.label}</h2>
+              <h2 className="truncate font-medium">{project.label}</h2>
               <span
                 className={
                   runtime.status === "online"
@@ -106,8 +219,19 @@ export function ObservabilityPage() {
               <tbody>
                 {rows.map((row) => (
                   <tr key={`${row.runtimeId}:${row.issueIdentifier}`} className="border-t">
-                    <td className="p-2">{row.runtimeLabel}</td>
-                    <td className="p-2 font-medium">{row.issueIdentifier}</td>
+                    <td className="p-2">{row.projectLabel}</td>
+                    <td className="p-2 font-medium">
+                      {row.resolvedProjectSlug && row.issueIdentifier.trim() ? (
+                        <Link
+                          className="text-primary underline-offset-2 hover:underline"
+                          to={issuePath(row.resolvedProjectSlug, "board", row.issueIdentifier, "agent")}
+                        >
+                          {row.issueIdentifier}
+                        </Link>
+                      ) : (
+                        row.issueIdentifier
+                      )}
+                    </td>
                     <td className="p-2">{row.state ?? "--"}</td>
                     <td className="p-2 tabular-nums">
                       {formatRuntime(row.startedAt, nowMs)}

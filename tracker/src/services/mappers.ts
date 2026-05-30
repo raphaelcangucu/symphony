@@ -1,5 +1,6 @@
 import type { Blocker, BlockerState, BlockerSummary } from "@/types/blocker";
 import type { Comment } from "@/types/comment";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type {
   AgentKind,
   AgentOption,
@@ -216,7 +217,7 @@ type BackendRealtimePayloadByEvent = {
 export function normalizeIssue(dto: BackendIssueDto): Issue {
   return {
     id: String(dto.id),
-    identifier: dto.identifier,
+    identifier: normalizeIssueIdentifier(dto.identifier),
     projectSlug: dto.projectSlug ?? dto.project_slug ?? "",
     status: normalizeStatusName(dto.status),
     title: dto.title,
@@ -381,8 +382,9 @@ function normalizeProjectSetup(dto: BackendProjectSetupDto): ProjectSetup {
 export function normalizeComment(dto: BackendCommentDto, fallbackIssueIdentifier?: string | null): Comment {
   return {
     id: String(dto.id),
-    issueIdentifier:
+    issueIdentifier: normalizeIssueIdentifier(
       dto.issueIdentifier ?? dto.issue_identifier ?? fallbackIssueIdentifier ?? maybeString(dto.issue_id) ?? "",
+    ),
     author: dto.author ?? null,
     body: dto.body,
     kind: dto.kind ?? null,
@@ -397,8 +399,8 @@ export function normalizeBlocker(dto: BackendBlockerDto, fallbackIssueIdentifier
 
   return {
     id: String(dto.id),
-    issueIdentifier: dto.sourceIdentifier ?? dto.source_identifier ?? fallbackIssueIdentifier ?? "",
-    blockingIssueIdentifier: dto.targetIdentifier ?? dto.target_identifier ?? null,
+    issueIdentifier: normalizeIssueIdentifier(dto.sourceIdentifier ?? dto.source_identifier ?? fallbackIssueIdentifier ?? ""),
+    blockingIssueIdentifier: normalizeOptionalIssueIdentifier(dto.targetIdentifier ?? dto.target_identifier),
     reason: dto.reason ?? dto.type ?? "blocked_by",
     state: normalizeBlockerState(dto.state),
     createdAt,
@@ -412,7 +414,7 @@ export function normalizeProjectRealtimePayload<TEvent extends ProjectRealtimeEv
 ): ProjectRealtimePayloadByEvent[TEvent] {
   if (event === "comment_created") {
     const commentPayload = payload as BackendRealtimePayloadByEvent["comment_created"];
-    const issueIdentifier = commentPayload.issueIdentifier ?? commentPayload.issue_identifier ?? "";
+    const issueIdentifier = normalizeIssueIdentifier(commentPayload.issueIdentifier ?? commentPayload.issue_identifier ?? "");
     return {
       issueIdentifier,
       comment: normalizeComment(commentPayload.comment, issueIdentifier),
@@ -421,7 +423,7 @@ export function normalizeProjectRealtimePayload<TEvent extends ProjectRealtimeEv
 
   if (event === "blocker_changed") {
     const blockerPayload = payload as BackendRealtimePayloadByEvent["blocker_changed"];
-    const issueIdentifier = blockerPayload.issueIdentifier ?? blockerPayload.issue_identifier ?? "";
+    const issueIdentifier = normalizeIssueIdentifier(blockerPayload.issueIdentifier ?? blockerPayload.issue_identifier ?? "");
     return {
       issueIdentifier,
       blocker: normalizeBlocker(blockerPayload.blocker, issueIdentifier),
@@ -477,6 +479,11 @@ function normalizeBlockerSummary(dto: BackendBlockerSummaryDto): BlockerSummary 
 function normalizeBlockerState(state: BackendBlockerDto["state"]): BlockerState {
   if (state === "resolved" || state === "canceled") return state;
   return "open";
+}
+
+function normalizeOptionalIssueIdentifier(identifier: string | null | undefined): string | null {
+  const normalized = normalizeIssueIdentifier(identifier);
+  return normalized || null;
 }
 
 function maybeString(value: BackendId | null | undefined): string | null {

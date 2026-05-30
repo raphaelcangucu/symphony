@@ -1,4 +1,7 @@
+import type { Issue } from "./issue";
+
 export type PullRequestState = "open" | "closed" | "merged" | "draft" | "unknown";
+export type PullRequestMergeMethod = "merge" | "squash" | "rebase";
 
 export type CheckStatus = "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "PENDING" | "WAITING" | string | null;
 
@@ -86,4 +89,18 @@ export interface PullRequestFixResult {
 
 export interface UpdateBranchResult {
   updated: boolean;
+}
+
+export interface MergePullRequestInput {
+  method: PullRequestMergeMethod;
+  bypass?: boolean;
+}
+
+export interface MergePullRequestResult {
+  merged: boolean;
+  method: PullRequestMergeMethod;
+  bypass: boolean;
+  sha?: string | null;
+  message?: string | null;
+  issue: Issue | null;
 }

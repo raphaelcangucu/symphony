@@ -1,3 +1,5 @@
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+
 export type WorkspaceView = "board" | "list";
 
 export const ISSUE_TABS = ["summary", "pr", "comments", "blockers", "agent", "preview", "activity", "terminal"] as const;
@@ -44,7 +46,7 @@ export function issuePath(
   identifier: string,
   tab: IssueTab = DEFAULT_ISSUE_TAB,
 ): string {
-  const trimmed = identifier.trim();
+  const trimmed = normalizeIssueIdentifier(identifier);
   if (!trimmed) throw new Error("identifier is required to build an issue route");
   const base = `${workspaceBasePath(projectSlug, view)}/issues/${encodeURIComponent(trimmed)}`;
   return tab === DEFAULT_ISSUE_TAB ? base : `${base}/${tab}`;

@@ -262,7 +262,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
         {:ok,
          [
            IssueDTO.build(%{
-             identifier: "#1",
+             identifier: "1",
              title: "Remote",
              status: %{name: "Todo", category: "unstarted", position: 0, is_terminal: false},
              project_slug: "remote"
@@ -299,7 +299,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     def create_issue(_p, attrs) do
       {:ok,
        IssueDTO.build(%{
-         identifier: "#42",
+         identifier: "42",
          title: Map.get(attrs, "title"),
          labels: Map.get(attrs, "label_ids", []),
          status: %{
@@ -341,7 +341,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
 
     test "index dispatches to the remote adapter" do
       conn = get(authorized_conn(), "/api/tracker/v1/projects/remote/issues")
-      assert %{"data" => [%{"identifier" => "#1", "title" => "Remote"}]} = json_response(conn, 200)
+      assert %{"data" => [%{"identifier" => "1", "title" => "Remote"}]} = json_response(conn, 200)
     end
 
     test "create returns 501 for unsupported remote mutation" do
@@ -403,7 +403,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
 
       assert %{
                "data" => %{
-                 "identifier" => "#42",
+                 "identifier" => "42",
                  "title" => "Social login first",
                  "labels" => ["L1"]
                }

@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { ArrowDownToLine, ArrowRight, ExternalLink, GitBranch } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, ExternalLink, GitBranch, GitMerge, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { CommentCard, ReviewBadge } from "@/components/issues/issue-detail/CommentCard";
 import { Separator } from "@/components/ui/separator";
 import { cn, formatDateTime } from "@/lib/utils";
-import { updatePullRequestBranch } from "@/services/pullRequests";
-import type { PullRequest, PullRequestPipeline } from "@/types/pull-request";
+import { mergePullRequest, updatePullRequestBranch } from "@/services/pullRequests";
+import type { PullRequest, PullRequestMergeMethod, PullRequestPipeline } from "@/types/pull-request";
 
 import { jobMeta, prStateMeta, rollupMeta, statusStateMeta } from "./pr-meta";
 
@@ -25,8 +25,11 @@ export function PullRequestPanel({
   onRefresh,
 }: PullRequestPanelProps) {
   const [updating, setUpdating] = useState(false);
+  const [merging, setMerging] = useState<"normal" | "force" | null>(null);
+  const [mergeMethod, setMergeMethod] = useState<PullRequestMergeMethod>("merge");
   const behind = pr.baseBehindBy ?? 0;
   const canUpdate = behind > 0;
+  const canMerge = pr.state === "open";
 
   async function handleUpdateBranch() {
     if (updating) return;
@@ -39,6 +42,21 @@ export function PullRequestPanel({
       toast.error(cause instanceof Error ? cause.message : "Could not update the branch.");
     } finally {
       setUpdating(false);
+    }
+  }
+
+  async function handleMerge(bypass: boolean) {
+    const mode = bypass ? "force" : "normal";
+    if (merging) return;
+    setMerging(mode);
+    try {
+      await mergePullRequest(projectSlug, issueIdentifier, pr.number, { method: mergeMethod, bypass });
+      toast.success(bypass ? "Force merge completed — issue moved to Done." : "Pull request merged — issue moved to Done.");
+      onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not merge the pull request.");
+    } finally {
+      setMerging(null);
     }
   }
 
@@ -88,6 +106,43 @@ export function PullRequestPanel({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {canMerge ? (
+            <>
+              <label className="sr-only" htmlFor={`merge-method-${pr.number}`}>
+                Merge method
+              </label>
+              <select
+                id={`merge-method-${pr.number}`}
+                value={mergeMethod}
+                onChange={(event) => setMergeMethod(event.target.value as PullRequestMergeMethod)}
+                disabled={merging !== null}
+                className="rounded-md border bg-background px-2 py-1.5 text-xs font-medium"
+              >
+                <option value="merge">Merge commit</option>
+                <option value="squash">Squash</option>
+                <option value="rebase">Rebase</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => void handleMerge(false)}
+                disabled={merging !== null}
+                className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 disabled:opacity-60 dark:text-emerald-300"
+              >
+                <GitMerge className={cn("h-3.5 w-3.5", merging === "normal" && "animate-pulse")} />
+                {merging === "normal" ? "Merging…" : "Merge"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleMerge(true)}
+                disabled={merging !== null}
+                className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/20 disabled:opacity-60 dark:text-red-300"
+                title="Attempts an immediate merge with the configured GitHub token. GitHub still enforces token permissions and branch rules."
+              >
+                <ShieldCheck className={cn("h-3.5 w-3.5", merging === "force" && "animate-pulse")} />
+                {merging === "force" ? "Force merging…" : "Force merge"}
+              </button>
+            </>
+          ) : null}
           {canUpdate ? (
             <button
               type="button"

@@ -63,6 +63,12 @@ defmodule SymphonyElixirWeb.Router do
       :update
     )
 
+    post(
+      "/projects/:project_slug/issues/:identifier/pull_requests/:number/merge",
+      PullRequestMergeController,
+      :create
+    )
+
     get("/projects/:project_slug/issues/:identifier/activity", ActivityController, :index)
     get("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :index)
     post("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :create)

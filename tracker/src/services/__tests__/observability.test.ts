@@ -40,6 +40,17 @@ describe("normalizeRuntime", () => {
     expect(runtime.retrying[0]).toEqual({ issueIdentifier: "PROJ-2", attempt: 1, dueAt: null, error: "boom" });
   });
 
+  it("strips leading hashes from running and retrying issue identifiers", () => {
+    const runtime = normalizeRuntime({
+      runtime_id: "r1",
+      running: [{ issue_identifier: "#508" }],
+      retrying: [{ issue_identifier: "#509" }],
+    });
+
+    expect(runtime.running[0].issueIdentifier).toBe("508");
+    expect(runtime.retrying[0].issueIdentifier).toBe("509");
+  });
+
   it("fills defaults for an empty/partial DTO", () => {
     const runtime = normalizeRuntime({ runtime_id: "r1" });
 

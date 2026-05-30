@@ -41,6 +41,12 @@ describe("workspaceRoutes", () => {
     expect(issuePath("acme", "board", "ABC-1", "preview")).toBe("/projects/acme/board/issues/ABC-1/preview");
   });
 
+  it("strips a leading hash when building GitHub issue paths", () => {
+    expect(issuePath("macro-markets", "board", "#508", "agent")).toBe(
+      "/projects/macro-markets/board/issues/508/agent",
+    );
+  });
+
   it("requires an identifier for issue paths", () => {
     expect(() => issuePath("acme", "board", "")).toThrow(/identifier is required/);
   });

@@ -4,6 +4,7 @@ import type {
   RuntimeObservability,
   RuntimeStatus,
 } from "@/types/observability";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 
 import { http, trackerPath, unwrapData } from "./http";
 
@@ -54,7 +55,7 @@ function normalizeStatus(status: string | null | undefined): RuntimeStatus {
 
 function normalizeRunning(dto: BackendRunningDto): RunningSession {
   return {
-    issueIdentifier: dto.issue_identifier ?? "",
+    issueIdentifier: normalizeIssueIdentifier(dto.issue_identifier ?? ""),
     state: dto.state ?? null,
     sessionId: dto.session_id ?? null,
     turnCount: dto.turn_count ?? 0,
@@ -72,7 +73,7 @@ function normalizeRunning(dto: BackendRunningDto): RunningSession {
 
 function normalizeRetry(dto: BackendRetryDto): RetryEntry {
   return {
-    issueIdentifier: dto.issue_identifier ?? "",
+    issueIdentifier: normalizeIssueIdentifier(dto.issue_identifier ?? ""),
     attempt: dto.attempt ?? 0,
     dueAt: dto.due_at ?? null,
     error: dto.error ?? null,

@@ -3,14 +3,19 @@ import type {
   PullRequestConversationEntry,
   PullRequestJob,
   PullRequestFixResult,
+  MergePullRequestInput,
+  MergePullRequestResult,
   PullRequestPipeline,
   PullRequestResult,
+  PullRequestMergeMethod,
   PullRequestState,
   PullRequestStatusContext,
   UpdateBranchResult,
 } from "@/types/pull-request";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 
 import { http, trackerPath } from "./http";
+import { type BackendIssueDto, normalizeIssue } from "./mappers";
 
 interface BackendJobDto {
   name?: string | null;
@@ -83,6 +88,7 @@ interface BackendPullRequestEnvelope {
 }
 
 const VALID_STATES: readonly PullRequestState[] = ["open", "closed", "merged", "draft", "unknown"];
+const VALID_MERGE_METHODS: readonly PullRequestMergeMethod[] = ["merge", "squash", "rebase"];
 
 function normalizeState(value: string | null | undefined): PullRequestState {
   if (typeof value === "string" && (VALID_STATES as readonly string[]).includes(value)) {
@@ -154,11 +160,12 @@ export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
 
 export async function listPullRequests(projectSlug: string, identifier: string): Promise<PullRequestResult> {
   if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!issueIdentifier) throw new Error("identifier is required");
 
   const response = await http.get<BackendPullRequestEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/pull_requests`,
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests`,
     ),
   );
 
@@ -183,11 +190,12 @@ export async function requestPullRequestFix(
   identifier: string,
 ): Promise<PullRequestFixResult> {
   if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!issueIdentifier) throw new Error("identifier is required");
 
   const response = await http.post<BackendFixEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/pull_requests/fix`,
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/fix`,
     ),
   );
 
@@ -213,14 +221,61 @@ export async function updatePullRequestBranch(
   number: number,
 ): Promise<UpdateBranchResult> {
   if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!issueIdentifier) throw new Error("identifier is required");
   if (!Number.isInteger(number) || number <= 0) throw new Error("number is required");
 
   const response = await http.post<BackendUpdateBranchEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/pull_requests/${number}/update_branch`,
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/${number}/update_branch`,
     ),
   );
 
   return { updated: response.data?.data?.updated ?? false };
+}
+
+interface BackendMergeEnvelope {
+  data?: {
+    merged?: boolean | null;
+    method?: string | null;
+    bypass?: boolean | null;
+    sha?: string | null;
+    message?: string | null;
+    issue?: BackendIssueDto | null;
+  } | null;
+}
+
+export async function mergePullRequest(
+  projectSlug: string,
+  identifier: string,
+  number: number,
+  input: MergePullRequestInput,
+): Promise<MergePullRequestResult> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!issueIdentifier) throw new Error("identifier is required");
+  if (!Number.isInteger(number) || number <= 0) throw new Error("number is required");
+  if (!isMergeMethod(input.method)) throw new Error("method is required");
+
+  const payload = { method: input.method, bypass: input.bypass === true };
+  const response = await http.post<BackendMergeEnvelope>(
+    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/${number}/merge`),
+    payload,
+  );
+
+  const data = response.data?.data ?? {};
+  const method = isMergeMethod(data.method) ? data.method : input.method;
+  const result: MergePullRequestResult = {
+    merged: data.merged === true,
+    method,
+    bypass: data.bypass === true,
+    issue: data.issue ? normalizeIssue(data.issue) : null,
+  };
+  if (data.sha) result.sha = data.sha;
+  if (data.message) result.message = data.message;
+  return result;
+}
+
+function isMergeMethod(value: unknown): value is PullRequestMergeMethod {
+  return typeof value === "string" && (VALID_MERGE_METHODS as readonly string[]).includes(value);
 }

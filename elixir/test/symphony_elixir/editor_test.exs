@@ -57,6 +57,22 @@ defmodule SymphonyElixir.EditorTest do
       assert Editor.editor_target("project", "MAC-EXISTS") == {:ok, expected_url}
       assert Editor.editor_target("project", "#MAC-EXISTS") == {:ok, expected_url}
     end
+
+    test "opens a repo subdirectory when the workspace root is not buildable" do
+      load_workflow_with_front_matter(editor_front_matter())
+      put_status_fun(fn -> :ready end)
+
+      workspace = SymphonyElixir.Workspace.path_for_issue("MAC-REPO")
+      repo = Path.join(workspace, "repo")
+      File.mkdir_p!(repo)
+      File.write!(Path.join(repo, "package.json"), "{}")
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      expected_url =
+        SymphonyElixir.Config.editor_base_url() <> "/?folder=" <> URI.encode_www_form(repo)
+
+      assert Editor.editor_target("project", "MAC-REPO") == {:ok, expected_url}
+    end
   end
 
   defp editor_front_matter do

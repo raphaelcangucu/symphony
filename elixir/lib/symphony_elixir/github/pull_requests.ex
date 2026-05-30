@@ -128,17 +128,17 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   """
   @spec for_issue(String.t() | nil, String.t() | nil, keyword()) ::
           {:ok, [pull_request()]} | {:error, term()}
-  def for_issue(repo, identifier, opts \\ [])
-
-  def for_issue(repo, identifier, opts) when is_binary(repo) and is_binary(identifier) do
-    with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, number} <- parse_issue_number(identifier),
-         {:ok, prs} <- fetch_for_issue(owner, name, number, opts) do
-      {:ok, annotate_branch_status(prs, repo, opts)}
+  def for_issue(repo, identifier, opts \\ []) do
+    if is_binary(repo) and is_binary(identifier) do
+      with {:ok, {owner, name}} <- RepoSpec.split(repo),
+           {:ok, number} <- parse_issue_number(identifier),
+           {:ok, prs} <- fetch_for_issue(owner, name, number, opts) do
+        {:ok, annotate_branch_status(prs, repo, opts)}
+      end
+    else
+      {:error, :invalid_arguments}
     end
   end
-
-  def for_issue(_repo, _identifier, _opts), do: {:error, :invalid_arguments}
 
   defp fetch_for_issue(owner, name, number, opts) do
     client = client_module(opts)

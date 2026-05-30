@@ -33,7 +33,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.QueryTest do
     dto = Query.normalize_item(item, "Symphony State", "demo")
 
     assert %IssueDTO{} = dto
-    assert dto.identifier == "#42"
+    assert dto.identifier == "42"
     assert dto.title == "Fix bug"
     assert dto.assignee == "octocat"
     assert dto.labels == ["bug"]

@@ -86,3 +86,4 @@ fi
 
 echo "✓ ${BINARY_NAME} installed: $("${BIN_DIR}/${BINARY_NAME}" --version 2>&1 | head -1)"
 echo "  Enable in WORKFLOW.md with editor.enabled: true (see README)."
+echo "  Run make configure-code-server to install Codex/Claude extensions."

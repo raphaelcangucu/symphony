@@ -37,6 +37,17 @@ describe("tracker DTO mappers", () => {
     });
   });
 
+  it("strips a leading hash from issue identifiers at the API boundary", () => {
+    const issue = normalizeIssue({
+      id: 508,
+      identifier: "#508",
+      project_slug: "macro-markets",
+      title: "Remove hash identifiers",
+    });
+
+    expect(issue.identifier).toBe("508");
+  });
+
   it("normalizes backend project DTOs into frontend projects", () => {
     const project = normalizeProject({
       id: 42,

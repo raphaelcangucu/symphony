@@ -69,7 +69,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
   end
 
   test "list_issues returns DTOs from the board" do
-    assert {:ok, [%IssueDTO{identifier: "#7", title: "Remote", status: %{name: "Todo"}}]} =
+    assert {:ok, [%IssueDTO{identifier: "7", title: "Remote", status: %{name: "Todo"}}]} =
              IssueAdapter.list_issues(project(), [])
   end
 
@@ -117,6 +117,63 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
                %{project() | tracker_config: Map.put(project().tracker_config, "status_field", "Symphony State")},
                "PVTI_1",
                %{"status" => "Done", "item_id" => "PVTI_1"}
+             )
+  end
+
+  defmodule MoveByIdentifierClientStub do
+    def graphql(query, _vars, _opts) do
+      cond do
+        String.contains?(query, "SymphonyUiIssueNodeId") ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_508"}}}}}
+
+        String.contains?(query, "SymphonyUiResolveProjectItem") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "projectItems" => %{
+                   "nodes" => [%{"id" => "PVTI_508", "project" => %{"id" => "PVT_1"}}]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "fields(first") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "fields" => %{
+                   "nodes" => [
+                     %{
+                       "__typename" => "ProjectV2SingleSelectField",
+                       "id" => "FIELD_1",
+                       "name" => "Symphony State",
+                       "options" => [%{"id" => "OPT_REWORK", "name" => "Rework"}]
+                     }
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "updateProjectV2ItemFieldValue") ->
+          {:ok, %{"data" => %{"updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_508"}}}}}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
+  test "move_issue resolves project item id from issue identifier" do
+    Application.put_env(:symphony_elixir, :github_client_module, MoveByIdentifierClientStub)
+
+    assert {:ok, %{status: %{name: "Rework"}}} =
+             IssueAdapter.move_issue(
+               %{project() | tracker_config: Map.put(project().tracker_config, "status_field", "Symphony State")},
+               "508",
+               %{"status" => "Rework"}
              )
   end
 
@@ -209,7 +266,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
         "agent" => "codex"
       }
 
-      assert {:ok, %IssueDTO{identifier: "#10", title: "New", url: "https://x/10", labels: labels}} =
+      assert {:ok, %IssueDTO{identifier: "10", title: "New", url: "https://x/10", labels: labels}} =
                IssueAdapter.create_issue(project(), attrs)
 
       assert "bug" in labels

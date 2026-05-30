@@ -62,34 +62,33 @@ defmodule SymphonyElixir.GitHub.IssueComments do
   """
   @spec for_issue(String.t() | nil, String.t() | nil, keyword()) ::
           {:ok, [comment()]} | {:error, term()}
-  def for_issue(repo, identifier, opts \\ [])
-
-  def for_issue(repo, identifier, opts) when is_binary(repo) and is_binary(identifier) do
-    with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, number} <- parse_issue_number(identifier) do
-      fetch(owner, name, number, opts)
+  def for_issue(repo, identifier, opts \\ []) do
+    if is_binary(repo) and is_binary(identifier) do
+      with {:ok, {owner, name}} <- RepoSpec.split(repo),
+           {:ok, number} <- parse_issue_number(identifier) do
+        fetch(owner, name, number, opts)
+      end
+    else
+      {:error, :invalid_arguments}
     end
   end
-
-  def for_issue(_repo, _identifier, _opts), do: {:error, :invalid_arguments}
 
   @doc """
   Posts a new comment on the GitHub issue and returns the created comment map.
   """
   @spec create(String.t() | nil, String.t() | nil, String.t(), keyword()) ::
           {:ok, comment()} | {:error, term()}
-  def create(repo, identifier, body, opts \\ [])
-
-  def create(repo, identifier, body, opts)
-      when is_binary(repo) and is_binary(identifier) and is_binary(body) and body != "" do
-    with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, number} <- parse_issue_number(identifier),
-         {:ok, node_id} <- fetch_issue_node_id(owner, name, number, opts) do
-      post_comment(node_id, body, opts)
+  def create(repo, identifier, body, opts \\ []) do
+    if is_binary(repo) and is_binary(identifier) and is_binary(body) and body != "" do
+      with {:ok, {owner, name}} <- RepoSpec.split(repo),
+           {:ok, number} <- parse_issue_number(identifier),
+           {:ok, node_id} <- fetch_issue_node_id(owner, name, number, opts) do
+        post_comment(node_id, body, opts)
+      end
+    else
+      {:error, :invalid_arguments}
     end
   end
-
-  def create(_repo, _identifier, _body, _opts), do: {:error, :invalid_arguments}
 
   defp fetch_issue_node_id(owner, name, number, opts) do
     client = client_module(opts)

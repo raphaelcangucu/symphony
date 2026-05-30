@@ -1,14 +1,20 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ObservabilityPage } from "../ObservabilityPage";
 import type { RuntimeObservability } from "@/types/observability";
+import type { Project } from "@/types/project";
 
-const runtime: RuntimeObservability = {
+let runtimes: RuntimeObservability[];
+let projects: Project[];
+
+const macroRuntime: RuntimeObservability = {
   runtimeId: "r1",
-  label: "macro-markets",
-  projectSlug: "macro-markets",
-  trackerKind: "local",
+  label: "WORKFLOW.macromarkets.example.md",
+  projectSlug: null,
+  trackerKind: "github",
   agentKind: "codex",
   sourceUrl: "http://localhost:4001",
   status: "online",
@@ -18,8 +24,8 @@ const runtime: RuntimeObservability = {
   rateLimits: null,
   running: [
     {
-      issueIdentifier: "MM-1",
-      state: "In Progress",
+      issueIdentifier: "508",
+      state: "Rework",
       sessionId: "sess-1",
       turnCount: 2,
       lastEvent: "agent_message",
@@ -32,15 +38,67 @@ const runtime: RuntimeObservability = {
   retrying: [],
 };
 
+const xipRuntime: RuntimeObservability = {
+  ...macroRuntime,
+  runtimeId: "r2",
+  label: "xip",
+  projectSlug: "xip",
+  running: [{ ...macroRuntime.running[0], issueIdentifier: "9", sessionId: "sess-2" }],
+};
+
+const macroProject: Project = {
+  id: "p1",
+  name: "Macro Markets",
+  slug: "macro-markets",
+  description: null,
+  tracker: { kind: "github", config: {} },
+};
+
 vi.mock("@/hooks/useObservability", () => ({
-  useObservability: () => ({ runtimes: [runtime], loading: false }),
+  useObservability: () => ({ runtimes, loading: false }),
+}));
+
+vi.mock("@/services/projects", () => ({
+  listProjects: vi.fn(() => Promise.resolve(projects)),
 }));
 
 describe("ObservabilityPage", () => {
-  it("renders a runtime card and the global sessions table row", () => {
-    render(<ObservabilityPage />);
-    expect(screen.getAllByText("macro-markets").length).toBeGreaterThan(0);
-    expect(screen.getByText("MM-1")).toBeInTheDocument();
+  beforeEach(() => {
+    runtimes = [macroRuntime];
+    projects = [macroProject];
+  });
+
+  it("renders a runtime card and the global sessions table row", async () => {
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    expect((await screen.findAllByText("macro-markets")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "508" })).toHaveAttribute(
+      "href",
+      "/projects/macro-markets/board/issues/508/agent",
+    );
     expect(screen.getByText(/online/i)).toBeInTheDocument();
+  });
+
+  it("filters running sessions by project", async () => {
+    runtimes = [macroRuntime, xipRuntime];
+    projects = [macroProject, { ...macroProject, id: "p2", name: "Xip", slug: "xip" }];
+
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("link", { name: "508" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "9" })).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Project"), "xip");
+
+    expect(screen.queryByRole("link", { name: "508" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "9" })).toBeInTheDocument();
   });
 });
