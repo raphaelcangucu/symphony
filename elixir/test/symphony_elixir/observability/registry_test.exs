@@ -67,6 +67,20 @@ defmodule SymphonyElixir.Observability.RegistryTest do
     assert Registry.list(name) == []
   end
 
+  test "tolerates a null snapshot", %{name: name} do
+    assert :ok = Registry.put_report(name, %{"runtime_id" => "r1", "snapshot" => nil})
+    assert [entry] = Registry.list(name)
+    assert entry.counts == %{running: 0, retrying: 0}
+    assert entry.running == []
+    assert entry.retrying == []
+  end
+
+  test "tolerates null counts inside snapshot", %{name: name} do
+    assert :ok = Registry.put_report(name, %{"runtime_id" => "r1", "snapshot" => %{"counts" => nil}})
+    assert [entry] = Registry.list(name)
+    assert entry.counts == %{running: 0, retrying: 0}
+  end
+
   test "broadcasts runtime_updated on report and runtime_removed on drop", %{name: name} do
     Phoenix.PubSub.subscribe(:registry_test_pubsub, "observability:global")
 

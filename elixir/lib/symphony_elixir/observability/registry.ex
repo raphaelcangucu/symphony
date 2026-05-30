@@ -101,7 +101,7 @@ defmodule SymphonyElixir.Observability.Registry do
   end
 
   defp build_entry(runtime_id, report) do
-    snapshot = Map.get(report, "snapshot", %{})
+    snapshot = Map.get(report, "snapshot") || %{}
 
     %{
       runtime_id: runtime_id,
@@ -114,9 +114,9 @@ defmodule SymphonyElixir.Observability.Registry do
       reported_at: DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
       monotonic_ms: System.monotonic_time(:millisecond),
       counts: atomize_counts(Map.get(snapshot, "counts", %{})),
-      running: Map.get(snapshot, "running", []),
-      retrying: Map.get(snapshot, "retrying", []),
-      agent_totals: Map.get(snapshot, "agent_totals", %{}),
+      running: Map.get(snapshot, "running") || [],
+      retrying: Map.get(snapshot, "retrying") || [],
+      agent_totals: Map.get(snapshot, "agent_totals") || %{},
       rate_limits: Map.get(snapshot, "rate_limits")
     }
   end
@@ -134,6 +134,8 @@ defmodule SymphonyElixir.Observability.Registry do
       retrying: Map.get(counts, "retrying", Map.get(counts, :retrying, 0))
     }
   end
+
+  defp atomize_counts(_counts), do: %{running: 0, retrying: 0}
 
   defp fetch_runtime_id(report) do
     case Map.get(report, "runtime_id") || Map.get(report, :runtime_id) do
