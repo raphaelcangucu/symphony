@@ -1,0 +1,291 @@
+import { AlertTriangle, ExternalLink, Loader2, Play, RotateCcw, Server, Square } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useIssueDevServers } from "@/hooks/useIssueDevServers";
+import { cn } from "@/lib/utils";
+import type { IssueDevServer, IssueDevServerReason, IssueDevServerStatus } from "@/types/issue";
+
+interface PreviewTabProps {
+  projectSlug: string;
+  issueIdentifier: string;
+}
+
+const STATUS_BADGE_CLASS: Record<IssueDevServerStatus, string> = {
+  crashed: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
+  pending: "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  provisioning: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  ready: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  starting: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  stopped: "border-muted bg-muted text-muted-foreground",
+};
+
+export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
+  const { data, error, loading, restart, start, stop } = useIssueDevServers(projectSlug, issueIdentifier);
+  const primaryServer = selectPrimaryServer(data?.servers ?? []);
+  const primaryUrl = primaryServer?.url ?? null;
+  const hasRequiredIdentifiers = projectSlug.trim().length > 0 && issueIdentifier.trim().length > 0;
+
+  if (!hasRequiredIdentifiers) {
+    return (
+      <StateCallout tone="error" title="Preview cannot load">
+        Project and issue identifiers are required to load preview status.
+      </StateCallout>
+    );
+  }
+
+  if (loading && !data) {
+    return (
+      <StateCallout icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Loading preview status...">
+        Checking dev-server availability for this issue.
+      </StateCallout>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <StateCallout tone="error" title="Could not load preview status">
+        {error}
+      </StateCallout>
+    );
+  }
+
+  if (!data) {
+    return (
+      <StateCallout title="Preview status unavailable">
+        No preview status has been loaded for this issue yet.
+      </StateCallout>
+    );
+  }
+
+  const unavailableMessage = data.available ? null : availabilityMessage(data.reason);
+  const provisioningMessage = data.available && !primaryUrl ? provisioningStatusMessage(primaryServer) : null;
+
+  return (
+    <div className="space-y-4 text-sm">
+      {error ? (
+        <StateCallout tone="error" title="Could not refresh preview status">
+          {error}
+        </StateCallout>
+      ) : null}
+
+      <Card>
+        <CardHeader className="gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Server className="h-4 w-4" />
+                Issue Preview
+              </CardTitle>
+              <CardDescription>
+                Availability: {data.available ? "available" : "unavailable"}
+                {loading ? " · refreshing status" : ""}
+              </CardDescription>
+            </div>
+            <PreviewControls loading={loading} onRestart={restart} onStart={start} onStop={stop} />
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {unavailableMessage ? (
+            <StateCallout tone="warning" title={unavailableMessage.title}>
+              {unavailableMessage.body}
+            </StateCallout>
+          ) : null}
+
+          {primaryUrl ? (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                    Preview is ready{primaryServer ? ` from ${primaryServer.slug}` : ""}.
+                  </p>
+                  <p className="mt-1 break-all font-mono text-xs text-emerald-700 dark:text-emerald-300">
+                    {primaryUrl}
+                  </p>
+                </div>
+                <Button asChild size="sm">
+                  <a href={primaryUrl} target="_blank" rel="noreferrer noopener">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open Preview
+                  </a>
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {provisioningMessage ? (
+            <StateCallout icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Preview is being provisioned...">
+              {provisioningMessage}
+            </StateCallout>
+          ) : null}
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dev Servers</h3>
+            {data.servers.length === 0 ? (
+              <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                No dev servers have reported yet. Auto-start polling may still be provisioning the preview.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {data.servers.map((server) => (
+                  <ServerRow key={server.id} server={server} />
+                ))}
+              </div>
+            )}
+          </section>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PreviewControls({
+  loading,
+  onRestart,
+  onStart,
+  onStop,
+}: {
+  loading: boolean;
+  onRestart: () => Promise<void>;
+  onStart: () => Promise<void>;
+  onStop: () => Promise<void>;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" size="sm" onClick={() => void onStart()} disabled={loading}>
+        <Play className="h-3.5 w-3.5" />
+        Start Preview
+      </Button>
+      <Button type="button" size="sm" variant="outline" onClick={() => void onStop()} disabled={loading}>
+        <Square className="h-3.5 w-3.5" />
+        Stop Preview
+      </Button>
+      <Button type="button" size="sm" variant="outline" onClick={() => void onRestart()} disabled={loading}>
+        <RotateCcw className="h-3.5 w-3.5" />
+        Restart Preview
+      </Button>
+    </div>
+  );
+}
+
+function ServerRow({ server }: { server: IssueDevServer }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{server.slug}</span>
+            {server.primary ? <Badge variant="outline">primary</Badge> : null}
+            <Badge className={cn("capitalize", STATUS_BADGE_CLASS[server.status])}>{server.status}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {server.working_dir ? `Working directory: ${server.working_dir}` : "No working directory reported"}
+            {server.port ? ` · Port ${server.port}` : ""}
+          </p>
+          {server.session_name ? <p className="font-mono text-xs text-muted-foreground">{server.session_name}</p> : null}
+        </div>
+        {server.url ? (
+          <Button asChild size="sm" variant="outline">
+            <a href={server.url} target="_blank" rel="noreferrer noopener">
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open
+            </a>
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">No URL yet</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StateCallout({
+  children,
+  icon,
+  title,
+  tone = "default",
+}: {
+  children: React.ReactNode;
+  icon?: React.ReactNode;
+  title: string;
+  tone?: "default" | "error" | "warning";
+}) {
+  return (
+    <div
+      role={tone === "error" ? "alert" : undefined}
+      className={cn(
+        "flex gap-3 rounded-lg border p-4 text-sm",
+        tone === "default" && "border-dashed text-muted-foreground",
+        tone === "error" && "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+        tone === "warning" && "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200",
+      )}
+    >
+      <span className="mt-0.5 shrink-0">{icon ?? <AlertTriangle className="h-5 w-5" />}</span>
+      <div className="space-y-1">
+        <p className="font-medium">{title}</p>
+        <p>{children}</p>
+      </div>
+    </div>
+  );
+}
+
+function selectPrimaryServer(servers: IssueDevServer[]): IssueDevServer | null {
+  return servers.find((server) => server.primary) ?? servers.find((server) => server.status === "ready") ?? servers[0] ?? null;
+}
+
+function availabilityMessage(reason: IssueDevServerReason): { title: string; body: string } {
+  switch (reason) {
+    case "disabled":
+      return {
+        title: "Dev-server previews are disabled",
+        body: "Availability is disabled for this project, so auto-start polling will not provision a preview.",
+      };
+    case "workspace_missing":
+      return {
+        title: "Preview workspace is missing",
+        body: "Availability is blocked because the issue workspace could not be found. Create or restore the workspace before starting a preview.",
+      };
+    case "no_serve_step":
+      return {
+        title: "No serve step configured",
+        body: "Availability is blocked because this project does not have a dev-server serve step configured.",
+      };
+    case "capacity":
+      return {
+        title: "Preview capacity is full",
+        body: "Availability is temporarily blocked because all preview slots are in use. Auto-start polling can retry when capacity frees up.",
+      };
+    case "no_free_port":
+      return {
+        title: "No free preview port",
+        body: "Availability is blocked because the system could not reserve a free port for the dev server.",
+      };
+    case "crashed":
+      return {
+        title: "Preview crashed",
+        body: "Availability is blocked because the preview process crashed. Restart the preview after checking the server logs.",
+      };
+    default:
+      return {
+        title: "Preview unavailable",
+        body: "Availability is blocked right now. Auto-start polling will update this tab when the preview can be provisioned.",
+      };
+  }
+}
+
+function provisioningStatusMessage(primaryServer: IssueDevServer | null): string {
+  if (!primaryServer) {
+    return "Auto-start polling has not reported a dev server yet. This tab will update when provisioning starts.";
+  }
+
+  if (primaryServer.status === "crashed") {
+    return "The dev server crashed before publishing a URL. Restart the preview to try again.";
+  }
+
+  if (primaryServer.status === "stopped") {
+    return "The dev server is stopped and has not published a URL yet. Start Preview to request a new run.";
+  }
+
+  return `The ${primaryServer.slug} dev server is ${primaryServer.status} and has not published a URL yet.`;
+}
