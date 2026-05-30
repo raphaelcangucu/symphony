@@ -318,6 +318,70 @@ editor:
 
 Never use `auth: none` when binding off localhost.
 
+## Issue Preview Servers
+
+Issue previews depend on both `WORKFLOW.md` front matter and each workspace repo's
+`.symphony/devenv.yaml` convention file.
+
+### Preview link is missing
+
+Common causes:
+
+- `dev_server.enabled` is missing or false in `WORKFLOW.md`.
+- The issue workspace has not been created yet. Run the agent or open the **Terminal**
+  tab first.
+- No repo in the workspace has a `.symphony/devenv.yaml` serve step:
+
+```yaml
+steps:
+  - description: Front dev server
+    command: npm run dev
+    working_dir: front
+    role: serve
+    port_env: PORT
+    url_path: /
+    ready: http
+    ready_path: /health
+    primary: true
+```
+
+`role: setup` steps prepare the workspace. `role: serve` steps are long-running preview
+servers. Multiple serve steps are allowed; `primary: true` selects the URL shown first
+in the Summary tab.
+
+### Preview stays provisioning or starting
+
+Check the serve step:
+
+- `port_env` must match the environment variable your dev server uses for its port
+  (for example `PORT`).
+- `ready: tcp` waits for the allocated port to accept connections.
+- `ready: http` sends an HTTP probe to `ready_path` on localhost; make sure the route
+  returns a successful response.
+- `working_dir` is relative to the issue workspace unless omitted.
+
+### Preview capacity is full or no port is available
+
+Symphony allocates ports from `dev_server.port_range` (default `[4100, 4199]`) and
+limits running previews with `dev_server.max_concurrent` (default `3`). Stop previews
+you no longer need, widen the range, or raise the concurrency cap if the host can
+support more servers.
+
+### Preview is stale, stopped, or crashed
+
+The Summary tab only links ready servers; stopped rows may remain as last-known status.
+Use the Preview tab's **Start Preview**, **Stop Preview**, or **Restart Preview**
+controls to reconcile the row.
+
+Dev servers run in tmux sessions named:
+
+```
+sym-dev-<project>-<issue>-<serve-step>
+```
+
+Use tmux to inspect the pane output, or check the Symphony log for dev-server warnings
+and health probe failures.
+
 ## Checking Logs
 
 Check the log files when diagnosing issues:

@@ -59,6 +59,15 @@ editor:
   auth: none            # "none" (localhost only) or "password"
   # password: your-password               # required when auth: password
   # base_url: https://editor.example.com  # browser-facing URL override (remote/proxy)
+# Issue preview dev servers. Requires at least one `.symphony/devenv.yaml`
+# step with `role: serve` in a workspace repository.
+dev_server:
+  enabled: true
+  port_range: [4100, 4199]
+  max_concurrent: 3
+  idle_timeout_ms: 1800000
+  auto_start_on: pull_request,human_review
+  base_url: http://127.0.0.1
 workspace:
   root: ~/code/macro-markets-workspaces
 hooks:
@@ -147,6 +156,37 @@ This is a **multi-repository** workspace. Issues and the Project board live on `
   - backend: `cd back && gh pr create --base dev --title "…"`
 - On **Rework**, sync with the right integration branch per repo and address feedback. Do not target `master`/`main`.
 - Backend conventions: prefer `sail`/`vibe` over bare `php`; follow `back/`'s own `AGENTS`/`.cursorrules` and PR template; commit messages in English.
+
+## Issue preview servers
+
+Symphony can expose a **Preview** tab for an issue workspace when `dev_server.enabled`
+is true and a cloned repo declares a serve step in `.symphony/devenv.yaml`:
+
+```yaml
+steps:
+  - description: Front dev server
+    command: npm run dev
+    working_dir: front
+    role: serve
+    port_env: PORT
+    url_path: /
+    ready: http
+    ready_path: /health
+    primary: true
+```
+
+- `role: setup` steps prepare the workspace; `role: serve` steps are long-running
+  preview processes. Multiple serve steps are allowed.
+- `primary: true` chooses the URL shown first in the issue summary chip. If none is
+  marked, Symphony treats the first serve step as primary.
+- `port_env` receives the allocated port before `command` runs. `url_path` is appended
+  to the preview URL.
+- `ready: tcp` waits for the port to accept connections. `ready: http` probes
+  `ready_path` on localhost before showing the preview as ready.
+
+The tracker shows provisioning state in the Summary tab, opens ready previews from the
+Preview tab, and provides manual **Start Preview**, **Stop Preview**, and **Restart
+Preview** controls.
 
 ## Agent routing (GitHub labels)
 

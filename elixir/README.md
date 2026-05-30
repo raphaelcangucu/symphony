@@ -348,6 +348,54 @@ live, cross-process view of running sessions.
 - **The page**: open `/tracker` and choose **Observability** in the sidebar (route
   `/observability`) for live per-runtime cards and a global running-sessions table.
 
+## Issue preview servers
+
+Symphony can start long-running dev servers for an issue workspace and surface their URLs in the
+tracker. Enable the feature in `WORKFLOW.md` front matter:
+
+```yaml
+dev_server:
+  enabled: true
+  port_range: [4100, 4199]
+  max_concurrent: 3
+  idle_timeout_ms: 1800000
+  auto_start_on: pull_request,human_review
+  base_url: http://127.0.0.1
+```
+
+Defaults are `enabled: false`, `port_range: [4100, 4199]`, `max_concurrent: 3`,
+`idle_timeout_ms: 1800000`, and `auto_start_on: [pull_request, human_review]`.
+When `base_url` is omitted, each preview URL defaults to `http://127.0.0.1:<allocated-port>`.
+
+Each workspace repo can declare setup and serve steps in `.symphony/devenv.yaml`:
+
+```yaml
+steps:
+  - description: Front dev server
+    command: npm run dev
+    working_dir: front
+    role: serve
+    port_env: PORT
+    url_path: /
+    ready: http
+    ready_path: /health
+    primary: true
+```
+
+- `role: setup` is for preparation commands; `role: serve` is for long-running preview
+  servers. Multiple serve steps are supported.
+- `port_env` receives Symphony's allocated port before the command runs.
+- `url_path` is appended to the preview URL.
+- `ready: tcp` waits for the port to accept connections; `ready: http` probes `ready_path`.
+- `primary: true` picks the preview shown in the Summary tab chip. If no serve step is
+  primary, the first serve step becomes primary.
+
+In the tracker, the issue drawer includes a **Preview** tab with provisioning status, ready URLs,
+and manual **Start Preview**, **Stop Preview**, and **Restart Preview** controls. The Summary tab
+also shows a Preview link or provisioning chip when preview status is available. Auto-start runs
+when a linked pull request appears or the issue enters a human review wait state, according to
+`auto_start_on`.
+
 ## Browser editor (code-server)
 
 Symphony can open a task's workspace directory in a browser-based VS Code
