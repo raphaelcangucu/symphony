@@ -20,6 +20,8 @@ defmodule SymphonyElixir.Config do
   @default_observability_enabled true
   @default_observability_refresh_ms 1_000
   @default_observability_render_interval_ms 16
+  @default_observability_heartbeat_interval_ms 5_000
+  @default_observability_min_report_interval_ms 250
   @default_server_host "127.0.0.1"
 
   @tracker_sections ["local", "linear", "github", "memory"]
@@ -130,7 +132,18 @@ defmodule SymphonyElixir.Config do
                                  render_interval_ms: [
                                    type: :integer,
                                    default: @default_observability_render_interval_ms
-                                 ]
+                                 ],
+                                 hub_url: [type: {:or, [:string, nil]}, default: nil],
+                                 heartbeat_interval_ms: [
+                                   type: :pos_integer,
+                                   default: @default_observability_heartbeat_interval_ms
+                                 ],
+                                 min_report_interval_ms: [
+                                   type: :pos_integer,
+                                   default: @default_observability_min_report_interval_ms
+                                 ],
+                                 label: [type: {:or, [:string, nil]}, default: nil],
+                                 runtime_id: [type: {:or, [:string, nil]}, default: nil]
                                ]
                              ],
                              server: [
@@ -396,6 +409,32 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:observability, :render_interval_ms])
   end
 
+  @spec observability_hub_url() :: String.t() | nil
+  def observability_hub_url do
+    get_in(validated_workflow_options(), [:observability, :hub_url])
+  end
+
+  @spec observability_heartbeat_interval_ms() :: pos_integer()
+  def observability_heartbeat_interval_ms do
+    get_in(validated_workflow_options(), [:observability, :heartbeat_interval_ms])
+  end
+
+  @spec observability_min_report_interval_ms() :: pos_integer()
+  def observability_min_report_interval_ms do
+    get_in(validated_workflow_options(), [:observability, :min_report_interval_ms])
+  end
+
+  @spec observability_label() :: String.t() | nil
+  def observability_label do
+    get_in(validated_workflow_options(), [:observability, :label])
+  end
+
+  @spec observability_runtime_id() :: String.t()
+  def observability_runtime_id do
+    get_in(validated_workflow_options(), [:observability, :runtime_id]) ||
+      SymphonyElixir.Workflow.workflow_file_path()
+  end
+
   @spec server_port() :: non_neg_integer() | nil
   def server_port do
     case Application.get_env(:symphony_elixir, :server_port_override) do
@@ -552,6 +591,17 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:dashboard_enabled, boolean_value(Map.get(section, "dashboard_enabled")))
     |> put_if_present(:refresh_ms, integer_value(Map.get(section, "refresh_ms")))
     |> put_if_present(:render_interval_ms, integer_value(Map.get(section, "render_interval_ms")))
+    |> put_if_present(:hub_url, scalar_string_value(Map.get(section, "hub_url")))
+    |> put_if_present(
+      :heartbeat_interval_ms,
+      positive_integer_value(Map.get(section, "heartbeat_interval_ms"))
+    )
+    |> put_if_present(
+      :min_report_interval_ms,
+      positive_integer_value(Map.get(section, "min_report_interval_ms"))
+    )
+    |> put_if_present(:label, scalar_string_value(Map.get(section, "label")))
+    |> put_if_present(:runtime_id, scalar_string_value(Map.get(section, "runtime_id")))
   end
 
   defp extract_server_options(section) do
