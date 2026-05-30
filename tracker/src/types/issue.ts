@@ -3,6 +3,42 @@ import type { WorkflowStatusName } from "./workflow-status";
 
 export type IssuePriority = 0 | 1 | 2 | 3 | 4;
 
+export type IssueDevServerStatus =
+  | "pending"
+  | "provisioning"
+  | "starting"
+  | "ready"
+  | "crashed"
+  | "stopped";
+
+export type IssueDevServerReason =
+  | "disabled"
+  | "workspace_missing"
+  | "no_serve_step"
+  | "capacity"
+  | "no_free_port"
+  | "lock_unavailable"
+  | "start_failed"
+  | "restart_failed"
+  | null;
+
+export interface IssueDevServer {
+  id: number;
+  slug: string;
+  working_dir: string | null;
+  port: number | null;
+  url: string | null;
+  status: IssueDevServerStatus;
+  primary: boolean;
+  session_name: string | null;
+}
+
+export interface IssueDevServersResponse {
+  available: boolean;
+  reason: IssueDevServerReason;
+  servers: IssueDevServer[];
+}
+
 export interface IssueLabel {
   id?: string;
   name: string;
