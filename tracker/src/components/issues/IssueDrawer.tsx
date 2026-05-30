@@ -6,6 +6,7 @@ import {
   FileText,
   GitPullRequest,
   MessageSquare,
+  Server,
   ShieldAlert,
   TerminalSquare,
 } from "lucide-react";
@@ -30,6 +31,7 @@ import { AssigneeAvatar } from "./AssigneeAvatar";
 import { BlockersTab } from "./issue-detail/BlockersTab";
 import { CommentsTab } from "./issue-detail/CommentsTab";
 import { PriorityIndicator, priorityLabel } from "./PriorityIndicator";
+import { PreviewTab } from "./issue-detail/PreviewTab";
 import { PullRequestTab } from "./issue-detail/PullRequestTab";
 import { rollupMeta } from "./pull-request/pr-meta";
 import { SummaryTab } from "./issue-detail/SummaryTab";
@@ -41,6 +43,7 @@ const TABS = [
   { value: "comments", label: "Comments", Icon: MessageSquare },
   { value: "blockers", label: "Blockers", Icon: ShieldAlert },
   { value: "agent", label: "Agent", Icon: Bot },
+  { value: "preview", label: "Preview", Icon: Server },
   { value: "activity", label: "Activity", Icon: Activity },
   { value: "terminal", label: "Terminal", Icon: TerminalSquare },
 ] as const;
@@ -215,6 +218,9 @@ export function IssueDrawer({
                 </TabsContent>
                 <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
                 <TabsContent value="agent"><AgentTab issue={issue} execution={execution} /></TabsContent>
+                <TabsContent value="preview">
+                  <PreviewTab projectSlug={projectSlug} issueIdentifier={issue.identifier} />
+                </TabsContent>
                 <TabsContent value="activity">
                   <ActivityTab projectSlug={projectSlug} issue={issue} execution={execution} />
                 </TabsContent>

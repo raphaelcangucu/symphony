@@ -38,6 +38,7 @@ describe("workspaceRoutes", () => {
     expect(issuePath("acme", "board", "ABC-1")).toBe("/projects/acme/board/issues/ABC-1");
     expect(issuePath("acme", "board", "ABC-1", DEFAULT_ISSUE_TAB)).toBe("/projects/acme/board/issues/ABC-1");
     expect(issuePath("acme", "board", "ABC-1", "comments")).toBe("/projects/acme/board/issues/ABC-1/comments");
+    expect(issuePath("acme", "board", "ABC-1", "preview")).toBe("/projects/acme/board/issues/ABC-1/preview");
   });
 
   it("requires an identifier for issue paths", () => {
@@ -51,6 +52,7 @@ describe("workspaceRoutes", () => {
 
   it("validates issue tabs", () => {
     expect(isIssueTab("comments")).toBe(true);
+    expect(isIssueTab("preview")).toBe(true);
     expect(isIssueTab("nope")).toBe(false);
     expect(isIssueTab(undefined)).toBe(false);
   });

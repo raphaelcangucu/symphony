@@ -14,6 +14,18 @@ vi.mock("@/services/comments", () => ({
   createComment: vi.fn(),
 }));
 
+vi.mock("@/components/issues/issue-detail/PreviewTab", () => ({
+  PreviewTab: ({ projectSlug, issueIdentifier }: { projectSlug: string; issueIdentifier: string }) => (
+    <div>
+      Preview for {projectSlug}:{issueIdentifier}
+    </div>
+  ),
+}));
+
+vi.mock("@/components/issues/issue-detail/TerminalTab", () => ({
+  TerminalTab: () => <div>Terminal output</div>,
+}));
+
 const issue = {
   id: "1",
   identifier: "MAC-1",
@@ -27,7 +39,14 @@ const issue = {
 } as unknown as Issue;
 
 describe("IssueDrawer editor button", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(editorService, "fetchEditorTarget").mockResolvedValue({
+      available: false,
+      url: null,
+      reason: "workspace_missing",
+    });
+  });
 
   it("opens the workspace in a new tab when available", async () => {
     vi.spyOn(editorService, "fetchEditorTarget").mockResolvedValue({
@@ -65,5 +84,15 @@ describe("IssueDrawer editor button", () => {
     fireEvent.keyDown(window, { key: "." });
 
     expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the preview tab for the selected issue", async () => {
+    render(
+      <IssueDrawer issue={issue} projectSlug="macro-markets" open onOpenChange={() => {}} tab="preview" />,
+    );
+
+    const previewTab = await screen.findByRole("tab", { name: /preview/i });
+    expect(previewTab).toHaveAttribute("data-state", "active");
+    expect(screen.getByText("Preview for macro-markets:MAC-1")).toBeInTheDocument();
   });
 });
