@@ -445,6 +445,25 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
+  @spec rest_put(String.t(), map(), keyword()) ::
+          {:ok, %{status: pos_integer(), body: term()}} | {:error, term()}
+  def rest_put(path, body \\ %{}, opts \\ [])
+      when is_binary(path) and is_map(body) and is_list(opts) do
+    request_fun = Keyword.get(opts, :request_fun, &put_rest_request/3)
+    url = @rest_endpoint <> path
+
+    with {:ok, token} <- require_token(),
+         headers = rest_headers(token),
+         {:ok, %{status: status, body: resp}} when status in 200..299 <-
+           request_fun.(url, headers, body) do
+      {:ok, %{status: status, body: resp}}
+    else
+      {:error, :missing_github_token} = error -> error
+      {:ok, %{status: status}} -> {:error, {:github_api_status, status}}
+      {:error, reason} -> {:error, {:github_api_request, reason}}
+    end
+  end
+
   @doc false
   @spec normalize_project_item_for_test(map(), String.t()) :: Issue.t() | nil
   def normalize_project_item_for_test(item, status_field_name)
@@ -1299,6 +1318,10 @@ defmodule SymphonyElixir.GitHub.Client do
 
   defp get_rest_request(url, headers) do
     Req.get(url, headers: headers, connect_options: [timeout: 30_000])
+  end
+
+  defp put_rest_request(url, headers, body) do
+    Req.put(url, headers: headers, json: body, connect_options: [timeout: 30_000])
   end
 
   defp decode_graphql_response(%{"errors" => errors}) when is_list(errors) and errors != [] do
