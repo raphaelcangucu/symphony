@@ -323,10 +323,30 @@ available.
 
 The observability UI now runs on a minimal Phoenix stack:
 
-- LiveView for the dashboard at `/`
+- The tracker SPA at `/tracker` (`/` now 302-redirects to `/tracker`; the old root LiveView dashboard was retired)
 - JSON API for operational debugging under `/api/v1/*`
 - Bandit as the HTTP server
-- Phoenix dependency static assets for the LiveView client bootstrap
+- Phoenix dependency static assets for the client bootstrap
+
+### Global observability
+
+Each Symphony process reports its orchestrator snapshot to a central observability hub. The hub
+(by default `http://localhost:4000`) aggregates all reporting runtimes in memory and exposes a
+live, cross-process view of running sessions.
+
+- **Hub model**: worker processes push their snapshot to the hub immediately on change (coalesced)
+  and on a periodic heartbeat. The hub keeps the latest snapshot per runtime and marks runtimes as
+  online or stale based on when they last reported.
+- **Config**: set `observability.hub_url` on each worker process to point at the hub. Omit it on the
+  hub process itself — the hub self-registers in-process. Tunables: `heartbeat_interval_ms`
+  (default `5000`), `min_report_interval_ms` (default `250`), `label`, and an optional stable
+  `runtime_id` (defaults to the workflow file path). See
+  `elixir/WORKFLOW.macromarkets.example.md` for a commented example block.
+- **Endpoints** (bearer auth, `SYMPHONY_TRACKER_TOKEN`):
+  - `GET /api/tracker/v1/observability` — the aggregate of all runtimes
+  - `POST /api/tracker/v1/observability/report` — worker → hub snapshot delivery
+- **The page**: open `/tracker` and choose **Observability** in the sidebar (route
+  `/observability`) for live per-runtime cards and a global running-sessions table.
 
 ## Project Layout
 

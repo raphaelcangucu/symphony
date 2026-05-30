@@ -38,6 +38,13 @@ tracker:
     - Duplicate
 polling:
   interval_ms: 5000
+# Report this process's orchestrator snapshot to a central observability hub.
+# observability:
+#   hub_url: http://localhost:4000      # where this process reports to; OMIT on the hub process itself (it self-registers in-process)
+#   heartbeat_interval_ms: 5000         # liveness ping interval
+#   min_report_interval_ms: 250         # coalesce window for burst updates
+#   label: macro-markets                # human-friendly name shown on the observability page
+#   # runtime_id: macro-markets-1       # optional stable id; defaults to the workflow file path
 workspace:
   root: ~/code/macro-markets-workspaces
 hooks:
