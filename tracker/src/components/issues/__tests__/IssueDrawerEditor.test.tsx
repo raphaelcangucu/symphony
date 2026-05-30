@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
@@ -40,6 +40,7 @@ describe("IssueDrawer editor button", () => {
     render(<IssueDrawer issue={issue} projectSlug="macro-markets" open onOpenChange={() => {}} />);
 
     const button = await screen.findByRole("button", { name: /open in vs code/i });
+    await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
 
     expect(open).toHaveBeenCalledWith(
@@ -59,6 +60,7 @@ describe("IssueDrawer editor button", () => {
 
     render(<IssueDrawer issue={issue} projectSlug="macro-markets" open onOpenChange={() => {}} />);
     await screen.findByRole("button", { name: /open in vs code/i });
+    await waitFor(() => expect(screen.getByRole("button", { name: /open in vs code/i })).toBeEnabled());
 
     fireEvent.keyDown(window, { key: "." });
 

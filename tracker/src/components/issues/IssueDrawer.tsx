@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIssueComments } from "@/hooks/useIssueComments";
 import { useIssueEditor } from "@/hooks/useIssueEditor";
+import type { EditorReason } from "@/services/editor";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn } from "@/lib/utils";
 import { DEFAULT_ISSUE_TAB, type IssueTab } from "@/lib/workspaceRoutes";
@@ -227,7 +228,7 @@ export function IssueDrawer({
   );
 }
 
-function editorUnavailableTitle(reason: string | null, loading: boolean): string {
+function editorUnavailableTitle(reason: EditorReason | null, loading: boolean): string {
   if (loading) return "Checking editor…";
   switch (reason) {
     case "starting":
