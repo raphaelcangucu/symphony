@@ -168,6 +168,39 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
       assert [%{name: "Checks", url: nil, jobs: [%{name: "orphan"}]}] =
                PullRequests.parse_pr_node(node).pipelines
     end
+
+    test "exposes job_id from CheckRun databaseId" do
+      node =
+        pr_node(%{
+          "commits" => %{
+            "nodes" => [
+              %{
+                "commit" => %{
+                  "statusCheckRollup" => %{
+                    "state" => "FAILURE",
+                    "contexts" => %{
+                      "nodes" => [
+                        %{
+                          "__typename" => "CheckRun",
+                          "name" => "vitest / test",
+                          "status" => "COMPLETED",
+                          "conclusion" => "FAILURE",
+                          "databaseId" => 78_427_907_850,
+                          "detailsUrl" => "https://github.com/acme/app/actions/runs/1/job/78427907850",
+                          "checkSuite" => %{"workflowRun" => %{"url" => "u", "workflow" => %{"name" => "CI"}}}
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        })
+
+      [%{jobs: [job]}] = PullRequests.parse_pr_node(node).pipelines
+      assert job.job_id == 78_427_907_850
+    end
   end
 
   describe "for_issue/3" do
@@ -239,6 +272,90 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
 
       assert {:ok, [%{number: 503}]} =
                PullRequests.for_issue("acme/app", "42",
+                 client_module: TestClient,
+                 request_fun: request_fun
+               )
+    end
+
+    test "falls back to same-repo cross-referenced PRs when no closing refs or branch match" do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyTrackerIssuePullRequests" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "repository" => %{
+                     "issue" => %{
+                       "linkedBranches" => %{"nodes" => []},
+                       "closedByPullRequestsReferences" => %{"nodes" => []},
+                       "timelineItems" => %{
+                         "nodes" => [
+                           %{
+                             "isCrossRepository" => false,
+                             "source" => Map.put(pr_node(%{}), "__typename", "PullRequest")
+                           }
+                         ]
+                       }
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, [%{number: 503}]} =
+               PullRequests.for_issue("acme/app", "508",
+                 client_module: TestClient,
+                 request_fun: request_fun
+               )
+    end
+
+    test "ignores cross-repository cross-references and dedups by number" do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyTrackerIssuePullRequests" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "repository" => %{
+                     "issue" => %{
+                       "linkedBranches" => %{"nodes" => []},
+                       "closedByPullRequestsReferences" => %{"nodes" => []},
+                       "timelineItems" => %{
+                         "nodes" => [
+                           %{
+                             "isCrossRepository" => true,
+                             "source" =>
+                               Map.merge(pr_node(%{}), %{
+                                 "__typename" => "PullRequest",
+                                 "number" => 999
+                               })
+                           },
+                           %{
+                             "isCrossRepository" => false,
+                             "source" => Map.put(pr_node(%{}), "__typename", "PullRequest")
+                           },
+                           %{
+                             "isCrossRepository" => false,
+                             "source" => Map.put(pr_node(%{}), "__typename", "PullRequest")
+                           }
+                         ]
+                       }
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, [%{number: 503}]} =
+               PullRequests.for_issue("acme/app", "508",
                  client_module: TestClient,
                  request_fun: request_fun
                )

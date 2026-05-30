@@ -2,6 +2,7 @@ import type {
   PullRequest,
   PullRequestConversationEntry,
   PullRequestJob,
+  PullRequestFixResult,
   PullRequestPipeline,
   PullRequestResult,
   PullRequestState,
@@ -162,5 +163,38 @@ export async function listPullRequests(projectSlug: string, identifier: string):
     data: (body.data ?? []).map(normalizePullRequest),
     supported: body.supported ?? false,
     available: body.available ?? false,
+  };
+}
+
+interface BackendFixEnvelope {
+  data?: {
+    moved_to?: string | null;
+    comment_posted?: boolean | null;
+    jobs?: { name?: string | null; conclusion?: string | null; url?: string | null }[] | null;
+  } | null;
+}
+
+export async function requestPullRequestFix(
+  projectSlug: string,
+  identifier: string,
+): Promise<PullRequestFixResult> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  if (!identifier.trim()) throw new Error("identifier is required");
+
+  const response = await http.post<BackendFixEnvelope>(
+    trackerPath(
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/pull_requests/fix`,
+    ),
+  );
+
+  const data = response.data?.data ?? {};
+  return {
+    movedTo: data.moved_to ?? "Rework",
+    commentPosted: data.comment_posted ?? false,
+    jobs: (data.jobs ?? []).map((job) => ({
+      name: job.name ?? null,
+      conclusion: job.conclusion ?? null,
+      url: job.url ?? null,
+    })),
   };
 }

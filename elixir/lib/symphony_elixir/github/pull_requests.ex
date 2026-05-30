@@ -5,9 +5,15 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   commit statuses, and the PR conversation (comments + reviews).
 
   Linkage is derived at read time via GraphQL — Symphony does not persist PR
-  numbers. We first look at `closedByPullRequestsReferences` (PRs that reference
-  the issue via closing keywords). When none are found we fall back to matching
-  PRs by the issue's linked branch name.
+  numbers. Resolution tries three strategies in order:
+
+  1. `closedByPullRequestsReferences` (PRs that close the issue via closing
+     keywords). GitHub only registers these when the PR targets the repo's
+     default branch.
+  2. PRs matching the issue's linked branch name.
+  3. Same-repository cross-referenced PRs from the issue timeline (the relation
+     the GitHub Projects board surfaces), which also covers PRs whose closing
+     keyword does not register because they target a non-default base branch.
   """
 
   alias SymphonyElixir.GitHub.{Client, Config, RepoSpec}
@@ -43,6 +49,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
               __typename
               ... on CheckRun {
                 name
+                databaseId
                 status
                 conclusion
                 detailsUrl
@@ -83,6 +90,17 @@ defmodule SymphonyElixir.GitHub.PullRequests do
         linkedBranches(first: 1) { nodes { ref { name } } }
         closedByPullRequestsReferences(first: #{@max_related_prs}, includeClosedPrs: true) {
           nodes { #{@pr_fields} }
+        }
+        timelineItems(last: #{@max_related_prs}, itemTypes: [CROSS_REFERENCED_EVENT]) {
+          nodes {
+            ... on CrossReferencedEvent {
+              isCrossRepository
+              source {
+                __typename
+                ... on PullRequest { #{@pr_fields} }
+              }
+            }
+          }
         }
       }
     }
@@ -144,19 +162,49 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   end
 
   defp resolve_from_issue(issue, owner, name, opts) do
-    prs =
-      issue
-      |> Map.get("closedByPullRequestsReferences", %{})
-      |> Map.get("nodes", [])
-      |> List.wrap()
-      |> Enum.map(&parse_pr_node/1)
-      |> Enum.reject(&is_nil/1)
-
-    case prs do
-      [_ | _] -> {:ok, sort_prs(prs)}
-      [] -> fetch_by_branch(extract_branch(issue), owner, name, opts)
+    case extract_closing_prs(issue) do
+      [_ | _] = prs -> {:ok, sort_prs(prs)}
+      [] -> resolve_without_closing_refs(issue, owner, name, opts)
     end
   end
+
+  defp resolve_without_closing_refs(issue, owner, name, opts) do
+    cross_referenced = extract_cross_referenced_prs(issue)
+
+    case fetch_by_branch(extract_branch(issue), owner, name, opts) do
+      {:ok, [_ | _] = branch_prs} -> {:ok, branch_prs}
+      {:ok, []} -> {:ok, sort_prs(cross_referenced)}
+      {:error, _reason} when cross_referenced != [] -> {:ok, sort_prs(cross_referenced)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp extract_closing_prs(issue) do
+    issue
+    |> get_in_safe(["closedByPullRequestsReferences", "nodes"])
+    |> List.wrap()
+    |> Enum.map(&parse_pr_node/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq_by(& &1.number)
+  end
+
+  defp extract_cross_referenced_prs(issue) do
+    issue
+    |> get_in_safe(["timelineItems", "nodes"])
+    |> List.wrap()
+    |> Enum.map(&cross_referenced_pr_node/1)
+    |> Enum.map(&parse_pr_node/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq_by(& &1.number)
+  end
+
+  defp cross_referenced_pr_node(%{
+         "isCrossRepository" => false,
+         "source" => %{"__typename" => "PullRequest"} = pr
+       }),
+       do: pr
+
+  defp cross_referenced_pr_node(_event), do: nil
 
   defp fetch_by_branch(nil, _owner, _name, _opts), do: {:ok, []}
 
@@ -277,12 +325,29 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   defp check_run_to_job(check_run) do
     %{
       name: string_or_nil(Map.get(check_run, "name")),
+      job_id: positive_integer_or_nil(Map.get(check_run, "databaseId")) || job_id_from_url(check_run),
       status: string_or_nil(Map.get(check_run, "status")),
       conclusion: string_or_nil(Map.get(check_run, "conclusion")),
       url: string_or_nil(Map.get(check_run, "detailsUrl")),
       started_at: string_or_nil(Map.get(check_run, "startedAt")),
       completed_at: string_or_nil(Map.get(check_run, "completedAt"))
     }
+  end
+
+  defp positive_integer_or_nil(value) when is_integer(value) and value > 0, do: value
+  defp positive_integer_or_nil(_value), do: nil
+
+  defp job_id_from_url(check_run) do
+    case string_or_nil(Map.get(check_run, "detailsUrl")) do
+      url when is_binary(url) ->
+        case Regex.run(~r{/job/(\d+)}, url) do
+          [_, captured] -> String.to_integer(captured)
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
   end
 
   defp build_conversation(node) do

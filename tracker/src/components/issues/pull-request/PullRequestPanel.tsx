@@ -1,7 +1,7 @@
 import { ArrowRight, ExternalLink, GitBranch } from "lucide-react";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
-import { Markdown } from "@/components/ui/markdown";
+import { CommentCard, ReviewBadge } from "@/components/issues/issue-detail/CommentCard";
 import { Separator } from "@/components/ui/separator";
 import { cn, formatDateTime } from "@/lib/utils";
 import type { PullRequest, PullRequestPipeline } from "@/types/pull-request";
@@ -128,19 +128,17 @@ export function PullRequestPanel({ pullRequest: pr }: PullRequestPanelProps) {
                 Conversation
               </h4>
               {pr.conversation.map((entry, index) => (
-                <div key={`${entry.author ?? "anon"}-${index}`} className="rounded-lg border p-3">
-                  <div className="mb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-                    <AssigneeAvatar login={entry.author} />
-                    <span className="font-medium text-foreground">{entry.author ?? "unknown"}</span>
-                    {entry.kind === "review" && entry.reviewState ? (
-                      <span className="rounded-full bg-muted px-1.5 py-0.5 font-medium uppercase tracking-wide">
-                        {entry.reviewState.replaceAll("_", " ").toLowerCase()}
-                      </span>
-                    ) : null}
-                    {entry.createdAt ? <span className="ml-auto">{formatDateTime(entry.createdAt)}</span> : null}
-                  </div>
-                  <Markdown>{entry.body}</Markdown>
-                </div>
+                <CommentCard
+                  key={`${entry.author ?? "anon"}-${index}`}
+                  author={entry.author}
+                  body={entry.body}
+                  createdAt={entry.createdAt}
+                  badge={
+                    entry.kind === "review" && entry.reviewState ? (
+                      <ReviewBadge state={entry.reviewState} />
+                    ) : undefined
+                  }
+                />
               ))}
             </section>
           </>

@@ -12,6 +12,7 @@ import {
 import { getStatusMeta } from "@/components/board/status-meta";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useIssueComments } from "@/hooks/useIssueComments";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn } from "@/lib/utils";
 import { DEFAULT_ISSUE_TAB, type IssueTab } from "@/lib/workspaceRoutes";
@@ -69,6 +70,12 @@ export function IssueDrawer({
   });
   const primaryPr = pr.pullRequests[0] ?? null;
   const prRollup = primaryPr ? rollupMeta(primaryPr.checksState) : null;
+
+  const commentsState = useIssueComments({
+    projectSlug,
+    identifier: issue?.identifier ?? null,
+    enabled: open && Boolean(issue),
+  });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -131,12 +138,15 @@ export function IssueDrawer({
                   <SummaryTab
                     issue={issue}
                     pullRequests={pr.pullRequests}
+                    workpad={commentsState.workpad}
                     onOpenPullRequest={() => onTabChange?.("pr")}
+                    onOpenComments={() => onTabChange?.("comments")}
                   />
                 </TabsContent>
                 <TabsContent value="pr">
                   <PullRequestTab
                     issue={issue}
+                    projectSlug={projectSlug}
                     pullRequests={pr.pullRequests}
                     supported={pr.supported}
                     available={pr.available}
@@ -145,10 +155,19 @@ export function IssueDrawer({
                     onRefresh={() => void pr.refetch()}
                   />
                 </TabsContent>
-                <TabsContent value="comments"><CommentsTab projectSlug={projectSlug} issue={issue} /></TabsContent>
+                <TabsContent value="comments">
+                  <CommentsTab
+                    comments={commentsState.comments}
+                    loading={commentsState.loading}
+                    error={commentsState.error}
+                    onAddComment={commentsState.addComment}
+                  />
+                </TabsContent>
                 <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
                 <TabsContent value="agent"><AgentTab issue={issue} execution={execution} /></TabsContent>
-                <TabsContent value="activity"><ActivityTab issue={issue} /></TabsContent>
+                <TabsContent value="activity">
+                  <ActivityTab projectSlug={projectSlug} issue={issue} execution={execution} />
+                </TabsContent>
                 <TabsContent value="terminal"><TerminalTab issue={issue} /></TabsContent>
               </div>
             </Tabs>

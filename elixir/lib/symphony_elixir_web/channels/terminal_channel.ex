@@ -90,6 +90,7 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
     case Registry.resize(project_slug, issue_identifier, cols, rows) do
       :ok ->
+        push_capture(socket, project_slug, issue_identifier)
         {:noreply, socket}
 
       {:error, message} ->

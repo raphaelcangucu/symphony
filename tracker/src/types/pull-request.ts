@@ -70,3 +70,15 @@ export interface PullRequestResult {
   supported: boolean;
   available: boolean;
 }
+
+export interface PullRequestFixJob {
+  name: string | null;
+  conclusion: string | null;
+  url: string | null;
+}
+
+export interface PullRequestFixResult {
+  movedTo: string;
+  commentPosted: boolean;
+  jobs: PullRequestFixJob[];
+}

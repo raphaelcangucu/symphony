@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import type { PullRequestJob, PullRequestState } from "@/types/pull-request";
+import type { PullRequest, PullRequestJob, PullRequestState } from "@/types/pull-request";
 
 export interface VisualMeta {
   Icon: LucideIcon;
@@ -99,4 +99,12 @@ const STATUS_STATE_META: Record<string, VisualMeta> = {
 
 export function statusStateMeta(state: string | null | undefined): VisualMeta {
   return STATUS_STATE_META[(state ?? "").toUpperCase()] ?? NEUTRAL;
+}
+
+const FAILING_CONCLUSIONS = new Set(["FAILURE", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE", "ACTION_REQUIRED"]);
+
+export function hasFailingChecks(pr: PullRequest): boolean {
+  return pr.pipelines.some((pipeline) =>
+    pipeline.jobs.some((job) => job.conclusion != null && FAILING_CONCLUSIONS.has(job.conclusion.toUpperCase())),
+  );
 }

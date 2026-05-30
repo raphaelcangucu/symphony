@@ -54,6 +54,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/:identifier/comments", CommentController, :index)
     post("/projects/:project_slug/issues/:identifier/comments", CommentController, :create)
     get("/projects/:project_slug/issues/:identifier/pull_requests", PullRequestController, :index)
+    post("/projects/:project_slug/issues/:identifier/pull_requests/fix", PullRequestFixController, :create)
     get("/projects/:project_slug/issues/:identifier/activity", ActivityController, :index)
     get("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :index)
     post("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :create)

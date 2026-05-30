@@ -1,12 +1,17 @@
-import { GitPullRequest, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { GitPullRequest, RefreshCw, Wrench } from "lucide-react";
+import { toast } from "sonner";
 
+import { hasFailingChecks } from "@/components/issues/pull-request/pr-meta";
 import { PullRequestPanel } from "@/components/issues/pull-request/PullRequestPanel";
+import { requestPullRequestFix } from "@/services/pullRequests";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
 import type { PullRequest } from "@/types/pull-request";
 
 interface PullRequestTabProps {
   issue: Issue;
+  projectSlug: string;
   pullRequests: PullRequest[];
   supported: boolean;
   available: boolean;
@@ -17,6 +22,7 @@ interface PullRequestTabProps {
 
 export function PullRequestTab({
   issue,
+  projectSlug,
   pullRequests,
   supported,
   available,
@@ -24,6 +30,23 @@ export function PullRequestTab({
   error,
   onRefresh,
 }: PullRequestTabProps) {
+  const [fixing, setFixing] = useState(false);
+  const canFix = pullRequests.some(hasFailingChecks);
+
+  async function handleFix() {
+    if (fixing) return;
+    setFixing(true);
+    try {
+      const result = await requestPullRequestFix(projectSlug, issue.identifier);
+      toast.success(`Sent to ${result.movedTo} — the agent will pick it up on the next poll.`);
+      onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not request a fix.");
+    } finally {
+      setFixing(false);
+    }
+  }
+
   if (!supported) {
     return (
       <EmptyState>
@@ -75,14 +98,27 @@ export function PullRequestTab({
         <span className="text-xs text-muted-foreground">
           {pullRequests.length} related pull request{pullRequests.length === 1 ? "" : "s"}
         </span>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {canFix ? (
+            <button
+              type="button"
+              onClick={() => void handleFix()}
+              disabled={fixing}
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-60 dark:text-amber-300"
+            >
+              <Wrench className={cn("h-3.5 w-3.5", fixing && "animate-pulse")} />
+              {fixing ? "Sending…" : "Fix with agent"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+            Refresh
+          </button>
+        </div>
       </div>
       {pullRequests.map((pr) => (
         <PullRequestPanel key={pr.number} pullRequest={pr} />

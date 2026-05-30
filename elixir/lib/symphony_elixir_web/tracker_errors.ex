@@ -62,6 +62,9 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, {:remote_validation, details}),
     do: error(conn, 422, "tracker_validation_failed", "Remote tracker rejected the request", details)
 
+  def render(conn, :no_failing_checks),
+    do: error(conn, 422, "no_failing_checks", "No failing checks found on the linked pull request(s).")
+
   def render(conn, {:adapter_error, _reason}),
     do: error(conn, 500, "tracker_internal", "Tracker adapter error")
 

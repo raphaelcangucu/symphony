@@ -46,7 +46,23 @@ defmodule SymphonyElixir.Terminal.Tmux do
   @spec resize(String.t(), pos_integer(), pos_integer()) :: command_result()
   def resize(session_name, cols, rows)
       when is_binary(session_name) and is_integer(cols) and is_integer(rows) and cols > 0 and rows > 0 do
-    run_result(["resize-pane", "-t", session_name, "-x", Integer.to_string(cols), "-y", Integer.to_string(rows)])
+    # Detached tmux sessions (no attached client) ignore `resize-pane` and stay
+    # at the 80x24 default. Switching the window to a manual size and resizing
+    # the window is the only way to widen the pane so client output stops
+    # wrapping at 80 columns.
+    with :ok <- run_result(["set-option", "-t", session_name, "window-size", "manual"]),
+         :ok <-
+           run_result([
+             "resize-window",
+             "-t",
+             session_name,
+             "-x",
+             Integer.to_string(cols),
+             "-y",
+             Integer.to_string(rows)
+           ]) do
+      :ok
+    end
   end
 
   @spec capture_pane(String.t()) :: {:ok, String.t()} | {:error, String.t()}

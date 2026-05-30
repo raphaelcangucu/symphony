@@ -144,6 +144,12 @@ defmodule SymphonyElixir.GitHub.IssueComments do
       {:ok, _payload} ->
         {:ok, []}
 
+      {:error, {:github_graphql_errors, _}} ->
+        # A pull-request number (or otherwise non-issue) yields a GraphQL
+        # "Could not resolve to an Issue" error. Comments are non-critical, so
+        # degrade to an empty list instead of failing the request.
+        {:ok, []}
+
       {:error, reason} ->
         {:error, reason}
     end

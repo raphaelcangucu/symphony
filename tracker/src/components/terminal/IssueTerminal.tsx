@@ -69,6 +69,10 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
             const session = payloadValue(payload, "session");
             const output = payloadValue(session, "output");
             if (typeof output === "string" && output.length > 0) renderSnapshot(terminal, output);
+            // The first fitAddon.fit() runs before this channel exists, so its
+            // resize event is lost and tmux stays at its 80x24 default. Push the
+            // current size explicitly so the detached pane matches the viewport.
+            channel?.push("resize", { cols: terminal.cols, rows: terminal.rows });
           })
           .receive("error", (reason) => {
             setError(`Failed to join terminal channel: ${JSON.stringify(reason)}`);

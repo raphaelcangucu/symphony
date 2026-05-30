@@ -8,13 +8,18 @@ import { PullRequestLink } from "@/components/issues/pull-request/PullRequestLin
 import { Markdown } from "@/components/ui/markdown";
 import { Separator } from "@/components/ui/separator";
 import { cn, formatDateTime } from "@/lib/utils";
+import type { Comment } from "@/types/comment";
 import type { Issue } from "@/types/issue";
 import type { PullRequest } from "@/types/pull-request";
+
+import { CommentCard, WorkpadBadge } from "./CommentCard";
 
 interface SummaryTabProps {
   issue: Issue;
   pullRequests?: PullRequest[];
+  workpad?: Comment | null;
   onOpenPullRequest?: () => void;
+  onOpenComments?: () => void;
 }
 
 function issueLinkLabel(url: string): string {
@@ -23,7 +28,13 @@ function issueLinkLabel(url: string): string {
   return "Open issue";
 }
 
-export function SummaryTab({ issue, pullRequests = [], onOpenPullRequest }: SummaryTabProps) {
+export function SummaryTab({
+  issue,
+  pullRequests = [],
+  workpad = null,
+  onOpenPullRequest,
+  onOpenComments,
+}: SummaryTabProps) {
   const meta = getStatusMeta(issue.status);
   const StatusIcon = meta.Icon;
   const hasLinks = Boolean(issue.url) || issue.branchName !== null || pullRequests.length > 0;
@@ -62,6 +73,26 @@ export function SummaryTab({ issue, pullRequests = [], onOpenPullRequest }: Summ
           <p className="text-sm text-muted-foreground">No description yet.</p>
         )}
       </section>
+      {workpad ? (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agent Workpad</h3>
+          <CommentCard
+            author={workpad.author}
+            body={workpad.body}
+            createdAt={workpad.createdAt}
+            url={workpad.url}
+            highlight
+            badge={<WorkpadBadge />}
+            actions={
+              onOpenComments ? (
+                <button type="button" onClick={onOpenComments} className="text-xs text-primary hover:underline">
+                  View all comments
+                </button>
+              ) : null
+            }
+          />
+        </section>
+      ) : null}
       <Separator />
       <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
         <div>

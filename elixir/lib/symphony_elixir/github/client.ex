@@ -21,6 +21,7 @@ defmodule SymphonyElixir.GitHub.Client do
   alias SymphonyElixir.GitHub.{Blockers, IssueDiscussion, ProjectMetadata, RepoSpec, Viewer}
 
   @graphql_endpoint "https://api.github.com/graphql"
+  @rest_endpoint "https://api.github.com"
   @max_error_body_log_bytes 1_000
   @project_item_page_size 50
   @resolve_item_page_size 20
@@ -423,6 +424,24 @@ defmodule SymphonyElixir.GitHub.Client do
       {:error, reason} ->
         Logger.error("GitHub GraphQL request failed: #{inspect(reason)}")
         {:error, {:github_api_request, reason}}
+    end
+  end
+
+  @spec rest_get(String.t(), keyword()) ::
+          {:ok, %{status: pos_integer(), body: term()}} | {:error, term()}
+  def rest_get(path, opts \\ []) when is_binary(path) and is_list(opts) do
+    request_fun = Keyword.get(opts, :request_fun, &get_rest_request/2)
+    url = @rest_endpoint <> path
+
+    with {:ok, token} <- require_token(),
+         headers = rest_headers(token),
+         {:ok, %{status: status, body: body}} when status in 200..299 <-
+           request_fun.(url, headers) do
+      {:ok, %{status: status, body: body}}
+    else
+      {:error, :missing_github_token} = error -> error
+      {:ok, %{status: status}} -> {:error, {:github_api_status, status}}
+      {:error, reason} -> {:error, {:github_api_request, reason}}
     end
   end
 
@@ -1268,6 +1287,18 @@ defmodule SymphonyElixir.GitHub.Client do
       json: payload,
       connect_options: [timeout: 30_000]
     )
+  end
+
+  defp rest_headers(token) do
+    [
+      {"Authorization", "Bearer #{token}"},
+      {"Accept", "application/vnd.github+json"},
+      {"X-GitHub-Api-Version", "2022-11-28"}
+    ]
+  end
+
+  defp get_rest_request(url, headers) do
+    Req.get(url, headers: headers, connect_options: [timeout: 30_000])
   end
 
   defp decode_graphql_response(%{"errors" => errors}) when is_list(errors) and errors != [] do
