@@ -9,6 +9,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
   require Logger
   alias SymphonyElixir.Codex.DynamicTool
+  alias SymphonyElixir.Codex.Session
   alias SymphonyElixir.Config
 
   @initialize_id 1
@@ -49,6 +50,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
       with {:ok, session_policies} <- session_policies(expanded_workspace),
            {:ok, thread_id} <- do_start_session(port, expanded_workspace, session_policies) do
+        Session.write(expanded_workspace, thread_id)
+
         {:ok,
          %{
            port: port,

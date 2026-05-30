@@ -23,6 +23,8 @@ function issueFixture(overrides: Partial<Issue>): Issue {
     blockedBy: [],
     assignee: null,
     creator: null,
+    url: null,
+    branchName: null,
     createdAt: "",
     updatedAt: "",
     ...overrides,

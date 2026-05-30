@@ -1,23 +1,26 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useSearchParams } from "react-router-dom";
+import { MemoryRouter, Outlet, Route, Routes, useSearchParams } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { BoardFiltersDrawer } from "@/components/board/BoardFiltersDrawer";
-import { BoardFiltersDrawerProvider } from "@/components/board/useBoardFiltersDrawer";
 import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { ViewerProvider } from "@/components/auth/ViewerProvider";
+import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRoute";
 import * as viewerService from "@/services/viewer";
+
+vi.mock("@/components/layout/WorkspaceContext", () => ({
+  useWorkspace: () => ({ projectSlug: "x", view: "board", knownLogins: ["alice", "bob"] }),
+}));
 
 function Harness() {
   const [params] = useSearchParams();
   return (
-    <BoardFiltersDrawerProvider>
+    <>
       <BoardFiltersTrigger />
-      <BoardFiltersDrawer knownLogins={["alice", "bob"]} />
+      <Outlet />
       <output data-testid="params">{params.toString()}</output>
-    </BoardFiltersDrawerProvider>
+    </>
   );
 }
 
@@ -32,20 +35,22 @@ function renderHarness() {
     <MemoryRouter initialEntries={["/projects/x/board"]}>
       <ViewerProvider>
         <Routes>
-          <Route path="/projects/:projectSlug/board" element={<Harness />} />
+          <Route path="/projects/:projectSlug/board" element={<Harness />}>
+            <Route path="filters" element={<WorkspaceFiltersRoute />} />
+          </Route>
         </Routes>
       </ViewerProvider>
     </MemoryRouter>,
   );
 }
 
-describe("BoardFiltersDrawer", () => {
+describe("BoardFiltersDrawer (route-driven)", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
-  it("is closed by default and opens via the header trigger", async () => {
+  it("is closed by default and opens via the header trigger navigating to /filters", async () => {
     renderHarness();
     await waitFor(() => expect(screen.getByRole("button", { name: /filters/i })).toBeInTheDocument());
 
@@ -101,7 +106,6 @@ describe("BoardFiltersDrawer", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /filters/i }));
     fireEvent.change(screen.getByPlaceholderText(/search issues/i), { target: { value: "login" } });
-    // advance debounce
     await waitFor(() => expect(screen.getByTestId("params").textContent).toContain("q="));
 
     expect(screen.getByRole("button", { name: "Filters · 1", hidden: true })).toBeInTheDocument();

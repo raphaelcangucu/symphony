@@ -22,6 +22,8 @@ export interface Issue {
   blockedBy: BlockerSummary[];
   assignee: string | null;
   creator: string | null;
+  url: string | null;
+  branchName: string | null;
   createdAt: string;
   updatedAt: string;
 }

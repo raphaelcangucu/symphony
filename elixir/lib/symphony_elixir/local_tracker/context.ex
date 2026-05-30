@@ -211,6 +211,20 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec set_agent_session_id(String.t(), String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def set_agent_session_id(project_slug, identifier, agent_session_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_binary(agent_session_id) and
+             agent_session_id != "" do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      issue
+      |> IssueRecord.changeset(%{agent_session_id: agent_session_id})
+      |> Repo.update()
+      |> preload_issue_result()
+    end
+  end
+
   @spec move_issue(String.t(), String.t(), map()) ::
           {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
   def move_issue(project_slug, identifier, attrs)
@@ -277,6 +291,25 @@ defmodule SymphonyElixir.LocalTracker.Context do
         |> Repo.all()
 
       {:ok, comments}
+    end
+  end
+
+  @doc """
+  Lists the append-only activity events for an issue, newest first.
+  """
+  @spec list_activity_events(String.t(), String.t()) ::
+          {:ok, [ActivityEvent.t()]} | {:error, term()}
+  def list_activity_events(project_slug, identifier)
+      when is_binary(project_slug) and is_binary(identifier) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      events =
+        ActivityEvent
+        |> where([event], event.issue_id == ^issue.id)
+        |> order_by([event], desc: event.inserted_at, desc: event.id)
+        |> Repo.all()
+
+      {:ok, events}
     end
   end
 
@@ -811,6 +844,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
       "assignee_id",
       :worker_id,
       "worker_id",
+      :agent_session_id,
+      "agent_session_id",
       :branch_name,
       "branch_name",
       :url,

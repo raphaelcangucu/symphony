@@ -147,6 +147,9 @@ export interface BackendIssueDto {
   assignee?: string | null;
   assignee_id?: string | null;
   creator?: string | null;
+  url?: string | null;
+  branch_name?: string | null;
+  branchName?: string | null;
   inserted_at?: string | null;
   created_at?: string | null;
   createdAt?: string | null;
@@ -169,6 +172,8 @@ export interface BackendCommentDto {
   issue_id?: BackendId | null;
   body: string;
   author?: string | null;
+  kind?: string | null;
+  url?: string | null;
   inserted_at?: string | null;
   created_at?: string | null;
   createdAt?: string | null;
@@ -214,6 +219,8 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     blockedBy: (dto.blockedBy ?? dto.blocked_by ?? []).map(normalizeBlockerSummary),
     assignee: dto.assignee ?? dto.assignee_id ?? null,
     creator: dto.creator ?? null,
+    url: dto.url ?? null,
+    branchName: dto.branchName ?? dto.branch_name ?? null,
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };
@@ -313,6 +320,8 @@ export function normalizeComment(dto: BackendCommentDto, fallbackIssueIdentifier
       dto.issueIdentifier ?? dto.issue_identifier ?? fallbackIssueIdentifier ?? maybeString(dto.issue_id) ?? "",
     author: dto.author ?? null,
     body: dto.body,
+    kind: dto.kind ?? null,
+    url: dto.url ?? null,
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };

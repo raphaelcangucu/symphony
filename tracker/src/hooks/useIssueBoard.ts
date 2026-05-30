@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { useViewer } from "@/components/auth/ViewerProvider";
@@ -20,7 +20,10 @@ export interface UseIssueBoardResult {
   issues: Issue[];
   filteredIssues: Issue[];
   board: ReturnType<typeof buildBoardState>;
+  /** True only while the first load is in flight. Background refreshes never set this. */
   loading: boolean;
+  /** True while a silent background refresh (poll / realtime / manual) is in flight. */
+  refreshing: boolean;
   error: string | null;
   refetch: () => Promise<void>;
   moveIssueOptimistically: (identifier: string, status: WorkflowStatusName, position: number) => Promise<void>;
@@ -44,21 +47,31 @@ export function useIssueBoard(
 
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const refetch = useCallback(async () => {
     if (!projectSlug.trim()) return;
-    setLoading(true);
+    if (hasLoadedRef.current) setRefreshing(true);
+    else setLoading(true);
     setError(null);
     try {
       setIssues(await listIssues(projectSlug, { search, assignee, creator }));
+      hasLoadedRef.current = true;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Failed to load issues";
       setError(message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [projectSlug, search, assignee, creator]);
+
+  useEffect(() => {
+    hasLoadedRef.current = false;
+    setLoading(true);
+  }, [projectSlug]);
 
   useEffect(() => {
     void refetch();
@@ -106,5 +119,5 @@ export function useIssueBoard(
     void refetch();
   });
 
-  return { issues, filteredIssues, board, loading, error, refetch, moveIssueOptimistically, setIssues };
+  return { issues, filteredIssues, board, loading, refreshing, error, refetch, moveIssueOptimistically, setIssues };
 }

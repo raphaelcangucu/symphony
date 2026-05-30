@@ -153,6 +153,25 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert %DateTime{} = issue.started_at
   end
 
+  test "set_agent_session_id persists the agent session id and surfaces it on reload" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Resume me", status: "In Progress"})
+
+    assert {:ok, issue} =
+             Context.set_agent_session_id("macro-markets", "MAC-1", "019e7191-fd28-7ec2-b53a-c4195e15147b")
+
+    assert issue.agent_session_id == "019e7191-fd28-7ec2-b53a-c4195e15147b"
+
+    assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
+    assert reloaded.agent_session_id == "019e7191-fd28-7ec2-b53a-c4195e15147b"
+  end
+
+  test "set_agent_session_id returns an error for an unknown issue" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:error, :issue_not_found} = Context.set_agent_session_id("macro-markets", "MAC-404", "abc")
+  end
+
   test "move_issue reorders same-column siblings before refetch" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _first_issue} = Context.create_issue("macro-markets", %{title: "First", status: "Todo"})

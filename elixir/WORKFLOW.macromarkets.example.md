@@ -42,8 +42,8 @@ workspace:
   root: ~/code/macro-markets-workspaces
 hooks:
   after_create: |
-    git clone --depth 1 -b homolog https://github.com/clouapp/front.git front
-    git clone --depth 1 -b dev https://github.com/clouapp/back.git back
+    gh repo clone clouapp/front front -- --depth 1 -b homolog
+    gh repo clone clouapp/back back -- --depth 1 -b dev
     cat > front/.env.local <<ENV
     # Local ------------------------------------------------------------------------------------------- #
     # APP

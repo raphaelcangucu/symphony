@@ -23,11 +23,15 @@ type WizardTab = "template" | "scratch";
 
 interface ProjectWorkspaceWizardProps {
   onCreated?: (project: Project) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProps) {
+export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpenChange }: ProjectWorkspaceWizardProps) {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? controlledOpen : internalOpen;
   const [activeTab, setActiveTab] = useState<WizardTab>("scratch");
   const [templates, setTemplates] = useState<WorkspaceTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<WorkspaceTemplate | null>(null);
@@ -62,8 +66,9 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
     void handleLoadTemplates();
   }, [loadingTemplates, open, templatesLoadAttempted]);
 
-  function handleOpenChange(nextOpen: boolean) {
-    setOpen(nextOpen);
+  function setOpen(nextOpen: boolean) {
+    if (!isControlled) setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
     if (!nextOpen) {
       setOwnersAutoLoadAttempted(false);
       setTemplatesLoadAttempted(false);
@@ -306,13 +311,15 @@ export function ProjectWorkspaceWizard({ onCreated }: ProjectWorkspaceWizardProp
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button size="sm">
-          <Plus className="h-4 w-4" />
-          New workspace project
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={setOpen}>
+      {isControlled ? null : (
+        <DialogTrigger asChild>
+          <Button size="sm">
+            <Plus className="h-4 w-4" />
+            New workspace project
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-h-[calc(100vh-2rem)] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create workspace project</DialogTitle>

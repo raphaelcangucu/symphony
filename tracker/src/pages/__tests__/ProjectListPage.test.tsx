@@ -3,6 +3,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { NewProjectRoute } from "@/components/projects/NewProjectRoute";
+import { ProjectFiltersRoute } from "@/components/projects/ProjectFiltersRoute";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { archiveProject, createWorkspaceProject, deleteProject, listProjects, restoreProject } from "@/services/projects";
 import { listGitHubOwners, listGitHubRepositories, scanRepositories, suggestWorkspaceSetup } from "@/services/projectSetup";
@@ -60,12 +62,19 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function renderProjectsIndex() {
+function ProjectsIndexRoute() {
+  return (
+    <Route path="/projects" element={<ProjectListPage />}>
+      <Route path="new" element={<NewProjectRoute />} />
+      <Route path="filters" element={<ProjectFiltersRoute />} />
+    </Route>
+  );
+}
+
+function renderProjectsIndex(initialEntry = "/projects") {
   return render(
-    <MemoryRouter initialEntries={["/projects"]}>
-      <Routes>
-        <Route path="/projects" element={<ProjectListPage />} />
-      </Routes>
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Routes>{ProjectsIndexRoute()}</Routes>
     </MemoryRouter>,
   );
 }
@@ -74,7 +83,7 @@ function renderProjectsIndexWithBoardRoute() {
   return render(
     <MemoryRouter initialEntries={["/projects"]}>
       <Routes>
-        <Route path="/projects" element={<ProjectListPage />} />
+        {ProjectsIndexRoute()}
         <Route path="/projects/:projectSlug/board" element={<div>Project board route</div>} />
       </Routes>
     </MemoryRouter>,
@@ -111,6 +120,18 @@ describe("ProjectListPage", () => {
 
     expect(screen.queryByText("Active Project")).toBeNull();
     expect(await screen.findByText("Archived Project")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Archived" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("restores the status and keyword filters from the URL query params", async () => {
+    vi.mocked(listProjects).mockResolvedValueOnce([activeProject, archivedProject]);
+
+    renderProjectsIndex("/projects?status=archived");
+
+    expect(await screen.findByText("Archived Project")).toBeTruthy();
+    expect(screen.queryByText("Active Project")).toBeNull();
+
+    openProjectFilters();
     expect(screen.getByRole("button", { name: "Archived" }).getAttribute("aria-pressed")).toBe("true");
   });
 
@@ -405,13 +426,7 @@ describe("ProjectListPage", () => {
       tracker: { kind: "local", config: {} },
     });
 
-    render(
-      <MemoryRouter initialEntries={["/projects"]}>
-        <Routes>
-          <Route path="/projects" element={<ProjectListPage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderProjectsIndex();
 
     await screen.findByText("No projects returned by the tracker API.");
 
@@ -488,13 +503,7 @@ describe("ProjectListPage", () => {
       },
     ]);
 
-    render(
-      <MemoryRouter initialEntries={["/projects"]}>
-        <Routes>
-          <Route path="/projects" element={<ProjectListPage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderProjectsIndex();
 
     await screen.findByText("No projects returned by the tracker API.");
 
@@ -519,13 +528,7 @@ describe("ProjectListPage", () => {
     vi.mocked(listProjects).mockResolvedValue([]);
     vi.mocked(listGitHubOwners).mockRejectedValue(new Error("Route not found"));
 
-    render(
-      <MemoryRouter initialEntries={["/projects"]}>
-        <Routes>
-          <Route path="/projects" element={<ProjectListPage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderProjectsIndex();
 
     await screen.findByText("No projects returned by the tracker API.");
 

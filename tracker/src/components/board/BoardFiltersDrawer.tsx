@@ -22,16 +22,16 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 
-import { useBoardFiltersDrawer } from "./useBoardFiltersDrawer";
-
 const DEBOUNCE_MS = 250;
 
 interface BoardFiltersDrawerProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   knownLogins?: string[];
+  focusSearch?: boolean;
 }
 
-export function BoardFiltersDrawer({ knownLogins = [] }: BoardFiltersDrawerProps) {
-  const { open, setOpen, focusSearchSignal } = useBoardFiltersDrawer();
+export function BoardFiltersDrawer({ open, onOpenChange, knownLogins = [], focusSearch = false }: BoardFiltersDrawerProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { viewer, status } = useViewer();
   const viewerLogin = viewer?.githubLogin ?? null;
@@ -45,10 +45,10 @@ export function BoardFiltersDrawer({ knownLogins = [] }: BoardFiltersDrawerProps
   }, [searchParams]);
 
   useEffect(() => {
-    if (focusSearchSignal > 0) {
+    if (open && focusSearch) {
       requestAnimationFrame(() => searchInputRef.current?.focus());
     }
-  }, [focusSearchSignal, open]);
+  }, [open, focusSearch]);
 
   function commitSearch(next: string) {
     setSearchParams(
@@ -102,7 +102,7 @@ export function BoardFiltersDrawer({ knownLogins = [] }: BoardFiltersDrawerProps
   const logins = useMemo(() => Array.from(new Set(knownLogins.filter(Boolean))).sort(), [knownLogins]);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex h-full flex-col gap-6 sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Filters</SheetTitle>

@@ -107,7 +107,7 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
       ) : null}
       <div
         aria-label={`Terminal for ${issueIdentifier}`}
-        className="min-h-[420px] overflow-hidden rounded-lg border bg-slate-950 p-2"
+        className="h-[480px] overflow-hidden rounded-lg border bg-slate-950 p-2"
         ref={containerRef}
       />
     </div>

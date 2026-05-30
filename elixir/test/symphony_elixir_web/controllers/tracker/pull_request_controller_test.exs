@@ -1,0 +1,180 @@
+defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
+  use ExUnit.Case, async: false
+
+  import Phoenix.ConnTest
+
+  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Repo
+
+  @endpoint SymphonyElixirWeb.Endpoint
+  @token_env "SYMPHONY_TRACKER_TOKEN"
+  @github_token_env "GITHUB_TOKEN"
+
+  defmodule FakeGitHubClient do
+    @moduledoc false
+
+    def graphql(query, variables, _opts) do
+      cond do
+        query =~ "SymphonyTrackerIssuePullRequests" ->
+          send(self(), {:pr_query, variables})
+
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       %{
+                         "number" => 7,
+                         "title" => "Fix",
+                         "url" => "https://github.com/o/r/pull/7",
+                         "state" => "OPEN",
+                         "isDraft" => false,
+                         "merged" => false,
+                         "headRefName" => "fix-7",
+                         "baseRefName" => "main",
+                         "author" => %{"login" => "codex-bot"},
+                         "updatedAt" => "2026-05-26T12:00:00Z",
+                         "commits" => %{
+                           "nodes" => [
+                             %{
+                               "commit" => %{
+                                 "statusCheckRollup" => %{
+                                   "state" => "SUCCESS",
+                                   "contexts" => %{
+                                     "nodes" => [
+                                       %{
+                                         "__typename" => "CheckRun",
+                                         "name" => "lint",
+                                         "status" => "COMPLETED",
+                                         "conclusion" => "SUCCESS",
+                                         "checkSuite" => %{
+                                           "workflowRun" => %{
+                                             "url" => "https://github.com/o/r/actions/runs/1",
+                                             "workflow" => %{"name" => "CI"}
+                                           }
+                                         }
+                                       }
+                                     ]
+                                   }
+                                 }
+                               }
+                             }
+                           ]
+                         },
+                         "comments" => %{"nodes" => []},
+                         "reviews" => %{"nodes" => []}
+                       }
+                     ]
+                   }
+                 }
+               }
+             }
+           }}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
+  setup do
+    start_supervised!(SymphonyElixirWeb.Endpoint)
+    migrate_repo()
+    clean_repo()
+
+    previous_token = System.get_env(@token_env)
+    System.put_env(@token_env, "secret")
+
+    on_exit(fn -> restore_env(@token_env, previous_token) end)
+
+    :ok
+  end
+
+  test "returns supported: false for local projects" do
+    {:ok, _project} =
+      Context.create_workspace_project(%{
+        "name" => "Local",
+        "slug" => "local",
+        "tracker" => %{"kind" => "local"},
+        "repositories" => [],
+        "setup" => %{}
+      })
+
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/local/issues/LOC-1/pull_requests")
+
+    assert %{"data" => [], "supported" => false} = json_response(conn, 200)
+  end
+
+  describe "github project" do
+    setup do
+      Application.put_env(:symphony_elixir, :github_client_module, FakeGitHubClient)
+      previous_github = System.get_env(@github_token_env)
+      System.put_env(@github_token_env, "gh-token")
+
+      {:ok, project} =
+        Context.create_workspace_project(%{
+          "name" => "Remote",
+          "slug" => "remote",
+          "tracker" => %{"kind" => "github", "config" => %{"repo" => "o/r", "project_id" => "PVT_1"}},
+          "repositories" => [],
+          "setup" => %{}
+        })
+
+      on_exit(fn ->
+        Application.delete_env(:symphony_elixir, :github_client_module)
+        restore_env(@github_token_env, previous_github)
+      end)
+
+      %{project: project}
+    end
+
+    test "resolves related PR with pipelines" do
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/remote/issues/%237/pull_requests")
+
+      assert %{
+               "supported" => true,
+               "available" => true,
+               "data" => [pr]
+             } = json_response(conn, 200)
+
+      assert pr["number"] == 7
+      assert pr["state"] == "open"
+      assert [%{"name" => "CI", "jobs" => [%{"name" => "lint"}]}] = pr["pipelines"]
+
+      assert_received {:pr_query, %{"number" => 7}}
+    end
+  end
+
+  defp authorized_conn do
+    build_conn() |> Plug.Conn.put_req_header("authorization", "Bearer secret")
+  end
+
+  defp migrate_repo do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(Repo, fn repo ->
+        Ecto.Migrator.run(repo, :up, all: true)
+      end)
+  end
+
+  defp clean_repo do
+    for table <- [
+          "local_tracker_activity_events",
+          "local_tracker_issue_relations",
+          "local_tracker_issue_labels",
+          "local_tracker_labels",
+          "local_tracker_comments",
+          "local_tracker_issues",
+          "local_tracker_workflow_statuses",
+          "local_tracker_repositories",
+          "local_tracker_projects"
+        ] do
+      Repo.query!("delete from #{table}")
+    end
+  end
+
+  defp restore_env(key, nil), do: System.delete_env(key)
+  defp restore_env(key, value), do: System.put_env(key, value)
+end

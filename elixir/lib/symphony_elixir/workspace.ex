@@ -50,6 +50,15 @@ defmodule SymphonyElixir.Workspace do
     {:ok, true}
   end
 
+  @spec path_for_issue(map() | String.t() | nil) :: Path.t()
+  def path_for_issue(issue_or_identifier) do
+    issue_or_identifier
+    |> issue_context()
+    |> Map.fetch!(:issue_identifier)
+    |> safe_identifier()
+    |> workspace_path_for_issue()
+  end
+
   @spec remove(Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
   def remove(workspace) do
     case File.exists?(workspace) do

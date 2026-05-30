@@ -11,8 +11,9 @@ import {
 } from "@dnd-kit/core";
 import { useMemo, useState } from "react";
 
+import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
-import type { WorkflowStatusName } from "@/types/workflow-status";
+import type { WorkflowStatus, WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflow-status";
 
 import { BoardColumn } from "./BoardColumn";
 import {
@@ -27,14 +28,41 @@ import { IssueCard } from "./IssueCard";
 interface BoardViewProps {
   board: BoardState;
   statuses?: WorkflowStatusName[];
+  workflowStatuses?: WorkflowStatus[];
+  projectSlug: string;
+  onIssueCreated?: (issue: Issue) => void;
   onSelectIssue: (issue: Issue) => void;
   onMoveIssue: (identifier: string, status: WorkflowStatusName, position: number) => Promise<void> | void;
+  collapsedStatuses: ReadonlySet<string>;
+  onToggleCollapse: (status: WorkflowStatusName) => void;
+  agentExecutions?: ReadonlyMap<string, AgentExecution>;
+  columnLimits?: Readonly<Record<string, number>>;
+  onChangeLimit?: (status: WorkflowStatusName, limit: number | null) => void;
 }
 
-export function BoardView({ board, statuses, onSelectIssue, onMoveIssue }: BoardViewProps) {
+export function BoardView({
+  board,
+  statuses,
+  workflowStatuses,
+  projectSlug,
+  onIssueCreated,
+  onSelectIssue,
+  onMoveIssue,
+  collapsedStatuses,
+  onToggleCollapse,
+  agentExecutions,
+  columnLimits,
+  onChangeLimit,
+}: BoardViewProps) {
   const [activeIdentifier, setActiveIdentifier] = useState<string | null>(null);
   const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 8 } }), useSensor(TouchSensor));
   const statusNames = useMemo(() => workflowStatusNames(statuses ?? Object.keys(board)), [board, statuses]);
+
+  const categoryByName = useMemo(() => {
+    const map = new Map<string, WorkflowStatusCategory>();
+    for (const status of workflowStatuses ?? []) map.set(status.name, status.category);
+    return map;
+  }, [workflowStatuses]);
 
   const activeIssue = useMemo(() => {
     if (!activeIdentifier) return null;
@@ -72,12 +100,35 @@ export function BoardView({ board, statuses, onSelectIssue, onMoveIssue }: Board
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex h-[calc(100vh-4rem)] gap-4 overflow-x-auto p-6">
+      <div className="flex h-[calc(100vh-4rem)] gap-3 overflow-x-auto px-6 py-5">
         {statusNames.map((status) => (
-          <BoardColumn key={status} status={status} issues={board[status] ?? []} onSelectIssue={onSelectIssue} />
+          <BoardColumn
+            key={status}
+            status={status}
+            category={categoryByName.get(status) ?? null}
+            issues={board[status] ?? []}
+            onSelectIssue={onSelectIssue}
+            projectSlug={projectSlug}
+            statuses={statusNames}
+            onIssueCreated={onIssueCreated}
+            collapsed={collapsedStatuses.has(status)}
+            onToggleCollapse={() => onToggleCollapse(status)}
+            agentExecutions={agentExecutions}
+            limit={columnLimits?.[status]}
+            onChangeLimit={onChangeLimit}
+          />
         ))}
       </div>
-      <DragOverlay>{activeIssue ? <IssueCard issue={activeIssue} onSelect={onSelectIssue} dragOverlay /> : null}</DragOverlay>
+      <DragOverlay>
+        {activeIssue ? (
+          <IssueCard
+            issue={activeIssue}
+            onSelect={onSelectIssue}
+            agent={agentExecutions?.get(activeIssue.identifier)}
+            dragOverlay
+          />
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }

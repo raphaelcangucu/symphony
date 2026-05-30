@@ -1044,10 +1044,10 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                              %{
                                "__typename" => "ProjectV2ItemFieldSingleSelectValue",
                                "name" => "Backlog",
-                              "field" => %{
-                                "id" => "PVTSSF_other",
-                                "name" => "Status"
-                              }
+                               "field" => %{
+                                 "id" => "PVTSSF_other",
+                                 "name" => "Status"
+                               }
                              }
                            ]
                          }
@@ -1060,10 +1060,10 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                              %{
                                "__typename" => "ProjectV2ItemFieldSingleSelectValue",
                                "name" => "In Progress",
-                              "field" => %{
-                                "id" => "PVTSSF_x",
-                                "name" => "Status"
-                              }
+                               "field" => %{
+                                 "id" => "PVTSSF_x",
+                                 "name" => "Status"
+                               }
                              }
                            ]
                          }

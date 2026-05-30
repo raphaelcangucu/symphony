@@ -1,46 +1,153 @@
+import {
+  Activity,
+  AlertTriangle,
+  Bot,
+  FileText,
+  GitPullRequest,
+  MessageSquare,
+  ShieldAlert,
+  TerminalSquare,
+} from "lucide-react";
+
+import { getStatusMeta } from "@/components/board/status-meta";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
+import { cn } from "@/lib/utils";
+import { DEFAULT_ISSUE_TAB, type IssueTab } from "@/lib/workspaceRoutes";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { ActivityTab } from "./issue-detail/ActivityTab";
+import { AgentStatusBadge } from "./AgentStatusBadge";
 import { AgentTab } from "./issue-detail/AgentTab";
+import { AssigneeAvatar } from "./AssigneeAvatar";
 import { BlockersTab } from "./issue-detail/BlockersTab";
 import { CommentsTab } from "./issue-detail/CommentsTab";
+import { PriorityIndicator, priorityLabel } from "./PriorityIndicator";
+import { PullRequestTab } from "./issue-detail/PullRequestTab";
+import { rollupMeta } from "./pull-request/pr-meta";
 import { SummaryTab } from "./issue-detail/SummaryTab";
 import { TerminalTab } from "./issue-detail/TerminalTab";
+
+const TABS = [
+  { value: "summary", label: "Summary", Icon: FileText },
+  { value: "pr", label: "Pull request", Icon: GitPullRequest },
+  { value: "comments", label: "Comments", Icon: MessageSquare },
+  { value: "blockers", label: "Blockers", Icon: ShieldAlert },
+  { value: "agent", label: "Agent", Icon: Bot },
+  { value: "activity", label: "Activity", Icon: Activity },
+  { value: "terminal", label: "Terminal", Icon: TerminalSquare },
+] as const;
 
 interface IssueDrawerProps {
   issue: Issue | null;
   projectSlug: string;
+  execution?: AgentExecution;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  tab?: IssueTab;
+  onTabChange?: (tab: IssueTab) => void;
 }
 
-export function IssueDrawer({ issue, projectSlug, open, onOpenChange }: IssueDrawerProps) {
+export function IssueDrawer({
+  issue,
+  projectSlug,
+  execution,
+  open,
+  onOpenChange,
+  tab = DEFAULT_ISSUE_TAB,
+  onTabChange,
+}: IssueDrawerProps) {
+  const meta = issue ? getStatusMeta(issue.status) : null;
+  const StatusIcon = meta?.Icon;
+
+  const pr = useIssuePullRequests({
+    projectSlug,
+    identifier: issue?.identifier ?? null,
+    enabled: open && Boolean(issue),
+  });
+  const primaryPr = pr.pullRequests[0] ?? null;
+  const prRollup = primaryPr ? rollupMeta(primaryPr.checksState) : null;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex flex-col overflow-hidden p-0">
+      <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-3xl lg:max-w-4xl xl:max-w-5xl">
         {issue ? (
           <>
             <SheetHeader className="border-b p-6 pb-4">
-              <div className="font-mono text-xs text-muted-foreground">{issue.identifier}</div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-mono font-semibold uppercase tracking-wide text-muted-foreground">
+                  {issue.identifier}
+                </span>
+                {issue.blockedBy.length > 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-300">
+                    <AlertTriangle className="h-3 w-3" />
+                    Blocked
+                  </span>
+                ) : null}
+                {execution ? <AgentStatusBadge status={execution.status} /> : null}
+              </div>
               <SheetTitle className="pr-8 text-xl leading-tight">{issue.title}</SheetTitle>
-              <SheetDescription>{issue.status}</SheetDescription>
+              <SheetDescription asChild>
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-xs font-medium text-foreground">
+                    {StatusIcon ? <StatusIcon className={cn("h-3.5 w-3.5", meta?.iconClass)} /> : null}
+                    {issue.status}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <PriorityIndicator priority={issue.priority} />
+                    {priorityLabel(issue.priority)}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <AssigneeAvatar login={issue.assignee} />
+                    {issue.assignee ?? "Unassigned"}
+                  </span>
+                </div>
+              </SheetDescription>
             </SheetHeader>
-            <Tabs defaultValue="summary" className="min-h-0 flex-1 overflow-hidden px-6 py-4">
-              <TabsList className="w-full justify-start overflow-x-auto">
-                <TabsTrigger value="summary">Summary</TabsTrigger>
-                <TabsTrigger value="comments">Comments</TabsTrigger>
-                <TabsTrigger value="blockers">Blockers</TabsTrigger>
-                <TabsTrigger value="agent">Agent</TabsTrigger>
-                <TabsTrigger value="activity">Activity</TabsTrigger>
-                <TabsTrigger value="terminal">Terminal</TabsTrigger>
+            <Tabs
+              value={tab}
+              onValueChange={(value) => onTabChange?.(value as IssueTab)}
+              className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4"
+            >
+              <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0">
+                {TABS.map(({ value, label, Icon }) => (
+                  <TabsTrigger
+                    key={value}
+                    value={value}
+                    className="gap-1.5 rounded-none border-b-2 border-transparent px-2.5 pb-2 pt-1 text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                    {value === "pr" && prRollup ? (
+                      <prRollup.Icon className={cn("h-3 w-3", prRollup.className, prRollup.spin && "animate-spin")} />
+                    ) : null}
+                  </TabsTrigger>
+                ))}
               </TabsList>
-              <div className="h-[calc(100%-3rem)] overflow-auto pr-1">
-                <TabsContent value="summary"><SummaryTab issue={issue} /></TabsContent>
+              <div className="mt-3 min-h-0 flex-1 overflow-auto pr-1">
+                <TabsContent value="summary">
+                  <SummaryTab
+                    issue={issue}
+                    pullRequests={pr.pullRequests}
+                    onOpenPullRequest={() => onTabChange?.("pr")}
+                  />
+                </TabsContent>
+                <TabsContent value="pr">
+                  <PullRequestTab
+                    issue={issue}
+                    pullRequests={pr.pullRequests}
+                    supported={pr.supported}
+                    available={pr.available}
+                    loading={pr.loading}
+                    error={pr.error}
+                    onRefresh={() => void pr.refetch()}
+                  />
+                </TabsContent>
                 <TabsContent value="comments"><CommentsTab projectSlug={projectSlug} issue={issue} /></TabsContent>
                 <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
-                <TabsContent value="agent"><AgentTab issue={issue} /></TabsContent>
+                <TabsContent value="agent"><AgentTab issue={issue} execution={execution} /></TabsContent>
                 <TabsContent value="activity"><ActivityTab issue={issue} /></TabsContent>
                 <TabsContent value="terminal"><TerminalTab issue={issue} /></TabsContent>
               </div>

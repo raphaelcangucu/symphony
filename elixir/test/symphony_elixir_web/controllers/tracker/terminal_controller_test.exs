@@ -12,7 +12,7 @@ defmodule SymphonyElixirWeb.Tracker.TerminalControllerTest do
 
   defmodule FakeTmux do
     def available?, do: true
-    def has_session?("sym-issue-macro-markets-MAC-1"), do: false
+    def has_session?(_name), do: false
     def new_session("sym-issue-macro-markets-MAC-1", _cwd), do: :ok
     def capture_pane("sym-issue-macro-markets-MAC-1"), do: {:ok, "terminal ready\n"}
   end
@@ -52,7 +52,7 @@ defmodule SymphonyElixirWeb.Tracker.TerminalControllerTest do
              }
            } = json_response(conn, 200)
 
-    assert String.ends_with?(cwd, "/macro-markets-MAC-1")
+    assert String.ends_with?(cwd, "/MAC-1")
   end
 
   test "returns issue not found for missing terminal issue" do

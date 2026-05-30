@@ -3,8 +3,10 @@ defmodule SymphonyElixir.Terminal.Registry do
   Issue terminal session registry backed by stable tmux session names.
   """
 
+  alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Terminal.Tmux
+  alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixir.Workspace
 
   @type session :: %{
@@ -30,8 +32,49 @@ defmodule SymphonyElixir.Terminal.Registry do
           {:ok, session()} | {:error, String.t() | atom()}
   def open_project_issue_session(project_slug, issue_identifier, opts \\ [])
       when is_binary(project_slug) and is_binary(issue_identifier) do
-    with {:ok, issue} <- Context.get_issue(project_slug, issue_identifier) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    session_name = session_name(project_slug, issue_identifier)
+
+    with :ok <- ensure_tmux_available(tmux) do
+      if tmux.has_session?(session_name) do
+        resume_issue_session(tmux, project_slug, issue_identifier, session_name, opts)
+      else
+        start_issue_session(project_slug, issue_identifier, opts)
+      end
+    end
+  end
+
+  defp resume_issue_session(tmux, project_slug, issue_identifier, session_name, opts) do
+    workspace = dependency(opts, :workspace, :terminal_workspace, Workspace)
+    {:ok, output} = capture_output(tmux, session_name)
+
+    {:ok,
+     %{
+       project_slug: project_slug,
+       issue_identifier: issue_identifier,
+       session_name: session_name,
+       cwd: workspace.path_for_issue(workspace_identifier(issue_identifier)),
+       state: "running",
+       output: output
+     }}
+  end
+
+  defp start_issue_session(project_slug, issue_identifier, opts) do
+    with {:ok, issue} <- fetch_issue(project_slug, issue_identifier, opts) do
       open_issue_session(issue, opts)
+    end
+  end
+
+  defp fetch_issue(project_slug, issue_identifier, opts) do
+    case Keyword.get(opts, :issue_fetcher) do
+      fetcher when is_function(fetcher, 2) -> fetcher.(project_slug, issue_identifier)
+      _absent -> default_fetch_issue(project_slug, issue_identifier)
+    end
+  end
+
+  defp default_fetch_issue(project_slug, issue_identifier) do
+    with {:ok, project} <- Context.get_project(project_slug) do
+      IssueAdapter.dispatch(project, :get_issue, [issue_identifier])
     end
   end
 
@@ -43,9 +86,12 @@ defmodule SymphonyElixir.Terminal.Registry do
     session_name = session_name(project_slug, issue_identifier)
 
     with :ok <- ensure_tmux_available(tmux),
-         {:ok, cwd} <- create_workspace(workspace, issue, project_slug),
-         :ok <- ensure_session(tmux, session_name, cwd),
-         {:ok, output} <- capture_output(tmux, session_name) do
+         {:ok, cwd} <- create_workspace(workspace, issue),
+         {:ok, session_state} <- ensure_session(tmux, session_name, cwd) do
+      resumed_session_id = maybe_resume_codex_session(tmux, session_name, cwd, session_state, opts)
+      maybe_persist_agent_session(project_slug, issue_identifier, resumed_session_id)
+      {:ok, output} = capture_output(tmux, session_name)
+
       {:ok,
        %{
          project_slug: project_slug,
@@ -56,6 +102,41 @@ defmodule SymphonyElixir.Terminal.Registry do
          output: output
        }}
     end
+  end
+
+  # When a brand new tmux session is created for an issue, resume the agent's
+  # Codex conversation in it (interactive `codex resume <id>`) if one can be
+  # resolved for the workspace. Existing sessions are left untouched so we never
+  # interrupt a live terminal. Returns the resolved id (or nil).
+  defp maybe_resume_codex_session(tmux, session_name, cwd, :created, opts) do
+    case resolve_codex_session(cwd, opts) do
+      {:ok, thread_id} ->
+        tmux.send_keys(session_name, "codex resume #{thread_id}\n")
+        thread_id
+
+      :error ->
+        nil
+    end
+  end
+
+  defp maybe_resume_codex_session(_tmux, _session_name, _cwd, :existing, _opts), do: nil
+
+  defp resolve_codex_session(cwd, opts) do
+    case Keyword.get(opts, :codex_resolver) do
+      resolver when is_function(resolver, 1) -> resolver.(cwd)
+      _absent -> CodexSession.resolve(cwd)
+    end
+  end
+
+  # Best-effort: persist the resolved session id onto the local tracker record so
+  # the UI can surface it. No-ops for trackers without a local row (e.g. GitHub).
+  defp maybe_persist_agent_session(_project_slug, _issue_identifier, nil), do: :ok
+
+  defp maybe_persist_agent_session(project_slug, issue_identifier, thread_id) do
+    Context.set_agent_session_id(project_slug, issue_identifier, thread_id)
+    :ok
+  rescue
+    _error -> :ok
   end
 
   @spec send_input(String.t(), String.t(), String.t(), keyword()) :: :ok | {:error, String.t()}
@@ -92,7 +173,7 @@ defmodule SymphonyElixir.Terminal.Registry do
 
     with :ok <- ensure_tmux_available(tmux),
          :ok <- File.mkdir_p(cwd),
-         :ok <- ensure_session(tmux, session_name, cwd),
+         {:ok, _session_state} <- ensure_session(tmux, session_name, cwd),
          {:ok, output} <- capture_output(tmux, session_name) do
       {:ok,
        %{
@@ -122,8 +203,8 @@ defmodule SymphonyElixir.Terminal.Registry do
     if tmux.available?(), do: :ok, else: {:error, "tmux is not available"}
   end
 
-  defp create_workspace(workspace, issue, project_slug) do
-    issue_workspace_key = Map.put(issue, :identifier, "#{project_slug}-#{issue.identifier}")
+  defp create_workspace(workspace, issue) do
+    issue_workspace_key = Map.put(issue, :identifier, workspace_identifier(issue.identifier))
 
     case workspace.create_for_issue(issue_workspace_key) do
       {:ok, cwd} -> {:ok, cwd}
@@ -131,8 +212,22 @@ defmodule SymphonyElixir.Terminal.Registry do
     end
   end
 
+  # Mirror the orchestrator workspace identifier so the issue terminal attaches to
+  # the same directory the agent uses: bare tracker identifier, no project prefix,
+  # and without the remote "#" issue-number marker.
+  defp workspace_identifier(issue_identifier) when is_binary(issue_identifier) do
+    String.trim_leading(issue_identifier, "#")
+  end
+
   defp ensure_session(tmux, session_name, cwd) do
-    if tmux.has_session?(session_name), do: :ok, else: tmux.new_session(session_name, cwd)
+    if tmux.has_session?(session_name) do
+      {:ok, :existing}
+    else
+      case tmux.new_session(session_name, cwd) do
+        :ok -> {:ok, :created}
+        {:error, _message} = error -> error
+      end
+    end
   end
 
   defp capture_output(tmux, session_name) do
@@ -147,6 +242,7 @@ defmodule SymphonyElixir.Terminal.Registry do
   end
 
   defp project_slug(%{project: %{slug: slug}}) when is_binary(slug), do: slug
+  defp project_slug(%{project_slug: slug}) when is_binary(slug), do: slug
   defp project_slug(_issue), do: "local"
 
   defp default_project_cwd(project_slug) do

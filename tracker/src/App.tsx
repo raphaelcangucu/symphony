@@ -4,8 +4,16 @@ import { Toaster } from "sonner";
 
 import { ViewerProvider } from "@/components/auth/ViewerProvider";
 import { Layout } from "@/components/layout/Layout";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
+import { NewProjectRoute } from "@/components/projects/NewProjectRoute";
+import { ProjectFiltersRoute } from "@/components/projects/ProjectFiltersRoute";
+import { DevEnvRoute } from "@/components/workspace/DevEnvRoute";
+import { IssueDetailRoute } from "@/components/workspace/IssueDetailRoute";
+import { NewIssueRoute } from "@/components/workspace/NewIssueRoute";
+import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRoute";
 import { getTrackerToken } from "@/config";
-import { ProjectBoardPage } from "@/pages/ProjectBoardPage";
+import { BoardPage } from "@/pages/BoardPage";
+import { ListPage } from "@/pages/ListPage";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { TemplateEditPage } from "@/pages/TemplateEditPage";
 import { TemplateListPage } from "@/pages/TemplateListPage";
@@ -33,9 +41,26 @@ export function App() {
         >
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/projects" replace />} />
-            <Route path="projects" element={<ProjectListPage />} />
-            <Route path="projects/:projectSlug/board" element={<ProjectBoardPage />} />
-            <Route path="projects/:projectSlug/list" element={<ProjectListPage />} />
+            <Route path="projects" element={<ProjectListPage />}>
+              <Route path="new" element={<NewProjectRoute />} />
+              <Route path="filters" element={<ProjectFiltersRoute />} />
+            </Route>
+            <Route path="projects/:projectSlug" element={<ProjectWorkspaceLayout />}>
+              <Route index element={<Navigate to="board" replace />} />
+              <Route path="board" element={<BoardPage />}>
+                <Route path="new-issue" element={<NewIssueRoute />} />
+                <Route path="filters" element={<WorkspaceFiltersRoute />} />
+                <Route path="dev-env" element={<DevEnvRoute />} />
+                <Route path="issues/:identifier" element={<IssueDetailRoute />} />
+                <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
+              </Route>
+              <Route path="list" element={<ListPage />}>
+                <Route path="new-issue" element={<NewIssueRoute />} />
+                <Route path="filters" element={<WorkspaceFiltersRoute />} />
+                <Route path="issues/:identifier" element={<IssueDetailRoute />} />
+                <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
+              </Route>
+            </Route>
             <Route path="templates" element={<TemplateListPage />} />
             <Route path="templates/:slug" element={<TemplateEditPage />} />
           </Route>

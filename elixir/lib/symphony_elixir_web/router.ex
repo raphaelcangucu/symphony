@@ -38,6 +38,7 @@ defmodule SymphonyElixirWeb.Router do
     pipe_through(:tracker_api)
 
     get("/viewer", ViewerController, :show)
+    get("/agent_executions", AgentExecutionController, :index)
     get("/github/owners", GitHubController, :owners)
     get("/github/owners/:owner/repositories", GitHubController, :repositories)
     post("/github/projects/discover", RemoteDiscoveryController, :github_discover)
@@ -52,6 +53,8 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/issues/:identifier/move", IssueController, :move)
     get("/projects/:project_slug/issues/:identifier/comments", CommentController, :index)
     post("/projects/:project_slug/issues/:identifier/comments", CommentController, :create)
+    get("/projects/:project_slug/issues/:identifier/pull_requests", PullRequestController, :index)
+    get("/projects/:project_slug/issues/:identifier/activity", ActivityController, :index)
     get("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :index)
     post("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :create)
     delete("/projects/:project_slug/issues/:identifier/blockers/:blocker_identifier", BlockerController, :delete)

@@ -1,23 +1,26 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useSearchParams } from "react-router-dom";
+import { MemoryRouter, Outlet, Route, Routes, useSearchParams } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
-import { BoardFiltersDrawer } from "@/components/board/BoardFiltersDrawer";
-import { BoardFiltersDrawerProvider } from "@/components/board/useBoardFiltersDrawer";
 import { ViewerProvider } from "@/components/auth/ViewerProvider";
+import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRoute";
 import * as viewerService from "@/services/viewer";
+
+vi.mock("@/components/layout/WorkspaceContext", () => ({
+  useWorkspace: () => ({ projectSlug: "x", view: "board", knownLogins: [] }),
+}));
 
 function Harness() {
   const [params] = useSearchParams();
   return (
-    <BoardFiltersDrawerProvider>
+    <>
       <BoardPaletteShortcuts />
-      <BoardFiltersDrawer />
+      <Outlet />
       <output data-testid="params">{params.toString()}</output>
-    </BoardFiltersDrawerProvider>
+    </>
   );
 }
 
@@ -32,7 +35,9 @@ function renderHarness() {
     <MemoryRouter initialEntries={["/projects/x/board"]}>
       <ViewerProvider>
         <Routes>
-          <Route path="/projects/:projectSlug/board" element={<Harness />} />
+          <Route path="/projects/:projectSlug/board" element={<Harness />}>
+            <Route path="filters" element={<WorkspaceFiltersRoute />} />
+          </Route>
         </Routes>
       </ViewerProvider>
     </MemoryRouter>,

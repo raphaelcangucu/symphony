@@ -2,6 +2,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   @moduledoc "JSON DTOs for the local tracker API and realtime payloads."
 
   alias SymphonyElixir.LocalTracker.{
+    ActivityEvent,
     Comment,
     IssueRecord,
     IssueRelation,
@@ -11,6 +12,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     WorkflowStatus
   }
 
+  alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.Tracker.IssueDTO
 
   @spec project(Project.t(), [WorkflowStatus.t()] | nil, [Repository.t()] | nil, ProjectSetup.t() | nil) :: map()
@@ -92,6 +94,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       assignee_id: dto.assignee,
       creator: dto.creator,
       worker_id: nil,
+      agent_session_id: nil,
       branch_name: nil,
       url: dto.url,
       project_slug: dto.project_slug,
@@ -117,6 +120,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       assignee_id: issue.assignee_id,
       creator: issue.creator,
       worker_id: issue.worker_id,
+      agent_session_id: issue.agent_session_id,
       branch_name: issue.branch_name,
       url: issue.url,
       project_slug: loaded_project_slug(issue),
@@ -128,7 +132,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     }
   end
 
-  @spec comment(Comment.t()) :: map()
+  @spec comment(Comment.t() | map()) :: map()
   def comment(%Comment{} = comment) do
     %{
       id: comment.id,
@@ -136,8 +140,33 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       kind: comment.kind,
       body: comment.body,
       author: comment.author,
+      url: nil,
       inserted_at: iso8601(comment.inserted_at),
       updated_at: iso8601(comment.updated_at)
+    }
+  end
+
+  def comment(comment) when is_map(comment) do
+    %{
+      id: Map.get(comment, :id),
+      issue_id: nil,
+      kind: Map.get(comment, :kind, "comment"),
+      body: Map.get(comment, :body),
+      author: Map.get(comment, :author),
+      url: Map.get(comment, :url),
+      inserted_at: Map.get(comment, :created_at),
+      updated_at: Map.get(comment, :updated_at)
+    }
+  end
+
+  @spec activity_event(ActivityEvent.t()) :: map()
+  def activity_event(%ActivityEvent{} = event) do
+    %{
+      id: event.id,
+      issue_id: event.issue_id,
+      event_type: event.event_type,
+      metadata: event.metadata || %{},
+      inserted_at: iso8601(event.inserted_at)
     }
   end
 
@@ -153,6 +182,29 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       inserted_at: iso8601(relation.inserted_at)
     }
   end
+
+  @spec agent_execution(AgentExecution.t()) :: map()
+  def agent_execution(execution) when is_map(execution) do
+    %{
+      issue_identifier: execution.issue_identifier,
+      status: Atom.to_string(execution.status),
+      session_id: execution.session_id,
+      last_event: event_to_string(execution.last_event),
+      last_message: AgentExecution.humanize_message(execution.last_message),
+      last_event_at: iso8601(execution.last_event_at),
+      turn_count: execution.turn_count,
+      runtime_seconds: execution.runtime_seconds,
+      started_at: iso8601(execution.started_at),
+      retry_attempt: execution.retry_attempt,
+      error: execution.error,
+      tokens: execution.tokens
+    }
+  end
+
+  defp event_to_string(nil), do: nil
+  defp event_to_string(event) when is_atom(event), do: Atom.to_string(event)
+  defp event_to_string(event) when is_binary(event), do: event
+  defp event_to_string(event), do: inspect(event)
 
   defp loaded_status(%IssueRecord{status: %WorkflowStatus{} = status}), do: status(status)
   defp loaded_status(_issue), do: nil

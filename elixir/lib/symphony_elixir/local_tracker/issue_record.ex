@@ -24,6 +24,7 @@ defmodule SymphonyElixir.LocalTracker.IssueRecord do
     field(:assignee_id, :string)
     field(:creator, :string)
     field(:worker_id, :string)
+    field(:agent_session_id, :string)
     field(:branch_name, :string)
     field(:url, :string)
     field(:started_at, :utc_datetime_usec)
@@ -53,6 +54,7 @@ defmodule SymphonyElixir.LocalTracker.IssueRecord do
       :assignee_id,
       :creator,
       :worker_id,
+      :agent_session_id,
       :branch_name,
       :url,
       :started_at,

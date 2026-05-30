@@ -1,16 +1,30 @@
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "cmdk";
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useViewer } from "@/components/auth/ViewerProvider";
+import { filtersPath, viewFromPathname } from "@/lib/workspaceRoutes";
 
-import { useBoardFiltersDrawer } from "./useBoardFiltersDrawer";
+type PaletteAction = "assignee_me" | "creator_me" | "clear" | "open_drawer" | "focus_search";
 
 export function BoardPaletteShortcuts() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const { projectSlug = "" } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [, setSearchParams] = useSearchParams();
   const { viewer } = useViewer();
-  const { setOpen: setDrawerOpen, openAndFocusSearch } = useBoardFiltersDrawer();
+
+  const openFilters = useCallback(
+    (focusSearch: boolean) => {
+      const view = viewFromPathname(location.pathname);
+      navigate(
+        { pathname: filtersPath(projectSlug, view), search: location.search },
+        { state: focusSearch ? { focusSearch: true } : undefined },
+      );
+    },
+    [location.pathname, location.search, navigate, projectSlug],
+  );
 
   useEffect(() => {
     function handler(event: KeyboardEvent) {
@@ -26,26 +40,26 @@ export function BoardPaletteShortcuts() {
 
       if (event.key === "/" && !insideInput) {
         event.preventDefault();
-        openAndFocusSearch();
+        openFilters(true);
       }
     }
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [openAndFocusSearch]);
+  }, [openFilters]);
 
   const closePalette = useCallback(() => setPaletteOpen(false), []);
 
-  function applyFilter(action: "assignee_me" | "creator_me" | "clear" | "open_drawer" | "focus_search") {
+  function applyFilter(action: PaletteAction) {
     closePalette();
 
     if (action === "open_drawer") {
-      setDrawerOpen(true);
+      openFilters(false);
       return;
     }
 
     if (action === "focus_search") {
-      openAndFocusSearch();
+      openFilters(true);
       return;
     }
 

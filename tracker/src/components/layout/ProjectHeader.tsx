@@ -1,12 +1,11 @@
-import { LayoutDashboard, List, RefreshCw } from "lucide-react";
+import { LayoutDashboard, List, Plus, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
-import { IssueCreateDialog } from "@/components/issues/IssueCreateDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Issue } from "@/types/issue";
+import { newIssuePath, workspaceBasePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import type { TrackerKind } from "@/types/project";
 
 const TRACKER_LABELS: Record<Exclude<TrackerKind, "local">, string> = {
@@ -16,20 +15,22 @@ const TRACKER_LABELS: Record<Exclude<TrackerKind, "local">, string> = {
 
 interface ProjectHeaderProps {
   projectSlug: string;
+  view: WorkspaceView;
   title?: string;
-  onIssueCreated?: (issue: Issue) => void;
   rightSlot?: ReactNode;
   trackerKind?: TrackerKind;
   onRefresh?: () => void;
+  refreshing?: boolean;
 }
 
 export function ProjectHeader({
   projectSlug,
+  view,
   title,
-  onIssueCreated,
   rightSlot,
   trackerKind,
   onRefresh,
+  refreshing = false,
 }: ProjectHeaderProps) {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
@@ -38,18 +39,24 @@ export function ProjectHeader({
         <p className="text-xs text-muted-foreground">{projectSlug}</p>
       </div>
       <div className="flex items-center gap-2">
+        {refreshing ? (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            Syncing
+          </span>
+        ) : null}
         {trackerKind != null && trackerKind !== "local" ? (
           <div className="flex items-center gap-2">
             <Badge variant="muted">{TRACKER_LABELS[trackerKind]}</Badge>
-            <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh board">
-              <RefreshCw className="h-4 w-4" />
+            <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh board" disabled={refreshing}>
+              <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
             </Button>
           </div>
         ) : null}
         {rightSlot}
         <Button variant="ghost" size="sm" asChild>
           <NavLink
-            to={`/projects/${projectSlug}/board`}
+            to={workspaceBasePath(projectSlug, "board")}
             className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
           >
             <LayoutDashboard className="h-4 w-4" />
@@ -58,14 +65,19 @@ export function ProjectHeader({
         </Button>
         <Button variant="ghost" size="sm" asChild>
           <NavLink
-            to={`/projects/${projectSlug}/list`}
+            to={workspaceBasePath(projectSlug, "list")}
             className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
           >
             <List className="h-4 w-4" />
             List
           </NavLink>
         </Button>
-        <IssueCreateDialog projectSlug={projectSlug} onCreated={onIssueCreated} />
+        <Button size="sm" asChild>
+          <Link to={newIssuePath(projectSlug, view)}>
+            <Plus className="h-4 w-4" />
+            New issue
+          </Link>
+        </Button>
       </div>
     </header>
   );

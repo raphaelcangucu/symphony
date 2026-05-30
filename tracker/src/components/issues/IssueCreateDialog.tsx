@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -16,7 +16,7 @@ import { DEFAULT_WORKFLOW_STATUSES } from "../board/board-utils";
 export const issueFormSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
   description: z.string().optional(),
-  status: z.enum(DEFAULT_WORKFLOW_STATUSES),
+  status: z.string().trim().min(1, "Status is required"),
   priority: z.coerce.number().int().min(0).max(4).optional(),
 });
 
@@ -25,15 +25,46 @@ export type IssueFormValues = z.infer<typeof issueFormSchema>;
 interface IssueCreateDialogProps {
   projectSlug: string;
   onCreated?: (issue: Issue) => void;
+  /** Pre-select the status (e.g. when opened from a specific column). */
+  defaultStatus?: WorkflowStatusName;
+  /** Status options to choose from. Falls back to the default workflow. */
+  statuses?: readonly WorkflowStatusName[];
+  /** Custom trigger element. When omitted, a default "New issue" button is rendered. */
+  trigger?: ReactNode;
+  /** Controlled open state. When provided the parent owns visibility. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function IssueCreateDialog({ projectSlug, onCreated }: IssueCreateDialogProps) {
-  const [open, setOpen] = useState(false);
+export function IssueCreateDialog({
+  projectSlug,
+  onCreated,
+  defaultStatus = "Todo",
+  statuses,
+  trigger,
+  open: controlledOpen,
+  onOpenChange,
+}: IssueCreateDialogProps) {
+  const isControlled = controlledOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? controlledOpen : internalOpen;
+
+  const statusOptions = statuses && statuses.length > 0 ? statuses : DEFAULT_WORKFLOW_STATUSES;
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<WorkflowStatusName>("Todo");
+  const [status, setStatus] = useState<WorkflowStatusName>(defaultStatus);
   const [priority, setPriority] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) setStatus(defaultStatus);
+  }, [open, defaultStatus]);
+
+  function setOpen(next: boolean) {
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,7 +86,7 @@ export function IssueCreateDialog({ projectSlug, onCreated }: IssueCreateDialogP
       setTitle("");
       setDescription("");
       setPriority("");
-      setStatus("Todo");
+      setStatus(defaultStatus);
       setOpen(false);
       toast.success("Issue created");
     } catch (cause) {
@@ -65,14 +96,20 @@ export function IssueCreateDialog({ projectSlug, onCreated }: IssueCreateDialogP
     }
   }
 
+  const showTrigger = trigger !== undefined || !isControlled;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm">
-          <Plus className="h-4 w-4" />
-          New issue
-        </Button>
-      </DialogTrigger>
+      {showTrigger ? (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button size="sm">
+              <Plus className="h-4 w-4" />
+              New issue
+            </Button>
+          )}
+        </DialogTrigger>
+      ) : null}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create issue</DialogTitle>
@@ -89,7 +126,7 @@ export function IssueCreateDialog({ projectSlug, onCreated }: IssueCreateDialogP
                 onChange={(event) => setStatus(event.target.value as WorkflowStatusName)}
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               >
-                {DEFAULT_WORKFLOW_STATUSES.map((item) => (
+                {statusOptions.map((item) => (
                   <option key={item} value={item}>
                     {item}
                   </option>

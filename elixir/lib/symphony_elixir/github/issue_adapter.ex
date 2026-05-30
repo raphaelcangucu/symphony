@@ -5,6 +5,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   alias SymphonyElixir.GitHub.Client
   alias SymphonyElixir.GitHub.IssueAdapter.Query
+  alias SymphonyElixir.GitHub.IssueComments
   alias SymphonyElixir.LocalTracker.Project
   alias SymphonyElixir.Tracker.IssueDTO
 
@@ -107,10 +108,33 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   end
 
   @impl true
-  def list_comments(%Project{} = _project, _identifier), do: {:error, :not_supported_on_remote}
+  def list_comments(%Project{} = project, identifier) do
+    case config(project) do
+      %{repo: repo} when is_binary(repo) and repo != "" ->
+        case IssueComments.for_issue(repo, identifier) do
+          {:ok, comments} -> {:ok, comments}
+          {:error, {:invalid_issue_identifier, _}} -> {:ok, []}
+          error -> {:error, map_error(error)}
+        end
+
+      _ ->
+        {:error, :not_supported_on_remote}
+    end
+  end
 
   @impl true
-  def add_comment(%Project{} = _project, _identifier, _body, _attrs), do: {:error, :not_supported_on_remote}
+  def add_comment(%Project{} = project, identifier, body, _attrs) do
+    case config(project) do
+      %{repo: repo} when is_binary(repo) and repo != "" ->
+        case IssueComments.create(repo, identifier, body) do
+          {:ok, comment} -> {:ok, comment}
+          error -> {:error, map_error(error)}
+        end
+
+      _ ->
+        {:error, :not_supported_on_remote}
+    end
+  end
 
   defp config(%Project{tracker_config: cfg}) do
     %{
@@ -123,6 +147,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp client, do: Application.get_env(:symphony_elixir, :github_client_module, Client)
 
   defp map_error({:error, reason}), do: map_error(reason)
+  defp map_error(:issue_not_found), do: :issue_not_found
   defp map_error(:missing_github_token), do: :missing_credentials
   defp map_error({:github_api_status, 401}), do: :remote_unauthorized
   defp map_error({:github_api_status, 403}), do: :remote_forbidden

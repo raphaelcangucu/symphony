@@ -4,6 +4,14 @@ config :phoenix, :json_library, Jason
 
 config :symphony_elixir, ecto_repos: [SymphonyElixir.Repo]
 
+config :symphony_elixir,
+  codex_sessions_dir:
+    System.get_env("SYMPHONY_CODEX_SESSIONS_DIR") ||
+      if(Mix.env() == :test,
+        do: Path.expand("../tmp/test-codex-sessions", __DIR__),
+        else: Path.expand("~/.codex/sessions")
+      )
+
 local_tracker_database =
   System.get_env("SYMPHONY_LOCAL_TRACKER_DATABASE") ||
     Path.expand("../tmp/#{Mix.env()}-local-tracker.sqlite3", __DIR__)
