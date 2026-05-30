@@ -146,9 +146,10 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
   end
 
   defp put_primary(attrs, value) when is_map(attrs) do
-    cond do
-      Map.has_key?(attrs, "primary") -> Map.put(attrs, "primary", value)
-      true -> Map.put(attrs, :primary, value)
+    if Map.has_key?(attrs, "primary") do
+      Map.put(attrs, "primary", value)
+    else
+      Map.put(attrs, :primary, value)
     end
   end
 

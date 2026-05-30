@@ -104,12 +104,14 @@ defmodule SymphonyElixir.DevServer.Manager do
   def list_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
     identifier = canonical_identifier(identifier)
 
-    with {:ok, project} <- Context.get_project(project_slug) do
-      project.id
-      |> DevServerRecord.list_for_issue(identifier)
-      |> Enum.map(&record_to_map/1)
-    else
-      {:error, _reason} -> []
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        project.id
+        |> DevServerRecord.list_for_issue(identifier)
+        |> Enum.map(&record_to_map/1)
+
+      {:error, _reason} ->
+        []
     end
   end
 
@@ -259,17 +261,9 @@ defmodule SymphonyElixir.DevServer.Manager do
 
     reserved_steps
     |> Enum.reduce_while({:ok, []}, fn {step, port, key}, {:ok, started} ->
-      case start_instance(project, identifier, workspace_path, step, port, key) do
-        {:ok, pid} ->
-          case await_initial_boot(pid) do
-            :ok ->
-              {:cont, {:ok, [{pid, key} | started]}}
-
-            {:error, reason} ->
-              stop_instance(pid)
-              rollback_start_attempt(started, attempt_keys)
-              {:halt, {:error, reason}}
-          end
+      case start_reserved_instance(project, identifier, workspace_path, step, port, key) do
+        {:ok, started_instance} ->
+          {:cont, {:ok, [started_instance | started]}}
 
         {:error, reason} ->
           rollback_start_attempt(started, attempt_keys)
@@ -279,6 +273,24 @@ defmodule SymphonyElixir.DevServer.Manager do
     |> case do
       {:ok, started} -> {:ok, started |> Enum.map(fn {pid, _key} -> pid end) |> Enum.reverse()}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp start_reserved_instance(project, identifier, workspace_path, step, port, key) do
+    case start_instance(project, identifier, workspace_path, step, port, key) do
+      {:ok, pid} -> await_reserved_instance_boot(pid, key)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp await_reserved_instance_boot(pid, key) do
+    case await_initial_boot(pid) do
+      :ok ->
+        {:ok, {pid, key}}
+
+      {:error, reason} ->
+        stop_instance(pid)
+        {:error, reason}
     end
   end
 
@@ -594,22 +606,25 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp cleanup_dead_reservations do
-    with {:ok, table} <- reservation_table() do
-      table
-      |> :ets.tab2list()
-      |> Enum.each(fn
-        {key, _port, pid} when is_pid(pid) ->
-          if Process.alive?(pid) do
-            :ok
-          else
-            :ets.delete(table, key)
-          end
-
-        _entry ->
-          :ok
-      end)
+    case reservation_table() do
+      {:ok, table} -> cleanup_dead_reservations(table)
+      :error -> :ok
     end
   end
+
+  defp cleanup_dead_reservations(table) do
+    table
+    |> :ets.tab2list()
+    |> Enum.each(&cleanup_reservation_entry(table, &1))
+  end
+
+  defp cleanup_reservation_entry(table, {key, _port, pid}) when is_pid(pid) do
+    unless Process.alive?(pid), do: :ets.delete(table, key)
+
+    :ok
+  end
+
+  defp cleanup_reservation_entry(_table, _entry), do: :ok
 
   defp live_instance_count do
     registry_keys =
