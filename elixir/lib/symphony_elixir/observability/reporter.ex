@@ -35,7 +35,8 @@ defmodule SymphonyElixir.Observability.Reporter do
         Keyword.get(opts, :min_report_interval_ms) ||
           Config.observability_min_report_interval_ms(),
       last_report_ms: nil,
-      pending?: false
+      pending?: false,
+      consecutive_failures: 0
     }
 
     ObservabilityPubSub.subscribe()
@@ -84,13 +85,44 @@ defmodule SymphonyElixir.Observability.Reporter do
   defp do_report(state) do
     report = Map.put(state.identity_fun.(), "snapshot", state.snapshot_fun.())
 
-    case state.deliver_fun.(report) do
-      :ok -> :ok
-      {:error, reason} -> Logger.warning("observability report failed: #{inspect(reason)}")
-      other -> Logger.warning("observability report unexpected result: #{inspect(other)}")
-    end
+    consecutive_failures =
+      case safe_deliver(state.deliver_fun, report) do
+        :ok -> handle_delivery_success(state.consecutive_failures)
+        {:error, reason} -> handle_delivery_failure(state.consecutive_failures, reason)
+        other -> handle_delivery_failure(state.consecutive_failures, {:unexpected, other})
+      end
 
-    %{state | last_report_ms: System.monotonic_time(:millisecond), pending?: false}
+    %{
+      state
+      | last_report_ms: System.monotonic_time(:millisecond),
+        pending?: false,
+        consecutive_failures: consecutive_failures
+    }
+  end
+
+  defp safe_deliver(deliver_fun, report) do
+    deliver_fun.(report)
+  rescue
+    exception -> {:error, {:raised, Exception.message(exception)}}
+  catch
+    :exit, reason -> {:error, {:exit, reason}}
+  end
+
+  defp handle_delivery_success(consecutive_failures) when consecutive_failures > 0 do
+    Logger.info("observability hub delivery recovered after #{consecutive_failures} failures")
+    0
+  end
+
+  defp handle_delivery_success(_consecutive_failures), do: 0
+
+  defp handle_delivery_failure(0, reason) do
+    Logger.warning("observability report failed: #{inspect(reason)}")
+    1
+  end
+
+  defp handle_delivery_failure(consecutive_failures, reason) do
+    Logger.debug("observability report failed: #{inspect(reason)}")
+    consecutive_failures + 1
   end
 
   defp schedule_heartbeat(state),
@@ -135,7 +167,13 @@ defmodule SymphonyElixir.Observability.Reporter do
   end
 
   defp deliver_http(report, hub_url) do
-    token = System.get_env(Config.local_api_token_env())
+    case System.get_env(Config.local_api_token_env()) do
+      token when is_binary(token) and token != "" -> post_report(report, hub_url, token)
+      _ -> {:error, :missing_token}
+    end
+  end
+
+  defp post_report(report, hub_url, token) do
     url = String.trim_trailing(hub_url, "/") <> "/api/tracker/v1/observability/report"
 
     case Req.post(url,

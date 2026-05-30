@@ -66,4 +66,48 @@ defmodule SymphonyElixir.Observability.ReporterTest do
     assert_receive {:reported, _}, 500
     refute_receive {:reported, _}, 100
   end
+
+  test "keeps issuing heartbeats when delivery returns an error" do
+    test_pid = self()
+
+    failing_deliver = fn report ->
+      send(test_pid, {:reported, report})
+      {:error, :boom}
+    end
+
+    start_supervised!({Reporter, opts(failing_deliver)})
+
+    assert_receive {:reported, %{"runtime_id" => "r1"}}, 500
+    assert_receive {:reported, %{"runtime_id" => "r1"}}, 500
+  end
+
+  test "survives a delivery that raises and keeps reporting" do
+    test_pid = self()
+
+    raising_deliver = fn report ->
+      send(test_pid, {:reported, report})
+      raise "kaboom"
+    end
+
+    pid = start_supervised!({Reporter, opts(raising_deliver)})
+
+    assert_receive {:reported, %{"runtime_id" => "r1"}}, 500
+    assert_receive {:reported, %{"runtime_id" => "r1"}}, 500
+    assert Process.alive?(pid)
+  end
+
+  test "survives a delivery that exits and keeps reporting" do
+    test_pid = self()
+
+    exiting_deliver = fn report ->
+      send(test_pid, {:reported, report})
+      exit(:noproc)
+    end
+
+    pid = start_supervised!({Reporter, opts(exiting_deliver)})
+
+    assert_receive {:reported, %{"runtime_id" => "r1"}}, 500
+    assert_receive {:reported, %{"runtime_id" => "r1"}}, 500
+    assert Process.alive?(pid)
+  end
 end
