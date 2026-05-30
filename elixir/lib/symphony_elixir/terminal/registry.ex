@@ -28,6 +28,40 @@ defmodule SymphonyElixir.Terminal.Registry do
     "sym-issue-#{safe_segment(project_slug, "project")}-#{safe_segment(issue_identifier, "issue")}"
   end
 
+  @spec dev_session_name(String.t(), String.t(), String.t()) :: String.t()
+  def dev_session_name(project_slug, issue_identifier, slug)
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(slug) do
+    "sym-dev-#{safe_segment(project_slug, "project")}-#{safe_segment(issue_identifier, "issue")}-#{safe_segment(slug, "server")}"
+  end
+
+  @spec open_dev_session(String.t(), String.t(), String.t(), Path.t(), keyword()) ::
+          {:ok, session()} | {:error, String.t()}
+  def open_dev_session(project_slug, issue_identifier, slug, cwd, opts \\ [])
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(slug) and is_binary(cwd) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    session_name = dev_session_name(project_slug, issue_identifier, slug)
+
+    with :ok <- ensure_tmux_available(tmux),
+         {:ok, _state} <- ensure_session(tmux, session_name, cwd),
+         {:ok, output} <- capture_output(tmux, session_name) do
+      {:ok,
+       %{
+         project_slug: project_slug,
+         issue_identifier: issue_identifier,
+         session_name: session_name,
+         cwd: cwd,
+         state: "running",
+         output: output
+       }}
+    end
+  end
+
+  @spec kill_dev_session(String.t(), String.t(), String.t(), keyword()) :: :ok | {:error, String.t()}
+  def kill_dev_session(project_slug, issue_identifier, slug, opts \\ []) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.kill_session(dev_session_name(project_slug, issue_identifier, slug))
+  end
+
   @spec open_project_issue_session(String.t(), String.t(), keyword()) ::
           {:ok, session()} | {:error, String.t() | atom()}
   def open_project_issue_session(project_slug, issue_identifier, opts \\ [])
