@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   fetchIssueDevServers,
@@ -10,6 +10,8 @@ import { http } from "@/services/http";
 import type { IssueDevServersResponse } from "@/types/issue";
 
 describe("issue dev-server service", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   const response: IssueDevServersResponse = {
     available: true,
     reason: null,
@@ -33,7 +35,7 @@ describe("issue dev-server service", () => {
     const result = await fetchIssueDevServers("macro markets", "#508");
 
     expect(get).toHaveBeenCalledWith(
-      "/api/tracker/v1/projects/macro%20markets/issues/%23508/dev_servers",
+      "/api/tracker/v1/projects/macro%20markets/issues/508/dev_servers",
     );
     expect(result).toEqual(response);
   });
@@ -69,5 +71,11 @@ describe("issue dev-server service", () => {
       "/api/tracker/v1/projects/macro-markets/issues/MAC-1/dev_servers/restart",
     );
     expect(result).toEqual(response);
+  });
+
+  it("validates required project and issue identifiers", async () => {
+    await expect(fetchIssueDevServers(" ", "508")).rejects.toThrow(/projectSlug/);
+    await expect(fetchIssueDevServers("macro-markets", " ")).rejects.toThrow(/issueIdentifier/);
+    await expect(fetchIssueDevServers("macro-markets", " # ")).rejects.toThrow(/issueIdentifier/);
   });
 });

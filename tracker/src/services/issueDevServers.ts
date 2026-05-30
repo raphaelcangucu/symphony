@@ -1,3 +1,4 @@
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { IssueDevServersResponse } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -48,10 +49,11 @@ async function postIssueDevServerAction(
 
 function issueDevServersPath(projectSlug: string, issueIdentifier: string): string {
   requireNonBlank(projectSlug, "projectSlug");
-  requireNonBlank(issueIdentifier, "issueIdentifier");
+  const normalizedIssueIdentifier = normalizeIssueIdentifier(issueIdentifier);
+  requireNonBlank(normalizedIssueIdentifier, "issueIdentifier");
 
   return trackerPath(
-    `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/${DEV_SERVERS_PATH_SEGMENT}`,
+    `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(normalizedIssueIdentifier)}/${DEV_SERVERS_PATH_SEGMENT}`,
   );
 }
 
