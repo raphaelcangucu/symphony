@@ -348,6 +348,36 @@ live, cross-process view of running sessions.
 - **The page**: open `/tracker` and choose **Observability** in the sidebar (route
   `/observability`) for live per-runtime cards and a global running-sessions table.
 
+## Browser editor (code-server)
+
+Symphony can open a task's workspace directory in a browser-based VS Code
+([code-server](https://github.com/coder/code-server)). It is **disabled by default**.
+
+Enable it with an `editor:` block in `WORKFLOW.md`:
+
+```yaml
+editor:
+  enabled: false        # set to true to enable
+  binary: code-server   # binary name or absolute path
+  host: 127.0.0.1
+  port: 4002
+  auth: none            # "none" (localhost only) or "password"
+  # password: your-password                # only used when auth: password
+  # base_url: https://editor.example.com   # browser-facing URL override (remote/proxy)
+```
+
+- `code-server` must be installed on the host (or set `editor.binary` to its absolute path).
+- When enabled, Symphony supervises a single `code-server` process — spawned on startup
+  and bound to `host:port`.
+- In the tracker `IssueDrawer`, an **Open in VS Code** button (and the `.` keyboard
+  shortcut) opens the task's workspace via `<base_url>/?folder=<workspace path>` in a new
+  browser tab (`base_url` defaults to `http://<host>:<port>`).
+- The button is disabled while the editor is starting or unavailable, and when the
+  workspace directory does not exist yet (it is not auto-created — run the agent or open
+  the Terminal tab first).
+- **Security**: `auth: none` is only safe on localhost (the default bind is `127.0.0.1`).
+  To expose it remotely, use `auth: password` with a `password` and set `base_url`.
+
 ## Project Layout
 
 - `lib/`: application code and Mix tasks

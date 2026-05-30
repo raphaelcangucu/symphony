@@ -257,6 +257,67 @@ The option lists are fetched live from the remote (`GET
 the token cannot read repo labels / assignable users, or the GitHub repo / Linear
 team has none. Check the server log for a `tracker_*` error.
 
+## Browser Editor (code-server)
+
+The tracker `IssueDrawer` shows an **Open in VS Code** button (and a `.` keyboard
+shortcut) that opens the task's workspace in browser-based VS Code. It depends on the
+optional `editor:` block in `WORKFLOW.md`.
+
+### "Open in VS Code" button is missing
+
+The editor is disabled. Set `editor.enabled: true` in `WORKFLOW.md` and restart Symphony.
+
+### Button is disabled showing "Editor is starting…"
+
+`code-server` is still booting. Wait a moment and retry; the button enables once the
+process accepts connections.
+
+### Button is disabled showing "Workspace not created yet"
+
+The task's workspace directory does not exist yet — Symphony does **not** auto-create it.
+Run the agent on the issue, or open the **Terminal** tab first, then retry.
+
+### code-server not found
+
+The log warns:
+
+```
+Editor server unavailable: binary not found binary=code-server
+```
+
+Install code-server on the host, or set `editor.binary` to its absolute path:
+
+```yaml
+editor:
+  enabled: true
+  binary: /usr/local/bin/code-server
+```
+
+### Port already in use
+
+If `editor.port` (default `4002`) collides with another service, change it:
+
+```yaml
+editor:
+  port: 4010
+```
+
+### Exposing the editor remotely
+
+`auth: none` is only safe on localhost (the default bind is `127.0.0.1`). To reach the
+editor from another machine, require a password and set the browser-facing URL:
+
+```yaml
+editor:
+  enabled: true
+  host: 0.0.0.0
+  auth: password
+  password: your-password
+  base_url: https://editor.example.com
+```
+
+Never use `auth: none` when binding off localhost.
+
 ## Checking Logs
 
 Check the log files when diagnosing issues:

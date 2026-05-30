@@ -48,6 +48,16 @@ polling:
 #   min_report_interval_ms: 250         # coalesce window for burst updates
 #   label: macro-markets                # human-friendly name shown on the observability page
 #   # runtime_id: macro-markets-1       # optional stable id; defaults to the workflow file path
+# Browser VS Code (code-server) for task workspaces. Disabled by default.
+# Requires code-server installed on the host. --auth none is only safe on localhost.
+# editor:
+#   enabled: false
+#   binary: code-server
+#   host: 127.0.0.1
+#   port: 4002
+#   auth: none
+#   # password: your-password                  # only when auth: password
+#   # base_url: https://editor.example.com     # browser-facing URL override (remote/proxy)
 workspace:
   root: ~/code/macro-markets-workspaces
 hooks:
