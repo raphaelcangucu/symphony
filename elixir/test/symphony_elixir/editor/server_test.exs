@@ -7,13 +7,15 @@ defmodule SymphonyElixir.Editor.ServerTest do
     previous = %{
       finder: Application.get_env(:symphony_elixir, :editor_executable_finder),
       spawner: Application.get_env(:symphony_elixir, :editor_spawner),
-      probe: Application.get_env(:symphony_elixir, :editor_probe)
+      probe: Application.get_env(:symphony_elixir, :editor_probe),
+      killer: Application.get_env(:symphony_elixir, :editor_killer)
     }
 
     on_exit(fn ->
       restore(:editor_executable_finder, previous.finder)
       restore(:editor_spawner, previous.spawner)
       restore(:editor_probe, previous.probe)
+      restore(:editor_killer, previous.killer)
     end)
 
     :ok
@@ -51,6 +53,23 @@ defmodule SymphonyElixir.Editor.ServerTest do
     pid = start_supervised!({Server, name: :editor_server_starting})
     send(pid, :probe)
     assert Server.status(pid) == :starting
+  end
+
+  test "kills the code-server process on shutdown" do
+    test_pid = self()
+    Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)
+    Application.put_env(:symphony_elixir, :editor_spawner, fn _args -> {:ok, :fake_port} end)
+    Application.put_env(:symphony_elixir, :editor_probe, fn _hp -> {:error, :econnrefused} end)
+
+    Application.put_env(:symphony_elixir, :editor_killer, fn port ->
+      send(test_pid, {:killed, port})
+      :ok
+    end)
+
+    start_supervised!({Server, name: :editor_server_shutdown})
+    stop_supervised!(Server)
+
+    assert_receive {:killed, :fake_port}, 1_000
   end
 
   defp restore(key, nil), do: Application.delete_env(:symphony_elixir, key)

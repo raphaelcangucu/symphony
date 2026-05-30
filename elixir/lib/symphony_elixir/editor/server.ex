@@ -38,6 +38,7 @@ defmodule SymphonyElixir.Editor.Server do
 
   @impl true
   def init(_opts) do
+    Process.flag(:trap_exit, true)
     state = %{port: nil, os_pid: nil, status: :starting}
     {:ok, boot(state)}
   end
@@ -109,12 +110,8 @@ defmodule SymphonyElixir.Editor.Server do
   def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true
-  def terminate(_reason, %{port: port}) when is_port(port) do
-    case Port.info(port, :os_pid) do
-      {:os_pid, os_pid} -> System.cmd("kill", ["-TERM", Integer.to_string(os_pid)])
-      _ -> :ok
-    end
-
+  def terminate(_reason, %{port: port}) when not is_nil(port) do
+    killer().(port)
     :ok
   rescue
     _ -> :ok
@@ -133,6 +130,19 @@ defmodule SymphonyElixir.Editor.Server do
   defp probe do
     Application.get_env(:symphony_elixir, :editor_probe, &default_probe/1)
   end
+
+  defp killer do
+    Application.get_env(:symphony_elixir, :editor_killer, &default_kill/1)
+  end
+
+  defp default_kill(port) when is_port(port) do
+    case Port.info(port, :os_pid) do
+      {:os_pid, os_pid} -> System.cmd("kill", ["-TERM", Integer.to_string(os_pid)])
+      _ -> :ok
+    end
+  end
+
+  defp default_kill(_port), do: :ok
 
   defp default_spawn({executable, args, env}) do
     port =
