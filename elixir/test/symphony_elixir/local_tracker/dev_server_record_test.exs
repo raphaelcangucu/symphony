@@ -29,6 +29,21 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecordTest do
     assert b.url == "http://127.0.0.1:4100"
   end
 
+  test "upsert updates only provided fields on conflict", %{project: project} do
+    {:ok, _} = DevServerRecord.upsert(project.id, "#1", "front", %{status: "starting", port: 4100, primary: true})
+
+    {:ok, row} =
+      DevServerRecord.upsert(project.id, "#1", "front", %{
+        "status" => "ready",
+        "url" => "http://127.0.0.1:4100"
+      })
+
+    assert row.status == "ready"
+    assert row.url == "http://127.0.0.1:4100"
+    assert row.port == 4100
+    assert row.primary == true
+  end
+
   test "list_for_issue returns rows for the issue", %{project: project} do
     {:ok, _} = DevServerRecord.upsert(project.id, "#1", "front", %{status: "ready", primary: true})
 

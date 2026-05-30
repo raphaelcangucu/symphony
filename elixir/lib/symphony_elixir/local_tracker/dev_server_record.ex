@@ -11,6 +11,8 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
   @type t :: %__MODULE__{}
   @statuses ~w(pending provisioning starting ready crashed stopped)
   @non_terminal_statuses ~w(pending provisioning starting ready)
+  @identity_fields ~w(project_id issue_identifier slug)a
+  @updatable_fields ~w(working_dir port url status primary session_name started_at)a
 
   schema "local_tracker_dev_servers" do
     field(:issue_identifier, :string)
@@ -49,16 +51,16 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
 
   @spec upsert(integer(), String.t(), String.t(), map()) :: {:ok, t()} | {:error, Ecto.Changeset.t()}
   def upsert(project_id, issue_identifier, slug, attrs) when is_integer(project_id) and is_binary(issue_identifier) and is_binary(slug) and is_map(attrs) do
-    existing_record =
-      Repo.get_by(__MODULE__,
-        project_id: project_id,
-        issue_identifier: issue_identifier,
-        slug: slug
-      ) || %__MODULE__{}
+    attrs = identity_attrs(attrs, project_id, issue_identifier, slug)
+    changeset = changeset(%__MODULE__{}, attrs)
 
-    existing_record
-    |> changeset(identity_attrs(attrs, project_id, issue_identifier, slug))
-    |> Repo.insert_or_update()
+    with {:ok, _inserted_or_updated} <-
+           Repo.insert(changeset,
+             on_conflict: [set: conflict_updates(attrs)],
+             conflict_target: @identity_fields
+           ) do
+      {:ok, Repo.one!(query_one(project_id, issue_identifier, slug))}
+    end
   end
 
   @spec list_for_issue(integer(), String.t()) :: [t()]
@@ -87,5 +89,30 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
       "issue_identifier" => issue_identifier,
       "slug" => slug
     })
+  end
+
+  defp conflict_updates(attrs) do
+    updates =
+      @updatable_fields
+      |> Enum.reduce([], fn field, acc ->
+        key = Atom.to_string(field)
+
+        if Map.has_key?(attrs, key) do
+          [{field, Map.fetch!(attrs, key)} | acc]
+        else
+          acc
+        end
+      end)
+      |> Enum.reverse()
+
+    Keyword.put(updates, :updated_at, DateTime.utc_now())
+  end
+
+  defp query_one(project_id, issue_identifier, slug) do
+    from(record in __MODULE__,
+      where:
+        record.project_id == ^project_id and record.issue_identifier == ^issue_identifier and
+          record.slug == ^slug
+    )
   end
 end
