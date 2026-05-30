@@ -2,13 +2,31 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ProposedStep do
   @moduledoc "An ephemeral, un-persisted dev-env step proposal."
 
   @enforce_keys [:description, :command, :source]
-  defstruct [:description, :command, :working_dir, :source, optional: false]
+  defstruct [
+    :description,
+    :command,
+    :working_dir,
+    :source,
+    port_env: nil,
+    role: "setup",
+    url_path: "/",
+    ready_probe: "tcp",
+    ready_path: "/",
+    primary: false,
+    optional: false
+  ]
 
   @type t :: %__MODULE__{
           description: String.t(),
           command: String.t(),
           working_dir: String.t() | nil,
           source: String.t(),
+          role: String.t(),
+          port_env: String.t() | nil,
+          url_path: String.t(),
+          ready_probe: String.t(),
+          ready_path: String.t(),
+          primary: boolean(),
           optional: boolean()
         }
 
@@ -19,6 +37,12 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ProposedStep do
       command: fetch(attrs, :command),
       working_dir: get(attrs, :working_dir),
       source: get(attrs, :source) || "manual",
+      role: get(attrs, :role) || "setup",
+      port_env: get(attrs, :port_env),
+      url_path: get(attrs, :url_path) || "/",
+      ready_probe: get(attrs, :ready_probe) || "tcp",
+      ready_path: get(attrs, :ready_path) || "/",
+      primary: get(attrs, :primary) || false,
       optional: get(attrs, :optional) || false
     }
   end
