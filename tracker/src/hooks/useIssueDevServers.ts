@@ -10,7 +10,7 @@ import type { IssueDevServersResponse, IssueDevServerStatus } from "@/types/issu
 
 const POLL_INTERVAL_MS = 2_000;
 const TRANSIENT_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
-const SETTLED_STATUSES = new Set<IssueDevServerStatus>(["ready", "stopped", "crashed"]);
+const FINAL_PREVIEW_STATUSES = new Set<IssueDevServerStatus>(["ready", "crashed"]);
 
 export interface UseIssueDevServersResult {
   data: IssueDevServersResponse | null;
@@ -178,5 +178,11 @@ function shouldPoll(data: IssueDevServersResponse | null): boolean {
     return true;
   }
 
-  return data.available && !data.servers.some((server) => SETTLED_STATUSES.has(server.status));
+  const hasFinalPreviewState = data.servers.some(
+    (server) =>
+      FINAL_PREVIEW_STATUSES.has(server.status) ||
+      (server.status === "stopped" && Boolean(server.session_name || server.url)),
+  );
+
+  return data.available && !hasFinalPreviewState;
 }

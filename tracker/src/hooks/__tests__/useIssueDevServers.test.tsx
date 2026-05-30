@@ -125,6 +125,25 @@ describe("useIssueDevServers", () => {
     expect(fetchIssueDevServers).toHaveBeenCalledTimes(2);
   });
 
+  it("polls while available servers have no preview evidence yet", async () => {
+    vi.useFakeTimers();
+    fetchIssueDevServers.mockResolvedValueOnce(stoppedResponse).mockResolvedValueOnce(startingResponse);
+
+    const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
+
+    await act(async () => {});
+
+    expect(result.current.data).toEqual(stoppedResponse);
+    expect(fetchIssueDevServers).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(result.current.data).toEqual(startingResponse);
+    expect(fetchIssueDevServers).toHaveBeenCalledTimes(2);
+  });
+
   it("sets error when fetching fails", async () => {
     fetchIssueDevServers.mockRejectedValueOnce(new Error("boom"));
 
