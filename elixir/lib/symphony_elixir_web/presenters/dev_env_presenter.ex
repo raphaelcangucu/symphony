@@ -12,13 +12,31 @@ defmodule SymphonyElixirWeb.DevEnvPresenter do
       working_dir: step.working_dir,
       position: step.position,
       source: step.source,
-      optional: step.optional
+      optional: step.optional,
+      role: step.role,
+      port_env: step.port_env,
+      url_path: step.url_path,
+      ready_probe: step.ready_probe,
+      ready_path: step.ready_path,
+      primary: step.primary
     }
   end
 
   @spec proposed(ProposedStep.t()) :: map()
   def proposed(%ProposedStep{} = step) do
-    %{description: step.description, command: step.command, working_dir: step.working_dir, source: step.source, optional: step.optional}
+    %{
+      description: step.description,
+      command: step.command,
+      working_dir: step.working_dir,
+      source: step.source,
+      optional: step.optional,
+      role: step.role,
+      port_env: step.port_env,
+      url_path: step.url_path,
+      ready_probe: step.ready_probe,
+      ready_path: step.ready_path,
+      primary: step.primary
+    }
   end
 
   @spec run(Run.t()) :: map()
