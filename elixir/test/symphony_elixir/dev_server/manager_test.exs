@@ -23,7 +23,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     TestSupport.write_workflow_file!(workflow_file)
     Workflow.set_workflow_file_path(workflow_file)
 
-    delete_reservation_table()
+    clear_reservation_table()
     migrate_repo()
     clean_repo()
 
@@ -44,14 +44,11 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     {:ok, project: project}
   end
 
-  test "live_ports does not create the reservation table before Manager starts" do
-    assert :undefined = :ets.whereis(reservation_table())
-    assert Manager.live_ports() == []
-    assert :undefined = :ets.whereis(reservation_table())
-
-    start_supervised!(Manager)
+  test "live_ports uses the reservation table created by Manager startup" do
+    ensure_manager_started!()
 
     assert :ets.whereis(reservation_table()) != :undefined
+    assert Manager.live_ports() == []
   end
 
   test "start_for_issue returns disabled when dev server config is off", %{project: project} do
@@ -209,7 +206,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
   test "reserved ports are visible before an instance reports its boot state" do
     key = {"p", "1", "front"}
 
-    start_supervised!(Manager)
+    ensure_manager_started!()
     Manager.reserve_port_for_key(key, 4100)
     on_exit(fn -> Manager.release_reservations([key]) end)
 
@@ -224,7 +221,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     File.mkdir_p!(workspace)
     on_exit(fn -> File.rm_rf(workspace) end)
 
-    start_supervised!(Manager)
+    ensure_manager_started!()
 
     {:ok, _steps} =
       DevEnv.save_steps(project.slug, [
@@ -264,6 +261,12 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
           "local_tracker_dev_env_step_runs",
           "local_tracker_dev_env_runs",
           "local_tracker_dev_env_steps",
+          "local_tracker_activity_events",
+          "local_tracker_issue_relations",
+          "local_tracker_issue_labels",
+          "local_tracker_labels",
+          "local_tracker_comments",
+          "local_tracker_issues",
           "local_tracker_repositories",
           "local_tracker_workflow_statuses",
           "local_tracker_project_setups",
@@ -281,10 +284,17 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     Module.concat(Manager, PortReservations)
   end
 
-  defp delete_reservation_table do
+  defp ensure_manager_started! do
+    case Process.whereis(Manager) do
+      nil -> start_supervised!(Manager)
+      pid when is_pid(pid) -> pid
+    end
+  end
+
+  defp clear_reservation_table do
     case :ets.whereis(reservation_table()) do
       :undefined -> :ok
-      table -> :ets.delete(table)
+      table -> :ets.delete_all_objects(table)
     end
   rescue
     ArgumentError -> :ok
