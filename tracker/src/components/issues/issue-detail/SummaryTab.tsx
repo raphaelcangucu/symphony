@@ -7,9 +7,10 @@ import { PriorityIndicator, priorityLabel } from "@/components/issues/PriorityIn
 import { PullRequestLink } from "@/components/issues/pull-request/PullRequestLink";
 import { Markdown } from "@/components/ui/markdown";
 import { Separator } from "@/components/ui/separator";
+import { useIssueDevServers } from "@/hooks/useIssueDevServers";
 import { cn, formatDateTime } from "@/lib/utils";
 import type { Comment } from "@/types/comment";
-import type { Issue } from "@/types/issue";
+import type { Issue, IssueDevServer, IssueDevServersResponse } from "@/types/issue";
 import type { PullRequest } from "@/types/pull-request";
 
 import { CommentCard, WorkpadBadge } from "./CommentCard";
@@ -37,7 +38,12 @@ export function SummaryTab({
 }: SummaryTabProps) {
   const meta = getStatusMeta(issue.status);
   const StatusIcon = meta.Icon;
-  const hasLinks = Boolean(issue.url) || issue.branchName !== null || pullRequests.length > 0;
+  const { data: previewData } = useIssueDevServers(issue.projectSlug, issue.identifier);
+  const primaryPreviewServer = selectPrimaryPreviewServer(previewData?.servers ?? []);
+  const previewUrl = readyPreviewUrl(primaryPreviewServer);
+  const previewStatus = previewUrl ? null : previewStatusLabel(previewData, primaryPreviewServer);
+  const hasPreviewSummary = Boolean(previewUrl || previewStatus);
+  const hasLinks = Boolean(issue.url) || issue.branchName !== null || pullRequests.length > 0 || hasPreviewSummary;
 
   return (
     <div className="space-y-5 text-sm">
@@ -63,6 +69,26 @@ export function SummaryTab({
           {pullRequests.map((pr) => (
             <PullRequestLink key={pr.number} pullRequest={pr} onOpen={onOpenPullRequest} />
           ))}
+          {previewUrl ? (
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15 dark:text-emerald-300"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Preview
+            </a>
+          ) : null}
+          {previewStatus ? (
+            <span
+              role="status"
+              aria-live="polite"
+              className="inline-flex items-center rounded-md border border-border/60 px-2.5 py-1 text-xs font-medium text-muted-foreground"
+            >
+              {previewStatus}
+            </span>
+          ) : null}
         </section>
       ) : null}
       <section>
@@ -139,4 +165,51 @@ export function SummaryTab({
       </section>
     </div>
   );
+}
+
+function selectPrimaryPreviewServer(servers: IssueDevServer[]): IssueDevServer | null {
+  return servers.find((server) => server.primary) ?? servers.find((server) => server.status === "ready") ?? servers[0] ?? null;
+}
+
+function readyPreviewUrl(server: IssueDevServer | null): string | null {
+  if (!server || server.status !== "ready" || !server.url) {
+    return null;
+  }
+
+  return server.url;
+}
+
+function previewStatusLabel(
+  data: IssueDevServersResponse | null,
+  primaryServer: IssueDevServer | null,
+): string | null {
+  if (!data) {
+    return null;
+  }
+
+  if (shouldHideUnavailablePreview(data) || !primaryServer) {
+    return data.available ? "Preview provisioning..." : null;
+  }
+
+  switch (primaryServer.status) {
+    case "pending":
+    case "provisioning":
+      return "Preview provisioning...";
+    case "starting":
+      return "Preview starting...";
+    case "ready":
+      return "Preview waiting for URL...";
+    case "crashed":
+      return "Preview crashed";
+    case "stopped":
+      return "Preview stopped";
+  }
+}
+
+function shouldHideUnavailablePreview(data: IssueDevServersResponse): boolean {
+  if (data.available || data.servers.length > 0) {
+    return false;
+  }
+
+  return data.reason === "disabled" || data.reason === "no_serve_step" || data.reason === "workspace_missing";
 }
