@@ -1,5 +1,5 @@
 defmodule SymphonyElixir.Editor.ServerTest do
-  use ExUnit.Case, async: false
+  use SymphonyElixir.TestSupport, async: false
 
   alias SymphonyElixir.Editor.Server
 
@@ -55,6 +55,31 @@ defmodule SymphonyElixir.Editor.ServerTest do
     assert Server.status(pid) == :starting
   end
 
+  test "probes 127.0.0.1 when the configured host is 0.0.0.0" do
+    test_pid = self()
+
+    load_workflow_with_front_matter("""
+    github:
+      repo: acme/app
+    editor:
+      enabled: true
+      host: 0.0.0.0
+      port: 4002
+    """)
+
+    Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)
+    Application.put_env(:symphony_elixir, :editor_spawner, fn _args -> {:ok, make_ref()} end)
+
+    Application.put_env(:symphony_elixir, :editor_probe, fn {host, _port} ->
+      send(test_pid, {:probe_host, host})
+      :ok
+    end)
+
+    pid = start_supervised!({Server, name: :editor_server_probe_host})
+    send(pid, :probe)
+    assert_receive {:probe_host, "127.0.0.1"}, 1_000
+  end
+
   test "kills the code-server process on shutdown" do
     test_pid = self()
     Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)
@@ -74,4 +99,15 @@ defmodule SymphonyElixir.Editor.ServerTest do
 
   defp restore(key, nil), do: Application.delete_env(:symphony_elixir, key)
   defp restore(key, value), do: Application.put_env(:symphony_elixir, key, value)
+
+  defp load_workflow_with_front_matter(front_matter) do
+    content = "---\n" <> front_matter <> "---\n"
+    File.write!(Workflow.workflow_file_path(), content)
+
+    if Process.whereis(SymphonyElixir.WorkflowStore) do
+      SymphonyElixir.WorkflowStore.force_reload()
+    end
+
+    :ok
+  end
 end

@@ -25,7 +25,7 @@ defmodule SymphonyElixir.Application do
   def start(_type, _args) do
     :ok = SymphonyElixir.LogFile.configure()
 
-    children = [
+    base_children = [
       {Phoenix.PubSub, name: SymphonyElixir.PubSub},
       SymphonyElixir.Observability.Registry,
       SymphonyElixir.Repo,
@@ -54,6 +54,8 @@ defmodule SymphonyElixir.Application do
       SymphonyElixir.StatusDashboard
     ]
 
+    children = base_children ++ editor_children()
+
     Supervisor.start_link(
       children,
       strategy: :one_for_one,
@@ -65,5 +67,19 @@ defmodule SymphonyElixir.Application do
   def stop(_state) do
     SymphonyElixir.StatusDashboard.render_offline_status()
     :ok
+  end
+
+  defp editor_children do
+    if editor_enabled?() do
+      [SymphonyElixir.Editor.Server]
+    else
+      []
+    end
+  end
+
+  defp editor_enabled? do
+    SymphonyElixir.Config.editor_enabled?()
+  rescue
+    _ -> false
   end
 end

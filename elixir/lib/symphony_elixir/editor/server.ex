@@ -91,7 +91,7 @@ defmodule SymphonyElixir.Editor.Server do
   def handle_info(:probe, %{status: :ready} = state), do: {:noreply, state}
 
   def handle_info(:probe, state) do
-    case probe().({Config.editor_host(), Config.editor_port()}) do
+    case probe().({probe_host(Config.editor_host()), Config.editor_port()}) do
       :ok ->
         Logger.info("Editor server ready host=#{Config.editor_host()} port=#{Config.editor_port()}")
         {:noreply, %{state | status: :ready}}
@@ -107,6 +107,8 @@ defmodule SymphonyElixir.Editor.Server do
     {:stop, {:editor_exited, code}, %{state | status: :unavailable}}
   end
 
+  def handle_info({:EXIT, _from, _reason}, state), do: {:noreply, state}
+
   def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true
@@ -118,6 +120,9 @@ defmodule SymphonyElixir.Editor.Server do
   end
 
   def terminate(_reason, _state), do: :ok
+
+  defp probe_host("0.0.0.0"), do: "127.0.0.1"
+  defp probe_host(host), do: host
 
   defp executable_finder do
     Application.get_env(:symphony_elixir, :editor_executable_finder, &System.find_executable/1)
