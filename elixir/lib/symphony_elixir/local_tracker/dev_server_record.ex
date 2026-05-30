@@ -13,6 +13,7 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
   @non_terminal_statuses ~w(pending provisioning starting ready)
   @identity_fields ~w(project_id issue_identifier slug)a
   @updatable_fields ~w(working_dir port url status primary session_name started_at)a
+  @known_fields @identity_fields ++ @updatable_fields
 
   schema "local_tracker_dev_servers" do
     field(:issue_identifier, :string)
@@ -51,15 +52,23 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
 
   @spec upsert(integer(), String.t(), String.t(), map()) :: {:ok, t()} | {:error, Ecto.Changeset.t()}
   def upsert(project_id, issue_identifier, slug, attrs) when is_integer(project_id) and is_binary(issue_identifier) and is_binary(slug) and is_map(attrs) do
-    attrs = identity_attrs(attrs, project_id, issue_identifier, slug)
+    attrs =
+      attrs
+      |> atomize_known_keys()
+      |> Map.merge(%{project_id: project_id, issue_identifier: issue_identifier, slug: slug})
+
     changeset = changeset(%__MODULE__{}, attrs)
 
-    with {:ok, _inserted_or_updated} <-
-           Repo.insert(changeset,
-             on_conflict: [set: conflict_updates(attrs)],
+    if changeset.valid? do
+      case Repo.insert(changeset,
+             on_conflict: [set: conflict_updates(attrs, changeset)],
              conflict_target: @identity_fields
            ) do
-      {:ok, Repo.one!(query_one(project_id, issue_identifier, slug))}
+        {:ok, _inserted_or_updated} -> {:ok, Repo.one!(query_one(project_id, issue_identifier, slug))}
+        {:error, changeset} -> {:error, changeset}
+      end
+    else
+      {:error, changeset}
     end
   end
 
@@ -81,31 +90,33 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
     )
   end
 
-  defp identity_attrs(attrs, project_id, issue_identifier, slug) do
-    attrs
-    |> Map.new(fn {key, value} -> {to_string(key), value} end)
-    |> Map.merge(%{
-      "project_id" => project_id,
-      "issue_identifier" => issue_identifier,
-      "slug" => slug
-    })
+  defp atomize_known_keys(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {key, value}, acc when is_binary(key) ->
+        case known_field_atom(key) do
+          nil -> acc
+          field -> Map.put(acc, field, value)
+        end
+
+      {key, value}, acc when is_atom(key) ->
+        Map.put(acc, key, value)
+
+      _pair, acc ->
+        acc
+    end)
   end
 
-  defp conflict_updates(attrs) do
+  defp conflict_updates(attrs, changeset) do
     updates =
       @updatable_fields
-      |> Enum.reduce([], fn field, acc ->
-        key = Atom.to_string(field)
-
-        if Map.has_key?(attrs, key) do
-          [{field, Map.fetch!(attrs, key)} | acc]
-        else
-          acc
-        end
-      end)
-      |> Enum.reverse()
+      |> Enum.filter(&Map.has_key?(attrs, &1))
+      |> Enum.map(fn field -> {field, Ecto.Changeset.get_field(changeset, field)} end)
 
     Keyword.put(updates, :updated_at, DateTime.utc_now())
+  end
+
+  defp known_field_atom(key) do
+    Enum.find(@known_fields, &(Atom.to_string(&1) == key))
   end
 
   defp query_one(project_id, issue_identifier, slug) do

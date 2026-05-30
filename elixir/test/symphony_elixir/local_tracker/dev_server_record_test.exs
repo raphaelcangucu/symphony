@@ -44,6 +44,21 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecordTest do
     assert row.primary == true
   end
 
+  test "upsert conflict updates use casted values", %{project: project} do
+    {:ok, _} = DevServerRecord.upsert(project.id, "#1", "front", %{status: "starting", port: 4100, primary: true})
+
+    assert {:ok, row} =
+             DevServerRecord.upsert(project.id, "#1", "front", %{
+               "status" => "ready",
+               "port" => "4101",
+               "primary" => "false"
+             })
+
+    assert row.status == "ready"
+    assert row.port == 4101
+    assert row.primary == false
+  end
+
   test "list_for_issue returns rows for the issue", %{project: project} do
     {:ok, _} = DevServerRecord.upsert(project.id, "#1", "front", %{status: "ready", primary: true})
 
