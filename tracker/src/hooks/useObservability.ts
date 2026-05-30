@@ -22,7 +22,12 @@ export function useObservability(): UseObservabilityResult {
 
     void listObservability()
       .then((items) => {
-        if (active && requestId === requestIdRef.current) setRuntimes(items);
+        if (active && requestId === requestIdRef.current)
+          setRuntimes((current) => {
+            const present = new Set(current.map((entry) => entry.runtimeId));
+            const additions = items.filter((item) => !present.has(item.runtimeId));
+            return [...current, ...additions];
+          });
       })
       .finally(() => {
         if (active && requestId === requestIdRef.current) setLoading(false);
@@ -35,8 +40,10 @@ export function useObservability(): UseObservabilityResult {
     bindObservabilityEvents(channel, {
       onUpdated: (runtime) =>
         setRuntimes((current) => {
-          const next = current.filter((entry) => entry.runtimeId !== runtime.runtimeId);
-          next.push(runtime);
+          const index = current.findIndex((entry) => entry.runtimeId === runtime.runtimeId);
+          if (index === -1) return [...current, runtime];
+          const next = current.slice();
+          next[index] = runtime;
           return next;
         }),
       onRemoved: (runtimeId) =>
