@@ -749,13 +749,6 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:base_url, scalar_string_value(Map.get(section, "base_url")))
   end
 
-  defp integer_list_value(values) when is_list(values) do
-    parsed = Enum.flat_map(values, fn v -> if(is_integer(v), do: [v], else: []) end)
-    if parsed == [], do: :omit, else: parsed
-  end
-
-  defp integer_list_value(_value), do: :omit
-
   defp section_map(config, key) do
     case Map.get(config, key) do
       section when is_map(section) -> section
@@ -869,6 +862,15 @@ defmodule SymphonyElixir.Config do
       :error -> :omit
     end
   end
+
+  defp integer_list_value(values) when is_list(values) do
+    case Enum.filter(values, &is_integer/1) do
+      [] -> :omit
+      parsed -> parsed
+    end
+  end
+
+  defp integer_list_value(_value), do: :omit
 
   defp boolean_value(value) when is_boolean(value), do: value
 
