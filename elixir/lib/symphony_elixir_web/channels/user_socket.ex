@@ -8,6 +8,7 @@ defmodule SymphonyElixirWeb.UserSocket do
 
   channel("project:*", SymphonyElixirWeb.TrackerChannel)
   channel("terminal:*", SymphonyElixirWeb.TerminalChannel)
+  channel("observability:global", SymphonyElixirWeb.ObservabilityChannel)
 
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) when is_binary(token) do
