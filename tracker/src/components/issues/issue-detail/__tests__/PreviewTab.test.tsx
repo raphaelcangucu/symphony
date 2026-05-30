@@ -74,6 +74,7 @@ describe("PreviewTab", () => {
 
     expect(screen.queryByText(/preview is ready/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^open preview$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^open web preview$/i })).not.toBeInTheDocument();
   });
 
   it("disables manual controls when previews are unavailable", () => {

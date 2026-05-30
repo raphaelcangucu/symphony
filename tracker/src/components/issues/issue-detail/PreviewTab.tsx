@@ -192,6 +192,8 @@ function PreviewControls({
 }
 
 function ServerRow({ server }: { server: IssueDevServer }) {
+  const previewUrl = readyPreviewUrl(server);
+
   return (
     <div className="rounded-lg border p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -207,9 +209,9 @@ function ServerRow({ server }: { server: IssueDevServer }) {
           </p>
           {server.session_name ? <p className="font-mono text-xs text-muted-foreground">{server.session_name}</p> : null}
         </div>
-        {server.url ? (
+        {previewUrl ? (
           <Button asChild size="sm" variant="outline">
-            <a href={server.url} target="_blank" rel="noreferrer noopener">
+            <a href={previewUrl} target="_blank" rel="noreferrer noopener">
               <ExternalLink className="h-3.5 w-3.5" />
               Open {server.slug} preview
             </a>
