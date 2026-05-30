@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { FormEvent, ReactNode, SVGProps, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
