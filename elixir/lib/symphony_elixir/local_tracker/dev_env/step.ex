@@ -47,7 +47,16 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Step do
       :ready_path,
       :primary
     ])
-    |> validate_required([:project_id, :description, :command])
+    |> validate_required([
+      :project_id,
+      :description,
+      :command,
+      :role,
+      :url_path,
+      :ready_probe,
+      :ready_path,
+      :primary
+    ])
     |> validate_inclusion(:source, @sources)
     |> validate_inclusion(:role, @roles)
     |> validate_inclusion(:ready_probe, @probes)

@@ -16,7 +16,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.StepTest do
     assert Step.sources() == ~w(convention readme heuristic manual)
   end
 
-  test "changeset accepts serve fields and defaults role to setup" do
+  test "changeset accepts serve fields" do
     cs =
       Step.changeset(%Step{}, %{
         project_id: 1,
@@ -33,6 +33,22 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.StepTest do
     assert cs.valid?
     assert Ecto.Changeset.get_field(cs, :role) == "serve"
     assert Ecto.Changeset.get_field(cs, :primary) == true
+  end
+
+  test "changeset rejects nil non-null serve fields" do
+    cs =
+      Step.changeset(%Step{}, %{
+        project_id: 1,
+        description: "Front dev",
+        command: "npm run dev",
+        role: nil,
+        url_path: nil,
+        ready_probe: nil,
+        ready_path: nil,
+        primary: nil
+      })
+
+    refute cs.valid?
   end
 
   test "changeset rejects unknown role" do
@@ -53,5 +69,19 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.StepTest do
     assert s.ready_probe == "tcp"
     assert s.ready_path == "/"
     refute s.primary
+  end
+
+  test "ProposedStep accepts string-keyed serve fields" do
+    s =
+      ProposedStep.new(%{
+        "description" => "d",
+        "command" => "npm run dev",
+        "source" => "convention",
+        "role" => "serve",
+        "primary" => true
+      })
+
+    assert s.role == "serve"
+    assert s.primary
   end
 end
