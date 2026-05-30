@@ -20,6 +20,7 @@ export type IssueDevServerReason =
   | "lock_unavailable"
   | "start_failed"
   | "restart_failed"
+  | "crashed"
   | null;
 
 export interface IssueDevServer {
