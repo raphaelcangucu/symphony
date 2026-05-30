@@ -29,6 +29,22 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
     end
   end
 
+  defmodule KillFailTmux do
+    def open_dev_session(project_slug, identifier, slug, cwd, _opts \\ []) do
+      send(test_pid(), {:opened_dev_session, project_slug, identifier, slug, cwd})
+      {:ok, %{session_name: "sym-dev-x"}}
+    end
+
+    def kill_dev_session(project_slug, identifier, slug, _opts \\ []) do
+      send(test_pid(), {:kill_failed, project_slug, identifier, slug})
+      {:error, :kill_failed}
+    end
+
+    defp test_pid do
+      Process.whereis(SymphonyElixir.DevServer.InstanceTest.TestProcess)
+    end
+  end
+
   setup do
     migrate_repo()
     clean_repo()
@@ -150,10 +166,90 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
         workspace_path: "/tmp/symphony-instance-test",
         step: step(),
         idle_timeout_ms: 60_000,
-        tmux: FakeTmux
+        tmux: FakeTmux,
+        command_sender: &FakeTmux.send_keys/2
       ],
       overrides
     )
+  end
+
+  test "send failure after session open kills session and persists crashed", %{project: project} do
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          port_allocator: fn _range, _claimed -> {:ok, 4123} end,
+          command_sender: fn "sym-dev-x", "PORT=4123 npm run dev\n" -> {:error, :send_failed} end,
+          probe_interval_ms: 5
+        )
+      )
+
+    assert_eventually(fn -> Instance.status(pid) == :crashed end)
+
+    assert_receive {:killed_dev_session, "p", @identifier, "front"}, 1_000
+    assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+    assert row.status == "crashed"
+  end
+
+  test "kill failure on stop persists crashed instead of stopped", %{project: project} do
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          tmux: KillFailTmux,
+          port_allocator: fn _range, _claimed -> {:ok, 4123} end,
+          probe: fn "127.0.0.1", 4123, "tcp", "/" -> :ok end,
+          probe_interval_ms: 5
+        )
+      )
+
+    assert_eventually(fn -> Instance.status(pid) == :ready end)
+    assert :ok = Instance.stop(pid)
+
+    assert_receive {:kill_failed, "p", @identifier, "front"}, 1_000
+    assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+    assert row.status == "crashed"
+  end
+
+  test "unsafe working dir persists crashed without opening tmux", %{project: project} do
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          step: %{step() | working_dir: "../outside"},
+          port_allocator: fn _range, _claimed -> {:ok, 4123} end,
+          probe_interval_ms: 5
+        )
+      )
+
+    assert_eventually(fn -> Instance.status(pid) == :crashed end)
+
+    assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+    assert row.status == "crashed"
+    refute_received {:opened_dev_session, _, _, _, _}
+  end
+
+  test "post-ready probe failure marks instance crashed", %{project: project} do
+    {:ok, probe_agent} = Agent.start_link(fn -> :ok end)
+
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          port_allocator: fn _range, _claimed -> {:ok, 4123} end,
+          probe: fn "127.0.0.1", 4123, "tcp", "/" ->
+            Agent.get(probe_agent, fn status ->
+              if status == :ok, do: :ok, else: {:error, :closed}
+            end)
+          end,
+          probe_interval_ms: 5
+        )
+      )
+
+    assert_eventually(fn -> Instance.status(pid) == :ready end)
+    Agent.update(probe_agent, fn _status -> :fail end)
+    assert_eventually(fn -> Instance.status(pid) == :crashed end)
+
+    assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+    assert row.status == "crashed"
+
+    assert :ok = Instance.stop(pid)
   end
 
   defp step do

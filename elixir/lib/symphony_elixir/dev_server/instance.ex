@@ -44,7 +44,7 @@ defmodule SymphonyElixir.DevServer.Instance do
     state =
       opts
       |> initial_state()
-      |> persist_status!(:provisioning)
+      |> persist_status(:provisioning)
 
     {:ok, state, {:continue, :boot}}
   end
@@ -57,30 +57,52 @@ defmodule SymphonyElixir.DevServer.Instance do
   @impl true
   def handle_call(:status, _from, state), do: {:reply, state.status, state}
 
-  def handle_call(:stop, _from, state), do: {:stop, :normal, :ok, %{state | status: :stopped}}
+  def handle_call(:stop, _from, %{status: :crashed} = state), do: {:stop, :normal, :ok, state}
+
+  def handle_call(:stop, _from, state) do
+    {:stop, :normal, :ok, %{state | status: :stopped, stop_requested: true}}
+  end
 
   @impl true
   def handle_info(:probe, %{status: :starting, port: port} = state) when is_integer(port) do
-    ready_probe = Map.get(state.step, :ready_probe, "tcp") || "tcp"
-    ready_path = Map.get(state.step, :ready_path, "/") || "/"
-
-    case state.probe.(@loopback_host, port, ready_probe, normalize_path(ready_path)) do
-      :ok ->
-        {:noreply, persist_status!(%{state | status: :ready}, :ready)}
-
-      {:error, reason} ->
-        handle_probe_error(state, reason)
-    end
+    probe_starting(state, port)
   end
 
-  def handle_info(:idle_timeout, state), do: {:stop, :normal, %{state | status: :stopped}}
+  def handle_info(:probe, %{status: :ready, port: port} = state) when is_integer(port) do
+    probe_ready(state, port)
+  end
+
+  def handle_info(:idle_timeout, %{status: :crashed} = state), do: {:noreply, state}
+
+  def handle_info(:idle_timeout, state) do
+    {:stop, :normal, %{state | status: :stopped, stop_requested: true}}
+  end
 
   def handle_info(_message, state), do: {:noreply, state}
 
   @impl true
-  def terminate(_reason, state) do
-    cleanup_session(state)
-    persist_stopped(state)
+  def terminate(_reason, %{status: :crashed} = state) do
+    safe_kill(state)
+    :ok
+  end
+
+  def terminate(_reason, %{status: :stopped, stop_requested: true} = state) do
+    case safe_kill(state) do
+      :ok -> persist_status(state, :stopped)
+      {:error, _reason} -> persist_status(state, :crashed)
+    end
+
+    :ok
+  end
+
+  def terminate(reason, state) do
+    Logger.warning("Dev server terminated unexpectedly slug=#{state.slug} reason=#{inspect(reason)}")
+
+    case safe_kill(state) do
+      :ok -> persist_status(state, :crashed)
+      {:error, _reason} -> persist_status(state, :crashed)
+    end
+
     :ok
   end
 
@@ -105,6 +127,7 @@ defmodule SymphonyElixir.DevServer.Instance do
       idle_timeout_ms: Keyword.get(opts, :idle_timeout_ms, @default_idle_timeout_ms),
       tmux: Keyword.get(opts, :tmux, Registry),
       port_allocator: Keyword.get(opts, :port_allocator, &PortAllocator.allocate/2),
+      command_sender: Keyword.get(opts, :command_sender, &Tmux.send_keys/2),
       probe: Keyword.get(opts, :probe, &default_probe/4),
       probe_interval_ms: Keyword.get(opts, :probe_interval_ms, @default_probe_interval_ms),
       max_probe_attempts: Keyword.get(opts, :max_probe_attempts, @default_max_probe_attempts),
@@ -115,7 +138,8 @@ defmodule SymphonyElixir.DevServer.Instance do
       url: nil,
       primary: Map.get(step, :primary, false) || false,
       session_name: nil,
-      probe_attempts: 0
+      probe_attempts: 0,
+      stop_requested: false
     }
   end
 
@@ -126,21 +150,31 @@ defmodule SymphonyElixir.DevServer.Instance do
 
       {:error, reason} ->
         Logger.warning("Dev server port allocation failed slug=#{state.slug} reason=#{inspect(reason)}")
-        persist_status!(%{state | status: :crashed}, :crashed)
+        persist_status(%{state | status: :crashed}, :crashed)
     end
   end
 
   defp launch_with_port(state, port) do
     url = build_url(state.base_url, port, Map.get(state.step, :url_path, "/"))
-    cwd = Path.join(state.workspace_path, state.working_dir || ".")
 
+    case resolve_cwd(state) do
+      {:ok, cwd} ->
+        open_session(state, port, url, cwd)
+
+      {:error, reason} ->
+        Logger.warning("Dev server working dir rejected slug=#{state.slug} reason=#{inspect(reason)}")
+        persist_status(%{state | port: port, url: url, status: :crashed}, :crashed)
+    end
+  end
+
+  defp open_session(state, port, url, cwd) do
     case state.tmux.open_dev_session(state.project_slug, state.identifier, state.slug, cwd, []) do
       {:ok, session} ->
         start_command(state, port, url, session)
 
       {:error, reason} ->
         Logger.warning("Dev server tmux session failed slug=#{state.slug} reason=#{inspect(reason)}")
-        persist_status!(%{state | port: port, url: url, status: :crashed}, :crashed)
+        persist_status(%{state | port: port, url: url, status: :crashed}, :crashed)
     end
   end
 
@@ -148,23 +182,53 @@ defmodule SymphonyElixir.DevServer.Instance do
     session_name = Map.fetch!(session, :session_name)
     command = launch_command(state.step, port)
 
-    case send_command(state.tmux, session_name, command) do
+    case send_command(state.command_sender, session_name, command) do
       :ok ->
         state =
           state
           |> Map.merge(%{port: port, url: url, session_name: session_name, status: :starting})
-          |> persist_status!(:starting)
+          |> persist_status(:starting)
 
-        Process.send_after(self(), :probe, state.probe_interval_ms)
-        Process.send_after(self(), :idle_timeout, state.idle_timeout_ms)
+        schedule_probe(state)
+        schedule_idle(state)
         state
 
       {:error, reason} ->
         Logger.warning("Dev server command send failed slug=#{state.slug} reason=#{inspect(reason)}")
 
-        state
-        |> Map.merge(%{port: port, url: url, session_name: session_name, status: :crashed})
-        |> persist_status!(:crashed)
+        state = Map.merge(state, %{port: port, url: url, session_name: session_name, status: :crashed})
+        safe_kill(state)
+        persist_status(state, :crashed)
+    end
+  end
+
+  defp probe_starting(state, port) do
+    ready_probe = Map.get(state.step, :ready_probe, "tcp") || "tcp"
+    ready_path = Map.get(state.step, :ready_path, "/") || "/"
+
+    case state.probe.(@loopback_host, port, ready_probe, normalize_path(ready_path)) do
+      :ok ->
+        state = persist_status(%{state | status: :ready, probe_attempts: 0}, :ready)
+        schedule_probe(state)
+        {:noreply, state}
+
+      {:error, reason} ->
+        handle_probe_error(state, reason)
+    end
+  end
+
+  defp probe_ready(state, port) do
+    ready_probe = Map.get(state.step, :ready_probe, "tcp") || "tcp"
+    ready_path = Map.get(state.step, :ready_path, "/") || "/"
+
+    case state.probe.(@loopback_host, port, ready_probe, normalize_path(ready_path)) do
+      :ok ->
+        schedule_probe(state)
+        {:noreply, state}
+
+      {:error, reason} ->
+        Logger.warning("Dev server post-ready probe failed slug=#{state.slug} reason=#{inspect(reason)}")
+        {:noreply, persist_status(%{state | status: :crashed}, :crashed)}
     end
   end
 
@@ -173,9 +237,9 @@ defmodule SymphonyElixir.DevServer.Instance do
 
     if attempts >= state.max_probe_attempts do
       Logger.warning("Dev server probe failed slug=#{state.slug} attempts=#{attempts} reason=#{inspect(reason)}")
-      {:noreply, persist_status!(%{state | status: :crashed, probe_attempts: attempts}, :crashed)}
+      {:noreply, persist_status(%{state | status: :crashed, probe_attempts: attempts}, :crashed)}
     else
-      Process.send_after(self(), :probe, state.probe_interval_ms)
+      schedule_probe(state)
       {:noreply, %{state | probe_attempts: attempts}}
     end
   end
@@ -189,11 +253,22 @@ defmodule SymphonyElixir.DevServer.Instance do
     end
   end
 
-  defp send_command(tmux, session_name, command) do
-    if function_exported?(tmux, :send_keys, 2) do
-      tmux.send_keys(session_name, command)
+  defp send_command(command_sender, session_name, command) when is_function(command_sender, 2) do
+    command_sender.(session_name, command)
+  rescue
+    error -> {:error, error}
+  end
+
+  defp send_command(_command_sender, _session_name, _command), do: {:error, :invalid_command_sender}
+
+  defp resolve_cwd(state) do
+    root = Path.expand(state.workspace_path)
+    cwd = Path.expand(Path.join(root, state.working_dir || "."))
+
+    if cwd == root or String.starts_with?(cwd, root <> "/") do
+      {:ok, cwd}
     else
-      Tmux.send_keys(session_name, command)
+      {:error, {:working_dir_outside_workspace, cwd, root}}
     end
   end
 
@@ -215,8 +290,40 @@ defmodule SymphonyElixir.DevServer.Instance do
     end
   end
 
-  defp persist_status!(state, status) do
-    attrs = %{
+  defp schedule_probe(state) do
+    Process.send_after(self(), :probe, state.probe_interval_ms)
+    :ok
+  end
+
+  defp schedule_idle(state) do
+    Process.send_after(self(), :idle_timeout, state.idle_timeout_ms)
+    :ok
+  end
+
+  defp persist_status(state, status) do
+    persist(state, status)
+    %{state | status: status}
+  end
+
+  defp persist(state, status) do
+    attrs = persist_attrs(state, status)
+
+    case DevServerRecord.upsert(state.project_id, state.identifier, state.slug, attrs) do
+      {:ok, _record} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Dev server persistence failed slug=#{state.slug} status=#{status} reason=#{inspect(reason)}")
+        {:error, reason}
+    end
+  rescue
+    error ->
+      Logger.warning("Dev server persistence failed slug=#{state.slug} status=#{status} reason=#{inspect(error)}")
+      {:error, error}
+  end
+
+  defp persist_attrs(state, status) do
+    %{
       working_dir: state.working_dir,
       port: state.port,
       url: state.url,
@@ -225,21 +332,23 @@ defmodule SymphonyElixir.DevServer.Instance do
       session_name: state.session_name,
       started_at: state.started_at
     }
-
-    {:ok, _record} = DevServerRecord.upsert(state.project_id, state.identifier, state.slug, attrs)
-    %{state | status: status}
   end
 
-  defp cleanup_session(state) do
-    state.tmux.kill_dev_session(state.project_slug, state.identifier, state.slug, [])
-  rescue
-    error -> Logger.debug("Dev server cleanup failed slug=#{state.slug} reason=#{inspect(error)}")
-  end
+  defp safe_kill(%{session_name: nil}), do: :ok
 
-  defp persist_stopped(state) do
-    persist_status!(%{state | status: :stopped}, :stopped)
+  defp safe_kill(state) do
+    case state.tmux.kill_dev_session(state.project_slug, state.identifier, state.slug, []) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Dev server cleanup failed slug=#{state.slug} reason=#{inspect(reason)}")
+        {:error, reason}
+    end
   rescue
-    error -> Logger.debug("Dev server stopped persistence failed slug=#{state.slug} reason=#{inspect(error)}")
+    error ->
+      Logger.warning("Dev server cleanup failed slug=#{state.slug} reason=#{inspect(error)}")
+      {:error, error}
   end
 
   defp default_probe(host, port, "http", ready_path) do
