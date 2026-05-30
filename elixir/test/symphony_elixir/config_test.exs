@@ -81,6 +81,30 @@ defmodule SymphonyElixir.ConfigTest do
       assert SymphonyElixir.Config.editor_password() == "hunter2"
       assert SymphonyElixir.Config.editor_base_url() == "https://editor.example.com"
     end
+
+    test "editor_base_url trims a trailing slash from a configured base_url" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      editor:
+        base_url: https://editor.example.com/
+      """)
+
+      assert SymphonyElixir.Config.editor_base_url() == "https://editor.example.com"
+    end
+
+    test "editor_base_url falls back to host and port when base_url is empty" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      editor:
+        host: 127.0.0.1
+        port: 4002
+        base_url: ""
+      """)
+
+      assert SymphonyElixir.Config.editor_base_url() == "http://127.0.0.1:4002"
+    end
   end
 
   defp load_workflow_with_front_matter(front_matter) do
