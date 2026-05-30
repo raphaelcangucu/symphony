@@ -360,14 +360,25 @@ dev_server:
   max_concurrent: 3
   idle_timeout_ms: 1800000
   auto_start_on: pull_request,human_review
-  base_url: http://127.0.0.1
 ```
 
 Defaults are `enabled: false`, `port_range: [4100, 4199]`, `max_concurrent: 3`,
 `idle_timeout_ms: 1800000`, and `auto_start_on: [pull_request, human_review]`.
-When `base_url` is omitted, each preview URL defaults to `http://127.0.0.1:<allocated-port>`.
+When `base_url` is omitted, each preview URL is built as
+`http://127.0.0.1:<allocated-port><url_path>`.
 
-Each workspace repo can declare setup and serve steps in `.symphony/devenv.yaml`:
+Set `base_url` only for proxy-backed setups:
+
+```yaml
+dev_server:
+  base_url: https://previews.example.com
+```
+
+When set, `base_url` is used as the origin/base before `url_path`; it is not where
+Symphony injects the allocated port unless your proxy is configured to route previews that way.
+
+Each workspace repo can declare setup and serve steps in `.symphony/devenv.yaml` for
+DevEnv proposal/discovery:
 
 ```yaml
 steps:
@@ -386,15 +397,19 @@ steps:
   servers. Multiple serve steps are supported.
 - `port_env` receives Symphony's allocated port before the command runs.
 - `url_path` is appended to the preview URL.
-- `ready: tcp` waits for the port to accept connections; `ready: http` probes `ready_path`.
+- `ready: tcp` waits for the port to accept connections; `ready: http` probes `ready_path`
+  and treats any HTTP response below 500 as responsive.
 - `primary: true` picks the preview shown in the Summary tab chip. If no serve step is
   primary, the first serve step becomes primary.
 
+Preview startup uses the saved DevEnv steps for the project, so propose/save or import the
+`.symphony/devenv.yaml` steps before expecting previews to auto-start.
+
 In the tracker, the issue drawer includes a **Preview** tab with provisioning status, ready URLs,
 and manual **Start Preview**, **Stop Preview**, and **Restart Preview** controls. The Summary tab
-also shows a Preview link or provisioning chip when preview status is available. Auto-start runs
-when a linked pull request appears or the issue enters a human review wait state, according to
-`auto_start_on`.
+also shows a Preview link or provisioning chip when preview status is available. Auto-start checks
+wait-state issues and starts previews according to `auto_start_on`: `pull_request` applies to
+wait-state issues with linked PRs, and `human_review` applies to human-review wait-state issues.
 
 ## Browser editor (code-server)
 

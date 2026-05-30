@@ -320,8 +320,9 @@ Never use `auth: none` when binding off localhost.
 
 ## Issue Preview Servers
 
-Issue previews depend on both `WORKFLOW.md` front matter and each workspace repo's
-`.symphony/devenv.yaml` convention file.
+Issue previews depend on `WORKFLOW.md` front matter and the project's saved DevEnv
+steps. A workspace repo's `.symphony/devenv.yaml` feeds DevEnv proposal/discovery, but
+you still need to propose/save or import those steps before previews can auto-start.
 
 ### Preview link is missing
 
@@ -330,7 +331,8 @@ Common causes:
 - `dev_server.enabled` is missing or false in `WORKFLOW.md`.
 - The issue workspace has not been created yet. Run the agent or open the **Terminal**
   tab first.
-- No repo in the workspace has a `.symphony/devenv.yaml` serve step:
+- The project has no saved DevEnv step with `role: serve`. If you use a convention
+  file, add a `.symphony/devenv.yaml` serve step and save/import it through DevEnv:
 
 ```yaml
 steps:
@@ -357,7 +359,7 @@ Check the serve step:
   (for example `PORT`).
 - `ready: tcp` waits for the allocated port to accept connections.
 - `ready: http` sends an HTTP probe to `ready_path` on localhost; make sure the route
-  returns a successful response.
+  is responsive and returns an HTTP response below 500.
 - `working_dir` is relative to the issue workspace unless omitted.
 
 ### Preview capacity is full or no port is available

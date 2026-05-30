@@ -67,7 +67,7 @@ dev_server:
   max_concurrent: 3
   idle_timeout_ms: 1800000
   auto_start_on: pull_request,human_review
-  base_url: http://127.0.0.1
+  # base_url: https://previews.example.com  # optional proxy-facing base URL
 workspace:
   root: ~/code/macro-markets-workspaces
 hooks:
@@ -182,11 +182,22 @@ steps:
 - `port_env` receives the allocated port before `command` runs. `url_path` is appended
   to the preview URL.
 - `ready: tcp` waits for the port to accept connections. `ready: http` probes
-  `ready_path` on localhost before showing the preview as ready.
+  `ready_path` on localhost and treats any HTTP response below 500 as responsive.
+
+When `base_url` is omitted, preview URLs use
+`http://127.0.0.1:<allocated-port><url_path>`. Set `base_url` only for proxy-backed
+setups; Symphony uses it as the origin/base before `url_path`, not as the direct port
+injection point unless your proxy is configured that way.
 
 The tracker shows provisioning state in the Summary tab, opens ready previews from the
 Preview tab, and provides manual **Start Preview**, **Stop Preview**, and **Restart
-Preview** controls.
+Preview** controls. Auto-start checks wait-state issues: `pull_request` applies to
+wait-state issues with linked PRs, and `human_review` applies to human-review wait-state
+issues.
+
+`.symphony/devenv.yaml` feeds DevEnv proposal/discovery. Preview startup uses the saved
+DevEnv steps for this project, so propose/save or import those steps before expecting
+previews to auto-start.
 
 ## Agent routing (GitHub labels)
 
