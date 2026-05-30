@@ -14,6 +14,7 @@ import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRo
 import { getTrackerToken } from "@/config";
 import { BoardPage } from "@/pages/BoardPage";
 import { ListPage } from "@/pages/ListPage";
+import { ObservabilityPage } from "@/pages/ObservabilityPage";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { TemplateEditPage } from "@/pages/TemplateEditPage";
 import { TemplateListPage } from "@/pages/TemplateListPage";
@@ -63,6 +64,7 @@ export function App() {
             </Route>
             <Route path="templates" element={<TemplateListPage />} />
             <Route path="templates/:slug" element={<TemplateEditPage />} />
+            <Route path="observability" element={<ObservabilityPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/projects" replace />} />
