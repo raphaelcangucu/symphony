@@ -1,5 +1,5 @@
 .PHONY: help all setup deps ensure-deps build fmt fmt-check lint test coverage ci dialyzer repo-ci \
-	check-tools db-create db-migrate migrate migration new-migration rollback \
+	check-tools install-code-server db-create db-migrate migrate migration new-migration rollback \
 	serve stop tracker-setup tracker-deps tracker-build tracker-lint tracker-test tracker-ci \
 	tracker-api tracker-api-escript tracker-dev
 
@@ -28,6 +28,7 @@ help:
 	@echo "Quality:  setup, deps, build, fmt, fmt-check, lint, test, coverage, dialyzer, ci, all"
 	@echo "Database: migrate (create+migrate), migration (alias), new-migration name=<desc>, rollback, db-create"
 	@echo "Run:      serve (recommended local dev server), stop, check-tools"
+	@echo "Editor:   install-code-server (browser VS Code for task workspaces)"
 	@echo "Tracker:  tracker-setup, tracker-deps, tracker-build, tracker-lint, tracker-test, tracker-ci, tracker-dev, repo-ci"
 	@echo "Packaged: tracker-api (alias of serve), tracker-api-escript (raw escript; no SQLite NIF)"
 
@@ -82,6 +83,12 @@ repo-ci:
 check-tools:
 	@if [ -n "$(strip $(MISE))" ]; then echo "✓ mise detected ($(MISE))"; else echo "… mise not found — using system mix/elixir"; fi
 	@$(MIX) --version >/dev/null 2>&1 && echo "✓ mix runnable" || { echo "✗ mix is not runnable; install Elixir/OTP (see README) or run via mise"; exit 1; }
+	@command -v code-server >/dev/null 2>&1 && echo "✓ code-server installed ($$(code-server --version 2>&1 | head -1))" || echo "… code-server not installed (optional — run make install-code-server)"
+
+# Installs code-server to ~/.local for the optional browser editor (editor: in WORKFLOW.md).
+# Re-run with FORCE=1 to reinstall the latest release.
+install-code-server:
+	@bash scripts/install-code-server.sh
 
 # --- Database / migrations -------------------------------------------------
 

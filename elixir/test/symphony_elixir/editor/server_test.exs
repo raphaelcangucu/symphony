@@ -108,6 +108,42 @@ defmodule SymphonyElixir.Editor.ServerTest do
     assert Process.alive?(pid)
   end
 
+  test "spawns code-server with workspace folder and strips VSCODE env vars" do
+    test_pid = self()
+    workspace_root = Path.join(System.tmp_dir!(), "symphony-editor-spawn-#{System.unique_integer()}")
+    previous_ipc = System.get_env("VSCODE_IPC_HOOK_CLI")
+    System.put_env("VSCODE_IPC_HOOK_CLI", "/tmp/fake-vscode-ipc.sock")
+    File.mkdir_p!(workspace_root)
+
+    load_workflow_with_front_matter("""
+    editor:
+      enabled: true
+    workspace:
+      root: #{workspace_root}
+    """)
+
+    on_exit(fn ->
+      if previous_ipc, do: System.put_env("VSCODE_IPC_HOOK_CLI", previous_ipc), else: System.delete_env("VSCODE_IPC_HOOK_CLI")
+
+      File.rm_rf!(workspace_root)
+    end)
+
+    Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)
+
+    Application.put_env(:symphony_elixir, :editor_spawner, fn {executable, args, env} ->
+      send(test_pid, {:spawn, executable, args, env})
+      {:ok, make_ref()}
+    end)
+
+    Application.put_env(:symphony_elixir, :editor_probe, fn _hp -> {:error, :econnrefused} end)
+
+    start_supervised!({Server, name: :editor_server_spawn_args})
+
+    assert_receive {:spawn, "/usr/bin/code-server", args, env}, 1_000
+    assert List.last(args) == workspace_root
+    assert {~c"VSCODE_IPC_HOOK_CLI", false} in env
+  end
+
   test "kills the code-server process on shutdown" do
     test_pid = self()
     Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)

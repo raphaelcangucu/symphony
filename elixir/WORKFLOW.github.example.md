@@ -28,6 +28,17 @@ tracker:
     - Duplicate
 polling:
   interval_ms: 5000
+# Browser VS Code (code-server) for task workspaces. Disabled by default.
+# Requires code-server installed on the host. auth: none is only safe on localhost.
+# Set enabled: true after `make install-code-server`.
+editor:
+  enabled: false
+  binary: code-server   # binary name on PATH, or an absolute path
+  host: 127.0.0.1
+  port: 4002
+  auth: none            # "none" (localhost only) or "password"
+  # password: your-password               # required when auth: password
+  # base_url: https://editor.example.com  # browser-facing URL override (remote/proxy)
 workspace:
   root: ~/code/symphony-workspaces
 hooks:

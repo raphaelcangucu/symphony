@@ -16,6 +16,7 @@ defmodule SymphonyElixir.Editor.Server do
 
   @probe_interval_ms 1_000
   @probe_connect_timeout_ms 500
+  @vscode_env_prefix "VSCODE_"
 
   @type status :: :starting | :ready | :unavailable
 
@@ -57,12 +58,15 @@ defmodule SymphonyElixir.Editor.Server do
   end
 
   defp spawn_code_server(state, executable) do
+    default_folder = Config.workspace_root() |> Path.expand()
+
     args = [
       "--bind-addr",
       "#{Config.editor_host()}:#{Config.editor_port()}",
       "--auth",
       Config.editor_auth(),
-      "--disable-telemetry"
+      "--disable-telemetry",
+      default_folder
     ]
 
     env = build_env(Config.editor_auth(), Config.editor_password())
@@ -79,10 +83,16 @@ defmodule SymphonyElixir.Editor.Server do
   end
 
   defp build_env("password", password) when is_binary(password) and password != "" do
-    [{~c"PASSWORD", String.to_charlist(password)}]
+    strip_parent_vscode_env() ++ [{~c"PASSWORD", String.to_charlist(password)}]
   end
 
-  defp build_env(_auth, _password), do: []
+  defp build_env(_auth, _password), do: strip_parent_vscode_env()
+
+  defp strip_parent_vscode_env do
+    System.get_env()
+    |> Enum.filter(fn {key, _} -> String.starts_with?(key, @vscode_env_prefix) end)
+    |> Enum.map(fn {key, _} -> {String.to_charlist(key), false} end)
+  end
 
   @impl true
   def handle_call(:status, _from, state), do: {:reply, state.status, state}

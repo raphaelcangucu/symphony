@@ -35,6 +35,14 @@ tracker:
     - Closed
 polling:
   interval_ms: 5000
+# Browser VS Code (code-server) for task workspaces.
+# Requires code-server installed on the host. auth: none is only safe on localhost.
+editor:
+  enabled: true
+  binary: code-server
+  host: 127.0.0.1
+  port: 4002
+  auth: none
 workspace:
   root: ~/code/symphony-workspaces
 hooks:
