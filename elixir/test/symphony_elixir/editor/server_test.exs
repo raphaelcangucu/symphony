@@ -80,6 +80,19 @@ defmodule SymphonyElixir.Editor.ServerTest do
     assert_receive {:probe_host, "127.0.0.1"}, 1_000
   end
 
+  test "stays alive and degraded when the code-server process exits" do
+    fake = make_ref()
+    Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)
+    Application.put_env(:symphony_elixir, :editor_spawner, fn _args -> {:ok, fake} end)
+    Application.put_env(:symphony_elixir, :editor_probe, fn _hp -> {:error, :econnrefused} end)
+
+    pid = start_supervised!({Server, name: :editor_server_exited})
+    send(pid, {fake, {:exit_status, 1}})
+
+    assert Server.status(pid) == :unavailable
+    assert Process.alive?(pid)
+  end
+
   test "kills the code-server process on shutdown" do
     test_pid = self()
     Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)

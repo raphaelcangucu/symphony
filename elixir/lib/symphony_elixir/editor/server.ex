@@ -103,8 +103,8 @@ defmodule SymphonyElixir.Editor.Server do
   end
 
   def handle_info({port, {:exit_status, code}}, %{port: port} = state) do
-    Logger.warning("Editor server process exited code=#{code}")
-    {:stop, {:editor_exited, code}, %{state | status: :unavailable}}
+    Logger.warning("Editor server process exited code=#{code}; marking unavailable")
+    {:noreply, %{state | status: :unavailable, port: nil}}
   end
 
   def handle_info({:EXIT, _from, _reason}, state), do: {:noreply, state}
@@ -122,6 +122,7 @@ defmodule SymphonyElixir.Editor.Server do
   def terminate(_reason, _state), do: :ok
 
   defp probe_host("0.0.0.0"), do: "127.0.0.1"
+  defp probe_host("::"), do: "::1"
   defp probe_host(host), do: host
 
   defp executable_finder do
