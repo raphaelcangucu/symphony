@@ -23,6 +23,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     TestSupport.write_workflow_file!(workflow_file)
     Workflow.set_workflow_file_path(workflow_file)
 
+    delete_reservation_table()
     migrate_repo()
     clean_repo()
 
@@ -41,6 +42,16 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     end)
 
     {:ok, project: project}
+  end
+
+  test "live_ports does not create the reservation table before Manager starts" do
+    assert :undefined = :ets.whereis(reservation_table())
+    assert Manager.live_ports() == []
+    assert :undefined = :ets.whereis(reservation_table())
+
+    start_supervised!(Manager)
+
+    assert :ets.whereis(reservation_table()) != :undefined
   end
 
   test "start_for_issue returns disabled when dev server config is off", %{project: project} do
@@ -198,14 +209,15 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
   test "reserved ports are visible before an instance reports its boot state" do
     key = {"p", "1", "front"}
 
+    start_supervised!(Manager)
     Manager.reserve_port_for_key(key, 4100)
     on_exit(fn -> Manager.release_reservations([key]) end)
 
     assert 4100 in Manager.live_ports()
   end
 
-  test "start_for_issue rolls back when an instance immediately crashes during boot", %{project: project} do
-    enable_dev_server!(port_range: [4100, 4100], max_concurrent: 1)
+  test "start_for_issue releases all reserved ports when the first instance crashes", %{project: project} do
+    enable_dev_server!(port_range: [4100, 4101], max_concurrent: 2)
 
     workspace = SymphonyElixir.Workspace.path_for_issue("1")
     File.rm_rf!(workspace)
@@ -221,6 +233,12 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
           command: "npm run dev",
           role: "serve",
           working_dir: "missing"
+        },
+        %{
+          description: "Unstarted",
+          command: "npm run dev",
+          role: "serve",
+          working_dir: "."
         }
       ])
 
@@ -257,6 +275,19 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
 
   defp shell_quote(value) do
     "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
+  end
+
+  defp reservation_table do
+    Module.concat(Manager, PortReservations)
+  end
+
+  defp delete_reservation_table do
+    case :ets.whereis(reservation_table()) do
+      :undefined -> :ok
+      table -> :ets.delete(table)
+    end
+  rescue
+    ArgumentError -> :ok
   end
 
   defp enable_dev_server!(opts) do

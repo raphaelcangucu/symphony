@@ -255,6 +255,8 @@ defmodule SymphonyElixir.DevServer.Manager do
   def setup_command_for_workspace(_workspace_path, _step), do: nil
 
   defp start_instances(project, identifier, workspace_path, reserved_steps) do
+    attempt_keys = Enum.map(reserved_steps, fn {_step, _port, key} -> key end)
+
     reserved_steps
     |> Enum.reduce_while({:ok, []}, fn {step, port, key}, {:ok, started} ->
       case start_instance(project, identifier, workspace_path, step, port, key) do
@@ -265,14 +267,12 @@ defmodule SymphonyElixir.DevServer.Manager do
 
             {:error, reason} ->
               stop_instance(pid)
-              release_reservations([key])
-              rollback_started_instances(started)
+              rollback_start_attempt(started, attempt_keys)
               {:halt, {:error, reason}}
           end
 
         {:error, reason} ->
-          release_reservations([key])
-          rollback_started_instances(started)
+          rollback_start_attempt(started, attempt_keys)
           {:halt, {:error, reason}}
       end
     end)
@@ -498,11 +498,9 @@ defmodule SymphonyElixir.DevServer.Manager do
     :exit, _reason -> :ok
   end
 
-  defp rollback_started_instances(started) do
-    Enum.each(started, fn {pid, key} ->
-      stop_instance(pid)
-      release_reservations([key])
-    end)
+  defp rollback_start_attempt(started, attempt_keys) do
+    Enum.each(started, fn {pid, _key} -> stop_instance(pid) end)
+    release_reservations(attempt_keys)
   end
 
   defp release_reserved_steps(reserved_steps) do
@@ -551,27 +549,31 @@ defmodule SymphonyElixir.DevServer.Manager do
   @doc false
   @spec reserve_port_for_key(term(), pos_integer()) :: :ok
   def reserve_port_for_key(key, port) when is_integer(port) and port > 0 do
-    ensure_reservation_table()
-    :ets.insert(@reservation_table, {key, port, nil})
+    with {:ok, table} <- reservation_table() do
+      :ets.insert(table, {key, port, nil})
+    end
+
     :ok
   end
 
   @doc false
   @spec release_reservations([term()]) :: :ok
   def release_reservations(keys) when is_list(keys) do
-    ensure_reservation_table()
-    Enum.each(keys, &:ets.delete(@reservation_table, &1))
+    with {:ok, table} <- reservation_table() do
+      Enum.each(keys, &:ets.delete(table, &1))
+    end
+
     :ok
   end
 
   def release_reservations(_keys), do: :ok
 
   defp attach_reserved_pid(key, pid) when is_pid(pid) do
-    ensure_reservation_table()
-
-    case :ets.lookup(@reservation_table, key) do
-      [{^key, port, _old_pid}] -> :ets.insert(@reservation_table, {key, port, pid})
-      [] -> :ok
+    with {:ok, table} <- reservation_table() do
+      case :ets.lookup(table, key) do
+        [{^key, port, _old_pid}] -> :ets.insert(table, {key, port, pid})
+        [] -> :ok
+      end
     end
 
     :ok
@@ -583,27 +585,30 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp reservation_entries do
-    ensure_reservation_table()
     cleanup_dead_reservations()
-    :ets.tab2list(@reservation_table)
+
+    case reservation_table() do
+      {:ok, table} -> :ets.tab2list(table)
+      :error -> []
+    end
   end
 
   defp cleanup_dead_reservations do
-    ensure_reservation_table()
+    with {:ok, table} <- reservation_table() do
+      table
+      |> :ets.tab2list()
+      |> Enum.each(fn
+        {key, _port, pid} when is_pid(pid) ->
+          if Process.alive?(pid) do
+            :ok
+          else
+            :ets.delete(table, key)
+          end
 
-    @reservation_table
-    |> :ets.tab2list()
-    |> Enum.each(fn
-      {key, _port, pid} when is_pid(pid) ->
-        if Process.alive?(pid) do
+        _entry ->
           :ok
-        else
-          :ets.delete(@reservation_table, key)
-        end
-
-      _entry ->
-        :ok
-    end)
+      end)
+    end
   end
 
   defp live_instance_count do
@@ -635,6 +640,13 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
 
     :ok
+  end
+
+  defp reservation_table do
+    case :ets.whereis(@reservation_table) do
+      :undefined -> :error
+      table -> {:ok, table}
+    end
   end
 
   defp step_to_map(%_struct{} = step), do: Map.from_struct(step)
