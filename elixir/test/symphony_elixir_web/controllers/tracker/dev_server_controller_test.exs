@@ -75,6 +75,22 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
            }
   end
 
+  test "index returns 404 for an unknown issue" do
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/p/issues/P-404/dev_servers")
+
+    assert json_response(conn, 404) == %{
+             "error" => %{"code" => "issue_not_found", "message" => "Issue not found"}
+           }
+  end
+
+  test "start returns 404 for an unknown issue" do
+    conn = post(authorized_conn(), "/api/tracker/v1/projects/p/issues/P-404/dev_servers/start")
+
+    assert json_response(conn, 404) == %{
+             "error" => %{"code" => "issue_not_found", "message" => "Issue not found"}
+           }
+  end
+
   test "start stop and restart return the current disabled view", %{identifier: identifier} do
     for action <- ["start", "stop", "restart"] do
       conn = post(authorized_conn(), "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers/#{action}")
