@@ -28,6 +28,11 @@ defmodule SymphonyElixir.Config do
   @default_editor_host "127.0.0.1"
   @default_editor_port 4002
   @default_editor_auth "none"
+  @default_dev_server_enabled false
+  @default_dev_server_port_range [4100, 4199]
+  @default_dev_server_max_concurrent 3
+  @default_dev_server_idle_timeout_ms 1_800_000
+  @default_dev_server_auto_start_on ["pull_request", "human_review"]
 
   @tracker_sections ["local", "linear", "github", "memory"]
   @agent_sections ["claude", "codex"]
@@ -172,6 +177,21 @@ defmodule SymphonyElixir.Config do
                                    default: @default_editor_auth
                                  ],
                                  password: [type: {:or, [:string, nil]}, default: nil],
+                                 base_url: [type: {:or, [:string, nil]}, default: nil]
+                               ]
+                             ],
+                             dev_server: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 enabled: [type: :boolean, default: @default_dev_server_enabled],
+                                 port_range: [type: {:list, :pos_integer}, default: @default_dev_server_port_range],
+                                 max_concurrent: [type: :pos_integer, default: @default_dev_server_max_concurrent],
+                                 idle_timeout_ms: [type: :pos_integer, default: @default_dev_server_idle_timeout_ms],
+                                 auto_start_on: [
+                                   type: {:list, {:in, ["pull_request", "human_review"]}},
+                                   default: @default_dev_server_auto_start_on
+                                 ],
                                  base_url: [type: {:or, [:string, nil]}, default: nil]
                                ]
                              ]
@@ -510,6 +530,39 @@ defmodule SymphonyElixir.Config do
     end
   end
 
+  @spec dev_server_enabled?() :: boolean()
+  def dev_server_enabled? do
+    get_in(validated_workflow_options(), [:dev_server, :enabled])
+  end
+
+  @spec dev_server_port_range() :: [pos_integer()]
+  def dev_server_port_range do
+    get_in(validated_workflow_options(), [:dev_server, :port_range])
+  end
+
+  @spec dev_server_max_concurrent() :: pos_integer()
+  def dev_server_max_concurrent do
+    get_in(validated_workflow_options(), [:dev_server, :max_concurrent])
+  end
+
+  @spec dev_server_idle_timeout_ms() :: pos_integer()
+  def dev_server_idle_timeout_ms do
+    get_in(validated_workflow_options(), [:dev_server, :idle_timeout_ms])
+  end
+
+  @spec dev_server_auto_start_on() :: [String.t()]
+  def dev_server_auto_start_on do
+    get_in(validated_workflow_options(), [:dev_server, :auto_start_on])
+  end
+
+  @spec dev_server_base_url() :: String.t() | nil
+  def dev_server_base_url do
+    case get_in(validated_workflow_options(), [:dev_server, :base_url]) do
+      url when is_binary(url) and url != "" -> String.trim_trailing(url, "/")
+      _ -> nil
+    end
+  end
+
   defp browser_host("0.0.0.0"), do: "127.0.0.1"
   defp browser_host("::"), do: "[::1]"
   defp browser_host(host), do: host
@@ -600,7 +653,8 @@ defmodule SymphonyElixir.Config do
       hooks: extract_hooks_options(section_map(config, "hooks")),
       observability: extract_observability_options(section_map(config, "observability")),
       server: extract_server_options(section_map(config, "server")),
-      editor: extract_editor_options(section_map(config, "editor"))
+      editor: extract_editor_options(section_map(config, "editor")),
+      dev_server: extract_dev_server_options(section_map(config, "dev_server"))
     }
   end
 
@@ -684,6 +738,23 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:password, scalar_string_value(Map.get(section, "password")))
     |> put_if_present(:base_url, scalar_string_value(Map.get(section, "base_url")))
   end
+
+  defp extract_dev_server_options(section) do
+    %{}
+    |> put_if_present(:enabled, boolean_value(Map.get(section, "enabled")))
+    |> put_if_present(:port_range, integer_list_value(Map.get(section, "port_range")))
+    |> put_if_present(:max_concurrent, positive_integer_value(Map.get(section, "max_concurrent")))
+    |> put_if_present(:idle_timeout_ms, positive_integer_value(Map.get(section, "idle_timeout_ms")))
+    |> put_if_present(:auto_start_on, csv_value(Map.get(section, "auto_start_on")))
+    |> put_if_present(:base_url, scalar_string_value(Map.get(section, "base_url")))
+  end
+
+  defp integer_list_value(values) when is_list(values) do
+    parsed = Enum.flat_map(values, fn v -> if(is_integer(v), do: [v], else: []) end)
+    if parsed == [], do: :omit, else: parsed
+  end
+
+  defp integer_list_value(_value), do: :omit
 
   defp section_map(config, key) do
     case Map.get(config, key) do

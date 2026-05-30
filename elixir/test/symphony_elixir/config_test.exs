@@ -133,6 +133,43 @@ defmodule SymphonyElixir.ConfigTest do
     end
   end
 
+  describe "dev_server config" do
+    test "defaults when the dev_server section is omitted" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      """)
+
+      refute SymphonyElixir.Config.dev_server_enabled?()
+      assert SymphonyElixir.Config.dev_server_port_range() == [4100, 4199]
+      assert SymphonyElixir.Config.dev_server_max_concurrent() == 3
+      assert SymphonyElixir.Config.dev_server_idle_timeout_ms() == 1_800_000
+      assert SymphonyElixir.Config.dev_server_auto_start_on() == ["pull_request", "human_review"]
+      assert SymphonyElixir.Config.dev_server_base_url() == nil
+    end
+
+    test "reads configured dev_server keys" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      dev_server:
+        enabled: true
+        port_range: [5000, 5009]
+        max_concurrent: 2
+        idle_timeout_ms: 60000
+        auto_start_on: [human_review]
+        base_url: http://example.test
+      """)
+
+      assert SymphonyElixir.Config.dev_server_enabled?()
+      assert SymphonyElixir.Config.dev_server_port_range() == [5000, 5009]
+      assert SymphonyElixir.Config.dev_server_max_concurrent() == 2
+      assert SymphonyElixir.Config.dev_server_idle_timeout_ms() == 60_000
+      assert SymphonyElixir.Config.dev_server_auto_start_on() == ["human_review"]
+      assert SymphonyElixir.Config.dev_server_base_url() == "http://example.test"
+    end
+  end
+
   defp load_workflow_with_front_matter(front_matter) do
     content = "---\n" <> front_matter <> "---\n"
     File.write!(Workflow.workflow_file_path(), content)
