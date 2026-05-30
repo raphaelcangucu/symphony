@@ -106,6 +106,31 @@ describe("useIssueDevServers", () => {
     expect(result.current.error).toBeNull();
   });
 
+  it("does not start another action while one is already in flight", async () => {
+    const startDeferred = createDeferred<IssueDevServersResponse>();
+    fetchIssueDevServers.mockResolvedValueOnce(stoppedResponse);
+    startIssueDevServers.mockReturnValue(startDeferred.promise);
+
+    const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
+
+    await waitFor(() => expect(result.current.data).toEqual(stoppedResponse));
+
+    let firstStart: Promise<void>;
+    let secondStart: Promise<void>;
+    act(() => {
+      firstStart = result.current.start();
+      secondStart = result.current.start();
+    });
+
+    expect(startIssueDevServers).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      startDeferred.resolve(startingResponse);
+      await firstStart;
+      await secondStart;
+    });
+  });
+
   it("polls while a server is starting", async () => {
     vi.useFakeTimers();
     fetchIssueDevServers.mockResolvedValueOnce(startingResponse).mockResolvedValueOnce(readyResponse);
@@ -154,3 +179,14 @@ describe("useIssueDevServers", () => {
     expect(result.current.loading).toBe(false);
   });
 });
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, reject, resolve };
+}
