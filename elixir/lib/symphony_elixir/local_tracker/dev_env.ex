@@ -34,6 +34,13 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
     end
   end
 
+  @spec list_serve_steps(String.t()) :: [Step.t()]
+  def list_serve_steps(project_slug) do
+    project_slug
+    |> list_steps()
+    |> Enum.filter(&(&1.role == "serve"))
+  end
+
   @spec save_steps(String.t(), [map()]) :: {:ok, [Step.t()]} | {:error, error()}
   def save_steps(project_slug, steps) when is_list(steps) do
     with {:ok, project} <- Context.get_project(project_slug) do
@@ -45,6 +52,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
     Repo.delete_all(from(s in Step, where: s.project_id == ^project.id))
 
     steps
+    |> normalize_primary()
     |> Enum.with_index()
     |> Enum.reduce_while([], fn {attrs, index}, acc -> insert_step(project, attrs, index, acc) end)
     |> Enum.reverse()
@@ -110,7 +118,43 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
     |> Map.put("project_id", project_id)
     |> Map.put("position", index)
     |> Map.put_new("source", "manual")
+    |> Map.put_new("role", "setup")
   end
+
+  defp normalize_primary(steps) do
+    serve_indexes =
+      steps
+      |> Enum.with_index()
+      |> Enum.filter(fn {attrs, _index} -> step_role(attrs) == "serve" end)
+      |> Enum.map(fn {_attrs, index} -> index end)
+
+    chosen_primary =
+      Enum.find(serve_indexes, fn index ->
+        attrs = Enum.at(steps, index)
+        truthy?(step_value(attrs, :primary, false))
+      end) || List.first(serve_indexes)
+
+    steps
+    |> Enum.with_index()
+    |> Enum.map(fn {attrs, index} -> put_primary(attrs, index == chosen_primary and index in serve_indexes) end)
+  end
+
+  defp step_role(attrs), do: to_string(step_value(attrs, :role, "setup"))
+
+  defp step_value(attrs, key, default) do
+    Map.get(attrs, key, Map.get(attrs, Atom.to_string(key), default))
+  end
+
+  defp put_primary(attrs, value) when is_map(attrs) do
+    cond do
+      Map.has_key?(attrs, "primary") -> Map.put(attrs, "primary", value)
+      true -> Map.put(attrs, :primary, value)
+    end
+  end
+
+  defp truthy?(true), do: true
+  defp truthy?("true"), do: true
+  defp truthy?(_value), do: false
 
   defp default_repo([], project_slug), do: [%{workspace_path: ".", github_full_name: project_slug}]
   defp default_repo(repositories, _project_slug), do: repositories

@@ -40,6 +40,53 @@ defmodule SymphonyElixir.LocalTracker.DevEnvTest do
     assert DevEnv.list_steps("p") |> Enum.map(& &1.command) == ["b"]
   end
 
+  test "save_steps then list_serve_steps returns only serve steps and preserves fields", %{project: _project} do
+    assert {:ok, _steps} =
+             DevEnv.save_steps("p", [
+               %{description: "Install", command: "npm ci", role: "setup"},
+               %{
+                 "description" => "Front",
+                 "command" => "npm run dev",
+                 "role" => "serve",
+                 "port_env" => "PORT",
+                 "primary" => true
+               }
+             ])
+
+    assert [serve] = DevEnv.list_serve_steps("p")
+    assert serve.description == "Front"
+    assert serve.command == "npm run dev"
+    assert serve.role == "serve"
+    assert serve.port_env == "PORT"
+    assert serve.primary
+  end
+
+  test "exactly one primary survives save when several serve steps are marked primary", %{project: _project} do
+    assert {:ok, _steps} =
+             DevEnv.save_steps("p", [
+               %{description: "A", command: "a", role: "serve", primary: true},
+               %{description: "B", command: "b", role: "serve", primary: true}
+             ])
+
+    assert [first, second] = DevEnv.list_serve_steps("p")
+    assert first.primary
+    refute second.primary
+    assert Enum.count([first, second], & &1.primary) == 1
+  end
+
+  test "first serve becomes primary when none are marked", %{project: _project} do
+    assert {:ok, _steps} =
+             DevEnv.save_steps("p", [
+               %{description: "Install", command: "npm ci", role: "setup", primary: true},
+               %{description: "A", command: "a", role: "serve"},
+               %{description: "B", command: "b", role: "serve"}
+             ])
+
+    assert [first, second] = DevEnv.list_serve_steps("p")
+    assert first.primary
+    refute second.primary
+  end
+
   test "start_run + record_step_result tracks status", %{project: _project} do
     {:ok, [step]} = DevEnv.save_steps("p", [%{"description" => "A", "command" => "a", "source" => "manual"}])
     {:ok, run} = DevEnv.start_run("p")
