@@ -2,17 +2,20 @@ import {
   Activity,
   AlertTriangle,
   Bot,
+  Code2,
   FileText,
   GitPullRequest,
   MessageSquare,
   ShieldAlert,
   TerminalSquare,
 } from "lucide-react";
+import { useCallback, useEffect } from "react";
 
 import { getStatusMeta } from "@/components/board/status-meta";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIssueComments } from "@/hooks/useIssueComments";
+import { useIssueEditor } from "@/hooks/useIssueEditor";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn } from "@/lib/utils";
 import { DEFAULT_ISSUE_TAB, type IssueTab } from "@/lib/workspaceRoutes";
@@ -77,6 +80,39 @@ export function IssueDrawer({
     enabled: open && Boolean(issue),
   });
 
+  const editor = useIssueEditor({
+    projectSlug,
+    identifier: issue?.identifier ?? null,
+    enabled: open && Boolean(issue),
+  });
+
+  const openEditor = useCallback(() => {
+    if (editor.available && editor.url) {
+      window.open(editor.url, "_blank", "noopener");
+    }
+  }, [editor.available, editor.url]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== "." || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+      event.preventDefault();
+      openEditor();
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, openEditor]);
+
+  const editorButtonHidden = editor.reason === "disabled";
+  const editorTitle = editor.available
+    ? "Open this task's workspace in VS Code (.)"
+    : editorUnavailableTitle(editor.reason, editor.loading);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-3xl lg:max-w-4xl xl:max-w-5xl">
@@ -94,6 +130,19 @@ export function IssueDrawer({
                   </span>
                 ) : null}
                 {execution ? <AgentStatusBadge status={execution.status} /> : null}
+                {editorButtonHidden ? null : (
+                  <button
+                    type="button"
+                    onClick={openEditor}
+                    disabled={!editor.available}
+                    title={editorTitle}
+                    aria-label="Open in VS Code"
+                    className="ml-auto inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-0.5 font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Code2 className="h-3 w-3" />
+                    Open in VS Code
+                  </button>
+                )}
               </div>
               <SheetTitle className="pr-8 text-xl leading-tight">{issue.title}</SheetTitle>
               <SheetDescription asChild>
@@ -176,4 +225,16 @@ export function IssueDrawer({
       </SheetContent>
     </Sheet>
   );
+}
+
+function editorUnavailableTitle(reason: string | null, loading: boolean): string {
+  if (loading) return "Checking editor…";
+  switch (reason) {
+    case "starting":
+      return "Editor is starting…";
+    case "workspace_missing":
+      return "Workspace not created yet — run the agent or open the terminal first";
+    default:
+      return "Editor unavailable";
+  }
 }
