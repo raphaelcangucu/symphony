@@ -88,6 +88,8 @@ defmodule SymphonyElixir.Editor.Server do
   def handle_call(:status, _from, state), do: {:reply, state.status, state}
 
   @impl true
+  def handle_info(:probe, %{port: nil} = state), do: {:noreply, state}
+
   def handle_info(:probe, %{status: :ready} = state), do: {:noreply, state}
 
   def handle_info(:probe, state) do
