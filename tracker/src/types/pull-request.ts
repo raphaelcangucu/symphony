@@ -63,6 +63,7 @@ export interface PullRequest {
   pipelines: PullRequestPipeline[];
   statuses: PullRequestStatusContext[];
   conversation: PullRequestConversationEntry[];
+  baseBehindBy: number | null;
 }
 
 export interface PullRequestResult {
@@ -81,4 +82,8 @@ export interface PullRequestFixResult {
   movedTo: string;
   commentPosted: boolean;
   jobs: PullRequestFixJob[];
+}
+
+export interface UpdateBranchResult {
+  updated: boolean;
 }

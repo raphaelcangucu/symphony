@@ -7,6 +7,7 @@ import type {
   PullRequestResult,
   PullRequestState,
   PullRequestStatusContext,
+  UpdateBranchResult,
 } from "@/types/pull-request";
 
 import { http, trackerPath } from "./http";
@@ -68,6 +69,8 @@ interface BackendPullRequestDto {
   mergedAt?: string | null;
   checks_state?: string | null;
   checksState?: string | null;
+  base_behind_by?: number | null;
+  baseBehindBy?: number | null;
   pipelines?: BackendPipelineDto[] | null;
   statuses?: BackendStatusDto[] | null;
   conversation?: BackendConversationDto[] | null;
@@ -145,6 +148,7 @@ export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
     pipelines: (dto.pipelines ?? []).map(normalizePipeline),
     statuses: (dto.statuses ?? []).map(normalizeStatus),
     conversation: (dto.conversation ?? []).map(normalizeConversation),
+    baseBehindBy: dto.base_behind_by ?? dto.baseBehindBy ?? null,
   };
 }
 
@@ -197,4 +201,26 @@ export async function requestPullRequestFix(
       url: job.url ?? null,
     })),
   };
+}
+
+interface BackendUpdateBranchEnvelope {
+  data?: { updated?: boolean | null } | null;
+}
+
+export async function updatePullRequestBranch(
+  projectSlug: string,
+  identifier: string,
+  number: number,
+): Promise<UpdateBranchResult> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  if (!identifier.trim()) throw new Error("identifier is required");
+  if (!Number.isInteger(number) || number <= 0) throw new Error("number is required");
+
+  const response = await http.post<BackendUpdateBranchEnvelope>(
+    trackerPath(
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/pull_requests/${number}/update_branch`,
+    ),
+  );
+
+  return { updated: response.data?.data?.updated ?? false };
 }

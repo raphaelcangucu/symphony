@@ -9,7 +9,7 @@ function pr(overrides: Partial<PullRequest>): PullRequest {
     number: 1, title: null, url: null, state: "open", rawState: null, isDraft: false,
     merged: false, headRef: null, baseRef: null, author: null, createdAt: null,
     updatedAt: null, mergedAt: null, checksState: null, pipelines: [], statuses: [],
-    conversation: [], ...overrides,
+    conversation: [], baseBehindBy: null, ...overrides,
   };
 }
 
