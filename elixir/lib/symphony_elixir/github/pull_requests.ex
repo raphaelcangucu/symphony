@@ -16,7 +16,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
      keyword does not register because they target a non-default base branch.
   """
 
-  alias SymphonyElixir.GitHub.{Client, Config, RepoSpec}
+  alias SymphonyElixir.GitHub.{BranchStatus, Client, Config, RepoSpec}
 
   require Logger
 
@@ -132,8 +132,9 @@ defmodule SymphonyElixir.GitHub.PullRequests do
 
   def for_issue(repo, identifier, opts) when is_binary(repo) and is_binary(identifier) do
     with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, number} <- parse_issue_number(identifier) do
-      fetch_for_issue(owner, name, number, opts)
+         {:ok, number} <- parse_issue_number(identifier),
+         {:ok, prs} <- fetch_for_issue(owner, name, number, opts) do
+      {:ok, annotate_branch_status(prs, repo, opts)}
     end
   end
 
@@ -257,11 +258,49 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       checks_state: string_or_nil(Map.get(rollup, "state")),
       pipelines: build_pipelines(rollup),
       statuses: build_statuses(rollup),
-      conversation: build_conversation(node)
+      conversation: build_conversation(node),
+      base_behind_by: nil
     }
   end
 
   def parse_pr_node(_node), do: nil
+
+  @doc """
+  Fills `:base_behind_by` for open/draft PRs by comparing each PR's head branch
+  against its base via `BranchStatus`. Closed/merged PRs and compare failures are
+  left as `nil`. Skipped entirely when the resolved client cannot perform REST
+  reads (graphql-only test stubs).
+  """
+  @spec annotate_branch_status([pull_request()], String.t(), keyword()) :: [pull_request()]
+  def annotate_branch_status(prs, repo, opts \\ []) when is_list(prs) and is_binary(repo) do
+    client = client_module(opts)
+
+    if function_exported?(client, :rest_get, 2) do
+      branch_opts = build_branch_opts(client, opts)
+      Enum.map(prs, fn pr -> Map.put(pr, :base_behind_by, behind_for(pr, repo, branch_opts)) end)
+    else
+      prs
+    end
+  end
+
+  defp build_branch_opts(client, opts) do
+    base = [client_module: client]
+
+    case Keyword.get(opts, :branch_status_request_fun) do
+      fun when is_function(fun, 2) -> Keyword.put(base, :request_fun, fun)
+      _ -> base
+    end
+  end
+
+  defp behind_for(%{state: state, base_ref: base, head_ref: head}, repo, branch_opts)
+       when state in ["open", "draft"] and is_binary(base) and is_binary(head) do
+    case BranchStatus.behind_by(repo, base, head, branch_opts) do
+      {:ok, behind} -> behind
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp behind_for(_pr, _repo, _branch_opts), do: nil
 
   defp extract_rollup(node) do
     node

@@ -17,6 +17,23 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
     end
   end
 
+  defmodule BranchTestClient do
+    @moduledoc false
+
+    def graphql(query, variables, opts) do
+      request_fun = Keyword.fetch!(opts, :request_fun)
+
+      case request_fun.(%{"query" => query, "variables" => variables}, []) do
+        {:ok, %{status: 200, body: body}} -> {:ok, body}
+        {:error, _reason} = error -> error
+      end
+    end
+
+    def rest_get(path, opts) do
+      Keyword.fetch!(opts, :request_fun).(path, nil)
+    end
+  end
+
   defp pr_node(overrides) do
     Map.merge(
       %{
@@ -393,6 +410,41 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
     test "rejects github projects without repo" do
       project = %Project{tracker_kind: "github", tracker_config: %{}}
       assert {:error, :missing_github_repo} = PullRequests.resolve_repo(project)
+    end
+  end
+
+  describe "annotate_branch_status/3" do
+    test "sets base_behind_by for an open PR and leaves merged PRs nil" do
+      open_pr = %{number: 1, state: "open", base_ref: "homolog", head_ref: "feat/508", base_behind_by: nil}
+      merged_pr = %{number: 2, state: "merged", base_ref: "homolog", head_ref: "old", base_behind_by: nil}
+
+      rest_fun = fn "/repos/acme/app/compare/homolog...feat/508", _h ->
+        {:ok, %{status: 200, body: %{"behind_by" => 3}}}
+      end
+
+      assert [%{number: 1, base_behind_by: 3}, %{number: 2, base_behind_by: nil}] =
+               PullRequests.annotate_branch_status([open_pr, merged_pr], "acme/app",
+                 client_module: BranchTestClient,
+                 branch_status_request_fun: rest_fun
+               )
+    end
+
+    test "swallows compare errors as nil" do
+      open_pr = %{number: 1, state: "open", base_ref: "main", head_ref: "feat/x", base_behind_by: nil}
+      rest_fun = fn _path, _h -> {:error, {:github_api_status, 404}} end
+
+      assert [%{number: 1, base_behind_by: nil}] =
+               PullRequests.annotate_branch_status([open_pr], "acme/app",
+                 client_module: BranchTestClient,
+                 branch_status_request_fun: rest_fun
+               )
+    end
+
+    test "skips annotation when the client has no rest_get/2" do
+      open_pr = %{number: 1, state: "open", base_ref: "main", head_ref: "feat/x", base_behind_by: nil}
+
+      assert [%{number: 1, base_behind_by: nil}] =
+               PullRequests.annotate_branch_status([open_pr], "acme/app", client_module: TestClient)
     end
   end
 end
