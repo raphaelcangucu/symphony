@@ -178,6 +178,33 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       assert result.data.status.name == "Triage"
       assert result.data.title == "Add export button"
     end
+
+    test "falls back to the backlog status when the configured draft status is absent" do
+      {:ok, _project} = Context.ensure_project(%{name: "Front", slug: "front"})
+
+      assert {:ok, result} =
+               ToolExecutor.execute("front", "create_draft_issue", %{
+                 "title" => "Make it multitenant"
+               })
+
+      assert result.tool == "create_draft_issue"
+      assert result.data.status.name == "Backlog"
+      assert result.data.title == "Make it multitenant"
+    end
+
+    test "prefers a backlog category over a lower-positioned unstarted status" do
+      {:ok, project} = Context.ensure_project(%{name: "Edge", slug: "edge"})
+
+      Repo.delete_all(from(status in WorkflowStatus, where: status.project_id == ^project.id))
+      {:ok, _unstarted} = seed_status(project, "Up Next", "unstarted")
+      {:ok, _backlog} = seed_status(project, "Icebox", "backlog")
+      {:ok, _started} = seed_status(project, "Doing", "started")
+
+      assert {:ok, result} =
+               ToolExecutor.execute("edge", "create_draft_issue", %{"title" => "Anchor chat"})
+
+      assert result.data.status.name == "Icebox"
+    end
   end
 
   test "fails fast for an unsupported tool" do

@@ -193,7 +193,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp do_execute(project, "create_draft_issue", arguments, _opts) do
     with {:ok, title} <- normalize_required_string(Map.get(arguments, "title"), :title),
-         attrs <- build_draft_attrs(arguments, title),
+         {:ok, draft_status} <- resolve_draft_status(project),
+         attrs <- build_draft_attrs(arguments, title, draft_status),
          {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]) do
       presented = TrackerPresenter.issue(issue)
 
@@ -415,13 +416,84 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     |> maybe_put_attr("assignee_ids", normalize_string_list(Map.get(arguments, "assignee_ids")))
   end
 
-  defp build_draft_attrs(arguments, title) do
+  defp build_draft_attrs(arguments, title, status) do
     %{
       "title" => title,
       "description" => normalize_optional_string(Map.get(arguments, "description")),
-      "status" => Config.assistant_draft_status()
+      "status" => status
     }
   end
+
+  @draft_category_priority %{"backlog" => 0, "unstarted" => 1}
+  @draft_category_fallback 2
+
+  defp resolve_draft_status(project) do
+    configured = Config.assistant_draft_status()
+
+    case IssueAdapter.dispatch(project, :list_statuses, []) do
+      {:ok, statuses} when is_list(statuses) and statuses != [] ->
+        {:ok, pick_draft_status(statuses, configured)}
+
+      _ ->
+        {:ok, configured}
+    end
+  end
+
+  defp pick_draft_status(statuses, configured) do
+    normalized_configured = normalize_status_name(configured)
+
+    case Enum.find(statuses, &(normalize_status_name(status_field(&1, :name)) == normalized_configured)) do
+      match when is_map(match) ->
+        status_field(match, :name) || configured
+
+      _ ->
+        non_dispatchable_draft_status(statuses) || configured
+    end
+  end
+
+  defp non_dispatchable_draft_status(statuses) do
+    dispatch_states = MapSet.new(Config.dispatch_states(), &normalize_status_name/1)
+
+    candidates =
+      statuses
+      |> Enum.reject(&terminal_status?/1)
+      |> Enum.reject(&MapSet.member?(dispatch_states, normalize_status_name(status_field(&1, :name))))
+
+    candidates
+    |> fallback_candidates(statuses)
+    |> Enum.min_by(&draft_sort_key/1, fn -> nil end)
+    |> case do
+      status when is_map(status) -> status_field(status, :name)
+      _ -> nil
+    end
+  end
+
+  defp fallback_candidates([], statuses), do: Enum.reject(statuses, &terminal_status?/1)
+  defp fallback_candidates(candidates, _statuses), do: candidates
+
+  defp draft_sort_key(status) do
+    category = status |> status_field(:category) |> normalize_status_name()
+    position = status_field(status, :position)
+
+    {
+      Map.get(@draft_category_priority, category, @draft_category_fallback),
+      normalize_position(position)
+    }
+  end
+
+  defp normalize_position(position) when is_integer(position), do: position
+  defp normalize_position(_position), do: 1_000_000
+
+  defp terminal_status?(status), do: status_field(status, :is_terminal) == true
+
+  defp status_field(status, key) when is_map(status) do
+    Map.get(status, key) || Map.get(status, to_string(key))
+  end
+
+  defp status_field(_status, _key), do: nil
+
+  defp normalize_status_name(name) when is_binary(name), do: name |> String.trim() |> String.downcase()
+  defp normalize_status_name(_name), do: ""
 
   defp comment_attrs(arguments) do
     %{}
