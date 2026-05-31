@@ -1,36 +1,19 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantComposer } from "@/components/assistant/AssistantComposer";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 
-const audioMock = vi.hoisted(() => ({
-  start: vi.fn(),
-  stop: vi.fn(),
-  refreshPermission: vi.fn(),
-}));
-
 const speechMock = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
-}));
-
-vi.mock("@/hooks/useAudioRecorder", () => ({
-  useAudioRecorder: () => ({
-    permission: "prompt",
-    recording: false,
-    error: null,
-    supported: true,
-    start: audioMock.start,
-    stop: audioMock.stop,
-    refreshPermission: audioMock.refreshPermission,
-  }),
+  listening: false,
 }));
 
 vi.mock("@/hooks/useSpeechRecognition", () => ({
   useSpeechRecognition: () => ({
-    supported: false,
-    listening: false,
+    supported: true,
+    listening: speechMock.listening,
     error: null,
     start: speechMock.start,
     stop: speechMock.stop,
@@ -54,9 +37,9 @@ vi.mock("@/services/assistant", async () => {
 describe("AssistantComposer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    audioMock.start.mockImplementation(async (onComplete: (blob: Blob, durationMs: number) => void) => {
-      onComplete(new Blob(["audio-bytes"], { type: "audio/webm" }), 1000);
-      return true;
+    speechMock.listening = false;
+    speechMock.start.mockImplementation((onTranscript: (text: string, isFinal: boolean) => void) => {
+      onTranscript("texto ditado", true);
     });
   });
 
@@ -98,7 +81,7 @@ describe("AssistantComposer", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("does not stop audio recording on unrelated re-render", () => {
+  it("does not stop voice dictation on unrelated re-render", () => {
     render(
       <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={vi.fn()} />,
     );
@@ -107,11 +90,10 @@ describe("AssistantComposer", () => {
       target: { value: "typing should not stop recording" },
     });
 
-    expect(audioMock.stop).not.toHaveBeenCalled();
     expect(speechMock.stop).not.toHaveBeenCalled();
   });
 
-  it("can submit an audio-only message after recording", async () => {
+  it("transcribes voice dictation into text without creating an audio attachment", () => {
     const onSubmit = vi.fn();
 
     render(
@@ -120,22 +102,32 @@ describe("AssistantComposer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Record audio" }));
 
-    await waitFor(() => expect(screen.getByText(/recording-/)).toBeTruthy());
+    expect(screen.getByPlaceholderText("Write a message...")).toHaveValue("texto ditado");
+    expect(screen.queryByText(/recording-/)).toBeNull();
 
     fireEvent.keyDown(screen.getByPlaceholderText("Write a message..."), { key: "Enter", code: "Enter" });
 
-    await waitFor(() =>
-      expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: "",
-          attachments: [
-            expect.objectContaining({
-              type: "audio",
-              data: expect.any(String),
-            }),
-          ],
-        }),
-      ),
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "texto ditado",
+        attachments: [],
+      }),
     );
+  });
+
+  it("shows a red stop button while recording", () => {
+    speechMock.listening = true;
+
+    const { container } = render(
+      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={vi.fn()} />,
+    );
+
+    const stopButton = screen.getByRole("button", { name: "Stop recording" });
+
+    expect(stopButton.className).toContain("text-red-600");
+    expect(container.querySelector(".lucide-square")).toBeTruthy();
+    expect(container.querySelector(".motion-safe\\:animate-ping")).toBeTruthy();
+    expect(container.querySelector(".motion-safe\\:animate-pulse")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Record audio" })).toBeNull();
   });
 });

@@ -4,7 +4,6 @@ import { toast } from "sonner";
 
 import {
   type AssistantAttachment,
-  blobToAudioAttachment,
   createImageAttachmentPreview,
   revokeAttachmentPreviews,
   serializeAttachments,
@@ -22,7 +21,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import {
   effortLabel,
@@ -57,16 +55,7 @@ export function AssistantComposer({ projectSlug, catalog, disabled = false, onSu
   const [settings, setSettings] = useState(() => loadAssistantComposerSettings(catalog));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recordingRef = useRef(false);
-  const audio = useAudioRecorder();
   const speech = useSpeechRecognition();
-  const {
-    error: audioError,
-    permission: audioPermission,
-    recording,
-    start: startAudioRecording,
-    stop: stopAudioRecording,
-    supported: audioSupported,
-  } = audio;
   const {
     error: speechError,
     listening: speechListening,
@@ -74,6 +63,7 @@ export function AssistantComposer({ projectSlug, catalog, disabled = false, onSu
     stop: stopSpeechRecognition,
     supported: speechSupported,
   } = speech;
+  const recording = speechListening;
 
   const selectedModel =
     catalog.models.find((model) => model.model === settings.model) ?? catalog.models[0];
@@ -95,10 +85,9 @@ export function AssistantComposer({ projectSlug, catalog, disabled = false, onSu
 
   useEffect(() => {
     return () => {
-      stopAudioRecording();
       stopSpeechRecognition();
     };
-  }, [stopAudioRecording, stopSpeechRecognition]);
+  }, [stopSpeechRecognition]);
 
   useEffect(() => {
     recordingRef.current = recording;
@@ -181,47 +170,21 @@ export function AssistantComposer({ projectSlug, catalog, disabled = false, onSu
 
     if (recording) {
       recordingRef.current = false;
-      stopAudioRecording();
       stopSpeechRecognition();
       return;
     }
 
-    if (!audioSupported) {
-      toast.error("Microphone recording requires HTTPS in a supported browser.");
-      return;
-    }
-
-    if (audioPermission === "denied") {
-      toast.error("Microphone permission denied. Enable it in your browser site settings and reload.");
-      return;
-    }
-
-    const started = await startAudioRecording(async (blob, durationMs) => {
-      try {
-        const attachment = await blobToAudioAttachment(blob, durationMs);
-        setAttachments((current) => [...current, attachment]);
-      } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Failed to save recording.");
-      }
-    });
-
-    if (!started) {
-      toast.error(audioError ?? "Could not start recording.");
+    if (!speechSupported) {
+      toast.error("Voice dictation is not supported in this browser.");
       return;
     }
 
     recordingRef.current = true;
 
-    if (speechSupported) {
-      window.setTimeout(() => {
-        if (!recordingRef.current) return;
-
-        startSpeechRecognition((text, isFinal) => {
-          if (!isFinal) return;
-          setInput((current) => (current.trim() ? `${current.trim()} ${text}` : text));
-        });
-      }, 300);
-    }
+    startSpeechRecognition((text, isFinal) => {
+      if (!isFinal) return;
+      setInput((current) => (current.trim() ? `${current.trim()} ${text}` : text));
+    });
   }
 
   return (
@@ -327,7 +290,7 @@ export function AssistantComposer({ projectSlug, catalog, disabled = false, onSu
               variant="ghost"
               size="icon"
               className={cn(
-                "h-8 w-8 rounded-full",
+                "relative h-8 w-8 overflow-visible rounded-full",
                 recording &&
                   "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50",
               )}
@@ -336,7 +299,17 @@ export function AssistantComposer({ projectSlug, catalog, disabled = false, onSu
               onClick={() => void toggleRecording()}
             >
               {recording ? (
-                <Square className="h-3.5 w-3.5 fill-current" />
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-0 rounded-full bg-red-500/20 motion-safe:animate-ping"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.18)] motion-safe:animate-pulse"
+                  />
+                  <Square className="relative h-3.5 w-3.5 fill-current" />
+                </>
               ) : (
                 <Mic className={cn("h-4 w-4", speechListening && "animate-pulse")} />
               )}
@@ -353,13 +326,7 @@ export function AssistantComposer({ projectSlug, catalog, disabled = false, onSu
 
       <p className="mt-2 text-xs text-muted-foreground">
         Enter to send · Shift+Enter for a new line · Models from {catalog.command}
-        {audioPermission === "denied" ? (
-          <span className="text-destructive"> · Microphone blocked — enable it in browser settings</span>
-        ) : null}
-        {audioError ? <span className="text-destructive"> · {audioError}</span> : null}
-        {speechError && recording ? (
-          <span className="text-muted-foreground"> · Live captions unavailable ({speechError})</span>
-        ) : null}
+        {speechError ? <span className="text-destructive"> · Voice dictation unavailable ({speechError})</span> : null}
       </p>
     </form>
   );

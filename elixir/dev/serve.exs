@@ -22,6 +22,7 @@ defmodule Symphony.DevServe do
 
     case Application.ensure_all_started(:symphony_elixir) do
       {:ok, _started} ->
+        migrate_repo!()
         announce_ready(workflow_path)
         Process.sleep(:infinity)
 
@@ -64,6 +65,18 @@ defmodule Symphony.DevServe do
   defp maybe_override_port(port) when is_integer(port) do
     Application.put_env(:symphony_elixir, :server_port_override, port)
     :ok
+  end
+
+  defp migrate_repo! do
+    case Ecto.Migrator.with_repo(SymphonyElixir.Repo, fn repo ->
+           Ecto.Migrator.run(repo, :up, all: true)
+         end) do
+      {:ok, _repo, _apps} ->
+        :ok
+
+      {:error, reason} ->
+        fail("Failed to migrate local tracker database: #{inspect(reason, pretty: true)}")
+    end
   end
 
   defp announce_ready(workflow_path) do
