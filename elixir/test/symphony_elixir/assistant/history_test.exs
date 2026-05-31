@@ -104,6 +104,35 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert {:error, :not_found} = History.get_thread(thread.id + 999_999)
   end
 
+  describe "ensure_issue_thread/3" do
+    setup do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+      :ok
+    end
+
+    test "creates an issue-scoped thread bound to the identifier" do
+      assert {:ok, thread} =
+               History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ws"})
+
+      assert thread.scope == "issue"
+      assert thread.project_slug == "macro"
+      assert thread.issue_identifier == "MAC-1"
+      assert thread.status == "active"
+    end
+
+    test "returns the same active thread on repeat calls" do
+      {:ok, a} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ws"})
+      {:ok, b} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ws"})
+      assert a.id == b.id
+    end
+
+    test "set_mode/2 persists the mode in metadata" do
+      {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ws"})
+      assert {:ok, updated} = History.set_mode(thread, "complex")
+      assert updated.metadata["mode"] == "complex"
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

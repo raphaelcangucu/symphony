@@ -20,6 +20,25 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
+  @spec ensure_issue_thread(String.t(), String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
+  def ensure_issue_thread(project_slug, issue_identifier, attrs \\ %{})
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_map(attrs) do
+    with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
+         {:ok, identifier} <- normalize_required_string(issue_identifier, :issue_identifier),
+         {:ok, _project} <- Context.get_project(slug) do
+      case active_issue_thread(slug, identifier) do
+        %Thread{} = thread -> {:ok, thread}
+        nil -> create_issue_thread(slug, identifier, attrs)
+      end
+    end
+  end
+
+  @spec set_mode(Thread.t(), String.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def set_mode(%Thread{metadata: metadata} = thread, mode) when is_binary(mode) do
+    next = Map.put(metadata || %{}, "mode", mode)
+    update_thread(thread, %{metadata: next})
+  end
+
   @spec update_thread(Thread.t(), attrs()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def update_thread(%Thread{} = thread, attrs) when is_map(attrs) do
     thread
@@ -111,6 +130,25 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp active_thread(project_slug) do
     Repo.get_by(Thread, project_slug: project_slug, status: "active")
+  end
+
+  defp active_issue_thread(slug, identifier) do
+    Repo.get_by(Thread,
+      project_slug: slug,
+      issue_identifier: identifier,
+      scope: "issue",
+      status: "active"
+    )
+  end
+
+  defp create_issue_thread(slug, identifier, attrs) do
+    attrs
+    |> Map.put(:scope, "issue")
+    |> Map.put(:project_slug, slug)
+    |> Map.put(:issue_identifier, identifier)
+    |> Map.put_new(:status, "active")
+    |> then(&Thread.changeset(%Thread{}, &1))
+    |> Repo.insert()
   end
 
   defp filter_scope(query, nil), do: query
