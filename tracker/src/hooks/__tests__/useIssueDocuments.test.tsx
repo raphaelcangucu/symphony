@@ -21,6 +21,20 @@ const availableDocuments: IssueDocumentList = {
   ],
 };
 
+const refreshedDocuments: IssueDocumentList = {
+  available: true,
+  reason: null,
+  documents: [
+    {
+      id: "plan",
+      kind: "plan",
+      path: "docs/superpowers/plans/2026-05-31-public-preview-tunnel.md",
+      title: "Public preview tunnel plan",
+      updatedAt: "2026-05-31T11:00:00Z",
+    },
+  ],
+};
+
 const unavailableDocuments: IssueDocumentList = {
   available: false,
   reason: "No issue documents found.",
@@ -77,6 +91,30 @@ describe("useIssueDocuments", () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it("resets to empty state when an active hook becomes inactive", async () => {
+    listIssueDocuments.mockResolvedValueOnce(availableDocuments);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) =>
+        useIssueDocuments({
+          projectSlug: "macro-markets",
+          identifier: "MAC-1",
+          enabled,
+        }),
+      { initialProps: { enabled: true } },
+    );
+
+    await waitFor(() => expect(result.current.documents).toEqual(availableDocuments.documents));
+
+    rerender({ enabled: false });
+
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+    expect(result.current.documents).toEqual([]);
+    expect(result.current.available).toBe(false);
+    expect(result.current.reason).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
   it("refetches when the refresh key changes", async () => {
     listIssueDocuments
       .mockResolvedValueOnce(unavailableDocuments)
@@ -97,6 +135,57 @@ describe("useIssueDocuments", () => {
     rerender({ refreshKey: 1 });
 
     await waitFor(() => expect(result.current.documents).toEqual(availableDocuments.documents));
+    expect(listIssueDocuments).toHaveBeenCalledTimes(2);
+  });
+
+  it("queues one refresh key refetch while a request is already pending", async () => {
+    const pendingInitialFetch = createDeferred<IssueDocumentList>();
+    listIssueDocuments
+      .mockReturnValueOnce(pendingInitialFetch.promise)
+      .mockResolvedValueOnce(refreshedDocuments);
+
+    const { rerender, result } = renderHook(
+      ({ refreshKey }) =>
+        useIssueDocuments({
+          projectSlug: "macro-markets",
+          identifier: "MAC-1",
+          refreshKey,
+        }),
+      { initialProps: { refreshKey: 0 } },
+    );
+
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+
+    rerender({ refreshKey: 1 });
+    rerender({ refreshKey: 2 });
+
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pendingInitialFetch.resolve(availableDocuments);
+      await pendingInitialFetch.promise;
+    });
+
+    await waitFor(() => expect(result.current.documents).toEqual(refreshedDocuments.documents));
+    expect(listIssueDocuments).toHaveBeenCalledTimes(2);
+  });
+
+  it("manual refetch updates documents after an initial success", async () => {
+    listIssueDocuments.mockResolvedValueOnce(availableDocuments).mockResolvedValueOnce(refreshedDocuments);
+
+    const { result } = renderHook(() =>
+      useIssueDocuments({ projectSlug: "macro-markets", identifier: "MAC-1" }),
+    );
+
+    await waitFor(() => expect(result.current.documents).toEqual(availableDocuments.documents));
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    expect(result.current.documents).toEqual(refreshedDocuments.documents);
+    expect(result.current.available).toBe(true);
+    expect(result.current.reason).toBeNull();
     expect(listIssueDocuments).toHaveBeenCalledTimes(2);
   });
 
@@ -151,3 +240,14 @@ describe("useIssueDocuments", () => {
     expect(result.current.loading).toBe(false);
   });
 });
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, reject, resolve };
+}

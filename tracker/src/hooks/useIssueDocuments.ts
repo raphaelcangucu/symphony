@@ -22,6 +22,13 @@ export interface UseIssueDocumentsResult {
   refetch: () => Promise<void>;
 }
 
+interface LatestRequestState {
+  active: boolean;
+  projectSlug: string;
+  identifier: string | null;
+  resourceKey: string | null;
+}
+
 export function useIssueDocuments({
   projectSlug,
   identifier,
@@ -34,26 +41,39 @@ export function useIssueDocuments({
   const [reason, setReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const inFlightRef = useRef(false);
+  const queuedRefetchRef = useRef(false);
   const hasLoadedRef = useRef(false);
-  const requestIdRef = useRef(0);
+  const requestVersionRef = useRef(0);
   const activeResourceKeyRef = useRef<string | null>(null);
+  const latestRequestRef = useRef<LatestRequestState>({
+    active: false,
+    projectSlug: "",
+    identifier: null,
+    resourceKey: null,
+  });
   const focused = useWindowFocus();
   const focusedRef = useRef(focused);
+  const previousFocusedRef = useRef(focused);
   focusedRef.current = focused;
 
   const active = enabled && Boolean(projectSlug && identifier);
   const activeResourceKey = active ? `${projectSlug}:${identifier}` : null;
+  latestRequestRef.current = { active, projectSlug, identifier, resourceKey: activeResourceKey };
 
   const refetch = useCallback(async () => {
-    if (!active || !projectSlug || !identifier) {
+    const requestState = latestRequestRef.current;
+
+    if (!requestState.active || !requestState.projectSlug || !requestState.identifier) {
       return;
     }
 
     if (inFlightRef.current) {
+      queuedRefetchRef.current = true;
       return;
     }
 
-    const requestId = ++requestIdRef.current;
+    const requestVersion = requestVersionRef.current;
+    const requestResourceKey = requestState.resourceKey;
     inFlightRef.current = true;
 
     if (!hasLoadedRef.current) {
@@ -61,9 +81,14 @@ export function useIssueDocuments({
     }
 
     try {
-      const response = await listIssueDocuments(projectSlug, identifier);
+      const response = await listIssueDocuments(requestState.projectSlug, requestState.identifier);
+      const latestRequestState = latestRequestRef.current;
 
-      if (requestId !== requestIdRef.current) {
+      if (
+        requestVersion !== requestVersionRef.current ||
+        !latestRequestState.active ||
+        latestRequestState.resourceKey !== requestResourceKey
+      ) {
         return;
       }
 
@@ -72,24 +97,33 @@ export function useIssueDocuments({
       setReason(response.reason);
       hasLoadedRef.current = true;
     } catch {
-      if (requestId !== requestIdRef.current) {
+      if (requestVersion !== requestVersionRef.current) {
         return;
       }
     } finally {
-      if (requestId === requestIdRef.current) {
-        inFlightRef.current = false;
+      inFlightRef.current = false;
+
+      if (queuedRefetchRef.current && latestRequestRef.current.active) {
+        queuedRefetchRef.current = false;
+        void refetch();
+        return;
+      }
+
+      queuedRefetchRef.current = false;
+
+      if (requestVersion === requestVersionRef.current || !latestRequestRef.current.active) {
         setLoading(false);
       }
     }
-  }, [active, identifier, projectSlug]);
+  }, []);
 
   useEffect(() => {
-    requestIdRef.current += 1;
-    inFlightRef.current = false;
+    requestVersionRef.current += 1;
 
     if (!active) {
       activeResourceKeyRef.current = null;
       hasLoadedRef.current = false;
+      queuedRefetchRef.current = false;
       setDocuments([]);
       setAvailable(false);
       setReason(null);
@@ -110,13 +144,15 @@ export function useIssueDocuments({
 
     return () => {
       clearInterval(timer);
-      requestIdRef.current += 1;
-      inFlightRef.current = false;
+      requestVersionRef.current += 1;
     };
   }, [active, activeResourceKey, intervalMs, refetch, refreshKey]);
 
   useEffect(() => {
-    if (!active || !focused) {
+    const wasFocused = previousFocusedRef.current;
+    previousFocusedRef.current = focused;
+
+    if (!active || !focused || wasFocused) {
       return;
     }
 
