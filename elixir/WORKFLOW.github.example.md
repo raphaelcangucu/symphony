@@ -28,6 +28,13 @@ tracker:
     - Duplicate
 polling:
   interval_ms: 5000
+# Public preview tunnel (Cloudflare). Exposes the tracker and ready dev-server
+# previews publicly via a named tunnel. Disabled by default; previews become
+# UNAUTHENTICATED to anyone with the URL once enabled. Uncomment to configure:
+# public_tunnel:
+#   enabled: false              # set true to expose previews via the Cloudflare tunnel
+#   base_domain: tracker.cods.dev
+#   # namespace: your-github-login   # defaults to the GitHub login
 # Browser VS Code (code-server) for task workspaces. Disabled by default.
 # Requires code-server installed on the host. auth: none is only safe on localhost.
 # Set enabled: true after `make install-code-server`.

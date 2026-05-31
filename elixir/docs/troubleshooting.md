@@ -384,6 +384,68 @@ sym-dev-<project>-<issue>-<serve-step>
 Use tmux to inspect the pane output, or check the Symphony log for dev-server warnings
 and health probe failures.
 
+## Public Preview Tunnel
+
+The public preview tunnel exposes the tracker and ready dev-server previews via a
+Cloudflare named tunnel. It depends on `public_tunnel.enabled: true` in `WORKFLOW.md`,
+the Cloudflare credentials in `elixir/.env`, and a running `cloudflared` process.
+
+### `cloudflared` not found
+
+The `make tunnel` targets shell out to `cloudflared`:
+
+```
+make: cloudflared: No such file or directory
+```
+
+Install the Cloudflare Tunnel client and ensure it is on `PATH`:
+
+```bash
+# macOS
+brew install cloudflared
+# then verify
+cloudflared --version
+```
+
+### Cloudflare error 1033 / "Argo Tunnel error"
+
+A public host loads the Cloudflare error page with code **1033**. The tunnel is not
+running or its DNS records are missing, so Cloudflare cannot reach the origin.
+
+1. Start the tunnel: `make tunnel` (foreground) or `make tunnel-bg`.
+2. Confirm it is up: `make tunnel-status` (and `make tunnel-logs` for output).
+3. (Re)create the apex + wildcard CNAMEs: `make tunnel-dns`.
+
+### TLS / certificate error on `*.<namespace>.tracker.cods.dev`
+
+Nested wildcard hosts (`<preview>.<namespace>.tracker.cods.dev`) fail with a TLS /
+certificate error while `<namespace>.tracker.cods.dev` works. Universal SSL only covers
+a **single** wildcard level, so the nested wildcard needs **Advanced Certificate Manager
+(ACM)**.
+
+1. Enable ACM for the `cods.dev` zone in the Cloudflare dashboard.
+2. Order an ordered certificate that includes `*.<namespace>.tracker.cods.dev`.
+3. Wait for the certificate to become **active** before retrying the preview host.
+
+### Preview returns 404 "Unknown preview host"
+
+The host is inside the namespace but `PublicHostPlug` has no matching dev server in the
+`SymphonyElixir.PublicRouting` registry.
+
+- The dev server is not `:ready` yet (still provisioning/starting) or has not registered.
+  Open the issue's **Preview** tab and start/await the server.
+- The host's namespace does not match the configured namespace. Confirm
+  `PUBLIC_NAMESPACE` / `public_tunnel.namespace` resolves to the same `<namespace>` used
+  in the URL (it defaults to the sanitized GitHub login).
+
+### Port already in use
+
+The tunnel routes to dev-server loopback ports; if another process already holds a port
+in the dev-server range (`dev_server.port_range`, default `[4100, 4199]`), the preview
+cannot bind. Stop the conflicting process, widen the range, or reduce
+`dev_server.max_concurrent`. See **Preview capacity is full or no port is available**
+above.
+
 ## Checking Logs
 
 Check the log files when diagnosing issues:

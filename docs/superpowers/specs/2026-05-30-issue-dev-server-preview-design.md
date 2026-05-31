@@ -48,6 +48,9 @@ showing that a poll-driven auto-start is in progress.
 - **Reverse-proxy routing through the `:4000` hub.** Each dev server binds its
   own port and is opened directly (consistent with the `editor:`/code-server
   decision D4). No websocket-proxy plumbing.
+  > Note: `docs/superpowers/specs/2026-05-31-public-preview-tunnel-design.md` (D12)
+  > supersedes this "no reverse-proxy through :4000" non-goal — the public preview
+  > tunnel intentionally reverse-proxies dev servers through the :4000 hub.
 - **Public exposure / multi-user auth.** Single-user, localhost-first
   assumption, consistent with the rest of Symphony. `base_url` override handles
   remote/proxy hosts.

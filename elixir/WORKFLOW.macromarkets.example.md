@@ -68,6 +68,13 @@ dev_server:
   idle_timeout_ms: 1800000
   auto_start_on: pull_request,human_review
   # base_url: https://previews.example.com  # optional proxy-facing base URL
+# Public preview tunnel (Cloudflare). Exposes the tracker and ready dev-server
+# previews publicly via a named tunnel. Disabled by default; previews become
+# UNAUTHENTICATED to anyone with the URL once enabled. Uncomment to configure:
+# public_tunnel:
+#   enabled: false              # set true to expose previews via the Cloudflare tunnel
+#   base_domain: tracker.cods.dev
+#   # namespace: your-github-login   # defaults to the GitHub login
 workspace:
   root: ~/code/macro-markets-workspaces
 hooks:

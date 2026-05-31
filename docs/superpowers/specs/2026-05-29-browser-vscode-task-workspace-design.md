@@ -36,6 +36,9 @@ rooted at the folder.
   task via `?folder=`. Considered and deferred.
 - **Reverse-proxy routing through the `:4000` hub.** code-server runs on its own
   dedicated port and is opened directly. No websocket-proxy plumbing.
+  > Note: `docs/superpowers/specs/2026-05-31-public-preview-tunnel-design.md` (D12)
+  > supersedes this "no reverse-proxy through :4000" non-goal — the public preview
+  > tunnel intentionally reverse-proxies dev servers through the :4000 hub.
 - **Embedded iframe panel inside the drawer.** Opens full-screen in a new tab to
   avoid iframe keybinding/clipboard/focus quirks.
 - **github.dev-style no-compute editing.** We have a real folder; we use a real

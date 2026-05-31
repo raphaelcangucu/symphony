@@ -434,6 +434,86 @@ also shows a Preview link or provisioning chip when preview status is available.
 wait-state issues and starts previews according to `auto_start_on`: `pull_request` applies to
 wait-state issues with linked PRs, and `human_review` applies to human-review wait-state issues.
 
+## Public preview tunnel
+
+Symphony can expose the tracker **and** each ready dev-server preview publicly through a single
+Cloudflare named tunnel. A static wildcard ingress (`*.tracker.cods.dev → http://127.0.0.1:4000`)
+sends all traffic to the Phoenix hub, and `SymphonyElixirWeb.PublicHostPlug` routes each request by
+its `Host` header before the router runs. It is **disabled by default**.
+
+### Host scheme
+
+- **Tracker**: `<namespace>.tracker.cods.dev` → the Phoenix hub on `:4000` (same-origin API +
+  websocket).
+- **Previews**: `<project>-<issue>-<step>.<namespace>.tracker.cods.dev` → reverse-proxied to the
+  matching dev server's loopback port (looked up in the `SymphonyElixir.PublicRouting` ETS
+  registry as servers become `:ready`).
+- Loopback requests and unknown out-of-namespace hosts pass through to the app; unknown
+  in-namespace hosts return `404 Unknown preview host`.
+- `<namespace>` defaults to the operator's sanitized GitHub login. Override it with the
+  `PUBLIC_NAMESPACE` env var or the `public_tunnel.namespace` WORKFLOW key.
+
+### One-time setup
+
+1. Create a Cloudflare named tunnel and note its ID/credentials:
+
+   ```bash
+   cloudflared tunnel create cods-dev-tunnel
+   ```
+
+2. Put the tunnel name/ID and Cloudflare API credentials in `elixir/.env` (see the keys below).
+3. Nested wildcard hosts (`*.<namespace>.tracker.cods.dev`) need **Cloudflare Advanced Certificate
+   Manager (ACM)**: enable ACM for the zone and order an ordered certificate for
+   `*.<namespace>.tracker.cods.dev`. Universal SSL only covers a single wildcard level, so the
+   nested wildcard will fail TLS without ACM.
+4. Create the DNS records (two proxied CNAMEs per namespace — the apex
+   `<namespace>.tracker.cods.dev` and the wildcard `*.<namespace>.tracker.cods.dev`, both pointing
+   at `<CLOUDFLARE_TUNNEL_ID>.cfargotunnel.com`):
+
+   ```bash
+   make tunnel-dns
+   ```
+
+### Enable and run
+
+1. Set `public_tunnel.enabled: true` in `WORKFLOW.md`:
+
+   ```yaml
+   public_tunnel:
+     enabled: true
+     base_domain: tracker.cods.dev
+     # namespace: your-github-login   # defaults to the GitHub login
+   ```
+
+2. Start the tunnel (foreground or background) and re-ensure DNS when needed:
+
+   ```bash
+   make tunnel        # run cloudflared in the foreground
+   make tunnel-bg     # run in the background
+   make tunnel-logs   # tail the background tunnel logs
+   make tunnel-status # show whether the tunnel is running
+   make tunnel-stop   # stop the background tunnel
+   make tunnel-dns    # (re)ensure the apex + wildcard CNAMEs
+   ```
+
+### `.env` keys
+
+| Key | Purpose |
+|-----|---------|
+| `CLOUDFLARED_TUNNEL_NAME` | Name of the Cloudflare named tunnel (e.g. `cods-dev-tunnel`). |
+| `CLOUDFLARE_TUNNEL_ID` | Tunnel ID; CNAMEs target `<id>.cfargotunnel.com`. |
+| `CLOUDFLARE_API_TOKEN` | API token used to create/ensure DNS records. |
+| `CLOUDFLARE_ZONE_ID` | Zone ID for `cods.dev`. |
+| `CLOUDFLARE_ZONE_NAME` | Zone name (e.g. `cods.dev`). |
+| `PUBLIC_NAMESPACE` | Optional namespace override (defaults to the GitHub login). |
+| `PUBLIC_TUNNEL_ROUTE_DNS` | Set truthy to let `make tunnel-dns` create/ensure the CNAMEs. |
+
+### Security
+
+Once enabled, previews are **unauthenticated** — anyone with the URL can reach the running app.
+Only enable the tunnel for non-sensitive work, or place the hosts behind **Cloudflare Access** (or
+another auth layer) before exposing anything that matters.
+
 ## Browser editor (code-server)
 
 Symphony can open a task's workspace directory in a browser-based VS Code
