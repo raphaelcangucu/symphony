@@ -24,7 +24,8 @@ export function ProjectWorkspaceLayout() {
 }
 
 function WorkspaceChrome() {
-  const { projectSlug, view, project, setProject, reloadProject, trackerKind, refetch, refreshing } = useWorkspace();
+  const { projectSlug, view, project, setProject, reloadProject, trackerKind, refetch, refreshing, setIssues } =
+    useWorkspace();
   const pollingActive = useWindowFocus();
   const [editing, setEditing] = useState(false);
 
@@ -60,6 +61,7 @@ function WorkspaceChrome() {
         onRefresh={() => void refetch()}
         refreshing={refreshing}
         pollingActive={pollingActive}
+        onIssueCreated={(issue) => setIssues((current) => [...current, issue])}
       />
       <BoardPaletteShortcuts />
       {project ? (

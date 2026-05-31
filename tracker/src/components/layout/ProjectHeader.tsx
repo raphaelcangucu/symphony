@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
 import { cn } from "@/lib/utils";
 import { workspaceBasePath, type WorkspaceView } from "@/lib/workspaceRoutes";
+import type { Issue } from "@/types/issue";
 import type { TrackerKind } from "@/types/project";
 
 const TRACKER_LABELS: Record<Exclude<TrackerKind, "local">, string> = {
@@ -23,6 +24,7 @@ interface ProjectHeaderProps {
   onRefresh?: () => void;
   refreshing?: boolean;
   pollingActive?: boolean;
+  onIssueCreated?: (issue: Issue) => void;
 }
 
 const POLLING_ACTIVE_LABEL = "Polling active";
@@ -37,6 +39,7 @@ export function ProjectHeader({
   onRefresh,
   refreshing = false,
   pollingActive = true,
+  onIssueCreated,
 }: ProjectHeaderProps) {
   const pollingLabel = pollingActive ? POLLING_ACTIVE_LABEL : POLLING_PAUSED_LABEL;
   return (
@@ -88,7 +91,7 @@ export function ProjectHeader({
             List
           </NavLink>
         </Button>
-        <NewIssueMenu projectSlug={projectSlug} size="sm" />
+        <NewIssueMenu projectSlug={projectSlug} size="sm" onCreated={onIssueCreated} />
       </div>
     </header>
   );
