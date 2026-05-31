@@ -9,6 +9,16 @@ defmodule SymphonyElixir.Assistant.Thread do
   @type t :: %__MODULE__{}
 
   @scopes ["project", "freeform", "issue"]
+  @cast_fields [
+    :scope,
+    :project_slug,
+    :issue_identifier,
+    :title,
+    :codex_thread_id,
+    :workspace_path,
+    :status,
+    :metadata
+  ]
 
   schema "assistant_threads" do
     field(:scope, :string, default: "project")
@@ -28,7 +38,7 @@ defmodule SymphonyElixir.Assistant.Thread do
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(thread, attrs) when is_map(attrs) do
     thread
-    |> cast(attrs, [:scope, :project_slug, :issue_identifier, :title, :codex_thread_id, :workspace_path, :status, :metadata])
+    |> cast(attrs, @cast_fields)
     |> validate_required([:scope])
     |> validate_required([:workspace_path, :status])
     |> validate_inclusion(:scope, @scopes)
