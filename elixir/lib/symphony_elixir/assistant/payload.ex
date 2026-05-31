@@ -133,8 +133,12 @@ defmodule SymphonyElixir.Assistant.Payload do
 
   defp image_data_url(media_type, data, name) do
     cond do
-      String.starts_with?(data, "data:") -> {:ok, data}
-      valid_base64?(data) -> {:ok, "data:#{media_type};base64,#{data}"}
+      String.starts_with?(data, "data:") ->
+        {:ok, data}
+
+      valid_base64?(data) ->
+        {:ok, "data:#{media_type};base64,#{data}"}
+
       true ->
         _ = name
         :error
