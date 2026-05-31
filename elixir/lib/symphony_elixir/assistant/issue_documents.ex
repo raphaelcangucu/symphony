@@ -6,6 +6,7 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
   @doc_root "docs/superpowers"
   @kind_dirs [{"specs", "spec"}, {"plans", "plan"}]
   @max_bytes 512_000
+  @title_scan_bytes 16_384
 
   @type document :: %{
           id: String.t(),
@@ -20,10 +21,10 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
     workspace = Workspace.path_for_issue(identifier)
     base = Path.join(workspace, @doc_root)
 
-    if File.dir?(base) do
-      %{available: true, reason: nil, documents: collect(base) ++ handoff(base)}
+    with :ok <- safe_directory(base, workspace) do
+      %{available: true, reason: nil, documents: collect(base, workspace) ++ handoff(base)}
     else
-      %{available: false, reason: "workspace_missing", documents: []}
+      {:error, _reason} -> %{available: false, reason: "workspace_missing", documents: []}
     end
   end
 
@@ -42,11 +43,11 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
     end
   end
 
-  defp collect(base) do
+  defp collect(base, workspace) do
     Enum.flat_map(@kind_dirs, fn {dir, kind} ->
       base
       |> Path.join(dir)
-      |> list_markdown()
+      |> list_markdown(workspace)
       |> Enum.map(&to_document(&1, kind, Path.join([@doc_root, dir, Path.basename(&1)])))
     end)
   end
@@ -61,17 +62,16 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
     end
   end
 
-  defp list_markdown(dir) do
-    case File.ls(dir) do
-      {:ok, entries} ->
-        entries
-        |> Enum.filter(&String.ends_with?(&1, ".md"))
-        |> Enum.map(&Path.join(dir, &1))
-        |> Enum.filter(&regular_file?/1)
-        |> Enum.sort()
-
-      {:error, _reason} ->
-        []
+  defp list_markdown(dir, workspace) do
+    with :ok <- safe_directory(dir, workspace),
+         {:ok, entries} <- File.ls(dir) do
+      entries
+      |> Enum.filter(&String.ends_with?(&1, ".md"))
+      |> Enum.map(&Path.join(dir, &1))
+      |> Enum.filter(&regular_file?/1)
+      |> Enum.sort()
+    else
+      {:error, _reason} -> []
     end
   end
 
@@ -87,18 +87,23 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
   end
 
   defp title_from(abs) do
-    case File.read(abs) do
-      {:ok, body} ->
+    case File.open(abs, [:read, :binary], &IO.binread(&1, @title_scan_bytes)) do
+      {:ok, body} when is_binary(body) ->
         body
-        |> String.split("\n")
+        |> :binary.split("\n", [:global])
         |> Enum.find_value(fn line ->
-          case Regex.run(~r/^#\s+(.+)$/, String.trim(line)) do
-            [_, title] -> String.trim(title)
-            _ -> nil
+          if String.valid?(line) do
+            case Regex.run(~r/^#\s+(.+)$/, String.trim(line)) do
+              [_, title] -> String.trim(title)
+              _ -> nil
+            end
           end
         end) || Path.basename(abs)
 
       {:error, _reason} ->
+        Path.basename(abs)
+
+      _other ->
         Path.basename(abs)
     end
   end
@@ -139,6 +144,16 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
       Path.type(path) == :absolute -> {:error, :invalid_path}
       Path.extname(path) != ".md" -> {:error, :invalid_path}
       true -> :ok
+    end
+  end
+
+  defp safe_directory(dir, workspace) do
+    with :ok <- ensure_no_symlink_components(Path.expand(dir), Path.expand(workspace)),
+         {:ok, %File.Stat{type: :directory}} <- File.lstat(dir) do
+      :ok
+    else
+      {:ok, %File.Stat{}} -> {:error, :not_directory}
+      {:error, _reason} = error -> error
     end
   end
 

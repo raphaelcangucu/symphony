@@ -32,7 +32,7 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
       File.rm_rf!(root)
     end)
 
-    %{root: root}
+    %{root: root, workspace_root: workspace_root}
   end
 
   test "list/1 returns docs with derived titles in stable kind order" do
@@ -63,6 +63,79 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
            } = List.last(documents)
   end
 
+  test "list/1 scans only a bounded title prefix", %{workspace_root: workspace_root} do
+    late_title_path =
+      Path.join([
+        workspace_root,
+        "MAC-1",
+        "docs",
+        "superpowers",
+        "specs",
+        "late-title.md"
+      ])
+
+    File.write!(late_title_path, String.duplicate("x", 20_000) <> "\n# Late Title\n")
+
+    assert %{available: true, documents: documents} = IssueDocuments.list("MAC-1")
+    assert %{title: "late-title.md"} = Enum.find(documents, &(&1.path == "docs/superpowers/specs/late-title.md"))
+  end
+
+  test "list/1 treats symlinked docs root as missing", %{root: root, workspace_root: workspace_root} do
+    issue_root = empty_issue_root!(workspace_root, "MAC-DOCS-LINK")
+    external_docs = Path.join([root, "external-docs"])
+    File.mkdir_p!(Path.join([external_docs, "superpowers", "specs"]))
+    File.write!(Path.join([external_docs, "superpowers", "specs", "outside.md"]), "# Outside\n")
+    File.ln_s!(external_docs, Path.join(issue_root, "docs"))
+
+    assert %{available: false, reason: "workspace_missing", documents: []} = IssueDocuments.list("MAC-DOCS-LINK")
+  end
+
+  test "list/1 treats symlinked superpowers root as missing", %{root: root, workspace_root: workspace_root} do
+    issue_root = empty_issue_root!(workspace_root, "MAC-SUPERPOWERS-LINK")
+    external_superpowers = Path.join([root, "external-superpowers"])
+    File.mkdir_p!(Path.join([external_superpowers, "specs"]))
+    File.write!(Path.join([external_superpowers, "specs", "outside.md"]), "# Outside\n")
+    File.mkdir_p!(Path.join(issue_root, "docs"))
+    File.ln_s!(external_superpowers, Path.join([issue_root, "docs", "superpowers"]))
+
+    assert %{available: false, reason: "workspace_missing", documents: []} =
+             IssueDocuments.list("MAC-SUPERPOWERS-LINK")
+  end
+
+  test "list/1 treats symlinked specs and plans dirs as empty", %{root: root, workspace_root: workspace_root} do
+    issue_root = empty_issue_root!(workspace_root, "MAC-KIND-LINKS")
+    doc_root = Path.join([issue_root, "docs", "superpowers"])
+    external_specs = Path.join([root, "external-specs"])
+    external_plans = Path.join([root, "external-plans"])
+
+    File.mkdir_p!(doc_root)
+    File.mkdir_p!(external_specs)
+    File.mkdir_p!(external_plans)
+    File.write!(Path.join(external_specs, "outside-spec.md"), "# Outside Spec\n")
+    File.write!(Path.join(external_plans, "outside-plan.md"), "# Outside Plan\n")
+    File.write!(Path.join(doc_root, "handoff.md"), "# Handoff\n")
+    File.ln_s!(external_specs, Path.join(doc_root, "specs"))
+    File.ln_s!(external_plans, Path.join(doc_root, "plans"))
+
+    assert %{available: true, documents: [%{kind: "handoff", title: "Handoff"}]} = IssueDocuments.list("MAC-KIND-LINKS")
+  end
+
+  test "list/1 ignores symlinked handoff file", %{root: root, workspace_root: workspace_root} do
+    issue_root = empty_issue_root!(workspace_root, "MAC-HANDOFF-LINK")
+    doc_root = Path.join([issue_root, "docs", "superpowers"])
+    external_handoff = Path.join([root, "outside-handoff.md"])
+
+    File.mkdir_p!(Path.join(doc_root, "specs"))
+    File.mkdir_p!(Path.join(doc_root, "plans"))
+    File.write!(Path.join([doc_root, "specs", "inside.md"]), "# Inside\n")
+    File.write!(external_handoff, "# Outside Handoff\n")
+    File.ln_s!(external_handoff, Path.join(doc_root, "handoff.md"))
+
+    assert %{available: true, documents: documents} = IssueDocuments.list("MAC-HANDOFF-LINK")
+    assert Enum.map(documents, & &1.kind) == ["spec"]
+    refute Enum.any?(documents, &(&1.kind == "handoff"))
+  end
+
   test "list/1 reports workspace_missing when the dir is absent" do
     assert %{available: false, reason: "workspace_missing", documents: []} = IssueDocuments.list("MAC-404")
   end
@@ -83,5 +156,12 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
 
   test "read/2 limits markdown size" do
     assert {:error, :too_large} = IssueDocuments.read("MAC-1", "docs/superpowers/specs/too-large.md")
+  end
+
+  defp empty_issue_root!(workspace_root, identifier) do
+    issue_root = Path.join(workspace_root, identifier)
+    File.rm_rf!(issue_root)
+    File.mkdir_p!(issue_root)
+    issue_root
   end
 end
