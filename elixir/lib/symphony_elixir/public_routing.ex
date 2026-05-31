@@ -6,8 +6,6 @@ defmodule SymphonyElixir.PublicRouting do
 
   use GenServer
 
-  require Logger
-
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Viewer
 
@@ -57,14 +55,16 @@ defmodule SymphonyElixir.PublicRouting do
     ".#{namespace}.#{fetch_base_domain(opts)}"
   end
 
-  @spec resolve_namespace() :: {:ok, String.t()} | {:error, :no_namespace}
-  def resolve_namespace do
+  @spec resolve_namespace(keyword()) :: {:ok, String.t()} | {:error, :no_namespace}
+  def resolve_namespace(opts \\ []) do
     case Config.public_tunnel_namespace() do
       ns when is_binary(ns) and ns != "" ->
         {:ok, sanitize_label(ns)}
 
       _ ->
-        case Viewer.current() do
+        viewer = Keyword.get(opts, :viewer, &Viewer.current/0)
+
+        case viewer.() do
           {:ok, %{login: login}} when is_binary(login) and login != "" ->
             {:ok, sanitize_label(login)}
 
@@ -83,7 +83,7 @@ defmodule SymphonyElixir.PublicRouting do
   defp fetch_namespace(opts) do
     case Keyword.get(opts, :namespace) do
       ns when is_binary(ns) and ns != "" -> {:ok, sanitize_label(ns)}
-      _ -> resolve_namespace()
+      _ -> resolve_namespace(opts)
     end
   end
 
@@ -92,7 +92,6 @@ defmodule SymphonyElixir.PublicRouting do
   end
 
   defp strip_hash(identifier) when is_binary(identifier), do: String.trim_leading(identifier, "#")
-  defp strip_hash(_), do: ""
 
   defp enforce_label_limit(label) when byte_size(label) <= @max_label_len, do: label
 

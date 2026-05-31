@@ -1,5 +1,5 @@
 defmodule SymphonyElixir.PublicRoutingTest do
-  use ExUnit.Case, async: false
+  use SymphonyElixir.TestSupport
 
   alias SymphonyElixir.PublicRouting
 
@@ -38,5 +38,67 @@ defmodule SymphonyElixir.PublicRoutingTest do
       assert PublicRouting.namespace_suffix(namespace: "octocat", base_domain: "tracker.cods.dev") ==
                ".octocat.tracker.cods.dev"
     end
+  end
+
+  describe "resolve_namespace/1" do
+    test "uses the configured namespace override when present" do
+      load_public_tunnel_workflow!(namespace: "Team-Cods")
+      assert PublicRouting.resolve_namespace() == {:ok, "team-cods"}
+    end
+
+    test "falls back to the injected viewer login when no override" do
+      load_public_tunnel_workflow!(namespace: nil)
+      viewer = fn -> {:ok, %{login: "Octo-Cat"}} end
+      assert PublicRouting.resolve_namespace(viewer: viewer) == {:ok, "octo-cat"}
+    end
+
+    test "returns :no_namespace when override absent and viewer fails" do
+      load_public_tunnel_workflow!(namespace: nil)
+      viewer = fn -> {:error, :missing_github_token} end
+      assert PublicRouting.resolve_namespace(viewer: viewer) == {:error, :no_namespace}
+    end
+  end
+
+  describe "host_for/4 namespace fallback" do
+    test "resolves the namespace via opts viewer when not passed explicitly" do
+      load_public_tunnel_workflow!(namespace: nil)
+      viewer = fn -> {:ok, %{login: "octocat"}} end
+
+      assert PublicRouting.host_for("previsions", "#mm-42", "front",
+               base_domain: "tracker.cods.dev",
+               viewer: viewer
+             ) == {:ok, "previsions-mm-42-front.octocat.tracker.cods.dev"}
+    end
+
+    test "propagates :no_namespace error" do
+      load_public_tunnel_workflow!(namespace: nil)
+      viewer = fn -> {:error, :x} end
+
+      assert PublicRouting.host_for("p", "i", "s", base_domain: "tracker.cods.dev", viewer: viewer) ==
+               {:error, :no_namespace}
+    end
+  end
+
+  defp load_public_tunnel_workflow!(opts) do
+    namespace = Keyword.get(opts, :namespace)
+
+    namespace_line =
+      if is_binary(namespace) and namespace != "" do
+        "  namespace: #{namespace}\n"
+      else
+        ""
+      end
+
+    front_matter =
+      "github:\n  repo: acme/app\npublic_tunnel:\n  enabled: true\n" <> namespace_line
+
+    content = "---\n" <> front_matter <> "---\n"
+    File.write!(Workflow.workflow_file_path(), content)
+
+    if Process.whereis(SymphonyElixir.WorkflowStore) do
+      SymphonyElixir.WorkflowStore.force_reload()
+    end
+
+    :ok
   end
 end
