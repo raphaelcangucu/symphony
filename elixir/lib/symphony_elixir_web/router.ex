@@ -52,6 +52,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/form_options", IssueController, :form_options)
     get("/assistant/threads", AssistantThreadController, :index)
     post("/assistant/threads", AssistantThreadController, :create)
+    get("/recents", RecentsController, :index)
     get("/projects/:project_slug/assistant/config", AssistantController, :config)
     post("/projects/:project_slug/assistant/attachments", AssistantController, :upload_attachment)
     post("/projects/:project_slug/assistant/messages", AssistantController, :create)

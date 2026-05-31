@@ -217,6 +217,27 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     }
   end
 
+  @spec recent_item(map()) :: map()
+  def recent_item(item) when is_map(item) do
+    %{
+      id: item.id,
+      kind: to_string(item.kind),
+      scope: scope_string(item.scope),
+      project_slug: item.project_slug,
+      project_name: item.project_name,
+      title: item.title,
+      identifier: item.identifier,
+      thread_id: item.thread_id,
+      status: item.status,
+      status_kind: to_string(item.status_kind),
+      preview: item.preview,
+      updated_at: iso8601(item.updated_at)
+    }
+  end
+
+  defp scope_string(nil), do: nil
+  defp scope_string(scope), do: to_string(scope)
+
   defp event_to_string(nil), do: nil
   defp event_to_string(event) when is_atom(event), do: Atom.to_string(event)
   defp event_to_string(event) when is_binary(event), do: event
