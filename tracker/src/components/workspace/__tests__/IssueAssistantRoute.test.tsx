@@ -186,14 +186,15 @@ describe("IssueAssistantRoute", () => {
     expect(screen.getByText("issue:MAC-8")).toBeTruthy();
   });
 
-  it("keeps draft tool-call navigation as a fallback", () => {
+  it("does not navigate from new issue authoring on completed draft tool-call fallback alone", () => {
     renderAt("/projects/macro/assistant/new-issue");
 
     act(() => {
       screen.getByRole("button", { name: "create draft issue" }).click();
     });
 
-    expect(screen.getByTestId("location")).toHaveTextContent("/projects/macro/assistant/issue/MAC-7");
+    expect(screen.getByTestId("location")).toHaveTextContent("/projects/macro/assistant/new-issue");
+    expect(screen.getByText("issue:none")).toBeTruthy();
   });
 
   it("refreshes documents only when the changed identifier matches the open issue", () => {

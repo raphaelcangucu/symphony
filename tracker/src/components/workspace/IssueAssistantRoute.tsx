@@ -11,13 +11,6 @@ export function IssueAssistantRoute() {
   const { projectSlug, view } = useWorkspace();
   const identifier = issueId?.trim() ? issueId : undefined;
 
-  const handleDraftIssueCreated = useCallback(
-    (issue: { identifier: string }) => {
-      navigate(issueAssistantPath(projectSlug, issue.identifier));
-    },
-    [navigate, projectSlug],
-  );
-
   const handleIssueCreated = useCallback(
     (issue: { identifier: string }) => {
       navigate(issueAssistantPath(projectSlug, issue.identifier));
@@ -30,7 +23,6 @@ export function IssueAssistantRoute() {
       projectSlug={projectSlug}
       identifier={identifier}
       view={view}
-      onDraftIssueCreated={handleDraftIssueCreated}
       onIssueCreated={handleIssueCreated}
     />
   );
