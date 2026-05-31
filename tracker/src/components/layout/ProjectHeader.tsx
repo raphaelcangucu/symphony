@@ -1,11 +1,12 @@
-import { LayoutDashboard, List, Plus, RefreshCw } from "lucide-react";
+import { LayoutDashboard, List, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
 import { cn } from "@/lib/utils";
-import { newIssuePath, workspaceBasePath, type WorkspaceView } from "@/lib/workspaceRoutes";
+import { workspaceBasePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import type { TrackerKind } from "@/types/project";
 
 const TRACKER_LABELS: Record<Exclude<TrackerKind, "local">, string> = {
@@ -87,12 +88,7 @@ export function ProjectHeader({
             List
           </NavLink>
         </Button>
-        <Button size="sm" asChild>
-          <Link to={newIssuePath(projectSlug, view)}>
-            <Plus className="h-4 w-4" />
-            New issue
-          </Link>
-        </Button>
+        <NewIssueMenu projectSlug={projectSlug} size="sm" />
       </div>
     </header>
   );

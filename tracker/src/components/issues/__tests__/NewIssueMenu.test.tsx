@@ -1,0 +1,123 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
+import type { Issue } from "@/types/issue";
+import type { WorkflowStatusName } from "@/types/workflow-status";
+
+const createdIssue: Issue = {
+  id: "issue-1",
+  identifier: "MAC-1",
+  projectSlug: "macro-markets",
+  status: "In Progress",
+  title: "Draft launch checklist",
+  description: null,
+  priority: null,
+  position: 0,
+  labels: [],
+  blockedBy: [],
+  assignee: null,
+  creator: null,
+  url: null,
+  branchName: null,
+  createdAt: "2026-05-31T00:00:00Z",
+  updatedAt: "2026-05-31T00:00:00Z",
+};
+
+const issueCreateDialog = vi.fn(
+  ({
+    projectSlug,
+    defaultStatus,
+    open,
+    onCreated,
+    onOpenChange,
+  }: {
+    projectSlug: string;
+    defaultStatus?: WorkflowStatusName;
+    open?: boolean;
+    onCreated?: (issue: Issue) => void;
+    onOpenChange?: (open: boolean) => void;
+  }) =>
+    open ? (
+      <section aria-label="mock quick create dialog">
+        <p>project:{projectSlug}</p>
+        <p>status:{defaultStatus ?? "none"}</p>
+        <button
+          type="button"
+          onClick={() => {
+            onCreated?.(createdIssue);
+            onOpenChange?.(false);
+          }}
+        >
+          emit created issue
+        </button>
+      </section>
+    ) : null,
+);
+
+vi.mock("@/components/issues/IssueCreateDialog", () => ({
+  IssueCreateDialog: (props: Parameters<typeof issueCreateDialog>[0]) => issueCreateDialog(props),
+}));
+
+describe("NewIssueMenu", () => {
+  beforeEach(() => {
+    issueCreateDialog.mockClear();
+  });
+
+  it("navigates to the assistant new issue route from the primary action", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
+        <Routes>
+          <Route
+            path="/projects/macro-markets/board"
+            element={<NewIssueMenu projectSlug="macro-markets" />}
+          />
+          <Route path="/projects/macro-markets/assistant/new-issue" element={<div>Assistant issue authoring</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("link", { name: "New issue" }));
+
+    expect(await screen.findByText("Assistant issue authoring")).toBeInTheDocument();
+  });
+
+  it("opens quick create from the menu with the seeded status", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <NewIssueMenu projectSlug="macro-markets" status="In Progress" />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "New issue options" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Quick create" }));
+
+    expect(screen.getByRole("region", { name: "mock quick create dialog" })).toBeInTheDocument();
+    expect(screen.getByText("project:macro-markets")).toBeInTheDocument();
+    expect(screen.getByText("status:In Progress")).toBeInTheDocument();
+  });
+
+  it("invokes onCreated and closes the quick create dialog after creation", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <NewIssueMenu projectSlug="macro-markets" status="In Progress" onCreated={onCreated} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "New issue options" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Quick create" }));
+    await user.click(screen.getByRole("button", { name: "emit created issue" }));
+
+    expect(onCreated).toHaveBeenCalledWith(createdIssue);
+    expect(screen.queryByRole("region", { name: "mock quick create dialog" })).toBeNull();
+  });
+});

@@ -1,10 +1,10 @@
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Gauge, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
+import { Gauge, MoreHorizontal, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useState } from "react";
 
 import { AgentStatusDot } from "@/components/issues/AgentStatusBadge";
-import { IssueCreateDialog } from "@/components/issues/IssueCreateDialog";
+import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -57,7 +57,6 @@ export function BoardColumn({
   const meta = getStatusMeta(status, category);
   const Icon = meta.Icon;
 
-  const [createOpen, setCreateOpen] = useState(false);
   const [limitOpen, setLimitOpen] = useState(false);
   const [limitDraft, setLimitDraft] = useState("");
 
@@ -136,15 +135,14 @@ export function BoardColumn({
           {activeAgent ? <AgentStatusDot status={activeAgent.status} className="ml-0.5" /> : null}
         </div>
         <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            aria-label={`Add issue to ${status}`}
-            title="Add issue"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
+          <NewIssueMenu
+            projectSlug={projectSlug}
+            status={status}
+            statuses={statuses}
+            onCreated={onIssueCreated}
+            size="sm"
+            className="shrink-0"
+          />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -157,10 +155,6 @@ export function BoardColumn({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add issue
-              </DropdownMenuItem>
               <DropdownMenuItem onSelect={onToggleCollapse}>
                 <PanelLeftClose className="mr-2 h-4 w-4" />
                 Collapse column
@@ -206,25 +200,17 @@ export function BoardColumn({
           </div>
         </SortableContext>
         {issues.length === 0 ? (
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="mt-1 flex h-20 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/70 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-          >
-            <Plus className="h-4 w-4" />
-            Add issue
-          </button>
+          <div className="mt-1 flex h-20 w-full items-center justify-center rounded-xl border border-dashed border-border/70">
+            <NewIssueMenu
+              projectSlug={projectSlug}
+              status={status}
+              statuses={statuses}
+              onCreated={onIssueCreated}
+              size="sm"
+            />
+          </div>
         ) : null}
       </div>
-
-      <IssueCreateDialog
-        projectSlug={projectSlug}
-        defaultStatus={status}
-        statuses={statuses}
-        onCreated={onIssueCreated}
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-      />
 
       <Dialog open={limitOpen} onOpenChange={setLimitOpen}>
         <DialogContent>
