@@ -17,13 +17,16 @@ export interface DocumentViewerProps {
 
 interface DocumentKindConfig {
   label: string;
+  groupLabel: string;
   Icon: LucideIcon;
 }
 
+const DOCUMENT_KIND_ORDER: readonly IssueDocumentKind[] = ["spec", "plan", "handoff"];
+
 const DOCUMENT_KIND_CONFIG: Record<IssueDocumentKind, DocumentKindConfig> = {
-  spec: { label: "Spec", Icon: ScrollText },
-  plan: { label: "Plan", Icon: ListChecks },
-  handoff: { label: "Handoff", Icon: FileText },
+  spec: { label: "Spec", groupLabel: "Specs", Icon: ScrollText },
+  plan: { label: "Plan", groupLabel: "Plans", Icon: ListChecks },
+  handoff: { label: "Handoff", groupLabel: "Handoff", Icon: FileText },
 };
 
 export function DocumentViewer({
@@ -34,26 +37,31 @@ export function DocumentViewer({
   reason,
 }: DocumentViewerProps) {
   const visibleDocuments = useMemo(() => documents.filter(hasReadablePath), [documents]);
+  const groupedDocuments = useMemo(() => groupDocumentsByKind(visibleDocuments), [visibleDocuments]);
+  const orderedDocuments = useMemo(() => groupedDocuments.flatMap((group) => group.documents), [groupedDocuments]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const selectedDocument = visibleDocuments.find((document) => document.path === selectedPath) ?? null;
+  const selectedDocument = orderedDocuments.find((document) => document.path === selectedPath) ?? null;
+  const selectedDocumentPath = selectedDocument?.path ?? null;
+  const selectedDocumentUpdatedAt = selectedDocument?.updatedAt ?? null;
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [reloadCounter, setReloadCounter] = useState(0);
 
   useEffect(() => {
-    if (!available || visibleDocuments.length === 0) {
+    if (!available || orderedDocuments.length === 0) {
       setSelectedPath(null);
       return;
     }
 
     setSelectedPath((currentPath) => {
-      if (currentPath && visibleDocuments.some((document) => document.path === currentPath)) return currentPath;
-      return visibleDocuments[0].path;
+      if (currentPath && orderedDocuments.some((document) => document.path === currentPath)) return currentPath;
+      return orderedDocuments[0].path;
     });
-  }, [available, visibleDocuments]);
+  }, [available, orderedDocuments]);
 
   useEffect(() => {
-    if (!available || !selectedDocument) {
+    if (!available || !selectedDocumentPath) {
       setContent(null);
       setLoadError(false);
       setLoading(false);
@@ -65,7 +73,7 @@ export function DocumentViewer({
     setLoadError(false);
     setContent(null);
 
-    void readIssueDocument(projectSlug, identifier, selectedDocument.path)
+    void readIssueDocument(projectSlug, identifier, selectedDocumentPath)
       .then((nextContent) => {
         if (!cancelled) {
           setContent(nextContent);
@@ -85,7 +93,13 @@ export function DocumentViewer({
     return () => {
       cancelled = true;
     };
-  }, [available, identifier, projectSlug, selectedDocument]);
+  }, [available, identifier, projectSlug, reloadCounter, selectedDocumentPath, selectedDocumentUpdatedAt]);
+
+  function retrySelectedDocument() {
+    if (!selectedDocumentPath || loading) return;
+
+    setReloadCounter((current) => current + 1);
+  }
 
   if (!available) {
     return (
@@ -109,13 +123,14 @@ export function DocumentViewer({
           <p className="text-xs text-muted-foreground">Generated specs, plans, and handoffs.</p>
         </div>
 
-        <div className="space-y-1 p-2">
-          {visibleDocuments.map((document) => (
-            <DocumentListItem
-              key={document.path}
-              document={document}
-              selected={document.path === selectedPath}
-              onSelect={() => setSelectedPath(document.path)}
+        <div className="space-y-4 p-2">
+          {groupedDocuments.map((group) => (
+            <DocumentKindGroup
+              key={group.kind}
+              kind={group.kind}
+              documents={group.documents}
+              selectedPath={selectedPath}
+              onSelect={setSelectedPath}
             />
           ))}
         </div>
@@ -128,8 +143,11 @@ export function DocumentViewer({
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
             <p className="text-sm font-medium text-destructive">Could not load this document.</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Try selecting it again, or ask the assistant to regenerate the document.
+              Use Retry to load it again, or ask the assistant to regenerate the document.
             </p>
+            <Button type="button" variant="outline" size="sm" className="mt-3" onClick={retrySelectedDocument}>
+              Retry
+            </Button>
           </div>
         ) : null}
 
@@ -139,6 +157,39 @@ export function DocumentViewer({
 
         {!loading && !loadError && !content ? <DocumentContentState>No content to display.</DocumentContentState> : null}
       </article>
+    </section>
+  );
+}
+
+function DocumentKindGroup({
+  kind,
+  documents,
+  selectedPath,
+  onSelect,
+}: {
+  kind: IssueDocumentKind;
+  documents: IssueDocument[];
+  selectedPath: string | null;
+  onSelect: (path: string) => void;
+}) {
+  const { groupLabel } = DOCUMENT_KIND_CONFIG[kind];
+  const headingId = `document-kind-${kind}`;
+
+  return (
+    <section aria-labelledby={headingId}>
+      <h3 id={headingId} className="px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {groupLabel}
+      </h3>
+      <div className="mt-1 space-y-1">
+        {documents.map((document) => (
+          <DocumentListItem
+            key={document.path}
+            document={document}
+            selected={document.path === selectedPath}
+            onSelect={() => onSelect(document.path)}
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -190,6 +241,13 @@ function DocumentContentState({ children }: { children: React.ReactNode }) {
 
 function hasReadablePath(document: IssueDocument): boolean {
   return typeof document.path === "string" && document.path.trim().length > 0;
+}
+
+function groupDocumentsByKind(documents: IssueDocument[]): Array<{ kind: IssueDocumentKind; documents: IssueDocument[] }> {
+  return DOCUMENT_KIND_ORDER.map((kind) => ({
+    kind,
+    documents: documents.filter((document) => document.kind === kind),
+  })).filter((group) => group.documents.length > 0);
 }
 
 function formatUpdatedAt(updatedAt: string): string {

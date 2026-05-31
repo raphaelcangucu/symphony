@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -87,6 +87,19 @@ describe("DocumentViewer", () => {
     expect(screen.getByRole("button", { name: /Spec Public preview tunnel design/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Plan Public preview tunnel plan/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Handoff Public preview tunnel handoff/i })).toBeTruthy();
+  });
+
+  it("groups document titles by kind in deterministic order", async () => {
+    readIssueDocument.mockResolvedValueOnce("# Spec");
+
+    renderViewer();
+
+    const groupHeadings = screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+    expect(groupHeadings).toEqual(["Specs", "Plans", "Handoff"]);
+
+    expect(within(screen.getByRole("region", { name: "Specs" })).getByRole("button", { name: /Spec Public preview tunnel design/i })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Plans" })).getByRole("button", { name: /Plan Public preview tunnel plan/i })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Handoff" })).getByRole("button", { name: /Handoff Public preview tunnel handoff/i })).toBeTruthy();
   });
 
   it("loads the first document and renders its markdown content", async () => {
@@ -186,6 +199,25 @@ describe("DocumentViewer", () => {
     renderViewer();
 
     expect(await screen.findByText("Could not load this document.")).toBeTruthy();
-    expect(screen.getByText("Try selecting it again, or ask the assistant to regenerate the document.")).toBeTruthy();
+    expect(screen.getByText("Use Retry to load it again, or ask the assistant to regenerate the document.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
+  it("reloads the current document after a transient read failure", async () => {
+    readIssueDocument.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce("# Recovered Spec");
+
+    renderViewer();
+
+    expect(await screen.findByText("Could not load this document.")).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(readIssueDocument).toHaveBeenCalledTimes(2);
+    expect(readIssueDocument).toHaveBeenLastCalledWith(
+      "macro-markets",
+      "MAC-1",
+      "docs/superpowers/specs/2026-05-31-test-design.md",
+    );
+    expect(await screen.findByRole("heading", { name: "Recovered Spec" })).toBeTruthy();
   });
 });
