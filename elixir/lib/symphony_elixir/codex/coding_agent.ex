@@ -17,9 +17,12 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @thread_start_id 2
   @turn_start_id 3
   @goal_set_id 4
+  @default_max_goal_turns 50
+  @max_goal_turns_cap 500
   @port_line_bytes 1_048_576
   @max_stream_log_bytes 1_000
   @non_interactive_tool_input_answer "This is a non-interactive session. Operator input is unavailable."
+  @goal_continuation_prompt "Continue working toward the active goal. Review prior progress, continue from the current workspace state, and stop when the goal is complete or blocked."
 
   @type session :: %{
           port: port(),
@@ -52,7 +55,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
       with {:ok, session_policies} <- session_policies(expanded_workspace),
            {:ok, thread_id} <- do_start_session(port, expanded_workspace, session_policies, opts) do
-        maybe_set_goal(port, thread_id, Keyword.get(opts, :goal))
+        goal_state = maybe_set_goal(port, thread_id, Keyword.get(opts, :goal))
         Session.write(expanded_workspace, thread_id)
 
         {:ok,
@@ -64,7 +67,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
            thread_sandbox: session_policies.thread_sandbox,
            turn_sandbox_policy: session_policies.turn_sandbox_policy,
            thread_id: thread_id,
-           workspace: expanded_workspace
+           workspace: expanded_workspace,
+           goal_active: goal_state == :active,
+           goal_attempted: goal_state != :not_requested
          }}
       else
         {:error, reason} ->
@@ -75,20 +80,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   @spec run_turn(session(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
-  def run_turn(
-        %{
-          port: port,
-          metadata: metadata,
-          approval_policy: approval_policy,
-          auto_approve_requests: auto_approve_requests,
-          turn_sandbox_policy: turn_sandbox_policy,
-          thread_id: thread_id,
-          workspace: workspace
-        },
-        prompt,
-        issue,
-        opts \\ []
-      ) do
+  def run_turn(%{} = session, prompt, issue, opts \\ []) do
     on_message = Keyword.get(opts, :on_message, &default_on_message/1)
 
     tool_executor =
@@ -96,6 +88,81 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         DynamicTool.execute(tool, arguments)
       end)
 
+    goal_active = ensure_goal_active(session, opts)
+    max_goal_turns = max_goal_turns(opts)
+
+    run_goal_turns(
+      session,
+      prompt,
+      issue,
+      opts,
+      on_message,
+      tool_executor,
+      goal_active,
+      max_goal_turns,
+      1
+    )
+  end
+
+  defp run_goal_turns(
+         session,
+         prompt,
+         issue,
+         opts,
+         on_message,
+         tool_executor,
+         goal_active,
+         max_goal_turns,
+         turn_number
+       ) do
+    case run_single_turn(session, prompt, issue, opts, on_message, tool_executor) do
+      {:ok, turn_session} ->
+        case next_goal_turn_action(goal_active, turn_session, turn_number, max_goal_turns) do
+          :continue ->
+            Logger.info("Continuing Codex goal for #{issue_context(issue)} turn=#{turn_number + 1}/#{max_goal_turns}")
+
+            run_goal_turns(
+              session,
+              @goal_continuation_prompt,
+              issue,
+              opts,
+              on_message,
+              tool_executor,
+              goal_active,
+              max_goal_turns,
+              turn_number + 1
+            )
+
+          :budget_exhausted ->
+            Logger.info("Codex goal turn budget exhausted for #{issue_context(issue)} max_goal_turns=#{max_goal_turns}")
+
+            {:ok, Map.put(turn_session, :goal_turns, turn_number)}
+
+          :stop ->
+            {:ok, Map.put(turn_session, :goal_turns, turn_number)}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp run_single_turn(
+         %{
+           port: port,
+           metadata: metadata,
+           approval_policy: approval_policy,
+           auto_approve_requests: auto_approve_requests,
+           turn_sandbox_policy: turn_sandbox_policy,
+           thread_id: thread_id,
+           workspace: workspace
+         },
+         prompt,
+         issue,
+         opts,
+         on_message,
+         tool_executor
+       ) do
     case start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy, opts) do
       {:ok, turn_id} ->
         session_id = "#{thread_id}-#{turn_id}"
@@ -113,12 +180,13 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         )
 
         case await_turn_completion(port, on_message, tool_executor, auto_approve_requests) do
-          {:ok, result} ->
+          {:ok, completion_payload} ->
             Logger.info("Codex session completed for #{issue_context(issue)} session_id=#{session_id}")
 
             {:ok,
              %{
-               result: result,
+               result: :turn_completed,
+               completion_payload: completion_payload,
                session_id: session_id,
                thread_id: thread_id,
                turn_id: turn_id
@@ -146,6 +214,73 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         {:error, reason}
     end
   end
+
+  defp next_goal_turn_action(false, _turn_session, _turn_number, _max_goal_turns), do: :stop
+
+  defp next_goal_turn_action(true, %{completion_payload: completion_payload}, turn_number, max_goal_turns) do
+    case goal_status_from_completion(completion_payload) do
+      :active when turn_number < max_goal_turns -> :continue
+      :active -> :budget_exhausted
+      _status -> :stop
+    end
+  end
+
+  defp ensure_goal_active(%{goal_active: true}, _opts), do: true
+  defp ensure_goal_active(%{goal_attempted: true}, _opts), do: false
+
+  defp ensure_goal_active(%{port: port, thread_id: thread_id}, opts) do
+    maybe_set_goal(port, thread_id, Keyword.get(opts, :goal)) == :active
+  end
+
+  defp ensure_goal_active(_session, _opts), do: false
+
+  defp max_goal_turns(opts) do
+    case Keyword.get(opts, :max_goal_turns, @default_max_goal_turns) do
+      value when is_integer(value) and value > 0 -> min(value, @max_goal_turns_cap)
+      _value -> @default_max_goal_turns
+    end
+  end
+
+  # Supported Codex completion status shapes for goal continuation.
+  defp goal_status_from_completion(payload) when is_map(payload) do
+    [
+      ["params", "goal", "status"],
+      ["params", "goalStatus"],
+      ["goal", "status"],
+      ["goalStatus"]
+    ]
+    |> Enum.find_value(fn path -> payload |> dig(path) |> normalize_goal_status() end)
+    |> case do
+      nil -> :unknown
+      status -> status
+    end
+  end
+
+  defp goal_status_from_completion(_payload), do: :unknown
+
+  defp normalize_goal_status(status) when is_binary(status) do
+    status
+    |> String.trim()
+    |> String.downcase()
+    |> case do
+      "active" -> :active
+      "in_progress" -> :active
+      "in-progress" -> :active
+      "running" -> :active
+      "pending" -> :active
+      "completed" -> :completed
+      "complete" -> :completed
+      "done" -> :completed
+      "satisfied" -> :completed
+      "blocked" -> :blocked
+      "failed" -> :blocked
+      "cancelled" -> :blocked
+      "canceled" -> :blocked
+      _other -> nil
+    end
+  end
+
+  defp normalize_goal_status(_status), do: nil
 
   @spec stop_session(session()) :: :ok
   def stop_session(%{port: port}) when is_port(port) do
@@ -262,13 +397,13 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp maybe_set_goal(_port, _thread_id, nil), do: :ok
+  defp maybe_set_goal(_port, _thread_id, nil), do: :not_requested
 
   defp maybe_set_goal(port, thread_id, goal) when is_binary(goal) do
     goal = String.trim(goal)
 
     if goal == "" do
-      :ok
+      :inactive
     else
       set_goal(port, thread_id, goal)
     end
@@ -277,7 +412,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   defp maybe_set_goal(_port, thread_id, _goal) do
     Logger.warning("Codex goal option must be a string; continuing with single-turn session thread_id=#{thread_id}")
 
-    :ok
+    :inactive
   end
 
   defp set_goal(port, thread_id, goal) do
@@ -290,17 +425,17 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
       case await_response(port, @goal_set_id) do
         {:ok, _result} ->
-          :ok
+          :active
 
         {:error, reason} ->
           Logger.warning("Codex failed to set thread goal; continuing with single-turn session thread_id=#{thread_id}: #{inspect(reason)}")
 
-          :ok
+          :inactive
       end
     else
       Logger.warning("Codex goal provided but goal mode is disabled; continuing with single-turn session thread_id=#{thread_id}")
 
-      :ok
+      :inactive
     end
   end
 
@@ -378,7 +513,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     case Jason.decode(payload_string) do
       {:ok, %{"method" => "turn/completed"} = payload} ->
         emit_turn_event(on_message, :turn_completed, payload, payload_string, port, payload)
-        {:ok, :turn_completed}
+        {:ok, payload}
 
       {:ok, %{"method" => "turn/failed", "params" => _} = payload} ->
         emit_turn_event(

@@ -87,6 +87,73 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
         assert log =~ "Codex failed to set thread goal"
       end)
     end
+
+    test "auto-continues while completed turns report an active goal" do
+      with_fake_goal_server([:active, :completed], fn workspace, issue, trace_file ->
+        enable_goals!()
+
+        assert {:ok, result} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
+
+        messages = outbound_messages(trace_file)
+        turn_starts = messages_with_method(messages, "turn/start")
+
+        assert result[:result] == :turn_completed
+        assert length(turn_starts) == 2
+
+        assert turn_prompt(Enum.at(turn_starts, 0)) =~ "Build the feature"
+
+        assert turn_prompt(Enum.at(turn_starts, 1)) =~
+                 "Continue working toward the active goal"
+      end)
+    end
+
+    test "stops auto-continuation when completed turns report a blocked goal" do
+      with_fake_goal_server([:blocked, :active], fn workspace, issue, trace_file ->
+        enable_goals!()
+
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
+
+        messages = outbound_messages(trace_file)
+
+        assert messages_with_method(messages, "thread/goal/set") |> length() == 1
+        assert messages_with_method(messages, "turn/start") |> length() == 1
+      end)
+    end
+
+    test "stops auto-continuation at the configured max goal turn budget" do
+      with_fake_goal_server([:active, :active, :completed], fn workspace, issue, trace_file ->
+        enable_goals!()
+
+        log =
+          capture_log(fn ->
+            assert {:ok, _result} =
+                     AppServer.run(workspace, "Build the feature", issue,
+                       goal: "Ship the feature",
+                       max_goal_turns: 2
+                     )
+          end)
+
+        messages = outbound_messages(trace_file)
+
+        assert messages_with_method(messages, "turn/start") |> length() == 2
+        assert log =~ "Codex goal turn budget exhausted"
+      end)
+    end
+
+    test "does not auto-continue when no goal is provided" do
+      with_fake_goal_server([:active, :completed], fn workspace, issue, trace_file ->
+        enable_goals!()
+
+        assert {:ok, _result} = AppServer.run(workspace, "Build the feature", issue)
+
+        messages = outbound_messages(trace_file)
+
+        refute message_with_method(messages, "thread/goal/set")
+        assert messages_with_method(messages, "turn/start") |> length() == 1
+      end)
+    end
   end
 
   defp with_fake_goal_server(response_mode \\ :goal_ok, fun) when is_function(fun, 3) do
@@ -129,13 +196,30 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
   defp write_goal_fake_codex!(codex_binary, trace_file, response_mode) do
     goal_response =
       case response_mode do
+        statuses when is_list(statuses) -> ~s({"id":4,"result":{}})
         :goal_ok -> ~s({"id":4,"result":{}})
         :goal_error -> ~s({"id":4,"error":{"code":-32601,"message":"Method not found"}})
       end
 
+    turn_completion_cases =
+      response_mode
+      |> turn_completion_statuses()
+      |> Enum.with_index(1)
+      |> Enum.map_join("\n", fn {status, index} ->
+        """
+                  #{index})
+                    printf '%s\\n' '#{turn_completed_payload(status)}'
+                    ;;
+        """
+      end)
+
+    turn_completion_count = length(turn_completion_statuses(response_mode))
+
     File.write!(codex_binary, """
     #!/bin/sh
     trace_file="#{trace_file}"
+    turn_count=0
+
     while IFS= read -r line; do
       printf 'JSON:%s\\n' "$line" >> "$trace_file"
 
@@ -152,9 +236,17 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
           printf '%s\\n' '#{goal_response}'
           ;;
         *'"method":"turn/start"'*)
+          turn_count=$((turn_count + 1))
           printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-goal"}}}'
-          printf '%s\\n' '{"method":"turn/completed"}'
-          exit 0
+          case "$turn_count" in
+    #{turn_completion_cases}
+            *)
+              printf '%s\\n' '{"method":"turn/completed"}'
+              ;;
+          esac
+          if [ "$turn_count" -ge #{turn_completion_count} ]; then
+            exit 0
+          fi
           ;;
         *)
           ;;
@@ -164,6 +256,20 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
 
     File.chmod!(codex_binary, 0o755)
   end
+
+  defp turn_completion_statuses(statuses) when is_list(statuses), do: statuses
+  defp turn_completion_statuses(_response_mode), do: [:unknown]
+
+  defp turn_completed_payload(:active),
+    do: ~s({"method":"turn/completed","params":{"goal":{"status":"active"}}})
+
+  defp turn_completed_payload(:completed),
+    do: ~s({"method":"turn/completed","params":{"goal":{"status":"completed"}}})
+
+  defp turn_completed_payload(:blocked),
+    do: ~s({"method":"turn/completed","params":{"goal":{"status":"blocked"}}})
+
+  defp turn_completed_payload(:unknown), do: ~s({"method":"turn/completed"})
 
   defp enable_goals! do
     workflow_file = Workflow.workflow_file_path()
@@ -191,6 +297,14 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
 
   defp message_with_method(messages, method) do
     Enum.find(messages, &(Map.get(&1, "method") == method))
+  end
+
+  defp messages_with_method(messages, method) do
+    Enum.filter(messages, &(Map.get(&1, "method") == method))
+  end
+
+  defp turn_prompt(%{"params" => %{"input" => input}}) when is_list(input) do
+    Enum.map_join(input, "\n", &Map.get(&1, "text", ""))
   end
 
   defp message_order(messages) do
