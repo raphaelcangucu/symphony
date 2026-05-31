@@ -272,6 +272,31 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert_receive {:docs_changed, "MAC-1"}
     end
 
+    test "documents_changed fires when an existing doc changes without metadata changes", %{thread: thread} do
+      test_pid = self()
+      ws = Workspace.path_for_issue("MAC-1")
+      specs_dir = Path.join([ws, "docs", "superpowers", "specs"])
+      existing_path = Path.join(specs_dir, "existing.md")
+
+      File.mkdir_p!(specs_dir)
+      File.write!(existing_path, "# Existing\n\nold")
+      fixed_mtime = File.stat!(existing_path).mtime
+
+      runner = fn _workspace, _prompt, _issue, _opts ->
+        File.write!(existing_path, "# Existing\n\nnew")
+        File.touch!(existing_path, fixed_mtime)
+        {:ok, %{assistant_message: "updated spec", tool_calls: [], codex_thread_id: "c", turn_id: "t"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "revise spec", %{},
+                 runner: runner,
+                 on_documents_changed: fn id -> send(test_pid, {:docs_changed, id}) end
+               )
+
+      assert_receive {:docs_changed, "MAC-1"}
+    end
+
     test "documents_changed does not fire when doc fingerprint is unchanged", %{thread: thread} do
       test_pid = self()
 

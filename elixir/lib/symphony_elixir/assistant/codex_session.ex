@@ -369,11 +369,14 @@ defmodule SymphonyElixir.Assistant.CodexSession do
       %{documents: documents} when is_list(documents) ->
         documents
         |> Enum.map(fn document ->
+          path = Map.get(document, :path)
+
           {
-            Map.get(document, :path),
-            Map.get(document, :updated_at),
+            path,
             Map.get(document, :kind),
-            Map.get(document, :title)
+            Map.get(document, :title),
+            Map.get(document, :updated_at),
+            content_fingerprint(identifier, path)
           }
         end)
         |> Enum.sort()
@@ -382,6 +385,15 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         []
     end
   end
+
+  defp content_fingerprint(identifier, path) when is_binary(path) do
+    case IssueDocuments.read(identifier, path) do
+      {:ok, body} -> {:ok, :crypto.hash(:sha256, body) |> Base.encode16(case: :lower)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp content_fingerprint(_identifier, _path), do: {:error, :invalid_path}
 
   defp maybe_notify_documents(identifier, before, opts) do
     if doc_fingerprint(identifier) != before do
