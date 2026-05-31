@@ -6,6 +6,7 @@ import { ViewerProvider } from "@/components/auth/ViewerProvider";
 import { Layout } from "@/components/layout/Layout";
 import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { ProjectDevEnvRoute } from "@/components/projects/ProjectDevEnvRoute";
+import { EditProjectRoute } from "@/components/projects/EditProjectRoute";
 import { NewProjectRoute } from "@/components/projects/NewProjectRoute";
 import { ProjectFiltersRoute } from "@/components/projects/ProjectFiltersRoute";
 import { IssueDetailRoute } from "@/components/workspace/IssueDetailRoute";
@@ -48,6 +49,7 @@ export function App() {
               <Route path="new" element={<NewProjectRoute />} />
               <Route path="filters" element={<ProjectFiltersRoute />} />
               <Route path=":projectSlug/dev-env" element={<ProjectDevEnvRoute />} />
+              <Route path=":projectSlug/edit" element={<EditProjectRoute />} />
             </Route>
             <Route path="projects/:projectSlug" element={<ProjectWorkspaceLayout />}>
               <Route index element={<Navigate to="board" replace />} />

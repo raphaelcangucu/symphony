@@ -48,6 +48,10 @@ export function projectsDevEnvPath(projectSlug: string): string {
   return `${PROJECTS_PATH}/${requireSlug(projectSlug)}/dev-env`;
 }
 
+export function projectEditPath(projectSlug: string): string {
+  return `${PROJECTS_PATH}/${requireSlug(projectSlug)}/edit`;
+}
+
 export function issuePath(
   projectSlug: string,
   view: WorkspaceView,

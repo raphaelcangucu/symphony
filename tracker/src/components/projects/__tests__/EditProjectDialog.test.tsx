@@ -86,6 +86,33 @@ describe("EditProjectDialog", () => {
     });
   });
 
+  it("shows which GitHub board the project is connected to with a link", async () => {
+    vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([
+      {
+        id: "PVT_kwDOCpPais4BY509",
+        number: 2,
+        title: "Macro Markets",
+        owner: { login: "clouapp", kind: "organization" },
+        repoNameWithOwner: "clouapp/front",
+      },
+    ]);
+
+    const connected = localProject({
+      tracker: {
+        kind: "github",
+        config: { project_id: "PVT_kwDOCpPais4BY509", project_number: 2, repo: "clouapp/front", status_field: "Status" },
+      },
+    });
+
+    render(<EditProjectDialog project={connected} open onOpenChange={vi.fn()} onSaved={vi.fn()} />);
+
+    expect(screen.getByText("Connected board")).toBeInTheDocument();
+    await waitFor(() => {
+      const link = screen.getByRole("link", { name: /Open on GitHub/i });
+      expect(link).toHaveAttribute("href", "https://github.com/orgs/clouapp/projects/2");
+    });
+  });
+
   it("blocks saving a GitHub source without a selected board", async () => {
     vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
 

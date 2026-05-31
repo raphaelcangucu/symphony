@@ -1,4 +1,4 @@
-import { Archive, FolderKanban, Plus, RotateCcw, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Archive, FolderKanban, Pencil, Plus, RotateCcw, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { notifyTrackerProjectsChanged } from "@/lib/projectEvents";
-import { projectsDevEnvPath, projectsFiltersPath, projectsNewPath } from "@/lib/workspaceRoutes";
+import { projectEditPath, projectsDevEnvPath, projectsFiltersPath, projectsNewPath } from "@/lib/workspaceRoutes";
 import { archiveProject, deleteProject, listProjects, restoreProject } from "@/services/projects";
 import type { Project } from "@/types/project";
 
@@ -222,6 +222,17 @@ export function ProjectListPage() {
                     <CardContent className="text-sm text-muted-foreground">{project.issueCount ?? 0} issues</CardContent>
                   </Link>
                   <CardContent className="flex justify-end gap-1 border-t pt-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground"
+                      aria-label={`Edit ${project.name}`}
+                      title="Edit project"
+                      onClick={() => navigate({ pathname: projectEditPath(project.slug), search: location.search })}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
