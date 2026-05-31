@@ -74,6 +74,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> Keyword.put(:on_assistant_delta, fn delta -> push(socket, "assistant_delta", %{delta: delta}) end)
           |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
           |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
+          |> Keyword.put(:on_documents_changed, fn identifier ->
+            push(socket, "assistant_document_changed", %{identifier: identifier})
+          end)
 
         thread
         |> run_send_turn(project_slug, trimmed, context, opts)

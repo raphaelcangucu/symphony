@@ -135,6 +135,42 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_receive {:workspace, ^expected_workspace}
   end
 
+  test "documents_changed pushes assistant_document_changed for issue doc-writing turn", %{socket: socket} do
+    workspace_root =
+      Path.join(System.tmp_dir!(), "symphony-assistant-channel-workspaces-#{System.unique_integer([:positive])}")
+
+    workflow_root =
+      Path.join(System.tmp_dir!(), "symphony-assistant-channel-workflow-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(workspace_root)
+    File.mkdir_p!(workflow_root)
+
+    workflow_file = Path.join(workflow_root, "WORKFLOW.md")
+    TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: workspace_root)
+    Workflow.set_workflow_file_path(workflow_file)
+
+    on_exit(fn ->
+      Application.delete_env(:symphony_elixir, :workflow_file_path)
+      File.rm_rf!(workspace_root)
+      File.rm_rf!(workflow_root)
+    end)
+
+    {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+    {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ignored"})
+
+    Application.put_env(:symphony_elixir, :assistant_runner, fn workspace, _prompt, _issue, _opts ->
+      File.mkdir_p!(Path.join([workspace, "docs", "superpowers", "specs"]))
+      File.write!(Path.join([workspace, "docs", "superpowers", "specs", "new.md"]), "# New")
+      {:ok, %{assistant_message: "wrote spec", codex_thread_id: "codex-thread", turn_id: "turn-1", tool_calls: []}}
+    end)
+
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
+
+    ref = push(socket, "send_message", %{"message" => "write doc"})
+    assert_reply(ref, :ok)
+    assert_push("assistant_document_changed", %{identifier: "MAC-1"})
+  end
+
   test "join assistant:thread:<id> with unknown id is rejected", %{socket: socket} do
     assert {:error, %{reason: _}} = subscribe_and_join(socket, "assistant:thread:999999999", %{})
   end

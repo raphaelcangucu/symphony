@@ -252,6 +252,41 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert prompt =~ "brainstorming"
       assert prompt =~ "docs/superpowers/specs"
     end
+
+    test "documents_changed fires on_documents_changed when a turn writes a doc", %{thread: thread} do
+      test_pid = self()
+      ws = Workspace.path_for_issue("MAC-1")
+
+      runner = fn _workspace, _prompt, _issue, _opts ->
+        File.mkdir_p!(Path.join([ws, "docs", "superpowers", "specs"]))
+        File.write!(Path.join([ws, "docs", "superpowers", "specs", "new.md"]), "# New")
+        {:ok, %{assistant_message: "wrote spec", tool_calls: [], codex_thread_id: "c", turn_id: "t"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "spec it", %{},
+                 runner: runner,
+                 on_documents_changed: fn id -> send(test_pid, {:docs_changed, id}) end
+               )
+
+      assert_receive {:docs_changed, "MAC-1"}
+    end
+
+    test "documents_changed does not fire when doc fingerprint is unchanged", %{thread: thread} do
+      test_pid = self()
+
+      runner = fn _workspace, _prompt, _issue, _opts ->
+        {:ok, %{assistant_message: "no docs", tool_calls: [], codex_thread_id: "c", turn_id: "t"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "chat only", %{},
+                 runner: runner,
+                 on_documents_changed: fn id -> send(test_pid, {:docs_changed, id}) end
+               )
+
+      refute_receive {:docs_changed, "MAC-1"}, 50
+    end
   end
 
   defp tmp_dir do

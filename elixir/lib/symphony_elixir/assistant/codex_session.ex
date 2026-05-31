@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Assistant.CodexSession do
   @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
 
-  alias SymphonyElixir.Assistant.{History, ToolExecutor}
+  alias SymphonyElixir.Assistant.{History, IssueDocuments, ToolExecutor}
   alias SymphonyElixir.Codex.CodingAgent
   alias SymphonyElixir.Config
   alias SymphonyElixir.{Skills, Workspace}
@@ -80,6 +80,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
       when is_binary(message) and is_map(context) and is_list(opts) do
     with {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_issue_workspace(identifier),
+         docs_before <- doc_fingerprint(identifier),
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
            History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
@@ -87,7 +88,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, identifier, opts),
          {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
-         {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
+         {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result),
+         :ok <- maybe_notify_documents(identifier, docs_before, opts) do
       {:ok,
        %{
          assistant_message: assistant_message.content,
@@ -359,6 +361,33 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
       _ ->
         :ok
+    end
+  end
+
+  defp doc_fingerprint(identifier) do
+    case IssueDocuments.list(identifier) do
+      %{documents: documents} when is_list(documents) ->
+        documents
+        |> Enum.map(fn document ->
+          {
+            Map.get(document, :path),
+            Map.get(document, :updated_at),
+            Map.get(document, :kind),
+            Map.get(document, :title)
+          }
+        end)
+        |> Enum.sort()
+
+      _other ->
+        []
+    end
+  end
+
+  defp maybe_notify_documents(identifier, before, opts) do
+    if doc_fingerprint(identifier) != before do
+      maybe_call(opts, :on_documents_changed, identifier)
+    else
+      :ok
     end
   end
 
