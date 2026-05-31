@@ -106,10 +106,8 @@ defmodule SymphonyElixir.AgentRunner do
       Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
 
       case continue_with_issue?(issue, issue_state_fetcher) do
-        {:continue, refreshed_issue} when turn_number < max_turns ->
-          Logger.info("Continuing agent run for #{issue_context(refreshed_issue)} after normal turn completion turn=#{turn_number}/#{max_turns}")
-
-          do_run_codex_turns(
+        {:continue, refreshed_issue} ->
+          continue_or_stop_outer_turn_loop(
             app_session,
             workspace,
             refreshed_issue,
@@ -117,14 +115,9 @@ defmodule SymphonyElixir.AgentRunner do
             opts,
             issue_state_fetcher,
             agent_kind,
-            turn_number + 1,
+            turn_number,
             max_turns
           )
-
-        {:continue, refreshed_issue} ->
-          Logger.info("Reached agent.max_turns for #{issue_context(refreshed_issue)} with issue still active; returning control to orchestrator")
-
-          :ok
 
         {:done, _refreshed_issue} ->
           :ok
@@ -132,6 +125,45 @@ defmodule SymphonyElixir.AgentRunner do
         {:error, reason} ->
           {:error, reason}
       end
+    end
+  end
+
+  defp continue_or_stop_outer_turn_loop(
+         app_session,
+         workspace,
+         refreshed_issue,
+         codex_update_recipient,
+         opts,
+         issue_state_fetcher,
+         agent_kind,
+         turn_number,
+         max_turns
+       ) do
+    cond do
+      goal_mode?(opts) ->
+        Logger.info("Stopping outer agent turn loop for #{issue_context(refreshed_issue)} because Codex goal mode handles continuation internally")
+
+        :ok
+
+      turn_number < max_turns ->
+        Logger.info("Continuing agent run for #{issue_context(refreshed_issue)} after normal turn completion turn=#{turn_number}/#{max_turns}")
+
+        do_run_codex_turns(
+          app_session,
+          workspace,
+          refreshed_issue,
+          codex_update_recipient,
+          opts,
+          issue_state_fetcher,
+          agent_kind,
+          turn_number + 1,
+          max_turns
+        )
+
+      true ->
+        Logger.info("Reached agent.max_turns for #{issue_context(refreshed_issue)} with issue still active; returning control to orchestrator")
+
+        :ok
     end
   end
 
@@ -179,6 +211,13 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp continue_with_issue?(issue, _issue_state_fetcher), do: {:done, issue}
+
+  defp goal_mode?(opts) do
+    case Keyword.get(opts, :goal) do
+      goal when is_binary(goal) -> String.trim(goal) != ""
+      _goal -> false
+    end
+  end
 
   defp wait_state?(state_name) when is_binary(state_name) do
     normalized_state = normalize_issue_state(state_name)

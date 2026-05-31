@@ -171,6 +171,89 @@ defmodule SymphonyElixir.AgentRunnerTest do
     end
   end
 
+  test "does not reset goal turn budget through the outer runner loop" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-agent-runner-goal-budget-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-goal-budget.trace")
+
+      File.mkdir_p!(test_root)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      trace_file="#{trace_file}"
+
+      while IFS= read -r line; do
+        printf 'JSON:%s\\n' "$line" >> "$trace_file"
+
+        case "$line" in
+          *'"method":"initialize"'*)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          *'"method":"initialized"'*)
+            ;;
+          *'"method":"thread/start"'*)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-runner-goal-budget"}}}'
+            ;;
+          *'"method":"thread/goal/set"'*)
+            printf '%s\\n' '{"id":4,"result":{}}'
+            ;;
+          *'"method":"turn/start"'*)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-runner-goal-budget"}}}'
+            printf '%s\\n' '{"method":"turn/completed","params":{"goal":{"status":"active"}}}'
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server",
+        prompt: "Ticket {{ issue.identifier }}"
+      )
+
+      enable_goals!()
+
+      issue = %Issue{
+        id: "issue-runner-goal-budget",
+        identifier: "MAC-12",
+        title: "Keep goal budget scoped",
+        description: "Runner should not reset goal budget",
+        state: "In Progress"
+      }
+
+      issue_state_fetcher = fn ["issue-runner-goal-budget"] -> {:ok, [%{issue | state: "In Progress"}]} end
+
+      assert :ok =
+               AgentRunner.run(issue, nil,
+                 goal: "  Ship with one budget  ",
+                 max_goal_turns: 2,
+                 max_turns: 3,
+                 issue_state_fetcher: issue_state_fetcher
+               )
+
+      messages =
+        trace_file
+        |> File.read!()
+        |> String.split("\n", trim: true)
+        |> Enum.map(&String.trim_leading(&1, "JSON:"))
+        |> Enum.map(&Jason.decode!/1)
+
+      assert messages |> messages_with_method("thread/goal/set") |> length() == 1
+      assert messages |> messages_with_method("turn/start") |> length() == 2
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   defp enable_goals! do
     workflow_file = Workflow.workflow_file_path()
 
@@ -186,5 +269,9 @@ defmodule SymphonyElixir.AgentRunnerTest do
     end
 
     :ok
+  end
+
+  defp messages_with_method(messages, method) do
+    Enum.filter(messages, &(Map.get(&1, "method") == method))
   end
 end
