@@ -4,8 +4,34 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.Assistant.SessionManager
+  alias SymphonyElixir.Assistant.{AttachmentStore, SessionManager}
+  alias SymphonyElixir.Codex.ModelCatalog
+  alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixirWeb.TrackerErrors
+
+  @spec config(Conn.t(), map()) :: Conn.t()
+  def config(conn, _params) do
+    {:ok, catalog} = ModelCatalog.list_models()
+    json(conn, %{data: catalog})
+  end
+
+  @spec upload_attachment(Conn.t(), map()) :: Conn.t()
+  def upload_attachment(conn, %{"project_slug" => project_slug, "file" => %Plug.Upload{} = upload}) do
+    with {:ok, _project} <- Context.get_project(project_slug),
+         {:ok, attachment} <- AttachmentStore.store_image(project_slug, upload) do
+      conn
+      |> put_status(:created)
+      |> json(%{data: attachment})
+    else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, :unsupported_image_type} -> TrackerErrors.validation(conn, "Only PNG, JPEG, GIF, and WebP images are supported.")
+      {:error, :image_too_large} -> TrackerErrors.validation(conn, "Images must be 4 MB or smaller.")
+      {:error, :invalid_upload} -> TrackerErrors.validation(conn, "Invalid image upload.")
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def upload_attachment(conn, _params), do: TrackerErrors.validation(conn, "file is required")
 
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"project_slug" => project_slug, "message" => message} = params) when is_binary(message) do

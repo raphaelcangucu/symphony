@@ -12,9 +12,23 @@ config :symphony_elixir,
         else: Path.expand("~/.codex/sessions")
       )
 
+# Local tracker SQLite database path.
+#
+# Override with `SYMPHONY_LOCAL_TRACKER_DATABASE` (e.g. in `elixir/.env`, which is
+# sourced by `make serve`). The default deliberately lives in a persistent
+# `.symphony/` directory (NOT the ephemeral `tmp/`, which gets wiped by cleans),
+# so project/issue data survives across rebuilds. The test env stays in `tmp/`.
+default_local_tracker_database =
+  case Mix.env() do
+    :test -> Path.expand("../tmp/test-local-tracker.sqlite3", __DIR__)
+    _ -> Path.expand("../.symphony/tracker.sqlite3", __DIR__)
+  end
+
 local_tracker_database =
-  System.get_env("SYMPHONY_LOCAL_TRACKER_DATABASE") ||
-    Path.expand("../tmp/#{Mix.env()}-local-tracker.sqlite3", __DIR__)
+  case System.get_env("SYMPHONY_LOCAL_TRACKER_DATABASE") do
+    value when is_binary(value) and value != "" -> Path.expand(value)
+    _ -> default_local_tracker_database
+  end
 
 File.mkdir_p!(Path.dirname(local_tracker_database))
 

@@ -50,6 +50,8 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:id/restore", ProjectController, :restore)
     resources("/projects", ProjectController, only: [:index, :create, :show, :delete])
     get("/projects/:project_slug/issues/form_options", IssueController, :form_options)
+    get("/projects/:project_slug/assistant/config", AssistantController, :config)
+    post("/projects/:project_slug/assistant/attachments", AssistantController, :upload_attachment)
     post("/projects/:project_slug/assistant/messages", AssistantController, :create)
     resources("/projects/:project_slug/issues", IssueController, only: [:index, :create, :show, :update])
     post("/projects/:project_slug/issues/:identifier/move", IssueController, :move)

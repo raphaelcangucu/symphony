@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { sendAssistantMessage } from "@/services/assistant";
+import { fetchAssistantCodexCatalog, normalizeAssistantCodexCatalog, sendAssistantMessage } from "@/services/assistant";
 import { http } from "@/services/http";
 
 describe("assistant service", () => {
@@ -51,6 +51,55 @@ describe("assistant service", () => {
         },
       },
     });
+  });
+
+  it("normalizes Codex CLI assistant catalog payloads", () => {
+    const catalog = normalizeAssistantCodexCatalog({
+      agent: "codex",
+      agent_label: "Codex CLI",
+      command: "codex app-server",
+      default_model: "gpt-5.3-codex",
+      models: [
+        {
+          id: "gpt-5.3-codex",
+          model: "gpt-5.3-codex",
+          label: "GPT-5.3 Codex",
+          is_default: true,
+          default_effort: "low",
+          efforts: [{ id: "low", label: "Low" }],
+        },
+      ],
+    });
+
+    expect(catalog.agentLabel).toBe("Codex CLI");
+    expect(catalog.models[0]?.label).toBe("GPT-5.3 Codex");
+  });
+
+  it("loads assistant config from the tracker API", async () => {
+    const get = vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: {
+        data: {
+          agent: "codex",
+          agent_label: "Codex CLI",
+          command: "codex app-server",
+          default_model: "gpt-5.3-codex",
+          models: [
+            {
+              model: "gpt-5.3-codex",
+              label: "GPT-5.3 Codex",
+              is_default: true,
+              default_effort: "low",
+              efforts: [{ id: "low", label: "Low" }],
+            },
+          ],
+        },
+      },
+    });
+
+    const catalog = await fetchAssistantCodexCatalog("macro-markets");
+
+    expect(get).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/assistant/config");
+    expect(catalog.models[0]?.model).toBe("gpt-5.3-codex");
   });
 
   it("fails fast for blank project slugs and messages", async () => {

@@ -24,6 +24,29 @@ vi.mock("@assistant-ui/react", () => ({
   useExternalStoreRuntime: () => ({}),
 }));
 
+vi.mock("@/services/assistant", async () => {
+  const actual = await vi.importActual<typeof import("@/services/assistant")>("@/services/assistant");
+  return {
+    ...actual,
+    fetchAssistantCodexCatalog: vi.fn(async () => ({
+      agent: "codex" as const,
+      agentLabel: "Codex CLI",
+      command: "codex app-server",
+      defaultModel: "gpt-5.3-codex",
+      models: [
+        {
+          id: "gpt-5.3-codex",
+          model: "gpt-5.3-codex",
+          label: "GPT-5.3 Codex",
+          isDefault: true,
+          defaultEffort: "low",
+          efforts: [{ id: "low", label: "Low" }],
+        },
+      ],
+    })),
+  };
+});
+
 vi.mock("@/services/phoenix/socket", () => ({
   createTrackerSocket: () => ({
     connect,
@@ -50,12 +73,25 @@ describe("ProjectAssistantPanel", () => {
 
     expect(await screen.findByText("Historico carregado")).toBeTruthy();
 
-    fireEvent.change(screen.getByPlaceholderText("Ask about this project or request tracker changes..."), {
-      target: { value: "Oi" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Send assistant message" }));
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "Oi" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("send_message", { message: "Oi", context: { view: "board" } }));
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          message: "Oi",
+          context: expect.objectContaining({
+            view: "board",
+            agent: "codex",
+            model: expect.any(String),
+            effort: expect.any(String),
+          }),
+          attachments: expect.any(Array),
+        }),
+      ),
+    );
 
     channelHandlers["message_created"]({ message: { id: 2, role: "user", content: "Oi", tool_calls: [] } });
     channelHandlers["assistant_delta"]({ delta: "Olá" });

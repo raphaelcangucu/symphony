@@ -12,7 +12,6 @@ vi.mock("@/components/layout/WorkspaceContext", () => ({
     statusNames: [],
     workflowStatuses: [],
     loading: false,
-    error: null,
     issues: [],
     trackerKind: "local",
     agentExecutions: new Map(),

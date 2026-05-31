@@ -123,6 +123,15 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, {:adapter_error, _reason}),
     do: error(conn, 500, "tracker_internal", "Tracker adapter error")
 
+  def render(conn, {:assistant_config_unavailable, _reason}) do
+    error(
+      conn,
+      503,
+      "assistant_config_unavailable",
+      "Could not load Codex CLI models. Check that Codex is installed and configured."
+    )
+  end
+
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
 

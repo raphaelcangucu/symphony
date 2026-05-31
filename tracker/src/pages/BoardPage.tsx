@@ -17,7 +17,6 @@ export function BoardPage() {
     statusNames,
     workflowStatuses,
     loading,
-    error,
     issues,
     trackerKind,
     agentExecutions,
@@ -59,9 +58,6 @@ export function BoardPage() {
           <Skeleton className="h-[70vh] w-80 rounded-2xl" />
           <Skeleton className="h-[70vh] w-80 rounded-2xl" />
         </div>
-      ) : null}
-      {error ? (
-        <div className="m-6 rounded-lg border border-destructive/30 p-4 text-sm text-destructive">{error}</div>
       ) : null}
       {!loading ? (
         <BoardView

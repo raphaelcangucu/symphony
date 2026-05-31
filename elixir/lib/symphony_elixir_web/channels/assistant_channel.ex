@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   use Phoenix.Channel
 
   alias Phoenix.Socket
-  alias SymphonyElixir.Assistant.{CodexSession, History}
+  alias SymphonyElixir.Assistant.{CodexSession, History, Payload}
   alias SymphonyElixir.Config
   alias SymphonyElixirWeb.TrackerAuth
 
@@ -32,31 +32,46 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("send_message", %{"message" => message} = payload, socket) when is_binary(message) do
     project_slug = socket.assigns.project_slug
     context = normalize_context(Map.get(payload, "context", %{}))
-    trimmed = String.trim(message)
+    raw_attachments = Map.get(payload, "attachments", [])
+    attachments = Payload.normalize_attachments(raw_attachments, project_slug)
+    trimmed = message |> Payload.enrich_message(attachments) |> String.trim()
 
-    if trimmed == "" do
-      {:reply, {:error, %{reason: "message is required"}}, socket}
-    else
-      opts =
-        []
-        |> maybe_put_runner()
-        |> Keyword.put(:on_message_created, fn message -> push(socket, "message_created", %{message: message}) end)
-        |> Keyword.put(:on_assistant_delta, fn delta -> push(socket, "assistant_delta", %{delta: delta}) end)
-        |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
-        |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
+    cond do
+      trimmed == "" ->
+        {:reply, {:error, %{reason: "message is required"}}, socket}
 
-      case CodexSession.send_message(project_slug, trimmed, context, opts) do
-        {:ok, result} ->
-          push(socket, "assistant_completed", %{
-            message: result.assistant_chat_message
-          })
+      raw_attachments != [] and attachments == [] ->
+        {:reply, {:error, %{reason: "One or more attachments could not be processed. Try a smaller image (max 4 MB)."}}, socket}
 
-          {:reply, :ok, socket}
+      true ->
+        context =
+          context
+          |> Map.put("attachments", Payload.attachment_summary(attachments))
+          |> Map.put("model", Map.get(context, "model") || Map.get(context, :model))
+          |> Map.put("effort", Map.get(context, "effort") || Map.get(context, :effort))
 
-        {:error, reason} ->
-          push(socket, "assistant_error", %{message: error_reason(reason)})
-          {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-      end
+        opts =
+          []
+          |> maybe_put_runner()
+          |> Keyword.merge(Payload.model_opts(context))
+          |> Keyword.put(:attachments, attachments)
+          |> Keyword.put(:on_message_created, fn message -> push(socket, "message_created", %{message: message}) end)
+          |> Keyword.put(:on_assistant_delta, fn delta -> push(socket, "assistant_delta", %{delta: delta}) end)
+          |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
+          |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
+
+        case CodexSession.send_message(project_slug, trimmed, context, opts) do
+          {:ok, result} ->
+            push(socket, "assistant_completed", %{
+              message: result.assistant_chat_message
+            })
+
+            {:reply, :ok, socket}
+
+          {:error, reason} ->
+            push(socket, "assistant_error", %{message: error_reason(reason)})
+            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        end
     end
   end
 

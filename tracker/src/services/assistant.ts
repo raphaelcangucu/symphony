@@ -1,3 +1,13 @@
+import axios from "axios";
+
+import {
+  fallbackCodexCatalog,
+  loadCachedCodexCatalog,
+  saveCachedCodexCatalog,
+  type AssistantCodexCatalog,
+  type AssistantEffortOption,
+  type AssistantModelOption,
+} from "@/lib/assistantSettings";
 import type { Comment } from "@/types/comment";
 import type { Issue } from "@/types/issue";
 
@@ -83,6 +93,182 @@ export interface BackendAssistantChatMessageDto {
   inserted_at?: string | null;
   insertedAt?: string | null;
   metadata?: Record<string, unknown> | null;
+}
+
+interface BackendAssistantEffortDto {
+  id?: string | null;
+  label?: string | null;
+  description?: string | null;
+}
+
+interface BackendAssistantModelDto {
+  id?: string | null;
+  model?: string | null;
+  label?: string | null;
+  description?: string | null;
+  is_default?: boolean | null;
+  isDefault?: boolean | null;
+  default_effort?: string | null;
+  defaultEffort?: string | null;
+  efforts?: BackendAssistantEffortDto[] | null;
+  input_modalities?: string[] | null;
+  inputModalities?: string[] | null;
+}
+
+interface BackendAssistantCodexCatalogDto {
+  agent?: string | null;
+  agent_label?: string | null;
+  agentLabel?: string | null;
+  command?: string | null;
+  default_model?: string | null;
+  defaultModel?: string | null;
+  models?: BackendAssistantModelDto[] | null;
+}
+
+interface BackendUploadedAttachmentDto {
+  id?: string | null;
+  type?: string | null;
+  name?: string | null;
+  media_type?: string | null;
+  mediaType?: string | null;
+  path?: string | null;
+  size_bytes?: number | null;
+  sizeBytes?: number | null;
+}
+
+export interface UploadedAssistantAttachment {
+  id: string;
+  type: "image";
+  name: string;
+  mediaType: string;
+  path: string;
+  sizeBytes?: number;
+}
+
+export async function uploadAssistantAttachment(
+  projectSlug: string,
+  file: File,
+): Promise<UploadedAssistantAttachment> {
+  const slug = projectSlug.trim();
+  if (!slug) throw new Error("projectSlug is required");
+
+  const form = new FormData();
+  form.append("file", file);
+
+  const response = await http.post(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/attachments`), form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+  const dto = unwrapData<BackendUploadedAttachmentDto>(response);
+  const path = dto.path?.trim();
+  if (!path) throw new Error("Upload response did not include a file path.");
+
+  return {
+    id: dto.id ?? path,
+    type: "image",
+    name: dto.name ?? file.name,
+    mediaType: dto.mediaType ?? dto.media_type ?? file.type,
+    path,
+    sizeBytes: dto.sizeBytes ?? dto.size_bytes ?? undefined,
+  };
+}
+
+export async function fetchAssistantCodexCatalog(projectSlug: string): Promise<AssistantCodexCatalog> {
+  const slug = projectSlug.trim();
+  if (!slug) throw new Error("projectSlug is required");
+
+  try {
+    const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/config`));
+    const catalog = normalizeAssistantCodexCatalog(unwrapData<BackendAssistantCodexCatalogDto>(response));
+    saveCachedCodexCatalog(catalog);
+    return catalog;
+  } catch (cause) {
+    if (axios.isAxiosError(cause) && cause.response?.status === 404) {
+      throw new Error(
+        "Assistant API is missing on the server. Restart Symphony so it loads the latest tracker routes.",
+      );
+    }
+
+    if (axios.isAxiosError(cause) && cause.response?.status === 503) {
+      const cachedCatalog = loadCachedCodexCatalog();
+      if (cachedCatalog) return cachedCatalog;
+
+      const catalog = fallbackCodexCatalog();
+      catalog.command =
+        (axios.isAxiosError(cause) &&
+          typeof cause.response?.data === "object" &&
+          cause.response?.data !== null &&
+          "error" in cause.response.data &&
+          typeof (cause.response.data as { error?: { message?: string } }).error?.message === "string" &&
+          (cause.response.data as { error?: { message?: string } }).error?.message) ||
+        catalog.command;
+      return catalog;
+    }
+
+    const cachedCatalog = loadCachedCodexCatalog();
+    if (cachedCatalog) return cachedCatalog;
+
+    throw new Error(extractApiErrorMessage(cause, "Failed to load Codex CLI models."));
+  }
+}
+
+export function normalizeAssistantCodexCatalog(dto: BackendAssistantCodexCatalogDto): AssistantCodexCatalog {
+  const models = (dto.models ?? []).map(normalizeAssistantModel).filter((model) => model.model.length > 0);
+
+  if (models.length === 0) {
+    throw new Error("Codex CLI returned no models");
+  }
+
+  return {
+    agent: "codex",
+    agentLabel: dto.agentLabel ?? dto.agent_label ?? "Codex CLI",
+    command: dto.command ?? "codex app-server",
+    defaultModel: dto.defaultModel ?? dto.default_model ?? null,
+    models,
+  };
+}
+
+function normalizeAssistantModel(dto: BackendAssistantModelDto): AssistantModelOption {
+  const model = dto.model ?? dto.id ?? "";
+  const efforts = (dto.efforts ?? []).map(normalizeAssistantEffort).filter((effort) => effort.id.length > 0);
+  const defaultEffort = dto.defaultEffort ?? dto.default_effort ?? efforts[0]?.id ?? "medium";
+
+  return {
+    id: dto.id ?? model,
+    model,
+    label: dto.label ?? model,
+    description: dto.description ?? undefined,
+    isDefault: dto.isDefault ?? dto.is_default ?? false,
+    defaultEffort,
+    efforts: efforts.length > 0 ? efforts : [{ id: defaultEffort, label: defaultEffort }],
+    inputModalities: dto.inputModalities ?? dto.input_modalities ?? undefined,
+  };
+}
+
+function extractApiErrorMessage(cause: unknown, fallback: string): string {
+  if (axios.isAxiosError(cause)) {
+    const body = cause.response?.data;
+    if (body && typeof body === "object" && "error" in body) {
+      const error = (body as { error?: { message?: string } }).error;
+      if (error?.message) return error.message;
+    }
+    if (cause.response?.status === 404) {
+      return "Assistant API is missing on the server. Restart Symphony to load the latest routes.";
+    }
+    if (cause.message) return cause.message;
+  }
+
+  if (cause instanceof Error && cause.message) return cause.message;
+  return fallback;
+}
+
+function normalizeAssistantEffort(dto: BackendAssistantEffortDto): AssistantEffortOption {
+  const id = dto.id ?? "";
+  return {
+    id,
+    label: dto.label ?? id,
+    description: dto.description ?? undefined,
+  };
 }
 
 export async function sendAssistantMessage(

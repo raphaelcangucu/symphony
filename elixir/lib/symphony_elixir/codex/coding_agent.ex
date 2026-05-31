@@ -93,7 +93,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         DynamicTool.execute(tool, arguments)
       end)
 
-    case start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy) do
+    case start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy, opts) do
       {:ok, turn_id} ->
         session_id = "#{thread_id}-#{turn_id}"
         Logger.info("Codex session started for #{issue_context(issue)} session_id=#{session_id}")
@@ -259,23 +259,38 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy) do
-    send_message(port, %{
-      "method" => "turn/start",
-      "id" => @turn_start_id,
-      "params" => %{
+  defp turn_input(prompt, attachments) do
+    alias SymphonyElixir.Assistant.Payload
+
+    Payload.turn_input_items(prompt, attachments)
+  end
+
+  defp maybe_put_param(params, _key, nil), do: params
+  defp maybe_put_param(params, _key, ""), do: params
+  defp maybe_put_param(params, key, value), do: Map.put(params, key, value)
+
+  defp reasoning_effort(nil), do: nil
+  defp reasoning_effort(effort) when is_binary(effort), do: effort
+
+  defp start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy, opts) do
+    attachments = Keyword.get(opts, :attachments, [])
+
+    params =
+      %{
         "threadId" => thread_id,
-        "input" => [
-          %{
-            "type" => "text",
-            "text" => prompt
-          }
-        ],
+        "input" => turn_input(prompt, attachments),
         "cwd" => Path.expand(workspace),
         "title" => "#{issue.identifier}: #{issue.title}",
         "approvalPolicy" => approval_policy,
         "sandboxPolicy" => turn_sandbox_policy
       }
+      |> maybe_put_param("model", Keyword.get(opts, :model))
+      |> maybe_put_param("reasoningEffort", reasoning_effort(Keyword.get(opts, :effort)))
+
+    send_message(port, %{
+      "method" => "turn/start",
+      "id" => @turn_start_id,
+      "params" => params
     })
 
     case await_response(port, @turn_start_id) do

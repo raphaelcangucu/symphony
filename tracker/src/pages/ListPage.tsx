@@ -8,7 +8,7 @@ import { issuePath } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 
 export function ListPage() {
-  const { projectSlug, view, filteredIssues, loading, error } = useWorkspace();
+  const { projectSlug, view, filteredIssues, loading } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -23,9 +23,6 @@ export function ListPage() {
     <>
       <div className="p-6">
         {loading ? <Skeleton className="h-72" /> : null}
-        {error ? (
-          <div className="mb-4 rounded-lg border border-destructive/30 p-4 text-sm text-destructive">{error}</div>
-        ) : null}
         {!loading ? <ListView issues={filteredIssues} onSelectIssue={openIssue} /> : null}
       </div>
       <Outlet />

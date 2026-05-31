@@ -24,7 +24,6 @@ export interface UseIssueBoardResult {
   loading: boolean;
   /** True while a silent background refresh (poll / realtime / manual) is in flight. */
   refreshing: boolean;
-  error: string | null;
   refetch: () => Promise<void>;
   moveIssueOptimistically: (identifier: string, status: WorkflowStatusName, position: number) => Promise<void>;
   setIssues: React.Dispatch<React.SetStateAction<Issue[]>>;
@@ -48,20 +47,20 @@ export function useIssueBoard(
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
+  const loadErrorToastId = `issue-board-${projectSlug}`;
 
   const refetch = useCallback(async () => {
     if (!projectSlug.trim()) return;
     if (hasLoadedRef.current) setRefreshing(true);
     else setLoading(true);
-    setError(null);
     try {
       setIssues(await listIssues(projectSlug, { search, assignee, creator }));
       hasLoadedRef.current = true;
+      toast.dismiss(loadErrorToastId);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Failed to load issues";
-      setError(message);
+      toast.error(message, { id: loadErrorToastId });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -119,5 +118,5 @@ export function useIssueBoard(
     void refetch();
   });
 
-  return { issues, filteredIssues, board, loading, refreshing, error, refetch, moveIssueOptimistically, setIssues };
+  return { issues, filteredIssues, board, loading, refreshing, refetch, moveIssueOptimistically, setIssues };
 }
