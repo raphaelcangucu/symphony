@@ -91,6 +91,30 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     assert prompt =~ "Current user message:\nVoce lembra?"
   end
 
+  test "send_message_to_thread/4 runs a freeform turn without tracker tools" do
+    {:ok, thread} = SymphonyElixir.Assistant.History.create_freeform_thread(%{title: "F", workspace_path: tmp_dir()})
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(self(), {:opts, opts})
+      {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct-1", turn_id: "t-1"}}
+    end
+
+    assert {:ok, result} =
+             SymphonyElixir.Assistant.CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
+
+    assert result.assistant_message == "ok"
+    assert_received {:opts, opts}
+    assert Keyword.get(opts, :dynamic_tools) == []
+    assert is_function(Keyword.get(opts, :tool_executor), 2)
+  end
+
+  defp tmp_dir do
+    dir = Path.join(System.tmp_dir!(), "symphony-assistant-test-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+    dir
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

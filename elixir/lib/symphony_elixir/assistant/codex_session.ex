@@ -41,6 +41,39 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
+  @spec send_message_to_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
+          {:ok, turn_result()} | {:error, term()}
+  def send_message_to_thread(%{scope: "freeform", id: thread_id} = thread, message, context, opts \\ [])
+      when is_binary(message) and is_map(context) and is_list(opts) do
+    with {:ok, trimmed} <- normalize_message(message),
+         workspace <- freeform_workspace(thread_id, opts),
+         :ok <- File.mkdir_p(workspace),
+         history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         {:ok, user_message} <-
+           History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
+         prompt <- build_freeform_prompt(trimmed, context, history),
+         :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
+         {:ok, runner_result} <- run_freeform_turn(workspace, prompt, opts),
+         {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
+         {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
+      {:ok,
+       %{
+         assistant_message: assistant_message.content,
+         tool_calls: assistant_message.tool_calls,
+         codex_thread_id: Map.get(runner_result, :codex_thread_id),
+         turn_id: Map.get(runner_result, :turn_id),
+         user_message: History.message_payload(user_message),
+         assistant_chat_message: History.message_payload(assistant_message)
+       }}
+    end
+  end
+
+  @spec freeform_workspace(integer() | String.t(), keyword()) :: Path.t()
+  def freeform_workspace(thread_id, opts \\ []) do
+    root = opts |> Keyword.get(:workspace_root, Config.workspace_root()) |> Path.expand()
+    Path.join([root, "assistant", "freeform", to_string(thread_id)])
+  end
+
   @spec assistant_workspace(String.t(), keyword()) :: {:ok, Path.t()} | {:error, term()}
   def assistant_workspace(project_slug, opts \\ []) when is_binary(project_slug) and is_list(opts) do
     case String.trim(project_slug) do
@@ -93,6 +126,38 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
     |> normalize_runner_result()
+  end
+
+  defp run_freeform_turn(workspace, prompt, opts) do
+    runner = Keyword.get(opts, :runner, &default_runner/4)
+
+    runner_opts =
+      opts
+      |> Keyword.put(:dynamic_tools, [])
+      |> Keyword.put(:tool_executor, fn _tool, _arguments -> {:error, :no_tools_in_freeform_chat} end)
+
+    runner.(workspace, prompt, freeform_issue(), runner_opts)
+    |> normalize_runner_result()
+  end
+
+  defp freeform_issue, do: %{id: "assistant:freeform", identifier: "freeform", title: "Freeform assistant chat"}
+
+  defp build_freeform_prompt(message, context, history) do
+    """
+    You are the Symphony freeform assistant. There is no project or repository context.
+    Behave like a real conversational coding assistant. Answer naturally in the user's language.
+    Do not call tracker tools; none are available in this chat.
+
+    Recent conversation:
+    #{format_history(history)}
+
+    Context:
+    #{inspect(context)}
+
+    Current user message:
+    #{message}
+    """
+    |> String.trim()
   end
 
   defp default_runner(workspace, prompt, issue, opts) do
