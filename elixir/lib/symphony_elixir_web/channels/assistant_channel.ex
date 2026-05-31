@@ -48,15 +48,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     project_slug = socket.assigns[:project_slug]
     thread = socket.assigns[:thread]
     context = normalize_context(Map.get(payload, "context", %{}))
-
-    {raw_attachments, attachments} =
-      if match?(%{scope: "freeform"}, thread) do
-        {[], []}
-      else
-        raw = Map.get(payload, "attachments", [])
-        {raw, Payload.normalize_attachments(raw, project_slug)}
-      end
-
+    {raw_attachments, attachments} = resolve_attachments(payload, thread, project_slug)
     trimmed = message |> Payload.enrich_message(attachments) |> String.trim()
 
     cond do
@@ -83,27 +75,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
           |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
 
-        result =
-          case thread do
-            %{scope: "freeform"} = freeform_thread ->
-              CodexSession.send_message_to_thread(freeform_thread, trimmed, context, opts)
-
-            _ ->
-              CodexSession.send_message(project_slug, trimmed, context, opts)
-          end
-
-        case result do
-          {:ok, result} ->
-            push(socket, "assistant_completed", %{
-              message: result.assistant_chat_message
-            })
-
-            {:reply, :ok, socket}
-
-          {:error, reason} ->
-            push(socket, "assistant_error", %{message: error_reason(reason)})
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-        end
+        thread
+        |> run_send_turn(project_slug, trimmed, context, opts)
+        |> handle_turn_result(socket)
     end
   end
 
@@ -113,6 +87,31 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_info({:assistant_history_loaded, payload}, socket) do
     push(socket, "history_loaded", payload)
     {:noreply, socket}
+  end
+
+  defp resolve_attachments(_payload, %{scope: "freeform"}, _project_slug), do: {[], []}
+
+  defp resolve_attachments(payload, _thread, project_slug) do
+    raw = Map.get(payload, "attachments", [])
+    {raw, Payload.normalize_attachments(raw, project_slug)}
+  end
+
+  defp run_send_turn(%{scope: "freeform"} = thread, _project_slug, trimmed, context, opts) do
+    CodexSession.send_message_to_thread(thread, trimmed, context, opts)
+  end
+
+  defp run_send_turn(_thread, project_slug, trimmed, context, opts) do
+    CodexSession.send_message(project_slug, trimmed, context, opts)
+  end
+
+  defp handle_turn_result({:ok, result}, socket) do
+    push(socket, "assistant_completed", %{message: result.assistant_chat_message})
+    {:reply, :ok, socket}
+  end
+
+  defp handle_turn_result({:error, reason}, socket) do
+    push(socket, "assistant_error", %{message: error_reason(reason)})
+    {:reply, {:error, %{reason: error_reason(reason)}}, socket}
   end
 
   defp parse_id(raw) do
