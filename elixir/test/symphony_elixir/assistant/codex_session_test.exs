@@ -266,8 +266,15 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
                CodexSession.send_message_to_issue_thread(thread, "done", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
+      prompt_text = String.downcase(prompt)
+
       assert prompt =~ "docs/superpowers/handoff.md"
-      assert prompt =~ "executive summary" or prompt =~ "Executive summary"
+      assert prompt =~ "update_issue"
+      assert prompt_text =~ "executive summary"
+      assert prompt_text =~ "links to the spec/plan files"
+      assert prompt_text =~ "spec/plan"
+      assert prompt_text =~ "key decisions"
+      assert prompt_text =~ "current state"
     end
 
     test "documents_changed fires on_documents_changed when a turn writes a doc", %{thread: thread} do
