@@ -4,6 +4,11 @@ config :phoenix, :json_library, Jason
 
 config :symphony_elixir, ecto_repos: [SymphonyElixir.Repo]
 
+# Repo-root `skills/` directory for vendored, agent-agnostic skill definitions
+# loaded by `SymphonyElixir.Skills`. `__DIR__` here is `.../symphony/elixir/config`,
+# so `../../skills` resolves to the repo-root `skills/` dir.
+config :symphony_elixir, :skills_root, Path.expand("../../skills", __DIR__)
+
 config :symphony_elixir,
   codex_sessions_dir:
     System.get_env("SYMPHONY_CODEX_SESSIONS_DIR") ||
