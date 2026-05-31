@@ -30,6 +30,42 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
            ]
   end
 
+  test "update_project changes name and description without touching the slug" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:ok, updated} =
+             Context.update_project("macro-markets", %{"name" => "Macro Markets v2", "description" => "Renamed"})
+
+    assert updated.slug == "macro-markets"
+    assert updated.name == "Macro Markets v2"
+    assert updated.description == "Renamed"
+  end
+
+  test "update_project switches a local project to a github tracker config" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    config = %{"project_id" => "PVT_kwDOCpPais4BY509", "repo" => "clouapp/front", "status_field" => "Status"}
+
+    assert {:ok, updated} =
+             Context.update_project("macro-markets", %{"tracker" => %{"kind" => "github", "config" => config}})
+
+    assert updated.tracker_kind == "github"
+    assert updated.tracker_config == config
+  end
+
+  test "update_project rejects a github tracker missing required config keys" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:error, %Ecto.Changeset{} = changeset} =
+             Context.update_project("macro-markets", %{"tracker" => %{"kind" => "github", "config" => %{}}})
+
+    assert "tracker_config" in Enum.map(changeset.errors, fn {field, _} -> Atom.to_string(field) end)
+  end
+
+  test "update_project returns project_not_found for an unknown slug" do
+    assert {:error, :project_not_found} = Context.update_project("nope", %{"name" => "Nope"})
+  end
+
   test "archive_project hides project from default list and include_archived returns it" do
     {:ok, _project} = Context.ensure_project(%{"name" => "Archive Me", "slug" => "archive-me"})
 

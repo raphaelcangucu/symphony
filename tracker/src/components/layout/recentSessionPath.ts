@@ -1,5 +1,15 @@
 import type { RecentSession } from "@/types/recents";
 
+export function recentSessionSubtitle(session: RecentSession): string {
+  if (session.kind === "codex") {
+    return [session.identifier, session.projectName ?? session.projectSlug].filter(Boolean).join(" · ");
+  }
+
+  if (session.scope === "freeform") return "Freeform chat";
+
+  return session.projectName ?? session.projectSlug ?? "Project chat";
+}
+
 export function recentSessionPath(session: RecentSession): string {
   if (session.kind === "codex") {
     if (session.projectSlug && session.identifier) {

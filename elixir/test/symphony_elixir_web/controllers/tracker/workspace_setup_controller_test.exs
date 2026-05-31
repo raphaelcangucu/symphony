@@ -170,6 +170,46 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceSetupControllerTest do
            } = json_response(conn, 201)
   end
 
+  test "updates a project's name and connects a github tracker through the API" do
+    Context.ensure_project(%{"name" => "Macro Markets", "slug" => "macro-markets"})
+
+    update_conn =
+      put(authorized_conn(), "/api/tracker/v1/projects/macro-markets", %{
+        "name" => "Macro Markets v2",
+        "description" => "Connected board",
+        "tracker" => %{
+          "kind" => "github",
+          "config" => %{
+            "project_id" => "PVT_kwDOCpPais4BY509",
+            "project_number" => 2,
+            "repo" => "clouapp/front",
+            "status_field" => "Status"
+          }
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "slug" => "macro-markets",
+               "name" => "Macro Markets v2",
+               "description" => "Connected board",
+               "tracker_kind" => "github",
+               "tracker_config" => %{"project_id" => "PVT_kwDOCpPais4BY509", "repo" => "clouapp/front"}
+             }
+           } = json_response(update_conn, 200)
+  end
+
+  test "rejects a github tracker update missing required config keys" do
+    Context.ensure_project(%{"name" => "Macro Markets", "slug" => "macro-markets"})
+
+    update_conn =
+      put(authorized_conn(), "/api/tracker/v1/projects/macro-markets", %{
+        "tracker" => %{"kind" => "github", "config" => %{}}
+      })
+
+    assert json_response(update_conn, 422)["error"]["code"] == "validation_failed"
+  end
+
   test "archives restores and deletes a project through the API" do
     Context.ensure_project(%{"name" => "Lifecycle", "slug" => "lifecycle"})
 

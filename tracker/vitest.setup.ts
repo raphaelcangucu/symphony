@@ -17,4 +17,15 @@ if (typeof Element !== "undefined") {
   Element.prototype.setPointerCapture ??= () => undefined;
   Element.prototype.releasePointerCapture ??= () => undefined;
   Element.prototype.scrollIntoView ??= () => undefined;
+  Element.prototype.scrollTo ??= () => undefined;
+}
+
+// jsdom does not implement ResizeObserver, which the assistant page uses to
+// size the chat scroll area around its floating composer.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
 }

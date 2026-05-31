@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { recentSessionPath } from "@/components/layout/recentSessionPath";
+import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
 import type { RecentSession } from "@/types/recents";
 
 const base: RecentSession = {
@@ -27,5 +27,19 @@ describe("recentSessionPath", () => {
   });
   it("project chat without projectSlug → /assistant fallback", () => {
     expect(recentSessionPath({ ...base, kind: "chat", scope: "project", projectSlug: null, threadId: 3 })).toBe("/assistant");
+  });
+});
+
+describe("recentSessionSubtitle", () => {
+  it("freeform chat → Freeform chat", () => {
+    expect(recentSessionSubtitle({ ...base, kind: "chat", scope: "freeform" })).toBe("Freeform chat");
+  });
+  it("project chat → project name", () => {
+    expect(recentSessionSubtitle({ ...base, kind: "chat", scope: "project", projectName: "Demo" })).toBe("Demo");
+  });
+  it("codex → identifier · project", () => {
+    expect(
+      recentSessionSubtitle({ ...base, kind: "codex", scope: null, identifier: "ABC-1", projectName: "Demo" }),
+    ).toBe("ABC-1 · Demo");
   });
 });

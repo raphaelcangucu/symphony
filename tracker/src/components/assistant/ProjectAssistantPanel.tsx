@@ -51,6 +51,9 @@ export function ProjectAssistantPanel({ projectSlug, threadId, view, mode = "she
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const channelRef = useRef<Channel | null>(null);
   const catalogRef = useRef<AssistantCodexCatalog | null>(null);
+  const composerDockRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [composerHeight, setComposerHeight] = useState(0);
   const active = mode === "page" || open;
 
   catalogRef.current = catalog;
@@ -180,6 +183,26 @@ export function ProjectAssistantPanel({ projectSlug, threadId, view, mode = "she
 
   const visibleMessages = displayMessages(messages);
 
+  useEffect(() => {
+    if (mode !== "page") return;
+    const dock = composerDockRef.current;
+    if (!dock) return;
+
+    const updateHeight = () => setComposerHeight(dock.offsetHeight);
+    updateHeight();
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [mode, catalog, catalogError]);
+
+  useEffect(() => {
+    if (mode !== "page") return;
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+  }, [mode, visibleMessages, isRunning]);
+
   const runtime = useExternalStoreRuntime<AssistantChatMessage>(
     useMemo(
       () => ({
@@ -192,66 +215,104 @@ export function ProjectAssistantPanel({ projectSlug, threadId, view, mode = "she
     ),
   );
 
-  const content = (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">
-          {visibleMessages.map((message) => (
-            <AssistantBubble key={message.id} message={message} />
-          ))}
-          {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
-          {isRunning ? <p className="text-sm text-muted-foreground">Assistant is working...</p> : null}
-        </div>
-        {catalog || catalogError ? (
-          <AssistantComposer
-            projectSlug={projectSlug ?? ""}
-            catalog={catalog ?? fallbackCodexCatalog()}
-            disabled={isRunning}
-            onSubmit={sendMessage}
-          />
-        ) : (
-          <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading Codex CLI models...</div>
-        )}
-        {catalogError ? (
-          <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
-        ) : null}
-      </div>
-    </AssistantRuntimeProvider>
+  const messageItems = (
+    <>
+      {visibleMessages.map((message) => (
+        <AssistantBubble key={message.id} message={message} />
+      ))}
+      {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
+      {isRunning ? <p className="text-sm text-muted-foreground">Assistant is working...</p> : null}
+    </>
   );
+
+  const composerNode =
+    catalog || catalogError ? (
+      <AssistantComposer
+        projectSlug={projectSlug ?? ""}
+        catalog={catalog ?? fallbackCodexCatalog()}
+        disabled={isRunning}
+        floating={mode === "page"}
+        onSubmit={sendMessage}
+      />
+    ) : null;
 
   if (mode === "page") {
     return (
-      <section className="flex h-[calc(100vh-4rem)] flex-col" aria-label="Project assistant">
-        <div className="border-b px-6 py-4">
-          <h2 className="text-base font-semibold">{projectSlug ? "Project assistant" : "Freeform assistant"}</h2>
-          <p className="text-sm text-muted-foreground">
-            {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
-            {catalog ? ` Models from \`${catalog.command}\`.` : null}
-          </p>
-        </div>
-        {content}
-      </section>
+      <AssistantRuntimeProvider runtime={runtime}>
+        <section
+          className={cn(
+            "relative flex flex-col",
+            projectSlug ? "h-[calc(100vh-4rem)]" : "h-screen",
+          )}
+          aria-label="Project assistant"
+        >
+          <div className="border-b px-6 py-3.5">
+            <h2 className="text-base font-semibold leading-tight">
+              {projectSlug ? "Project assistant" : "Freeform assistant"}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
+              {catalog ? ` Models from \`${catalog.command}\`.` : null}
+            </p>
+          </div>
+
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div
+              className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 pt-8"
+              style={{ paddingBottom: composerHeight + 16 }}
+            >
+              {messageItems}
+            </div>
+          </div>
+
+          <div ref={composerDockRef} className="pointer-events-none absolute inset-x-0 bottom-0">
+            <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
+            <div className="pointer-events-auto bg-background">
+              <div className="mx-auto w-full max-w-4xl px-4 pb-2 pt-1">
+                {composerNode ?? (
+                  <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
+                    Loading Codex CLI models...
+                  </div>
+                )}
+                {catalogError ? (
+                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
+      </AssistantRuntimeProvider>
     );
   }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button type="button" variant="outline" size="sm" aria-label="Open project assistant">
-          <Bot className="h-4 w-4" />
-          Assistant
-        </Button>
-      </SheetTrigger>
-      <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
-        <SheetHeader className="border-b px-6 py-4">
-          <SheetTitle>{projectSlug ? "Project assistant" : "Freeform assistant"}</SheetTitle>
-          <SheetDescription>
-            {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
-          </SheetDescription>
-        </SheetHeader>
-        {content}
-      </SheetContent>
-    </Sheet>
+    <AssistantRuntimeProvider runtime={runtime}>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <Button type="button" variant="outline" size="sm" aria-label="Open project assistant">
+            <Bot className="h-4 w-4" />
+            Assistant
+          </Button>
+        </SheetTrigger>
+        <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
+          <SheetHeader className="border-b px-6 py-4">
+            <SheetTitle>{projectSlug ? "Project assistant" : "Freeform assistant"}</SheetTitle>
+            <SheetDescription>
+              {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">{messageItems}</div>
+            {composerNode ?? (
+              <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading Codex CLI models...</div>
+            )}
+            {catalogError ? (
+              <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </AssistantRuntimeProvider>
   );
 }
 
@@ -263,10 +324,10 @@ function AssistantBubble({ message }: { message: AssistantChatMessage }) {
     <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
       <article
         className={cn(
-          "w-fit max-w-[92%] rounded-2xl px-4 py-3 text-sm shadow-sm",
+          "text-sm",
           isUser
-            ? "bg-slate-950 text-white dark:bg-primary dark:text-primary-foreground"
-            : "border bg-card text-card-foreground",
+            ? "w-fit max-w-[85%] rounded-3xl bg-slate-950 px-4 py-2.5 text-white shadow-sm dark:bg-primary dark:text-primary-foreground"
+            : "w-full max-w-none text-foreground",
         )}
       >
         {attachments.length > 0 ? (
@@ -279,7 +340,7 @@ function AssistantBubble({ message }: { message: AssistantChatMessage }) {
         {isUser ? (
           <p className="whitespace-pre-wrap leading-6">{message.content}</p>
         ) : (
-          <Markdown className="max-w-none text-sm leading-6 text-inherit">{message.content}</Markdown>
+          <Markdown className="max-w-none text-sm leading-7 text-inherit">{message.content}</Markdown>
         )}
         {message.toolCalls.length ? (
           <div className={cn("mt-3 space-y-2 border-t pt-2", isUser && "border-white/20")}>

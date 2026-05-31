@@ -45,10 +45,17 @@ interface AssistantComposerProps {
   projectSlug: string;
   catalog: AssistantCodexCatalog;
   disabled?: boolean;
+  floating?: boolean;
   onSubmit: (payload: AssistantComposerSubmit) => void;
 }
 
-export function AssistantComposer({ projectSlug, catalog, disabled = false, onSubmit }: AssistantComposerProps) {
+export function AssistantComposer({
+  projectSlug,
+  catalog,
+  disabled = false,
+  floating = false,
+  onSubmit,
+}: AssistantComposerProps) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -188,10 +195,11 @@ export function AssistantComposer({ projectSlug, catalog, disabled = false, onSu
   }
 
   return (
-    <form className="border-t bg-background p-4" onSubmit={handleSubmit}>
+    <form className={cn("bg-background", floating ? "px-0 pb-0 pt-0" : "border-t p-4")} onSubmit={handleSubmit}>
       <div
         className={cn(
-          "rounded-2xl border bg-card shadow-sm transition-shadow",
+          "rounded-2xl border bg-card transition-shadow",
+          floating ? "shadow-lg" : "shadow-sm",
           recording && "ring-2 ring-primary/30",
         )}
       >
@@ -324,7 +332,7 @@ export function AssistantComposer({ projectSlug, catalog, disabled = false, onSu
         </div>
       </div>
 
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className={cn("text-xs text-muted-foreground", floating ? "mt-1.5" : "mt-2")}>
         Enter to send · Shift+Enter for a new line · Models from {catalog.command}
         {speechError ? <span className="text-destructive"> · Voice dictation unavailable ({speechError})</span> : null}
       </p>

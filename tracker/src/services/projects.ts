@@ -20,6 +20,12 @@ export interface CreateWorkspaceProjectInput extends CreateProjectInput {
   tracker?: { kind: TrackerKind; config: Record<string, unknown> };
 }
 
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string | null;
+  tracker?: { kind: TrackerKind; config: Record<string, unknown> };
+}
+
 export async function listProjects(options: { includeArchived?: boolean } = {}): Promise<Project[]> {
   const response = options.includeArchived
     ? await http.get(trackerPath("/projects"), { params: { include_archived: "true" } })
@@ -79,6 +85,29 @@ export async function createWorkspaceProject(input: CreateWorkspaceProjectInput)
 export async function getProject(projectSlug: string): Promise<Project> {
   const slug = requireProjectSlug(projectSlug);
   const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}`));
+  return normalizeProject(unwrapData<BackendProjectDto>(response));
+}
+
+export async function updateProject(projectSlug: string, input: UpdateProjectInput): Promise<Project> {
+  const slug = requireProjectSlug(projectSlug);
+
+  const payload: Record<string, unknown> = {};
+
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) throw new Error("Project name is required");
+    payload.name = name;
+  }
+
+  if (input.description !== undefined) {
+    payload.description = input.description?.trim() || null;
+  }
+
+  if (input.tracker !== undefined) {
+    payload.tracker = input.tracker;
+  }
+
+  const response = await http.put(trackerPath(`/projects/${encodeURIComponent(slug)}`), payload);
   return normalizeProject(unwrapData<BackendProjectDto>(response));
 }
 

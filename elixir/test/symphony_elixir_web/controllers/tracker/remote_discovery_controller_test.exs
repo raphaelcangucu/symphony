@@ -17,6 +17,24 @@ defmodule SymphonyElixirWeb.Tracker.RemoteDiscoveryControllerTest do
                "nodes" => [
                  %{"id" => "PVT_1", "number" => 7, "title" => "Roadmap", "owner" => %{"login" => "o", "__typename" => "User"}}
                ]
+             },
+             "organizations" => %{
+               "nodes" => [
+                 %{
+                   "projectsV2" => %{
+                     "nodes" => [
+                       %{
+                         "id" => "PVT_2",
+                         "number" => 2,
+                         "title" => "Macro Markets",
+                         "owner" => %{"login" => "clouapp", "__typename" => "Organization"}
+                       },
+                       # Duplicate of the viewer-owned board: must be de-duplicated by id.
+                       %{"id" => "PVT_1", "number" => 7, "title" => "Roadmap", "owner" => %{"login" => "o", "__typename" => "User"}}
+                     ]
+                   }
+                 }
+               ]
              }
            }
          }
@@ -40,8 +58,16 @@ defmodule SymphonyElixirWeb.Tracker.RemoteDiscoveryControllerTest do
 
   defp authorized_conn, do: build_conn() |> put_req_header("authorization", "Bearer secret")
 
-  test "POST /github/projects/discover returns boards" do
+  test "POST /github/projects/discover returns viewer and organization boards, de-duplicated" do
     conn = post(authorized_conn(), "/api/tracker/v1/github/projects/discover", %{})
-    assert %{"data" => [%{"id" => "PVT_1", "number" => 7, "title" => "Roadmap"}]} = json_response(conn, 200)
+    assert %{"data" => boards} = json_response(conn, 200)
+
+    ids = Enum.map(boards, & &1["id"])
+    assert ids == ["PVT_1", "PVT_2"]
+
+    org_board = Enum.find(boards, &(&1["id"] == "PVT_2"))
+    assert org_board["title"] == "Macro Markets"
+    assert org_board["owner"]["login"] == "clouapp"
+    assert org_board["owner"]["kind"] == "organization"
   end
 end

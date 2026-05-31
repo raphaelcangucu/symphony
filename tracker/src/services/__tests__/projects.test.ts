@@ -10,6 +10,7 @@ import {
   getProject,
   listProjects,
   restoreProject,
+  updateProject,
 } from "@/services/projects";
 
 describe("project service", () => {
@@ -143,6 +144,61 @@ describe("project service", () => {
         tracker: { kind: "github", config: { project_id: "PVT_1", project_number: 7, status_field: "Symphony State" } },
       }),
     );
+  });
+
+  it("updates a project's details and tracker through the tracker API", async () => {
+    const put = vi.spyOn(http, "put").mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 3,
+          name: "Macro Markets",
+          slug: "macro-markets",
+          description: "Connected board",
+          tracker_kind: "github",
+          tracker_config: { project_id: "PVT_kwDOCpPais4BY509", repo: "clouapp/front", status_field: "Status" },
+        },
+      },
+    });
+
+    const project = await updateProject(" macro-markets ", {
+      name: "  Macro Markets  ",
+      description: "  Connected board  ",
+      tracker: {
+        kind: "github",
+        config: { project_id: "PVT_kwDOCpPais4BY509", repo: "clouapp/front", status_field: "Status" },
+      },
+    });
+
+    expect(put).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets", {
+      name: "Macro Markets",
+      description: "Connected board",
+      tracker: {
+        kind: "github",
+        config: { project_id: "PVT_kwDOCpPais4BY509", repo: "clouapp/front", status_field: "Status" },
+      },
+    });
+    expect(project.tracker).toEqual({
+      kind: "github",
+      config: { project_id: "PVT_kwDOCpPais4BY509", repo: "clouapp/front", status_field: "Status" },
+    });
+  });
+
+  it("only sends fields that were provided when updating a project", async () => {
+    const put = vi.spyOn(http, "put").mockResolvedValueOnce({
+      data: { data: { id: 3, name: "Renamed", slug: "macro-markets" } },
+    });
+
+    await updateProject("macro-markets", { name: "Renamed" });
+
+    expect(put).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets", { name: "Renamed" });
+  });
+
+  it("rejects an empty name when updating a project", async () => {
+    const put = vi.spyOn(http, "put");
+
+    await expect(updateProject("macro-markets", { name: "   " })).rejects.toThrow("Project name is required");
+
+    expect(put).not.toHaveBeenCalled();
   });
 
   it("trims the slug before getting a project", async () => {

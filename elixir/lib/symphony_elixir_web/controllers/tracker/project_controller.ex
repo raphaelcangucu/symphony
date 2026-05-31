@@ -47,6 +47,21 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
     end
   end
 
+  @spec update(Conn.t(), map()) :: Conn.t()
+  def update(conn, %{"id" => project_slug} = params) do
+    case Context.update_project(project_slug, params) do
+      {:ok, project} ->
+        statuses = Context.list_statuses(project.slug)
+        json(conn, %{data: TrackerPresenter.project(project, statuses)})
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec show(Conn.t(), map()) :: Conn.t()
   def show(conn, %{"id" => project_slug}) do
     case Context.get_project(project_slug) do

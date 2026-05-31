@@ -1,24 +1,18 @@
-import { MessageSquarePlus, Plus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { NavLink, useNavigate, useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { Plus, Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
+import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
+import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import { createFreeformThread, listAssistantThreads } from "@/services/assistantThreads";
-import type { AssistantThread } from "@/types/assistant-thread";
+import { useCreateFreeformChat } from "@/hooks/useCreateFreeformChat";
+import { useRecents } from "@/hooks/useRecents";
+import type { RecentSession } from "@/types/recents";
 
-function freeformThreadTitle(thread: AssistantThread): string {
-  const title = thread.title?.trim();
-  if (title) return title;
-
-  const preview = thread.preview?.trim();
-  if (preview) return preview;
-
-  return "Untitled chat";
-}
+const CONVERSATIONS_LIMIT = 50;
 
 function parseThreadId(raw: string | undefined): number | null {
   if (!raw || !/^\d+$/.test(raw)) return null;
@@ -27,96 +21,101 @@ function parseThreadId(raw: string | undefined): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function matchesQuery(session: RecentSession, query: string): boolean {
+  if (!query) return true;
+
+  const haystack = [
+    session.title,
+    session.preview ?? "",
+    session.identifier ?? "",
+    session.projectName ?? "",
+    session.projectSlug ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes(query);
+}
+
+function ConversationsView() {
+  const { sessions, loading, refetch } = useRecents({ limit: CONVERSATIONS_LIMIT });
+  const { creating, createChat } = useCreateFreeformChat(() => void refetch());
+  const [query, setQuery] = useState("");
+
+  const chatSessions = useMemo(() => sessions.filter((session) => session.kind === "chat"), [sessions]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = useMemo(
+    () => chatSessions.filter((session) => matchesQuery(session, normalizedQuery)),
+    [chatSessions, normalizedQuery],
+  );
+
+  return (
+    <section className="flex h-[calc(100vh-4rem)] flex-col" aria-label="Conversations">
+      <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
+        <h1 className="text-base font-semibold">Conversations</h1>
+        <Button type="button" size="sm" onClick={() => void createChat()} disabled={creating}>
+          <Plus className="h-4 w-4" />
+          New chat
+        </Button>
+      </div>
+
+      <div className="border-b px-6 py-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search conversations..."
+            aria-label="Search conversations"
+            className="pl-9"
+          />
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
+        {loading && chatSessions.length === 0 ? (
+          <div className="space-y-2 px-3">
+            <Skeleton className="h-12" />
+            <Skeleton className="h-12" />
+          </div>
+        ) : null}
+
+        {!loading && chatSessions.length === 0 ? (
+          <p className="px-3 py-8 text-center text-sm text-muted-foreground">No conversations yet. Start a new one.</p>
+        ) : null}
+
+        {!loading && chatSessions.length > 0 && filtered.length === 0 ? (
+          <p className="px-3 py-8 text-center text-sm text-muted-foreground">No conversations match your search.</p>
+        ) : null}
+
+        <ul className="space-y-1">
+          {filtered.map((session) => (
+            <li key={session.id}>
+              <Link
+                to={recentSessionPath(session)}
+                className="flex items-start gap-3 rounded-md px-3 py-2.5 hover:bg-accent"
+              >
+                <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{session.title}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{recentSessionSubtitle(session)}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 export function AssistantPage() {
-  const navigate = useNavigate();
   const { threadId: threadIdParam } = useParams<{ threadId: string }>();
   const selectedThreadId = parseThreadId(threadIdParam);
 
-  const [threads, setThreads] = useState<AssistantThread[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  if (selectedThreadId == null) return <ConversationsView />;
 
-  const loadThreads = useCallback(async () => {
-    try {
-      const items = await listAssistantThreads("freeform");
-      setThreads(items);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to load chats");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadThreads();
-  }, [loadThreads]);
-
-  const handleNewChat = useCallback(async () => {
-    if (creating) return;
-
-    setCreating(true);
-    try {
-      const thread = await createFreeformThread();
-      setThreads((current) => [thread, ...current.filter((item) => item.id !== thread.id)]);
-      navigate(`/assistant/${thread.id}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to start a new chat");
-    } finally {
-      setCreating(false);
-    }
-  }, [creating, navigate]);
-
-  return (
-    <div className="flex h-[calc(100vh-4rem)] min-h-0">
-      <aside className="flex w-72 shrink-0 flex-col border-r">
-        <div className="flex items-center justify-between gap-2 border-b px-4 py-4">
-          <h1 className="text-base font-semibold">Chats</h1>
-          <Button type="button" size="sm" onClick={() => void handleNewChat()} disabled={creating}>
-            <Plus className="h-4 w-4" />
-            New chat
-          </Button>
-        </div>
-
-        <nav className="min-h-0 flex-1 space-y-1 overflow-auto p-2" aria-label="Freeform chats">
-          {loading ? (
-            <>
-              <Skeleton className="h-12" />
-              <Skeleton className="h-12" />
-            </>
-          ) : null}
-
-          {!loading && threads.length === 0 ? (
-            <p className="px-3 py-6 text-sm text-muted-foreground">No chats yet. Start a new one.</p>
-          ) : null}
-
-          {threads.map((thread) => (
-            <NavLink
-              key={thread.id}
-              to={`/assistant/${thread.id}`}
-              className={({ isActive }) =>
-                cn(
-                  "flex flex-col gap-0.5 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-foreground",
-                  isActive ? "bg-accent text-foreground" : "text-muted-foreground",
-                )
-              }
-            >
-              <span className="truncate font-medium text-foreground">{freeformThreadTitle(thread)}</span>
-              {thread.preview ? <span className="truncate text-xs text-muted-foreground">{thread.preview}</span> : null}
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
-
-      <main className="min-w-0 flex-1">
-        {selectedThreadId != null ? (
-          <ProjectAssistantPanel key={selectedThreadId} threadId={selectedThreadId} view="board" mode="page" />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
-            <MessageSquarePlus className="h-8 w-8" />
-            <p className="text-sm">Select a chat or start a new one.</p>
-          </div>
-        )}
-      </main>
-    </div>
-  );
+  return <ProjectAssistantPanel key={selectedThreadId} threadId={selectedThreadId} view="board" mode="page" />;
 }

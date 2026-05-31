@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
 
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
@@ -15,6 +15,8 @@ interface WorkspaceContextValue extends UseIssueBoardResult {
   projectSlug: string;
   view: WorkspaceView;
   project: Project | null;
+  setProject: (project: Project) => void;
+  reloadProject: () => Promise<void>;
   trackerKind: TrackerKind;
   statusNames: WorkflowStatusName[] | undefined;
   workflowStatuses: WorkflowStatus[] | undefined;
@@ -76,12 +78,25 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     };
   }, [projectSlug]);
 
+  const reloadProject = useCallback(async () => {
+    if (!projectSlug.trim()) return;
+    try {
+      const loaded = await getProject(projectSlug);
+      setProject(loaded);
+    } catch {
+      // keep the previously loaded project on transient failures
+    }
+    await board.refetch();
+  }, [projectSlug, board]);
+
   const value = useMemo<WorkspaceContextValue>(
     () => ({
       ...board,
       projectSlug,
       view,
       project,
+      setProject,
+      reloadProject,
       trackerKind,
       statusNames,
       workflowStatuses: project?.workflowStatuses,
@@ -90,7 +105,19 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
       collapsed,
       toggleCollapse,
     }),
-    [board, projectSlug, view, project, trackerKind, statusNames, agentExecutions, knownLogins, collapsed, toggleCollapse],
+    [
+      board,
+      projectSlug,
+      view,
+      project,
+      reloadProject,
+      trackerKind,
+      statusNames,
+      agentExecutions,
+      knownLogins,
+      collapsed,
+      toggleCollapse,
+    ],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

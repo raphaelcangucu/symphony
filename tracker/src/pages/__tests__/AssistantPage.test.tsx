@@ -1,19 +1,15 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantPage } from "../AssistantPage";
-import type { AssistantThread } from "@/types/assistant-thread";
+import * as useRecentsModule from "@/hooks/useRecents";
+import * as useCreateFreeformChatModule from "@/hooks/useCreateFreeformChat";
+import type { RecentSession } from "@/types/recents";
 
-let threads: AssistantThread[];
-const listAssistantThreads = vi.fn(() => Promise.resolve(threads));
-const createFreeformThread = vi.fn();
-
-vi.mock("@/services/assistantThreads", () => ({
-  listAssistantThreads: (...args: unknown[]) => listAssistantThreads(...(args as [])),
-  createFreeformThread: (...args: unknown[]) => createFreeformThread(...(args as [])),
-}));
+vi.mock("@/hooks/useRecents");
+vi.mock("@/hooks/useCreateFreeformChat");
 
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: ({ threadId }: { threadId?: number }) => (
@@ -21,19 +17,18 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ),
 }));
 
-function makeThread(overrides: Partial<AssistantThread> = {}): AssistantThread {
+const createChat = vi.fn();
+
+function makeSession(overrides: Partial<RecentSession> = {}): RecentSession {
   return {
-    id: 1,
-    scope: "freeform",
-    projectSlug: null,
-    projectName: null,
-    issueIdentifier: null,
-    title: null,
-    status: "active",
-    preview: null,
-    updatedAt: "2026-05-30T12:00:00Z",
-    ...overrides,
+    id: "chat:1", kind: "chat", scope: "freeform", projectSlug: null, projectName: null,
+    title: "Untitled", identifier: null, threadId: 1, status: "active", statusKind: "active",
+    preview: null, updatedAt: "2026-05-30T12:00:00Z", ...overrides,
   };
+}
+
+function mockRecents(sessions: RecentSession[], loading = false) {
+  vi.mocked(useRecentsModule.useRecents).mockReturnValue({ sessions, loading, refetch: vi.fn() });
 }
 
 function renderAt(path: string) {
@@ -49,47 +44,45 @@ function renderAt(path: string) {
 
 describe("AssistantPage", () => {
   beforeEach(() => {
-    listAssistantThreads.mockClear();
-    createFreeformThread.mockClear();
-    threads = [
-      makeThread({ id: 7, title: "Endereços em wallet", preview: "como derivar" }),
-      makeThread({ id: 8, title: null, preview: "rascunho rápido" }),
-    ];
+    createChat.mockClear();
+    vi.mocked(useCreateFreeformChatModule.useCreateFreeformChat).mockReturnValue({ creating: false, createChat });
+    mockRecents([
+      makeSession({ id: "chat:7", threadId: 7, title: "Endereços em wallet", preview: "como derivar" }),
+      makeSession({ id: "codex:ABC-12", kind: "codex", scope: null, threadId: null, identifier: "ABC-12", title: "Fix login", projectSlug: "app" }),
+    ]);
   });
 
-  it("lists freeform chats from the threads service", async () => {
+  it("lists chat sessions and excludes codex rows", async () => {
     renderAt("/assistant");
 
-    expect(await screen.findByRole("link", { name: /Endereços em wallet/ })).toHaveAttribute(
-      "href",
-      "/assistant/7",
-    );
-    expect(screen.getByRole("link", { name: /rascunho rápido/ })).toHaveAttribute("href", "/assistant/8");
-    expect(listAssistantThreads).toHaveBeenCalledWith("freeform");
+    expect(await screen.findByRole("link", { name: /Endereços em wallet/ })).toHaveAttribute("href", "/assistant/7");
+    expect(screen.queryByRole("link", { name: /Fix login/ })).not.toBeInTheDocument();
   });
 
-  it("shows an empty placeholder when no thread is selected", async () => {
+  it("filters conversations by the search query", async () => {
+    mockRecents([
+      makeSession({ id: "chat:7", threadId: 7, title: "Endereços em wallet", preview: "como derivar" }),
+      makeSession({ id: "chat:8", threadId: 8, title: "Plano de testes", preview: "rascunho" }),
+    ]);
     renderAt("/assistant");
 
     await screen.findByRole("link", { name: /Endereços em wallet/ });
-    expect(screen.queryByTestId("assistant-panel")).not.toBeInTheDocument();
-    expect(screen.getByText(/select a chat or start a new one/i)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/search conversations/i), "wallet");
+
+    expect(screen.getByRole("link", { name: /Endereços em wallet/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Plano de testes/ })).not.toBeInTheDocument();
   });
 
-  it("opens the panel for the selected thread id", async () => {
+  it("creates a new chat from the page header", async () => {
+    renderAt("/assistant");
+
+    await userEvent.click(screen.getByRole("button", { name: /new chat/i }));
+    expect(createChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the full-width panel for the selected thread id", async () => {
     renderAt("/assistant/7");
 
     expect(await screen.findByTestId("assistant-panel")).toHaveTextContent("panel:7");
-  });
-
-  it("creates a new chat and navigates to it", async () => {
-    createFreeformThread.mockResolvedValueOnce(makeThread({ id: 42, title: null }));
-    renderAt("/assistant");
-
-    await screen.findByRole("link", { name: /Endereços em wallet/ });
-    await userEvent.click(screen.getByRole("button", { name: /new chat/i }));
-
-    await waitFor(() => expect(createFreeformThread).toHaveBeenCalledTimes(1));
-    expect(await screen.findByTestId("assistant-panel")).toHaveTextContent("panel:42");
   });
 });

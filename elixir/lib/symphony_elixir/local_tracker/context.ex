@@ -113,6 +113,17 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec update_project(String.t(), map()) ::
+          {:ok, Project.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def update_project(project_slug, attrs) when is_binary(project_slug) and is_map(attrs) do
+    with {:ok, project} <- fetch_project(project_slug) do
+      project
+      |> Project.changeset(project_update_attrs(attrs))
+      |> Repo.update()
+      |> tap_project_event("project_updated")
+    end
+  end
+
   @spec list_statuses(String.t()) :: [WorkflowStatus.t()]
   def list_statuses(project_slug) when is_binary(project_slug) do
     case Repo.get_by(Project, slug: project_slug) do
@@ -420,6 +431,47 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   defp insert_workspace_setup(_project, _setup_attrs), do: {:error, workspace_changeset_error(:setup)}
+
+  defp project_update_attrs(attrs) do
+    base =
+      %{}
+      |> copy_present(attrs, :name, :name)
+      |> copy_present(attrs, :description, :description)
+
+    case fetch_attr(attrs, :tracker) do
+      {:ok, tracker} when is_map(tracker) ->
+        base
+        |> copy_present(tracker, :kind, :tracker_kind)
+        |> copy_tracker_config(tracker)
+
+      _absent ->
+        base
+    end
+  end
+
+  defp copy_present(map, source, source_key, target_key) do
+    case fetch_attr(source, source_key) do
+      {:ok, value} -> Map.put(map, target_key, value)
+      :error -> map
+    end
+  end
+
+  defp copy_tracker_config(map, tracker) do
+    case fetch_attr(tracker, :config) do
+      {:ok, config} when is_map(config) -> Map.put(map, :tracker_config, config)
+      _absent -> map
+    end
+  end
+
+  defp fetch_attr(attrs, key) when is_map(attrs) and is_atom(key) do
+    string_key = Atom.to_string(key)
+
+    cond do
+      Map.has_key?(attrs, key) -> {:ok, Map.get(attrs, key)}
+      Map.has_key?(attrs, string_key) -> {:ok, Map.get(attrs, string_key)}
+      true -> :error
+    end
+  end
 
   defp project_attrs(attrs) do
     tracker = attr(attrs, :tracker, %{})

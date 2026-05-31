@@ -14,6 +14,13 @@ defmodule SymphonyElixirWeb.Tracker.RemoteDiscoveryController do
       projectsV2(first: 50) {
         nodes { id number title owner { __typename ... on User { login } ... on Organization { login } } }
       }
+      organizations(first: 25) {
+        nodes {
+          projectsV2(first: 50) {
+            nodes { id number title owner { __typename ... on User { login } ... on Organization { login } } }
+          }
+        }
+      }
     }
   }
   """
@@ -32,12 +39,27 @@ defmodule SymphonyElixirWeb.Tracker.RemoteDiscoveryController do
   def github_discover(conn, _params) do
     case github_client().graphql(@github_projects, %{}, []) do
       {:ok, response} ->
-        nodes = get_in(response, ["data", "viewer", "projectsV2", "nodes"]) || []
-        json(conn, %{data: Enum.map(nodes, &github_project_dto/1)})
+        json(conn, %{data: github_projects(response)})
 
       {:error, reason} ->
         TrackerErrors.render(conn, github_error(reason))
     end
+  end
+
+  defp github_projects(response) do
+    viewer = get_in(response, ["data", "viewer"]) || %{}
+    viewer_nodes = get_in(viewer, ["projectsV2", "nodes"]) || []
+
+    org_nodes =
+      viewer
+      |> get_in(["organizations", "nodes"])
+      |> List.wrap()
+      |> Enum.flat_map(fn org -> get_in(org, ["projectsV2", "nodes"]) || [] end)
+
+    (viewer_nodes ++ org_nodes)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq_by(& &1["id"])
+    |> Enum.map(&github_project_dto/1)
   end
 
   @spec linear_discover(Conn.t(), map()) :: Conn.t()
