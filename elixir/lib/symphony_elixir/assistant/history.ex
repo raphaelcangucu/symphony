@@ -46,6 +46,55 @@ defmodule SymphonyElixir.Assistant.History do
     append_message_with_retry(thread, attrs, 3)
   end
 
+  @spec create_freeform_thread(attrs()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def create_freeform_thread(attrs) when is_map(attrs) do
+    attrs
+    |> Map.put(:scope, "freeform")
+    |> Map.delete(:project_slug)
+    |> Map.put_new(:status, "active")
+    |> then(&Thread.changeset(%Thread{}, &1))
+    |> Repo.insert()
+  end
+
+  @spec get_thread(integer()) :: {:ok, Thread.t()} | {:error, :not_found}
+  def get_thread(id) when is_integer(id) do
+    case Repo.get(Thread, id) do
+      %Thread{} = thread -> {:ok, thread}
+      nil -> {:error, :not_found}
+    end
+  end
+
+  @spec list_threads(keyword()) :: [Thread.t()]
+  def list_threads(opts \\ []) when is_list(opts) do
+    Thread
+    |> filter_scope(Keyword.get(opts, :scope))
+    |> filter_project(Keyword.get(opts, :project_slug))
+    |> order_by([t], desc: t.updated_at, desc: t.id)
+    |> limit(^Keyword.get(opts, :limit, 50))
+    |> Repo.all()
+  end
+
+  @spec latest_message(integer()) :: map() | nil
+  def latest_message(thread_id) when is_integer(thread_id) do
+    Message
+    |> where([m], m.thread_id == ^thread_id)
+    |> order_by([m], desc: m.sequence)
+    |> limit(1)
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      %Message{} = message -> message_payload(message)
+    end
+  end
+
+  @spec list_messages_for_thread(integer()) :: [Message.t()]
+  def list_messages_for_thread(thread_id) when is_integer(thread_id) do
+    Message
+    |> where([m], m.thread_id == ^thread_id)
+    |> order_by([m], asc: m.sequence)
+    |> Repo.all()
+  end
+
   @spec message_payload(Message.t()) :: map()
   def message_payload(%Message{} = message) do
     %{
@@ -63,6 +112,12 @@ defmodule SymphonyElixir.Assistant.History do
   defp active_thread(project_slug) do
     Repo.get_by(Thread, project_slug: project_slug, status: "active")
   end
+
+  defp filter_scope(query, nil), do: query
+  defp filter_scope(query, scope) when is_binary(scope), do: where(query, [t], t.scope == ^scope)
+
+  defp filter_project(query, nil), do: query
+  defp filter_project(query, slug) when is_binary(slug), do: where(query, [t], t.project_slug == ^slug)
 
   defp append_message_with_retry(thread, attrs, attempts_left) do
     case append_message_once(thread, attrs) do

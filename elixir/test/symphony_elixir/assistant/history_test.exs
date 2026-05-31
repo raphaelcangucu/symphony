@@ -67,6 +67,43 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     refute changeset.valid?
   end
 
+  test "create_freeform_thread/1 persists a project-less thread" do
+    assert {:ok, thread} = History.create_freeform_thread(%{title: "Ideas", workspace_path: "/tmp/f"})
+    assert thread.scope == "freeform"
+    assert thread.project_slug == nil
+  end
+
+  test "list_threads/1 returns freeform threads newest first" do
+    {:ok, t1} = History.create_freeform_thread(%{title: "A", workspace_path: "/tmp/a"})
+    {:ok, t2} = History.create_freeform_thread(%{title: "B", workspace_path: "/tmp/b"})
+    ids = History.list_threads(scope: "freeform", limit: 10) |> Enum.map(& &1.id)
+    assert ids == [t2.id, t1.id]
+  end
+
+  test "latest_message/1 returns the most recent message map" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "A", workspace_path: "/tmp/a"})
+    {:ok, _} = History.append_message(thread, %{role: "user", content: "hello"})
+    {:ok, _} = History.append_message(thread, %{role: "assistant", content: "hi there"})
+    assert %{content: "hi there"} = History.latest_message(thread.id)
+  end
+
+  test "list_messages_for_thread/1 returns Message structs in sequence order" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "A", workspace_path: "/tmp/a"})
+    {:ok, _} = History.append_message(thread, %{role: "user", content: "one"})
+    {:ok, _} = History.append_message(thread, %{role: "assistant", content: "two"})
+    messages = History.list_messages_for_thread(thread.id)
+    assert Enum.all?(messages, &match?(%Message{}, &1))
+    contents = Enum.map(messages, & &1.content)
+    assert contents == ["one", "two"]
+  end
+
+  test "get_thread/1 returns {:ok, thread} or {:error, :not_found}" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "A", workspace_path: "/tmp/a"})
+    assert {:ok, %{id: id}} = History.get_thread(thread.id)
+    assert id == thread.id
+    assert {:error, :not_found} = History.get_thread(thread.id + 999_999)
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
