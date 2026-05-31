@@ -6,6 +6,9 @@ defmodule SymphonyElixir.PromptBuilder do
   alias SymphonyElixir.{Config, Workflow}
 
   @render_opts [strict_filters: true]
+  @artifact_max_bytes 512_000
+  @artifact_too_large_message "_Skipped: artifact too large._"
+  @artifact_unreadable_message "_Skipped: artifact could not be read._"
 
   @spec build_prompt(SymphonyElixir.Issue.t(), keyword()) :: String.t()
   def build_prompt(issue, opts \\ []) do
@@ -14,16 +17,19 @@ defmodule SymphonyElixir.PromptBuilder do
       |> prompt_template!()
       |> parse_template!()
 
-    template
-    |> Solid.render!(
-      %{
-        "attempt" => Keyword.get(opts, :attempt),
-        "issue" => issue |> Map.from_struct() |> to_solid_map()
-      },
-      @render_opts
-    )
-    |> IO.iodata_to_binary()
-    |> ensure_utf8()
+    rendered =
+      template
+      |> Solid.render!(
+        %{
+          "attempt" => Keyword.get(opts, :attempt),
+          "issue" => issue |> Map.from_struct() |> to_solid_map()
+        },
+        @render_opts
+      )
+      |> IO.iodata_to_binary()
+      |> ensure_utf8()
+
+    rendered <> artifacts_section(Keyword.get(opts, :workspace))
   end
 
   defp prompt_template!({:ok, %{prompt_template: prompt}}), do: default_prompt(prompt)
@@ -66,6 +72,81 @@ defmodule SymphonyElixir.PromptBuilder do
         result when is_binary(result) -> result
         _ -> String.replace(binary, ~r/[^\x00-\x7F]/, "\uFFFD")
       end
+    end
+  end
+
+  defp artifacts_section(nil), do: ""
+
+  defp artifacts_section(workspace) when is_binary(workspace) do
+    base = Path.join(workspace, "docs/superpowers")
+
+    if File.dir?(base) do
+      files =
+        ["specs", "plans"]
+        |> Enum.flat_map(fn dir -> base |> Path.join(dir) |> list_markdown_files() end)
+        |> Kernel.++(handoff_file(base))
+
+      case files do
+        [] ->
+          ""
+
+        list ->
+          "\n\n## Existing authoring artifacts (follow these)\n\n" <>
+            Enum.map_join(list, "\n\n", &render_artifact(workspace, &1))
+      end
+    else
+      ""
+    end
+  end
+
+  defp artifacts_section(_workspace), do: ""
+
+  defp list_markdown_files(directory) do
+    case File.ls(directory) do
+      {:ok, entries} ->
+        entries
+        |> Enum.sort()
+        |> Enum.map(&Path.join(directory, &1))
+        |> Enum.filter(&regular_markdown_file?/1)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp handoff_file(base) do
+    file = Path.join(base, "handoff.md")
+
+    if regular_markdown_file?(file) do
+      [file]
+    else
+      []
+    end
+  end
+
+  defp regular_markdown_file?(path) do
+    Path.extname(path) == ".md" and
+      match?({:ok, %File.Stat{type: :regular}}, File.lstat(path))
+  end
+
+  defp render_artifact(workspace, file) do
+    relative_path = Path.relative_to(file, workspace)
+
+    """
+    ### `#{relative_path}`
+
+    #{artifact_body(file)}
+    """
+    |> String.trim_trailing()
+  end
+
+  defp artifact_body(file) do
+    with {:ok, %File.Stat{size: size}} when size <= @artifact_max_bytes <- File.stat(file),
+         {:ok, body} <- File.read(file) do
+      ensure_utf8(body)
+    else
+      {:ok, %File.Stat{}} -> @artifact_too_large_message
+      {:error, _reason} -> @artifact_unreadable_message
     end
   end
 
