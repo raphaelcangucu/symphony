@@ -30,6 +30,8 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixir.Linear.Config,
           # Cloudflare DNS HTTP client; real transport not unit-testable, logic covered via injected transport
           SymphonyElixir.Cloudflare.Dns,
+          # Thin Cloudflare DNS CLI wrapper; network/env IO, not unit-tested
+          Mix.Tasks.Symphony.Tunnel.Dns,
           SymphonyElixir.LocalTracker.Config,
           SymphonyElixir.Memory.Config,
           SymphonyElixir.Repo,
