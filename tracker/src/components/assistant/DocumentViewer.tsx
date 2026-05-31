@@ -116,7 +116,7 @@ export function DocumentViewer({
   }
 
   return (
-    <section className="flex min-h-0 overflow-hidden rounded-xl border bg-card" aria-label="Issue documents">
+    <section className="flex h-full min-h-0 flex-1 overflow-hidden rounded-xl border bg-card" aria-label="Issue documents">
       <aside className="w-64 shrink-0 border-r bg-muted/20" aria-label="Document list">
         <div className="border-b px-4 py-3">
           <h2 className="text-sm font-semibold">Documents</h2>

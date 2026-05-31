@@ -89,6 +89,15 @@ describe("DocumentViewer", () => {
     expect(screen.getByRole("button", { name: /Handoff Public preview tunnel handoff/i })).toBeTruthy();
   });
 
+  it("fills bounded parent containers so document content can scroll internally", async () => {
+    readIssueDocument.mockResolvedValueOnce("# Spec");
+
+    renderViewer();
+
+    expect(screen.getByRole("region", { name: "Issue documents" })).toHaveClass("h-full", "flex-1", "min-h-0");
+    expect(await screen.findByRole("heading", { name: "Spec" })).toBeTruthy();
+  });
+
   it("groups document titles by kind in deterministic order", async () => {
     readIssueDocument.mockResolvedValueOnce("# Spec");
 
