@@ -107,6 +107,19 @@ describe("DocumentViewer", () => {
     );
   });
 
+  it("shows loading UI while the selected document is pending", async () => {
+    const pendingRead = createDeferred<string>();
+    readIssueDocument.mockReturnValueOnce(pendingRead.promise);
+
+    renderViewer();
+
+    expect(await screen.findByText("Loading document...")).toBeTruthy();
+
+    pendingRead.resolve("# Loaded Spec");
+
+    expect(await screen.findByRole("heading", { name: "Loaded Spec" })).toBeTruthy();
+  });
+
   it("loads and renders the selected document when switching documents", async () => {
     readIssueDocument.mockResolvedValueOnce("# Generated Spec").mockResolvedValueOnce("# Implementation Plan");
 
