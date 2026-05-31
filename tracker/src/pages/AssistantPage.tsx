@@ -21,7 +21,7 @@ function freeformThreadTitle(thread: AssistantThread): string {
 }
 
 function parseThreadId(raw: string | undefined): number | null {
-  if (!raw) return null;
+  if (!raw || !/^\d+$/.test(raw)) return null;
 
   const parsed = Number(raw);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
