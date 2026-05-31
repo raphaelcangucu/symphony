@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 
 import { IssueCreateDialog } from "@/components/issues/IssueCreateDialog";
 import { createIssue, getIssueFormOptions } from "@/services/issues";
@@ -52,6 +53,7 @@ const formOptions: IssueFormOptions = {
 
 describe("IssueCreateDialog Codex goal mode", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mockCreateIssue.mockResolvedValue(createdIssue);
     mockGetIssueFormOptions.mockResolvedValue(formOptions);
   });
@@ -121,5 +123,21 @@ describe("IssueCreateDialog Codex goal mode", () => {
       "macro-markets",
       expect.not.objectContaining({ goal: expect.anything() }),
     );
+  });
+
+  it("requires a non-empty goal when Codex goal mode is checked", async () => {
+    const user = userEvent.setup();
+
+    render(<IssueCreateDialog projectSlug="macro-markets" open onOpenChange={vi.fn()} />);
+
+    await user.type(screen.getByPlaceholderText("Issue title"), "Social login");
+    await user.click(await screen.findByRole("checkbox", { name: /goal mode/i }));
+
+    const goal = await screen.findByRole("textbox", { name: /codex goal/i });
+    await user.clear(goal);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(toast.error).toHaveBeenCalledWith("Goal mode requires a goal.");
+    expect(mockCreateIssue).not.toHaveBeenCalled();
   });
 });

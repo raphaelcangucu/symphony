@@ -5,6 +5,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   import Ecto.Query
 
+  alias SymphonyElixir.AgentRouting
+
   alias SymphonyElixir.LocalTracker.{
     ActivityEvent,
     Broadcaster,
@@ -22,7 +24,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   alias SymphonyElixir.Repo
 
-  @issue_preloads [:project, :status]
+  @issue_preloads [:project, :status, :labels]
   @default_issue_status "Todo"
 
   @type missing_error ::
@@ -187,6 +189,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, status} <- fetch_status(project.id, attr(attrs, :status, @default_issue_status)) do
       position = attr(attrs, :position, next_issue_position(project.id, status.id))
+      agent = attr(attrs, :agent)
 
       attrs
       |> issue_create_attrs()
@@ -194,7 +197,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
         project_id: project.id,
         status_id: status.id,
         identifier: next_identifier(project),
-        position: position
+        position: position,
+        agent: agent
       })
       |> insert_issue()
     end
@@ -217,6 +221,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       issue
       |> IssueRecord.changeset(changes)
       |> Repo.update()
+      |> sync_agent_routing_label_result(project.id, attr(attrs, :agent))
       |> preload_issue_result()
       |> tap_issue_event("issue_updated", %{status: status.name})
     end
@@ -746,6 +751,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
     %IssueRecord{}
     |> IssueRecord.changeset(attrs)
     |> Repo.insert()
+    |> sync_agent_routing_label_result(Map.get(attrs, :project_id), attr(attrs, :agent))
     |> preload_issue_result()
     |> tap_issue_event("issue_created", %{})
   end
@@ -826,6 +832,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
     issue
     |> IssueRecord.changeset(changes)
     |> Repo.update()
+    |> sync_agent_routing_label_result(issue.project_id, attr(attrs, :agent))
     |> preload_issue_result()
   end
 
@@ -959,6 +966,68 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   defp preload_issue_result({:ok, %IssueRecord{} = issue}), do: {:ok, Repo.preload(issue, @issue_preloads)}
   defp preload_issue_result(result), do: result
+
+  defp sync_agent_routing_label_result({:ok, %IssueRecord{} = issue}, project_id, agent) do
+    case normalize_agent_kind(agent) do
+      nil -> {:ok, issue}
+      agent_kind -> replace_agent_routing_label(issue, project_id, agent_kind)
+    end
+  end
+
+  defp sync_agent_routing_label_result(result, _project_id, _agent), do: result
+
+  defp replace_agent_routing_label(%IssueRecord{} = issue, project_id, agent_kind) when is_integer(project_id) do
+    with :ok <- delete_agent_routing_labels(issue.id),
+         {:ok, label} <- ensure_label(project_id, agent_label_name(agent_kind)),
+         {:ok, _issue_label} <- ensure_issue_label(issue.id, label.id) do
+      {:ok, issue}
+    end
+  end
+
+  defp replace_agent_routing_label(%IssueRecord{} = issue, _project_id, _agent_kind), do: {:ok, issue}
+
+  defp delete_agent_routing_labels(issue_id) do
+    agent_label_ids =
+      Label
+      |> where([label], label.name in ^AgentRouting.agent_labels())
+      |> select([label], label.id)
+      |> Repo.all()
+
+    if agent_label_ids != [] do
+      IssueLabel
+      |> where([issue_label], issue_label.issue_id == ^issue_id and issue_label.label_id in ^agent_label_ids)
+      |> Repo.delete_all()
+    end
+
+    :ok
+  end
+
+  defp ensure_label(project_id, name) do
+    case Repo.get_by(Label, project_id: project_id, name: name) do
+      %Label{} = label ->
+        {:ok, label}
+
+      nil ->
+        %Label{}
+        |> Label.changeset(%{project_id: project_id, name: name})
+        |> Repo.insert()
+    end
+  end
+
+  defp ensure_issue_label(issue_id, label_id) do
+    %IssueLabel{}
+    |> IssueLabel.changeset(%{issue_id: issue_id, label_id: label_id})
+    |> Repo.insert()
+  end
+
+  defp normalize_agent_kind(agent) when is_binary(agent) do
+    agent = agent |> String.trim() |> String.downcase()
+    if agent in ["codex", "claude"], do: agent, else: nil
+  end
+
+  defp normalize_agent_kind(_agent), do: nil
+
+  defp agent_label_name(agent_kind), do: "symphony:" <> agent_kind
 
   defp preload_relation_result({:ok, %IssueRelation{} = relation}) do
     {:ok, Repo.preload(relation, [:source_issue, :target_issue])}

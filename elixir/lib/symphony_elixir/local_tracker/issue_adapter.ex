@@ -86,6 +86,7 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
       priority: issue.priority,
       position: issue.position,
       status: status_to_map(issue.status),
+      labels: labels_to_names(issue.labels),
       assignee: issue.assignee_id,
       creator: issue.creator,
       agent_goal: issue.agent_goal,
@@ -101,6 +102,17 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
   end
 
   defp status_to_map(_), do: nil
+
+  defp labels_to_names(labels) when is_list(labels) do
+    labels
+    |> Enum.map(fn
+      %{name: name} when is_binary(name) -> name
+      _label -> nil
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp labels_to_names(_labels), do: []
 
   defp project_slug(%IssueRecord{project: %Project{slug: slug}}), do: slug
   defp project_slug(_), do: nil

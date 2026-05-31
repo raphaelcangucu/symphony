@@ -60,6 +60,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert body =~ "Reproduce the failing test and fix it."
   end
 
+  test "dispatches Codex work by forcing Codex routing on the issue" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Fix tests", "status" => "Todo", "agent" => "claude"})
+
+    assert {:ok, result} =
+             ToolExecutor.execute("macro-markets", "dispatch_codex", %{
+               "identifier" => "MAC-1",
+               "instructions" => "Reproduce the failing test and fix it."
+             })
+
+    assert result.data.status.name == "In Progress"
+
+    assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
+    assert Enum.map(reloaded.labels, & &1.name) == ["symphony:codex"]
+  end
+
   test "dispatches Codex work with a persisted goal for the orchestrator" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Fix tests", "status" => "Todo"})
@@ -93,6 +109,29 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
                "identifier" => "MAC-1",
                "instructions" => "Reproduce the failing test and fix it.",
                "goal" => " \n\t "
+             })
+
+    assert result.data.status.name == "In Progress"
+    assert result.data.agent_goal == nil
+
+    assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
+    assert reloaded.agent_goal == nil
+  end
+
+  test "dispatches Codex work by clearing an existing goal when no goal is provided" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    {:ok, _issue} =
+      Context.create_issue("macro-markets", %{
+        "title" => "Fix tests",
+        "status" => "Todo",
+        "agent_goal" => "Stale long-running goal"
+      })
+
+    assert {:ok, result} =
+             ToolExecutor.execute("macro-markets", "dispatch_codex", %{
+               "identifier" => "MAC-1",
+               "instructions" => "Reproduce the failing test and fix it."
              })
 
     assert result.data.status.name == "In Progress"

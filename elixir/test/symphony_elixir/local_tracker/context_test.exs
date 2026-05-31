@@ -188,6 +188,35 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert reloaded.agent_goal == "Ship the goal-mode path"
   end
 
+  test "create_issue stores selected agent as a routing label" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:ok, issue} =
+             Context.create_issue("macro-markets", %{
+               "title" => "Route to Codex",
+               "status" => "Todo",
+               "agent" => "codex"
+             })
+
+    assert Enum.map(issue.labels, & &1.name) == ["symphony:codex"]
+
+    assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
+    assert Enum.map(reloaded.labels, & &1.name) == ["symphony:codex"]
+  end
+
+  test "move_issue updates the agent routing label" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Move me", status: "Todo", agent: "claude"})
+
+    assert {:ok, issue} =
+             Context.move_issue("macro-markets", "MAC-1", %{
+               status: "In Progress",
+               agent: "codex"
+             })
+
+    assert Enum.map(issue.labels, & &1.name) == ["symphony:codex"]
+  end
+
   test "move_issue updates workflow status and mutable fields" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Move me", status: "Todo"})

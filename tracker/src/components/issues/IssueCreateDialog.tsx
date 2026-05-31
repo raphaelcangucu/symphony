@@ -202,6 +202,10 @@ export function IssueCreateDialog({
       toast.error(parsed.error.issues[0]?.message ?? "Invalid issue");
       return;
     }
+    if (agent === "codex" && codexGoalMode && !codexGoal.trim()) {
+      toast.error("Goal mode requires a goal.");
+      return;
+    }
 
     setSubmitting(true);
     try {

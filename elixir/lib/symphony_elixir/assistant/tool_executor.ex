@@ -434,8 +434,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp dispatch_codex_attrs(arguments) do
-    %{"status" => @in_progress_state}
-    |> maybe_put_attr("agent_goal", normalize_optional_string(Map.get(arguments, "goal")))
+    %{
+      "status" => @in_progress_state,
+      "agent" => "codex",
+      "agent_goal" => normalize_optional_string(Map.get(arguments, "goal"))
+    }
   end
 
   defp normalize_required_string(value, field) when is_binary(value) do
