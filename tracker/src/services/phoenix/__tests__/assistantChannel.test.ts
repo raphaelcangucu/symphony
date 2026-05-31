@@ -32,6 +32,7 @@ describe("assistant channel binding", () => {
     const onToolCallCompleted = vi.fn();
     const onAssistantCompleted = vi.fn();
     const onAssistantError = vi.fn();
+    const onAssistantDocumentChanged = vi.fn();
 
     bindAssistantEvents(channel, {
       onHistoryLoaded,
@@ -41,6 +42,7 @@ describe("assistant channel binding", () => {
       onToolCallCompleted,
       onAssistantCompleted,
       onAssistantError,
+      onAssistantDocumentChanged,
     });
 
     handlers["history_loaded"]({
@@ -52,6 +54,7 @@ describe("assistant channel binding", () => {
     handlers["tool_call_completed"]({ tool_call: { name: "list_issues", status: "complete", result: { issues: [] } } });
     handlers["assistant_completed"]({ message: { role: "assistant", content: "Olá!", tool_calls: [] } });
     handlers["assistant_error"]({ message: "Codex unavailable" });
+    handlers["assistant_document_changed"]({ identifier: "MAC-1" });
 
     expect(assistantTopic("macro-markets")).toBe("assistant:macro-markets");
     expect(onHistoryLoaded).toHaveBeenCalledWith([expect.objectContaining({ id: "1", role: "user", content: "Oi" })]);
@@ -61,6 +64,29 @@ describe("assistant channel binding", () => {
     expect(onToolCallCompleted).toHaveBeenCalledWith(expect.objectContaining({ name: "list_issues", status: "complete" }));
     expect(onAssistantCompleted).toHaveBeenCalledWith(expect.objectContaining({ role: "assistant", content: "Olá!" }));
     expect(onAssistantError).toHaveBeenCalledWith("Codex unavailable");
+    expect(onAssistantDocumentChanged).toHaveBeenCalledWith({ identifier: "MAC-1" });
+  });
+
+  it("does not emit document-change callbacks for malformed payloads", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onAssistantDocumentChanged = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onAssistantDocumentChanged,
+    });
+
+    handlers["assistant_document_changed"]({});
+    handlers["assistant_document_changed"]({ identifier: " " });
+
+    expect(onAssistantDocumentChanged).not.toHaveBeenCalled();
   });
 
   it("fails fast for blank project slugs", () => {

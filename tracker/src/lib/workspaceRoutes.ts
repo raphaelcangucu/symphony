@@ -32,6 +32,14 @@ export function assistantPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/assistant`;
 }
 
+export function newIssueAssistantPath(projectSlug: string): string {
+  return `/projects/${requireSlug(projectSlug)}/assistant/new-issue`;
+}
+
+export function issueAssistantPath(projectSlug: string, issueId: string): string {
+  return `/projects/${requireSlug(projectSlug)}/assistant/issue/${encodeURIComponent(issueId)}`;
+}
+
 export function newIssuePath(projectSlug: string, view: WorkspaceView): string {
   return `${workspaceBasePath(projectSlug, view)}/new-issue`;
 }

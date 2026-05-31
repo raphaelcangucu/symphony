@@ -109,4 +109,23 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("Olá, posso ajudar.")).toBeTruthy();
     expect(screen.getByText("list_issues")).toBeTruthy();
   });
+
+  it("surfaces assistant document change events from the channel", async () => {
+    const onDocumentChanged = vi.fn();
+
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+        onDocumentChanged={onDocumentChanged}
+      />,
+    );
+
+    await waitFor(() => expect(channelHandlers["assistant_document_changed"]).toEqual(expect.any(Function)));
+
+    channelHandlers["assistant_document_changed"]({ identifier: "MAC-1" });
+
+    expect(onDocumentChanged).toHaveBeenCalledWith({ identifier: "MAC-1" });
+  });
 });

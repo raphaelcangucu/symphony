@@ -9,6 +9,7 @@ import { ProjectDevEnvRoute } from "@/components/projects/ProjectDevEnvRoute";
 import { EditProjectRoute } from "@/components/projects/EditProjectRoute";
 import { NewProjectRoute } from "@/components/projects/NewProjectRoute";
 import { ProjectFiltersRoute } from "@/components/projects/ProjectFiltersRoute";
+import { IssueAssistantRoute } from "@/components/workspace/IssueAssistantRoute";
 import { IssueDetailRoute } from "@/components/workspace/IssueDetailRoute";
 import { NewIssueRoute } from "@/components/workspace/NewIssueRoute";
 import { ProjectAssistantRoute } from "@/components/workspace/ProjectAssistantRoute";
@@ -66,6 +67,8 @@ export function App() {
                 <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
               </Route>
               <Route path="assistant" element={<ProjectAssistantRoute />} />
+              <Route path="assistant/new-issue" element={<IssueAssistantRoute />} />
+              <Route path="assistant/issue/:issueId" element={<IssueAssistantRoute />} />
             </Route>
             <Route path="templates" element={<TemplateListPage />} />
             <Route path="templates/:slug" element={<TemplateEditPage />} />

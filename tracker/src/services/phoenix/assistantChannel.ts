@@ -16,6 +16,11 @@ export interface AssistantChannelHandlers {
   onToolCallCompleted: (toolCall: AssistantToolCall) => void;
   onAssistantCompleted: (message: AssistantChatMessage) => void;
   onAssistantError: (message: string) => void;
+  onAssistantDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
+}
+
+export interface AssistantDocumentChangedPayload {
+  identifier: string;
 }
 
 interface HistoryLoadedPayload {
@@ -37,6 +42,10 @@ interface ToolCallPayload {
 
 interface ErrorPayload {
   message?: string | null;
+}
+
+interface DocumentChangedPayload {
+  identifier?: string | null;
 }
 
 export function assistantTopic(projectSlug: string): string {
@@ -84,5 +93,12 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
 
   channel.on("assistant_error", (payload) => {
     handlers.onAssistantError((payload as ErrorPayload).message ?? "Assistant request failed");
+  });
+
+  channel.on("assistant_document_changed", (payload) => {
+    const identifier = (payload as DocumentChangedPayload).identifier?.trim();
+    if (!identifier) return;
+
+    handlers.onAssistantDocumentChanged?.({ identifier });
   });
 }

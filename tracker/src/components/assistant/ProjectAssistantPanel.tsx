@@ -22,7 +22,12 @@ import {
   type AssistantChatMessage,
   type AssistantToolCall,
 } from "@/services/assistant";
-import { assistantThreadTopic, assistantTopic, bindAssistantEvents } from "@/services/phoenix/assistantChannel";
+import {
+  assistantThreadTopic,
+  assistantTopic,
+  bindAssistantEvents,
+  type AssistantDocumentChangedPayload,
+} from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
@@ -32,6 +37,7 @@ interface ProjectAssistantPanelProps {
   threadId?: number;
   view: WorkspaceView;
   mode?: "sheet" | "page";
+  onDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
 }
 
 const STREAMING_ASSISTANT_ID = "assistant-streaming";
@@ -42,7 +48,13 @@ const convertMessage = (message: AssistantChatMessage): ThreadMessageLike => ({
   content: [{ type: "text", text: message.content }],
 });
 
-export function ProjectAssistantPanel({ projectSlug, threadId, view, mode = "sheet" }: ProjectAssistantPanelProps) {
+export function ProjectAssistantPanel({
+  projectSlug,
+  threadId,
+  view,
+  mode = "sheet",
+  onDocumentChanged,
+}: ProjectAssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
@@ -121,6 +133,7 @@ export function ProjectAssistantPanel({ projectSlug, threadId, view, mode = "she
         setConnectionError(message);
         setIsRunning(false);
       },
+      onAssistantDocumentChanged: onDocumentChanged,
     });
 
     channel.join().receive("error", (reason) => setConnectionError(errorMessage(reason)));
@@ -130,7 +143,7 @@ export function ProjectAssistantPanel({ projectSlug, threadId, view, mode = "she
       channel.leave();
       socket.disconnect();
     };
-  }, [active, projectSlug, threadId]);
+  }, [active, onDocumentChanged, projectSlug, threadId]);
 
   const sendMessage = useCallback(
     ({ message, settings, attachments }: AssistantComposerSubmit) => {

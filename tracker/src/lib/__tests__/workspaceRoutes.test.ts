@@ -6,7 +6,9 @@ import {
   filtersPath,
   isIssueTab,
   isWorkspaceView,
+  issueAssistantPath,
   issuePath,
+  newIssueAssistantPath,
   newIssuePath,
   projectsFiltersPath,
   projectsNewPath,
@@ -32,6 +34,16 @@ describe("workspaceRoutes", () => {
     expect(newIssuePath("acme", "board")).toBe("/projects/acme/board/new-issue");
     expect(filtersPath("acme", "list")).toBe("/projects/acme/list/filters");
     expect(devEnvPath("acme", "board")).toBe("/projects/acme/board/dev-env");
+  });
+
+  it("builds assistant issue authoring paths", () => {
+    expect(newIssueAssistantPath("acme")).toBe("/projects/acme/assistant/new-issue");
+    expect(issueAssistantPath("acme", "ABC-1")).toBe("/projects/acme/assistant/issue/ABC-1");
+  });
+
+  it("encodes assistant issue authoring path parameters", () => {
+    expect(newIssueAssistantPath("a/b c")).toBe("/projects/a%2Fb%20c/assistant/new-issue");
+    expect(issueAssistantPath("acme", "#508")).toBe("/projects/acme/assistant/issue/%23508");
   });
 
   it("omits the default tab from the issue path but keeps explicit tabs", () => {
