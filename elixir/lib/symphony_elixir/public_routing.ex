@@ -17,6 +17,24 @@ defmodule SymphonyElixir.PublicRouting do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
 
+  @spec register(String.t(), pos_integer()) :: :ok
+  def register(host, port) when is_binary(host) and is_integer(port) do
+    GenServer.call(__MODULE__, {:register, host, port})
+  end
+
+  @spec unregister(String.t()) :: :ok
+  def unregister(host) when is_binary(host) do
+    GenServer.call(__MODULE__, {:unregister, host})
+  end
+
+  @spec lookup(String.t()) :: {:ok, pos_integer()} | :error
+  def lookup(host) when is_binary(host) do
+    case :ets.lookup(@table, host) do
+      [{^host, port}] -> {:ok, port}
+      _ -> :error
+    end
+  end
+
   @spec sanitize_label(String.t()) :: String.t()
   def sanitize_label(value) when is_binary(value) do
     value
@@ -78,6 +96,17 @@ defmodule SymphonyElixir.PublicRouting do
   def init(_opts) do
     table = :ets.new(@table, [:named_table, :set, :protected, read_concurrency: true])
     {:ok, %{table: table}}
+  end
+
+  @impl true
+  def handle_call({:register, host, port}, _from, state) do
+    :ets.insert(state.table, {host, port})
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:unregister, host}, _from, state) do
+    :ets.delete(state.table, host)
+    {:reply, :ok, state}
   end
 
   defp fetch_namespace(opts) do

@@ -79,6 +79,32 @@ defmodule SymphonyElixir.PublicRoutingTest do
     end
   end
 
+  describe "register/unregister/lookup" do
+    setup do
+      case Process.whereis(SymphonyElixir.PublicRouting) do
+        nil -> start_supervised!(SymphonyElixir.PublicRouting)
+        _pid -> :ok
+      end
+
+      :ok
+    end
+
+    test "register then lookup returns the port" do
+      assert :ok = PublicRouting.register("mm-42-front.octocat.tracker.cods.dev", 4123)
+      assert {:ok, 4123} = PublicRouting.lookup("mm-42-front.octocat.tracker.cods.dev")
+    end
+
+    test "unregister removes the mapping" do
+      PublicRouting.register("a.octocat.tracker.cods.dev", 4101)
+      assert :ok = PublicRouting.unregister("a.octocat.tracker.cods.dev")
+      assert :error = PublicRouting.lookup("a.octocat.tracker.cods.dev")
+    end
+
+    test "lookup of unknown host returns :error" do
+      assert :error = PublicRouting.lookup("nope.octocat.tracker.cods.dev")
+    end
+  end
+
   defp load_public_tunnel_workflow!(opts) do
     namespace = Keyword.get(opts, :namespace)
 
