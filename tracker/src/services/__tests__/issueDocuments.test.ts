@@ -68,7 +68,7 @@ describe("normalizeIssueDocument", () => {
 
     const list = await listIssueDocuments("macro markets", "#508");
 
-    expect(get).toHaveBeenCalledWith("/api/tracker/v1/projects/macro%20markets/issues/%23508/documents");
+    expect(get).toHaveBeenCalledWith("/api/tracker/v1/projects/macro%20markets/issues/508/documents");
     expect(list.documents[0]).toMatchObject({ kind: "plan", updatedAt: "2026-05-31T00:00:00Z" });
   });
 
@@ -83,5 +83,29 @@ describe("normalizeIssueDocument", () => {
       "/api/tracker/v1/projects/macro%20markets/issues/ISSUE-1/documents/docs/superpowers/plans/a%20b.md",
     );
     expect(content).toBe("# Plan");
+  });
+
+  it("rejects parent directory document path segments", async () => {
+    const get = vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: { data: { content: "# Plan" } },
+    });
+
+    await expect(readIssueDocument("macro markets", "ISSUE-1", "../x.md")).rejects.toThrow(
+      "Document path cannot include . or .. segments",
+    );
+
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("rejects current directory document path segments", async () => {
+    const get = vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: { data: { content: "# Plan" } },
+    });
+
+    await expect(readIssueDocument("macro markets", "ISSUE-1", "docs/./x.md")).rejects.toThrow(
+      "Document path cannot include . or .. segments",
+    );
+
+    expect(get).not.toHaveBeenCalled();
   });
 });

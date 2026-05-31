@@ -1,3 +1,4 @@
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { IssueDocument, IssueDocumentKind, IssueDocumentList } from "@/types/issueDocument";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -46,8 +47,7 @@ export async function listIssueDocuments(projectSlug: string, identifier: string
 }
 
 export async function readIssueDocument(projectSlug: string, identifier: string, path: string): Promise<string> {
-  const normalizedPath = requireNonBlank(path, "path");
-  const encodedPath = normalizedPath.split("/").map(encodeURIComponent).join("/");
+  const encodedPath = encodeDocumentPath(path);
   const response = await http.get(`${issueDocumentsPath(projectSlug, identifier)}/${encodedPath}`);
 
   return unwrapData<{ content: string }>(response).content;
@@ -55,11 +55,22 @@ export async function readIssueDocument(projectSlug: string, identifier: string,
 
 function issueDocumentsPath(projectSlug: string, identifier: string): string {
   const slug = requireNonBlank(projectSlug, "projectSlug");
-  const issueIdentifier = requireNonBlank(identifier, "identifier");
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
 
   return trackerPath(
     `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/documents`,
   );
+}
+
+function encodeDocumentPath(path: string): string {
+  const normalizedPath = requireNonBlank(path, "path");
+  const segments = normalizedPath.split("/");
+
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    throw new Error("Document path cannot include . or .. segments");
+  }
+
+  return segments.map(encodeURIComponent).join("/");
 }
 
 function requireNonBlank(value: string, fieldName: string): string {
