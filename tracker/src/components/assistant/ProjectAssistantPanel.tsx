@@ -38,7 +38,7 @@ interface ProjectAssistantPanelProps {
   threadId?: number;
   issueIdentifier?: string;
   view: WorkspaceView;
-  mode?: "sheet" | "page";
+  mode?: "sheet" | "page" | "embedded";
   onDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
 }
 
@@ -69,7 +69,10 @@ export function ProjectAssistantPanel({
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [composerHeight, setComposerHeight] = useState(0);
-  const active = mode === "page" || open;
+  const isPageMode = mode === "page";
+  const isEmbeddedMode = mode === "embedded";
+  const isPanelMode = isPageMode || isEmbeddedMode;
+  const active = isPanelMode || open;
 
   catalogRef.current = catalog;
 
@@ -205,7 +208,7 @@ export function ProjectAssistantPanel({
   const visibleMessages = displayMessages(messages);
 
   useEffect(() => {
-    if (mode !== "page") return;
+    if (!isPageMode) return;
     const dock = composerDockRef.current;
     if (!dock) return;
 
@@ -215,14 +218,14 @@ export function ProjectAssistantPanel({
     const observer = new ResizeObserver(updateHeight);
     observer.observe(dock);
     return () => observer.disconnect();
-  }, [mode, catalog, catalogError]);
+  }, [isPageMode, catalog, catalogError]);
 
   useEffect(() => {
-    if (mode !== "page") return;
+    if (!isPanelMode) return;
     const scroller = scrollRef.current;
     if (!scroller) return;
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
-  }, [mode, visibleMessages, isRunning]);
+  }, [isPanelMode, visibleMessages, isRunning]);
 
   const runtime = useExternalStoreRuntime<AssistantChatMessage>(
     useMemo(
@@ -252,22 +255,23 @@ export function ProjectAssistantPanel({
         projectSlug={projectSlug ?? ""}
         catalog={catalog ?? fallbackCodexCatalog()}
         disabled={isRunning}
-        floating={mode === "page"}
+        floating={isPageMode}
         onSubmit={sendMessage}
       />
     ) : null;
 
-  if (mode === "page") {
+  if (isPanelMode) {
     return (
       <AssistantRuntimeProvider runtime={runtime}>
         <section
           className={cn(
             "relative flex flex-col",
-            projectSlug ? "h-[calc(100vh-4rem)]" : "h-screen",
+            isPageMode && (projectSlug ? "h-[calc(100vh-4rem)]" : "h-screen"),
+            isEmbeddedMode && "h-full min-h-0",
           )}
           aria-label="Project assistant"
         >
-          <div className="border-b px-6 py-3.5">
+          <div className={cn("border-b", isPageMode ? "px-6 py-3.5" : "px-4 py-3")}>
             <h2 className="text-base font-semibold leading-tight">
               {projectSlug ? "Project assistant" : "Freeform assistant"}
             </h2>
@@ -279,28 +283,42 @@ export function ProjectAssistantPanel({
 
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
             <div
-              className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 pt-8"
-              style={{ paddingBottom: composerHeight + 16 }}
+              className={cn(
+                "flex w-full flex-col",
+                isPageMode ? "mx-auto max-w-4xl gap-6 px-4 pt-8" : "gap-4 px-4 py-4",
+              )}
+              style={isPageMode ? { paddingBottom: composerHeight + 16 } : undefined}
             >
               {messageItems}
             </div>
           </div>
 
-          <div ref={composerDockRef} className="pointer-events-none absolute inset-x-0 bottom-0">
-            <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
-            <div className="pointer-events-auto bg-background">
-              <div className="mx-auto w-full max-w-4xl px-4 pb-2 pt-1">
-                {composerNode ?? (
-                  <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
-                    Loading Codex CLI models...
-                  </div>
-                )}
-                {catalogError ? (
-                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
-                ) : null}
+          {isPageMode ? (
+            <div ref={composerDockRef} className="pointer-events-none absolute inset-x-0 bottom-0">
+              <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
+              <div className="pointer-events-auto bg-background">
+                <div className="mx-auto w-full max-w-4xl px-4 pb-2 pt-1">
+                  {composerNode ?? (
+                    <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
+                      Loading Codex CLI models...
+                    </div>
+                  )}
+                  {catalogError ? (
+                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
+                  ) : null}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="shrink-0 bg-background">
+              {composerNode ?? (
+                <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading Codex CLI models...</div>
+              )}
+              {catalogError ? (
+                <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
+              ) : null}
+            </div>
+          )}
         </section>
       </AssistantRuntimeProvider>
     );

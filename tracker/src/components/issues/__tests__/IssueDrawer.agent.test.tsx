@@ -129,6 +129,7 @@ describe("IssueDrawer Agent tab", () => {
 
     expect(screen.getByRole("tab", { name: /authoring/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /execution/i })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: /agent sections/i })).toBeInTheDocument();
     expect(screen.getByTestId("issue-authoring-panel")).toHaveTextContent(
       "Authoring panel for macro-markets:MAC-1:list:compact",
     );

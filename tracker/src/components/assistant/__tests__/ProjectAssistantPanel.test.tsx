@@ -116,6 +116,16 @@ describe("ProjectAssistantPanel", () => {
     expect(socketChannel).toHaveBeenCalledWith("assistant:issue:macro-markets:MAC-1");
   });
 
+  it("renders an embedded assistant without viewport height", () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="embedded" />);
+
+    const region = screen.getByRole("region", { name: "Project assistant" });
+    expect(region).toHaveClass("h-full");
+    expect(region).not.toHaveClass("h-[calc(100vh-4rem)]");
+    expect(region).not.toHaveClass("h-screen");
+    expect(socketChannel).toHaveBeenCalledWith("assistant:issue:macro-markets:MAC-1");
+  });
+
   it("keeps thread id topic priority over issue identifier", () => {
     render(
       <ProjectAssistantPanel

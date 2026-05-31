@@ -32,14 +32,14 @@ export function AgentTabs({ issue, projectSlug, execution, view }: AgentTabsProp
       onValueChange={(value) => {
         if (isAgentSection(value)) setSection(value);
       }}
-      className="flex min-h-0 flex-col gap-3"
+      className="flex h-full min-h-0 flex-col gap-3"
     >
-      <TabsList className="w-fit">
+      <TabsList aria-label="Agent sections" className="w-fit">
         <TabsTrigger value="authoring">Authoring</TabsTrigger>
         <TabsTrigger value="execution">Execution</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="authoring" className="mt-0 min-h-0">
+      <TabsContent value="authoring" className="mt-0 min-h-0 flex-1 overflow-hidden">
         <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} compact />
       </TabsContent>
       <TabsContent value="execution" className="mt-0">
