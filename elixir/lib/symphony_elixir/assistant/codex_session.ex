@@ -85,7 +85,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
            History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
          prompt <- build_issue_prompt(thread, trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
-         {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, opts),
+         {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, identifier, opts),
          {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
       {:ok,
@@ -181,14 +181,14 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Workspace.create_for_issue(identifier)
   end
 
-  defp run_issue_turn(workspace, prompt, project_slug, opts) do
+  defp run_issue_turn(workspace, prompt, project_slug, identifier, opts) do
     runner = Keyword.get(opts, :runner, &default_runner/4)
 
     runner_opts =
       opts
       |> Keyword.put(:project_slug, project_slug)
-      |> Keyword.put_new(:dynamic_tools, ToolExecutor.tool_specs())
-      |> Keyword.put_new(:tool_executor, ToolExecutor.codex_tool_executor(project_slug))
+      |> Keyword.put_new(:dynamic_tools, ToolExecutor.issue_bound_tool_specs(identifier))
+      |> Keyword.put_new(:tool_executor, ToolExecutor.issue_bound_codex_tool_executor(project_slug, identifier))
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
     |> normalize_runner_result()

@@ -164,6 +164,57 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert error_text =~ "Unsupported assistant tool"
   end
 
+  describe "issue-bound Codex tools" do
+    setup do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+      {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Bound issue", "status" => "Todo"})
+      {:ok, _other_issue} = Context.create_issue("macro-markets", %{"title" => "Other issue", "status" => "Todo"})
+
+      :ok
+    end
+
+    test "exposes only existing-issue tools with schemas constrained to the bound issue" do
+      specs = ToolExecutor.issue_bound_tool_specs("MAC-1")
+      names = Enum.map(specs, & &1["name"])
+
+      refute "create_issue" in names
+      refute "create_draft_issue" in names
+
+      for tool <- ["update_issue", "move_issue", "add_comment", "dispatch_codex"] do
+        spec = Enum.find(specs, &(&1["name"] == tool))
+        assert get_in(spec, ["inputSchema", "properties", "identifier", "const"]) == "MAC-1"
+      end
+    end
+
+    test "injects the bound identifier when a mutable tool omits it" do
+      executor = ToolExecutor.issue_bound_codex_tool_executor("macro-markets", "MAC-1")
+
+      assert %{
+               "success" => true,
+               "toolResult" => %{"tool" => "add_comment", "message" => "Added comment to MAC-1."}
+             } = executor.("add_comment", %{"body" => "Clarify the issue"})
+
+      assert {:ok, comments} = Context.list_comments("macro-markets", "MAC-1")
+      assert [%{body: "Clarify the issue"}] = comments
+    end
+
+    test "rejects mutable tool calls for a different issue identifier" do
+      executor = ToolExecutor.issue_bound_codex_tool_executor("macro-markets", "MAC-1")
+
+      for {tool, arguments} <- [
+            {"update_issue", %{"identifier" => "MAC-2", "title" => "Wrong issue"}},
+            {"move_issue", %{"identifier" => "MAC-2", "status" => "In Progress"}},
+            {"add_comment", %{"identifier" => "MAC-2", "body" => "Wrong issue"}},
+            {"dispatch_codex", %{"identifier" => "MAC-2", "instructions" => "Wrong issue"}}
+          ] do
+        assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} = executor.(tool, arguments)
+        assert error_text =~ "issue_identifier_mismatch"
+        assert error_text =~ "MAC-1"
+        assert error_text =~ "MAC-2"
+      end
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

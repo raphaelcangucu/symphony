@@ -120,6 +120,8 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
   describe "send_message_to_issue_thread/4" do
     setup %{workspace_root: workspace_root} do
       {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+      {:ok, _issue} = Context.create_issue("macro", %{"title" => "Bound issue", "status" => "Todo"})
+      {:ok, _other_issue} = Context.create_issue("macro", %{"title" => "Other issue", "status" => "Todo"})
 
       thread_workspace = Path.join(workspace_root, "ignored")
       File.mkdir_p!(thread_workspace)
@@ -143,6 +145,62 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert result.assistant_message == "done"
       expected = Workspace.path_for_issue("MAC-1")
       assert_receive {:workspace, ^expected}
+    end
+
+    test "uses issue-bound tools, persists messages, updates thread id, and emits callback", %{thread: thread} do
+      test_pid = self()
+
+      runner = fn _workspace, _prompt, _issue, opts ->
+        send(test_pid, {:runner_opts, opts})
+
+        {:ok,
+         %{
+           assistant_message: "updated",
+           tool_calls: [%{name: "update_issue", status: "complete"}],
+           codex_thread_id: "ct",
+           turn_id: "t1"
+         }}
+      end
+
+      callback = fn payload -> send(test_pid, {:message_created, payload}) end
+
+      assert {:ok, result} =
+               CodexSession.send_message_to_issue_thread(thread, "hi", %{source: "test"},
+                 runner: runner,
+                 on_message_created: callback
+               )
+
+      assert result.assistant_message == "updated"
+      assert result.tool_calls == [%{name: "update_issue", status: "complete"}]
+      assert result.codex_thread_id == "ct"
+      assert result.turn_id == "t1"
+      assert result.user_message.role == "user"
+      assert result.user_message.content == "hi"
+      assert result.user_message.metadata == %{"source" => "test"}
+      assert result.assistant_chat_message.role == "assistant"
+      assert result.assistant_chat_message.content == "updated"
+
+      assert_receive {:message_created, %{role: "user", content: "hi"}}
+      assert_receive {:runner_opts, opts}
+
+      tool_names = opts |> Keyword.fetch!(:dynamic_tools) |> Enum.map(& &1["name"])
+      refute "create_issue" in tool_names
+      refute "create_draft_issue" in tool_names
+      assert "update_issue" in tool_names
+
+      tool_executor = Keyword.fetch!(opts, :tool_executor)
+
+      assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} =
+               tool_executor.("update_issue", %{"identifier" => "MAC-2", "title" => "Wrong"})
+
+      assert error_text =~ "issue_identifier_mismatch"
+
+      persisted_thread = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
+      assert persisted_thread.codex_thread_id == "ct"
+
+      messages = thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1)
+      assert Enum.map(messages, & &1.role) == ["user", "assistant"]
+      assert Enum.map(messages, & &1.content) == ["hi", "updated"]
     end
 
     test "complex mode injects superpowers methodology into the prompt", %{thread: thread} do

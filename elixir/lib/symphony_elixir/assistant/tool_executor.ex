@@ -10,6 +10,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   alias SymphonyElixirWeb.TrackerPresenter
 
   @supported_tools ~w(list_issues create_issue create_draft_issue update_issue move_issue add_comment get_agent_executions dispatch_codex)
+  @issue_bound_mutable_tools ~w(update_issue move_issue add_comment dispatch_codex)
+  @issue_bound_supported_tools ~w(list_issues update_issue move_issue add_comment get_agent_executions dispatch_codex)
   @in_progress_state "In Progress"
 
   @type result :: %{
@@ -100,9 +102,34 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     ]
   end
 
+  @spec issue_bound_tool_specs(String.t()) :: [map()]
+  def issue_bound_tool_specs(issue_identifier) when is_binary(issue_identifier) do
+    identifier = normalize_issue_identifier!(issue_identifier)
+
+    tool_specs()
+    |> Enum.filter(&(Map.get(&1, "name") in @issue_bound_supported_tools))
+    |> Enum.map(&bind_tool_spec_identifier(&1, identifier))
+  end
+
   @spec codex_tool_executor(String.t(), keyword()) :: (String.t() | nil, term() -> map())
   def codex_tool_executor(project_slug, opts \\ []) when is_binary(project_slug) and is_list(opts) do
     fn tool, arguments -> execute_for_codex(project_slug, tool, arguments, opts) end
+  end
+
+  @spec issue_bound_codex_tool_executor(String.t(), String.t(), keyword()) :: (String.t() | nil, term() -> map())
+  def issue_bound_codex_tool_executor(project_slug, issue_identifier, opts \\ [])
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_list(opts) do
+    identifier = normalize_issue_identifier!(issue_identifier)
+
+    fn tool, arguments ->
+      tool_name = to_string(tool)
+      arguments = if is_map(arguments), do: stringify_keys(arguments), else: %{}
+
+      case bind_issue_tool_arguments(tool_name, arguments, identifier) do
+        {:ok, bound_arguments} -> execute_for_codex(project_slug, tool_name, bound_arguments, opts)
+        {:error, reason} -> codex_failure_response(reason)
+      end
+    end
   end
 
   @spec execute_for_codex(String.t(), String.t() | nil, term(), keyword()) :: map()
@@ -262,6 +289,43 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp do_execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
 
+  defp bind_tool_spec_identifier(%{"name" => tool_name, "inputSchema" => schema} = spec, identifier)
+       when tool_name in @issue_bound_mutable_tools do
+    identifier_schema = %{
+      "type" => "string",
+      "const" => identifier,
+      "description" => "Bound issue identifier. Must be #{identifier}."
+    }
+
+    schema =
+      update_in(schema, ["properties"], fn properties ->
+        Map.put(properties || %{}, "identifier", identifier_schema)
+      end)
+
+    %{spec | "inputSchema" => schema}
+  end
+
+  defp bind_tool_spec_identifier(spec, _identifier), do: spec
+
+  defp bind_issue_tool_arguments(tool_name, _arguments, _identifier) when tool_name not in @issue_bound_supported_tools do
+    {:error, {:unsupported_issue_bound_tool, tool_name}}
+  end
+
+  defp bind_issue_tool_arguments(tool_name, arguments, identifier) when tool_name in @issue_bound_mutable_tools do
+    case normalize_optional_string(Map.get(arguments, "identifier")) do
+      nil ->
+        {:ok, Map.put(arguments, "identifier", identifier)}
+
+      ^identifier ->
+        {:ok, Map.put(arguments, "identifier", identifier)}
+
+      actual ->
+        {:error, {:issue_identifier_mismatch, identifier, actual}}
+    end
+  end
+
+  defp bind_issue_tool_arguments(_tool_name, arguments, _identifier), do: {:ok, arguments}
+
   defp tool_spec(name, description, input_schema) do
     %{"name" => name, "description" => description, "inputSchema" => input_schema}
   end
@@ -368,6 +432,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp normalize_required_string(_value, field), do: {:error, {:missing_required_field, field}}
+
+  defp normalize_issue_identifier!(issue_identifier) do
+    case normalize_required_string(issue_identifier, :issue_identifier) do
+      {:ok, identifier} -> identifier
+      {:error, reason} -> raise ArgumentError, "invalid issue identifier: #{inspect(reason)}"
+    end
+  end
 
   defp normalize_optional_string(value) when is_binary(value) do
     case String.trim(value) do
