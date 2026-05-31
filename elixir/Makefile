@@ -175,3 +175,27 @@ tracker-api-escript: build migrate
 
 tracker-dev:
 	$(NPM) --prefix $(TRACKER_DIR) run dev
+
+# --- Public preview tunnel -------------------------------------------------
+
+.PHONY: tunnel tunnel-bg tunnel-logs tunnel-status tunnel-stop tunnel-dns
+
+tunnel: ## Run the Cloudflare tunnel (foreground)
+	@exec bash scripts/public-tunnel.sh
+
+tunnel-bg: ## Run the Cloudflare tunnel in the background (logs: /tmp/symphony-cloudflared.log)
+	@nohup bash scripts/public-tunnel.sh > /tmp/symphony-cloudflared.log 2>&1 &
+	@echo "Tunnel started. Logs: /tmp/symphony-cloudflared.log"
+
+tunnel-logs: ## Tail the background tunnel logs
+	@tail -50 /tmp/symphony-cloudflared.log 2>/dev/null || echo "No log file. Is the tunnel running?"
+
+tunnel-status: ## Show the named tunnel status
+	@cloudflared tunnel info "$$(grep -E '^CLOUDFLARED_TUNNEL_NAME=' .env | cut -d= -f2 | tr -d '\"' || echo cods-dev-tunnel)" 2>/dev/null || echo "Tunnel not running"
+
+tunnel-stop: ## Stop the background tunnel
+	@pkill -f "cloudflared tunnel --config" || true
+	@echo "Tunnel stopped."
+
+tunnel-dns: ## Ensure Cloudflare CNAMEs for the namespace
+	@mix symphony.tunnel.dns
