@@ -116,6 +116,70 @@ describe("ProjectAssistantPanel", () => {
     expect(socketChannel).toHaveBeenCalledWith("assistant:issue:macro-markets:MAC-1");
   });
 
+  it("reports a created draft issue when the completed assistant message includes create_draft_issue", async () => {
+    const onDraftIssueCreated = vi.fn();
+
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+        onDraftIssueCreated={onDraftIssueCreated}
+      />,
+    );
+
+    await waitFor(() => expect(channelHandlers["assistant_completed"]).toEqual(expect.any(Function)));
+
+    channelHandlers["assistant_completed"]({
+      message: {
+        id: 7,
+        role: "assistant",
+        content: "Drafted MAC-7.",
+        tool_calls: [
+          {
+            name: "create_draft_issue",
+            status: "complete",
+            result: {
+              tool: "create_draft_issue",
+              message: "Created draft MAC-7",
+              data: { id: 7, identifier: "MAC-7", title: "Draft issue" },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(onDraftIssueCreated).toHaveBeenCalledWith({ identifier: "MAC-7" });
+  });
+
+  it("sends set_mode through the existing issue channel when issue mode changes", async () => {
+    const { rerender } = render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueMode="triage"
+      />,
+    );
+
+    await waitFor(() => expect(join).toHaveBeenCalled());
+    expect(push).not.toHaveBeenCalledWith("set_mode", expect.anything());
+
+    rerender(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueMode="complex"
+      />,
+    );
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("set_mode", { mode: "complex" }));
+    expect(socketChannel).toHaveBeenCalledTimes(1);
+  });
+
   it("renders an embedded assistant without viewport height", () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="embedded" />);
 

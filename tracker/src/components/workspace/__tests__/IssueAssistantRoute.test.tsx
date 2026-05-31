@@ -1,5 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueAssistantRoute } from "@/components/workspace/IssueAssistantRoute";
@@ -12,12 +12,14 @@ const projectAssistantPanel = vi.fn(
     issueIdentifier,
     view,
     mode,
+    onDraftIssueCreated,
     onDocumentChanged,
   }: {
     projectSlug?: string;
     issueIdentifier?: string;
     view: WorkspaceView;
     mode?: "sheet" | "page";
+    onDraftIssueCreated?: (issue: { identifier: string }) => void;
     onDocumentChanged?: (payload: { identifier: string }) => void;
   }) => (
     <section aria-label="mock project assistant">
@@ -33,6 +35,9 @@ const projectAssistantPanel = vi.fn(
       </button>
       <button type="button" onClick={() => onDocumentChanged?.({ identifier: "#508" })}>
         emit normalized change
+      </button>
+      <button type="button" onClick={() => onDraftIssueCreated?.({ identifier: "MAC-7" })}>
+        create draft issue
       </button>
     </section>
   ),
@@ -107,9 +112,15 @@ vi.mock("@/components/layout/WorkspaceContext", () => ({
   useWorkspace: () => workspaceValue,
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
+}
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
+      <LocationProbe />
       <Routes>
         <Route path="/projects/:projectSlug/assistant/new-issue" element={<IssueAssistantRoute />} />
         <Route path="/projects/:projectSlug/assistant/issue/:issueId" element={<IssueAssistantRoute />} />
@@ -157,6 +168,17 @@ describe("IssueAssistantRoute", () => {
       enabled: false,
       refreshKey: 0,
     });
+  });
+
+  it("navigates from new issue authoring to the issue assistant route after a draft is created", () => {
+    renderAt("/projects/macro/assistant/new-issue");
+
+    act(() => {
+      screen.getByRole("button", { name: "create draft issue" }).click();
+    });
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/projects/macro/assistant/issue/MAC-7");
+    expect(screen.getByText("issue:MAC-7")).toBeTruthy();
   });
 
   it("refreshes documents only when the changed identifier matches the open issue", () => {

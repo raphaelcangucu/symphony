@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { DocumentViewer } from "@/components/assistant/DocumentViewer";
-import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
+import {
+  ProjectAssistantPanel,
+  type DraftIssueCreated,
+  type IssueAssistantMode,
+} from "@/components/assistant/ProjectAssistantPanel";
+import { Button } from "@/components/ui/button";
 import { useIssueDocuments } from "@/hooks/useIssueDocuments";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
@@ -14,6 +19,7 @@ interface IssueAuthoringPanelProps {
   identifier?: string;
   view: WorkspaceView;
   compact?: boolean;
+  onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
 }
 
 export function IssueAuthoringPanel({
@@ -22,9 +28,13 @@ export function IssueAuthoringPanel({
   identifier,
   view,
   compact = false,
+  onDraftIssueCreated,
 }: IssueAuthoringPanelProps) {
   const normalizedIdentifier = useMemo(() => normalizeIssueIdentifier(identifier) || null, [identifier]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [issueMode, setIssueMode] = useState<IssueAssistantMode>("triage");
+  const [issueModeStatus, setIssueModeStatus] = useState<string | null>(null);
+  const [issueModeError, setIssueModeError] = useState<string | null>(null);
   const issueDocuments = useIssueDocuments({
     projectSlug,
     identifier: normalizedIdentifier,
@@ -42,6 +52,23 @@ export function IssueAuthoringPanel({
     [normalizedIdentifier],
   );
 
+  const selectIssueMode = useCallback((mode: Exclude<IssueAssistantMode, "triage">) => {
+    setIssueMode(mode);
+    setIssueModeError(null);
+    setIssueModeStatus(`Setting ${issueModeLabel(mode)} mode...`);
+  }, []);
+
+  const handleIssueModeChanged = useCallback((mode: IssueAssistantMode) => {
+    setIssueMode(mode);
+    setIssueModeError(null);
+    setIssueModeStatus(`${issueModeLabel(mode)} mode active.`);
+  }, []);
+
+  const handleIssueModeError = useCallback((message: string) => {
+    setIssueModeError(message);
+    setIssueModeStatus(null);
+  }, []);
+
   const assistantPanel = (
     <div
       className={cn(
@@ -55,7 +82,11 @@ export function IssueAuthoringPanel({
         issueIdentifier={normalizedIdentifier ?? undefined}
         view={view}
         mode={compact ? "embedded" : "page"}
+        issueMode={normalizedIdentifier ? issueMode : undefined}
         onDocumentChanged={handleDocumentChanged}
+        onDraftIssueCreated={onDraftIssueCreated}
+        onIssueModeChanged={handleIssueModeChanged}
+        onIssueModeError={handleIssueModeError}
       />
     </div>
   );
@@ -82,9 +113,41 @@ export function IssueAuthoringPanel({
           {normalizedIdentifier ? `Issue authoring: ${normalizedIdentifier}` : "New issue authoring"}
         </h1>
         <p className="mt-1 text-xs text-muted-foreground">
-          Documents refresh when the assistant reports changes for the open issue. Simple/complex mode controls can be
-          added once the assistant channel exposes a mode API.
+          {normalizedIdentifier
+            ? "Documents refresh when the assistant reports changes for the open issue. Choose Simple for a polished issue brief or Complex for a spec and implementation plan."
+            : "Start by asking the assistant to draft an issue; documents appear once an identifier exists."}
         </p>
+        {normalizedIdentifier ? (
+          <div className="mt-3 space-y-2">
+            <div className="flex flex-wrap gap-2" aria-label="Issue authoring mode">
+              <Button
+                type="button"
+                size="sm"
+                variant={issueMode === "simple" ? "default" : "outline"}
+                aria-pressed={issueMode === "simple"}
+                onClick={() => selectIssueMode("simple")}
+              >
+                Simple
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={issueMode === "complex" ? "default" : "outline"}
+                aria-pressed={issueMode === "complex"}
+                onClick={() => selectIssueMode("complex")}
+              >
+                Complex
+              </Button>
+            </div>
+            {issueModeError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {issueModeError}
+              </p>
+            ) : issueModeStatus ? (
+              <p className="text-xs text-muted-foreground">{issueModeStatus}</p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {compact ? <div className="min-h-0 flex-1 overflow-hidden">{documentsContent}</div> : documentsContent}
@@ -119,4 +182,10 @@ export function IssueAuthoringPanel({
       </aside>
     </main>
   );
+}
+
+function issueModeLabel(mode: IssueAssistantMode): string {
+  if (mode === "simple") return "Simple";
+  if (mode === "complex") return "Complex";
+  return "Triage";
 }

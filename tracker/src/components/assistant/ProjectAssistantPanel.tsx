@@ -30,8 +30,15 @@ import {
   type AssistantDocumentChangedPayload,
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
+
+export type IssueAssistantMode = "triage" | "simple" | "complex";
+
+export interface DraftIssueCreated {
+  identifier: string;
+}
 
 interface ProjectAssistantPanelProps {
   projectSlug?: string;
@@ -39,7 +46,11 @@ interface ProjectAssistantPanelProps {
   issueIdentifier?: string;
   view: WorkspaceView;
   mode?: "sheet" | "page" | "embedded";
+  issueMode?: IssueAssistantMode;
   onDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
+  onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
+  onIssueModeChanged?: (mode: IssueAssistantMode) => void;
+  onIssueModeError?: (message: string) => void;
 }
 
 const STREAMING_ASSISTANT_ID = "assistant-streaming";
@@ -56,7 +67,11 @@ export function ProjectAssistantPanel({
   issueIdentifier,
   view,
   mode = "sheet",
+  issueMode,
   onDocumentChanged,
+  onDraftIssueCreated,
+  onIssueModeChanged,
+  onIssueModeError,
 }: ProjectAssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -64,10 +79,12 @@ export function ProjectAssistantPanel({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<AssistantCodexCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [channelReady, setChannelReady] = useState(false);
   const channelRef = useRef<Channel | null>(null);
   const catalogRef = useRef<AssistantCodexCatalog | null>(null);
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const lastPushedIssueModeRef = useRef<IssueAssistantMode | null>(null);
   const [composerHeight, setComposerHeight] = useState(0);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
@@ -114,6 +131,9 @@ export function ProjectAssistantPanel({
       return;
     }
 
+    setChannelReady(false);
+    lastPushedIssueModeRef.current = null;
+
     const socket = createTrackerSocket();
     socket.connect();
 
@@ -138,6 +158,8 @@ export function ProjectAssistantPanel({
       onAssistantCompleted: (message) => {
         setMessages((current) => replaceStreamingMessage(current, message));
         setIsRunning(false);
+        const createdIssue = draftIssueCreatedFromMessage(message);
+        if (createdIssue) onDraftIssueCreated?.(createdIssue);
       },
       onAssistantError: (message) => {
         setMessages((current) => appendMessage(current, assistantMessage("assistant-error", message)));
@@ -147,14 +169,41 @@ export function ProjectAssistantPanel({
       onAssistantDocumentChanged: onDocumentChanged,
     });
 
-    channel.join().receive("error", (reason) => setConnectionError(errorMessage(reason)));
+    const joinPush = channel.join();
+    joinPush.receive("ok", () => {
+      setConnectionError(null);
+      setChannelReady(true);
+    });
+    joinPush.receive("error", (reason) => {
+      setConnectionError(errorMessage(reason));
+      setChannelReady(false);
+    });
 
     return () => {
+      setChannelReady(false);
       channelRef.current = null;
       channel.leave();
       socket.disconnect();
     };
-  }, [active, issueIdentifier, onDocumentChanged, projectSlug, threadId]);
+  }, [active, issueIdentifier, onDocumentChanged, onDraftIssueCreated, projectSlug, threadId]);
+
+  useEffect(() => {
+    if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;
+    if (issueMode === "triage" || lastPushedIssueModeRef.current === issueMode) return;
+
+    const channel = channelRef.current;
+    if (!channel) return;
+
+    lastPushedIssueModeRef.current = issueMode;
+    const pushResult = channel.push("set_mode", { mode: issueMode });
+    pushResult.receive("ok", (response) => {
+      const mode = modeFromResponse(response) ?? issueMode;
+      onIssueModeChanged?.(mode);
+    });
+    pushResult.receive("error", (reason) => {
+      onIssueModeError?.(errorMessage(reason));
+    });
+  }, [active, channelReady, issueIdentifier, issueMode, onIssueModeChanged, onIssueModeError]);
 
   const sendMessage = useCallback(
     ({ message, settings, attachments }: AssistantComposerSubmit) => {
@@ -506,6 +555,54 @@ function replaceStreamingMessage(messages: AssistantChatMessage[], message: Assi
   }
 
   return appendMessage(messages, message);
+}
+
+function draftIssueCreatedFromMessage(message: AssistantChatMessage): DraftIssueCreated | null {
+  for (const toolCall of message.toolCalls) {
+    if (toolCall.status !== "complete") continue;
+    if (!isCreateDraftIssueToolCall(toolCall)) continue;
+
+    const identifier =
+      extractIssueIdentifier(toolCall.result.issue) ??
+      extractIssueIdentifier(toolCall.result.data) ??
+      extractIssueIdentifier(toolCall.result);
+    if (identifier) return { identifier };
+  }
+
+  return null;
+}
+
+function isCreateDraftIssueToolCall(toolCall: AssistantToolCall): boolean {
+  return toolCall.name === "create_draft_issue" || stringFromRecord(toolCall.result, "tool") === "create_draft_issue";
+}
+
+function extractIssueIdentifier(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+
+  const record = value as Record<string, unknown>;
+  const identifier =
+    stringFromRecord(record, "identifier") ??
+    stringFromRecord(record, "issueIdentifier") ??
+    stringFromRecord(record, "issue_identifier");
+  const normalized = identifier ? normalizeIssueIdentifier(identifier) : "";
+  if (normalized) return normalized;
+
+  return extractIssueIdentifier(record.issue) ?? extractIssueIdentifier(record.data);
+}
+
+function isIssueAssistantMode(value: unknown): value is IssueAssistantMode {
+  return value === "triage" || value === "simple" || value === "complex";
+}
+
+function modeFromResponse(response: unknown): IssueAssistantMode | null {
+  if (!response || typeof response !== "object") return null;
+  const mode = stringFromRecord(response as Record<string, unknown>, "mode");
+  return isIssueAssistantMode(mode) ? mode : null;
+}
+
+function stringFromRecord(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" ? value : null;
 }
 
 function errorMessage(reason: unknown): string {

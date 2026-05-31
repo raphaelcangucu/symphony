@@ -9,6 +9,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixirWeb.TrackerAuth
   alias SymphonyElixir.Workspace
 
+  @issue_modes ~w(triage simple complex)
+
   @impl true
   def join("assistant:issue:" <> raw_issue_topic, _payload, socket) do
     with true <- authorized?(socket),
@@ -109,6 +111,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_in("send_message", _payload, socket), do: {:reply, {:error, %{reason: "message is required"}}, socket}
 
+  def handle_in("set_mode", %{"mode" => mode}, socket) when is_binary(mode) do
+    with {:ok, normalized_mode} <- normalize_issue_mode(mode),
+         {:ok, thread} <- issue_thread(socket),
+         {:ok, updated_thread} <- History.set_mode(thread, normalized_mode) do
+      {:reply, {:ok, %{mode: normalized_mode}}, assign(socket, :thread, updated_thread)}
+    else
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("set_mode", _payload, socket), do: {:reply, {:error, %{reason: "mode is required"}}, socket}
+
   @impl true
   def handle_info({:assistant_history_loaded, payload}, socket) do
     push(socket, "history_loaded", payload)
@@ -186,6 +200,19 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp normalize_context(context) when is_map(context), do: context
   defp normalize_context(_context), do: %{}
 
+  defp normalize_issue_mode(mode) do
+    normalized = mode |> String.trim() |> String.downcase()
+
+    if normalized in @issue_modes do
+      {:ok, normalized}
+    else
+      {:error, {:unsupported_mode, mode}}
+    end
+  end
+
+  defp issue_thread(%Socket{assigns: %{thread: %{scope: "issue"} = thread}}), do: {:ok, thread}
+  defp issue_thread(_socket), do: {:error, :issue_thread_required}
+
   defp authorized?(%Socket{assigns: %{tracker_token_valid: true}}), do: true
 
   defp authorized?(%Socket{assigns: %{token: token}}) when is_binary(token) do
@@ -197,6 +224,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp error_reason(reason) when is_binary(reason), do: reason
   defp error_reason({:missing_required_field, field}), do: "#{field} is required"
   defp error_reason(:project_not_found), do: "project not found"
+  defp error_reason({:unsupported_mode, mode}), do: "unsupported mode: #{mode}. Expected one of: #{Enum.join(@issue_modes, ", ")}"
+  defp error_reason(:issue_thread_required), do: "set_mode is only supported for issue assistant threads"
   defp error_reason(:message_required), do: "message is required"
+  defp error_reason(%Ecto.Changeset{}), do: "failed to persist mode"
   defp error_reason(reason), do: inspect(reason)
 end

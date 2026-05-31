@@ -104,6 +104,30 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert thread.issue_identifier == "#508"
   end
 
+  test "set_mode persists an allowed mode for issue threads", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_mode", %{"mode" => "complex"})
+    assert_reply(ref, :ok, %{mode: "complex"})
+
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.metadata["mode"] == "complex"
+  end
+
+  test "set_mode rejects unsupported modes for issue threads", %{socket: socket} do
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_mode", %{"mode" => "expert"})
+    assert_reply(ref, :error, %{reason: "unsupported mode: expert. Expected one of: triage, simple, complex"})
+  end
+
+  test "set_mode rejects project assistant threads", %{socket: socket} do
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:macro-markets", %{})
+
+    ref = push(socket, "set_mode", %{"mode" => "simple"})
+    assert_reply(ref, :error, %{reason: "set_mode is only supported for issue assistant threads"})
+  end
+
   test "freeform send_message routes through send_message_to_thread", %{socket: socket} do
     Application.put_env(:symphony_elixir, :assistant_runner, fn _w, _p, _i, _o ->
       {:ok, %{assistant_message: "freeform reply", tool_calls: []}}
