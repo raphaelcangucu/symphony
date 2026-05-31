@@ -18,12 +18,20 @@ export function IssueAssistantRoute() {
     [navigate, projectSlug],
   );
 
+  const handleIssueCreated = useCallback(
+    (issue: { identifier: string }) => {
+      navigate(issueAssistantPath(projectSlug, issue.identifier));
+    },
+    [navigate, projectSlug],
+  );
+
   return (
     <IssueAuthoringPanel
       projectSlug={projectSlug}
       identifier={identifier}
       view={view}
       onDraftIssueCreated={handleDraftIssueCreated}
+      onIssueCreated={handleIssueCreated}
     />
   );
 }

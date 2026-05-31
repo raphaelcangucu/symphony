@@ -45,6 +45,7 @@ describe("assistant channel binding", () => {
     const onAssistantCompleted = vi.fn();
     const onAssistantError = vi.fn();
     const onAssistantDocumentChanged = vi.fn();
+    const onAssistantIssueCreated = vi.fn();
 
     bindAssistantEvents(channel, {
       onHistoryLoaded,
@@ -55,6 +56,7 @@ describe("assistant channel binding", () => {
       onAssistantCompleted,
       onAssistantError,
       onAssistantDocumentChanged,
+      onAssistantIssueCreated,
     });
 
     handlers["history_loaded"]({
@@ -67,6 +69,7 @@ describe("assistant channel binding", () => {
     handlers["assistant_completed"]({ message: { role: "assistant", content: "Olá!", tool_calls: [] } });
     handlers["assistant_error"]({ message: "Codex unavailable" });
     handlers["assistant_document_changed"]({ identifier: "MAC-1" });
+    handlers["assistant_issue_created"]({ identifier: "MAC-7", thread_id: 42 });
 
     expect(assistantTopic("macro-markets")).toBe("assistant:macro-markets");
     expect(onHistoryLoaded).toHaveBeenCalledWith([expect.objectContaining({ id: "1", role: "user", content: "Oi" })]);
@@ -77,6 +80,7 @@ describe("assistant channel binding", () => {
     expect(onAssistantCompleted).toHaveBeenCalledWith(expect.objectContaining({ role: "assistant", content: "Olá!" }));
     expect(onAssistantError).toHaveBeenCalledWith("Codex unavailable");
     expect(onAssistantDocumentChanged).toHaveBeenCalledWith({ identifier: "MAC-1" });
+    expect(onAssistantIssueCreated).toHaveBeenCalledWith({ identifier: "MAC-7", threadId: 42 });
   });
 
   it("does not emit document-change callbacks for malformed payloads", () => {

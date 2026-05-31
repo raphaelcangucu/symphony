@@ -4,7 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 
 const channelHandlers: Record<string, (payload: unknown) => void> = {};
-const push = vi.fn(() => ({ receive: vi.fn() }));
+type ReceiveCallbacks = Record<string, (response: unknown) => void>;
+const pushReceives: ReceiveCallbacks[] = [];
+const push = vi.fn((_event: string, _payload?: unknown) => {
+  const callbacks: ReceiveCallbacks = {};
+  const result = {
+    receive: (status: string, callback: (response: unknown) => void) => {
+      callbacks[status] = callback;
+      return result;
+    },
+  };
+  pushReceives.push(callbacks);
+  return result;
+});
 const join = vi.fn(() => ({ receive: (status: string, callback: (response: unknown) => void) => (status === "ok" ? callback({}) : undefined) }));
 const leave = vi.fn(() => ({ receive: vi.fn() }));
 const channel = {
@@ -59,6 +71,7 @@ describe("ProjectAssistantPanel", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     for (const key of Object.keys(channelHandlers)) delete channelHandlers[key];
+    pushReceives.length = 0;
   });
 
   it("renders a routed project assistant page, loads history, streams a response, and sends through the channel", async () => {
@@ -152,6 +165,25 @@ describe("ProjectAssistantPanel", () => {
     expect(onDraftIssueCreated).toHaveBeenCalledWith({ identifier: "MAC-7" });
   });
 
+  it("reports issue-created events from the channel", async () => {
+    const onIssueCreated = vi.fn();
+
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+        onIssueCreated={onIssueCreated}
+      />,
+    );
+
+    await waitFor(() => expect(channelHandlers["assistant_issue_created"]).toEqual(expect.any(Function)));
+
+    channelHandlers["assistant_issue_created"]({ identifier: "MAC-8", thread_id: 88 });
+
+    expect(onIssueCreated).toHaveBeenCalledWith({ identifier: "MAC-8", threadId: 88 });
+  });
+
   it("sends set_mode through the existing issue channel when issue mode changes", async () => {
     const { rerender } = render(
       <ProjectAssistantPanel
@@ -178,6 +210,40 @@ describe("ProjectAssistantPanel", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("set_mode", { mode: "complex" }));
     expect(socketChannel).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows retrying the same set_mode value after an error", async () => {
+    const onIssueModeError = vi.fn();
+    const { rerender } = render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueMode="complex"
+        issueModeRequestId={1}
+        onIssueModeError={onIssueModeError}
+      />,
+    );
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("set_mode", { mode: "complex" }));
+    const firstSetModeCallIndex = push.mock.calls.findIndex(([event]) => event === "set_mode");
+    pushReceives[firstSetModeCallIndex]?.error?.({ reason: "temporary failure" });
+    expect(onIssueModeError).toHaveBeenCalledWith("temporary failure");
+
+    rerender(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueMode="complex"
+        issueModeRequestId={2}
+        onIssueModeError={onIssueModeError}
+      />,
+    );
+
+    await waitFor(() => expect(push.mock.calls.filter(([event]) => event === "set_mode")).toHaveLength(2));
   });
 
   it("renders an embedded assistant without viewport height", () => {

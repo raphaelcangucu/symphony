@@ -68,6 +68,50 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert Enum.map(messages, & &1.role) == ["user", "assistant"]
   end
 
+  test "project draft issue turn creates an issue thread, migrates chat history, and pushes issue event" do
+    Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, _opts ->
+      {:ok,
+       %{
+         assistant_message: "Drafted MAC-7 for billing work.",
+         turn_id: "turn-draft-7",
+         tool_calls: [
+           %{
+             name: "create_draft_issue",
+             status: "complete",
+             result: %{
+               tool: "create_draft_issue",
+               data: %{identifier: "MAC-7", title: "Billing work"}
+             }
+           }
+         ]
+       }}
+    end)
+
+    {:ok, %{messages: []}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert_push("history_loaded", %{messages: []})
+
+    ref = push(socket, "send_message", %{"message" => "Draft a billing issue", "context" => %{"view" => "board"}})
+    assert_reply(ref, :ok, %{})
+
+    assert_push("message_created", %{message: %{role: "user", content: "Draft a billing issue"}})
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "Drafted MAC-7 for billing work."}})
+    assert_push("assistant_issue_created", %{identifier: "MAC-7", thread_id: issue_thread_id})
+
+    copied_messages = History.list_messages_for_thread(issue_thread_id)
+    assert Enum.map(copied_messages, & &1.role) == ["user", "assistant"]
+    assert Enum.map(copied_messages, & &1.content) == ["Draft a billing issue", "Drafted MAC-7 for billing work."]
+    assert List.last(copied_messages).turn_id == "turn-draft-7"
+
+    {:ok, %{messages: issue_history, thread_id: ^issue_thread_id}, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-7")
+
+    assert Enum.map(issue_history, & &1.content) == ["Draft a billing issue", "Drafted MAC-7 for billing work."]
+  end
+
   test "rejects assistant topic without valid token" do
     assert {:error, %{reason: "unauthorized"}} =
              socket(SymphonyElixirWeb.UserSocket, nil, %{token: "wrong"})

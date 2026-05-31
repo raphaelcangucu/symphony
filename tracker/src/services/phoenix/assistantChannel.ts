@@ -17,10 +17,16 @@ export interface AssistantChannelHandlers {
   onAssistantCompleted: (message: AssistantChatMessage) => void;
   onAssistantError: (message: string) => void;
   onAssistantDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
+  onAssistantIssueCreated?: (payload: AssistantIssueCreatedPayload) => void;
 }
 
 export interface AssistantDocumentChangedPayload {
   identifier: string;
+}
+
+export interface AssistantIssueCreatedPayload {
+  identifier: string;
+  threadId: number | null;
 }
 
 interface HistoryLoadedPayload {
@@ -46,6 +52,12 @@ interface ErrorPayload {
 
 interface DocumentChangedPayload {
   identifier?: string | null;
+}
+
+interface IssueCreatedPayload {
+  identifier?: string | null;
+  thread_id?: number | string | null;
+  threadId?: number | string | null;
 }
 
 export function assistantTopic(projectSlug: string): string {
@@ -111,4 +123,20 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
 
     handlers.onAssistantDocumentChanged?.({ identifier });
   });
+
+  channel.on("assistant_issue_created", (payload) => {
+    const created = payload as IssueCreatedPayload;
+    const identifier = created.identifier?.trim();
+    if (!identifier) return;
+
+    handlers.onAssistantIssueCreated?.({ identifier, threadId: normalizeThreadId(created.threadId ?? created.thread_id) });
+  });
+}
+
+function normalizeThreadId(value: number | string | null | undefined): number | null {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  if (typeof value !== "string") return null;
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && String(parsed) === value.trim() && parsed > 0 ? parsed : null;
 }

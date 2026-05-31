@@ -28,6 +28,7 @@ import {
   assistantTopic,
   bindAssistantEvents,
   type AssistantDocumentChangedPayload,
+  type AssistantIssueCreatedPayload,
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
@@ -47,8 +48,10 @@ interface ProjectAssistantPanelProps {
   view: WorkspaceView;
   mode?: "sheet" | "page" | "embedded";
   issueMode?: IssueAssistantMode;
+  issueModeRequestId?: number;
   onDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
   onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
+  onIssueCreated?: (issue: AssistantIssueCreatedPayload) => void;
   onIssueModeChanged?: (mode: IssueAssistantMode) => void;
   onIssueModeError?: (message: string) => void;
 }
@@ -68,8 +71,10 @@ export function ProjectAssistantPanel({
   view,
   mode = "sheet",
   issueMode,
+  issueModeRequestId = 0,
   onDocumentChanged,
   onDraftIssueCreated,
+  onIssueCreated,
   onIssueModeChanged,
   onIssueModeError,
 }: ProjectAssistantPanelProps) {
@@ -84,7 +89,8 @@ export function ProjectAssistantPanel({
   const catalogRef = useRef<AssistantCodexCatalog | null>(null);
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const lastPushedIssueModeRef = useRef<IssueAssistantMode | null>(null);
+  const lastConfirmedIssueModeRef = useRef<IssueAssistantMode | null>(null);
+  const pendingIssueModeRef = useRef<{ mode: IssueAssistantMode; requestId: number } | null>(null);
   const [composerHeight, setComposerHeight] = useState(0);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
@@ -132,7 +138,8 @@ export function ProjectAssistantPanel({
     }
 
     setChannelReady(false);
-    lastPushedIssueModeRef.current = null;
+    lastConfirmedIssueModeRef.current = null;
+    pendingIssueModeRef.current = null;
 
     const socket = createTrackerSocket();
     socket.connect();
@@ -167,6 +174,7 @@ export function ProjectAssistantPanel({
         setIsRunning(false);
       },
       onAssistantDocumentChanged: onDocumentChanged,
+      onAssistantIssueCreated: onIssueCreated,
     });
 
     const joinPush = channel.join();
@@ -185,25 +193,36 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, issueIdentifier, onDocumentChanged, onDraftIssueCreated, projectSlug, threadId]);
+  }, [active, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onIssueCreated, projectSlug, threadId]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;
-    if (issueMode === "triage" || lastPushedIssueModeRef.current === issueMode) return;
+    if (issueMode === "triage" || lastConfirmedIssueModeRef.current === issueMode) return;
+
+    const requestId = issueModeRequestId;
+    const pending = pendingIssueModeRef.current;
+    if (pending?.mode === issueMode && pending.requestId === requestId) return;
 
     const channel = channelRef.current;
     if (!channel) return;
 
-    lastPushedIssueModeRef.current = issueMode;
+    pendingIssueModeRef.current = { mode: issueMode, requestId };
     const pushResult = channel.push("set_mode", { mode: issueMode });
     pushResult.receive("ok", (response) => {
       const mode = modeFromResponse(response) ?? issueMode;
+      lastConfirmedIssueModeRef.current = mode;
+      pendingIssueModeRef.current = null;
       onIssueModeChanged?.(mode);
     });
     pushResult.receive("error", (reason) => {
+      pendingIssueModeRef.current = null;
       onIssueModeError?.(errorMessage(reason));
     });
-  }, [active, channelReady, issueIdentifier, issueMode, onIssueModeChanged, onIssueModeError]);
+    pushResult.receive("timeout", () => {
+      pendingIssueModeRef.current = null;
+      onIssueModeError?.("Assistant mode update timed out");
+    });
+  }, [active, channelReady, issueIdentifier, issueMode, issueModeRequestId, onIssueModeChanged, onIssueModeError]);
 
   const sendMessage = useCallback(
     ({ message, settings, attachments }: AssistantComposerSubmit) => {

@@ -150,6 +150,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp handle_turn_result({:ok, result}, socket) do
     push(socket, "assistant_completed", %{message: result.assistant_chat_message})
+    maybe_push_created_issue(result, socket)
     {:reply, :ok, socket}
   end
 
@@ -157,6 +158,34 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     push(socket, "assistant_error", %{message: error_reason(reason)})
     {:reply, {:error, %{reason: error_reason(reason)}}, socket}
   end
+
+  defp maybe_push_created_issue(result, %Socket{assigns: %{project_slug: project_slug}} = socket)
+       when is_binary(project_slug) do
+    if project_scoped_socket?(socket) do
+      result
+      |> draft_issue_identifier()
+      |> maybe_migrate_created_issue(project_slug, socket)
+    else
+      :ok
+    end
+  end
+
+  defp maybe_push_created_issue(_result, _socket), do: :ok
+
+  defp maybe_migrate_created_issue({:ok, identifier}, project_slug, socket) do
+    with {:ok, issue_thread} <-
+           History.ensure_issue_thread(project_slug, identifier, %{
+             workspace_path: Workspace.path_for_issue(identifier)
+           }),
+         {:ok, project_messages} <- History.list_messages(project_slug),
+         {:ok, _thread} <- History.copy_messages_to_empty_thread(issue_thread, project_messages) do
+      push(socket, "assistant_issue_created", %{identifier: identifier, thread_id: issue_thread.id})
+    end
+
+    :ok
+  end
+
+  defp maybe_migrate_created_issue(_other, _project_slug, _socket), do: :ok
 
   defp parse_id(raw) do
     case Integer.parse(raw) do
@@ -199,6 +228,92 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp normalize_context(context) when is_map(context), do: context
   defp normalize_context(_context), do: %{}
+
+  defp project_scoped_socket?(%Socket{assigns: %{thread: %{scope: scope}}}) when scope in ["issue", "freeform"], do: false
+  defp project_scoped_socket?(%Socket{assigns: %{project_slug: project_slug}}) when is_binary(project_slug), do: true
+  defp project_scoped_socket?(_socket), do: false
+
+  defp draft_issue_identifier(result) when is_map(result) do
+    result
+    |> draft_issue_tool_calls()
+    |> Enum.find_value(fn tool_call ->
+      if create_draft_issue_tool_call?(tool_call) and successful_tool_call?(tool_call) do
+        extract_identifier(get_any(tool_call, "result") || tool_call)
+      end
+    end)
+    |> case do
+      identifier when is_binary(identifier) and identifier != "" -> {:ok, identifier}
+      _ -> :error
+    end
+  end
+
+  defp draft_issue_identifier(_result), do: :error
+
+  defp draft_issue_tool_calls(result) do
+    direct_tool_calls = get_any(result, "tool_calls") || []
+
+    message_tool_calls =
+      result
+      |> get_any("assistant_chat_message")
+      |> case do
+        message when is_map(message) -> get_any(message, "tool_calls") || []
+        _ -> []
+      end
+
+    List.wrap(direct_tool_calls) ++ List.wrap(message_tool_calls)
+  end
+
+  defp create_draft_issue_tool_call?(tool_call) when is_map(tool_call) do
+    get_any(tool_call, "name") == "create_draft_issue" or get_any(tool_call, "tool") == "create_draft_issue" or
+      tool_call |> get_any("result") |> get_any("tool") == "create_draft_issue"
+  end
+
+  defp create_draft_issue_tool_call?(_tool_call), do: false
+
+  defp successful_tool_call?(tool_call) when is_map(tool_call) do
+    case get_any(tool_call, "status") do
+      status when status in [nil, "complete", :complete, "completed", :completed, "ok", :ok] -> true
+      _ -> false
+    end
+  end
+
+  defp successful_tool_call?(_tool_call), do: false
+
+  defp extract_identifier(value) when is_map(value) do
+    identifier =
+      get_any(value, "identifier") ||
+        get_any(value, "issue_identifier") ||
+        get_any(value, "issueIdentifier")
+
+    case normalize_identifier(identifier) do
+      {:ok, normalized} ->
+        normalized
+
+      :error ->
+        extract_identifier(get_any(value, "data")) ||
+          extract_identifier(get_any(value, "issue")) ||
+          extract_identifier(get_any(value, "result"))
+    end
+  end
+
+  defp extract_identifier(_value), do: nil
+
+  defp normalize_identifier(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> :error
+      trimmed -> {:ok, trimmed}
+    end
+  end
+
+  defp normalize_identifier(_value), do: :error
+
+  defp get_any(nil, _key), do: nil
+
+  defp get_any(map, key) when is_map(map) and is_binary(key) do
+    Map.get(map, key) || Map.get(map, String.to_existing_atom(key))
+  rescue
+    ArgumentError -> Map.get(map, key)
+  end
 
   defp normalize_issue_mode(mode) do
     normalized = mode |> String.trim() |> String.downcase()

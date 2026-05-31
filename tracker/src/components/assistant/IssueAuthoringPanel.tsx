@@ -11,7 +11,7 @@ import { useIssueDocuments } from "@/hooks/useIssueDocuments";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
-import type { AssistantDocumentChangedPayload } from "@/services/phoenix/assistantChannel";
+import type { AssistantDocumentChangedPayload, AssistantIssueCreatedPayload } from "@/services/phoenix/assistantChannel";
 
 interface IssueAuthoringPanelProps {
   projectSlug: string;
@@ -20,6 +20,7 @@ interface IssueAuthoringPanelProps {
   view: WorkspaceView;
   compact?: boolean;
   onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
+  onIssueCreated?: (issue: AssistantIssueCreatedPayload) => void;
 }
 
 export function IssueAuthoringPanel({
@@ -29,10 +30,12 @@ export function IssueAuthoringPanel({
   view,
   compact = false,
   onDraftIssueCreated,
+  onIssueCreated,
 }: IssueAuthoringPanelProps) {
   const normalizedIdentifier = useMemo(() => normalizeIssueIdentifier(identifier) || null, [identifier]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [issueMode, setIssueMode] = useState<IssueAssistantMode>("triage");
+  const [issueModeRequestId, setIssueModeRequestId] = useState(0);
   const [issueModeStatus, setIssueModeStatus] = useState<string | null>(null);
   const [issueModeError, setIssueModeError] = useState<string | null>(null);
   const issueDocuments = useIssueDocuments({
@@ -54,6 +57,7 @@ export function IssueAuthoringPanel({
 
   const selectIssueMode = useCallback((mode: Exclude<IssueAssistantMode, "triage">) => {
     setIssueMode(mode);
+    setIssueModeRequestId((current) => current + 1);
     setIssueModeError(null);
     setIssueModeStatus(`Setting ${issueModeLabel(mode)} mode...`);
   }, []);
@@ -83,8 +87,10 @@ export function IssueAuthoringPanel({
         view={view}
         mode={compact ? "embedded" : "page"}
         issueMode={normalizedIdentifier ? issueMode : undefined}
+        issueModeRequestId={issueModeRequestId}
         onDocumentChanged={handleDocumentChanged}
         onDraftIssueCreated={onDraftIssueCreated}
+        onIssueCreated={onIssueCreated}
         onIssueModeChanged={handleIssueModeChanged}
         onIssueModeError={handleIssueModeError}
       />

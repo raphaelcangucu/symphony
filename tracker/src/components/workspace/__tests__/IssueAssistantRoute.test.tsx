@@ -13,6 +13,7 @@ const projectAssistantPanel = vi.fn(
     view,
     mode,
     onDraftIssueCreated,
+    onIssueCreated,
     onDocumentChanged,
   }: {
     projectSlug?: string;
@@ -20,6 +21,7 @@ const projectAssistantPanel = vi.fn(
     view: WorkspaceView;
     mode?: "sheet" | "page";
     onDraftIssueCreated?: (issue: { identifier: string }) => void;
+    onIssueCreated?: (issue: { identifier: string; threadId?: number | null }) => void;
     onDocumentChanged?: (payload: { identifier: string }) => void;
   }) => (
     <section aria-label="mock project assistant">
@@ -38,6 +40,9 @@ const projectAssistantPanel = vi.fn(
       </button>
       <button type="button" onClick={() => onDraftIssueCreated?.({ identifier: "MAC-7" })}>
         create draft issue
+      </button>
+      <button type="button" onClick={() => onIssueCreated?.({ identifier: "MAC-8", threadId: 88 })}>
+        emit issue created
       </button>
     </section>
   ),
@@ -170,7 +175,18 @@ describe("IssueAssistantRoute", () => {
     });
   });
 
-  it("navigates from new issue authoring to the issue assistant route after a draft is created", () => {
+  it("navigates from new issue authoring to the issue assistant route after the issue-created event", () => {
+    renderAt("/projects/macro/assistant/new-issue");
+
+    act(() => {
+      screen.getByRole("button", { name: "emit issue created" }).click();
+    });
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/projects/macro/assistant/issue/MAC-8");
+    expect(screen.getByText("issue:MAC-8")).toBeTruthy();
+  });
+
+  it("keeps draft tool-call navigation as a fallback", () => {
     renderAt("/projects/macro/assistant/new-issue");
 
     act(() => {
@@ -178,7 +194,6 @@ describe("IssueAssistantRoute", () => {
     });
 
     expect(screen.getByTestId("location")).toHaveTextContent("/projects/macro/assistant/issue/MAC-7");
-    expect(screen.getByText("issue:MAC-7")).toBeTruthy();
   });
 
   it("refreshes documents only when the changed identifier matches the open issue", () => {

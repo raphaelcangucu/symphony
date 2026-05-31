@@ -140,6 +140,44 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert {:error, :not_found} = History.get_thread(thread.id + 999_999)
   end
 
+  test "copy_messages_to_empty_thread/2 preserves authoring messages and skips non-empty targets" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, project_thread} = History.ensure_thread("macro-markets", %{workspace_path: "/tmp/assistant/macro-markets"})
+    {:ok, issue_thread} = History.ensure_issue_thread("macro-markets", "MAC-7", %{workspace_path: "/tmp/issue/MAC-7"})
+
+    {:ok, _user_message} =
+      History.append_message(project_thread, %{
+        role: "user",
+        content: "Draft the billing issue",
+        metadata: %{"view" => "board"}
+      })
+
+    {:ok, _assistant_message} =
+      History.append_message(project_thread, %{
+        role: "assistant",
+        content: "Drafted MAC-7",
+        turn_id: "turn-7",
+        tool_calls: [%{"name" => "create_draft_issue", "status" => "complete"}]
+      })
+
+    project_messages = History.list_messages_for_thread(project_thread.id)
+
+    assert {:ok, ^issue_thread} = History.copy_messages_to_empty_thread(issue_thread, project_messages)
+
+    copied_messages = History.list_messages_for_thread(issue_thread.id)
+    assert Enum.map(copied_messages, & &1.role) == ["user", "assistant"]
+    assert Enum.map(copied_messages, & &1.content) == ["Draft the billing issue", "Drafted MAC-7"]
+    assert hd(copied_messages).metadata == %{"view" => "board"}
+    assert List.last(copied_messages).turn_id == "turn-7"
+
+    assert History.message_payload(List.last(copied_messages)).tool_calls == [
+             %{"name" => "create_draft_issue", "status" => "complete"}
+           ]
+
+    assert {:ok, ^issue_thread} = History.copy_messages_to_empty_thread(issue_thread, project_messages)
+    assert length(History.list_messages_for_thread(issue_thread.id)) == 2
+  end
+
   describe "ensure_issue_thread/3" do
     setup do
       {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})

@@ -65,6 +65,15 @@ defmodule SymphonyElixir.Assistant.History do
     append_message_with_retry(thread, attrs, 3)
   end
 
+  @spec copy_messages_to_empty_thread(Thread.t(), [Message.t() | map()]) :: {:ok, Thread.t()} | {:error, term()}
+  def copy_messages_to_empty_thread(%Thread{id: thread_id} = target_thread, messages)
+      when is_integer(thread_id) and is_list(messages) do
+    case list_messages_for_thread(thread_id) do
+      [] -> copy_messages(target_thread, messages)
+      _existing_messages -> {:ok, target_thread}
+    end
+  end
+
   @spec create_freeform_thread(attrs()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def create_freeform_thread(attrs) when is_map(attrs) do
     attrs
@@ -224,6 +233,35 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   defp public_message(%Message{} = message), do: %{message | tool_calls: tool_calls(message)}
+
+  defp copy_messages(target_thread, messages) do
+    Enum.reduce_while(messages, {:ok, target_thread}, fn message, {:ok, thread} ->
+      case append_message(thread, copy_message_attrs(message)) do
+        {:ok, _message} -> {:cont, {:ok, thread}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp copy_message_attrs(%Message{} = message) do
+    %{
+      role: message.role,
+      content: message.content,
+      metadata: message.metadata || %{},
+      tool_calls: tool_calls(message),
+      turn_id: message.turn_id
+    }
+  end
+
+  defp copy_message_attrs(message) when is_map(message) do
+    %{
+      role: Map.get(message, :role) || Map.get(message, "role"),
+      content: Map.get(message, :content) || Map.get(message, "content"),
+      metadata: Map.get(message, :metadata) || Map.get(message, "metadata") || %{},
+      tool_calls: Map.get(message, :tool_calls) || Map.get(message, "tool_calls") || [],
+      turn_id: Map.get(message, :turn_id) || Map.get(message, "turn_id")
+    }
+  end
 
   defp unique_sequence_error?(%Ecto.Changeset{errors: errors}) do
     Enum.any?(errors, fn
