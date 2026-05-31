@@ -6,6 +6,9 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.TestSupport
+  alias SymphonyElixir.Workflow
+  alias SymphonyElixir.Workspace
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
@@ -92,6 +95,44 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("assistant_completed", %{message: %{content: "freeform reply"}})
   after
     Application.delete_env(:symphony_elixir, :assistant_runner)
+  end
+
+  test "issue thread send_message routes to the issue working tree", %{socket: socket} do
+    workspace_root =
+      Path.join(System.tmp_dir!(), "symphony-assistant-channel-workspaces-#{System.unique_integer([:positive])}")
+
+    workflow_root =
+      Path.join(System.tmp_dir!(), "symphony-assistant-channel-workflow-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(workspace_root)
+    File.mkdir_p!(workflow_root)
+
+    workflow_file = Path.join(workflow_root, "WORKFLOW.md")
+    TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: workspace_root)
+    Workflow.set_workflow_file_path(workflow_file)
+
+    on_exit(fn ->
+      Application.delete_env(:symphony_elixir, :workflow_file_path)
+      File.rm_rf!(workspace_root)
+      File.rm_rf!(workflow_root)
+    end)
+
+    {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+    {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ignored"})
+    test_pid = self()
+
+    Application.put_env(:symphony_elixir, :assistant_runner, fn workspace, _prompt, _issue, _opts ->
+      send(test_pid, {:workspace, workspace})
+      {:ok, %{assistant_message: "issue reply", codex_thread_id: "codex-thread", turn_id: "turn-1", tool_calls: []}}
+    end)
+
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
+
+    ref = push(socket, "send_message", %{"message" => "build X"})
+    assert_reply(ref, :ok)
+
+    expected_workspace = Workspace.path_for_issue("MAC-1")
+    assert_receive {:workspace, ^expected_workspace}
   end
 
   test "join assistant:thread:<id> with unknown id is rejected", %{socket: socket} do

@@ -96,6 +96,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {raw, Payload.normalize_attachments(raw, project_slug)}
   end
 
+  defp run_send_turn(%{scope: "issue"} = thread, _project_slug, trimmed, context, opts) do
+    CodexSession.send_message_to_issue_thread(thread, trimmed, context, opts)
+  end
+
   defp run_send_turn(%{scope: "freeform"} = thread, _project_slug, trimmed, context, opts) do
     CodexSession.send_message_to_thread(thread, trimmed, context, opts)
   end
