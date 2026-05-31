@@ -9,17 +9,20 @@ import type { IssueDocument } from "@/types/issueDocument";
 const projectAssistantPanel = vi.fn(
   ({
     projectSlug,
+    issueIdentifier,
     view,
     mode,
     onDocumentChanged,
   }: {
     projectSlug?: string;
+    issueIdentifier?: string;
     view: WorkspaceView;
     mode?: "sheet" | "page";
     onDocumentChanged?: (payload: { identifier: string }) => void;
   }) => (
     <section aria-label="mock project assistant">
       <div>assistant:{projectSlug}</div>
+      <div>issue:{issueIdentifier ?? "none"}</div>
       <div>view:{view}</div>
       <div>mode:{mode}</div>
       <button type="button" onClick={() => onDocumentChanged?.({ identifier: "MAC-1" })}>
@@ -27,6 +30,9 @@ const projectAssistantPanel = vi.fn(
       </button>
       <button type="button" onClick={() => onDocumentChanged?.({ identifier: "MAC-2" })}>
         emit other change
+      </button>
+      <button type="button" onClick={() => onDocumentChanged?.({ identifier: "#508" })}>
+        emit normalized change
       </button>
     </section>
   ),
@@ -125,6 +131,7 @@ describe("IssueAssistantRoute", () => {
 
     expect(screen.getByRole("region", { name: "mock project assistant" })).toBeTruthy();
     expect(screen.getByText("assistant:macro")).toBeTruthy();
+    expect(screen.getByText("issue:MAC-1")).toBeTruthy();
     expect(screen.getByText("view:board")).toBeTruthy();
     expect(screen.getByText("mode:page")).toBeTruthy();
     expect(screen.getByRole("region", { name: "mock documents" })).toBeTruthy();
@@ -141,6 +148,7 @@ describe("IssueAssistantRoute", () => {
     renderAt("/projects/macro/assistant/new-issue");
 
     expect(screen.getByRole("region", { name: "mock project assistant" })).toBeTruthy();
+    expect(screen.getByText("issue:none")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "mock documents" })).toBeNull();
     expect(screen.getByText(/Draft documents appear here after the assistant creates or links an issue/i)).toBeTruthy();
     expect(useIssueDocuments).toHaveBeenLastCalledWith({
@@ -172,6 +180,22 @@ describe("IssueAssistantRoute", () => {
 
     expect(useIssueDocuments).toHaveBeenLastCalledWith(
       expect.objectContaining({ identifier: "MAC-1", refreshKey: 1 }),
+    );
+  });
+
+  it("normalizes issue identifiers when matching document change events", () => {
+    renderAt("/projects/macro/assistant/issue/508");
+
+    expect(useIssueDocuments).toHaveBeenLastCalledWith(
+      expect.objectContaining({ identifier: "508", refreshKey: 0 }),
+    );
+
+    act(() => {
+      screen.getByRole("button", { name: "emit normalized change" }).click();
+    });
+
+    expect(useIssueDocuments).toHaveBeenLastCalledWith(
+      expect.objectContaining({ identifier: "508", refreshKey: 1 }),
     );
   });
 });

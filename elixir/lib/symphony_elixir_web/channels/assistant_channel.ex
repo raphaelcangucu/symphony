@@ -7,8 +7,31 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixir.Assistant.{CodexSession, History, Payload}
   alias SymphonyElixir.Config
   alias SymphonyElixirWeb.TrackerAuth
+  alias SymphonyElixir.Workspace
 
   @impl true
+  def join("assistant:issue:" <> raw_issue_topic, _payload, socket) do
+    with true <- authorized?(socket),
+         {:ok, project_slug, issue_identifier} <- parse_issue_topic(raw_issue_topic),
+         {:ok, thread} <-
+           History.ensure_issue_thread(project_slug, issue_identifier, %{
+             workspace_path: Workspace.path_for_issue(issue_identifier)
+           }) do
+      payload = %{
+        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
+        thread_id: thread.id
+      }
+
+      socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
+      send(self(), {:assistant_history_loaded, payload})
+      {:ok, payload, socket}
+    else
+      false -> {:error, %{reason: "unauthorized"}}
+      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+      _ -> {:error, %{reason: "invalid_topic"}}
+    end
+  end
+
   def join("assistant:thread:" <> raw_id, _payload, socket) do
     with true <- authorized?(socket),
          {:ok, id} <- parse_id(raw_id),
@@ -126,6 +149,31 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       {id, ""} -> {:ok, id}
       _ -> {:error, :invalid_id}
     end
+  end
+
+  defp parse_issue_topic(raw_issue_topic) do
+    case String.split(raw_issue_topic, ":", parts: 2) do
+      [raw_project_slug, raw_issue_identifier] ->
+        with {:ok, project_slug} <- decode_required_topic_segment(raw_project_slug, :project_slug),
+             {:ok, issue_identifier} <- decode_required_topic_segment(raw_issue_identifier, :issue_identifier) do
+          {:ok, project_slug, issue_identifier}
+        end
+
+      _ ->
+        {:error, :invalid_topic}
+    end
+  end
+
+  defp decode_required_topic_segment(raw_value, field) when is_binary(raw_value) do
+    raw_value
+    |> URI.decode()
+    |> String.trim()
+    |> case do
+      "" -> {:error, {:missing_required_field, field}}
+      decoded -> {:ok, decoded}
+    end
+  rescue
+    ArgumentError -> {:error, :invalid_topic}
   end
 
   defp maybe_put_runner(opts) do

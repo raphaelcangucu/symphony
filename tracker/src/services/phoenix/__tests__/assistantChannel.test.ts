@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { assistantThreadTopic, assistantTopic, bindAssistantEvents } from "../assistantChannel";
+import { assistantIssueTopic, assistantThreadTopic, assistantTopic, bindAssistantEvents } from "../assistantChannel";
 
 describe("assistantThreadTopic", () => {
   it("builds a thread topic from a numeric id", () => {
@@ -17,6 +17,18 @@ describe("assistantThreadTopic", () => {
 describe("assistantTopic", () => {
   it("still builds a project topic", () => {
     expect(assistantTopic("demo")).toBe("assistant:demo");
+  });
+});
+
+describe("assistantIssueTopic", () => {
+  it("builds an encoded issue assistant topic", () => {
+    expect(assistantIssueTopic("macro-markets", "MAC-1")).toBe("assistant:issue:macro-markets:MAC-1");
+    expect(assistantIssueTopic("a/b c", "#508")).toBe("assistant:issue:a%2Fb%20c:%23508");
+  });
+
+  it("rejects empty issue topic parts", () => {
+    expect(() => assistantIssueTopic(" ", "MAC-1")).toThrow("projectSlug is required");
+    expect(() => assistantIssueTopic("macro", " ")).toThrow("identifier is required");
   });
 });
 

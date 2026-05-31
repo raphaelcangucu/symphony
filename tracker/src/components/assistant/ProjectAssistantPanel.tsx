@@ -23,6 +23,7 @@ import {
   type AssistantToolCall,
 } from "@/services/assistant";
 import {
+  assistantIssueTopic,
   assistantThreadTopic,
   assistantTopic,
   bindAssistantEvents,
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils";
 interface ProjectAssistantPanelProps {
   projectSlug?: string;
   threadId?: number;
+  issueIdentifier?: string;
   view: WorkspaceView;
   mode?: "sheet" | "page";
   onDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
@@ -51,6 +53,7 @@ const convertMessage = (message: AssistantChatMessage): ThreadMessageLike => ({
 export function ProjectAssistantPanel({
   projectSlug,
   threadId,
+  issueIdentifier,
   view,
   mode = "sheet",
   onDocumentChanged,
@@ -111,7 +114,12 @@ export function ProjectAssistantPanel({
     const socket = createTrackerSocket();
     socket.connect();
 
-    const topic = threadId != null ? assistantThreadTopic(threadId) : assistantTopic(projectSlug ?? "");
+    const topic =
+      threadId != null
+        ? assistantThreadTopic(threadId)
+        : issueIdentifier
+          ? assistantIssueTopic(projectSlug ?? "", issueIdentifier)
+          : assistantTopic(projectSlug ?? "");
     const channel = socket.channel(topic);
     channelRef.current = channel;
 
@@ -143,7 +151,7 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, onDocumentChanged, projectSlug, threadId]);
+  }, [active, issueIdentifier, onDocumentChanged, projectSlug, threadId]);
 
   const sendMessage = useCallback(
     ({ message, settings, attachments }: AssistantComposerSubmit) => {

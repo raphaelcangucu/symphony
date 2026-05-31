@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { DocumentViewer } from "@/components/assistant/DocumentViewer";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { useIssueDocuments } from "@/hooks/useIssueDocuments";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import type { AssistantDocumentChangedPayload } from "@/services/phoenix/assistantChannel";
@@ -22,23 +23,23 @@ export function IssueAuthoringPanel({
   view,
   compact = false,
 }: IssueAuthoringPanelProps) {
-  const trimmedIdentifier = useMemo(() => identifier?.trim() || null, [identifier]);
+  const normalizedIdentifier = useMemo(() => normalizeIssueIdentifier(identifier) || null, [identifier]);
   const [refreshKey, setRefreshKey] = useState(0);
   const issueDocuments = useIssueDocuments({
     projectSlug,
-    identifier: trimmedIdentifier,
-    enabled: trimmedIdentifier !== null,
+    identifier: normalizedIdentifier,
+    enabled: normalizedIdentifier !== null,
     refreshKey,
   });
 
   const handleDocumentChanged = useCallback(
     (payload: AssistantDocumentChangedPayload) => {
-      if (!trimmedIdentifier) return;
-      if (payload.identifier !== trimmedIdentifier) return;
+      if (!normalizedIdentifier) return;
+      if (normalizeIssueIdentifier(payload.identifier) !== normalizedIdentifier) return;
 
       setRefreshKey((current) => current + 1);
     },
-    [trimmedIdentifier],
+    [normalizedIdentifier],
   );
 
   return (
@@ -52,6 +53,7 @@ export function IssueAuthoringPanel({
         <ProjectAssistantPanel
           projectSlug={projectSlug}
           threadId={threadId}
+          issueIdentifier={normalizedIdentifier ?? undefined}
           view={view}
           mode="page"
           onDocumentChanged={handleDocumentChanged}
@@ -61,7 +63,7 @@ export function IssueAuthoringPanel({
       <aside className="flex min-h-0 flex-col gap-3" aria-label="Issue authoring documents">
         <div className="rounded-xl border bg-card px-4 py-3 shadow-sm">
           <h1 className="text-sm font-semibold">
-            {trimmedIdentifier ? `Issue authoring: ${trimmedIdentifier}` : "New issue authoring"}
+            {normalizedIdentifier ? `Issue authoring: ${normalizedIdentifier}` : "New issue authoring"}
           </h1>
           <p className="mt-1 text-xs text-muted-foreground">
             Documents refresh when the assistant reports changes for the open issue. Simple/complex mode controls can
@@ -69,10 +71,10 @@ export function IssueAuthoringPanel({
           </p>
         </div>
 
-        {trimmedIdentifier ? (
+        {normalizedIdentifier ? (
           <DocumentViewer
             projectSlug={projectSlug}
-            identifier={trimmedIdentifier}
+            identifier={normalizedIdentifier}
             documents={issueDocuments.documents}
             available={issueDocuments.available}
             reason={issueDocuments.reason}

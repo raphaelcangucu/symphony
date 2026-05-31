@@ -43,7 +43,7 @@ describe("workspaceRoutes", () => {
 
   it("encodes assistant issue authoring path parameters", () => {
     expect(newIssueAssistantPath("a/b c")).toBe("/projects/a%2Fb%20c/assistant/new-issue");
-    expect(issueAssistantPath("acme", "#508")).toBe("/projects/acme/assistant/issue/%23508");
+    expect(issueAssistantPath("acme", "#508")).toBe("/projects/acme/assistant/issue/508");
   });
 
   it("omits the default tab from the issue path but keeps explicit tabs", () => {

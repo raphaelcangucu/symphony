@@ -60,6 +60,16 @@ export function assistantThreadTopic(threadId: number | string): string {
   return `assistant:thread:${id}`;
 }
 
+export function assistantIssueTopic(projectSlug: string, identifier: string): string {
+  const slug = projectSlug.trim();
+  if (!slug) throw new Error("projectSlug is required");
+
+  const issueIdentifier = identifier.trim();
+  if (!issueIdentifier) throw new Error("identifier is required");
+
+  return `assistant:issue:${encodeURIComponent(slug)}:${encodeURIComponent(issueIdentifier)}`;
+}
+
 export function bindAssistantEvents(channel: Channel, handlers: AssistantChannelHandlers): void {
   channel.on("history_loaded", (payload) => {
     const messages = ((payload as HistoryLoadedPayload).messages ?? []).map(normalizeAssistantChatMessage);

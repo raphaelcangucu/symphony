@@ -110,6 +110,26 @@ describe("ProjectAssistantPanel", () => {
     expect(screen.getByText("list_issues")).toBeTruthy();
   });
 
+  it("joins an issue-scoped assistant topic when an issue identifier is provided", () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    expect(socketChannel).toHaveBeenCalledWith("assistant:issue:macro-markets:MAC-1");
+  });
+
+  it("keeps thread id topic priority over issue identifier", () => {
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={42}
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
+
+    expect(socketChannel).toHaveBeenCalledWith("assistant:thread:42");
+  });
+
   it("surfaces assistant document change events from the channel", async () => {
     const onDocumentChanged = vi.fn();
 

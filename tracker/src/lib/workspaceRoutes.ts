@@ -37,7 +37,9 @@ export function newIssueAssistantPath(projectSlug: string): string {
 }
 
 export function issueAssistantPath(projectSlug: string, issueId: string): string {
-  return `/projects/${requireSlug(projectSlug)}/assistant/issue/${encodeURIComponent(issueId)}`;
+  const trimmed = normalizeIssueIdentifier(issueId);
+  if (!trimmed) throw new Error("identifier is required to build an issue assistant route");
+  return `/projects/${requireSlug(projectSlug)}/assistant/issue/${encodeURIComponent(trimmed)}`;
 }
 
 export function newIssuePath(projectSlug: string, view: WorkspaceView): string {

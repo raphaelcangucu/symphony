@@ -82,6 +82,28 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert [%{content: "hello freeform"}] = payload.messages
   end
 
+  test "join assistant:issue:<project>:<identifier> creates and loads an issue thread", %{socket: socket} do
+    {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    assert %{messages: [], thread_id: thread_id} = payload
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.scope == "issue"
+    assert thread.project_slug == "macro-markets"
+    assert thread.issue_identifier == "MAC-1"
+    assert thread.workspace_path == Workspace.path_for_issue("MAC-1")
+  end
+
+  test "join assistant:issue:<project>:<identifier> decodes encoded topic segments", %{socket: socket} do
+    {:ok, _project} = Context.ensure_project(%{name: "Encoded Project", slug: "encoded/project"})
+
+    {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:issue:encoded%2Fproject:%23508", %{})
+
+    assert %{thread_id: thread_id} = payload
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.project_slug == "encoded/project"
+    assert thread.issue_identifier == "#508"
+  end
+
   test "freeform send_message routes through send_message_to_thread", %{socket: socket} do
     Application.put_env(:symphony_elixir, :assistant_runner, fn _w, _p, _i, _o ->
       {:ok, %{assistant_message: "freeform reply", tool_calls: []}}
@@ -127,6 +149,43 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     end)
 
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
+
+    ref = push(socket, "send_message", %{"message" => "build X"})
+    assert_reply(ref, :ok)
+
+    expected_workspace = Workspace.path_for_issue("MAC-1")
+    assert_receive {:workspace, ^expected_workspace}
+  end
+
+  test "issue topic send_message routes to the issue working tree", %{socket: socket} do
+    workspace_root =
+      Path.join(System.tmp_dir!(), "symphony-assistant-channel-workspaces-#{System.unique_integer([:positive])}")
+
+    workflow_root =
+      Path.join(System.tmp_dir!(), "symphony-assistant-channel-workflow-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(workspace_root)
+    File.mkdir_p!(workflow_root)
+
+    workflow_file = Path.join(workflow_root, "WORKFLOW.md")
+    TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: workspace_root)
+    Workflow.set_workflow_file_path(workflow_file)
+
+    on_exit(fn ->
+      Application.delete_env(:symphony_elixir, :workflow_file_path)
+      File.rm_rf!(workspace_root)
+      File.rm_rf!(workflow_root)
+    end)
+
+    {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+    test_pid = self()
+
+    Application.put_env(:symphony_elixir, :assistant_runner, fn workspace, _prompt, _issue, _opts ->
+      send(test_pid, {:workspace, workspace})
+      {:ok, %{assistant_message: "issue reply", codex_thread_id: "codex-thread", turn_id: "turn-1", tool_calls: []}}
+    end)
+
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro:MAC-1", %{})
 
     ref = push(socket, "send_message", %{"message" => "build X"})
     assert_reply(ref, :ok)
