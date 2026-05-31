@@ -253,6 +253,23 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert prompt =~ "docs/superpowers/specs"
     end
 
+    test "complex prompt instructs writing handoff.md", %{thread: thread} do
+      {:ok, thread} = History.set_mode(thread, "complex")
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "c", turn_id: "t"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "done", %{}, runner: runner)
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "docs/superpowers/handoff.md"
+      assert prompt =~ "executive summary" or prompt =~ "Executive summary"
+    end
+
     test "documents_changed fires on_documents_changed when a turn writes a doc", %{thread: thread} do
       test_pid = self()
       ws = Workspace.path_for_issue("MAC-1")

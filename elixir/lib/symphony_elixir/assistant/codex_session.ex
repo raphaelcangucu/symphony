@@ -244,6 +244,9 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
           Write spec files to `docs/superpowers/specs/` and plan files to `docs/superpowers/plans/`
           in this working tree. Get section-by-section approval in chat. Do not start writing feature code.
+          When the user signals the task is ready, write a concise `docs/superpowers/handoff.md`
+          (key decisions + current state) and enrich the issue description (executive summary +
+          links to the spec/plan files) via the update_issue tool.
           """
 
         "simple" ->
