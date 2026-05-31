@@ -348,6 +348,29 @@ live, cross-process view of running sessions.
 - **The page**: open `/tracker` and choose **Observability** in the sidebar (route
   `/observability`) for live per-runtime cards and a global running-sessions table.
 
+### Recents & freeform assistant chats
+
+The sidebar shows a **Recents** group listing the most recent sessions across all projects,
+unifying two row kinds: persisted **assistant chat threads** and **Codex/issue runs** (an issue
+with an active run or a non-empty `branch_name`). Each row shows its project (or "Geral" when none)
+and a status dot; clicking navigates to the chat view or the issue's **Agent** tab.
+
+The assistant also supports **freeform chats** that are not bound to any project, created and opened
+from the global **Assistant** area (`/assistant`, `/assistant/:threadId`). Freeform chat is
+conversational only in v1 (no tracker tools). The thread model carries a `scope`
+(`project`|`freeform`|`issue`) with `issue_identifier`/`title`, and `project_slug` is nullable;
+`scope: "issue"` is reserved for future issue-scoped chats.
+
+- **Endpoints** (bearer auth, `SYMPHONY_TRACKER_TOKEN`):
+  - `GET /api/tracker/v1/recents?limit=` — unified, recency-ranked sessions (limit clamped `1..50`,
+    default `20`).
+  - `GET /api/tracker/v1/assistant/threads?scope=&project_slug=&limit=` — list assistant threads
+    with previews.
+  - `POST /api/tracker/v1/assistant/threads` — body `{ scope, project_slug?, title? }`; v1 supports
+    `freeform` (and `project`) and returns the created thread.
+- **Channel**: the assistant channel accepts `assistant:thread:<id>` (a specific thread, project or
+  freeform) alongside the existing `assistant:<project_slug>` topic.
+
 ## Issue preview servers
 
 Symphony can start long-running dev servers for an issue workspace and surface their URLs in the
