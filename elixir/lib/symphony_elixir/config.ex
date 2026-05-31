@@ -33,6 +33,7 @@ defmodule SymphonyElixir.Config do
   @default_dev_server_max_concurrent 3
   @default_dev_server_idle_timeout_ms 1_800_000
   @default_dev_server_auto_start_on ["pull_request", "human_review"]
+  @default_assistant_draft_status "Triage"
 
   @tracker_sections ["local", "linear", "github", "memory"]
   @agent_sections ["claude", "codex"]
@@ -264,6 +265,14 @@ defmodule SymphonyElixir.Config do
     section("local")
     |> Map.get("assignee")
     |> trim_string()
+  end
+
+  @spec assistant_draft_status() :: String.t()
+  def assistant_draft_status do
+    case section("assistant")["draft_status"] do
+      value when is_binary(value) and value != "" -> String.trim(value)
+      _ -> @default_assistant_draft_status
+    end
   end
 
   @doc """

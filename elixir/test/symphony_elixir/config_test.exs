@@ -1,6 +1,12 @@
 defmodule SymphonyElixir.ConfigTest do
   use SymphonyElixir.TestSupport
 
+  describe "assistant_draft_status/0" do
+    test "defaults to Triage when unset" do
+      assert SymphonyElixir.Config.assistant_draft_status() == "Triage"
+    end
+  end
+
   describe "observability hub config" do
     test "defaults when observability section omits hub keys" do
       load_workflow_with_front_matter("""
