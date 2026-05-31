@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useWindowFocus } from "@/hooks/useWindowFocus";
 import { listIssueDocuments } from "@/services/issueDocuments";
@@ -46,6 +46,8 @@ export function useIssueDocuments({
   const hasLoadedRef = useRef(false);
   const requestVersionRef = useRef(0);
   const activeResourceKeyRef = useRef<string | null>(null);
+  const refetchImplRef = useRef<() => Promise<void>>(async () => {});
+  const [refetch] = useState<() => Promise<void>>(() => () => refetchImplRef.current());
   const latestRequestRef = useRef<LatestRequestState>({
     active: false,
     projectSlug: "",
@@ -61,7 +63,7 @@ export function useIssueDocuments({
   const activeResourceKey = active ? `${projectSlug}:${identifier}` : null;
   latestRequestRef.current = { active, projectSlug, identifier, resourceKey: activeResourceKey };
 
-  const refetch = useCallback(async () => {
+  refetchImplRef.current = async () => {
     const requestState = latestRequestRef.current;
 
     if (
@@ -110,22 +112,20 @@ export function useIssueDocuments({
     } finally {
       inFlightRef.current = false;
 
-      if (queuedRefetchRef.current && mountedRef.current && latestRequestRef.current.active) {
-        queuedRefetchRef.current = false;
-        void refetch();
-        return;
-      }
-
+      const shouldRunQueuedRefetch =
+        queuedRefetchRef.current && mountedRef.current && latestRequestRef.current.active;
       queuedRefetchRef.current = false;
 
-      if (
+      if (shouldRunQueuedRefetch) {
+        void refetch();
+      } else if (
         mountedRef.current &&
         (requestVersion === requestVersionRef.current || !latestRequestRef.current.active)
       ) {
         setLoading(false);
       }
     }
-  }, []);
+  };
 
   useEffect(() => {
     mountedRef.current = true;

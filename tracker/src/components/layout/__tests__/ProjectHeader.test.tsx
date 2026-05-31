@@ -51,7 +51,7 @@ vi.mock("@/components/issues/IssueCreateDialog", () => ({
 function renderHeader(pollingActive: boolean) {
   return render(
     <MemoryRouter>
-      <ProjectHeader projectSlug="macro-markets" view="board" trackerKind="github" pollingActive={pollingActive} />
+      <ProjectHeader projectSlug="macro-markets" trackerKind="github" pollingActive={pollingActive} />
     </MemoryRouter>,
   );
 }
@@ -72,7 +72,7 @@ describe("ProjectHeader polling indicator", () => {
   it("does not render the indicator for local trackers", () => {
     render(
       <MemoryRouter>
-        <ProjectHeader projectSlug="macro-markets" view="board" trackerKind="local" />
+        <ProjectHeader projectSlug="macro-markets" trackerKind="local" />
       </MemoryRouter>,
     );
     expect(screen.queryByLabelText("Polling active")).toBeNull();
@@ -87,7 +87,6 @@ describe("ProjectHeader polling indicator", () => {
       <MemoryRouter>
         <ProjectHeader
           projectSlug="macro-markets"
-          view="board"
           trackerKind="local"
           onIssueCreated={onIssueCreated}
         />

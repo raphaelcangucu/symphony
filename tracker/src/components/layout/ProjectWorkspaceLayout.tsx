@@ -24,7 +24,7 @@ export function ProjectWorkspaceLayout() {
 }
 
 function WorkspaceChrome() {
-  const { projectSlug, view, project, setProject, reloadProject, trackerKind, refetch, refreshing, setIssues } =
+  const { projectSlug, project, setProject, reloadProject, trackerKind, refetch, refreshing, setIssues } =
     useWorkspace();
   const pollingActive = useWindowFocus();
   const [editing, setEditing] = useState(false);
@@ -33,7 +33,6 @@ function WorkspaceChrome() {
     <div className="min-h-screen">
       <ProjectHeader
         projectSlug={projectSlug}
-        view={view}
         title={project?.name}
         rightSlot={
           <>

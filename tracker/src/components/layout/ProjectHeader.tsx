@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
 import { cn } from "@/lib/utils";
-import { workspaceBasePath, type WorkspaceView } from "@/lib/workspaceRoutes";
+import { workspaceBasePath } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 import type { TrackerKind } from "@/types/project";
 
@@ -17,7 +17,6 @@ const TRACKER_LABELS: Record<Exclude<TrackerKind, "local">, string> = {
 
 interface ProjectHeaderProps {
   projectSlug: string;
-  view: WorkspaceView;
   title?: string;
   rightSlot?: ReactNode;
   trackerKind?: TrackerKind;
@@ -32,7 +31,6 @@ const POLLING_PAUSED_LABEL = "Polling paused (window not focused)";
 
 export function ProjectHeader({
   projectSlug,
-  view,
   title,
   rightSlot,
   trackerKind,
