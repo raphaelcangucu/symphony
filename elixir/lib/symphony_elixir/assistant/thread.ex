@@ -1,5 +1,5 @@
 defmodule SymphonyElixir.Assistant.Thread do
-  @moduledoc "Persistent Codex-backed assistant thread for one tracker project."
+  @moduledoc "Persistent Codex-backed assistant thread (project, freeform, or issue scoped)."
 
   use Ecto.Schema
   import Ecto.Changeset
@@ -8,8 +8,13 @@ defmodule SymphonyElixir.Assistant.Thread do
 
   @type t :: %__MODULE__{}
 
+  @scopes ["project", "freeform", "issue"]
+
   schema "assistant_threads" do
+    field(:scope, :string, default: "project")
     field(:project_slug, :string)
+    field(:issue_identifier, :string)
+    field(:title, :string)
     field(:codex_thread_id, :string)
     field(:workspace_path, :string)
     field(:status, :string, default: "active")
@@ -23,16 +28,37 @@ defmodule SymphonyElixir.Assistant.Thread do
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(thread, attrs) when is_map(attrs) do
     thread
-    |> cast(attrs, [:project_slug, :codex_thread_id, :workspace_path, :status, :metadata])
-    |> validate_required([:project_slug, :workspace_path, :status])
+    |> cast(attrs, [:scope, :project_slug, :issue_identifier, :title, :codex_thread_id, :workspace_path, :status, :metadata])
+    |> validate_required([:scope])
+    |> validate_required([:workspace_path, :status])
+    |> validate_inclusion(:scope, @scopes)
     |> validate_inclusion(:status, ["active", "closed", "error"])
     |> normalize_project_slug()
-    |> unique_constraint(:project_slug, name: :assistant_threads_active_project_slug_index)
+    |> validate_scope_fields()
+    |> unique_constraint(:project_slug, name: :assistant_threads_active_project_index)
+    |> unique_constraint(:issue_identifier, name: :assistant_threads_active_issue_index)
+  end
+
+  defp validate_scope_fields(changeset) do
+    case get_field(changeset, :scope) do
+      "project" -> validate_required(changeset, [:project_slug])
+      "issue" -> validate_required(changeset, [:project_slug, :issue_identifier])
+      "freeform" -> reject_project(changeset)
+      _ -> changeset
+    end
+  end
+
+  defp reject_project(changeset) do
+    if get_field(changeset, :project_slug) in [nil, ""] do
+      put_change(changeset, :project_slug, nil)
+    else
+      add_error(changeset, :project_slug, "must be empty for freeform chats")
+    end
   end
 
   defp normalize_project_slug(changeset) do
     case get_change(changeset, :project_slug) do
-      project_slug when is_binary(project_slug) -> put_change(changeset, :project_slug, String.trim(project_slug))
+      slug when is_binary(slug) -> put_change(changeset, :project_slug, String.trim(slug))
       _ -> changeset
     end
   end
