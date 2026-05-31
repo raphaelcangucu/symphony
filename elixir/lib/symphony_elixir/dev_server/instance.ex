@@ -147,6 +147,7 @@ defmodule SymphonyElixir.DevServer.Instance do
       slug: slug,
       working_dir: working_dir,
       base_url: Keyword.get(opts, :base_url),
+      public_host: SymphonyElixir.PublicRouting.preview_host(project_slug, identifier, slug),
       idle_timeout_ms: Keyword.get(opts, :idle_timeout_ms, @default_idle_timeout_ms),
       tmux: Keyword.get(opts, :tmux, Registry),
       port_allocator: Keyword.get(opts, :port_allocator, &PortAllocator.allocate/2),
@@ -180,7 +181,7 @@ defmodule SymphonyElixir.DevServer.Instance do
   end
 
   defp launch_with_port(state, port) do
-    url = build_url(state.base_url, port, Map.get(state.step, :url_path, "/"))
+    url = build_url(state, port, Map.get(state.step, :url_path, "/"))
 
     case resolve_cwd(state) do
       {:ok, cwd} ->
@@ -232,6 +233,8 @@ defmodule SymphonyElixir.DevServer.Instance do
 
     case state.probe.(@loopback_host, port, ready_probe, normalize_path(ready_path)) do
       :ok ->
+        maybe_register_public_host(state, port)
+
         state =
           state
           |> Map.merge(%{status: :ready, probe_attempts: 0})
@@ -360,14 +363,16 @@ defmodule SymphonyElixir.DevServer.Instance do
     end
   end
 
-  defp build_url(base_url, port, path) do
-    base =
-      case base_url do
-        url when is_binary(url) and url != "" -> String.trim_trailing(url, "/")
-        _absent -> "http://127.0.0.1:#{port}"
-      end
+  defp build_url(%{public_host: host}, _port, path) when is_binary(host) do
+    "https://#{host}" <> normalize_path(path || "/")
+  end
 
-    base <> normalize_path(path || "/")
+  defp build_url(%{base_url: base_url}, _port, path) when is_binary(base_url) and base_url != "" do
+    String.trim_trailing(base_url, "/") <> normalize_path(path || "/")
+  end
+
+  defp build_url(_state, port, path) do
+    "http://127.0.0.1:#{port}" <> normalize_path(path || "/")
   end
 
   defp normalize_path(path) when is_binary(path) do
@@ -407,7 +412,23 @@ defmodule SymphonyElixir.DevServer.Instance do
     :ok
   end
 
+  defp maybe_register_public_host(%{public_host: host}, port)
+       when is_binary(host) and is_integer(port) do
+    SymphonyElixir.PublicRouting.register(host, port)
+    :ok
+  end
+
+  defp maybe_register_public_host(_state, _port), do: :ok
+
+  defp maybe_unregister_public_host(%{public_host: host}) when is_binary(host) do
+    SymphonyElixir.PublicRouting.unregister(host)
+    :ok
+  end
+
+  defp maybe_unregister_public_host(_state), do: :ok
+
   defp mark_crashed(state) do
+    maybe_unregister_public_host(state)
     state = cancel_timers(state)
     cleanup_session(state)
     persist_status(state, :crashed)
@@ -416,6 +437,7 @@ defmodule SymphonyElixir.DevServer.Instance do
   defp mark_stopped(%{status: :crashed} = state), do: mark_crashed(state)
 
   defp mark_stopped(state) do
+    maybe_unregister_public_host(state)
     state = cancel_timers(state)
 
     case cleanup_session(state) do

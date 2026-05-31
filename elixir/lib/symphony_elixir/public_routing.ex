@@ -73,6 +73,18 @@ defmodule SymphonyElixir.PublicRouting do
     ".#{namespace}.#{fetch_base_domain(opts)}"
   end
 
+  @spec preview_host(String.t(), String.t(), String.t(), keyword()) :: String.t() | nil
+  def preview_host(project_slug, identifier, step_slug, opts \\ []) do
+    if Config.public_tunnel_enabled?() do
+      case host_for(project_slug, identifier, step_slug, opts) do
+        {:ok, host} -> host
+        {:error, _reason} -> nil
+      end
+    else
+      nil
+    end
+  end
+
   @spec resolve_namespace(keyword()) :: {:ok, String.t()} | {:error, :no_namespace}
   def resolve_namespace(opts \\ []) do
     case Config.public_tunnel_namespace() do

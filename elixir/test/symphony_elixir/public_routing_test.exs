@@ -79,6 +79,29 @@ defmodule SymphonyElixir.PublicRoutingTest do
     end
   end
 
+  describe "preview_host/4" do
+    test "nil when tunnel disabled" do
+      load_public_tunnel_workflow!(enabled: false)
+      assert PublicRouting.preview_host("previsions", "mm-42", "front") == nil
+    end
+
+    test "host when enabled and namespace resolves" do
+      load_public_tunnel_workflow!(namespace: "octocat")
+
+      assert PublicRouting.preview_host("previsions", "mm-42", "front", base_domain: "tracker.cods.dev") ==
+               "previsions-mm-42-front.octocat.tracker.cods.dev"
+    end
+
+    test "nil when enabled but namespace cannot resolve" do
+      load_public_tunnel_workflow!(namespace: nil)
+
+      assert PublicRouting.preview_host("p", "i", "s",
+               base_domain: "tracker.cods.dev",
+               viewer: fn -> {:error, :x} end
+             ) == nil
+    end
+  end
+
   describe "register/unregister/lookup" do
     setup do
       case Process.whereis(SymphonyElixir.PublicRouting) do
@@ -107,6 +130,7 @@ defmodule SymphonyElixir.PublicRoutingTest do
 
   defp load_public_tunnel_workflow!(opts) do
     namespace = Keyword.get(opts, :namespace)
+    enabled = Keyword.get(opts, :enabled, true)
 
     namespace_line =
       if is_binary(namespace) and namespace != "" do
@@ -116,7 +140,7 @@ defmodule SymphonyElixir.PublicRoutingTest do
       end
 
     front_matter =
-      "github:\n  repo: acme/app\npublic_tunnel:\n  enabled: true\n" <> namespace_line
+      "github:\n  repo: acme/app\npublic_tunnel:\n  enabled: #{enabled}\n" <> namespace_line
 
     content = "---\n" <> front_matter <> "---\n"
     File.write!(Workflow.workflow_file_path(), content)

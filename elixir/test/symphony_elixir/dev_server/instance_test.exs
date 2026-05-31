@@ -343,6 +343,98 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
     assert row.status == "stopped"
   end
 
+  test "registers public host on ready and unregisters on stop", %{project: project} do
+    enable_public_tunnel!(namespace: "octocat", base_domain: "tracker.cods.dev")
+    ensure_public_routing_started!()
+
+    pid = start_ready_instance!(project, port: 4123, project_slug: "previsions", identifier: "mm-42", step_slug: "front")
+
+    host = "previsions-mm-42-front.octocat.tracker.cods.dev"
+    assert {:ok, 4123} = SymphonyElixir.PublicRouting.lookup(host)
+
+    :ok = SymphonyElixir.DevServer.Instance.stop(pid)
+    assert_eventually(fn -> SymphonyElixir.PublicRouting.lookup(host) == :error end)
+  end
+
+  test "ready transition uses configured base_url when set", %{project: project} do
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          base_url: "http://example.test/",
+          port_allocator: fn _range, _claimed -> {:ok, 4123} end,
+          probe: fn "127.0.0.1", 4123, "tcp", "/" -> :ok end,
+          probe_interval_ms: 5
+        )
+      )
+
+    assert_eventually(fn -> Instance.status(pid) == :ready end)
+
+    assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+    assert row.url == "http://example.test/"
+
+    assert :ok = Instance.stop(pid)
+  end
+
+  defp enable_public_tunnel!(opts) do
+    namespace = Keyword.fetch!(opts, :namespace)
+    base_domain = Keyword.fetch!(opts, :base_domain)
+
+    front_matter =
+      "github:\n  repo: acme/app\npublic_tunnel:\n  enabled: true\n" <>
+        "  base_domain: #{base_domain}\n  namespace: #{namespace}\n"
+
+    content = "---\n" <> front_matter <> "---\n"
+
+    workflow_root =
+      Path.join(System.tmp_dir!(), "symphony-instance-tunnel-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(workflow_root)
+    workflow_file = Path.join(workflow_root, "WORKFLOW.md")
+    File.write!(workflow_file, content)
+
+    previous_path = Application.get_env(:symphony_elixir, :workflow_file_path)
+    SymphonyElixir.Workflow.set_workflow_file_path(workflow_file)
+
+    on_exit(fn ->
+      if previous_path do
+        SymphonyElixir.Workflow.set_workflow_file_path(previous_path)
+      else
+        SymphonyElixir.Workflow.clear_workflow_file_path()
+      end
+
+      File.rm_rf!(workflow_root)
+    end)
+
+    :ok
+  end
+
+  defp ensure_public_routing_started! do
+    case Process.whereis(SymphonyElixir.PublicRouting) do
+      nil -> start_supervised!(SymphonyElixir.PublicRouting)
+      _ -> :ok
+    end
+  end
+
+  defp start_ready_instance!(project, opts) do
+    port = Keyword.fetch!(opts, :port)
+    step = %{step() | slug: Keyword.fetch!(opts, :step_slug)}
+
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          project_slug: Keyword.fetch!(opts, :project_slug),
+          identifier: Keyword.fetch!(opts, :identifier),
+          step: step,
+          port_allocator: fn _range, _claimed -> {:ok, port} end,
+          probe: fn "127.0.0.1", ^port, "tcp", "/" -> :ok end,
+          probe_interval_ms: 5
+        )
+      )
+
+    assert_eventually(fn -> Instance.status(pid) == :ready end)
+    pid
+  end
+
   defp step do
     %{
       slug: "front",
