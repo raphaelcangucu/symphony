@@ -51,14 +51,21 @@
 **Files:**
 - Modify: `elixir/mix.exs:122-139`
 
-- [ ] **Step 1: Add the two deps**
+- [ ] **Step 1: Add the deps**
 
 In `defp deps do` add (after the `{:req, "~> 0.5"},` line):
 
 ```elixir
 {:reverse_proxy_plug, "~> 3.0"},
 {:reverse_proxy_plug_websocket, "~> 0.2"},
+{:websockex, "~> 0.4.3"},
 ```
+
+> `:websockex` is required: `reverse_proxy_plug_websocket` 0.2.0 unconditionally
+> macro-expands `use WebSockex` in its WebSockex adapter (the `Code.ensure_loaded?`
+> guard is ineffective for a compile-time macro), so the library does not compile
+> unless `:websockex` is present. WebSockex is a pure-Elixir WS client (no native
+> deps); the library auto-selects it when `:gun` is absent.
 
 - [ ] **Step 2: Fetch deps**
 
@@ -74,7 +81,7 @@ Expected: compiles with exit code 0 (warnings ok).
 
 ```bash
 git add elixir/mix.exs elixir/mix.lock
-git commit -m "build: add reverse_proxy_plug deps for public preview tunnel"
+git commit -m "build: add reverse_proxy_plug + websockex deps for public preview tunnel"
 ```
 
 ---
@@ -252,10 +259,51 @@ defmodule SymphonyElixir.PublicRoutingTest do
                ".octocat.tracker.cods.dev"
     end
   end
+
+  describe "resolve_namespace/1" do
+    test "uses the configured namespace override when present" do
+      # load a WORKFLOW with public_tunnel.namespace set, mirroring the
+      # config_test.exs front-matter helper (load_workflow_with_front_matter/1).
+      load_public_tunnel_workflow!(namespace: "Team-Cods")
+      assert PublicRouting.resolve_namespace() == {:ok, "team-cods"}
+    end
+
+    test "falls back to the injected viewer login when no override" do
+      load_public_tunnel_workflow!(namespace: nil)
+      viewer = fn -> {:ok, %{login: "Octo-Cat"}} end
+      assert PublicRouting.resolve_namespace(viewer: viewer) == {:ok, "octo-cat"}
+    end
+
+    test "returns :no_namespace when override absent and viewer fails" do
+      load_public_tunnel_workflow!(namespace: nil)
+      viewer = fn -> {:error, :missing_github_token} end
+      assert PublicRouting.resolve_namespace(viewer: viewer) == {:error, :no_namespace}
+    end
+  end
+
+  describe "host_for/4 namespace fallback" do
+    test "resolves the namespace via opts viewer when not passed explicitly" do
+      load_public_tunnel_workflow!(namespace: nil)
+      viewer = fn -> {:ok, %{login: "octocat"}} end
+
+      assert PublicRouting.host_for("previsions", "#mm-42", "front",
+               base_domain: "tracker.cods.dev",
+               viewer: viewer
+             ) == {:ok, "previsions-mm-42-front.octocat.tracker.cods.dev"}
+    end
+
+    test "propagates :no_namespace error" do
+      load_public_tunnel_workflow!(namespace: nil)
+      viewer = fn -> {:error, :x} end
+
+      assert PublicRouting.host_for("p", "i", "s", base_domain: "tracker.cods.dev", viewer: viewer) ==
+               {:error, :no_namespace}
+    end
+  end
 end
 ```
 
-> The functions take an explicit `opts` keyword (`namespace:`, `base_domain:`) so they are unit-testable without config/Viewer. The zero-arg public wrappers (Task 4) read config + resolve the namespace and delegate.
+> The functions take an explicit `opts` keyword (`namespace:`, `base_domain:`, and `viewer:` for injecting `Viewer.current/0` in tests) so they are unit-testable without config/network. When opts omit them they fall back to `Config` / `Viewer`. `start_link/1` and `init/1` are exercised by Task 4's `start_supervised!` tests (so the 100% coverage gate holds across the suite). Implement `load_public_tunnel_workflow!/1` in this test by mirroring `config_test.exs`'s `load_workflow_with_front_matter/1` helper: when `namespace:` is nil, write a `public_tunnel:` block without a `namespace:` key (and `enabled: true`); when set, include `namespace: <value>`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -274,8 +322,6 @@ defmodule SymphonyElixir.PublicRouting do
   """
 
   use GenServer
-
-  require Logger
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Viewer
@@ -325,14 +371,16 @@ defmodule SymphonyElixir.PublicRouting do
     ".#{namespace}.#{fetch_base_domain(opts)}"
   end
 
-  @spec resolve_namespace() :: {:ok, String.t()} | {:error, :no_namespace}
-  def resolve_namespace do
+  @spec resolve_namespace(keyword()) :: {:ok, String.t()} | {:error, :no_namespace}
+  def resolve_namespace(opts \\ []) do
     case Config.public_tunnel_namespace() do
       ns when is_binary(ns) and ns != "" ->
         {:ok, sanitize_label(ns)}
 
       _ ->
-        case Viewer.current() do
+        viewer = Keyword.get(opts, :viewer, &Viewer.current/0)
+
+        case viewer.() do
           {:ok, %{login: login}} when is_binary(login) and login != "" ->
             {:ok, sanitize_label(login)}
 
@@ -345,7 +393,7 @@ defmodule SymphonyElixir.PublicRouting do
   defp fetch_namespace(opts) do
     case Keyword.get(opts, :namespace) do
       ns when is_binary(ns) and ns != "" -> {:ok, sanitize_label(ns)}
-      _ -> resolve_namespace()
+      _ -> resolve_namespace(opts)
     end
   end
 
@@ -354,7 +402,6 @@ defmodule SymphonyElixir.PublicRouting do
   end
 
   defp strip_hash(identifier) when is_binary(identifier), do: String.trim_leading(identifier, "#")
-  defp strip_hash(_), do: ""
 
   defp enforce_label_limit(label) when byte_size(label) <= @max_label_len, do: label
 
@@ -607,11 +654,20 @@ defmodule SymphonyElixirWeb.PublicHostPlug do
   defp route(conn, host) when host in @loopback_hosts, do: conn
 
   defp route(conn, host) do
+    case PublicRouting.resolve_namespace() do
+      {:ok, namespace} -> route_in_namespace(conn, host, namespace)
+      {:error, :no_namespace} -> conn
+    end
+  end
+
+  defp route_in_namespace(conn, host, namespace) do
+    opts = [namespace: namespace, base_domain: Config.public_tunnel_base_domain()]
+
     cond do
-      host == PublicRouting.tracker_host([]) ->
+      host == PublicRouting.tracker_host(opts) ->
         conn
 
-      not String.ends_with?(host, PublicRouting.namespace_suffix([])) ->
+      not String.ends_with?(host, PublicRouting.namespace_suffix(opts)) ->
         conn
 
       true ->
@@ -669,6 +725,18 @@ end
 
 > Verify the `reverse_proxy_plug_websocket` `init/call` arity/keys against the installed version's docs while wiring Step 3; adjust the `proxy/2` WS branch to match (the HTTP branch uses `ReverseProxyPlug` `upstream:`). Keep behavior identical: WS upgrade → WS plug, else HTTP plug, both halting.
 
+- [ ] **Step 3b: Exempt the plug from the 100% coverage gate**
+
+The proxy/WS branches of `proxy/2` reverse-proxy to a live loopback upstream and cannot be deterministically unit-tested without a real listener (consistent with the repo already ignoring `SymphonyElixirWeb.Endpoint`, `Router`, and the proxying controllers). Add the module to `test_coverage.ignore_modules` in `elixir/mix.exs`, with a comment, near the other `SymphonyElixirWeb.*` entries:
+
+```elixir
+# Reverse-proxies to live loopback upstream + WS upgrade; guard branches
+# are covered by plug tests, proxy path by Task 6 integration.
+SymphonyElixirWeb.PublicHostPlug,
+```
+
+The guard-branch tests in Step 1 remain as regression tests regardless of the coverage exemption.
+
 - [ ] **Step 4: Insert into the Endpoint**
 
 In `elixir/lib/symphony_elixir_web/endpoint.ex`, add the plug immediately before `plug(SymphonyElixirWeb.Router)` (line 36):
@@ -694,8 +762,18 @@ git commit -m "feat(web): host-based public preview proxy plug"
 
 ## Task 6: `DevServer.Instance` — register/unregister + public URL
 
+> **Coverage note:** `DevServer.Instance` is NOT in `ignore_modules`, so it is held to
+> 100% line coverage. To avoid uncoverable branches, the "is the tunnel on + did host
+> resolution succeed" decision lives in a new pure-ish `PublicRouting.preview_host/4`
+> (fully unit-tested with the injected `viewer:` opt), and the Instance helpers do NOT
+> use `rescue`. Instance just stores the resolved `public_host` (a string or nil) and
+> branches on `is_binary/1`, both arms of which are exercised by existing (tunnel-off →
+> nil) and new (tunnel-on → host) tests.
+
 **Files:**
+- Modify: `elixir/lib/symphony_elixir/public_routing.ex` (+ `preview_host/4`)
 - Modify: `elixir/lib/symphony_elixir/dev_server/instance.ex`
+- Test: `elixir/test/symphony_elixir/public_routing_test.exs` (+ `preview_host/4` cases)
 - Test: `elixir/test/symphony_elixir/dev_server/instance_test.exs` (existing file; mirror its setup)
 
 - [ ] **Step 1: Write failing tests**
@@ -727,36 +805,63 @@ end
 Run (from `elixir/`): `mix test test/symphony_elixir/dev_server/instance_test.exs -k "public host"`
 Expected: FAIL — no registration happens; lookup returns `:error`.
 
-- [ ] **Step 3: Compute `public_host` in `initial_state/1`**
+- [ ] **Step 3a: Add `PublicRouting.preview_host/4`** (testable decision, keeps Instance branchless)
 
-In `initial_state/1` (~141-167) add a `public_host` field, resolved once from project/identifier/slug (nil when the tunnel is disabled or namespace unresolved):
-
-```elixir
-public_host: resolve_public_host(project_slug, identifier, slug),
-```
-
-And add the private helper near `build_url/3`:
+In `elixir/lib/symphony_elixir/public_routing.ex` add:
 
 ```elixir
-defp resolve_public_host(project_slug, identifier, slug) do
-  if SymphonyElixir.Config.public_tunnel_enabled?() do
-    case SymphonyElixir.PublicRouting.host_for(project_slug, identifier, slug, []) do
+@spec preview_host(String.t(), String.t(), String.t(), keyword()) :: String.t() | nil
+def preview_host(project_slug, identifier, step_slug, opts \\ []) do
+  if Config.public_tunnel_enabled?() do
+    case host_for(project_slug, identifier, step_slug, opts) do
       {:ok, host} -> host
-      {:error, reason} ->
-        Logger.warning("Public host resolution failed slug=#{slug} reason=#{inspect(reason)}")
-        nil
+      {:error, _reason} -> nil
     end
   else
     nil
   end
-rescue
-  _ -> nil
 end
+```
+
+Add tests to `public_routing_test.exs` covering all three arms:
+
+```elixir
+describe "preview_host/4" do
+  test "nil when tunnel disabled" do
+    load_public_tunnel_workflow!(enabled: false)
+    assert PublicRouting.preview_host("previsions", "mm-42", "front") == nil
+  end
+
+  test "host when enabled and namespace resolves" do
+    load_public_tunnel_workflow!(namespace: "octocat")
+    assert PublicRouting.preview_host("previsions", "mm-42", "front",
+             base_domain: "tracker.cods.dev") ==
+             "previsions-mm-42-front.octocat.tracker.cods.dev"
+  end
+
+  test "nil when enabled but namespace cannot resolve" do
+    load_public_tunnel_workflow!(namespace: nil)
+    assert PublicRouting.preview_host("p", "i", "s",
+             base_domain: "tracker.cods.dev",
+             viewer: fn -> {:error, :x} end
+           ) == nil
+  end
+end
+```
+
+Extend the existing `load_public_tunnel_workflow!/1` helper to accept `enabled: false` (writes `enabled: false`), defaulting to `enabled: true`.
+
+- [ ] **Step 3b: Compute `public_host` in `initial_state/1`**
+
+In `initial_state/1` add a `public_host` field next to `base_url:`:
+
+```elixir
+public_host: SymphonyElixir.PublicRouting.preview_host(project_slug, identifier, slug),
 ```
 
 - [ ] **Step 4: Register on `:ready`**
 
-In `probe_starting/2`, in the `:ok` branch (~234-242), after the state becomes `:ready`, register the mapping when a public host and port exist:
+In `probe_starting/2`, in the `:ok` branch, register before the state merge:
 
 ```elixir
 :ok ->
@@ -772,14 +877,13 @@ In `probe_starting/2`, in the `:ok` branch (~234-242), after the state becomes `
   {:noreply, state}
 ```
 
-With helper:
+With helper (NO `rescue` — `PublicRouting` is always supervised; both clauses are covered: the registering clause by the new tunnel-on test, the fallback by existing tunnel-off tests):
 
 ```elixir
 defp maybe_register_public_host(%{public_host: host}, port)
      when is_binary(host) and is_integer(port) do
   SymphonyElixir.PublicRouting.register(host, port)
-rescue
-  _ -> :ok
+  :ok
 end
 
 defp maybe_register_public_host(_state, _port), do: :ok
@@ -787,47 +891,44 @@ defp maybe_register_public_host(_state, _port), do: :ok
 
 - [ ] **Step 5: Unregister on stop/crash**
 
-In `mark_crashed/1` (~410) and `mark_stopped/1` (~418), add an unregister call (best-effort). Add to the top of `cancel_timers/1`'s callers, or simplest: at the start of both `mark_crashed/1` and `mark_stopped/1`:
+Add the helper (NO `rescue`):
 
 ```elixir
 defp maybe_unregister_public_host(%{public_host: host}) when is_binary(host) do
   SymphonyElixir.PublicRouting.unregister(host)
-rescue
-  _ -> :ok
+  :ok
 end
 
 defp maybe_unregister_public_host(_state), do: :ok
 ```
 
-Call `maybe_unregister_public_host(state)` as the first line of both `mark_crashed/1` and `mark_stopped/1` (the non-`:crashed` clause).
+Call `maybe_unregister_public_host(state)` as the first line of `mark_crashed/1` and of the GENERAL `mark_stopped/1` clause (NOT the `%{status: :crashed}` delegating clause — that delegates to `mark_crashed/1`, which already unregisters, avoiding a double call). The binary-host arm is covered by the new stop test; the fallback arm by existing tunnel-off teardown tests.
 
-- [ ] **Step 6: Use `public_host` in `build_url/3`**
+- [ ] **Step 6: Use `public_host` in `build_url`**
 
-Change the public URL build at the `:ready`/launch path. `build_url/3` (~363-371) currently uses `base_url`/loopback. Update `launch_with_port/1` (~182-183) to prefer the public host:
+`build_url/3` is currently called once (in `launch_with_port/1`: `build_url(state.base_url, port, ...)`). Change that call to pass `state`:
 
 ```elixir
 url = build_url(state, port, Map.get(state.step, :url_path, "/"))
 ```
 
-and replace `build_url/3` with a `build_url/3` that takes `state`:
+and replace `build_url/3` with state-taking clauses:
 
 ```elixir
 defp build_url(%{public_host: host}, _port, path) when is_binary(host) do
   "https://#{host}" <> normalize_path(path || "/")
 end
 
-defp build_url(%{base_url: base_url}, port, path) do
-  base =
-    case base_url do
-      url when is_binary(url) and url != "" -> String.trim_trailing(url, "/")
-      _absent -> "http://127.0.0.1:#{port}"
-    end
+defp build_url(%{base_url: base_url}, _port, path) when is_binary(base_url) and base_url != "" do
+  String.trim_trailing(base_url, "/") <> normalize_path(path || "/")
+end
 
-  base <> normalize_path(path || "/")
+defp build_url(_state, port, path) do
+  "http://127.0.0.1:#{port}" <> normalize_path(path || "/")
 end
 ```
 
-> Update the existing `build_url/3` call site(s) and any direct unit test of `build_url` to pass the state map (or a map with `:public_host`/`:base_url`). Grep `build_url(` in `instance.ex` and the test file before editing.
+> Grep `build_url(` in `instance.ex` and `instance_test.exs` first; there is one call site in `instance.ex` (line ~183). Update any direct `build_url` unit test to pass a state map. All three clauses must be covered: public_host (new test), base_url-present (existing tests that pass `base_url:`), and the loopback fallback (existing tests with neither).
 
 - [ ] **Step 7: Run tests to verify they pass**
 
@@ -1020,10 +1121,14 @@ end
 Run (from `elixir/`): `mix test test/symphony_elixir/cloudflare/dns_test.exs`
 Expected: PASS.
 
+- [ ] **Step 4b: Exempt from the 100% coverage gate**
+
+The real `request_json/3` transport hits the Cloudflare HTTP API and can't be unit-tested without live network (consistent with the repo already ignoring `SymphonyElixir.GitHub.Client` and `SymphonyElixir.Linear.Client`). Add `SymphonyElixir.Cloudflare.Dns` to `test_coverage.ignore_modules` in `elixir/mix.exs`. The injected-transport tests remain as regression tests regardless.
+
 - [ ] **Step 5: Commit**
 
 ```bash
-git add elixir/lib/symphony_elixir/cloudflare/dns.ex elixir/test/symphony_elixir/cloudflare/dns_test.exs
+git add elixir/lib/symphony_elixir/cloudflare/dns.ex elixir/test/symphony_elixir/cloudflare/dns_test.exs elixir/mix.exs
 git commit -m "feat(cloudflare): DNS client for tunnel CNAME records"
 ```
 
@@ -1178,13 +1283,13 @@ env_value() {
 TUNNEL_NAME="$(env_value CLOUDFLARED_TUNNEL_NAME cods-dev-tunnel)"
 ROUTE_DNS="$(env_value PUBLIC_TUNNEL_ROUTE_DNS false)"
 TUNNEL_CONFIG="$(env_value PUBLIC_TUNNEL_CONFIG /tmp/symphony-cods-dev-tunnel.yml)"
-HUB_PORT="$(env_value SYMPHONY_HUB_PORT 4000)"
 
+# The Phoenix hub always listens on :4000 (D2); the ingress is a static wildcard.
 cat > "$TUNNEL_CONFIG" <<EOF
 tunnel: ${TUNNEL_NAME}
 ingress:
   - hostname: "*.tracker.cods.dev"
-    service: http://127.0.0.1:${HUB_PORT}
+    service: http://127.0.0.1:4000
   - service: http_status:404
 EOF
 
