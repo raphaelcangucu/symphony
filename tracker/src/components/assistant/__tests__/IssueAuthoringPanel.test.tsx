@@ -47,8 +47,22 @@ describe("IssueAuthoringPanel", () => {
     expect(screen.getByTestId("project-assistant-panel")).toHaveTextContent(
       "Assistant macro-markets:MAC-1:list:embedded",
     );
-    expect(screen.getByRole("region", { name: /issue authoring chat/i })).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: /issue authoring documents/i })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: /issue documents/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /issue authoring chat/i })).toHaveClass(
+      "flex",
+      "min-h-0",
+      "overflow-hidden",
+    );
+    expect(screen.getByTestId("project-assistant-panel").parentElement).toHaveClass(
+      "h-full",
+      "min-h-0",
+      "flex-1",
+      "overflow-hidden",
+    );
+
+    const documentsSection = screen.getByRole("complementary", { name: /issue authoring documents/i });
+    const documentViewer = screen.getByRole("region", { name: /issue documents/i });
+    expect(documentsSection).toHaveClass("flex", "min-h-0", "flex-1", "overflow-hidden");
+    expect(documentViewer.parentElement).not.toBe(documentsSection);
+    expect(documentViewer.parentElement).toHaveClass("min-h-0", "flex-1", "overflow-hidden");
   });
 });

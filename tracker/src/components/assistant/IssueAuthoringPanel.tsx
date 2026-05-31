@@ -43,7 +43,12 @@ export function IssueAuthoringPanel({
   );
 
   const assistantPanel = (
-    <div className="min-h-0 overflow-hidden rounded-xl border bg-background shadow-sm">
+    <div
+      className={cn(
+        "min-h-0 overflow-hidden rounded-xl border bg-background shadow-sm",
+        compact && "h-full flex-1",
+      )}
+    >
       <ProjectAssistantPanel
         projectSlug={projectSlug}
         threadId={threadId}
@@ -52,6 +57,21 @@ export function IssueAuthoringPanel({
         mode={compact ? "embedded" : "page"}
         onDocumentChanged={handleDocumentChanged}
       />
+    </div>
+  );
+
+  const documentsContent = normalizedIdentifier ? (
+    <DocumentViewer
+      projectSlug={projectSlug}
+      identifier={normalizedIdentifier}
+      documents={issueDocuments.documents}
+      available={issueDocuments.available}
+      reason={issueDocuments.reason}
+    />
+  ) : (
+    <div className="rounded-xl border bg-card px-6 py-8 text-center text-sm text-muted-foreground shadow-sm">
+      Draft documents appear here after the assistant creates or links an issue. Start by asking the project assistant
+      to draft the issue, then open the issue authoring route once an identifier exists.
     </div>
   );
 
@@ -67,27 +87,14 @@ export function IssueAuthoringPanel({
         </p>
       </div>
 
-      {normalizedIdentifier ? (
-        <DocumentViewer
-          projectSlug={projectSlug}
-          identifier={normalizedIdentifier}
-          documents={issueDocuments.documents}
-          available={issueDocuments.available}
-          reason={issueDocuments.reason}
-        />
-      ) : (
-        <div className="rounded-xl border bg-card px-6 py-8 text-center text-sm text-muted-foreground shadow-sm">
-          Draft documents appear here after the assistant creates or links an issue. Start by asking the project
-          assistant to draft the issue, then open the issue authoring route once an identifier exists.
-        </div>
-      )}
+      {compact ? <div className="min-h-0 flex-1 overflow-hidden">{documentsContent}</div> : documentsContent}
     </>
   );
 
   if (compact) {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden bg-muted/20 p-3">
-        <section className="min-h-0 flex-[1.15] overflow-hidden" aria-label="Issue authoring chat">
+        <section className="flex min-h-0 flex-[1.15] overflow-hidden" aria-label="Issue authoring chat">
           {assistantPanel}
         </section>
 
