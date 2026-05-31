@@ -734,7 +734,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
     assert Config.active_states() == ["Todo", "In Progress"]
     assert Config.terminal_states() == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
-    assert Config.poll_interval_ms() == 30_000
+    assert Config.poll_interval_ms() == 60_000
     assert Config.workspace_root() == Path.join(System.tmp_dir!(), "symphony_workspaces")
     assert Config.max_retry_backoff_ms() == 300_000
     assert Config.max_concurrent_agents_for_state("Todo") == 1

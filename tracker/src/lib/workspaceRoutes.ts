@@ -28,6 +28,10 @@ export function workspaceBasePath(projectSlug: string, view: WorkspaceView): str
   return `/projects/${requireSlug(projectSlug)}/${view}`;
 }
 
+export function assistantPath(projectSlug: string): string {
+  return `/projects/${requireSlug(projectSlug)}/assistant`;
+}
+
 export function newIssuePath(projectSlug: string, view: WorkspaceView): string {
   return `${workspaceBasePath(projectSlug, view)}/new-issue`;
 }
@@ -38,6 +42,10 @@ export function filtersPath(projectSlug: string, view: WorkspaceView): string {
 
 export function devEnvPath(projectSlug: string, view: WorkspaceView): string {
   return `${workspaceBasePath(projectSlug, view)}/dev-env`;
+}
+
+export function projectsDevEnvPath(projectSlug: string): string {
+  return `${PROJECTS_PATH}/${requireSlug(projectSlug)}/dev-env`;
 }
 
 export function issuePath(

@@ -331,6 +331,28 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
+  @doc """
+  Enriches a single issue with pull-request discussion comments on demand (lazy).
+
+  Used at dispatch time so the agent prompt keeps PR feedback context without the poll
+  loop paying a per-issue enrichment call every cycle. Routed through `ReadCache`.
+  """
+  @spec enrich_issue(Issue.t(), keyword()) :: Issue.t()
+  def enrich_issue(%Issue{} = issue, opts \\ []) when is_list(opts) do
+    case require_repo() do
+      {:ok, repo} ->
+        [issue]
+        |> IssueDiscussion.enrich_issues(repo, Keyword.put(opts, :enrich_pr_discussion, true))
+        |> case do
+          [%Issue{} = enriched | _] -> enriched
+          _ -> issue
+        end
+
+      _ ->
+        issue
+    end
+  end
+
   @spec create_comment(String.t(), String.t(), keyword()) :: :ok | {:error, term()}
   def create_comment(issue_id, body, opts \\ [])
       when is_binary(issue_id) and is_binary(body) do
@@ -400,25 +422,10 @@ defmodule SymphonyElixir.GitHub.Client do
 
     with {:ok, token} <- require_token(),
          headers = graphql_headers(token),
-         {:ok, %{status: 200, body: body}} <- request_fun.(payload, headers),
-         {:ok, decoded} <- decode_graphql_response(body) do
-      {:ok, decoded}
+         {:ok, response} <- request_fun.(payload, headers) do
+      classify_graphql_response(response, payload)
     else
       {:error, :missing_github_token} = error ->
-        error
-
-      {:ok, response} ->
-        Logger.error(
-          "GitHub GraphQL request failed status=#{response.status}" <>
-            github_error_context(payload, response)
-        )
-
-        {:error, {:github_api_status, response.status}}
-
-      {:error, {:github_graphql_errors, _} = err} ->
-        {:error, err}
-
-      {:error, :github_unknown_payload} = error ->
         error
 
       {:error, reason} ->
@@ -501,7 +508,7 @@ defmodule SymphonyElixir.GitHub.Client do
           items
           |> build_candidate_records(status_field_name, repo, assignee_filter)
           |> filter_candidate_records(repo, state_set)
-          |> IssueDiscussion.enrich_issues(repo, opts)
+          |> maybe_enrich_issues(repo, opts)
 
         {:ok, issues}
 
@@ -713,7 +720,7 @@ defmodule SymphonyElixir.GitHub.Client do
         issues =
           nodes
           |> build_issues_from_nodes(project_id, status_field_name, repo, assignee_filter)
-          |> IssueDiscussion.enrich_issues(repo, opts)
+          |> maybe_enrich_issues(repo, opts)
 
         {:ok, issues}
 
@@ -863,6 +870,17 @@ defmodule SymphonyElixir.GitHub.Client do
 
   defp forward_graphql_opts(opts) do
     Keyword.take(opts, [:request_fun, :operation_name])
+  end
+
+  # Lazy by default: the poll loop does not enrich PR discussion for every candidate
+  # issue. Enrichment is opt-in (`enrich_pr_discussion: true`) and done per-issue at
+  # dispatch / on issue-open instead.
+  defp maybe_enrich_issues(issues, repo, opts) do
+    if Keyword.get(opts, :enrich_pr_discussion, false) do
+      IssueDiscussion.enrich_issues(issues, repo, opts)
+    else
+      issues
+    end
   end
 
   # -- Admission helpers ------------------------------------------------------
@@ -1330,6 +1348,107 @@ defmodule SymphonyElixir.GitHub.Client do
 
   defp decode_graphql_response(body) when is_map(body), do: {:ok, body}
   defp decode_graphql_response(_body), do: {:error, :github_unknown_payload}
+
+  # GitHub signals GraphQL rate limiting via a 200 body with an `errors` entry of
+  # `type: "RATE_LIMIT"` / `code: "graphql_rate_limit"`, or via a 429/403 status with
+  # `x-ratelimit-remaining: 0`. Classify these distinctly so callers do not surface them
+  # as generic network failures.
+  defp classify_graphql_response(%{status: 200, body: body} = response, _payload) do
+    case decode_graphql_response(body) do
+      {:ok, decoded} ->
+        {:ok, decoded}
+
+      {:error, {:github_graphql_errors, errors}} ->
+        if rate_limit_errors?(errors) do
+          {:error, {:rate_limited, rate_limit_reset_info(response)}}
+        else
+          {:error, {:github_graphql_errors, errors}}
+        end
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp classify_graphql_response(%{status: 429} = response, _payload) do
+    {:error, {:rate_limited, rate_limit_reset_info(response)}}
+  end
+
+  defp classify_graphql_response(%{status: 403} = response, payload) do
+    if rate_limited_response?(response) do
+      {:error, {:rate_limited, rate_limit_reset_info(response)}}
+    else
+      log_graphql_failure(payload, response)
+      {:error, {:github_api_status, 403}}
+    end
+  end
+
+  defp classify_graphql_response(%{status: status} = response, payload) do
+    log_graphql_failure(payload, response)
+    {:error, {:github_api_status, status}}
+  end
+
+  defp log_graphql_failure(payload, response) do
+    Logger.error(
+      "GitHub GraphQL request failed status=#{response.status}" <>
+        github_error_context(payload, response)
+    )
+  end
+
+  defp rate_limited_response?(response) do
+    case header_value(response, "x-ratelimit-remaining") do
+      "0" -> true
+      _ -> rate_limit_errors?(extract_response_errors(response))
+    end
+  end
+
+  defp extract_response_errors(%{body: %{"errors" => errors}}) when is_list(errors), do: errors
+  defp extract_response_errors(_response), do: []
+
+  defp rate_limit_errors?(errors) when is_list(errors), do: Enum.any?(errors, &rate_limit_error?/1)
+  defp rate_limit_errors?(_errors), do: false
+
+  defp rate_limit_error?(error) when is_map(error) do
+    type = Map.get(error, "type")
+    code = Map.get(error, "code")
+
+    (is_binary(type) and String.upcase(type) in ["RATE_LIMIT", "RATE_LIMITED"]) or
+      (is_binary(code) and String.downcase(code) in ["graphql_rate_limit", "rate_limited"])
+  end
+
+  defp rate_limit_error?(_error), do: false
+
+  defp rate_limit_reset_info(response) do
+    %{reset_at: parse_reset_at(header_value(response, "x-ratelimit-reset"))}
+  end
+
+  defp parse_reset_at(value) when is_binary(value) do
+    with {unix, _rest} <- Integer.parse(String.trim(value)),
+         {:ok, datetime} <- DateTime.from_unix(unix) do
+      datetime
+    else
+      _ -> nil
+    end
+  end
+
+  defp parse_reset_at(_value), do: nil
+
+  defp header_value(%{headers: headers}, name) when is_map(headers) do
+    case Map.get(headers, name) do
+      [value | _] when is_binary(value) -> value
+      value when is_binary(value) -> value
+      _ -> nil
+    end
+  end
+
+  defp header_value(%{headers: headers}, name) when is_list(headers) do
+    Enum.find_value(headers, fn
+      {key, value} -> if String.downcase(to_string(key)) == name, do: to_string(value)
+      _ -> nil
+    end)
+  end
+
+  defp header_value(_response, _name), do: nil
 
   defp github_error_context(payload, response) when is_map(payload) do
     operation_name =

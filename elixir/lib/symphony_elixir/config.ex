@@ -8,7 +8,7 @@ defmodule SymphonyElixir.Config do
 
   @default_active_states ["Todo", "In Progress"]
   @default_terminal_states ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
-  @default_poll_interval_ms 30_000
+  @default_poll_interval_ms 60_000
   @default_workspace_root Path.join(System.tmp_dir!(), "symphony_workspaces")
   @default_hook_timeout_ms 60_000
   @default_max_concurrent_agents 10

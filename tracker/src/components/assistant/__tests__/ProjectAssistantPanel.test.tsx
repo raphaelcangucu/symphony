@@ -1,0 +1,76 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
+
+const channelHandlers: Record<string, (payload: unknown) => void> = {};
+const push = vi.fn(() => ({ receive: vi.fn() }));
+const join = vi.fn(() => ({ receive: (status: string, callback: (response: unknown) => void) => (status === "ok" ? callback({}) : undefined) }));
+const leave = vi.fn(() => ({ receive: vi.fn() }));
+const channel = {
+  on: (event: string, callback: (payload: unknown) => void) => {
+    channelHandlers[event] = callback;
+  },
+  join,
+  leave,
+  push,
+};
+const connect = vi.fn();
+const disconnect = vi.fn();
+const socketChannel = vi.fn(() => channel);
+
+vi.mock("@assistant-ui/react", () => ({
+  AssistantRuntimeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useExternalStoreRuntime: () => ({}),
+}));
+
+vi.mock("@/services/phoenix/socket", () => ({
+  createTrackerSocket: () => ({
+    connect,
+    disconnect,
+    channel: socketChannel,
+  }),
+}));
+
+describe("ProjectAssistantPanel", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    for (const key of Object.keys(channelHandlers)) delete channelHandlers[key];
+  });
+
+  it("renders a routed project assistant page, loads history, streams a response, and sends through the channel", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    expect(screen.getByRole("region", { name: "Project assistant" })).toBeTruthy();
+    expect(socketChannel).toHaveBeenCalledWith("assistant:macro-markets");
+
+    channelHandlers["history_loaded"]({
+      messages: [{ id: 1, role: "assistant", content: "Historico carregado", tool_calls: [] }],
+    });
+
+    expect(await screen.findByText("Historico carregado")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("Ask about this project or request tracker changes..."), {
+      target: { value: "Oi" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send assistant message" }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("send_message", { message: "Oi", context: { view: "board" } }));
+
+    channelHandlers["message_created"]({ message: { id: 2, role: "user", content: "Oi", tool_calls: [] } });
+    channelHandlers["assistant_delta"]({ delta: "Olá" });
+    channelHandlers["assistant_delta"]({ delta: ", posso ajudar." });
+    channelHandlers["assistant_completed"]({
+      message: {
+        id: 3,
+        role: "assistant",
+        content: "Olá, posso ajudar.",
+        tool_calls: [{ name: "list_issues", status: "complete", result: { issues: [] } }],
+      },
+    });
+
+    expect(await screen.findByText("Oi")).toBeTruthy();
+    expect(await screen.findByText("Olá, posso ajudar.")).toBeTruthy();
+    expect(screen.getByText("list_issues")).toBeTruthy();
+  });
+});

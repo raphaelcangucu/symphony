@@ -33,6 +33,16 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     error(conn, 401, "github_unauthorized", "GitHub rejected the configured GITHUB_TOKEN.")
   end
 
+  def render(conn, {:rate_limited, info}) when is_map(info) do
+    reset_at = Map.get(info, :reset_at)
+    body = %{error: %{code: "github_rate_limited", message: rate_limited_message(reset_at)}}
+    body = if reset_at, do: put_in(body, [:error, :reset_at], DateTime.to_iso8601(reset_at)), else: body
+
+    conn
+    |> put_status(429)
+    |> json(body)
+  end
+
   def render(conn, {:network_error, _reason}) do
     error(conn, 503, "github_network_error", "Failed to reach GitHub. Try again in a moment.")
   end
@@ -130,6 +140,14 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     conn
     |> put_status(status)
     |> json(body)
+  end
+
+  defp rate_limited_message(%DateTime{} = reset_at) do
+    "GitHub API rate limit exceeded. Access resets at #{Calendar.strftime(reset_at, "%H:%M UTC")}."
+  end
+
+  defp rate_limited_message(_reset_at) do
+    "GitHub API rate limit exceeded. Try again shortly."
   end
 
   defp not_found(conn, code, message) do

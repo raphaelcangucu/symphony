@@ -11,14 +11,14 @@ defmodule SymphonyElixir.CoreTest do
       command: nil
     )
 
-    assert Config.poll_interval_ms() == 30_000
+    assert Config.poll_interval_ms() == 60_000
     assert Config.active_states() == ["Todo", "In Progress"]
     assert Config.terminal_states() == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
     assert LinearConfig.assignee() == nil
     assert Config.agent_max_turns() == 20
 
     write_workflow_file!(Workflow.workflow_file_path(), poll_interval_ms: "invalid")
-    assert Config.poll_interval_ms() == 30_000
+    assert Config.poll_interval_ms() == 60_000
 
     write_workflow_file!(Workflow.workflow_file_path(), poll_interval_ms: 45_000)
     assert Config.poll_interval_ms() == 45_000

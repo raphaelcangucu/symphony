@@ -12,7 +12,10 @@ interface BackendViewerDto {
 }
 
 export class ViewerNotConfiguredError extends Error {
-  constructor(public code: string) {
+  constructor(
+    public code: string,
+    public resetAt: string | null = null,
+  ) {
     super(code);
     this.name = "ViewerNotConfiguredError";
   }
@@ -34,6 +37,7 @@ export function normalizeViewer(dto: BackendViewerDto): Viewer {
 const VIEWER_ERROR_CODES = new Set([
   "github_token_missing",
   "github_unauthorized",
+  "github_rate_limited",
   "github_network_error",
   "github_malformed_response",
 ]);
@@ -44,9 +48,10 @@ export async function fetchViewer(): Promise<Viewer> {
     return normalizeViewer(unwrapData<BackendViewerDto>(response));
   } catch (cause) {
     if (axios.isAxiosError(cause) && cause.response) {
-      const code = (cause.response.data as { error?: { code?: string } } | undefined)?.error?.code;
+      const errorBody = (cause.response.data as { error?: { code?: string; reset_at?: string } } | undefined)?.error;
+      const code = errorBody?.code;
       if (code && VIEWER_ERROR_CODES.has(code)) {
-        throw new ViewerNotConfiguredError(code);
+        throw new ViewerNotConfiguredError(code, errorBody?.reset_at ?? null);
       }
     }
 

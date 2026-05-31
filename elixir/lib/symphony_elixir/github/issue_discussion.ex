@@ -3,7 +3,7 @@ defmodule SymphonyElixir.GitHub.IssueDiscussion do
   Loads recent issue and pull-request discussion for agent prompts.
   """
 
-  alias SymphonyElixir.GitHub.{Client, Config, RepoSpec}
+  alias SymphonyElixir.GitHub.{Client, Config, ReadCache, RepoSpec}
   alias SymphonyElixir.Issue
 
   @pr_discussion_query """
@@ -106,7 +106,14 @@ defmodule SymphonyElixir.GitHub.IssueDiscussion do
   end
 
   defp safe_fetch_pr_discussion_comments(owner, name, number, opts) do
-    fetch_pr_discussion_comments(owner, name, number, opts)
+    # Cached read-through (single source of truth) so dispatch-time enrichment and the
+    # UI's on-open enrichment never duplicate the same GitHub call within the TTL window.
+    cache_key = {:issue_pr_discussion, owner, name, number}
+
+    case ReadCache.fetch(cache_key, fn -> {:ok, fetch_pr_discussion_comments(owner, name, number, opts)} end) do
+      {:ok, comments} when is_list(comments) -> comments
+      _ -> []
+    end
   rescue
     _ -> []
   end

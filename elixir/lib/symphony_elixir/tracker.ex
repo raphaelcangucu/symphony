@@ -34,6 +34,21 @@ defmodule SymphonyElixir.Tracker do
     adapter().fetch_issue_states_by_ids(issue_ids)
   end
 
+  @doc """
+  Lazily enriches a single issue with extra context (e.g. PR discussion) right before
+  dispatch. Adapters that do not implement enrichment return the issue unchanged.
+  """
+  @spec enrich_issue(term()) :: term()
+  def enrich_issue(issue) do
+    adapter = adapter()
+
+    if function_exported?(adapter, :enrich_issue, 1) do
+      apply(adapter, :enrich_issue, [issue])
+    else
+      issue
+    end
+  end
+
   @spec create_comment(String.t(), String.t()) :: :ok | {:error, term()}
   def create_comment(issue_id, body) do
     adapter().create_comment(issue_id, body)

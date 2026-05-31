@@ -483,6 +483,46 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                  request_fun: fn _, _ -> flunk("GraphQL should not be invoked without token") end
                )
     end
+
+    test "does not enrich PR discussion during the candidate poll", %{base_dir: base_dir} do
+      request_fun = fn payload, _headers ->
+        cond do
+          payload["query"] =~ "SymphonyGitHubIssuePRDiscussion" ->
+            flunk("poll must not enrich PR discussion (lazy enrichment)")
+
+          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+            empty_admission_response()
+
+          payload["query"] =~ "SymphonyGitHubPollItems" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "data" => %{
+                   "node" => %{
+                     "items" => %{
+                       "nodes" => [
+                         build_project_item_fixture(%{
+                           item_id: "PVTI_1",
+                           issue_node_id: "I_1",
+                           number: 11,
+                           title: "Active todo",
+                           repo: "owner/repo",
+                           state_name: "Todo"
+                         })
+                       ],
+                       "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                     }
+                   }
+                 }
+               }
+             }}
+        end
+      end
+
+      assert {:ok, [_issue]} =
+               Client.fetch_candidate_issues(base_dir: base_dir, request_fun: request_fun)
+    end
   end
 
   describe "fetch_candidate_issues/1 admission" do
@@ -1126,6 +1166,65 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     end
   end
 
+  describe "enrich_issue/2 (lazy single-issue enrichment)" do
+    test "appends PR discussion comments to a single issue" do
+      issue = %SymphonyElixir.Issue{id: "I_1", identifier: "502", title: "Test", comments: []}
+
+      request_fun = fn payload, _headers ->
+        assert payload["query"] =~ "SymphonyGitHubIssuePRDiscussion"
+        assert payload["variables"]["number"] == 502
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       %{
+                         "number" => 503,
+                         "title" => "Fix",
+                         "comments" => %{"nodes" => []},
+                         "reviews" => %{
+                           "nodes" => [
+                             %{
+                               "author" => %{"login" => "alice"},
+                               "body" => "Use the homolog path helper",
+                               "state" => "CHANGES_REQUESTED",
+                               "createdAt" => "2026-05-26T11:00:00Z"
+                             }
+                           ]
+                         },
+                         "reviewThreads" => %{"nodes" => []}
+                       }
+                     ]
+                   }
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      enriched = Client.enrich_issue(issue, request_fun: request_fun)
+
+      assert Enum.any?(enriched.comments, fn comment ->
+               comment["source"] =~ "PR #503 review" and comment["body"] == "Use the homolog path helper"
+             end)
+    end
+
+    test "returns the issue unchanged when repo is not configured" do
+      write_workflow_file!(Workflow.workflow_file_path(), tracker_kind: "github", tracker_repo: "")
+
+      issue = %SymphonyElixir.Issue{id: "I_1", identifier: "502", title: "Test", comments: []}
+
+      assert ^issue =
+               Client.enrich_issue(issue, request_fun: fn _, _ -> flunk("must not call GitHub") end)
+    end
+  end
+
   describe "create_comment/3 (GraphQL)" do
     test "posts addComment mutation with issue node id and body" do
       request_fun = fn payload, _headers ->
@@ -1619,6 +1718,71 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       end
 
       assert {:error, :github_unknown_payload} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+    end
+
+    test "classifies a 200 RATE_LIMIT error body as :rate_limited with reset time" do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           headers: %{"x-ratelimit-remaining" => ["0"], "x-ratelimit-reset" => ["1780146793"]},
+           body: %{
+             "errors" => [
+               %{
+                 "type" => "RATE_LIMIT",
+                 "code" => "graphql_rate_limit",
+                 "message" => "API rate limit already exceeded for user ID 5266252."
+               }
+             ]
+           }
+         }}
+      end
+
+      assert {:error, {:rate_limited, %{reset_at: %DateTime{} = reset_at}}} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+
+      assert DateTime.to_unix(reset_at) == 1_780_146_793
+    end
+
+    test "classifies a 403 with x-ratelimit-remaining: 0 as :rate_limited" do
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 403,
+           headers: %{"x-ratelimit-remaining" => ["0"]},
+           body: %{"message" => "API rate limit exceeded"}
+         }}
+      end
+
+      assert {:error, {:rate_limited, %{reset_at: nil}}} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+    end
+
+    test "classifies a 429 status as :rate_limited" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 429, body: %{"message" => "Too Many Requests"}}}
+      end
+
+      assert {:error, {:rate_limited, %{reset_at: nil}}} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+    end
+
+    test "keeps non-rate-limit 403 as :github_api_status" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 403, headers: %{"x-ratelimit-remaining" => ["4999"]}, body: %{"message" => "Forbidden"}}}
+      end
+
+      assert {:error, {:github_api_status, 403}} =
+               Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
+    end
+
+    test "non-rate-limit graphql errors are not misclassified as rate_limited" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 200, body: %{"errors" => [%{"message" => "rate limited"}]}}}
+      end
+
+      assert {:error, {:github_graphql_errors, [%{"message" => "rate limited"}]}} =
                Client.graphql("query { viewer { login } }", %{}, request_fun: request_fun)
     end
   end

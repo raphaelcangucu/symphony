@@ -63,10 +63,12 @@ describe("useIssueDevServers", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("fetches issue dev servers on mount", async () => {

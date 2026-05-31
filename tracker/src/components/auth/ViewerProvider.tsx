@@ -14,6 +14,28 @@ interface ViewerContextValue {
 
 const ViewerContext = createContext<ViewerContextValue | null>(null);
 
+const FALLBACK_RATE_LIMIT_RETRY_MS = 60_000;
+const RATE_LIMIT_RETRY_BUFFER_MS = 2_000;
+const MAX_RATE_LIMIT_RETRY_MS = 60 * 60 * 1_000;
+
+function rateLimitRetryDelayMs(resetAt: string | null): number {
+  if (!resetAt) {
+    return FALLBACK_RATE_LIMIT_RETRY_MS;
+  }
+
+  const resetMs = Date.parse(resetAt);
+  if (Number.isNaN(resetMs)) {
+    return FALLBACK_RATE_LIMIT_RETRY_MS;
+  }
+
+  const delay = resetMs - Date.now() + RATE_LIMIT_RETRY_BUFFER_MS;
+  if (delay <= 0) {
+    return RATE_LIMIT_RETRY_BUFFER_MS;
+  }
+
+  return Math.min(delay, MAX_RATE_LIMIT_RETRY_MS);
+}
+
 interface ViewerProviderProps {
   children: ReactNode;
 }
@@ -45,6 +67,16 @@ export function ViewerProvider({ children }: ViewerProviderProps) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (status !== "error" || error?.code !== "github_rate_limited") {
+      return undefined;
+    }
+
+    const delayMs = rateLimitRetryDelayMs(error.resetAt);
+    const timer = window.setTimeout(() => void reload(), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [status, error, reload]);
 
   return (
     <ViewerContext.Provider value={{ viewer, status, error, reload }}>{children}</ViewerContext.Provider>

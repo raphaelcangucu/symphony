@@ -23,6 +23,10 @@ defmodule SymphonyElixir.LocalTracker.ViewerTest do
     def graphql(_, _, _), do: {:error, :offline}
   end
 
+  defmodule RateLimitedMock do
+    def graphql(_, _, _), do: {:error, {:rate_limited, %{reset_at: ~U[2026-05-30 23:13:13Z]}}}
+  end
+
   setup do
     unless Process.whereis(Viewer.Server) do
       {:ok, _pid} = start_supervised(Viewer.Server)
@@ -117,6 +121,28 @@ defmodule SymphonyElixir.LocalTracker.ViewerTest do
 
     test "maps other client errors to network_error" do
       assert {:error, {:network_error, :offline}} = Viewer.current(client_module: GenericErrorMock)
+    end
+
+    test "passes rate_limited through without folding into network_error" do
+      assert {:error, {:rate_limited, %{reset_at: %DateTime{}}}} =
+               Viewer.current(client_module: RateLimitedMock)
+    end
+
+    test "does not cache rate_limited errors so a later success resolves" do
+      System.put_env("GITHUB_TOKEN", "fake")
+      on_exit(fn -> System.delete_env("GITHUB_TOKEN") end)
+
+      assert {:error, {:rate_limited, _}} = Viewer.current(client_module: RateLimitedMock)
+
+      request_fun = fn _payload, _headers ->
+        {:ok,
+         %{
+           status: 200,
+           body: %{"data" => %{"viewer" => %{"login" => "octocat", "name" => nil, "avatarUrl" => nil}}}
+         }}
+      end
+
+      assert {:ok, %{login: "octocat"}} = Viewer.current(request_fun: request_fun)
     end
 
     test "re-resolves after cache entry expires" do

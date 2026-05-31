@@ -5,11 +5,12 @@ import { Toaster } from "sonner";
 import { ViewerProvider } from "@/components/auth/ViewerProvider";
 import { Layout } from "@/components/layout/Layout";
 import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
+import { ProjectDevEnvRoute } from "@/components/projects/ProjectDevEnvRoute";
 import { NewProjectRoute } from "@/components/projects/NewProjectRoute";
 import { ProjectFiltersRoute } from "@/components/projects/ProjectFiltersRoute";
-import { DevEnvRoute } from "@/components/workspace/DevEnvRoute";
 import { IssueDetailRoute } from "@/components/workspace/IssueDetailRoute";
 import { NewIssueRoute } from "@/components/workspace/NewIssueRoute";
+import { ProjectAssistantRoute } from "@/components/workspace/ProjectAssistantRoute";
 import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRoute";
 import { getTrackerToken } from "@/config";
 import { BoardPage } from "@/pages/BoardPage";
@@ -45,13 +46,13 @@ export function App() {
             <Route path="projects" element={<ProjectListPage />}>
               <Route path="new" element={<NewProjectRoute />} />
               <Route path="filters" element={<ProjectFiltersRoute />} />
+              <Route path=":projectSlug/dev-env" element={<ProjectDevEnvRoute />} />
             </Route>
             <Route path="projects/:projectSlug" element={<ProjectWorkspaceLayout />}>
               <Route index element={<Navigate to="board" replace />} />
               <Route path="board" element={<BoardPage />}>
                 <Route path="new-issue" element={<NewIssueRoute />} />
                 <Route path="filters" element={<WorkspaceFiltersRoute />} />
-                <Route path="dev-env" element={<DevEnvRoute />} />
                 <Route path="issues/:identifier" element={<IssueDetailRoute />} />
                 <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
               </Route>
@@ -61,6 +62,7 @@ export function App() {
                 <Route path="issues/:identifier" element={<IssueDetailRoute />} />
                 <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
               </Route>
+              <Route path="assistant" element={<ProjectAssistantRoute />} />
             </Route>
             <Route path="templates" element={<TemplateListPage />} />
             <Route path="templates/:slug" element={<TemplateEditPage />} />

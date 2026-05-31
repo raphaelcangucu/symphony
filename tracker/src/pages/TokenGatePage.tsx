@@ -15,6 +15,8 @@ function viewerErrorMessage(code: string): string {
       return "GITHUB_TOKEN is not configured on the Symphony server. Set it and restart Symphony.";
     case "github_unauthorized":
       return "GitHub rejected the configured GITHUB_TOKEN. Generate a new token with the required scopes.";
+    case "github_rate_limited":
+      return "GitHub's API rate limit is exhausted. Symphony will recover automatically once the limit resets.";
     case "github_network_error":
       return "Symphony could not reach GitHub. Check the server's connectivity and retry.";
     default:

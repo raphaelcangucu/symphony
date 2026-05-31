@@ -13,6 +13,7 @@ defmodule SymphonyElixir.LocalTracker.Viewer do
   @type viewer_error ::
           :missing_github_token
           | :unauthorized
+          | {:rate_limited, %{optional(:reset_at) => DateTime.t() | nil}}
           | {:network_error, term()}
           | {:malformed_response, term()}
 
@@ -103,6 +104,9 @@ defmodule SymphonyElixir.LocalTracker.Viewer do
 
       {:error, {:github_api_status, 401}} ->
         {:error, :unauthorized}
+
+      {:error, {:rate_limited, _info} = error} ->
+        {:error, error}
 
       {:error, {:github_api_status, status}} ->
         {:error, {:network_error, {:http_status, status}}}

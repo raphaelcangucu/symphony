@@ -14,6 +14,7 @@ defmodule SymphonyElixir.AgentExecution do
   @type status :: :live | :idle | :waiting | :retrying
 
   @type t :: %{
+          issue_id: String.t() | nil,
           issue_identifier: String.t(),
           status: status(),
           session_id: String.t() | nil,
@@ -76,6 +77,7 @@ defmodule SymphonyElixir.AgentExecution do
     last_event_at = Map.get(entry, :last_codex_timestamp)
 
     %{
+      issue_id: issue_id(entry),
       issue_identifier: entry.identifier,
       status: running_status(entry, last_event_at, now),
       session_id: Map.get(entry, :session_id),
@@ -97,6 +99,7 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp retry_execution(entry) do
     %{
+      issue_id: issue_id(entry),
       issue_identifier: identifier(entry),
       status: :retrying,
       session_id: nil,
@@ -127,6 +130,10 @@ defmodule SymphonyElixir.AgentExecution do
   defp live?(_last_event_at, _now), do: false
 
   defp identifier(entry), do: Map.get(entry, :identifier)
+  defp issue_id(entry), do: entry |> Map.get(:issue_id) |> maybe_to_string()
+
+  defp maybe_to_string(nil), do: nil
+  defp maybe_to_string(value), do: to_string(value)
 
   @doc "Humanizes a raw Codex message for display, mirroring the dashboard."
   @spec humanize_message(term()) :: String.t() | nil

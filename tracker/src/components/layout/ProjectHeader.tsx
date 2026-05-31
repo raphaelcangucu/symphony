@@ -21,7 +21,11 @@ interface ProjectHeaderProps {
   trackerKind?: TrackerKind;
   onRefresh?: () => void;
   refreshing?: boolean;
+  pollingActive?: boolean;
 }
+
+const POLLING_ACTIVE_LABEL = "Polling active";
+const POLLING_PAUSED_LABEL = "Polling paused (window not focused)";
 
 export function ProjectHeader({
   projectSlug,
@@ -31,7 +35,9 @@ export function ProjectHeader({
   trackerKind,
   onRefresh,
   refreshing = false,
+  pollingActive = true,
 }: ProjectHeaderProps) {
+  const pollingLabel = pollingActive ? POLLING_ACTIVE_LABEL : POLLING_PAUSED_LABEL;
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
       <div>
@@ -48,6 +54,15 @@ export function ProjectHeader({
         {trackerKind != null && trackerKind !== "local" ? (
           <div className="flex items-center gap-2">
             <Badge variant="muted">{TRACKER_LABELS[trackerKind]}</Badge>
+            <span
+              role="status"
+              aria-label={pollingLabel}
+              title={pollingLabel}
+              className={cn(
+                "h-2 w-2 rounded-full",
+                pollingActive ? "bg-green-500" : "bg-muted-foreground",
+              )}
+            />
             <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh board" disabled={refreshing}>
               <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
             </Button>

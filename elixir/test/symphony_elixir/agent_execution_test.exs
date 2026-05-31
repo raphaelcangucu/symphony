@@ -29,6 +29,7 @@ defmodule SymphonyElixir.AgentExecutionTest do
       snapshot = %{running: [running_entry(%{})], retrying: []}
 
       assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.issue_id == "issue-1"
       assert execution.issue_identifier == "SYM-1"
       assert execution.status == :live
       assert execution.session_id == "thread-turn"
@@ -64,6 +65,7 @@ defmodule SymphonyElixir.AgentExecutionTest do
 
       assert [execution] = AgentExecution.from_snapshot(snapshot)
       assert execution.status == :retrying
+      assert execution.issue_id == "issue-9"
       assert execution.issue_identifier == "SYM-9"
       assert execution.retry_attempt == 3
       assert execution.error == "boom"

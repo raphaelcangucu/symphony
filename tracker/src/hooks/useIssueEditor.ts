@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useWindowFocus } from "@/hooks/useWindowFocus";
 import { fetchEditorTarget, type EditorReason } from "@/services/editor";
 
 const STARTING_POLL_MS = 2_000;
@@ -28,6 +29,9 @@ export function useIssueEditor({ projectSlug, identifier, enabled = true }: UseI
   const [reason, setReason] = useState<EditorReason | null>(null);
   const [loading, setLoading] = useState(false);
   const inFlightRef = useRef(false);
+  const focused = useWindowFocus();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
 
   const active = enabled && Boolean(identifier && projectSlug);
 
@@ -65,9 +69,16 @@ export function useIssueEditor({ projectSlug, identifier, enabled = true }: UseI
 
   useEffect(() => {
     if (!active || reason !== "starting") return undefined;
-    const timer = setInterval(() => void refetch(), STARTING_POLL_MS);
+    const timer = setInterval(() => {
+      if (focusedRef.current) void refetch();
+    }, STARTING_POLL_MS);
     return () => clearInterval(timer);
   }, [active, reason, refetch]);
+
+  useEffect(() => {
+    if (!active || reason !== "starting" || !focused) return;
+    void refetch();
+  }, [active, reason, focused, refetch]);
 
   return { url, available, reason, loading };
 }

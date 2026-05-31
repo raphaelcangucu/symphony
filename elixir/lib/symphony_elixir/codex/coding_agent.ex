@@ -32,7 +32,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
   @spec run(Path.t(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def run(workspace, prompt, issue, opts \\ []) do
-    with {:ok, session} <- start_session(workspace) do
+    with {:ok, session} <- start_session(workspace, opts) do
       try do
         run_turn(session, prompt, issue, opts)
       after
@@ -41,15 +41,15 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  @spec start_session(Path.t()) :: {:ok, session()} | {:error, term()}
-  def start_session(workspace) do
+  @spec start_session(Path.t(), keyword()) :: {:ok, session()} | {:error, term()}
+  def start_session(workspace, opts \\ []) do
     with :ok <- validate_workspace_cwd(workspace),
          {:ok, port} <- start_port(workspace) do
       metadata = port_metadata(port)
       expanded_workspace = Path.expand(workspace)
 
       with {:ok, session_policies} <- session_policies(expanded_workspace),
-           {:ok, thread_id} <- do_start_session(port, expanded_workspace, session_policies) do
+           {:ok, thread_id} <- do_start_session(port, expanded_workspace, session_policies, opts) do
         Session.write(expanded_workspace, thread_id)
 
         {:ok,
@@ -228,14 +228,14 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     SymphonyElixir.Codex.Config.runtime_settings(workspace)
   end
 
-  defp do_start_session(port, workspace, session_policies) do
+  defp do_start_session(port, workspace, session_policies, opts) do
     case send_initialize(port) do
-      :ok -> start_thread(port, workspace, session_policies)
+      :ok -> start_thread(port, workspace, session_policies, opts)
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp start_thread(port, workspace, %{approval_policy: approval_policy, thread_sandbox: thread_sandbox}) do
+  defp start_thread(port, workspace, %{approval_policy: approval_policy, thread_sandbox: thread_sandbox}, opts) do
     send_message(port, %{
       "method" => "thread/start",
       "id" => @thread_start_id,
@@ -243,7 +243,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         "approvalPolicy" => approval_policy,
         "sandbox" => thread_sandbox,
         "cwd" => Path.expand(workspace),
-        "dynamicTools" => DynamicTool.tool_specs()
+        "dynamicTools" => Keyword.get(opts, :dynamic_tools, DynamicTool.tool_specs())
       }
     })
 
@@ -507,6 +507,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     tool_name = tool_call_name(params)
     arguments = tool_call_arguments(params)
 
+    emit_message(on_message, :tool_call_started, %{payload: payload, raw: payload_string}, metadata)
+
     result = tool_executor.(tool_name, arguments)
 
     send_message(port, %{
@@ -521,7 +523,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         _ -> :tool_call_failed
       end
 
-    emit_message(on_message, event, %{payload: payload, raw: payload_string}, metadata)
+    emit_message(on_message, event, %{payload: payload, raw: payload_string, result: result}, metadata)
 
     :approved
   end

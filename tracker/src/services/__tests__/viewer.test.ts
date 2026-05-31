@@ -47,4 +47,26 @@ describe("viewer service", () => {
       code: "github_unauthorized",
     });
   });
+
+  it("throws ViewerNotConfiguredError with resetAt on 429 github_rate_limited", async () => {
+    vi.spyOn(http, "get").mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        status: 429,
+        data: {
+          error: {
+            code: "github_rate_limited",
+            message: "rate limited",
+            reset_at: "2026-05-30T23:13:13Z",
+          },
+        },
+      },
+    });
+
+    await expect(fetchViewer()).rejects.toMatchObject({
+      name: "ViewerNotConfiguredError",
+      code: "github_rate_limited",
+      resetAt: "2026-05-30T23:13:13Z",
+    });
+  });
 });

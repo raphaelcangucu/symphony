@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useWindowFocus } from "@/hooks/useWindowFocus";
 import { listAgentExecutions } from "@/services/agentExecutions";
 import type { AgentExecution } from "@/types/agent-execution";
 
@@ -26,6 +27,9 @@ export function useAgentExecutions({
 }: UseAgentExecutionsArgs = {}): UseAgentExecutionsResult {
   const [executions, setExecutions] = useState<ReadonlyMap<string, AgentExecution>>(new Map());
   const inFlightRef = useRef(false);
+  const focused = useWindowFocus();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
 
   const refetch = useCallback(async () => {
     if (inFlightRef.current) return;
@@ -46,24 +50,19 @@ export function useAgentExecutions({
       return undefined;
     }
 
-    void refetch();
+    if (focusedRef.current) void refetch();
 
-    const isHidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
-    const tick = () => {
-      if (!isHidden()) void refetch();
-    };
+    const timer = setInterval(() => {
+      if (focusedRef.current) void refetch();
+    }, intervalMs);
 
-    const timer = setInterval(tick, intervalMs);
-    const onVisibility = () => {
-      if (!isHidden()) void refetch();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
+    return () => clearInterval(timer);
   }, [enabled, intervalMs, refetch]);
+
+  useEffect(() => {
+    if (!enabled || !focused) return;
+    void refetch();
+  }, [enabled, focused, refetch]);
 
   return { executions, refetch };
 }

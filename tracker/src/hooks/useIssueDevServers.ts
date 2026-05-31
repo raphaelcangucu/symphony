@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useWindowFocus } from "@/hooks/useWindowFocus";
 import {
   fetchIssueDevServers,
   restartIssueDevServers,
@@ -39,6 +40,9 @@ export function useIssueDevServers(
   const actionInFlightRef = useRef(false);
   const actionGenerationRef = useRef(0);
   const hasLoadedRef = useRef(false);
+  const focused = useWindowFocus();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
 
   const hasIdentifiers = hasRequiredIdentifier(projectSlug) && hasRequiredIdentifier(issueIdentifier);
 
@@ -172,11 +176,16 @@ export function useIssueDevServers(
     }
 
     const timer = setInterval(() => {
-      void refresh();
+      if (focusedRef.current) void refresh();
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(timer);
   }, [data, hasIdentifiers, refresh]);
+
+  useEffect(() => {
+    if (!hasIdentifiers || !focused) return;
+    void refresh();
+  }, [focused, hasIdentifiers, refresh]);
 
   return { data, loading, error, refresh, start, stop, restart };
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useWindowFocus } from "@/hooks/useWindowFocus";
 import { listPullRequests } from "@/services/pullRequests";
 import type { PullRequest } from "@/types/pull-request";
 
@@ -39,6 +40,9 @@ export function useIssuePullRequests({
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
   const hasLoadedRef = useRef(false);
+  const focused = useWindowFocus();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
 
   const active = enabled && Boolean(identifier && projectSlug);
 
@@ -75,13 +79,17 @@ export function useIssuePullRequests({
 
     void refetch();
 
-    const isHidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
     const timer = setInterval(() => {
-      if (!isHidden()) void refetch();
+      if (focusedRef.current) void refetch();
     }, intervalMs);
 
     return () => clearInterval(timer);
   }, [active, intervalMs, refetch]);
+
+  useEffect(() => {
+    if (!active || !focused) return;
+    void refetch();
+  }, [active, focused, refetch]);
 
   return { pullRequests, supported, available, loading, error, refetch };
 }

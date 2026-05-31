@@ -1,13 +1,11 @@
-import { Settings2 } from "lucide-react";
 import { useCallback } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { BoardView } from "@/components/board/BoardView";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTrackerPolling } from "@/hooks/useTrackerPolling";
-import { devEnvPath, issuePath } from "@/lib/workspaceRoutes";
+import { issuePath } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
@@ -79,14 +77,6 @@ export function BoardPage() {
           agentExecutions={agentExecutions}
         />
       ) : null}
-      <section className="border-t px-6 py-4">
-        <Button variant="outline" size="sm" asChild>
-          <Link to={devEnvPath(projectSlug, view)}>
-            <Settings2 className="h-4 w-4" />
-            Dev environment setup
-          </Link>
-        </Button>
-      </section>
       <Outlet />
     </>
   );

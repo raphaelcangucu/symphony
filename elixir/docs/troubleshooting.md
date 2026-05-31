@@ -226,7 +226,7 @@ delete the cache and restart so bootstrap can resolve `viewer { login }`.
 1. Confirm the issue is OPEN in the repo.
 2. Confirm the issue carries the `symphony` label (or the value configured
    in `github.admission_label`).
-3. Wait one poll cycle (default 30s) for admission and state initialization.
+3. Wait one poll cycle (default 60s) for admission and state initialization.
 4. Check the orchestrator log for `Admission failed for issue ...` warnings.
 
 ## Creating Issues From the Tracker UI

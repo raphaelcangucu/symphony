@@ -186,6 +186,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   @spec agent_execution(AgentExecution.t()) :: map()
   def agent_execution(execution) when is_map(execution) do
     %{
+      issue_id: Map.get(execution, :issue_id),
       issue_identifier: execution.issue_identifier,
       status: Atom.to_string(execution.status),
       session_id: execution.session_id,
