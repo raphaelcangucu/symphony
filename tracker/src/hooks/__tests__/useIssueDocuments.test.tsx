@@ -45,7 +45,7 @@ describe("useIssueDocuments", () => {
   const listIssueDocuments = vi.mocked(issueDocumentsService.listIssueDocuments);
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
   });
 
@@ -168,6 +168,69 @@ describe("useIssueDocuments", () => {
 
     await waitFor(() => expect(result.current.documents).toEqual(refreshedDocuments.documents));
     expect(listIssueDocuments).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not run a queued refetch after unmount", async () => {
+    const pendingInitialFetch = createDeferred<IssueDocumentList>();
+    listIssueDocuments
+      .mockReturnValueOnce(pendingInitialFetch.promise)
+      .mockResolvedValueOnce(refreshedDocuments);
+
+    const { rerender, unmount } = renderHook(
+      ({ refreshKey }) =>
+        useIssueDocuments({
+          projectSlug: "macro-markets",
+          identifier: "MAC-1",
+          refreshKey,
+        }),
+      { initialProps: { refreshKey: 0 } },
+    );
+
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+
+    rerender({ refreshKey: 1 });
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+
+    unmount();
+
+    await act(async () => {
+      pendingInitialFetch.resolve(availableDocuments);
+      await pendingInitialFetch.promise;
+    });
+
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the latest identifier for a queued refetch after identifier changes", async () => {
+    const pendingInitialFetch = createDeferred<IssueDocumentList>();
+    listIssueDocuments
+      .mockReturnValueOnce(pendingInitialFetch.promise)
+      .mockResolvedValueOnce(refreshedDocuments);
+
+    const { rerender, result } = renderHook(
+      ({ identifier }) =>
+        useIssueDocuments({
+          projectSlug: "macro-markets",
+          identifier,
+        }),
+      { initialProps: { identifier: "MAC-1" } },
+    );
+
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+    expect(listIssueDocuments).toHaveBeenNthCalledWith(1, "macro-markets", "MAC-1");
+
+    rerender({ identifier: "MAC-2" });
+
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pendingInitialFetch.resolve(availableDocuments);
+      await pendingInitialFetch.promise;
+    });
+
+    await waitFor(() => expect(result.current.documents).toEqual(refreshedDocuments.documents));
+    expect(listIssueDocuments).toHaveBeenCalledTimes(2);
+    expect(listIssueDocuments).toHaveBeenNthCalledWith(2, "macro-markets", "MAC-2");
   });
 
   it("manual refetch updates documents after an initial success", async () => {

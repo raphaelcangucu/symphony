@@ -119,6 +119,7 @@ export function useIssueDocuments({
 
   useEffect(() => {
     requestVersionRef.current += 1;
+    latestRequestRef.current = { active, projectSlug, identifier, resourceKey: activeResourceKey };
 
     if (!active) {
       activeResourceKeyRef.current = null;
@@ -145,8 +146,15 @@ export function useIssueDocuments({
     return () => {
       clearInterval(timer);
       requestVersionRef.current += 1;
+      latestRequestRef.current = {
+        active: false,
+        projectSlug: "",
+        identifier: null,
+        resourceKey: null,
+      };
+      queuedRefetchRef.current = false;
     };
-  }, [active, activeResourceKey, intervalMs, refetch, refreshKey]);
+  }, [active, activeResourceKey, identifier, intervalMs, projectSlug, refetch, refreshKey]);
 
   useEffect(() => {
     const wasFocused = previousFocusedRef.current;
