@@ -45,6 +45,12 @@ export function assistantTopic(projectSlug: string): string {
   return `assistant:${slug}`;
 }
 
+export function assistantThreadTopic(threadId: number | string): string {
+  const id = String(threadId).trim();
+  if (!id) throw new Error("threadId is required");
+  return `assistant:thread:${id}`;
+}
+
 export function bindAssistantEvents(channel: Channel, handlers: AssistantChannelHandlers): void {
   channel.on("history_loaded", (payload) => {
     const messages = ((payload as HistoryLoadedPayload).messages ?? []).map(normalizeAssistantChatMessage);

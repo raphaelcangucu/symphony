@@ -22,13 +22,14 @@ import {
   type AssistantChatMessage,
   type AssistantToolCall,
 } from "@/services/assistant";
-import { assistantTopic, bindAssistantEvents } from "@/services/phoenix/assistantChannel";
+import { assistantThreadTopic, assistantTopic, bindAssistantEvents } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 
 interface ProjectAssistantPanelProps {
-  projectSlug: string;
+  projectSlug?: string;
+  threadId?: number;
   view: WorkspaceView;
   mode?: "sheet" | "page";
 }
@@ -41,7 +42,7 @@ const convertMessage = (message: AssistantChatMessage): ThreadMessageLike => ({
   content: [{ type: "text", text: message.content }],
 });
 
-export function ProjectAssistantPanel({ projectSlug, view, mode = "sheet" }: ProjectAssistantPanelProps) {
+export function ProjectAssistantPanel({ projectSlug, threadId, view, mode = "sheet" }: ProjectAssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
@@ -56,6 +57,12 @@ export function ProjectAssistantPanel({ projectSlug, view, mode = "sheet" }: Pro
 
   useEffect(() => {
     if (!active) return;
+
+    if (!projectSlug) {
+      setCatalog(fallbackCodexCatalog());
+      setCatalogError(null);
+      return;
+    }
 
     let cancelled = false;
     setCatalog(null);
@@ -85,7 +92,8 @@ export function ProjectAssistantPanel({ projectSlug, view, mode = "sheet" }: Pro
     const socket = createTrackerSocket();
     socket.connect();
 
-    const channel = socket.channel(assistantTopic(projectSlug));
+    const topic = threadId != null ? assistantThreadTopic(threadId) : assistantTopic(projectSlug ?? "");
+    const channel = socket.channel(topic);
     channelRef.current = channel;
 
     bindAssistantEvents(channel, {
@@ -115,7 +123,7 @@ export function ProjectAssistantPanel({ projectSlug, view, mode = "sheet" }: Pro
       channel.leave();
       socket.disconnect();
     };
-  }, [active, projectSlug]);
+  }, [active, projectSlug, threadId]);
 
   const sendMessage = useCallback(
     ({ message, settings, attachments }: AssistantComposerSubmit) => {
@@ -192,7 +200,7 @@ export function ProjectAssistantPanel({ projectSlug, view, mode = "sheet" }: Pro
         </div>
         {catalog || catalogError ? (
           <AssistantComposer
-            projectSlug={projectSlug}
+            projectSlug={projectSlug ?? ""}
             catalog={catalog ?? fallbackCodexCatalog()}
             disabled={isRunning}
             onSubmit={sendMessage}
@@ -211,9 +219,9 @@ export function ProjectAssistantPanel({ projectSlug, view, mode = "sheet" }: Pro
     return (
       <section className="flex h-[calc(100vh-4rem)] flex-col" aria-label="Project assistant">
         <div className="border-b px-6 py-4">
-          <h2 className="text-base font-semibold">Project assistant</h2>
+          <h2 className="text-base font-semibold">{projectSlug ? "Project assistant" : "Freeform assistant"}</h2>
           <p className="text-sm text-muted-foreground">
-            Codex CLI assistant for `{projectSlug}`.
+            {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
             {catalog ? ` Models from \`${catalog.command}\`.` : null}
           </p>
         </div>
@@ -232,8 +240,10 @@ export function ProjectAssistantPanel({ projectSlug, view, mode = "sheet" }: Pro
       </SheetTrigger>
       <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
         <SheetHeader className="border-b px-6 py-4">
-          <SheetTitle>Project assistant</SheetTitle>
-          <SheetDescription>Codex CLI assistant for `{projectSlug}`.</SheetDescription>
+          <SheetTitle>{projectSlug ? "Project assistant" : "Freeform assistant"}</SheetTitle>
+          <SheetDescription>
+            {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
+          </SheetDescription>
         </SheetHeader>
         {content}
       </SheetContent>

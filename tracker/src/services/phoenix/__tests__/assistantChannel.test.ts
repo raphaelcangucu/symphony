@@ -1,6 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { assistantTopic, bindAssistantEvents } from "../assistantChannel";
+import { assistantThreadTopic, assistantTopic, bindAssistantEvents } from "../assistantChannel";
+
+describe("assistantThreadTopic", () => {
+  it("builds a thread topic from a numeric id", () => {
+    expect(assistantThreadTopic(7)).toBe("assistant:thread:7");
+  });
+  it("builds a thread topic from a string id", () => {
+    expect(assistantThreadTopic("7")).toBe("assistant:thread:7");
+  });
+  it("rejects an empty id", () => {
+    expect(() => assistantThreadTopic("")).toThrow();
+  });
+});
+
+describe("assistantTopic", () => {
+  it("still builds a project topic", () => {
+    expect(assistantTopic("demo")).toBe("assistant:demo");
+  });
+});
 
 describe("assistant channel binding", () => {
   it("normalizes history, streaming deltas, tool calls, completion, and errors", () => {
