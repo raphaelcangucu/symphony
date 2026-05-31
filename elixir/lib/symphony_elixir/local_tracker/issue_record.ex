@@ -23,6 +23,7 @@ defmodule SymphonyElixir.LocalTracker.IssueRecord do
     field(:position, :integer)
     field(:assignee_id, :string)
     field(:creator, :string)
+    field(:agent_goal, :string)
     field(:worker_id, :string)
     field(:agent_session_id, :string)
     field(:branch_name, :string)
@@ -53,6 +54,7 @@ defmodule SymphonyElixir.LocalTracker.IssueRecord do
       :position,
       :assignee_id,
       :creator,
+      :agent_goal,
       :worker_id,
       :agent_session_id,
       :branch_name,

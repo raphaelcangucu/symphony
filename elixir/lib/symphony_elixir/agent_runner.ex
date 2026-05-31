@@ -9,6 +9,8 @@ defmodule SymphonyElixir.AgentRunner do
 
   @spec run(map(), pid() | nil, keyword()) :: :ok | no_return()
   def run(issue, codex_update_recipient \\ nil, opts \\ []) do
+    opts = issue_goal_opts(issue, opts)
+
     Logger.info("Starting agent run for #{issue_context(issue)}")
 
     case Workspace.create_for_issue(issue) do
@@ -43,6 +45,23 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp issue_agent_kind(%Issue{agent_kind: kind}) when is_binary(kind) and kind != "", do: kind
   defp issue_agent_kind(_issue), do: Config.default_agent_kind()
+
+  defp issue_goal_opts(issue, opts) do
+    if Keyword.has_key?(opts, :goal) do
+      opts
+    else
+      maybe_put_issue_goal(opts, issue_agent_kind(issue), Map.get(issue, :agent_goal))
+    end
+  end
+
+  defp maybe_put_issue_goal(opts, "codex", goal) when is_binary(goal) do
+    case String.trim(goal) do
+      "" -> opts
+      trimmed -> Keyword.put(opts, :goal, trimmed)
+    end
+  end
+
+  defp maybe_put_issue_goal(opts, _agent_kind, _goal), do: opts
 
   defp send_codex_update(recipient, %Issue{id: issue_id}, message)
        when is_binary(issue_id) and is_pid(recipient) do

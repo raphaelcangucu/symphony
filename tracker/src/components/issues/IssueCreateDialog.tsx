@@ -62,6 +62,20 @@ function toggle(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
 
+function buildCodexGoal(title: string, description: string): string {
+  const objective = title.trim() || "Complete this issue";
+  const details = description.trim();
+  const lines = [`Objective: ${objective}`];
+
+  if (details) lines.push(`Context: ${details}`);
+
+  lines.push(
+    "Constraints: follow existing issue artifacts, specs, and plans when present; verify changes before reporting completion; stop when complete or blocked.",
+  );
+
+  return lines.join("\n");
+}
+
 function CodexIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
@@ -103,6 +117,9 @@ export function IssueCreateDialog({
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [agent, setAgent] = useState<AgentKind | "">("");
+  const [codexGoalMode, setCodexGoalMode] = useState(false);
+  const [codexGoal, setCodexGoal] = useState("");
+  const [codexGoalEdited, setCodexGoalEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [options, setOptions] = useState<IssueFormOptions | null>(null);
@@ -118,6 +135,16 @@ export function IssueCreateDialog({
   useEffect(() => {
     if (open) setStatus(defaultStatus);
   }, [open, defaultStatus]);
+
+  useEffect(() => {
+    if (agent !== "codex") setCodexGoalMode(false);
+  }, [agent]);
+
+  useEffect(() => {
+    if (agent === "codex" && codexGoalMode && !codexGoalEdited) {
+      setCodexGoal(buildCodexGoal(title, description));
+    }
+  }, [agent, codexGoalEdited, codexGoalMode, description, title]);
 
   useEffect(() => {
     if (!open || !projectSlug.trim()) return;
@@ -157,6 +184,15 @@ export function IssueCreateDialog({
     setSelectedLabels([]);
     setSelectedAssignees([]);
     setAgent("");
+    setCodexGoalMode(false);
+    setCodexGoal("");
+    setCodexGoalEdited(false);
+  }
+
+  function handleGoalModeChange(checked: boolean) {
+    setCodexGoalMode(checked);
+    setCodexGoalEdited(false);
+    setCodexGoal(checked ? buildCodexGoal(title, description) : "");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -177,6 +213,7 @@ export function IssueCreateDialog({
         labelIds: selectedLabels,
         assigneeIds: selectedAssignees,
         agent: agent || null,
+        goal: agent === "codex" && codexGoalMode ? codexGoal.trim() || null : null,
       });
       onCreated?.(issue);
       resetForm();
@@ -250,6 +287,34 @@ export function IssueCreateDialog({
                   );
                 })}
               </div>
+            </div>
+          ) : null}
+
+          {agent === "codex" ? (
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3 text-sm">
+              <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+                <input
+                  type="checkbox"
+                  checked={codexGoalMode}
+                  onChange={(event) => handleGoalModeChange(event.target.checked)}
+                  className="h-4 w-4 rounded border-input"
+                />
+                Goal mode (long-running)
+              </label>
+              {codexGoalMode ? (
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Codex goal</span>
+                  <Textarea
+                    value={codexGoal}
+                    onChange={(event) => {
+                      setCodexGoalEdited(true);
+                      setCodexGoal(event.target.value);
+                    }}
+                    className="min-h-28"
+                    aria-label="Codex goal"
+                  />
+                </label>
+              ) : null}
             </div>
           ) : null}
 

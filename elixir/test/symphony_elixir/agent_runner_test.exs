@@ -171,6 +171,86 @@ defmodule SymphonyElixir.AgentRunnerTest do
     end
   end
 
+  test "passes issue goal through to Codex app-server sessions" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-agent-runner-issue-goal-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-issue-goal.trace")
+
+      File.mkdir_p!(test_root)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      trace_file="#{trace_file}"
+
+      while IFS= read -r line; do
+        printf 'JSON:%s\\n' "$line" >> "$trace_file"
+
+        case "$line" in
+          *'"method":"initialize"'*)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          *'"method":"initialized"'*)
+            ;;
+          *'"method":"thread/start"'*)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-runner-issue-goal"}}}'
+            ;;
+          *'"method":"thread/goal/set"'*)
+            printf '%s\\n' '{"id":4,"result":{}}'
+            ;;
+          *'"method":"turn/start"'*)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-runner-issue-goal"}}}'
+            printf '%s\\n' '{"method":"turn/completed","params":{"goal":{"status":"completed"}}}'
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server",
+        prompt: "Ticket {{ issue.identifier }}"
+      )
+
+      enable_goals!()
+
+      issue = %Issue{
+        identifier: "MAC-12",
+        title: "Pass issue goal",
+        description: "Runner should pass issue goal",
+        state: "In Progress",
+        agent_kind: "codex",
+        agent_goal: "  Ship from issue  "
+      }
+
+      assert :ok = AgentRunner.run(issue)
+
+      messages =
+        trace_file
+        |> File.read!()
+        |> String.split("\n", trim: true)
+        |> Enum.map(&String.trim_leading(&1, "JSON:"))
+        |> Enum.map(&Jason.decode!/1)
+
+      assert Enum.find(messages, &(Map.get(&1, "method") == "thread/goal/set")) == %{
+               "id" => 4,
+               "method" => "thread/goal/set",
+               "params" => %{"threadId" => "thread-runner-issue-goal", "goal" => "Ship from issue"}
+             }
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "does not reset goal turn budget through the outer runner loop" do
     test_root =
       Path.join(

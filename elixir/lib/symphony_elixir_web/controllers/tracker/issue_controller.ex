@@ -134,10 +134,20 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     |> Map.put("label_ids", label_ids)
     |> Map.put("assignee_ids", assignee_ids)
     |> maybe_put_agent(Map.get(params, "agent"))
+    |> maybe_put_agent_goal(Map.get(params, "agent"), Map.get(params, "goal"))
   end
 
   defp maybe_put_agent(attrs, agent) when agent in ["codex", "claude"], do: Map.put(attrs, "agent", agent)
   defp maybe_put_agent(attrs, _agent), do: attrs
+
+  defp maybe_put_agent_goal(attrs, "codex", goal) when is_binary(goal) do
+    case String.trim(goal) do
+      "" -> attrs
+      trimmed -> Map.put(attrs, "agent_goal", trimmed)
+    end
+  end
+
+  defp maybe_put_agent_goal(attrs, _agent, _goal), do: attrs
 
   defp normalize_string_list(value) when is_list(value) do
     value

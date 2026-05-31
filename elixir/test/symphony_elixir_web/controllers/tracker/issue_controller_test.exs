@@ -411,6 +411,38 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     end
   end
 
+  test "create passes trimmed Codex goal to the local tracker" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    conn =
+      post(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues", %{
+        "title" => "Goal dispatch",
+        "status" => "Todo",
+        "agent" => "codex",
+        "goal" => "  Ship the local goal  "
+      })
+
+    assert %{"data" => %{"identifier" => "MAC-1"}} = json_response(conn, 201)
+    assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    assert issue.agent_goal == "Ship the local goal"
+  end
+
+  test "create ignores goal for non-Codex agents" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    conn =
+      post(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues", %{
+        "title" => "Claude dispatch",
+        "status" => "Todo",
+        "agent" => "claude",
+        "goal" => "Do not persist"
+      })
+
+    assert %{"data" => %{"identifier" => "MAC-1"}} = json_response(conn, 201)
+    assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    assert issue.agent_goal == nil
+  end
+
   defp authorized_conn do
     build_conn()
     |> put_req_header("authorization", "Bearer secret")

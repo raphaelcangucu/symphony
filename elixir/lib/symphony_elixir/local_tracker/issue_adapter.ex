@@ -88,6 +88,7 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
       status: status_to_map(issue.status),
       assignee: issue.assignee_id,
       creator: issue.creator,
+      agent_goal: issue.agent_goal,
       url: issue.url,
       project_slug: project_slug(issue),
       created_at: iso8601(issue.inserted_at),

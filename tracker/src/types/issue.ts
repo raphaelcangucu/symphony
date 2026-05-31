@@ -101,6 +101,7 @@ export interface CreateIssueInput {
   labelIds?: string[];
   assigneeIds?: string[];
   agent?: AgentKind | null;
+  goal?: string | null;
 }
 
 export interface MoveIssueInput {

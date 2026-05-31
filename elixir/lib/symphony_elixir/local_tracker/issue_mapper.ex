@@ -28,6 +28,7 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
       branch_name: record.branch_name,
       url: record.url,
       assignee_id: record.assignee_id,
+      agent_goal: record.agent_goal,
       labels: visible_labels(label_names),
       comments: comments(record.comments),
       blocked_by: blockers(record.source_relations),

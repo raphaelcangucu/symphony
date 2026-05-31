@@ -172,6 +172,22 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert second_issue.status.name == "Backlog"
   end
 
+  test "create_issue stores Codex goal text for dispatch" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:ok, issue} =
+             Context.create_issue("macro-markets", %{
+               "title" => "Goal mode",
+               "status" => "Todo",
+               "agent_goal" => "Ship the goal-mode path"
+             })
+
+    assert issue.agent_goal == "Ship the goal-mode path"
+
+    assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
+    assert reloaded.agent_goal == "Ship the goal-mode path"
+  end
+
   test "move_issue updates workflow status and mutable fields" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Move me", status: "Todo"})

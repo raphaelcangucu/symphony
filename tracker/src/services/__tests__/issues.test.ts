@@ -64,6 +64,45 @@ describe("createIssue payload", () => {
     });
   });
 
+  it("sends a trimmed Codex goal when provided", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: createdDto } });
+
+    await createIssue("macro-markets", {
+      title: "Social login",
+      description: "body",
+      status: "Todo",
+      agent: "codex",
+      goal: "  Ship OAuth login  ",
+    });
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues", {
+      title: "Social login",
+      description: "body",
+      status: "Todo",
+      agent: "codex",
+      goal: "Ship OAuth login",
+    });
+  });
+
+  it("omits goal for non-Codex agents", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: createdDto } });
+
+    await createIssue("macro-markets", {
+      title: "Claude cleanup",
+      description: null,
+      status: "Todo",
+      agent: "claude",
+      goal: "Do not send this",
+    });
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues", {
+      title: "Claude cleanup",
+      description: null,
+      status: "Todo",
+      agent: "claude",
+    });
+  });
+
   it("omits empty selectors", async () => {
     const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: createdDto } });
 
