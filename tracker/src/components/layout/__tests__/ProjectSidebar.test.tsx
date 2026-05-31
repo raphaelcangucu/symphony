@@ -15,6 +15,10 @@ vi.mock("@/services/projects", () => ({
   listProjects: vi.fn(),
 }));
 
+vi.mock("@/hooks/useRecents", () => ({
+  useRecents: () => ({ sessions: [], loading: false, refetch: vi.fn() }),
+}));
+
 const activeProject: Project = {
   id: "active-1",
   name: "Active Project",
