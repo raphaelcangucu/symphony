@@ -9,6 +9,21 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixirWeb.TrackerAuth
 
   @impl true
+  def join("assistant:thread:" <> raw_id, _payload, socket) do
+    with true <- authorized?(socket),
+         {:ok, id} <- parse_id(raw_id),
+         {:ok, thread} <- History.get_thread(id) do
+      payload = %{messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1)}
+      socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
+      send(self(), {:assistant_history_loaded, payload})
+      {:ok, payload, socket}
+    else
+      false -> {:error, %{reason: "unauthorized"}}
+      {:error, :not_found} -> {:error, %{reason: "thread not found"}}
+      _ -> {:error, %{reason: "invalid_topic"}}
+    end
+  end
+
   def join("assistant:" <> project_slug, _payload, socket) when project_slug != "" do
     if authorized?(socket) do
       case History.list_messages(project_slug) do
@@ -30,10 +45,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   @impl true
   def handle_in("send_message", %{"message" => message} = payload, socket) when is_binary(message) do
-    project_slug = socket.assigns.project_slug
+    project_slug = socket.assigns[:project_slug]
+    thread = socket.assigns[:thread]
     context = normalize_context(Map.get(payload, "context", %{}))
-    raw_attachments = Map.get(payload, "attachments", [])
-    attachments = Payload.normalize_attachments(raw_attachments, project_slug)
+
+    {raw_attachments, attachments} =
+      if match?(%{scope: "freeform"}, thread) do
+        {[], []}
+      else
+        raw = Map.get(payload, "attachments", [])
+        {raw, Payload.normalize_attachments(raw, project_slug)}
+      end
+
     trimmed = message |> Payload.enrich_message(attachments) |> String.trim()
 
     cond do
@@ -60,7 +83,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
           |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
 
-        case CodexSession.send_message(project_slug, trimmed, context, opts) do
+        result =
+          case thread do
+            %{scope: "freeform"} = freeform_thread ->
+              CodexSession.send_message_to_thread(freeform_thread, trimmed, context, opts)
+
+            _ ->
+              CodexSession.send_message(project_slug, trimmed, context, opts)
+          end
+
+        case result do
           {:ok, result} ->
             push(socket, "assistant_completed", %{
               message: result.assistant_chat_message
@@ -81,6 +113,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_info({:assistant_history_loaded, payload}, socket) do
     push(socket, "history_loaded", payload)
     {:noreply, socket}
+  end
+
+  defp parse_id(raw) do
+    case Integer.parse(raw) do
+      {id, ""} -> {:ok, id}
+      _ -> {:error, :invalid_id}
+    end
   end
 
   defp maybe_put_runner(opts) do

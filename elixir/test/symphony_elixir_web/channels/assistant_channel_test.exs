@@ -3,6 +3,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   import Phoenix.ChannelTest
 
+  alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
@@ -24,7 +25,9 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     end)
 
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    :ok
+
+    socket = socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+    {:ok, socket: socket}
   end
 
   test "joins assistant topic, streams a turn, and replays persisted history" do
@@ -66,6 +69,33 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert {:error, %{reason: "unauthorized"}} =
              socket(SymphonyElixirWeb.UserSocket, nil, %{token: "wrong"})
              |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+  end
+
+  test "join assistant:thread:<id> loads that thread's history", %{socket: socket} do
+    {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: System.tmp_dir!()})
+    {:ok, _} = History.append_message(thread, %{role: "user", content: "hello freeform"})
+
+    {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
+    assert [%{content: "hello freeform"}] = payload.messages
+  end
+
+  test "freeform send_message routes through send_message_to_thread", %{socket: socket} do
+    Application.put_env(:symphony_elixir, :assistant_runner, fn _w, _p, _i, _o ->
+      {:ok, %{assistant_message: "freeform reply", tool_calls: []}}
+    end)
+
+    {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: System.tmp_dir!()})
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
+
+    ref = push(socket, "send_message", %{"message" => "hi"})
+    assert_reply(ref, :ok)
+    assert_push("assistant_completed", %{message: %{content: "freeform reply"}})
+  after
+    Application.delete_env(:symphony_elixir, :assistant_runner)
+  end
+
+  test "join assistant:thread:<id> with unknown id is rejected", %{socket: socket} do
+    assert {:error, %{reason: _}} = subscribe_and_join(socket, "assistant:thread:999999999", %{})
   end
 
   defp migrate_repo do
