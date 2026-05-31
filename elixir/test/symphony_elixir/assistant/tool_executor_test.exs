@@ -60,6 +60,48 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert body =~ "Reproduce the failing test and fix it."
   end
 
+  test "dispatches Codex work with a persisted goal for the orchestrator" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Fix tests", "status" => "Todo"})
+
+    assert {:ok, result} =
+             ToolExecutor.execute("macro-markets", "dispatch_codex", %{
+               "identifier" => "MAC-1",
+               "instructions" => "Reproduce the failing test and fix it.",
+               "goal" => "  Fix the regression, verify, and stop when complete.  "
+             })
+
+    assert result.tool == "dispatch_codex"
+    assert result.data.identifier == "MAC-1"
+    assert result.data.status.name == "In Progress"
+    assert result.data.agent_goal == "Fix the regression, verify, and stop when complete."
+
+    assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
+    assert reloaded.agent_goal == "Fix the regression, verify, and stop when complete."
+
+    assert {:ok, comments} = Context.list_comments("macro-markets", "MAC-1")
+    assert [%{body: body, author: "assistant"}] = comments
+    assert body =~ "Reproduce the failing test and fix it."
+  end
+
+  test "dispatches Codex work without persisting blank goal values" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Fix tests", "status" => "Todo"})
+
+    assert {:ok, result} =
+             ToolExecutor.execute("macro-markets", "dispatch_codex", %{
+               "identifier" => "MAC-1",
+               "instructions" => "Reproduce the failing test and fix it.",
+               "goal" => " \n\t "
+             })
+
+    assert result.data.status.name == "In Progress"
+    assert result.data.agent_goal == nil
+
+    assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
+    assert reloaded.agent_goal == nil
+  end
+
   test "does not add a Codex dispatch comment when the active status is unavailable" do
     {:ok, project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Fix tests", "status" => "Todo"})
@@ -147,6 +189,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert Enum.any?(ToolExecutor.tool_specs(), fn
              %{"name" => "create_issue", "inputSchema" => %{"required" => required}} -> "title" in required
              _ -> false
+           end)
+
+    assert Enum.any?(ToolExecutor.tool_specs(), fn
+             %{"name" => "dispatch_codex", "inputSchema" => %{"properties" => properties}} ->
+               Map.has_key?(properties, "goal")
+
+             _ ->
+               false
            end)
 
     executor = ToolExecutor.codex_tool_executor("macro-markets")

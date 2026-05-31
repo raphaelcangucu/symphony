@@ -96,7 +96,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "required" => ["identifier", "instructions"],
         "properties" => %{
           "identifier" => string_schema("Issue identifier to dispatch, for example MAC-1."),
-          "instructions" => string_schema("Concrete coding instructions for Codex.")
+          "instructions" => string_schema("Concrete coding instructions for Codex."),
+          "goal" => string_schema("Optional long-running Codex goal to persist for the orchestrator.")
         }
       })
     ]
@@ -275,7 +276,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          {:ok, instructions} <- normalize_required_string(Map.get(arguments, "instructions"), :instructions),
          :ok <- ensure_status_available(project, @in_progress_state),
          {:ok, _comment} <- IssueAdapter.dispatch(project, :add_comment, [identifier, codex_comment(instructions), %{"author" => "assistant"}]),
-         {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, %{"status" => @in_progress_state}]) do
+         {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, dispatch_codex_attrs(arguments)]) do
       presented = TrackerPresenter.issue(issue)
 
       {:ok,
@@ -430,6 +431,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp codex_comment(instructions) do
     "## Codex work requested from tracker assistant\n\n" <> instructions
+  end
+
+  defp dispatch_codex_attrs(arguments) do
+    %{"status" => @in_progress_state}
+    |> maybe_put_attr("agent_goal", normalize_optional_string(Map.get(arguments, "goal")))
   end
 
   defp normalize_required_string(value, field) when is_binary(value) do
