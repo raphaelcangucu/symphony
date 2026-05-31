@@ -7,6 +7,9 @@ defmodule SymphonyElixir.PromptBuilder do
 
   @render_opts [strict_filters: true]
   @artifact_max_bytes 512_000
+  @max_artifacts 20
+  @max_artifact_section_bytes 1_000_000
+  @artifact_separator "\n\n"
   @artifact_too_large_message "_Skipped: artifact too large._"
   @artifact_unreadable_message "_Skipped: artifact could not be read._"
 
@@ -91,8 +94,12 @@ defmodule SymphonyElixir.PromptBuilder do
           ""
 
         list ->
+          {rendered_artifacts, skipped_count} = render_artifacts(workspace, list)
+
           "\n\n## Existing authoring artifacts (follow these)\n\n" <>
-            Enum.map_join(list, "\n\n", &render_artifact(workspace, &1))
+            (rendered_artifacts
+             |> append_artifact_budget_marker(skipped_count)
+             |> Enum.join(@artifact_separator))
       end
     else
       ""
@@ -129,25 +136,82 @@ defmodule SymphonyElixir.PromptBuilder do
       match?({:ok, %File.Stat{type: :regular}}, File.lstat(path))
   end
 
-  defp render_artifact(workspace, file) do
-    relative_path = Path.relative_to(file, workspace)
+  defp render_artifacts(workspace, files) do
+    file_count = length(files)
 
-    """
-    ### `#{relative_path}`
+    result =
+      files
+      |> Enum.with_index()
+      |> Enum.reduce_while({[], 0, 0, 0}, fn {file, index}, {artifacts, artifact_count, bytes_used, _skipped_count} ->
+        if artifact_count >= @max_artifacts do
+          {:halt, {artifacts, artifact_count, bytes_used, file_count - index}}
+        else
+          case render_artifact(workspace, file, bytes_used, artifacts == []) do
+            {:ok, rendered_artifact, updated_bytes} ->
+              {:cont, {[rendered_artifact | artifacts], artifact_count + 1, updated_bytes, 0}}
 
-    #{artifact_body(file)}
-    """
-    |> String.trim_trailing()
+            :budget_exceeded ->
+              {:halt, {artifacts, artifact_count, bytes_used, file_count - index}}
+          end
+        end
+      end)
+
+    {artifacts, _artifact_count, _bytes_used, skipped_count} = result
+    {Enum.reverse(artifacts), skipped_count}
   end
 
-  defp artifact_body(file) do
-    with {:ok, %File.Stat{size: size}} when size <= @artifact_max_bytes <- File.stat(file),
-         {:ok, body} <- File.read(file) do
-      ensure_utf8(body)
+  defp render_artifact(workspace, file, bytes_used, first_artifact?) do
+    relative_path = Path.relative_to(file, workspace)
+    prefix = "### `#{relative_path}`\n\n"
+    separator_bytes = if first_artifact?, do: 0, else: byte_size(@artifact_separator)
+    remaining_bytes = @max_artifact_section_bytes - bytes_used - separator_bytes
+
+    if remaining_bytes <= 0 do
+      :budget_exceeded
     else
-      {:ok, %File.Stat{}} -> @artifact_too_large_message
-      {:error, _reason} -> @artifact_unreadable_message
+      do_render_artifact(file, prefix, bytes_used + separator_bytes, remaining_bytes)
     end
+  end
+
+  defp do_render_artifact(file, prefix, updated_bytes_used, remaining_bytes) do
+    case File.stat(file) do
+      {:ok, %File.Stat{size: size}} when size > @artifact_max_bytes ->
+        render_artifact_body(prefix, @artifact_too_large_message, updated_bytes_used, remaining_bytes)
+
+      {:ok, %File.Stat{size: size}} ->
+        if byte_size(prefix) + size > remaining_bytes do
+          :budget_exceeded
+        else
+          case File.read(file) do
+            {:ok, body} ->
+              body = ensure_utf8(body)
+              render_artifact_body(prefix, body, updated_bytes_used, remaining_bytes)
+
+            {:error, _reason} ->
+              render_artifact_body(prefix, @artifact_unreadable_message, updated_bytes_used, remaining_bytes)
+          end
+        end
+
+      {:error, _reason} ->
+        render_artifact_body(prefix, @artifact_unreadable_message, updated_bytes_used, remaining_bytes)
+    end
+  end
+
+  defp render_artifact_body(prefix, body, updated_bytes_used, remaining_bytes) do
+    rendered_artifact = prefix <> body
+    artifact_bytes = byte_size(rendered_artifact)
+
+    if artifact_bytes <= remaining_bytes do
+      {:ok, rendered_artifact, updated_bytes_used + artifact_bytes}
+    else
+      :budget_exceeded
+    end
+  end
+
+  defp append_artifact_budget_marker(artifacts, 0), do: artifacts
+
+  defp append_artifact_budget_marker(artifacts, skipped_count) do
+    artifacts ++ ["_Skipped #{skipped_count} additional authoring artifact(s) due to prompt size limits._"]
   end
 
   defp default_prompt(prompt) when is_binary(prompt) do

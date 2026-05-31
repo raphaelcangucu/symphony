@@ -87,6 +87,60 @@ defmodule SymphonyElixir.PromptBuilderTest do
     assert prompt =~ "Spec A"
   end
 
+  test "limits injected artifacts by deterministic aggregate count" do
+    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
+
+    root = temporary_workspace_root!("pb-count-budget")
+    File.mkdir_p!(Path.join([root, "docs", "superpowers", "specs"]))
+
+    Enum.each(1..22, fn index ->
+      padded_index = index |> Integer.to_string() |> String.pad_leading(2, "0")
+      File.write!(Path.join([root, "docs", "superpowers", "specs", "#{padded_index}.md"]), "# Spec #{padded_index}")
+    end)
+
+    issue = %Issue{
+      identifier: "MAC-4",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    prompt = PromptBuilder.build_prompt(issue, workspace: root)
+
+    assert prompt =~ "docs/superpowers/specs/01.md"
+    assert prompt =~ "docs/superpowers/specs/20.md"
+    refute prompt =~ "docs/superpowers/specs/21.md"
+    refute prompt =~ "Spec 21"
+    refute prompt =~ "docs/superpowers/specs/22.md"
+    assert prompt =~ "_Skipped 2 additional authoring artifact(s) due to prompt size limits._"
+  end
+
+  test "limits injected artifacts by aggregate byte budget" do
+    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
+
+    root = temporary_workspace_root!("pb-byte-budget")
+    File.mkdir_p!(Path.join([root, "docs", "superpowers", "specs"]))
+
+    File.write!(Path.join([root, "docs", "superpowers", "specs", "01.md"]), String.duplicate("a", 400_000))
+    File.write!(Path.join([root, "docs", "superpowers", "specs", "02.md"]), String.duplicate("b", 400_000))
+    File.write!(Path.join([root, "docs", "superpowers", "specs", "03.md"]), String.duplicate("c", 400_000))
+
+    issue = %Issue{
+      identifier: "MAC-5",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    prompt = PromptBuilder.build_prompt(issue, workspace: root)
+
+    assert prompt =~ "docs/superpowers/specs/01.md"
+    assert prompt =~ "docs/superpowers/specs/02.md"
+    refute prompt =~ "docs/superpowers/specs/03.md"
+    refute prompt =~ String.duplicate("c", 100)
+    assert prompt =~ "_Skipped 1 additional authoring artifact(s) due to prompt size limits._"
+  end
+
   defp temporary_workspace_root!(name) do
     root = Path.join(System.tmp_dir!(), "#{name}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(root)
