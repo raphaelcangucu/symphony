@@ -33,9 +33,10 @@ defmodule SymphonyElixir.Cloudflare.DnsTest do
 
   test "ensure_records/2 updates when present (PUT) with explicit zone_id" do
     transport = fn method, path, _opts ->
-      cond do
-        method == "GET" and String.contains?(path, "/dns_records") -> %{"result" => [%{"id" => "rec-existing"}]}
-        true -> %{"result" => %{"id" => "rec-existing"}}
+      if method == "GET" and String.contains?(path, "/dns_records") do
+        %{"result" => [%{"id" => "rec-existing"}]}
+      else
+        %{"result" => %{"id" => "rec-existing"}}
       end
     end
 

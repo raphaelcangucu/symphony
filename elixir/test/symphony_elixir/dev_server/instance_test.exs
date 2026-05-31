@@ -3,6 +3,7 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
 
   alias SymphonyElixir.DevServer.Instance
   alias SymphonyElixir.LocalTracker.{Context, DevServerRecord}
+  alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.Repo
 
   @test_process __MODULE__.TestProcess
@@ -350,13 +351,13 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
     pid = start_ready_instance!(project, port: 4123, project_slug: "previsions", identifier: "mm-42", step_slug: "front")
 
     host = "previsions-mm-42-front.octocat.tracker.cods.dev"
-    assert {:ok, 4123} = SymphonyElixir.PublicRouting.lookup(host)
+    assert {:ok, 4123} = PublicRouting.lookup(host)
 
     assert [row] = DevServerRecord.list_for_issue(project.id, "mm-42")
     assert row.url == "https://previsions-mm-42-front.octocat.tracker.cods.dev/"
 
-    :ok = SymphonyElixir.DevServer.Instance.stop(pid)
-    assert_eventually(fn -> SymphonyElixir.PublicRouting.lookup(host) == :error end)
+    :ok = Instance.stop(pid)
+    assert_eventually(fn -> PublicRouting.lookup(host) == :error end)
   end
 
   test "ready transition uses configured base_url when set", %{project: project} do
@@ -412,8 +413,8 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
   end
 
   defp ensure_public_routing_started! do
-    case Process.whereis(SymphonyElixir.PublicRouting) do
-      nil -> start_supervised!(SymphonyElixir.PublicRouting)
+    case Process.whereis(PublicRouting) do
+      nil -> start_supervised!(PublicRouting)
       _ -> :ok
     end
   end

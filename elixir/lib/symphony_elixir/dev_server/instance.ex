@@ -12,8 +12,8 @@ defmodule SymphonyElixir.DevServer.Instance do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.DevServer.PortAllocator
-  alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.LocalTracker.DevServerRecord
+  alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.Terminal.{Registry, Tmux}
 
   @default_idle_timeout_ms 1_800_000
