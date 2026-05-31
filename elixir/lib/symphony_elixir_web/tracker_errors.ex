@@ -132,6 +132,30 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     )
   end
 
+  def render(conn, :invalid_path),
+    do:
+      error(
+        conn,
+        422,
+        "invalid_issue_document_path",
+        "Issue document path must be a markdown file under docs/superpowers."
+      )
+
+  def render(conn, :not_markdown),
+    do:
+      error(
+        conn,
+        422,
+        "invalid_issue_document_path",
+        "Issue document path must be a markdown file under docs/superpowers."
+      )
+
+  def render(conn, :not_found),
+    do: not_found(conn, "issue_document_not_found", "Issue document not found")
+
+  def render(conn, :too_large),
+    do: error(conn, 413, "issue_document_too_large", "Issue document is too large.")
+
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
 

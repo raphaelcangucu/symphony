@@ -57,6 +57,8 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/assistant/attachments", AssistantController, :upload_attachment)
     post("/projects/:project_slug/assistant/messages", AssistantController, :create)
     resources("/projects/:project_slug/issues", IssueController, only: [:index, :create, :show, :update])
+    get("/projects/:project_slug/issues/:identifier/documents", IssueDocumentController, :index)
+    get("/projects/:project_slug/issues/:identifier/documents/*path", IssueDocumentController, :show)
     post("/projects/:project_slug/issues/:identifier/move", IssueController, :move)
     get("/projects/:project_slug/issues/:identifier/comments", CommentController, :index)
     post("/projects/:project_slug/issues/:identifier/comments", CommentController, :create)
