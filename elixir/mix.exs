@@ -28,6 +28,8 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixir.GitHub.StateReconciliation,
           SymphonyElixir.Linear.Client,
           SymphonyElixir.Linear.Config,
+          # Cloudflare DNS HTTP client; real transport not unit-testable, logic covered via injected transport
+          SymphonyElixir.Cloudflare.Dns,
           SymphonyElixir.LocalTracker.Config,
           SymphonyElixir.Memory.Config,
           SymphonyElixir.Repo,
