@@ -75,6 +75,9 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixirWeb.DevEnvPresenter,
           SymphonyElixirWeb.ObservabilityApiController,
           SymphonyElixirWeb.Presenter,
+          # Reverse-proxies to live loopback upstream + WS upgrade; guard branches
+          # covered by plug tests, proxy path by Task 6 integration.
+          SymphonyElixirWeb.PublicHostPlug,
           SymphonyElixirWeb.TerminalChannel,
           SymphonyElixirWeb.Tracker.BlockerController,
           # retry/2 spawns a real git-shelling clone worker; cannot be deterministically unit-tested
