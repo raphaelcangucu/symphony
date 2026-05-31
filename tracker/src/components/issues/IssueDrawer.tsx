@@ -20,13 +20,13 @@ import { useIssueEditor } from "@/hooks/useIssueEditor";
 import type { EditorReason } from "@/services/editor";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn } from "@/lib/utils";
-import { DEFAULT_ISSUE_TAB, type IssueTab } from "@/lib/workspaceRoutes";
+import { DEFAULT_ISSUE_TAB, type IssueTab, type WorkspaceView } from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { ActivityTab } from "./issue-detail/ActivityTab";
 import { AgentStatusBadge } from "./AgentStatusBadge";
-import { AgentTab } from "./issue-detail/AgentTab";
+import { AgentTabs } from "./issue-detail/AgentTabs";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { BlockersTab } from "./issue-detail/BlockersTab";
 import { CommentsTab } from "./issue-detail/CommentsTab";
@@ -51,6 +51,7 @@ const TABS = [
 interface IssueDrawerProps {
   issue: Issue | null;
   projectSlug: string;
+  view: WorkspaceView;
   execution?: AgentExecution;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -61,6 +62,7 @@ interface IssueDrawerProps {
 export function IssueDrawer({
   issue,
   projectSlug,
+  view,
   execution,
   open,
   onOpenChange,
@@ -217,7 +219,9 @@ export function IssueDrawer({
                   />
                 </TabsContent>
                 <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
-                <TabsContent value="agent"><AgentTab issue={issue} execution={execution} /></TabsContent>
+                <TabsContent value="agent">
+                  <AgentTabs issue={issue} projectSlug={projectSlug} execution={execution} view={view} />
+                </TabsContent>
                 <TabsContent value="preview">
                   <PreviewTab projectSlug={projectSlug} issueIdentifier={issue.identifier} />
                 </TabsContent>

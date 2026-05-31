@@ -56,7 +56,7 @@ describe("IssueDrawer editor button", () => {
     });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
 
-    render(<IssueDrawer issue={issue} projectSlug="macro-markets" open onOpenChange={() => {}} />);
+    render(<IssueDrawer issue={issue} projectSlug="macro-markets" view="board" open onOpenChange={() => {}} />);
 
     const button = await screen.findByRole("button", { name: /open in vs code/i });
     await waitFor(() => expect(button).toBeEnabled());
@@ -77,7 +77,7 @@ describe("IssueDrawer editor button", () => {
     });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
 
-    render(<IssueDrawer issue={issue} projectSlug="macro-markets" open onOpenChange={() => {}} />);
+    render(<IssueDrawer issue={issue} projectSlug="macro-markets" view="board" open onOpenChange={() => {}} />);
     await screen.findByRole("button", { name: /open in vs code/i });
     await waitFor(() => expect(screen.getByRole("button", { name: /open in vs code/i })).toBeEnabled());
 
@@ -88,7 +88,7 @@ describe("IssueDrawer editor button", () => {
 
   it("renders the preview tab for the selected issue", async () => {
     render(
-      <IssueDrawer issue={issue} projectSlug="macro-markets" open onOpenChange={() => {}} tab="preview" />,
+      <IssueDrawer issue={issue} projectSlug="macro-markets" view="board" open onOpenChange={() => {}} tab="preview" />,
     );
 
     const previewTab = await screen.findByRole("tab", { name: /preview/i });

@@ -48,6 +48,7 @@ export function IssueDetailRoute() {
   return (
     <IssueDrawer
       projectSlug={projectSlug}
+      view={view}
       issue={issue}
       execution={issue ? agentExecutions.get(issue.identifier) : undefined}
       open
