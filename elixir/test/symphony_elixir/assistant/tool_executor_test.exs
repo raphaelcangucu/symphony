@@ -184,6 +184,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
         spec = Enum.find(specs, &(&1["name"] == tool))
         assert get_in(spec, ["inputSchema", "properties", "identifier", "const"]) == "MAC-1"
       end
+
+      assert required_fields(specs, "update_issue") == []
+      refute "identifier" in required_fields(specs, "move_issue")
+      refute "identifier" in required_fields(specs, "add_comment")
+      refute "identifier" in required_fields(specs, "dispatch_codex")
+      assert "status" in required_fields(specs, "move_issue")
+      assert "body" in required_fields(specs, "add_comment")
+      assert "instructions" in required_fields(specs, "dispatch_codex")
     end
 
     test "injects the bound identifier when a mutable tool omits it" do
@@ -258,6 +266,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       is_terminal: false
     })
     |> Repo.insert()
+  end
+
+  defp required_fields(specs, tool) do
+    specs
+    |> Enum.find(&(&1["name"] == tool))
+    |> get_in(["inputSchema", "required"])
   end
 
   defp restore_env(key, nil), do: System.delete_env(key)

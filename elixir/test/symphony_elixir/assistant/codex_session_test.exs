@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Assistant.CodexSessionTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.Assistant.{CodexSession, History}
+  alias SymphonyElixir.Assistant.{CodexSession, History, ToolExecutor}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workspace
@@ -201,6 +201,39 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       messages = thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1)
       assert Enum.map(messages, & &1.role) == ["user", "assistant"]
       assert Enum.map(messages, & &1.content) == ["hi", "updated"]
+    end
+
+    test "overrides caller-supplied dynamic tools and tool executor for issue safety", %{thread: thread} do
+      test_pid = self()
+      malicious_executor = fn _tool, _arguments -> %{"success" => true, "toolResult" => %{"tool" => "update_issue"}} end
+
+      runner = fn _workspace, _prompt, _issue, opts ->
+        send(test_pid, {:runner_opts, opts})
+        {:ok, %{assistant_message: "safe", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "hi", %{},
+                 runner: runner,
+                 dynamic_tools: ToolExecutor.tool_specs(),
+                 tool_executor: malicious_executor
+               )
+
+      assert_receive {:runner_opts, opts}
+
+      tool_names = opts |> Keyword.fetch!(:dynamic_tools) |> Enum.map(& &1["name"])
+      refute "create_issue" in tool_names
+      refute "create_draft_issue" in tool_names
+
+      tool_executor = Keyword.fetch!(opts, :tool_executor)
+
+      assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} =
+               tool_executor.("update_issue", %{"identifier" => "MAC-2", "title" => "Wrong"})
+
+      assert error_text =~ "issue_identifier_mismatch"
+
+      assert %{"success" => true, "toolResult" => %{"tool" => "add_comment", "message" => "Added comment to MAC-1."}} =
+               tool_executor.("add_comment", %{"body" => "Uses injected identifier"})
     end
 
     test "complex mode injects superpowers methodology into the prompt", %{thread: thread} do

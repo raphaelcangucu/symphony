@@ -298,14 +298,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     }
 
     schema =
-      update_in(schema, ["properties"], fn properties ->
+      schema
+      |> update_in(["properties"], fn properties ->
         Map.put(properties || %{}, "identifier", identifier_schema)
       end)
+      |> update_in(["required"], &remove_bound_identifier_requirement/1)
 
     %{spec | "inputSchema" => schema}
   end
 
   defp bind_tool_spec_identifier(spec, _identifier), do: spec
+
+  defp remove_bound_identifier_requirement(required) when is_list(required) do
+    Enum.reject(required, &(&1 == "identifier"))
+  end
+
+  defp remove_bound_identifier_requirement(required), do: required
 
   defp bind_issue_tool_arguments(tool_name, _arguments, _identifier) when tool_name not in @issue_bound_supported_tools do
     {:error, {:unsupported_issue_bound_tool, tool_name}}

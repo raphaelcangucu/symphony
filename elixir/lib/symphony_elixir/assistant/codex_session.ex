@@ -187,8 +187,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     runner_opts =
       opts
       |> Keyword.put(:project_slug, project_slug)
-      |> Keyword.put_new(:dynamic_tools, ToolExecutor.issue_bound_tool_specs(identifier))
-      |> Keyword.put_new(:tool_executor, ToolExecutor.issue_bound_codex_tool_executor(project_slug, identifier))
+      |> Keyword.put(:dynamic_tools, ToolExecutor.issue_bound_tool_specs(identifier))
+      |> Keyword.put(:tool_executor, ToolExecutor.issue_bound_codex_tool_executor(project_slug, identifier))
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
     |> normalize_runner_result()
