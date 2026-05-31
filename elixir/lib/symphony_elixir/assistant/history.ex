@@ -129,7 +129,7 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   defp active_thread(project_slug) do
-    Repo.get_by(Thread, project_slug: project_slug, status: "active")
+    Repo.get_by(Thread, project_slug: project_slug, scope: "project", status: "active")
   end
 
   defp active_issue_thread(slug, identifier) do

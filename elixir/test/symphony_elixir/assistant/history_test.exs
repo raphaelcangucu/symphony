@@ -59,6 +59,42 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert List.last(messages).tool_calls == [%{"name" => "list_issues", "status" => "complete"}]
   end
 
+  test "project history ignores issue-scoped threads for the same project" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, project_thread} = History.ensure_thread("macro-markets", %{workspace_path: "/tmp/assistant/macro-markets"})
+    {:ok, issue_thread} = History.ensure_issue_thread("macro-markets", "MAC-1", %{workspace_path: "/tmp/issue/MAC-1"})
+    {:ok, other_issue_thread} = History.ensure_issue_thread("macro-markets", "MAC-2", %{workspace_path: "/tmp/issue/MAC-2"})
+
+    {:ok, _} = History.append_message(project_thread, %{role: "user", content: "project question"})
+    {:ok, _} = History.append_message(issue_thread, %{role: "user", content: "issue one question"})
+    {:ok, _} = History.append_message(other_issue_thread, %{role: "user", content: "issue two question"})
+
+    assert {:ok, messages} = History.list_messages("macro-markets")
+    assert Enum.map(messages, & &1.content) == ["project question"]
+
+    assert {:ok, same_project_thread} = History.ensure_thread("macro-markets", %{workspace_path: "/tmp/ignored"})
+    assert same_project_thread.id == project_thread.id
+    assert same_project_thread.scope == "project"
+  end
+
+  test "ensure_thread creates a project thread when only issue threads exist for the project" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue_thread} = History.ensure_issue_thread("macro-markets", "MAC-1", %{workspace_path: "/tmp/issue/MAC-1"})
+    {:ok, _other_issue_thread} = History.ensure_issue_thread("macro-markets", "MAC-2", %{workspace_path: "/tmp/issue/MAC-2"})
+
+    assert {:ok, project_thread} =
+             History.ensure_thread("macro-markets", %{
+               codex_thread_id: "project-thread",
+               workspace_path: "/tmp/assistant/macro-markets"
+             })
+
+    assert project_thread.scope == "project"
+    assert project_thread.issue_identifier == nil
+    assert project_thread.codex_thread_id == "project-thread"
+
+    assert {:ok, []} = History.list_messages("macro-markets")
+  end
+
   test "rejects messages without role or content" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, thread} = History.ensure_thread("macro-markets", %{workspace_path: "/tmp/assistant/macro-markets"})
