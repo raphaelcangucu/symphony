@@ -64,6 +64,11 @@ defmodule SymphonyElixirWeb.PublicHostPlugTest do
       refute call("evil.example.com").halted
     end
 
+    test "sibling-namespace spoof host passes through (leading-dot suffix guard)" do
+      # ends with "octocat.tracker.cods.dev" but not ".octocat.tracker.cods.dev"
+      refute call("eviloctocat.tracker.cods.dev").halted
+    end
+
     test "unknown in-suffix host returns 404" do
       conn = call("ghost.octocat.tracker.cods.dev")
       assert conn.halted

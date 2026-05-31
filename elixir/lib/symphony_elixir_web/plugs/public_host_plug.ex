@@ -62,18 +62,27 @@ defmodule SymphonyElixirWeb.PublicHostPlug do
 
   defp proxy(conn, port) do
     if websocket_upgrade?(conn) do
-      ReverseProxyPlugWebsocket.call(
-        conn,
+      conn
+      |> ReverseProxyPlugWebsocket.call(
         ReverseProxyPlugWebsocket.init(
-          upstream_uri: "ws://127.0.0.1:#{port}#{conn.request_path}",
+          upstream_uri: ws_upstream_uri(port, conn),
           path: conn.request_path
         )
       )
+      |> halt()
     else
       conn
       |> ReverseProxyPlug.call(ReverseProxyPlug.init(upstream: "http://127.0.0.1:#{port}"))
       |> halt()
     end
+  end
+
+  defp ws_upstream_uri(port, %{query_string: query} = conn) when is_binary(query) and query != "" do
+    "ws://127.0.0.1:#{port}#{conn.request_path}?#{query}"
+  end
+
+  defp ws_upstream_uri(port, conn) do
+    "ws://127.0.0.1:#{port}#{conn.request_path}"
   end
 
   defp websocket_upgrade?(conn) do
