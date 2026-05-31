@@ -33,6 +33,8 @@ defmodule SymphonyElixir.Config do
   @default_dev_server_max_concurrent 3
   @default_dev_server_idle_timeout_ms 1_800_000
   @default_dev_server_auto_start_on ["pull_request", "human_review"]
+  @default_public_tunnel_enabled false
+  @default_public_tunnel_base_domain "tracker.cods.dev"
   @default_assistant_draft_status "Triage"
 
   @tracker_sections ["local", "linear", "github", "memory"]
@@ -194,6 +196,18 @@ defmodule SymphonyElixir.Config do
                                    default: @default_dev_server_auto_start_on
                                  ],
                                  base_url: [type: {:or, [:string, nil]}, default: nil]
+                               ]
+                             ],
+                             public_tunnel: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 enabled: [type: :boolean, default: @default_public_tunnel_enabled],
+                                 base_domain: [
+                                   type: :string,
+                                   default: @default_public_tunnel_base_domain
+                                 ],
+                                 namespace: [type: {:or, [:string, nil]}, default: nil]
                                ]
                              ]
                            )
@@ -572,6 +586,21 @@ defmodule SymphonyElixir.Config do
     end
   end
 
+  @spec public_tunnel_enabled?() :: boolean()
+  def public_tunnel_enabled? do
+    get_in(validated_workflow_options(), [:public_tunnel, :enabled])
+  end
+
+  @spec public_tunnel_base_domain() :: String.t()
+  def public_tunnel_base_domain do
+    get_in(validated_workflow_options(), [:public_tunnel, :base_domain])
+  end
+
+  @spec public_tunnel_namespace() :: String.t() | nil
+  def public_tunnel_namespace do
+    get_in(validated_workflow_options(), [:public_tunnel, :namespace])
+  end
+
   defp browser_host("0.0.0.0"), do: "127.0.0.1"
   defp browser_host("::"), do: "[::1]"
   defp browser_host(host), do: host
@@ -663,7 +692,8 @@ defmodule SymphonyElixir.Config do
       observability: extract_observability_options(section_map(config, "observability")),
       server: extract_server_options(section_map(config, "server")),
       editor: extract_editor_options(section_map(config, "editor")),
-      dev_server: extract_dev_server_options(section_map(config, "dev_server"))
+      dev_server: extract_dev_server_options(section_map(config, "dev_server")),
+      public_tunnel: extract_public_tunnel_options(section_map(config, "public_tunnel"))
     }
   end
 
@@ -756,6 +786,13 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:idle_timeout_ms, positive_integer_value(Map.get(section, "idle_timeout_ms")))
     |> put_if_present(:auto_start_on, csv_value(Map.get(section, "auto_start_on")))
     |> put_if_present(:base_url, scalar_string_value(Map.get(section, "base_url")))
+  end
+
+  defp extract_public_tunnel_options(section) do
+    %{}
+    |> put_if_present(:enabled, boolean_value(Map.get(section, "enabled")))
+    |> put_if_present(:base_domain, scalar_string_value(Map.get(section, "base_domain")))
+    |> put_if_present(:namespace, scalar_string_value(Map.get(section, "namespace")))
   end
 
   defp section_map(config, key) do

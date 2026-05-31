@@ -176,6 +176,34 @@ defmodule SymphonyElixir.ConfigTest do
     end
   end
 
+  describe "public_tunnel config" do
+    test "defaults when public_tunnel section omitted" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      """)
+
+      refute SymphonyElixir.Config.public_tunnel_enabled?()
+      assert SymphonyElixir.Config.public_tunnel_base_domain() == "tracker.cods.dev"
+      assert SymphonyElixir.Config.public_tunnel_namespace() == nil
+    end
+
+    test "reads configured public_tunnel keys" do
+      load_workflow_with_front_matter("""
+      github:
+        repo: acme/app
+      public_tunnel:
+        enabled: true
+        base_domain: tracker.example.dev
+        namespace: octocat
+      """)
+
+      assert SymphonyElixir.Config.public_tunnel_enabled?()
+      assert SymphonyElixir.Config.public_tunnel_base_domain() == "tracker.example.dev"
+      assert SymphonyElixir.Config.public_tunnel_namespace() == "octocat"
+    end
+  end
+
   defp load_workflow_with_front_matter(front_matter) do
     content = "---\n" <> front_matter <> "---\n"
     File.write!(Workflow.workflow_file_path(), content)
