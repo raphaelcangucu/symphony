@@ -50,9 +50,9 @@ defmodule SymphonyElixir.Application do
       SymphonyElixir.GitHub.ReadCache,
       SymphonyElixir.WorkflowStore,
       SymphonyElixir.Orchestrator,
+      SymphonyElixir.PublicRouting,
       SymphonyElixir.DevServer.Manager,
       SymphonyElixir.DevServer.Reconciler,
-      SymphonyElixir.PublicRouting,
       SymphonyElixir.Observability.Reporter,
       SymphonyElixir.HttpServer,
       SymphonyElixir.StatusDashboard

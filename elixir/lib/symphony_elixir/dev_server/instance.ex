@@ -12,6 +12,7 @@ defmodule SymphonyElixir.DevServer.Instance do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.DevServer.PortAllocator
+  alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.LocalTracker.DevServerRecord
   alias SymphonyElixir.Terminal.{Registry, Tmux}
 
@@ -147,7 +148,7 @@ defmodule SymphonyElixir.DevServer.Instance do
       slug: slug,
       working_dir: working_dir,
       base_url: Keyword.get(opts, :base_url),
-      public_host: SymphonyElixir.PublicRouting.preview_host(project_slug, identifier, slug),
+      public_host: PublicRouting.preview_host(project_slug, identifier, slug),
       idle_timeout_ms: Keyword.get(opts, :idle_timeout_ms, @default_idle_timeout_ms),
       tmux: Keyword.get(opts, :tmux, Registry),
       port_allocator: Keyword.get(opts, :port_allocator, &PortAllocator.allocate/2),
@@ -414,14 +415,14 @@ defmodule SymphonyElixir.DevServer.Instance do
 
   defp maybe_register_public_host(%{public_host: host}, port)
        when is_binary(host) and is_integer(port) do
-    SymphonyElixir.PublicRouting.register(host, port)
+    PublicRouting.register(host, port)
     :ok
   end
 
   defp maybe_register_public_host(_state, _port), do: :ok
 
   defp maybe_unregister_public_host(%{public_host: host}) when is_binary(host) do
-    SymphonyElixir.PublicRouting.unregister(host)
+    PublicRouting.unregister(host)
     :ok
   end
 

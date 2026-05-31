@@ -352,6 +352,9 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
     host = "previsions-mm-42-front.octocat.tracker.cods.dev"
     assert {:ok, 4123} = SymphonyElixir.PublicRouting.lookup(host)
 
+    assert [row] = DevServerRecord.list_for_issue(project.id, "mm-42")
+    assert row.url == "https://previsions-mm-42-front.octocat.tracker.cods.dev/"
+
     :ok = SymphonyElixir.DevServer.Instance.stop(pid)
     assert_eventually(fn -> SymphonyElixir.PublicRouting.lookup(host) == :error end)
   end
