@@ -8,6 +8,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @behaviour SymphonyElixir.CodingAgent
 
   require Logger
+  alias SymphonyElixir.Codex.Config, as: CodexConfig
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Codex.Session
   alias SymphonyElixir.Config
@@ -15,6 +16,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @initialize_id 1
   @thread_start_id 2
   @turn_start_id 3
+  @goal_set_id 4
   @port_line_bytes 1_048_576
   @max_stream_log_bytes 1_000
   @non_interactive_tool_input_answer "This is a non-interactive session. Operator input is unavailable."
@@ -50,6 +52,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
       with {:ok, session_policies} <- session_policies(expanded_workspace),
            {:ok, thread_id} <- do_start_session(port, expanded_workspace, session_policies, opts) do
+        maybe_set_goal(port, thread_id, Keyword.get(opts, :goal))
         Session.write(expanded_workspace, thread_id)
 
         {:ok,
@@ -256,6 +259,34 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
       other ->
         other
+    end
+  end
+
+  defp maybe_set_goal(_port, _thread_id, nil), do: :ok
+
+  defp maybe_set_goal(_port, _thread_id, goal) when is_binary(goal) and goal == "", do: :ok
+
+  defp maybe_set_goal(port, thread_id, goal) when is_binary(goal) do
+    if CodexConfig.goals_enabled?() do
+      send_message(port, %{
+        "method" => "thread/goal/set",
+        "id" => @goal_set_id,
+        "params" => %{"threadId" => thread_id, "goal" => goal}
+      })
+
+      case await_response(port, @goal_set_id) do
+        {:ok, _result} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning("Codex failed to set thread goal; continuing with single-turn session thread_id=#{thread_id}: #{inspect(reason)}")
+
+          :ok
+      end
+    else
+      Logger.warning("Codex goal provided but goal mode is disabled; continuing with single-turn session thread_id=#{thread_id}")
+
+      :ok
     end
   end
 
