@@ -103,6 +103,47 @@ describe("NewIssueMenu", () => {
     expect(screen.getByText("status:In Progress")).toBeInTheDocument();
   });
 
+  it("exposes assistant and quick create from the icon variant", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
+        <Routes>
+          <Route
+            path="/projects/macro-markets/board"
+            element={<NewIssueMenu projectSlug="macro-markets" status="Backlog" variant="icon" />}
+          />
+          <Route path="/projects/macro-markets/assistant/new-issue" element={<div>Assistant issue authoring</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add issue to Backlog" }));
+
+    expect(await screen.findByRole("menuitem", { name: "New issue with assistant" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Quick create" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: "New issue with assistant" }));
+
+    expect(await screen.findByText("Assistant issue authoring")).toBeInTheDocument();
+  });
+
+  it("opens quick create from the dashed empty-state variant", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <NewIssueMenu projectSlug="macro-markets" status="Backlog" variant="dashed" />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add issue to Backlog" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Quick create" }));
+
+    expect(screen.getByRole("region", { name: "mock quick create dialog" })).toBeInTheDocument();
+    expect(screen.getByText("status:Backlog")).toBeInTheDocument();
+  });
+
   it("invokes onCreated and closes the quick create dialog after creation", async () => {
     const user = userEvent.setup();
     const onCreated = vi.fn();

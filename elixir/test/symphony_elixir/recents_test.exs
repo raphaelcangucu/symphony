@@ -2,6 +2,7 @@ defmodule SymphonyElixir.RecentsTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.Assistant.History
+  alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Recents
   alias SymphonyElixir.Repo
 
@@ -35,6 +36,25 @@ defmodule SymphonyElixir.RecentsTest do
     assert codex.identifier == "ABC-12"
     assert codex.status_kind == :running
     assert codex.project_slug == "demo"
+  end
+
+  test "issue-scoped chat rows expose the issue identifier" do
+    {:ok, _project} = Context.ensure_project(%{name: "Demo", slug: "demo"})
+
+    {:ok, thread} =
+      History.ensure_issue_thread("demo", "MAC-1", %{
+        title: "Author MAC-1",
+        workspace_path: System.tmp_dir!()
+      })
+
+    {:ok, _} = History.append_message(thread, %{role: "user", content: "let's author this"})
+
+    items = Recents.list(limit: 20, executions: [], issue_lister: fn _slug -> [] end, projects: [])
+    chat = Enum.find(items, &(&1.kind == :chat and &1.scope == :issue))
+
+    assert chat
+    assert chat.identifier == "MAC-1"
+    assert chat.project_slug == "demo"
   end
 
   test "respects limit" do

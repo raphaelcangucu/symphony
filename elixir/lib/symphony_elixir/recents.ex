@@ -16,6 +16,8 @@ defmodule SymphonyElixir.Recents do
     projects = Keyword.get_lazy(opts, :projects, &safe_projects/0)
     issue_lister = Keyword.get(opts, :issue_lister, &default_issue_lister/1)
 
+    repair_lingering_issue_drafts()
+
     (chat_items(limit) ++ codex_items(projects, issue_lister, executions))
     |> Enum.sort_by(& &1.updated_at, {:desc, DateTime})
     |> Enum.take(limit)
@@ -34,7 +36,7 @@ defmodule SymphonyElixir.Recents do
         project_slug: thread.project_slug,
         project_name: project_name(thread.project_slug),
         title: chat_title(thread, preview),
-        identifier: nil,
+        identifier: thread.issue_identifier,
         thread_id: thread.id,
         status: humanize_thread_status(thread.status),
         status_kind: thread_status_kind(thread.status),
@@ -90,6 +92,14 @@ defmodule SymphonyElixir.Recents do
       preview: nil,
       updated_at: issue.updated_at
     }
+  end
+
+  defp repair_lingering_issue_drafts do
+    History.repair_lingering_issue_drafts()
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
   end
 
   defp safe_executions do

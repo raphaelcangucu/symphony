@@ -44,9 +44,9 @@ assistant:
 # previews publicly via a named tunnel. Disabled by default; previews become
 # UNAUTHENTICATED to anyone with the URL once enabled.
 public_tunnel:
-  enabled: false              # set true to expose previews via the Cloudflare tunnel
+  enabled: true
   base_domain: tracker.cods.dev
-  # namespace: your-github-login   # defaults to the GitHub login
+  # namespace: raphaelcangucu   # defaults to the GitHub login when unset
 # Browser VS Code (code-server) for task workspaces.
 # Requires code-server installed on the host. auth: none is only safe on localhost.
 editor:

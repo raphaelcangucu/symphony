@@ -207,6 +207,106 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     end
   end
 
+  describe "promote_project_thread_to_issue/3" do
+    setup do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+      :ok
+    end
+
+    test "upgrades the active project thread in place and leaves no orphan" do
+      {:ok, project_thread} = History.ensure_thread("macro", %{workspace_path: "/tmp/project-ws"})
+      {:ok, _} = History.append_message(project_thread, %{role: "user", content: "draft this"})
+
+      assert {:ok, issue_thread} =
+               History.promote_project_thread_to_issue("macro", "MAC-9", %{workspace_path: "/tmp/issue-ws"})
+
+      assert issue_thread.id == project_thread.id
+      assert issue_thread.scope == "issue"
+      assert issue_thread.issue_identifier == "MAC-9"
+      assert issue_thread.workspace_path == "/tmp/issue-ws"
+
+      assert Enum.map(History.list_messages_for_thread(issue_thread.id), & &1.content) == ["draft this"]
+      refute Repo.get_by(Thread, project_slug: "macro", scope: "project", status: "active")
+    end
+
+    test "folds the project chat into an existing issue thread and closes the orphan" do
+      {:ok, issue_thread} = History.ensure_issue_thread("macro", "MAC-9", %{workspace_path: "/tmp/issue-ws"})
+      {:ok, project_thread} = History.ensure_thread("macro", %{workspace_path: "/tmp/project-ws"})
+      {:ok, _} = History.append_message(project_thread, %{role: "user", content: "draft this"})
+
+      assert {:ok, returned} =
+               History.promote_project_thread_to_issue("macro", "MAC-9", %{workspace_path: "/tmp/issue-ws"})
+
+      assert returned.id == issue_thread.id
+      assert Enum.map(History.list_messages_for_thread(issue_thread.id), & &1.content) == ["draft this"]
+      refute Repo.get_by(Thread, project_slug: "macro", scope: "project", status: "active")
+    end
+  end
+
+  describe "repair_lingering_issue_drafts/0" do
+    setup do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+      :ok
+    end
+
+    test "promotes a legacy project thread that produced a draft issue" do
+      {:ok, project_thread} = History.ensure_thread("macro", %{workspace_path: "/tmp/project-ws"})
+      {:ok, _} = History.append_message(project_thread, %{role: "user", content: "draft this"})
+
+      {:ok, _} =
+        History.append_message(project_thread, %{
+          role: "assistant",
+          content: "Drafted MAC-9",
+          tool_calls: [
+            %{
+              "name" => "create_draft_issue",
+              "status" => "complete",
+              "result" => %{"tool" => "create_draft_issue", "data" => %{"identifier" => "MAC-9"}}
+            }
+          ]
+        })
+
+      assert :ok = History.repair_lingering_issue_drafts()
+
+      assert {:ok, upgraded} = History.get_thread(project_thread.id)
+      assert upgraded.scope == "issue"
+      assert upgraded.issue_identifier == "MAC-9"
+      refute Repo.get_by(Thread, project_slug: "macro", scope: "project", status: "active")
+    end
+
+    test "promotes a legacy project thread that created a regular issue" do
+      {:ok, project_thread} = History.ensure_thread("macro", %{workspace_path: "/tmp/project-ws"})
+      {:ok, _} = History.append_message(project_thread, %{role: "user", content: "create the task"})
+
+      {:ok, _} =
+        History.append_message(project_thread, %{
+          role: "assistant",
+          content: "Created MAC-510",
+          tool_calls: [
+            %{
+              "name" => "create_issue",
+              "status" => "complete",
+              "result" => %{"tool" => "create_issue", "data" => %{"identifier" => "MAC-510"}}
+            }
+          ]
+        })
+
+      assert :ok = History.repair_lingering_issue_drafts()
+
+      assert {:ok, %Thread{scope: "issue", issue_identifier: "MAC-510"}} =
+               History.get_thread(project_thread.id)
+    end
+
+    test "leaves plain project chats untouched" do
+      {:ok, project_thread} = History.ensure_thread("macro", %{workspace_path: "/tmp/project-ws"})
+      {:ok, _} = History.append_message(project_thread, %{role: "user", content: "just chatting"})
+
+      assert :ok = History.repair_lingering_issue_drafts()
+
+      assert {:ok, %Thread{scope: "project"}} = History.get_thread(project_thread.id)
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

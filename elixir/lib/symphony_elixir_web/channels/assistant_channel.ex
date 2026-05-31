@@ -10,6 +10,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixir.Workspace
 
   @issue_modes ~w(triage simple complex)
+  @issue_authoring_tools ~w(create_draft_issue create_issue)
 
   @impl true
   def join("assistant:issue:" <> raw_issue_topic, _payload, socket) do
@@ -173,13 +174,14 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp maybe_push_created_issue(_result, _socket), do: :ok
 
   defp maybe_migrate_created_issue({:ok, identifier}, project_slug, socket) do
-    with {:ok, issue_thread} <-
-           History.ensure_issue_thread(project_slug, identifier, %{
-             workspace_path: Workspace.path_for_issue(identifier)
-           }),
-         {:ok, project_messages} <- History.list_messages(project_slug),
-         {:ok, _thread} <- History.copy_messages_to_empty_thread(issue_thread, project_messages) do
-      push(socket, "assistant_issue_created", %{identifier: identifier, thread_id: issue_thread.id})
+    case History.promote_project_thread_to_issue(project_slug, identifier, %{
+           workspace_path: Workspace.path_for_issue(identifier)
+         }) do
+      {:ok, issue_thread} ->
+        push(socket, "assistant_issue_created", %{identifier: identifier, thread_id: issue_thread.id})
+
+      _error ->
+        :ok
     end
 
     :ok
@@ -237,7 +239,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     result
     |> draft_issue_tool_calls()
     |> Enum.find_value(fn tool_call ->
-      if create_draft_issue_tool_call?(tool_call) and successful_tool_call?(tool_call) do
+      if issue_authoring_tool_call?(tool_call) and successful_tool_call?(tool_call) do
         extract_identifier(get_any(tool_call, "result") || tool_call)
       end
     end)
@@ -263,12 +265,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     List.wrap(direct_tool_calls) ++ List.wrap(message_tool_calls)
   end
 
-  defp create_draft_issue_tool_call?(tool_call) when is_map(tool_call) do
-    get_any(tool_call, "name") == "create_draft_issue" or get_any(tool_call, "tool") == "create_draft_issue" or
-      tool_call |> get_any("result") |> get_any("tool") == "create_draft_issue"
+  defp issue_authoring_tool_call?(tool_call) when is_map(tool_call) do
+    nested_tool = tool_call |> get_any("result") |> get_any("tool")
+
+    get_any(tool_call, "name") in @issue_authoring_tools or
+      get_any(tool_call, "tool") in @issue_authoring_tools or
+      nested_tool in @issue_authoring_tools
   end
 
-  defp create_draft_issue_tool_call?(_tool_call), do: false
+  defp issue_authoring_tool_call?(_tool_call), do: false
 
   defp successful_tool_call?(tool_call) when is_map(tool_call) do
     case get_any(tool_call, "status") do

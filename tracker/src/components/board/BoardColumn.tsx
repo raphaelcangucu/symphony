@@ -140,7 +140,7 @@ export function BoardColumn({
             status={status}
             statuses={statuses}
             onCreated={onIssueCreated}
-            size="sm"
+            variant="icon"
             className="shrink-0"
           />
           <DropdownMenu>
@@ -200,15 +200,14 @@ export function BoardColumn({
           </div>
         </SortableContext>
         {issues.length === 0 ? (
-          <div className="mt-1 flex h-20 w-full items-center justify-center rounded-xl border border-dashed border-border/70">
-            <NewIssueMenu
-              projectSlug={projectSlug}
-              status={status}
-              statuses={statuses}
-              onCreated={onIssueCreated}
-              size="sm"
-            />
-          </div>
+          <NewIssueMenu
+            projectSlug={projectSlug}
+            status={status}
+            statuses={statuses}
+            onCreated={onIssueCreated}
+            variant="dashed"
+            className="mt-1"
+          />
         ) : null}
       </div>
 

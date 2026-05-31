@@ -68,7 +68,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert Enum.map(messages, & &1.role) == ["user", "assistant"]
   end
 
-  test "project draft issue turn creates an issue thread, migrates chat history, and pushes issue event" do
+  test "project draft issue turn promotes the chat in place to the issue thread without leaving an orphan" do
     Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, _opts ->
       {:ok,
        %{
@@ -110,6 +110,45 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-7")
 
     assert Enum.map(issue_history, & &1.content) == ["Draft a billing issue", "Drafted MAC-7 for billing work."]
+
+    assert {:ok, %{scope: "issue", issue_identifier: "MAC-7"}} = History.get_thread(issue_thread_id)
+
+    {:ok, %{messages: project_history}, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert project_history == []
+  end
+
+  test "project chat that creates a regular issue also binds the chat to that issue" do
+    Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, _opts ->
+      {:ok,
+       %{
+         assistant_message: "Created MAC-8.",
+         turn_id: "turn-create-8",
+         tool_calls: [
+           %{
+             name: "create_issue",
+             status: "complete",
+             result: %{
+               tool: "create_issue",
+               data: %{identifier: "MAC-8", title: "Regular issue"}
+             }
+           }
+         ]
+       }}
+    end)
+
+    {:ok, %{messages: []}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    ref = push(socket, "send_message", %{"message" => "Create the issue", "context" => %{"view" => "board"}})
+    assert_reply(ref, :ok, %{})
+
+    assert_push("assistant_issue_created", %{identifier: "MAC-8", thread_id: issue_thread_id})
+
+    assert {:ok, %{scope: "issue", issue_identifier: "MAC-8"}} = History.get_thread(issue_thread_id)
   end
 
   test "rejects assistant topic without valid token" do

@@ -19,6 +19,16 @@ describe("recentSessionPath", () => {
   it("codex → issue detail", () => {
     expect(recentSessionPath({ ...base, kind: "codex", scope: null, projectSlug: "demo", identifier: "ABC-1" })).toBe("/projects/demo/board/issues/ABC-1");
   });
+  it("issue chat → /projects/:slug/assistant/issue/:identifier", () => {
+    expect(
+      recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: "ABC-1", threadId: 9 }),
+    ).toBe("/projects/demo/assistant/issue/ABC-1");
+  });
+  it("issue chat without identifier → project assistant fallback", () => {
+    expect(
+      recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: null, threadId: 9 }),
+    ).toBe("/projects/demo/assistant");
+  });
   it("freeform chat without threadId → /assistant", () => {
     expect(recentSessionPath({ ...base, kind: "chat", scope: "freeform", threadId: null })).toBe("/assistant");
   });
@@ -40,6 +50,11 @@ describe("recentSessionSubtitle", () => {
   it("codex → identifier · project", () => {
     expect(
       recentSessionSubtitle({ ...base, kind: "codex", scope: null, identifier: "ABC-1", projectName: "Demo" }),
+    ).toBe("ABC-1 · Demo");
+  });
+  it("issue chat → identifier · project", () => {
+    expect(
+      recentSessionSubtitle({ ...base, kind: "chat", scope: "issue", identifier: "ABC-1", projectName: "Demo" }),
     ).toBe("ABC-1 · Demo");
   });
 });

@@ -33,6 +33,55 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
+  @doc """
+  Promotes the active project-scoped thread into the issue-scoped thread for `issue_identifier`.
+
+  The `/assistant/new-issue` chat lives in the project's active thread until a draft issue is
+  created. At that point the same thread must become the issue's authoring thread (spec D1) so it
+  is reachable at `/projects/:slug/assistant/issue/:id` and never lingers as an orphan project
+  chat in the recents sidebar. Behaviour:
+
+    * no active issue thread yet → upgrade the active project thread in place;
+    * an active issue thread already exists → fold the project chat into it and close the orphan;
+    * no active project thread → return/create the issue thread.
+  """
+  @spec promote_project_thread_to_issue(String.t(), String.t(), attrs()) ::
+          {:ok, Thread.t()} | {:error, term()}
+  def promote_project_thread_to_issue(project_slug, issue_identifier, attrs \\ %{})
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_map(attrs) do
+    with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
+         {:ok, identifier} <- normalize_required_string(issue_identifier, :issue_identifier),
+         {:ok, _project} <- Context.get_project(slug) do
+      promote_active_project_thread(slug, identifier, attrs)
+    end
+  end
+
+  @doc """
+  Repairs legacy orphan project threads that already produced a draft issue.
+
+  Earlier builds copied the chat into a new issue thread but left the project thread active, so it
+  surfaced in recents pointing to the project assistant instead of the issue assistant. This scans
+  active project threads, and for any whose history contains a successful `create_draft_issue`,
+  promotes it via `promote_project_thread_to_issue/3`. Idempotent and safe to run repeatedly.
+  """
+  @spec repair_lingering_issue_drafts() :: :ok
+  def repair_lingering_issue_drafts do
+    Thread
+    |> where([t], t.scope == "project" and t.status == "active")
+    |> Repo.all()
+    |> Enum.each(fn %Thread{project_slug: slug} = thread ->
+      case draft_identifier_from_thread(thread.id) do
+        nil ->
+          :ok
+
+        identifier ->
+          promote_project_thread_to_issue(slug, identifier, %{workspace_path: thread.workspace_path})
+      end
+    end)
+
+    :ok
+  end
+
   @spec set_mode(Thread.t(), String.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def set_mode(%Thread{metadata: metadata} = thread, mode) when is_binary(mode) do
     next = Map.put(metadata || %{}, "mode", mode)
@@ -158,6 +207,114 @@ defmodule SymphonyElixir.Assistant.History do
     |> Map.put_new(:status, "active")
     |> then(&Thread.changeset(%Thread{}, &1))
     |> Repo.insert()
+  end
+
+  defp promote_active_project_thread(slug, identifier, attrs) do
+    case {active_issue_thread(slug, identifier), active_thread(slug)} do
+      {%Thread{} = issue_thread, %Thread{} = project_thread} ->
+        fold_project_thread_into_issue(issue_thread, project_thread)
+
+      {%Thread{} = issue_thread, nil} ->
+        {:ok, issue_thread}
+
+      {nil, %Thread{} = project_thread} ->
+        upgrade_thread_to_issue(project_thread, identifier, attrs)
+
+      {nil, nil} ->
+        create_issue_thread(slug, identifier, attrs)
+    end
+  end
+
+  defp fold_project_thread_into_issue(%Thread{} = issue_thread, %Thread{} = project_thread) do
+    project_messages = list_messages_for_thread(project_thread.id)
+
+    with {:ok, _filled} <- copy_messages_to_empty_thread(issue_thread, project_messages),
+         {:ok, _closed} <- close_thread(project_thread) do
+      {:ok, issue_thread}
+    end
+  end
+
+  defp upgrade_thread_to_issue(%Thread{} = project_thread, identifier, attrs) do
+    workspace_path = Map.get(attrs, :workspace_path) || project_thread.workspace_path
+
+    project_thread
+    |> Thread.changeset(%{
+      scope: "issue",
+      issue_identifier: identifier,
+      workspace_path: workspace_path
+    })
+    |> Repo.update()
+  end
+
+  defp close_thread(%Thread{} = thread) do
+    thread
+    |> Thread.changeset(%{status: "closed"})
+    |> Repo.update()
+  end
+
+  defp draft_identifier_from_thread(thread_id) when is_integer(thread_id) do
+    Message
+    |> where([m], m.thread_id == ^thread_id)
+    |> order_by([m], desc: m.sequence)
+    |> Repo.all()
+    |> Enum.find_value(&draft_identifier_from_message/1)
+  end
+
+  defp draft_identifier_from_message(%Message{} = message) do
+    message
+    |> tool_calls()
+    |> Enum.find_value(fn call ->
+      if draft_tool_call?(call) and tool_call_succeeded?(call) do
+        draft_identifier_from_call(call)
+      end
+    end)
+  end
+
+  @issue_authoring_tools ~w(create_draft_issue create_issue)
+
+  defp draft_tool_call?(call) when is_map(call) do
+    nested_tool = call |> field_any("result") |> field_any("tool")
+
+    field_any(call, "name") in @issue_authoring_tools or
+      field_any(call, "tool") in @issue_authoring_tools or
+      nested_tool in @issue_authoring_tools
+  end
+
+  defp draft_tool_call?(_call), do: false
+
+  defp tool_call_succeeded?(call) when is_map(call) do
+    field_any(call, "status") in [nil, "complete", "completed", "ok"]
+  end
+
+  defp tool_call_succeeded?(_call), do: false
+
+  defp draft_identifier_from_call(call) do
+    result = field_any(call, "result") || call
+    data = field_any(result, "data") || result
+
+    [field_any(data, "identifier"), field_any(result, "identifier"), field_any(call, "identifier")]
+    |> Enum.find_value(fn
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> nil
+          trimmed -> trimmed
+        end
+
+      _other ->
+        nil
+    end)
+  end
+
+  defp field_any(map, key) when is_map(map) and is_binary(key) do
+    Map.get(map, key) || Map.get(map, safe_existing_atom(key))
+  end
+
+  defp field_any(_map, _key), do: nil
+
+  defp safe_existing_atom(key) do
+    String.to_existing_atom(key)
+  rescue
+    ArgumentError -> nil
   end
 
   defp filter_scope(query, nil), do: query
