@@ -4,6 +4,8 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
   alias SymphonyElixir.Assistant.{CodexSession, History}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workspace
+  alias SymphonyElixir.Workflow
 
   setup do
     migrate_repo()
@@ -12,7 +14,14 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     File.rm_rf!(tmp_dir)
     File.mkdir_p!(tmp_dir)
 
-    on_exit(fn -> File.rm_rf!(tmp_dir) end)
+    workflow_file = Path.join(tmp_dir, "WORKFLOW.md")
+    SymphonyElixir.TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: tmp_dir)
+    Workflow.set_workflow_file_path(workflow_file)
+
+    on_exit(fn ->
+      Workflow.clear_workflow_file_path()
+      File.rm_rf!(tmp_dir)
+    end)
 
     %{workspace_root: tmp_dir}
   end
@@ -106,6 +115,52 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     assert_received {:opts, opts}
     assert Keyword.get(opts, :dynamic_tools) == []
     assert is_function(Keyword.get(opts, :tool_executor), 2)
+  end
+
+  describe "send_message_to_issue_thread/4" do
+    setup %{workspace_root: workspace_root} do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+
+      thread_workspace = Path.join(workspace_root, "ignored")
+      File.mkdir_p!(thread_workspace)
+
+      {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: thread_workspace})
+
+      %{thread: thread}
+    end
+
+    test "runs the turn in the issue working tree", %{thread: thread} do
+      test_pid = self()
+
+      runner = fn workspace, _prompt, _issue, _opts ->
+        send(test_pid, {:workspace, workspace})
+        {:ok, %{assistant_message: "done", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, result} =
+               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+
+      assert result.assistant_message == "done"
+      expected = Workspace.path_for_issue("MAC-1")
+      assert_receive {:workspace, ^expected}
+    end
+
+    test "complex mode injects superpowers methodology into the prompt", %{thread: thread} do
+      {:ok, thread} = History.set_mode(thread, "complex")
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "build X", %{}, runner: runner)
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "brainstorming"
+      assert prompt =~ "docs/superpowers/specs"
+    end
   end
 
   defp tmp_dir do

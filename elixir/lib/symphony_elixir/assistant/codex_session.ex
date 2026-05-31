@@ -4,6 +4,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   alias SymphonyElixir.Assistant.{History, ToolExecutor}
   alias SymphonyElixir.Codex.CodingAgent
   alias SymphonyElixir.Config
+  alias SymphonyElixir.{Skills, Workspace}
 
   @history_limit 20
 
@@ -54,6 +55,37 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          prompt <- build_freeform_prompt(trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_freeform_turn(workspace, prompt, opts),
+         {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
+         {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
+      {:ok,
+       %{
+         assistant_message: assistant_message.content,
+         tool_calls: assistant_message.tool_calls,
+         codex_thread_id: Map.get(runner_result, :codex_thread_id),
+         turn_id: Map.get(runner_result, :turn_id),
+         user_message: History.message_payload(user_message),
+         assistant_chat_message: History.message_payload(assistant_message)
+       }}
+    end
+  end
+
+  @spec send_message_to_issue_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
+          {:ok, turn_result()} | {:error, term()}
+  def send_message_to_issue_thread(
+        %{scope: "issue", id: thread_id, project_slug: project_slug, issue_identifier: identifier} = thread,
+        message,
+        context,
+        opts \\ []
+      )
+      when is_binary(message) and is_map(context) and is_list(opts) do
+    with {:ok, trimmed} <- normalize_message(message),
+         {:ok, workspace} <- ensure_issue_workspace(identifier),
+         history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         {:ok, user_message} <-
+           History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
+         prompt <- build_issue_prompt(thread, trimmed, context, history),
+         :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
+         {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, opts),
          {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
       {:ok,
@@ -145,6 +177,23 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     |> normalize_runner_result()
   end
 
+  defp ensure_issue_workspace(identifier) do
+    Workspace.create_for_issue(identifier)
+  end
+
+  defp run_issue_turn(workspace, prompt, project_slug, opts) do
+    runner = Keyword.get(opts, :runner, &default_runner/4)
+
+    runner_opts =
+      opts
+      |> Keyword.put(:project_slug, project_slug)
+      |> Keyword.put_new(:dynamic_tools, ToolExecutor.tool_specs())
+      |> Keyword.put_new(:tool_executor, ToolExecutor.codex_tool_executor(project_slug))
+
+    runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
+    |> normalize_runner_result()
+  end
+
   defp freeform_issue, do: %{id: "assistant:freeform", identifier: "freeform", title: "Freeform assistant chat"}
 
   defp build_freeform_prompt(message, context, history) do
@@ -163,6 +212,51 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     #{message}
     """
     |> String.trim()
+  end
+
+  defp build_issue_prompt(%{metadata: metadata, issue_identifier: identifier, project_slug: project_slug}, message, context, history) do
+    mode = Map.get(metadata || %{}, "mode", "triage")
+
+    base = """
+    You are the Symphony issue authoring assistant for `#{project_slug}`, working on issue `#{identifier}`.
+    You are running inside the issue's working tree (the project repositories are cloned here).
+    Answer in the user's language. Use tracker tools to update the bound issue. Do not dispatch Codex unless asked.
+
+    Recent conversation:
+    #{format_history(history)}
+
+    Context:
+    #{inspect(context)}
+
+    Current user message:
+    #{message}
+    """
+
+    mode_section =
+      case mode do
+        "complex" ->
+          """
+
+          MODE: COMPLEX. Follow this vendored methodology exactly:
+          #{Skills.load(["brainstorming", "writing-plans"])}
+
+          Write spec files to `docs/superpowers/specs/` and plan files to `docs/superpowers/plans/`
+          in this working tree. Get section-by-section approval in chat. Do not start writing feature code.
+          """
+
+        "simple" ->
+          """
+
+          MODE: SIMPLE. Search the repositories in this working tree for relevant context (README, code,
+          conventions) and produce a fuller, formal issue description. Apply it with the update_issue tool
+          for `#{identifier}`. Do not create spec/plan files.
+          """
+
+        _ ->
+          "\n\nMODE: TRIAGE. Collect the title and a short description, then help decide simple vs complex."
+      end
+
+    String.trim(base <> mode_section)
   end
 
   defp default_runner(workspace, prompt, issue, opts) do
