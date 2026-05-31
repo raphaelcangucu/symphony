@@ -11,6 +11,7 @@ linear:
 tracker:
   field_states:
     - Backlog
+    - Triage
     - Todo
     - In Progress
     - Human Review
@@ -35,6 +36,10 @@ tracker:
     - Closed
 polling:
   interval_ms: 5000
+assistant:
+  # Draft issues created by the New issue assistant start here. The status must
+  # exist in tracker.field_states and stay outside tracker.active_states.
+  draft_status: Triage
 # Public preview tunnel (Cloudflare). Exposes the tracker and ready dev-server
 # previews publicly via a named tunnel. Disabled by default; previews become
 # UNAUTHENTICATED to anyone with the URL once enabled.
@@ -65,6 +70,9 @@ agent:
   max_turns: 20
 codex:
   command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex app-server
+  # Enables the tracker dispatch checkbox that sends a reviewed Codex goal for
+  # long-running tasks. Leave false/missing to use normal single-turn dispatch.
+  goals_enabled: true
   approval_policy: never
   thread_sandbox: workspace-write
   turn_sandbox_policy:
@@ -103,6 +111,13 @@ Instructions:
 3. Final message must report completed actions and blockers only. Do not include "next steps for user".
 
 Work only in the provided repository copy. Do not touch any other path.
+
+If the issue was prepared through the assistant authoring flow, review any
+`docs/superpowers/specs/*.md`, `docs/superpowers/plans/*.md`, and
+`docs/superpowers/handoff.md` files in the workspace before implementation.
+Treat those documents as the accepted task design; use the issue body as a lean
+summary and keep authoring/revision discussion in the issue-scoped assistant,
+not in the execution workpad.
 
 ## Prerequisite: Linear MCP or `linear_graphql` tool is available
 

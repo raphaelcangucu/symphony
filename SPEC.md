@@ -323,6 +323,7 @@ Top-level keys:
 - `workspace`
 - `hooks`
 - `agent`
+- `assistant`
 - `codex`
 
 Unknown keys should be ignored for forward compatibility.
@@ -413,7 +414,17 @@ Fields:
   - State keys are normalized (`trim` + `lowercase`) for lookup.
   - Invalid entries (non-positive or non-numeric) are ignored.
 
-#### 5.3.6 `codex` (object)
+#### 5.3.6 `assistant` (object, optional extension)
+
+Fields:
+
+- `draft_status` (string)
+  - Default: `Triage`.
+  - Status used when the issue authoring assistant creates a draft issue.
+  - The status must exist in the configured tracker workflow and should be outside the active states
+    used for orchestration so draft issues are not auto-dispatched before authoring finishes.
+
+#### 5.3.7 `codex` (object)
 
 Fields:
 
@@ -442,6 +453,11 @@ fields locally if they want stricter startup checks.
 - `stall_timeout_ms` (integer)
   - Default: `300000` (5 minutes)
   - If `<= 0`, stall detection is disabled.
+- `goals_enabled` (boolean)
+  - Default: `false`.
+  - Enables the Codex-only Goal mode dispatch option. When enabled and a user confirms a goal, the
+    runtime sends `thread/goal/set` before `turn/start`; unsupported goal calls fall back to normal
+    single-turn execution with an operator-visible warning.
 
 ### 5.4 Prompt Template Contract
 
@@ -545,6 +561,7 @@ Validation checks:
 - `tracker.kind` is present and supported.
 - `tracker.api_key` is present after `$` resolution.
 - `tracker.project_slug` is present when required by the selected tracker kind.
+- If issue authoring is enabled, `assistant.draft_status` names an existing tracker workflow status.
 - `codex.command` is present and non-empty.
 
 ### 6.4 Config Fields Summary (Cheat Sheet)
@@ -557,6 +574,7 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `tracker.project_slug`: string, required when `tracker.kind=linear`
 - `tracker.active_states`: list/string, default `Todo, In Progress`
 - `tracker.terminal_states`: list/string, default `Closed, Cancelled, Canceled, Duplicate, Done`
+- `assistant.draft_status`: string, default `Triage`
 - `polling.interval_ms`: integer, default `30000`
 - `workspace.root`: path, default `<system-temp>/symphony_workspaces`
 - `hooks.after_create`: shell script or null
@@ -575,6 +593,7 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `codex.turn_timeout_ms`: integer, default `3600000`
 - `codex.read_timeout_ms`: integer, default `5000`
 - `codex.stall_timeout_ms`: integer, default `300000`
+- `codex.goals_enabled`: boolean, default `false`
 - `server.port` (extension): integer, optional; enables the optional HTTP server, `0` may be used
   for ephemeral local bind, and CLI `--port` overrides it
 
@@ -951,7 +970,14 @@ semantics):
      - `cwd` = absolute workspace path
      - If optional client-side tools are implemented, include their advertised tool specs using the
        protocol mechanism supported by the targeted Codex app-server version.
-4. `turn/start` request
+4. Optional `thread/goal/set` request for Codex Goal mode
+   - Sent only when `codex.goals_enabled` is true and the dispatch request includes a non-empty,
+     user-reviewed goal.
+   - The goal should be derived from accepted issue authoring artifacts when present, including
+     objective, constraints, verification, and stopping conditions.
+   - If the request fails because the Codex app-server does not support goals, continue with a normal
+     single-turn dispatch and surface a clear warning.
+5. `turn/start` request
    - Params include:
      - `threadId`
      - `input` = single text item containing rendered prompt for the first turn, or continuation
@@ -1252,6 +1278,22 @@ If prompt rendering fails:
 - Fail the run attempt immediately.
 - Let the orchestrator treat it like any other worker failure and decide retry behavior.
 
+### 12.5 Issue Authoring Assistant Extension
+
+An implementation may provide an issue authoring assistant as a pre-dispatch workflow:
+
+- **New issue assistant** is the primary create path, with a quick-create/manual fallback if offered.
+- The assistant creates an issue in `assistant.draft_status`, binds the assistant thread to that
+  issue, and routes to `/projects/:slug/assistant/issue/:id`.
+- **Simple mode** enriches the issue description from workspace context. **Complex mode** injects
+  vendored methodology skills from `skills/superpowers/...`, writes specs/plans/handoff under
+  `docs/superpowers/`, and keeps document review read-only in the assistant and issue detail.
+- Authoring and execution are separate surfaces: authoring owns chat and document revision;
+  execution owns orchestrator dispatch, run state, and agent controls.
+- On dispatch, prompt construction should reuse the same issue workspace and include any
+  `docs/superpowers/specs/*.md`, `docs/superpowers/plans/*.md`, and `docs/superpowers/handoff.md`
+  content needed for execution continuity.
+
 ## 13. Logging, Status, and Observability
 
 ### 13.1 Logging Conventions
@@ -1264,6 +1306,12 @@ Required context fields for issue-related logs:
 Required context for coding-agent session lifecycle logs:
 
 - `session_id`
+
+Recommended context for assistant authoring and Goal mode events:
+
+- `assistant_thread_id` when the event is tied to an assistant thread.
+- `issue_identifier` on `assistant_document_changed` and document API failures.
+- `goal_mode=true` or equivalent on Codex dispatches that provide a goal.
 
 Message formatting requirements:
 
@@ -1519,6 +1567,22 @@ API design notes:
 - API errors should use a JSON envelope such as `{"error":{"code":"...","message":"..."}}`.
 - If the dashboard is a client-side app, it should consume this API rather than duplicating state
   logic.
+
+#### 13.7.3 Tracker Issue Documents API Extension
+
+For the issue authoring assistant, implementations may expose read-only document endpoints under the
+tracker API:
+
+- `GET /api/tracker/v1/projects/:slug/issues/:identifier/documents`
+  - Lists available issue documents from the issue workspace under `docs/superpowers/specs/`,
+    `docs/superpowers/plans/`, and `docs/superpowers/handoff.md`.
+  - Response data should include `available`, optional `reason`, and document rows with `kind`,
+    `path`, `title`, and `updated_at`.
+- `GET /api/tracker/v1/projects/:slug/issues/:identifier/documents/*path`
+  - Returns the markdown content for one listed document.
+  - Paths must be resolved from the issue workspace, restricted to `docs/superpowers/`, and rejected
+    for traversal, symlink escape, non-markdown files, or oversized reads.
+  - These endpoints are read-only; document changes happen through the authoring assistant.
 
 ## 14. Failure Model and Recovery Strategy
 
@@ -1947,6 +2011,9 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - `$VAR` resolution works for tracker API key and path values
 - `~` path expansion works
 - `codex.command` is preserved as a shell command string
+- `assistant.draft_status` defaults to `Triage` and validates against tracker workflow statuses when
+  issue authoring is enabled
+- `codex.goals_enabled` defaults to `false` and enables Goal mode only when explicitly true
 - Per-state concurrency override map normalizes state names and ignores invalid values
 - Prompt template renders `issue` and `attempt`
 - Prompt rendering fails on unknown variables (strict mode)
@@ -2020,6 +2087,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   telemetry are accepted when they preserve the same logical meaning
 - If optional client-side tools are implemented, the startup handshake advertises the supported tool
   specs required for discovery by the targeted app-server version
+- If Goal mode is enabled and a goal is provided, `thread/goal/set` is sent once before `turn/start`;
+  unsupported goals fall back to normal dispatch with a warning
 - If the optional `linear_graphql` client-side tool extension is implemented:
   - the tool is advertised to the session
   - valid `query` / `variables` inputs execute against configured Linear auth
@@ -2059,6 +2128,9 @@ network access, or external service permissions are unavailable.
 - A skipped real-integration test should be reported as skipped, not silently treated as passed.
 - If a real-integration profile is explicitly enabled in CI or release validation, failures should
   fail that job.
+- For the issue authoring assistant: click **New issue**, confirm
+  `/projects/:slug/assistant/issue/:id`, verify Complex-mode docs appear/refresh, open issue
+  detail Authoring/Execution, and dispatch Codex with Goal mode checked when enabled.
 
 ## 18. Implementation Checklist (Definition of Done)
 

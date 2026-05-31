@@ -41,6 +41,10 @@ tracker:
     - Duplicate
 polling:
   interval_ms: 5000
+assistant:
+  # Draft issues created by the New issue assistant start here. Default is
+  # Triage; this board uses Backlog as its non-actionable intake status.
+  draft_status: Backlog
 # Report this process's orchestrator snapshot to a central observability hub.
 # observability:
 #   hub_url: http://localhost:4000      # where this process reports to; OMIT on the hub process itself (it self-registers in-process)
@@ -131,6 +135,8 @@ agent:
     Merging: Done
 codex:
   command: codex --config shell_environment_policy.inherit=all app-server
+  # Enables the Codex-only Goal mode checkbox at dispatch time.
+  # goals_enabled: true
   approval_policy: never
   thread_sandbox: workspace-write
   turn_sandbox_policy:
@@ -231,6 +237,19 @@ Symphony reads and updates the GitHub Project **Status** field when moving cards
 Use a single `## Codex Workpad` comment for progress. Blockers: `Blocked by #N` or `Depends on clouapp/front#N`.
 
 Raw GitHub GraphQL: `github_graphql` (same shape as `linear_graphql`).
+
+## Assistant authoring handoff
+
+The tracker **New issue** button opens the issue authoring assistant by default. It
+creates a draft in `assistant.draft_status`, then continues at
+`/projects/:slug/assistant/issue/:id`. Simple mode enriches the issue body; Complex
+mode writes read-only review artifacts under `docs/superpowers/specs/`,
+`docs/superpowers/plans/`, and `docs/superpowers/handoff.md` in this workspace.
+
+Before execution, read those documents when present. The Agent tab separates
+**Authoring** (assistant chat and docs) from **Execution** (orchestrator run). For
+Codex work that needs long-running continuation, enable `codex.goals_enabled` and
+dispatch with **Goal mode** checked after reviewing the generated goal.
 
 ## Rework flow (required)
 

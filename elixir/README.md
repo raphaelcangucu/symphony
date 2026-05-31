@@ -234,6 +234,14 @@ Notes:
   - `codex.turn_sandbox_policy` defaults to a `workspaceWrite` policy rooted at the current issue
     workspace. Supported `type` values: `dangerFullAccess`, `readOnly`, `externalSandbox`,
     `workspaceWrite`.
+  - `codex.goals_enabled` defaults to `false`. Set it to `true` to allow Codex dispatches with
+    Goal mode; when disabled, goal requests fall back to a normal single-turn dispatch with a
+    warning.
+- **Assistant issue authoring**:
+  - `assistant.draft_status` defaults to `Triage`. The configured tracker workflow/status must
+    already exist and should be outside `tracker.active_states` so drafts are not auto-dispatched.
+  - Complex issue authoring injects vendored skill files from `skills/superpowers/...`; update that
+    folder manually when changing the assistant methodology.
 - **Claude backend** uses `bypassPermissions` mode and has no additional policy settings.
 - `agent.max_turns` caps how many back-to-back agent turns Symphony will run in a single agent
   invocation when a turn completes normally but the issue is still in an active state. Default: `20`.
@@ -348,7 +356,7 @@ live, cross-process view of running sessions.
 - **The page**: open `/tracker` and choose **Observability** in the sidebar (route
   `/observability`) for live per-runtime cards and a global running-sessions table.
 
-### Recents & freeform assistant chats
+### Recents & assistant chats
 
 The sidebar shows a **Recents** group listing the most recent sessions across all projects,
 unifying two row kinds: persisted **assistant chat threads** and **Codex/issue runs** (an issue
@@ -358,8 +366,17 @@ and a status dot; clicking navigates to the chat view or the issue's **Agent** t
 The assistant also supports **freeform chats** that are not bound to any project, created and opened
 from the global **Assistant** area (`/assistant`, `/assistant/:threadId`). Freeform chat is
 conversational only in v1 (no tracker tools). The thread model carries a `scope`
-(`project`|`freeform`|`issue`) with `issue_identifier`/`title`, and `project_slug` is nullable;
-`scope: "issue"` is reserved for future issue-scoped chats.
+(`project`|`freeform`|`issue`) with `issue_identifier`/`title`, and `project_slug` is nullable.
+
+Issue authoring uses the same assistant surface as the primary **New issue** path. The assistant
+creates a draft issue in `assistant.draft_status`, redirects to
+`/projects/:slug/assistant/issue/:id`, and continues in an issue-scoped chat that runs inside that
+issue's workspace. **Simple** mode enriches the issue description directly; **Complex** mode follows
+the vendored superpowers methodology, writes spec/plan/handoff docs under `docs/superpowers/`, and
+keeps review read-only in the assistant and issue detail. Execution stays separate: the issue
+detail's Agent tab has **Authoring** for chat/docs and **Execution** for the orchestrator run.
+Codex dispatch can opt into **Goal mode** when `codex.goals_enabled: true`; Symphony derives a goal
+from the issue docs for review, then sends it to Codex for long-running continuation.
 
 - **Endpoints** (bearer auth, `SYMPHONY_TRACKER_TOKEN`):
   - `GET /api/tracker/v1/recents?limit=` — unified, recency-ranked sessions (limit clamped `1..50`,
@@ -367,9 +384,24 @@ conversational only in v1 (no tracker tools). The thread model carries a `scope`
   - `GET /api/tracker/v1/assistant/threads?scope=&project_slug=&limit=` — list assistant threads
     with previews.
   - `POST /api/tracker/v1/assistant/threads` — body `{ scope, project_slug?, title? }`; v1 supports
-    `freeform` (and `project`) and returns the created thread.
+    `freeform`, `project`, and issue-authoring threads, and returns the created thread.
+  - `GET /api/tracker/v1/projects/:slug/issues/:identifier/documents` — list issue authoring docs
+    from the issue workspace under `docs/superpowers/specs/`, `docs/superpowers/plans/`, and
+    `docs/superpowers/handoff.md`.
+  - `GET /api/tracker/v1/projects/:slug/issues/:identifier/documents/*path` — read one markdown
+    document. Paths are resolved from the issue workspace, restricted to `docs/superpowers/`, and
+    protected against traversal/oversized reads.
 - **Channel**: the assistant channel accepts `assistant:thread:<id>` (a specific thread, project or
-  freeform) alongside the existing `assistant:<project_slug>` topic.
+  freeform) alongside the existing `assistant:<project_slug>` topic. Issue threads push
+  `assistant_document_changed` when complex-mode turns change authoring docs.
+
+Manual smoke checklist:
+
+- Click **New issue** and confirm it opens the assistant path.
+- Follow the issue route `/projects/:slug/assistant/issue/:id`.
+- In Complex mode, confirm docs appear and refresh after assistant edits.
+- In issue detail, confirm the Agent tab separates **Authoring** and **Execution**.
+- Dispatch with **Goal mode** checked for Codex when goals are enabled.
 
 ## Issue preview servers
 
