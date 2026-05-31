@@ -40,6 +40,7 @@ export function useIssueDocuments({
   const [available, setAvailable] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const mountedRef = useRef(false);
   const inFlightRef = useRef(false);
   const queuedRefetchRef = useRef(false);
   const hasLoadedRef = useRef(false);
@@ -63,7 +64,12 @@ export function useIssueDocuments({
   const refetch = useCallback(async () => {
     const requestState = latestRequestRef.current;
 
-    if (!requestState.active || !requestState.projectSlug || !requestState.identifier) {
+    if (
+      !mountedRef.current ||
+      !requestState.active ||
+      !requestState.projectSlug ||
+      !requestState.identifier
+    ) {
       return;
     }
 
@@ -85,6 +91,7 @@ export function useIssueDocuments({
       const latestRequestState = latestRequestRef.current;
 
       if (
+        !mountedRef.current ||
         requestVersion !== requestVersionRef.current ||
         !latestRequestState.active ||
         latestRequestState.resourceKey !== requestResourceKey
@@ -103,7 +110,7 @@ export function useIssueDocuments({
     } finally {
       inFlightRef.current = false;
 
-      if (queuedRefetchRef.current && latestRequestRef.current.active) {
+      if (queuedRefetchRef.current && mountedRef.current && latestRequestRef.current.active) {
         queuedRefetchRef.current = false;
         void refetch();
         return;
@@ -111,10 +118,28 @@ export function useIssueDocuments({
 
       queuedRefetchRef.current = false;
 
-      if (requestVersion === requestVersionRef.current || !latestRequestRef.current.active) {
+      if (
+        mountedRef.current &&
+        (requestVersion === requestVersionRef.current || !latestRequestRef.current.active)
+      ) {
         setLoading(false);
       }
     }
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      latestRequestRef.current = {
+        active: false,
+        projectSlug: "",
+        identifier: null,
+        resourceKey: null,
+      };
+      queuedRefetchRef.current = false;
+    };
   }, []);
 
   useEffect(() => {

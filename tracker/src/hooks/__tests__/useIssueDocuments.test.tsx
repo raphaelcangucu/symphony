@@ -201,6 +201,29 @@ describe("useIssueDocuments", () => {
     expect(listIssueDocuments).toHaveBeenCalledTimes(1);
   });
 
+  it("settles an in-flight request after unmount without another fetch", async () => {
+    const pendingInitialFetch = createDeferred<IssueDocumentList>();
+    listIssueDocuments.mockReturnValueOnce(pendingInitialFetch.promise);
+
+    const { unmount } = renderHook(() =>
+      useIssueDocuments({
+        projectSlug: "macro-markets",
+        identifier: "MAC-1",
+      }),
+    );
+
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+
+    unmount();
+
+    await act(async () => {
+      pendingInitialFetch.resolve(availableDocuments);
+      await pendingInitialFetch.promise;
+    });
+
+    expect(listIssueDocuments).toHaveBeenCalledTimes(1);
+  });
+
   it("uses the latest identifier for a queued refetch after identifier changes", async () => {
     const pendingInitialFetch = createDeferred<IssueDocumentList>();
     listIssueDocuments
