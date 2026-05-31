@@ -39,6 +39,11 @@ defmodule SymphonyElixir.Codex.Config do
     end
   end
 
+  @spec goals_enabled?() :: boolean()
+  def goals_enabled? do
+    section_value("goals_enabled") == true
+  end
+
   @spec turn_sandbox_policy(Path.t() | nil) :: map()
   def turn_sandbox_policy(workspace \\ nil) do
     case resolve_turn_sandbox_policy(workspace) do
