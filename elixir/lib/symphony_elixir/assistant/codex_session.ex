@@ -74,6 +74,11 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Path.join([root, "assistant", "freeform", to_string(thread_id)])
   end
 
+  @spec freeform_workspace_root() :: Path.t()
+  def freeform_workspace_root do
+    Path.join([Config.workspace_root() |> Path.expand(), "assistant", "freeform"])
+  end
+
   @spec assistant_workspace(String.t(), keyword()) :: {:ok, Path.t()} | {:error, term()}
   def assistant_workspace(project_slug, opts \\ []) when is_binary(project_slug) and is_list(opts) do
     case String.trim(project_slug) do

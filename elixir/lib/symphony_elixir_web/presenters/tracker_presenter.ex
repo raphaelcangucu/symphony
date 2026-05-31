@@ -202,6 +202,21 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     }
   end
 
+  @spec assistant_thread(map()) :: map()
+  def assistant_thread(thread) when is_map(thread) do
+    %{
+      id: thread.id,
+      scope: thread.scope,
+      project_slug: thread.project_slug,
+      project_name: Map.get(thread, :project_name),
+      issue_identifier: thread.issue_identifier,
+      title: thread.title,
+      status: thread.status,
+      preview: Map.get(thread, :preview),
+      updated_at: iso8601(thread.updated_at)
+    }
+  end
+
   defp event_to_string(nil), do: nil
   defp event_to_string(event) when is_atom(event), do: Atom.to_string(event)
   defp event_to_string(event) when is_binary(event), do: event
