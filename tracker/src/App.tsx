@@ -13,6 +13,7 @@ import { NewIssueRoute } from "@/components/workspace/NewIssueRoute";
 import { ProjectAssistantRoute } from "@/components/workspace/ProjectAssistantRoute";
 import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRoute";
 import { getTrackerToken } from "@/config";
+import { AssistantPage } from "@/pages/AssistantPage";
 import { BoardPage } from "@/pages/BoardPage";
 import { ListPage } from "@/pages/ListPage";
 import { ObservabilityPage } from "@/pages/ObservabilityPage";
@@ -67,6 +68,8 @@ export function App() {
             <Route path="templates" element={<TemplateListPage />} />
             <Route path="templates/:slug" element={<TemplateEditPage />} />
             <Route path="observability" element={<ObservabilityPage />} />
+            <Route path="assistant" element={<AssistantPage />} />
+            <Route path="assistant/:threadId" element={<AssistantPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/projects" replace />} />

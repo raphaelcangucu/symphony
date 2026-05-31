@@ -88,6 +88,10 @@ export function ProjectAssistantPanel({ projectSlug, threadId, view, mode = "she
 
   useEffect(() => {
     if (!active) return;
+    if (threadId == null && !projectSlug) {
+      setConnectionError("Assistant has no thread or project to connect to.");
+      return;
+    }
 
     const socket = createTrackerSocket();
     socket.connect();
