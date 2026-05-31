@@ -1,0 +1,104 @@
+defmodule SymphonyElixir.PublicRouting do
+  @moduledoc """
+  Maps public preview hostnames to local dev-server ports and builds the
+  per-namespace hostnames used by the public tunnel.
+  """
+
+  use GenServer
+
+  require Logger
+
+  alias SymphonyElixir.Config
+  alias SymphonyElixir.LocalTracker.Viewer
+
+  @table __MODULE__
+  @max_label_len 63
+
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
+  end
+
+  @spec sanitize_label(String.t()) :: String.t()
+  def sanitize_label(value) when is_binary(value) do
+    value
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/u, "-")
+    |> String.replace(~r/-+/, "-")
+    |> String.trim("-")
+  end
+
+  @spec host_for(String.t(), String.t(), String.t(), keyword()) ::
+          {:ok, String.t()} | {:error, term()}
+  def host_for(project_slug, identifier, step_slug, opts) do
+    with {:ok, namespace} <- fetch_namespace(opts) do
+      base_domain = fetch_base_domain(opts)
+
+      label =
+        [project_slug, strip_hash(identifier), step_slug]
+        |> Enum.map(&sanitize_label/1)
+        |> Enum.reject(&(&1 == ""))
+        |> Enum.join("-")
+        |> enforce_label_limit()
+
+      {:ok, "#{label}.#{namespace}.#{base_domain}"}
+    end
+  end
+
+  @spec tracker_host(keyword()) :: String.t()
+  def tracker_host(opts) do
+    {:ok, namespace} = fetch_namespace(opts)
+    "#{namespace}.#{fetch_base_domain(opts)}"
+  end
+
+  @spec namespace_suffix(keyword()) :: String.t()
+  def namespace_suffix(opts) do
+    {:ok, namespace} = fetch_namespace(opts)
+    ".#{namespace}.#{fetch_base_domain(opts)}"
+  end
+
+  @spec resolve_namespace() :: {:ok, String.t()} | {:error, :no_namespace}
+  def resolve_namespace do
+    case Config.public_tunnel_namespace() do
+      ns when is_binary(ns) and ns != "" ->
+        {:ok, sanitize_label(ns)}
+
+      _ ->
+        case Viewer.current() do
+          {:ok, %{login: login}} when is_binary(login) and login != "" ->
+            {:ok, sanitize_label(login)}
+
+          _ ->
+            {:error, :no_namespace}
+        end
+    end
+  end
+
+  @impl true
+  def init(_opts) do
+    table = :ets.new(@table, [:named_table, :set, :protected, read_concurrency: true])
+    {:ok, %{table: table}}
+  end
+
+  defp fetch_namespace(opts) do
+    case Keyword.get(opts, :namespace) do
+      ns when is_binary(ns) and ns != "" -> {:ok, sanitize_label(ns)}
+      _ -> resolve_namespace()
+    end
+  end
+
+  defp fetch_base_domain(opts) do
+    Keyword.get(opts, :base_domain) || Config.public_tunnel_base_domain()
+  end
+
+  defp strip_hash(identifier) when is_binary(identifier), do: String.trim_leading(identifier, "#")
+  defp strip_hash(_), do: ""
+
+  defp enforce_label_limit(label) when byte_size(label) <= @max_label_len, do: label
+
+  defp enforce_label_limit(label) do
+    hash = label |> :erlang.md5() |> Base.encode16(case: :lower) |> binary_part(0, 8)
+    keep = @max_label_len - byte_size(hash) - 1
+    "#{binary_part(label, 0, keep)}-#{hash}"
+  end
+end
