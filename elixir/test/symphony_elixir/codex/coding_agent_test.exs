@@ -2,12 +2,12 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
   use SymphonyElixir.TestSupport
 
   describe "goal mode" do
-    test "sets the thread goal after thread start and before turn start when goals are enabled" do
+    test "sets the trimmed thread goal after thread start and before turn start when goals are enabled" do
       with_fake_goal_server(fn workspace, issue, trace_file ->
         enable_goals!()
 
         assert {:ok, _result} =
-                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
+                 AppServer.run(workspace, "Build the feature", issue, goal: "  Ship the feature\n")
 
         messages = outbound_messages(trace_file)
         goal_message = message_with_method(messages, "thread/goal/set")
@@ -19,6 +19,38 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
                }
 
         assert message_order(messages) == ["initialize", "initialized", "thread/start", "thread/goal/set", "turn/start"]
+      end)
+    end
+
+    test "continues without setting a goal for whitespace-only goal text" do
+      with_fake_goal_server(fn workspace, issue, trace_file ->
+        enable_goals!()
+
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: " \n\t ")
+
+        messages = outbound_messages(trace_file)
+
+        refute message_with_method(messages, "thread/goal/set")
+        assert message_order(messages) == ["initialize", "initialized", "thread/start", "turn/start"]
+      end)
+    end
+
+    test "warns and continues without setting a goal for non-binary goal values" do
+      with_fake_goal_server(fn workspace, issue, trace_file ->
+        enable_goals!()
+
+        log =
+          capture_log(fn ->
+            assert {:ok, _result} =
+                     AppServer.run(workspace, "Build the feature", issue, goal: false)
+          end)
+
+        messages = outbound_messages(trace_file)
+
+        refute message_with_method(messages, "thread/goal/set")
+        assert message_order(messages) == ["initialize", "initialized", "thread/start", "turn/start"]
+        assert log =~ "Codex goal option must be a string"
       end)
     end
 

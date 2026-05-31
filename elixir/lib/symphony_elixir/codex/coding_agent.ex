@@ -264,9 +264,23 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
   defp maybe_set_goal(_port, _thread_id, nil), do: :ok
 
-  defp maybe_set_goal(_port, _thread_id, goal) when is_binary(goal) and goal == "", do: :ok
-
   defp maybe_set_goal(port, thread_id, goal) when is_binary(goal) do
+    goal = String.trim(goal)
+
+    if goal == "" do
+      :ok
+    else
+      set_goal(port, thread_id, goal)
+    end
+  end
+
+  defp maybe_set_goal(_port, thread_id, _goal) do
+    Logger.warning("Codex goal option must be a string; continuing with single-turn session thread_id=#{thread_id}")
+
+    :ok
+  end
+
+  defp set_goal(port, thread_id, goal) do
     if CodexConfig.goals_enabled?() do
       send_message(port, %{
         "method" => "thread/goal/set",
