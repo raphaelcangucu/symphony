@@ -4,11 +4,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   """
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixirWeb.TrackerPresenter
 
-  @supported_tools ~w(list_issues create_issue update_issue move_issue add_comment get_agent_executions dispatch_codex)
+  @supported_tools ~w(list_issues create_issue create_draft_issue update_issue move_issue add_comment get_agent_executions dispatch_codex)
   @in_progress_state "In Progress"
 
   @type result :: %{
@@ -41,6 +42,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "description" => string_schema("Optional issue description."),
           "status" => string_schema("Optional workflow status. Defaults to Todo."),
           "priority" => %{"type" => ["integer", "null"], "description" => "Optional numeric priority."}
+        }
+      }),
+      tool_spec("create_draft_issue", "Create a draft tracker issue (non-actionable status) to anchor the authoring chat.", %{
+        "type" => "object",
+        "additionalProperties" => false,
+        "required" => ["title"],
+        "properties" => %{
+          "title" => string_schema("Issue title."),
+          "description" => string_schema("Optional short description.")
         }
       }),
       tool_spec("update_issue", "Update mutable fields on an existing tracker issue.", %{
@@ -148,6 +158,21 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
        %{
          tool: "create_issue",
          message: "Created issue #{presented.identifier}: #{presented.title}",
+         data: presented
+       }}
+    end
+  end
+
+  defp do_execute(project, "create_draft_issue", arguments, _opts) do
+    with {:ok, title} <- normalize_required_string(Map.get(arguments, "title"), :title),
+         attrs <- build_draft_attrs(arguments, title),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]) do
+      presented = TrackerPresenter.issue(issue)
+
+      {:ok,
+       %{
+         tool: "create_draft_issue",
+         message: "Created draft #{presented.identifier}: #{presented.title}",
          data: presented
        }}
     end
@@ -315,6 +340,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     |> maybe_put_attr("agent", normalize_optional_string(Map.get(arguments, "agent")))
     |> maybe_put_attr("label_ids", normalize_string_list(Map.get(arguments, "label_ids")))
     |> maybe_put_attr("assignee_ids", normalize_string_list(Map.get(arguments, "assignee_ids")))
+  end
+
+  defp build_draft_attrs(arguments, title) do
+    %{
+      "title" => title,
+      "description" => normalize_optional_string(Map.get(arguments, "description")),
+      "status" => Config.assistant_draft_status()
+    }
   end
 
   defp comment_attrs(arguments) do

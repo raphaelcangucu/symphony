@@ -79,6 +79,26 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert {:ok, []} = Context.list_comments("macro-markets", "MAC-1")
   end
 
+  describe "create_draft_issue" do
+    setup do
+      {:ok, project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+      {:ok, _status} = seed_status(project, "Triage", "triage")
+      :ok
+    end
+
+    test "creates an issue in the non-actionable draft status" do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro", "create_draft_issue", %{
+                 "title" => "Add export button",
+                 "description" => "quick note"
+               })
+
+      assert result.tool == "create_draft_issue"
+      assert result.data.status.name == "Triage"
+      assert result.data.title == "Add export button"
+    end
+  end
+
   test "fails fast for an unsupported tool" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
@@ -168,6 +188,25 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
         ] do
       Ecto.Adapters.SQL.query!(Repo, "DELETE FROM #{table}", [])
     end
+  end
+
+  defp seed_status(project, name, category) do
+    next_position =
+      Repo.aggregate(
+        from(status in WorkflowStatus, where: status.project_id == ^project.id),
+        :count,
+        :id
+      )
+
+    %WorkflowStatus{}
+    |> WorkflowStatus.changeset(%{
+      project_id: project.id,
+      name: name,
+      category: category,
+      position: next_position,
+      is_terminal: false
+    })
+    |> Repo.insert()
   end
 
   defp restore_env(key, nil), do: System.delete_env(key)
