@@ -73,6 +73,29 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     assert Enum.map(loaded.comments, & &1.remote_id) == ["IC_1"]
   end
 
+  test "remote update overwrites fields with no pending local edit", %{project: project} do
+    {:ok, _} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "v1"}))
+    {:ok, updated} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "v2", remote_updated_at: DateTime.utc_now()}))
+    assert updated.title == "v2"
+    assert updated.sync_status == "synced"
+  end
+
+  test "a newer pending local edit survives a remote pull", %{project: project} do
+    {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "remote-v1"}))
+
+    future = DateTime.utc_now() |> DateTime.add(120, :second) |> DateTime.to_iso8601()
+
+    Repo.get!(IssueRecord, issue.id)
+    |> Ecto.Changeset.change(%{title: "local-edit", dirty_fields: %{"title" => future}})
+    |> Repo.update!()
+
+    {:ok, after_pull} =
+      LocalStore.upsert_remote_issue(project, remote_issue(%{title: "remote-v2", remote_updated_at: DateTime.utc_now()}))
+
+    assert after_pull.title == "local-edit"
+    assert Map.has_key?(after_pull.dirty_fields, "title")
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
