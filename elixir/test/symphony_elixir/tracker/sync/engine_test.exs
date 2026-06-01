@@ -41,7 +41,7 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     end
 
     @impl true
-    def pull_pull_requests(_project, _issue), do: {:ok, []}
+    def pull_pull_requests(_project, _issue), do: {:ok, [%{remote_id: "PR_1", number: 7, url: "u", title: "t", state: "open"}]}
   end
 
   setup do
@@ -67,6 +67,13 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     state = Repo.get_by(StateRecord, project_id: project.id)
     assert state.status == "idle"
     refute is_nil(state.last_pull_at)
+  end
+
+  test "sync_project stores pull requests for pulled issues", %{project: project} do
+    assert {:ok, _summary} = Engine.sync_project(project, driver: FakeDriver, pr_driver: FakeDriver)
+
+    prs = Repo.all(SymphonyElixir.Tracker.Sync.PullRequestRecord)
+    assert Enum.map(prs, & &1.remote_id) == ["PR_1"]
   end
 
   test "a failing push marks the entry failed without aborting the pull", %{project: project} do

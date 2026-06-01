@@ -36,12 +36,13 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   @spec sync_project(map(), keyword()) :: {:ok, summary()} | {:error, term()}
   def sync_project(project, opts \\ []) do
     driver = Keyword.fetch!(opts, :driver)
+    pr_driver = Keyword.get(opts, :pr_driver, SymphonyElixir.GitHub.SyncDriver)
     max_attempts = Keyword.get(opts, :max_attempts, @default_max_attempts)
 
     mark_state(project, %{status: "syncing"})
 
     with {:ok, push_summary} <- push_outbox(project, driver, max_attempts),
-         {:ok, pulled} <- pull_remote(project, driver) do
+         {:ok, pulled} <- pull_remote(project, driver, pr_driver) do
       mark_state(project, %{status: "idle", last_pull_at: now(), last_push_at: now(), last_error: nil})
       {:ok, Map.put(push_summary, :pulled, pulled)}
     else
@@ -110,14 +111,28 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   # -- pull --------------------------------------------------------------------
 
-  defp pull_remote(project, driver) do
+  defp pull_remote(project, driver, pr_driver) do
     case driver.pull(project, []) do
       {:ok, issues} ->
-        Enum.each(issues, fn remote -> LocalStore.upsert_remote_issue(project, remote) end)
+        Enum.each(issues, &upsert_with_prs(project, &1, pr_driver))
         {:ok, length(issues)}
 
       {:error, _reason} = error ->
         error
+    end
+  end
+
+  defp upsert_with_prs(project, remote, pr_driver) do
+    case LocalStore.upsert_remote_issue(project, remote) do
+      {:ok, issue} -> sync_pull_requests(project, issue, pr_driver)
+      {:error, _reason} -> :ok
+    end
+  end
+
+  defp sync_pull_requests(project, issue, pr_driver) do
+    case pr_driver.pull_pull_requests(project, issue) do
+      {:ok, prs} -> LocalStore.upsert_pull_requests(issue, prs)
+      {:error, _reason} -> :ok
     end
   end
 
