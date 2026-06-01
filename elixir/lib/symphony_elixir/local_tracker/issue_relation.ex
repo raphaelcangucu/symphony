@@ -10,6 +10,7 @@ defmodule SymphonyElixir.LocalTracker.IssueRelation do
 
   schema "local_tracker_issue_relations" do
     field(:type, :string)
+    field(:remote_origin, :boolean, default: false)
 
     belongs_to(:source_issue, IssueRecord)
     belongs_to(:target_issue, IssueRecord)
@@ -20,7 +21,7 @@ defmodule SymphonyElixir.LocalTracker.IssueRelation do
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(relation, attrs) do
     relation
-    |> cast(attrs, [:source_issue_id, :target_issue_id, :type])
+    |> cast(attrs, [:source_issue_id, :target_issue_id, :type, :remote_origin])
     |> validate_required([:source_issue_id, :target_issue_id, :type])
     |> unique_constraint([:source_issue_id, :target_issue_id, :type])
   end
