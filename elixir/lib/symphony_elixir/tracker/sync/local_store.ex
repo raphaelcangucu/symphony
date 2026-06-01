@@ -37,6 +37,22 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     end)
   end
 
+  @doc """
+  Marks `fields` as locally-edited on an issue (so a later remote pull respects
+  LWW) and flips its `sync_status` to `pending`.
+  """
+  @spec mark_dirty(String.t(), String.t(), [atom()]) :: {:ok, IssueRecord.t()} | {:error, term()}
+  def mark_dirty(identifier, project_slug, fields) when is_list(fields) do
+    with {:ok, issue} <- SymphonyElixir.LocalTracker.Context.get_issue(project_slug, identifier) do
+      now_iso = DateTime.to_iso8601(DateTime.utc_now())
+      dirty = Enum.reduce(fields, issue.dirty_fields || %{}, fn field, acc -> Map.put(acc, Atom.to_string(field), now_iso) end)
+
+      issue
+      |> IssueRecord.changeset(%{dirty_fields: dirty, sync_status: "pending"})
+      |> Repo.update()
+    end
+  end
+
   @spec upsert_pull_requests(IssueRecord.t(), [map()]) :: :ok
   def upsert_pull_requests(%IssueRecord{} = issue, prs) when is_list(prs) do
     now = DateTime.utc_now()
