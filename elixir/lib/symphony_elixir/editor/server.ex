@@ -2,8 +2,10 @@ defmodule SymphonyElixir.Editor.Server do
   @moduledoc """
   Supervises a single `code-server` process and tracks its readiness.
 
-  Started only when `Config.editor_enabled?/0`. Spawns `code-server` bound to the
-  configured host/port, then TCP-probes the bind address until it accepts
+  Started only when `Config.editor_enabled?/0`. On boot it TCP-probes the bind
+  address: if a `code-server` is already listening (e.g. one orphaned by a
+  previous abrupt shutdown), it reuses that process and reports `:ready`;
+  otherwise it spawns `code-server` and probes until the bind address accepts
   connections (`:starting` -> `:ready`). A missing binary or spawn failure marks
   the server `:unavailable` without crashing the orchestrator.
   """
@@ -53,6 +55,24 @@ defmodule SymphonyElixir.Editor.Server do
         %{state | status: :unavailable}
 
       executable ->
+        reuse_or_spawn(state, executable)
+    end
+  end
+
+  # A code-server left over from a previous run (e.g. when the BEAM was killed
+  # abruptly and `terminate/2` never ran) keeps holding the bind port, so a fresh
+  # spawn would hit EADDRINUSE and exit immediately. Reuse the live process
+  # instead of dying with `:unavailable`.
+  defp reuse_or_spawn(state, executable) do
+    case probe().({probe_host(Config.editor_host()), Config.editor_port()}) do
+      :ok ->
+        Logger.info(
+          "Editor server reusing existing code-server host=#{Config.editor_host()} port=#{Config.editor_port()}"
+        )
+
+        %{state | status: :ready}
+
+      {:error, _reason} ->
         spawn_code_server(state, executable)
     end
   end

@@ -138,6 +138,7 @@ serve: ensure-deps migrate
 # regex `dev/serve[.]exs` does not match).
 stop:
 	@pkill -f 'dev/serve[.]exs' >/dev/null 2>&1 && echo "stopped running serve process" || echo "no running serve process found"
+	@pkill -f 'code-server.*--bind-addr' >/dev/null 2>&1 && echo "stopped code-server process" || echo "no code-server process found"
 
 # --- Tracker frontend ------------------------------------------------------
 

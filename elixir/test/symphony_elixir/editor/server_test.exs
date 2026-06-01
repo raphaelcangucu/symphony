@@ -45,6 +45,15 @@ defmodule SymphonyElixir.Editor.ServerTest do
     assert Server.status(pid) == :ready
   end
 
+  test "reuses an already-running code-server without spawning" do
+    Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)
+    Application.put_env(:symphony_elixir, :editor_spawner, fn _args -> flunk("should not spawn when port is already in use") end)
+    Application.put_env(:symphony_elixir, :editor_probe, fn _hp -> :ok end)
+
+    pid = start_supervised!({Server, name: :editor_server_reuse})
+    assert Server.status(pid) == :ready
+  end
+
   test "stays starting while the probe keeps failing" do
     Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)
     Application.put_env(:symphony_elixir, :editor_spawner, fn _args -> {:ok, make_ref()} end)
@@ -95,9 +104,18 @@ defmodule SymphonyElixir.Editor.ServerTest do
 
   test "ignores probe once the code-server port is gone" do
     fake = make_ref()
+    {:ok, probe_calls} = Agent.start_link(fn -> 0 end)
     Application.put_env(:symphony_elixir, :editor_executable_finder, fn _binary -> "/usr/bin/code-server" end)
     Application.put_env(:symphony_elixir, :editor_spawner, fn _args -> {:ok, fake} end)
-    Application.put_env(:symphony_elixir, :editor_probe, fn _hp -> :ok end)
+
+    # Boot probe fails so the server spawns its own process; any later probe
+    # succeeds, proving a successful probe is still ignored once the port is gone.
+    Application.put_env(:symphony_elixir, :editor_probe, fn _hp ->
+      case Agent.get_and_update(probe_calls, fn count -> {count, count + 1} end) do
+        0 -> {:error, :econnrefused}
+        _ -> :ok
+      end
+    end)
 
     pid = start_supervised!({Server, name: :editor_server_probe_after_exit})
     send(pid, {fake, {:exit_status, 1}})
