@@ -46,6 +46,10 @@ When logging Codex Goal mode, include:
   `assistant_document_changed`.
 - `IssueDocumentController`: log rejected document reads with `issue_identifier` and concise reasons
   such as `invalid_path`, `workspace_missing`, or `too_large`.
+- `GitHub.RequestGateway`: when a GitHub request is rate limited, log a `warning` with the backoff
+  delay and attempt counters, for example
+  `GitHub rate limit hit; pausing <delay>ms before retry (attempt <n>/<max>)`. Keep this wording
+  stable so rate-limit backoff is greppable.
 
 ## Checklist For New Logs
 

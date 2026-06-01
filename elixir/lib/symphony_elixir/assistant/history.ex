@@ -116,6 +116,48 @@ defmodule SymphonyElixir.Assistant.History do
     update_thread(thread, %{metadata: next})
   end
 
+  @default_mode "triage"
+
+  @doc """
+  Returns the authoring mode persisted on a thread's metadata.
+
+  The issue authoring toggle (`triage` | `simple` | `complex`) lives in the thread metadata
+  map (set via `set_mode/2`). Joining clients need this so the UI can rehydrate the selected
+  mode instead of always defaulting to `triage` after a reload. Falls back to `triage` when no
+  mode is recorded.
+  """
+  @spec thread_mode(Thread.t()) :: String.t()
+  def thread_mode(%Thread{metadata: metadata}) do
+    case metadata do
+      %{"mode" => mode} when is_binary(mode) and mode != "" -> mode
+      _ -> @default_mode
+    end
+  end
+
+  @doc """
+  Persists whether Codex Goal mode is enabled for an issue authoring thread.
+
+  Goal mode is an opt-in, Codex-only dispatch preference: when enabled, the authoring assistant
+  is instructed to dispatch Codex with a long-running `goal` derived from the issue artifacts
+  (spec/plan/handoff). The flag lives in the thread metadata map alongside `mode` (no migration).
+  """
+  @spec set_goal_mode(Thread.t(), boolean()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def set_goal_mode(%Thread{metadata: metadata} = thread, enabled) when is_boolean(enabled) do
+    next = Map.put(metadata || %{}, "goal_mode", enabled)
+    update_thread(thread, %{metadata: next})
+  end
+
+  @doc """
+  Returns whether Codex Goal mode is enabled on a thread's metadata. Defaults to `false`.
+  """
+  @spec thread_goal_mode(Thread.t()) :: boolean()
+  def thread_goal_mode(%Thread{metadata: metadata}) do
+    case metadata do
+      %{"goal_mode" => enabled} when is_boolean(enabled) -> enabled
+      _ -> false
+    end
+  end
+
   @spec update_thread(Thread.t(), attrs()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def update_thread(%Thread{} = thread, attrs) when is_map(attrs) do
     thread

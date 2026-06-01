@@ -450,6 +450,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp map_error({:github_api_status, 401}), do: :remote_unauthorized
   defp map_error({:github_api_status, 403}), do: :remote_forbidden
   defp map_error({:github_api_status, status}) when status in 500..599, do: :remote_unavailable
+  defp map_error({:rate_limited, info}) when is_map(info), do: {:rate_limited, info}
   defp map_error(_), do: :remote_unavailable
 
   defp summarize_graphql_errors(errors) when is_list(errors) do

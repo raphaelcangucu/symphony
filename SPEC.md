@@ -365,6 +365,20 @@ Fields:
   - Default: `30000`
   - Changes should be re-applied at runtime and affect future tick scheduling without restart.
 
+#### 5.3.2.1 `github` (object, superset)
+
+Tuning for the GitHub request gateway. Implementations using the GitHub tracker SHOULD serialize
+all GitHub REST/GraphQL traffic through a single gateway that follows GitHub's API best practices:
+avoid concurrent requests (stagger them), pause at least one second between mutative requests, and,
+on `429`/`403` rate-limit responses, stop issuing requests until the window indicated by
+`Retry-After` / `x-ratelimit-reset` elapses (falling back to capped exponential backoff) before
+retrying. Fields (all optional):
+
+- `read_interval_ms` (integer), default `150` — minimum spacing between GitHub read requests.
+- `mutation_interval_ms` (integer), default `1000` — minimum spacing between GitHub mutations.
+- `max_retries` (integer), default `4` — retry attempts before the rate-limit error is surfaced.
+- `max_backoff_ms` (integer), default `60000` — cap on the exponential-backoff fallback delay.
+
 #### 5.3.3 `workspace` (object)
 
 Fields:
@@ -576,6 +590,10 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `tracker.terminal_states`: list/string, default `Closed, Cancelled, Canceled, Duplicate, Done`
 - `assistant.draft_status`: string, default `Triage`
 - `polling.interval_ms`: integer, default `30000`
+- `github.read_interval_ms`: integer, default `150` (GitHub request gateway: min spacing between reads)
+- `github.mutation_interval_ms`: integer, default `1000` (min spacing between mutative requests)
+- `github.max_retries`: integer, default `4` (attempts before a rate-limit error is surfaced)
+- `github.max_backoff_ms`: integer, default `60000` (cap on exponential backoff fallback)
 - `workspace.root`: path, default `<system-temp>/symphony_workspaces`
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null

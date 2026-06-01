@@ -178,9 +178,15 @@ export function ProjectAssistantPanel({
     });
 
     const joinPush = channel.join();
-    joinPush.receive("ok", () => {
+    joinPush.receive("ok", (response) => {
       setConnectionError(null);
       setChannelReady(true);
+
+      const hydratedMode = modeFromResponse(response);
+      if (issueIdentifier && hydratedMode && hydratedMode !== "triage") {
+        lastConfirmedIssueModeRef.current = hydratedMode;
+        onIssueModeChanged?.(hydratedMode);
+      }
     });
     joinPush.receive("error", (reason) => {
       setConnectionError(errorMessage(reason));
@@ -193,7 +199,7 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onIssueCreated, projectSlug, threadId]);
+  }, [active, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onIssueCreated, onIssueModeChanged, projectSlug, threadId]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;

@@ -197,6 +197,26 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert thread.metadata["mode"] == "complex"
   end
 
+  test "issue join returns the persisted mode so the UI can rehydrate it", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_mode", %{"mode" => "complex"})
+    assert_reply(ref, :ok, %{mode: "complex"})
+
+    {:ok, payload, _rejoined} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join("assistant:issue:macro-markets:MAC-1", %{})
+
+    assert payload.thread_id == thread_id
+    assert payload.mode == "complex"
+  end
+
+  test "issue join defaults to triage mode when none is persisted", %{socket: socket} do
+    {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    assert payload.mode == "triage"
+  end
+
   test "set_mode rejects unsupported modes for issue threads", %{socket: socket} do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 

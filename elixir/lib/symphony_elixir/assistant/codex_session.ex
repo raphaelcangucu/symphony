@@ -132,6 +132,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
     Behave like a real conversational coding assistant inside the tracker.
     Answer naturally in the user's language. Use tracker tools only when the user asks for tracker data or a concrete tracker action.
+    Do not post issue comments - your replies are shown to the user directly in this chat. Use update_issue when you need to record something on an issue.
     If the user asks for coding work, create or update tracker context and dispatch Codex through the tracker workflow instead of editing files directly from this chat.
     If a request is ambiguous, ask one concise clarifying question before taking action.
 
@@ -252,6 +253,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     You are the Symphony issue authoring assistant for `#{project_slug}`, working on issue `#{identifier}`.
     You are running inside the issue's working tree (the project repositories are cloned here).
     Answer in the user's language. Use tracker tools to update the bound issue. Do not dispatch Codex unless asked.
+    Do not post issue comments - your replies are shown to the user directly in this chat. Author the issue via the update_issue tool instead of commenting.
 
     Recent conversation:
     #{format_history(history)}

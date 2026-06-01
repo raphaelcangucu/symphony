@@ -34,6 +34,9 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
       <button type="button" onClick={() => onIssueModeChanged?.(issueMode ?? "triage")}>
         acknowledge mode
       </button>
+      <button type="button" onClick={() => onIssueModeChanged?.("complex")}>
+        hydrate complex
+      </button>
     </div>
   ),
 }));
@@ -89,6 +92,17 @@ describe("IssueAuthoringPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "acknowledge mode" }));
 
+    expect(screen.getByText("Complex mode active.")).toBeTruthy();
+  });
+
+  it("reflects a mode rehydrated from the channel without a fresh selection", () => {
+    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+
+    expect(screen.getByRole("button", { name: "Complex" })).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "hydrate complex" }));
+
+    expect(screen.getByRole("button", { name: "Complex" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Complex mode active.")).toBeTruthy();
   });
 });

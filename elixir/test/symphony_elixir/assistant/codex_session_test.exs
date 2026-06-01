@@ -280,8 +280,8 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
       assert error_text =~ "issue_identifier_mismatch"
 
-      assert %{"success" => true, "toolResult" => %{"tool" => "add_comment", "message" => "Added comment to MAC-1."}} =
-               tool_executor.("add_comment", %{"body" => "Uses injected identifier"})
+      assert %{"success" => true, "toolResult" => %{"tool" => "update_issue", "message" => "Updated issue MAC-1."}} =
+               tool_executor.("update_issue", %{"title" => "Uses injected identifier"})
     end
 
     test "complex mode injects superpowers methodology into the prompt", %{thread: thread} do

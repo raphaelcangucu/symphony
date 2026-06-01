@@ -1787,6 +1787,46 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     end
   end
 
+  describe "REST rate-limit classification" do
+    test "rest_get/2 classifies a 429 as :rate_limited with the reset time" do
+      request_fun = fn _url, _headers ->
+        {:ok, %{status: 429, headers: %{"x-ratelimit-reset" => ["1780146793"]}, body: %{}}}
+      end
+
+      assert {:error, {:rate_limited, %{reset_at: %DateTime{} = reset_at}}} =
+               Client.rest_get("/repos/owner/repo", request_fun: request_fun)
+
+      assert DateTime.to_unix(reset_at) == 1_780_146_793
+    end
+
+    test "rest_get/2 classifies a 403 with x-ratelimit-remaining: 0 as :rate_limited" do
+      request_fun = fn _url, _headers ->
+        {:ok, %{status: 403, headers: %{"x-ratelimit-remaining" => ["0"]}, body: %{}}}
+      end
+
+      assert {:error, {:rate_limited, %{reset_at: nil}}} =
+               Client.rest_get("/repos/owner/repo", request_fun: request_fun)
+    end
+
+    test "rest_get/2 keeps a non-rate-limit failure as :github_api_status" do
+      request_fun = fn _url, _headers ->
+        {:ok, %{status: 404, headers: %{}, body: %{}}}
+      end
+
+      assert {:error, {:github_api_status, 404}} =
+               Client.rest_get("/repos/owner/repo", request_fun: request_fun)
+    end
+
+    test "rest_put/3 classifies a 429 as :rate_limited" do
+      request_fun = fn _url, _headers, _body ->
+        {:ok, %{status: 429, headers: %{}, body: %{}}}
+      end
+
+      assert {:error, {:rate_limited, %{reset_at: nil}}} =
+               Client.rest_put("/repos/owner/repo/pulls/1/merge", %{}, request_fun: request_fun)
+    end
+  end
+
   defp empty_pr_discussion_response do
     {:ok,
      %{

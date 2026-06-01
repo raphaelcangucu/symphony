@@ -22,7 +22,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
            }) do
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
-        thread_id: thread.id
+        thread_id: thread.id,
+        mode: History.thread_mode(thread),
+        goal_mode: History.thread_goal_mode(thread)
       }
 
       socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
@@ -39,7 +41,11 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     with true <- authorized?(socket),
          {:ok, id} <- parse_id(raw_id),
          {:ok, thread} <- History.get_thread(id) do
-      payload = %{messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1)}
+      payload = %{
+        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
+        mode: History.thread_mode(thread),
+        goal_mode: History.thread_goal_mode(thread)
+      }
       socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
       send(self(), {:assistant_history_loaded, payload})
       {:ok, payload, socket}
@@ -123,6 +129,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_in("set_mode", _payload, socket), do: {:reply, {:error, %{reason: "mode is required"}}, socket}
+
+  def handle_in("set_goal_mode", %{"goal_mode" => enabled}, socket) when is_boolean(enabled) do
+    with {:ok, thread} <- issue_thread(socket),
+         {:ok, updated_thread} <- History.set_goal_mode(thread, enabled) do
+      {:reply, {:ok, %{goal_mode: enabled}}, assign(socket, :thread, updated_thread)}
+    else
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("set_goal_mode", _payload, socket),
+    do: {:reply, {:error, %{reason: "goal_mode is required"}}, socket}
 
   @impl true
   def handle_info({:assistant_history_loaded, payload}, socket) do

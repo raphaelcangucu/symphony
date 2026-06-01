@@ -265,6 +265,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
                false
            end)
 
+    refute Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "add_comment"))
+
     executor = ToolExecutor.codex_tool_executor("macro-markets")
     response = executor.("list_issues", %{})
 
@@ -295,18 +297,17 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
 
       refute "create_issue" in names
       refute "create_draft_issue" in names
+      refute "add_comment" in names
 
-      for tool <- ["update_issue", "move_issue", "add_comment", "dispatch_codex"] do
+      for tool <- ["update_issue", "move_issue", "dispatch_codex"] do
         spec = Enum.find(specs, &(&1["name"] == tool))
         assert get_in(spec, ["inputSchema", "properties", "identifier", "const"]) == "MAC-1"
       end
 
       assert required_fields(specs, "update_issue") == []
       refute "identifier" in required_fields(specs, "move_issue")
-      refute "identifier" in required_fields(specs, "add_comment")
       refute "identifier" in required_fields(specs, "dispatch_codex")
       assert "status" in required_fields(specs, "move_issue")
-      assert "body" in required_fields(specs, "add_comment")
       assert "instructions" in required_fields(specs, "dispatch_codex")
     end
 
@@ -315,11 +316,20 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
 
       assert %{
                "success" => true,
-               "toolResult" => %{"tool" => "add_comment", "message" => "Added comment to MAC-1."}
-             } = executor.("add_comment", %{"body" => "Clarify the issue"})
+               "toolResult" => %{"tool" => "update_issue", "message" => "Updated issue MAC-1."}
+             } = executor.("update_issue", %{"title" => "Bound issue (clarified)"})
 
-      assert {:ok, comments} = Context.list_comments("macro-markets", "MAC-1")
-      assert [%{body: "Clarify the issue"}] = comments
+      assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+      assert issue.title == "Bound issue (clarified)"
+    end
+
+    test "rejects add_comment in the issue-bound chat since chat replies are not comments" do
+      executor = ToolExecutor.issue_bound_codex_tool_executor("macro-markets", "MAC-1")
+
+      assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} =
+               executor.("add_comment", %{"body" => "Should not be posted"})
+
+      assert error_text =~ "unsupported_issue_bound_tool"
     end
 
     test "rejects mutable tool calls for a different issue identifier" do
@@ -328,7 +338,6 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       for {tool, arguments} <- [
             {"update_issue", %{"identifier" => "MAC-2", "title" => "Wrong issue"}},
             {"move_issue", %{"identifier" => "MAC-2", "status" => "In Progress"}},
-            {"add_comment", %{"identifier" => "MAC-2", "body" => "Wrong issue"}},
             {"dispatch_codex", %{"identifier" => "MAC-2", "instructions" => "Wrong issue"}}
           ] do
         assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} = executor.(tool, arguments)

@@ -10,8 +10,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   alias SymphonyElixirWeb.TrackerPresenter
 
   @supported_tools ~w(list_issues create_issue create_draft_issue update_issue move_issue add_comment get_agent_executions dispatch_codex)
-  @issue_bound_mutable_tools ~w(update_issue move_issue add_comment dispatch_codex)
-  @issue_bound_supported_tools ~w(list_issues update_issue move_issue add_comment get_agent_executions dispatch_codex)
+  # `add_comment` is intentionally absent from the advertised (`tool_specs/0`) and
+  # issue-bound tool lists. The assistant's replies already stream to the user in the
+  # chat UI, so re-posting them as GitHub issue comments is redundant and a major
+  # source of rate-limit pressure. `dispatch_codex` still posts its single milestone
+  # comment via a direct IssueAdapter call, and `do_execute(_, "add_comment", _, _)`
+  # remains for direct/server-side use.
+  @issue_bound_mutable_tools ~w(update_issue move_issue dispatch_codex)
+  @issue_bound_supported_tools ~w(list_issues update_issue move_issue get_agent_executions dispatch_codex)
   @in_progress_state "In Progress"
 
   @type result :: %{
@@ -73,16 +79,6 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "properties" => %{
           "identifier" => string_schema("Issue identifier, for example MAC-1."),
           "status" => string_schema("Target workflow status.")
-        }
-      }),
-      tool_spec("add_comment", "Add a comment to a tracker issue.", %{
-        "type" => "object",
-        "additionalProperties" => false,
-        "required" => ["identifier", "body"],
-        "properties" => %{
-          "identifier" => string_schema("Issue identifier, for example MAC-1."),
-          "body" => string_schema("Comment body."),
-          "author" => string_schema("Optional comment author. Defaults to assistant.")
         }
       }),
       tool_spec("get_agent_executions", "List active or retrying coding-agent executions for this project.", %{

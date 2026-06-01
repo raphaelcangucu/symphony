@@ -48,6 +48,7 @@ defmodule SymphonyElixir.Application do
       SymphonyElixir.LocalTracker.Viewer.Server,
       {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
       SymphonyElixir.GitHub.ReadCache,
+      SymphonyElixir.GitHub.RequestGateway,
       SymphonyElixir.WorkflowStore,
       SymphonyElixir.Orchestrator,
       SymphonyElixir.PublicRouting,

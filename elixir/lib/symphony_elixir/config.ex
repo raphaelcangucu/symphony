@@ -36,6 +36,10 @@ defmodule SymphonyElixir.Config do
   @default_public_tunnel_enabled false
   @default_public_tunnel_base_domain "tracker.cods.dev"
   @default_assistant_draft_status "Triage"
+  @default_github_read_interval_ms 150
+  @default_github_mutation_interval_ms 1_000
+  @default_github_max_retries 4
+  @default_github_max_backoff_ms 60_000
 
   @tracker_sections ["local", "linear", "github", "memory"]
   @agent_sections ["claude", "codex"]
@@ -72,6 +76,28 @@ defmodule SymphonyElixir.Config do
                                default: %{},
                                keys: [
                                  interval_ms: [type: :integer, default: @default_poll_interval_ms]
+                               ]
+                             ],
+                             github: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 read_interval_ms: [
+                                   type: :non_neg_integer,
+                                   default: @default_github_read_interval_ms
+                                 ],
+                                 mutation_interval_ms: [
+                                   type: :non_neg_integer,
+                                   default: @default_github_mutation_interval_ms
+                                 ],
+                                 max_retries: [
+                                   type: :pos_integer,
+                                   default: @default_github_max_retries
+                                 ],
+                                 max_backoff_ms: [
+                                   type: :pos_integer,
+                                   default: @default_github_max_backoff_ms
+                                 ]
                                ]
                              ],
                              workspace: [
@@ -366,6 +392,44 @@ defmodule SymphonyElixir.Config do
   @spec poll_interval_ms() :: pos_integer()
   def poll_interval_ms do
     get_in(validated_workflow_options(), [:polling, :interval_ms])
+  end
+
+  @doc """
+  Minimum spacing (ms) between successive GitHub read requests through the
+  `GitHub.RequestGateway`. Defaults to #{@default_github_read_interval_ms}.
+  """
+  @spec github_read_interval_ms() :: non_neg_integer()
+  def github_read_interval_ms do
+    get_in(validated_workflow_options(), [:github, :read_interval_ms])
+  end
+
+  @doc """
+  Minimum spacing (ms) between successive GitHub mutation requests. GitHub advises
+  at least one second between mutative requests. Defaults to
+  #{@default_github_mutation_interval_ms}.
+  """
+  @spec github_mutation_interval_ms() :: non_neg_integer()
+  def github_mutation_interval_ms do
+    get_in(validated_workflow_options(), [:github, :mutation_interval_ms])
+  end
+
+  @doc """
+  Maximum number of attempts a rate-limited GitHub request is retried before the
+  rate-limit error is surfaced. Defaults to #{@default_github_max_retries}.
+  """
+  @spec github_max_retries() :: pos_integer()
+  def github_max_retries do
+    get_in(validated_workflow_options(), [:github, :max_retries])
+  end
+
+  @doc """
+  Cap (ms) on the exponential backoff used when GitHub does not provide a
+  `Retry-After` / `x-ratelimit-reset` hint. Defaults to
+  #{@default_github_max_backoff_ms}.
+  """
+  @spec github_max_backoff_ms() :: pos_integer()
+  def github_max_backoff_ms do
+    get_in(validated_workflow_options(), [:github, :max_backoff_ms])
   end
 
   @spec workspace_root() :: Path.t()
@@ -686,6 +750,7 @@ defmodule SymphonyElixir.Config do
     %{
       tracker: extract_tracker_options(section_map(config, "tracker")),
       polling: extract_polling_options(section_map(config, "polling")),
+      github: extract_github_options(section_map(config, "github")),
       workspace: extract_workspace_options(section_map(config, "workspace")),
       agent: extract_agent_options(section_map(config, "agent")),
       hooks: extract_hooks_options(section_map(config, "hooks")),
@@ -709,6 +774,14 @@ defmodule SymphonyElixir.Config do
   defp extract_polling_options(section) do
     %{}
     |> put_if_present(:interval_ms, integer_value(Map.get(section, "interval_ms")))
+  end
+
+  defp extract_github_options(section) do
+    %{}
+    |> put_if_present(:read_interval_ms, integer_value(Map.get(section, "read_interval_ms")))
+    |> put_if_present(:mutation_interval_ms, integer_value(Map.get(section, "mutation_interval_ms")))
+    |> put_if_present(:max_retries, positive_integer_value(Map.get(section, "max_retries")))
+    |> put_if_present(:max_backoff_ms, positive_integer_value(Map.get(section, "max_backoff_ms")))
   end
 
   defp extract_workspace_options(section) do

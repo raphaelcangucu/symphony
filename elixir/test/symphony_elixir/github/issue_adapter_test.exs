@@ -50,6 +50,12 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     def graphql(_query, _vars, _opts), do: {:error, {:github_api_status, 401}}
   end
 
+  defmodule RateLimitedClientStub do
+    def graphql(_query, _vars, _opts) do
+      {:error, {:rate_limited, %{reset_at: ~U[2026-05-31 12:00:00Z]}}}
+    end
+  end
+
   setup do
     Application.put_env(:symphony_elixir, :github_client_module, ListClientStub)
     on_exit(fn -> Application.delete_env(:symphony_elixir, :github_client_module) end)
@@ -76,6 +82,13 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
   test "maps 401 to :remote_unauthorized" do
     Application.put_env(:symphony_elixir, :github_client_module, UnauthorizedClientStub)
     assert {:error, :remote_unauthorized} = IssueAdapter.list_issues(project(), [])
+  end
+
+  test "preserves {:rate_limited, info} so the UI can render a 429 with the reset time" do
+    Application.put_env(:symphony_elixir, :github_client_module, RateLimitedClientStub)
+
+    assert {:error, {:rate_limited, %{reset_at: %DateTime{}}}} =
+             IssueAdapter.list_issues(project(), [])
   end
 
   defmodule MoveClientStub do

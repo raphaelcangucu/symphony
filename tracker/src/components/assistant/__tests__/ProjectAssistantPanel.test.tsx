@@ -212,6 +212,50 @@ describe("ProjectAssistantPanel", () => {
     expect(socketChannel).toHaveBeenCalledTimes(1);
   });
 
+  it("rehydrates the persisted issue mode from the join response", async () => {
+    const onIssueModeChanged = vi.fn();
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok" ? callback({ mode: "complex", thread_id: 1 }) : undefined,
+    }));
+
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueMode="triage"
+        onIssueModeChanged={onIssueModeChanged}
+      />,
+    );
+
+    await waitFor(() => expect(onIssueModeChanged).toHaveBeenCalledWith("complex"));
+    expect(push).not.toHaveBeenCalledWith("set_mode", expect.anything());
+  });
+
+  it("does not rehydrate when the persisted mode is triage", async () => {
+    const onIssueModeChanged = vi.fn();
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok" ? callback({ mode: "triage", thread_id: 1 }) : undefined,
+    }));
+
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueMode="triage"
+        onIssueModeChanged={onIssueModeChanged}
+      />,
+    );
+
+    await waitFor(() => expect(join).toHaveBeenCalled());
+    expect(onIssueModeChanged).not.toHaveBeenCalled();
+  });
+
   it("allows retrying the same set_mode value after an error", async () => {
     const onIssueModeError = vi.fn();
     const { rerender } = render(
