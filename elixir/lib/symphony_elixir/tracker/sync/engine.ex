@@ -56,39 +56,50 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   @impl true
   def handle_cast({:sync_all, opts}, state) do
-    Enum.each(sync_enabled_projects(), fn project ->
-      driver = Keyword.get(opts, :driver) || state.driver_for.(project)
-
-      if driver do
-        case sync_project(project, Keyword.put(opts, :driver, driver)) do
-          {:ok, _summary} -> :ok
-          {:error, reason} -> Logger.warning("Tracker sync failed for #{project.slug}: #{inspect(reason)}")
-        end
-      end
-    end)
-
+    Enum.each(sync_enabled_projects(), &sync_one(&1, opts, state))
     {:noreply, state}
+  end
+
+  defp sync_one(project, opts, state) do
+    case Keyword.get(opts, :driver) || state.driver_for.(project) do
+      nil -> :ok
+      driver -> run_project_sync(project, Keyword.put(opts, :driver, driver))
+    end
+  end
+
+  defp run_project_sync(project, opts) do
+    case sync_project(project, opts) do
+      {:ok, _summary} -> :ok
+      {:error, reason} -> Logger.warning("Tracker sync failed for #{project.slug}: #{inspect(reason)}")
+    end
   end
 
   # -- push --------------------------------------------------------------------
 
   defp push_outbox(project, driver, max_attempts) do
-    entries = Outbox.claim_pending(project.id, 50)
-
     summary =
-      Enum.reduce(entries, %{pushed: 0, failed: 0}, fn entry, acc ->
-        case safe_push(driver, project, entry) do
-          {:ok, remote_id} ->
-            Outbox.mark_done(entry, remote_id)
-            %{acc | pushed: acc.pushed + 1}
-
-          {:error, reason} ->
-            {:ok, updated} = Outbox.mark_failed(entry, inspect(reason), max_attempts)
-            if updated.status == "failed", do: %{acc | failed: acc.failed + 1}, else: acc
-        end
-      end)
+      project.id
+      |> Outbox.claim_pending(50)
+      |> Enum.reduce(%{pushed: 0, failed: 0}, &push_entry(&1, &2, project, driver, max_attempts))
 
     {:ok, summary}
+  end
+
+  defp push_entry(entry, acc, project, driver, max_attempts) do
+    case safe_push(driver, project, entry) do
+      {:ok, remote_id} -> record_pushed(acc, entry, remote_id)
+      {:error, reason} -> record_failed(acc, entry, reason, max_attempts)
+    end
+  end
+
+  defp record_pushed(acc, entry, remote_id) do
+    Outbox.mark_done(entry, remote_id)
+    %{acc | pushed: acc.pushed + 1}
+  end
+
+  defp record_failed(acc, entry, reason, max_attempts) do
+    {:ok, updated} = Outbox.mark_failed(entry, inspect(reason), max_attempts)
+    if updated.status == "failed", do: %{acc | failed: acc.failed + 1}, else: acc
   end
 
   defp safe_push(driver, project, entry) do
