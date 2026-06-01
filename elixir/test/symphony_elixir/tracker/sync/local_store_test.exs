@@ -96,6 +96,17 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     assert Map.has_key?(after_pull.dirty_fields, "title")
   end
 
+  test "upsert_pull_requests links and updates PR state", %{project: project} do
+    {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
+
+    :ok = LocalStore.upsert_pull_requests(issue, [%{remote_id: "PR_1", number: 9, url: "u", title: "t", state: "open"}])
+    :ok = LocalStore.upsert_pull_requests(issue, [%{remote_id: "PR_1", number: 9, url: "u", title: "t", state: "merged"}])
+
+    prs = Repo.all(SymphonyElixir.Tracker.Sync.PullRequestRecord)
+    assert length(prs) == 1
+    assert hd(prs).state == "merged"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
