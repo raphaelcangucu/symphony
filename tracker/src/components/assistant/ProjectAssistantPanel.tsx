@@ -51,6 +51,7 @@ interface ProjectAssistantPanelProps {
   issueModeRequestId?: number;
   issueGoalMode?: boolean;
   issueGoalModeRequestId?: number;
+  dispatchRequestId?: number;
   onDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
   onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
   onIssueCreated?: (issue: AssistantIssueCreatedPayload) => void;
@@ -58,6 +59,8 @@ interface ProjectAssistantPanelProps {
   onIssueModeError?: (message: string) => void;
   onIssueGoalModeChanged?: (enabled: boolean) => void;
   onIssueGoalModeError?: (message: string) => void;
+  onDispatchSucceeded?: (message: string) => void;
+  onDispatchError?: (message: string) => void;
 }
 
 const STREAMING_ASSISTANT_ID = "assistant-streaming";
@@ -78,6 +81,7 @@ export function ProjectAssistantPanel({
   issueModeRequestId = 0,
   issueGoalMode,
   issueGoalModeRequestId = 0,
+  dispatchRequestId = 0,
   onDocumentChanged,
   onDraftIssueCreated,
   onIssueCreated,
@@ -85,6 +89,8 @@ export function ProjectAssistantPanel({
   onIssueModeError,
   onIssueGoalModeChanged,
   onIssueGoalModeError,
+  onDispatchSucceeded,
+  onDispatchError,
 }: ProjectAssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -101,6 +107,7 @@ export function ProjectAssistantPanel({
   const pendingIssueModeRef = useRef<{ mode: IssueAssistantMode; requestId: number } | null>(null);
   const lastConfirmedGoalModeRef = useRef<boolean | null>(null);
   const pendingGoalModeRef = useRef<{ enabled: boolean; requestId: number } | null>(null);
+  const lastDispatchRequestRef = useRef(0);
   const [composerHeight, setComposerHeight] = useState(0);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
@@ -276,6 +283,26 @@ export function ProjectAssistantPanel({
       onIssueGoalModeError?.("Assistant goal mode update timed out");
     });
   }, [active, channelReady, issueIdentifier, issueGoalMode, issueGoalModeRequestId, onIssueGoalModeChanged, onIssueGoalModeError]);
+
+  useEffect(() => {
+    if (!active || !channelReady || !issueIdentifier) return;
+    if (dispatchRequestId <= 0 || dispatchRequestId === lastDispatchRequestRef.current) return;
+
+    const channel = channelRef.current;
+    if (!channel) return;
+
+    lastDispatchRequestRef.current = dispatchRequestId;
+    const pushResult = channel.push("dispatch_codex", { goal_mode: issueGoalMode === true });
+    pushResult.receive("ok", (response) => {
+      onDispatchSucceeded?.(messageFromResponse(response) ?? "Dispatched to Codex.");
+    });
+    pushResult.receive("error", (reason) => {
+      onDispatchError?.(errorMessage(reason));
+    });
+    pushResult.receive("timeout", () => {
+      onDispatchError?.("Codex dispatch timed out");
+    });
+  }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError]);
 
   const sendMessage = useCallback(
     ({ message, settings, attachments }: AssistantComposerSubmit) => {
@@ -680,6 +707,11 @@ function goalModeFromResponse(response: unknown): boolean | null {
   if (!response || typeof response !== "object") return null;
   const value = (response as Record<string, unknown>).goal_mode;
   return typeof value === "boolean" ? value : null;
+}
+
+function messageFromResponse(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+  return stringFromRecord(response as Record<string, unknown>, "message");
 }
 
 function stringFromRecord(record: Record<string, unknown>, key: string): string | null {

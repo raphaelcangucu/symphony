@@ -18,24 +18,31 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
     issueIdentifier,
     issueMode,
     issueGoalMode,
+    dispatchRequestId,
     mode,
     onIssueModeChanged,
     onIssueGoalModeChanged,
+    onDispatchSucceeded,
+    onDispatchError,
     projectSlug,
     view,
   }: {
     issueIdentifier?: string;
     issueMode?: "triage" | "simple" | "complex";
     issueGoalMode?: boolean;
+    dispatchRequestId?: number;
     mode?: "sheet" | "page" | "embedded";
     onIssueModeChanged?: (mode: "triage" | "simple" | "complex") => void;
     onIssueGoalModeChanged?: (enabled: boolean) => void;
+    onDispatchSucceeded?: (message: string) => void;
+    onDispatchError?: (message: string) => void;
     projectSlug?: string;
     view: "board" | "list";
   }) => (
     <div data-testid="project-assistant-panel">
       Assistant {projectSlug}:{issueIdentifier}:{view}:{mode}:{issueMode ?? "unset"}:goal=
-      {issueGoalMode === undefined ? "unset" : String(issueGoalMode)}
+      {issueGoalMode === undefined ? "unset" : String(issueGoalMode)}:dispatch=
+      {dispatchRequestId ?? 0}
       <button type="button" onClick={() => onIssueModeChanged?.(issueMode ?? "triage")}>
         acknowledge mode
       </button>
@@ -47,6 +54,12 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
       </button>
       <button type="button" onClick={() => onIssueGoalModeChanged?.(true)}>
         hydrate goal
+      </button>
+      <button type="button" onClick={() => onDispatchSucceeded?.("Requested Codex work on MAC-1")}>
+        confirm dispatch
+      </button>
+      <button type="button" onClick={() => onDispatchError?.("dispatch failed")}>
+        fail dispatch
       </button>
     </div>
   ),
@@ -134,6 +147,30 @@ describe("IssueAuthoringPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "hydrate goal" }));
 
     expect(goalToggle).toBeChecked();
+  });
+
+  it("requests a Codex dispatch and surfaces the confirmation", () => {
+    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+
+    expect(screen.getByTestId("project-assistant-panel")).toHaveTextContent("dispatch=0");
+
+    fireEvent.click(screen.getByRole("button", { name: /dispatch to codex/i }));
+
+    expect(screen.getByTestId("project-assistant-panel")).toHaveTextContent("dispatch=1");
+    expect(screen.getByText("Dispatching to Codex...")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "confirm dispatch" }));
+
+    expect(screen.getByText("Requested Codex work on MAC-1")).toBeTruthy();
+  });
+
+  it("surfaces a dispatch error", () => {
+    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /dispatch to codex/i }));
+    fireEvent.click(screen.getByRole("button", { name: "fail dispatch" }));
+
+    expect(screen.getByText("dispatch failed")).toBeTruthy();
   });
 
   it("reflects a mode rehydrated from the channel without a fresh selection", () => {

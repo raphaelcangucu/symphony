@@ -42,6 +42,10 @@ export function IssueAuthoringPanel({
   const [goalModeRequestId, setGoalModeRequestId] = useState(0);
   const [goalModeStatus, setGoalModeStatus] = useState<string | null>(null);
   const [goalModeError, setGoalModeError] = useState<string | null>(null);
+  const [dispatchRequestId, setDispatchRequestId] = useState(0);
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const issueDocuments = useIssueDocuments({
     projectSlug,
     identifier: normalizedIdentifier,
@@ -95,6 +99,25 @@ export function IssueAuthoringPanel({
     setGoalModeStatus(null);
   }, []);
 
+  const handleDispatch = useCallback(() => {
+    setDispatching(true);
+    setDispatchError(null);
+    setDispatchStatus("Dispatching to Codex...");
+    setDispatchRequestId((current) => current + 1);
+  }, []);
+
+  const handleDispatchSucceeded = useCallback((message: string) => {
+    setDispatching(false);
+    setDispatchError(null);
+    setDispatchStatus(message);
+  }, []);
+
+  const handleDispatchError = useCallback((message: string) => {
+    setDispatching(false);
+    setDispatchError(message);
+    setDispatchStatus(null);
+  }, []);
+
   const assistantPanel = (
     <div
       className={cn(
@@ -112,6 +135,7 @@ export function IssueAuthoringPanel({
         issueModeRequestId={issueModeRequestId}
         issueGoalMode={normalizedIdentifier ? goalMode : undefined}
         issueGoalModeRequestId={goalModeRequestId}
+        dispatchRequestId={dispatchRequestId}
         onDocumentChanged={handleDocumentChanged}
         onDraftIssueCreated={onDraftIssueCreated}
         onIssueCreated={onIssueCreated}
@@ -119,6 +143,8 @@ export function IssueAuthoringPanel({
         onIssueModeError={handleIssueModeError}
         onIssueGoalModeChanged={handleGoalModeChanged}
         onIssueGoalModeError={handleGoalModeError}
+        onDispatchSucceeded={handleDispatchSucceeded}
+        onDispatchError={handleDispatchError}
       />
     </div>
   );
@@ -200,6 +226,28 @@ export function IssueAuthoringPanel({
                 </p>
               ) : goalModeStatus ? (
                 <p className="mt-1 text-xs text-muted-foreground">{goalModeStatus}</p>
+              ) : null}
+            </div>
+            <div className="border-t pt-2">
+              <Button
+                type="button"
+                size="sm"
+                className="w-full"
+                disabled={dispatching}
+                onClick={handleDispatch}
+              >
+                {dispatching ? "Dispatching..." : goalMode ? "Dispatch to Codex (goal)" : "Dispatch to Codex"}
+              </Button>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Moves this issue to In Progress and hands it to the Codex orchestrator
+                {goalMode ? " as a long-running goal" : ""}.
+              </p>
+              {dispatchError ? (
+                <p role="alert" className="mt-1 text-xs text-destructive">
+                  {dispatchError}
+                </p>
+              ) : dispatchStatus ? (
+                <p className="mt-1 text-xs text-muted-foreground">{dispatchStatus}</p>
               ) : null}
             </div>
           </div>

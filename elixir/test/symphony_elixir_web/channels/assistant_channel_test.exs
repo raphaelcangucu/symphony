@@ -241,6 +241,38 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_reply(ref, :error, %{reason: "this action is only supported for issue assistant threads"})
   end
 
+  test "dispatch_codex moves the bound issue to In Progress without a goal by default", %{socket: socket} do
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Dispatch me", "status" => "Todo"})
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "dispatch_codex", %{"goal_mode" => false})
+    assert_reply(ref, :ok, %{goal_mode: false})
+
+    assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    assert issue.status.name == "In Progress"
+    assert issue.agent_goal in [nil, ""]
+  end
+
+  test "dispatch_codex persists a goal when goal mode is enabled", %{socket: socket} do
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Dispatch me", "status" => "Todo"})
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "dispatch_codex", %{"goal_mode" => true})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    assert issue.status.name == "In Progress"
+    assert is_binary(issue.agent_goal)
+    assert issue.agent_goal =~ "MAC-1"
+  end
+
+  test "dispatch_codex rejects non-issue assistant threads", %{socket: socket} do
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:macro-markets", %{})
+
+    ref = push(socket, "dispatch_codex", %{})
+    assert_reply(ref, :error, %{reason: "this action is only supported for issue assistant threads"})
+  end
+
   test "set_mode rejects unsupported modes for issue threads", %{socket: socket} do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 

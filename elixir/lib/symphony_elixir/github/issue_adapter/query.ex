@@ -106,6 +106,14 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   }
   """
 
+  @add_labels """
+  mutation SymphonyUiAddLabels($labelableId: ID!, $labelIds: [ID!]!) {
+    addLabelsToLabelable(input: { labelableId: $labelableId, labelIds: $labelIds }) {
+      labelable { __typename }
+    }
+  }
+  """
+
   @resolve_project_item """
   query SymphonyUiResolveProjectItem($issueId: ID!, $first: Int!) {
     node(id: $issueId) {
@@ -144,6 +152,9 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
 
   @spec issue_node_id_query() :: String.t()
   def issue_node_id_query, do: @issue_node_id
+
+  @spec add_labels_mutation() :: String.t()
+  def add_labels_mutation, do: @add_labels
 
   @spec resolve_project_item_query() :: String.t()
   def resolve_project_item_query, do: @resolve_project_item

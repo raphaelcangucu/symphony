@@ -5,13 +5,13 @@ github:
     mode: auto
     title: Symphony
   admission_label: symphony
-  # Request gateway tuning (optional). All GitHub calls are serialized through
-  # SymphonyElixir.GitHub.RequestGateway, which spaces requests and backs off on
-  # rate limits per GitHub's REST/GraphQL best practices. Defaults shown:
-  # read_interval_ms: 150        # minimum spacing between read requests
+  # Request gateway tuning (optional). GitHub calls flow through
+  # SymphonyElixir.GitHub.RequestGateway, which spaces mutations and FAILS FAST
+  # while a shared rate-limit window is open (returns 429 immediately instead of
+  # blocking request handlers) per GitHub's REST/GraphQL best practices. Reads run
+  # concurrently so the tracker UI stays responsive. Defaults shown:
   # mutation_interval_ms: 1000   # minimum spacing between mutative requests (>= 1s advised)
-  # max_retries: 4               # attempts before a rate-limit error is surfaced
-  # max_backoff_ms: 60000        # cap on exponential backoff when no Retry-After/reset hint
+  # max_backoff_ms: 60000        # cap on how long the shared rate-limit block lasts before re-probing
 tracker:
   field_states:
     - Backlog

@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   use Phoenix.Channel
 
   alias Phoenix.Socket
-  alias SymphonyElixir.Assistant.{CodexSession, History, Payload}
+  alias SymphonyElixir.Assistant.{CodexSession, History, Payload, ToolExecutor}
   alias SymphonyElixir.Config
   alias SymphonyElixirWeb.TrackerAuth
   alias SymphonyElixir.Workspace
@@ -142,6 +142,25 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_in("set_goal_mode", _payload, socket),
     do: {:reply, {:error, %{reason: "goal_mode is required"}}, socket}
+
+  def handle_in("dispatch_codex", payload, socket) do
+    case issue_thread(socket) do
+      {:ok, %{issue_identifier: identifier, project_slug: project_slug} = thread} ->
+        goal_mode = dispatch_goal_mode(payload, thread)
+        arguments = dispatch_arguments(identifier, goal_mode)
+
+        case ToolExecutor.execute(project_slug, "dispatch_codex", arguments) do
+          {:ok, result} ->
+            {:reply, {:ok, %{message: result.message, issue: result.data, goal_mode: goal_mode}}, socket}
+
+          {:error, reason} ->
+            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
 
   @impl true
   def handle_info({:assistant_history_loaded, payload}, socket) do
@@ -370,6 +389,37 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp issue_thread(%Socket{assigns: %{thread: %{scope: "issue"} = thread}}), do: {:ok, thread}
   defp issue_thread(_socket), do: {:error, :issue_thread_required}
+
+  defp dispatch_goal_mode(payload, thread) when is_map(payload) do
+    case Map.get(payload, "goal_mode") do
+      enabled when is_boolean(enabled) -> enabled
+      _ -> History.thread_goal_mode(thread)
+    end
+  end
+
+  defp dispatch_arguments(identifier, goal_mode) do
+    base = %{"identifier" => identifier, "instructions" => dispatch_instructions(identifier)}
+
+    if goal_mode do
+      Map.put(base, "goal", dispatch_goal(identifier))
+    else
+      base
+    end
+  end
+
+  defp dispatch_instructions(identifier) do
+    "Implement issue #{identifier} by following the spec, plan, and handoff under " <>
+      "docs/superpowers/ in this working tree. Make the planned changes, verify them, and report when complete."
+  end
+
+  defp dispatch_goal(identifier) do
+    """
+    Objective: complete issue #{identifier} following docs/superpowers/plans/*.md and docs/superpowers/handoff.md in this working tree.
+    Constraints: follow the existing specs and plans; verify changes before reporting completion.
+    Stopping condition: stop when the planned work is complete or you are blocked.
+    """
+    |> String.trim()
+  end
 
   defp authorized?(%Socket{assigns: %{tracker_token_valid: true}}), do: true
 

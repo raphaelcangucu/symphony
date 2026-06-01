@@ -1,24 +1,27 @@
 defmodule SymphonyElixir.GitHub.RequestGateway do
   @moduledoc """
-  Serializes every GitHub HTTP request through a single process so Symphony
-  follows GitHub's REST/GraphQL best practices:
+  Coordinates GitHub HTTP traffic so Symphony follows GitHub's REST/GraphQL
+  guidance without blocking interactive request paths:
 
-  - **Avoid concurrent requests** — callers acquire a slot on a shared monotonic
-    schedule, so requests issued from the orchestrator poll, the dev-server
-    reconciler, per-agent turns, and the assistant chat are staggered instead of
-    fired in parallel.
+  - **Fail fast while rate limited** — when a response signals a primary or
+    secondary rate limit, the gateway records a shared `blocked_until` window
+    derived from `Retry-After` / `x-ratelimit-reset`. Subsequent requests issued
+    while the window is open return a synthetic `429` *immediately* instead of
+    sleeping, so HTTP handlers, the orchestrator poll, and app boot are never
+    frozen waiting for the reset. Callers classify the synthetic response with
+    the same `{:rate_limited, _}` rules used for real responses.
   - **Pause between mutative requests** — mutations are spaced at least
-    `mutation_interval_ms` (>= 1s) apart; reads use a smaller `read_interval_ms`.
-  - **Handle rate-limit errors appropriately** — when a response is rate limited,
-    the gateway records a shared `blocked_until` derived from `Retry-After` /
-    `x-ratelimit-reset` (falling back to exponential backoff) and retries up to
-    `max_retries`, so we stop hammering GitHub instead of risking a ban.
+    `mutation_interval_ms` apart (bounded by `max_wait_ms`) so writes are not
+    fired in bursts. Reads run concurrently; spacing reads provides no relief for
+    the hourly GraphQL points budget and only adds latency to the UI.
+  - **Stop hammering when blocked** — once `blocked_until` is set, no further
+    GitHub calls are made until the window elapses, so a rate-limited account is
+    given room to recover. The window is capped at `max_block_ms` so a far-future
+    reset header cannot wedge the app for an hour; the gateway re-probes instead.
 
-  The GenServer itself never sleeps: `acquire/1` only reserves the next slot and
-  returns how long the caller should wait. The caller performs the sleep and the
-  actual HTTP, then reports rate-limit outcomes back via `report_rate_limited/2`.
-  This keeps `GenServer.call/3` fast (no long blocking calls) while still
-  serializing all GitHub traffic globally.
+  The GenServer never sleeps: `reserve/2` only checks the shared schedule and
+  returns either `{:proceed, wait_ms}` (a short, bounded spacing wait the caller
+  performs) or `{:blocked, reset_at}`. This keeps `GenServer.call/3` fast.
 
   If the gateway process is not running (for example in unit tests that exercise
   callers in isolation), `run/2` degrades to invoking the request function
@@ -33,21 +36,19 @@ defmodule SymphonyElixir.GitHub.RequestGateway do
   alias SymphonyElixir.GitHub.RateLimit
 
   @call_timeout 5_000
-  @default_read_interval_ms 150
   @default_mutation_interval_ms 1_000
-  @default_max_retries 4
-  @default_base_backoff_ms 1_000
-  @default_max_backoff_ms 60_000
+  @default_max_wait_ms 2_000
+  @default_min_block_ms 1_000
+  @default_max_block_ms 60_000
 
   @type kind :: :read | :mutation
   @type request_result :: {:ok, term()} | {:error, term()}
 
   @type tuning :: %{
-          read_interval_ms: non_neg_integer(),
           mutation_interval_ms: non_neg_integer(),
-          max_retries: pos_integer(),
-          base_backoff_ms: non_neg_integer(),
-          max_backoff_ms: non_neg_integer()
+          max_wait_ms: non_neg_integer(),
+          min_block_ms: non_neg_integer(),
+          max_block_ms: non_neg_integer()
         }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -57,18 +58,19 @@ defmodule SymphonyElixir.GitHub.RequestGateway do
 
   @doc """
   Runs `fun` (a GitHub HTTP request returning `{:ok, response} | {:error, reason}`)
-  under the serialized gateway.
+  under the gateway.
 
   Options:
 
   - `:kind` — `:read` (default) or `:mutation`; controls inter-request spacing.
   - `:gateway` — the registered name or pid to use (defaults to this module).
-  - `:max_retries` — override the configured retry count.
   - `:sleep_fun` — 1-arity sleeper, injected in tests (defaults to `Process.sleep/1`).
 
-  Returns the request function's result. When all retries are exhausted, the last
-  (rate-limited) response is returned so the caller can classify it as
-  `{:rate_limited, _}` as usual.
+  Returns the request function's result. While a shared rate-limit window is
+  open, returns a synthetic `{:ok, %{status: 429, ...}}` response *without*
+  calling `fun`, so callers surface `{:rate_limited, _}` quickly instead of
+  blocking. A real rate-limited response opens the shared window for later
+  callers.
   """
   @spec run(keyword(), (-> request_result())) :: request_result()
   def run(opts, fun) when is_list(opts) and is_function(fun, 0) do
@@ -77,41 +79,47 @@ defmodule SymphonyElixir.GitHub.RequestGateway do
     if alive?(gateway) do
       kind = normalize_kind(Keyword.get(opts, :kind, :read))
       sleep_fun = Keyword.get(opts, :sleep_fun, &Process.sleep/1)
-      attempt(gateway, kind, opts, fun, sleep_fun, 1)
+      execute(gateway, kind, fun, sleep_fun)
     else
       fun.()
     end
   end
 
   @doc """
-  Reserves the next request slot for `kind` and returns `{wait_ms, tuning}`.
+  Reserves the next slot for `kind`.
 
-  `wait_ms` is how long the caller must wait before issuing the request so that
-  spacing and any active backoff window are respected.
+  Returns `{:blocked, reset_at}` when a shared rate-limit window is open, or
+  `{:proceed, wait_ms}` with the (bounded) spacing the caller should wait before
+  issuing the request.
   """
-  @spec acquire(GenServer.server(), kind()) :: {non_neg_integer(), tuning()}
-  def acquire(gateway, kind) do
-    GenServer.call(gateway, {:acquire, normalize_kind(kind)}, @call_timeout)
+  @spec reserve(GenServer.server(), kind()) ::
+          {:blocked, DateTime.t() | nil} | {:proceed, non_neg_integer()}
+  def reserve(gateway, kind) do
+    GenServer.call(gateway, {:reserve, normalize_kind(kind)}, @call_timeout)
   end
 
   @doc """
-  Records that the most recent request was rate limited and the shared schedule
-  must pause for at least `delay_ms` before any further GitHub request.
+  Records that the most recent request was rate limited so later callers fail
+  fast until the shared window (derived from `reset_info`) elapses.
   """
-  @spec report_rate_limited(GenServer.server(), non_neg_integer()) :: :ok
-  def report_rate_limited(gateway, delay_ms) when is_integer(delay_ms) and delay_ms >= 0 do
-    GenServer.call(gateway, {:report_rate_limited, delay_ms}, @call_timeout)
+  @spec report_rate_limited(GenServer.server(), %{optional(:reset_at) => DateTime.t() | nil}) ::
+          :ok
+  def report_rate_limited(gateway, %{} = reset_info) do
+    GenServer.call(gateway, {:report_rate_limited, reset_info}, @call_timeout)
   end
 
   @impl true
   def init(opts) do
     clock = Keyword.get(opts, :clock, &__MODULE__.monotonic_ms/0)
+    now_fun = Keyword.get(opts, :now_fun, &DateTime.utc_now/0)
     now = clock.()
 
     state = %{
       next_slot: now,
       blocked_until: now,
+      blocked_reset_at: nil,
       clock: clock,
+      now_fun: now_fun,
       tuning: resolve_tuning(opts)
     }
 
@@ -119,77 +127,96 @@ defmodule SymphonyElixir.GitHub.RequestGateway do
   end
 
   @impl true
-  def handle_call({:acquire, kind}, _from, state) do
+  def handle_call({:reserve, kind}, _from, state) do
     now = state.clock.()
-    spacing = spacing_for(kind, state.tuning)
-    start_at = Enum.max([now, state.next_slot, state.blocked_until])
-    wait_ms = max(start_at - now, 0)
 
-    {:reply, {wait_ms, state.tuning}, %{state | next_slot: start_at + spacing}}
+    cond do
+      now < state.blocked_until ->
+        {:reply, {:blocked, state.blocked_reset_at}, state}
+
+      kind == :mutation ->
+        start_at = max(now, state.next_slot)
+        wait_ms = min(start_at - now, state.tuning.max_wait_ms)
+        {:reply, {:proceed, wait_ms}, %{state | next_slot: start_at + state.tuning.mutation_interval_ms}}
+
+      true ->
+        {:reply, {:proceed, 0}, state}
+    end
   end
 
   @impl true
-  def handle_call({:report_rate_limited, delay_ms}, _from, state) do
+  def handle_call({:report_rate_limited, reset_info}, _from, state) do
     now = state.clock.()
+    reset_at = Map.get(reset_info, :reset_at)
+    delay_ms = block_delay_ms(reset_at, state)
     blocked_until = max(state.blocked_until, now + delay_ms)
-    next_slot = max(state.next_slot, blocked_until)
 
-    {:reply, :ok, %{state | blocked_until: blocked_until, next_slot: next_slot}}
+    {:reply, :ok, %{state | blocked_until: blocked_until, blocked_reset_at: reset_at}}
   end
 
   @doc false
   @spec monotonic_ms() :: integer()
   def monotonic_ms, do: System.monotonic_time(:millisecond)
 
-  defp attempt(gateway, kind, opts, fun, sleep_fun, attempt_no) do
-    {wait_ms, tuning} = acquire(gateway, kind)
-    if wait_ms > 0, do: sleep_fun.(wait_ms)
+  defp execute(gateway, kind, fun, sleep_fun) do
+    case reserve(gateway, kind) do
+      {:blocked, reset_at} ->
+        {:ok, blocked_response(reset_at)}
 
-    result = fun.()
-    max_retries = Keyword.get(opts, :max_retries, tuning.max_retries)
-
-    case result do
-      {:ok, response} ->
-        if RateLimit.rate_limited?(response) and attempt_no < max_retries do
-          backoff(gateway, response, attempt_no, max_retries, tuning)
-          attempt(gateway, kind, opts, fun, sleep_fun, attempt_no + 1)
-        else
-          result
-        end
-
-      {:error, _reason} ->
+      {:proceed, wait_ms} ->
+        if wait_ms > 0, do: sleep_fun.(wait_ms)
+        result = fun.()
+        maybe_report_rate_limit(gateway, result)
         result
     end
   end
 
-  defp backoff(gateway, response, attempt_no, max_retries, tuning) do
-    delay_ms =
-      RateLimit.retry_delay_ms(response, attempt_no,
-        base_backoff_ms: tuning.base_backoff_ms,
-        max_backoff_ms: tuning.max_backoff_ms
-      )
+  defp maybe_report_rate_limit(gateway, {:ok, response}) do
+    if RateLimit.rate_limited?(response) do
+      reset_info = RateLimit.reset_info(response)
+      Logger.warning("GitHub rate limit hit; pausing new requests until #{format_reset(reset_info)}")
+      :ok = report_rate_limited(gateway, reset_info)
+    end
 
-    Logger.warning(
-      "GitHub rate limit hit; pausing #{delay_ms}ms before retry " <>
-        "(attempt #{attempt_no}/#{max_retries})"
-    )
-
-    :ok = report_rate_limited(gateway, delay_ms)
+    :ok
   end
 
-  defp spacing_for(:mutation, tuning), do: tuning.mutation_interval_ms
-  defp spacing_for(_read, tuning), do: tuning.read_interval_ms
+  defp maybe_report_rate_limit(_gateway, _result), do: :ok
+
+  # Synthetic response so callers classify a blocked request with the same
+  # `{:rate_limited, _}` path as a real 429, carrying the reset hint for the UI.
+  defp blocked_response(%DateTime{} = reset_at) do
+    %{status: 429, headers: [{"x-ratelimit-reset", Integer.to_string(DateTime.to_unix(reset_at))}], body: %{}}
+  end
+
+  defp blocked_response(_reset_at) do
+    %{status: 429, headers: [], body: %{}}
+  end
+
+  defp block_delay_ms(%DateTime{} = reset_at, state) do
+    diff = DateTime.diff(reset_at, state.now_fun.(), :millisecond)
+
+    diff
+    |> max(state.tuning.min_block_ms)
+    |> min(state.tuning.max_block_ms)
+  end
+
+  defp block_delay_ms(_reset_at, state) do
+    min(state.tuning.min_block_ms, state.tuning.max_block_ms)
+  end
+
+  defp format_reset(%{reset_at: %DateTime{} = reset_at}), do: DateTime.to_iso8601(reset_at)
+  defp format_reset(_reset_info), do: "the reset window elapses"
 
   defp normalize_kind(:mutation), do: :mutation
   defp normalize_kind(_kind), do: :read
 
   defp resolve_tuning(opts) do
     %{
-      read_interval_ms: interval(opts, :read_interval_ms, @default_read_interval_ms),
       mutation_interval_ms: interval(opts, :mutation_interval_ms, @default_mutation_interval_ms),
-      max_retries: max(interval(opts, :max_retries, @default_max_retries), 1),
-      base_backoff_ms: Keyword.get(opts, :base_backoff_ms, @default_base_backoff_ms),
-      max_backoff_ms: interval(opts, :max_backoff_ms, @default_max_backoff_ms)
+      max_wait_ms: interval(opts, :max_wait_ms, @default_max_wait_ms),
+      min_block_ms: interval(opts, :min_block_ms, @default_min_block_ms),
+      max_block_ms: max(interval(opts, :max_block_ms, @default_max_block_ms), 1)
     }
   end
 
@@ -211,10 +238,9 @@ defmodule SymphonyElixir.GitHub.RequestGateway do
     _, _ -> default
   end
 
-  defp config_value(:read_interval_ms), do: Config.github_read_interval_ms()
   defp config_value(:mutation_interval_ms), do: Config.github_mutation_interval_ms()
-  defp config_value(:max_retries), do: Config.github_max_retries()
-  defp config_value(:max_backoff_ms), do: Config.github_max_backoff_ms()
+  defp config_value(:max_block_ms), do: Config.github_max_backoff_ms()
+  defp config_value(_key), do: nil
 
   defp alive?(name) when is_atom(name), do: is_pid(Process.whereis(name))
   defp alive?(pid) when is_pid(pid), do: Process.alive?(pid)

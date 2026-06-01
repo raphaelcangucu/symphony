@@ -338,6 +338,42 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() => expect(onIssueGoalModeChanged).toHaveBeenCalledWith(true));
   });
 
+  it("pushes dispatch_codex with the current goal mode when dispatch is requested", async () => {
+    const onDispatchSucceeded = vi.fn();
+    const { rerender } = render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueGoalMode={true}
+        dispatchRequestId={0}
+        onDispatchSucceeded={onDispatchSucceeded}
+      />,
+    );
+
+    await waitFor(() => expect(join).toHaveBeenCalled());
+    expect(push).not.toHaveBeenCalledWith("dispatch_codex", expect.anything());
+
+    rerender(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueGoalMode={true}
+        dispatchRequestId={1}
+        onDispatchSucceeded={onDispatchSucceeded}
+      />,
+    );
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("dispatch_codex", { goal_mode: true }));
+
+    const dispatchCallIndex = push.mock.calls.findIndex(([event]) => event === "dispatch_codex");
+    pushReceives[dispatchCallIndex]?.ok?.({ message: "Requested Codex work on MAC-1" });
+    expect(onDispatchSucceeded).toHaveBeenCalledWith("Requested Codex work on MAC-1");
+  });
+
   it("renders an embedded assistant without viewport height", () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="embedded" />);
 

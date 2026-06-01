@@ -245,13 +245,14 @@ Notes:
   - The assistant chat does **not** post its replies as GitHub issue comments (they stream in the
     chat UI); it records changes via `update_issue`. Only `dispatch_codex` posts a single milestone
     comment. This keeps the chat from spamming GitHub and triggering rate limits.
-- **GitHub request gateway** (`github.*`, optional): every GitHub REST/GraphQL call is serialized
-  through `SymphonyElixir.GitHub.RequestGateway`, which follows GitHub's API best practices —
-  staggering concurrent requests, spacing mutations at least one second apart, and backing off on
-  `429`/`403` rate limits using `Retry-After` / `x-ratelimit-reset` (with exponential-backoff
-  fallback) before retrying. Tunables: `github.read_interval_ms` (default `150`),
-  `github.mutation_interval_ms` (default `1000`), `github.max_retries` (default `4`),
-  `github.max_backoff_ms` (default `60000`).
+- **GitHub request gateway** (`github.*`, optional): GitHub REST/GraphQL calls flow through
+  `SymphonyElixir.GitHub.RequestGateway`, which follows GitHub's API best practices — spacing
+  mutations at least one second apart and, on a `429`/`403`/GraphQL rate-limit response, opening a
+  shared backoff window derived from `Retry-After` / `x-ratelimit-reset`. While that window is open
+  the gateway **fails fast** (returns `429` immediately) instead of blocking request handlers, so
+  the tracker UI and app boot never freeze waiting for a reset; reads otherwise run concurrently.
+  Tunables: `github.mutation_interval_ms` (default `1000`) and `github.max_backoff_ms`
+  (default `60000`, the cap on how long a block lasts before re-probing).
 - **Claude backend** uses `bypassPermissions` mode and has no additional policy settings.
 - `agent.max_turns` caps how many back-to-back agent turns Symphony will run in a single agent
   invocation when a turn completes normally but the issue is still in an active state. Default: `20`.
