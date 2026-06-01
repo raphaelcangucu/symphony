@@ -61,11 +61,17 @@ defmodule SymphonyElixir.Tracker do
 
   @spec adapter() :: module()
   def adapter do
-    case Config.tracker_kind() do
-      "local" -> SymphonyElixir.LocalTracker.Tracker
-      "memory" -> SymphonyElixir.Memory.Tracker
-      "linear" -> SymphonyElixir.Linear.Tracker
-      _ -> SymphonyElixir.GitHub.Tracker
+    kind = Config.tracker_kind()
+
+    if kind in ["github", "linear"] and Config.tracker_sync_enabled?() do
+      SymphonyElixir.Tracker.Sync.LocalFirstTracker
+    else
+      remote_adapter(kind)
     end
   end
+
+  defp remote_adapter("local"), do: SymphonyElixir.LocalTracker.Tracker
+  defp remote_adapter("memory"), do: SymphonyElixir.Memory.Tracker
+  defp remote_adapter("linear"), do: SymphonyElixir.Linear.Tracker
+  defp remote_adapter(_kind), do: SymphonyElixir.GitHub.Tracker
 end
