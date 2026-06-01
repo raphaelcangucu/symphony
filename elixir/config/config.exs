@@ -29,10 +29,15 @@ default_local_tracker_database =
     _ -> Path.expand("../.symphony/tracker.sqlite3", __DIR__)
   end
 
+# The test suite truncates every table on setup, so it must NEVER touch the
+# dev/prod database. In `:test` we pin the path and ignore the
+# `SYMPHONY_LOCAL_TRACKER_DATABASE` override (which is commonly exported via
+# `.env`), preventing a sourced shell from pointing tests at real data.
 local_tracker_database =
-  case System.get_env("SYMPHONY_LOCAL_TRACKER_DATABASE") do
-    value when is_binary(value) and value != "" -> Path.expand(value)
-    _ -> default_local_tracker_database
+  case {Mix.env(), System.get_env("SYMPHONY_LOCAL_TRACKER_DATABASE")} do
+    {:test, _override} -> default_local_tracker_database
+    {_env, value} when is_binary(value) and value != "" -> Path.expand(value)
+    {_env, _value} -> default_local_tracker_database
   end
 
 File.mkdir_p!(Path.dirname(local_tracker_database))

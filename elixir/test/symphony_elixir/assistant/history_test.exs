@@ -297,9 +297,49 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
                History.get_thread(project_thread.id)
     end
 
-    test "leaves plain project chats untouched" do
+    test "extracts the identifier from the nested codex app-server tool result shape" do
+      {:ok, project_thread} = History.ensure_thread("macro", %{workspace_path: "/tmp/project-ws"})
+      {:ok, _} = History.append_message(project_thread, %{role: "user", content: "create the task"})
+
+      {:ok, _} =
+        History.append_message(project_thread, %{
+          role: "assistant",
+          content: "Created 510",
+          tool_calls: [
+            %{
+              "name" => "create_issue",
+              "status" => "complete",
+              "result" => %{
+                "success" => true,
+                "contentItems" => [%{"type" => "inputText", "text" => "{\"data\":{\"identifier\":\"510\"}}"}],
+                "toolResult" => %{"data" => %{"identifier" => "510", "title" => "Multitenant"}}
+              }
+            }
+          ]
+        })
+
+      assert :ok = History.repair_lingering_issue_drafts()
+
+      assert {:ok, %Thread{scope: "issue", issue_identifier: "510"}} =
+               History.get_thread(project_thread.id)
+    end
+
+    test "ignores a failed create_draft_issue and leaves plain project chats untouched" do
       {:ok, project_thread} = History.ensure_thread("macro", %{workspace_path: "/tmp/project-ws"})
       {:ok, _} = History.append_message(project_thread, %{role: "user", content: "just chatting"})
+
+      {:ok, _} =
+        History.append_message(project_thread, %{
+          role: "assistant",
+          content: "draft failed",
+          tool_calls: [
+            %{
+              "name" => "create_draft_issue",
+              "status" => "error",
+              "result" => %{"success" => false}
+            }
+          ]
+        })
 
       assert :ok = History.repair_lingering_issue_drafts()
 

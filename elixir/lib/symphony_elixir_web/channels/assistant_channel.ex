@@ -297,11 +297,30 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       :error ->
         extract_identifier(get_any(value, "data")) ||
           extract_identifier(get_any(value, "issue")) ||
-          extract_identifier(get_any(value, "result"))
+          extract_identifier(get_any(value, "result")) ||
+          extract_identifier(get_any(value, "toolResult")) ||
+          extract_identifier_from_content(get_any(value, "contentItems"))
     end
   end
 
   defp extract_identifier(_value), do: nil
+
+  defp extract_identifier_from_content(items) when is_list(items) do
+    Enum.find_value(items, fn item ->
+      item |> get_any("text") |> decode_identifier_text()
+    end)
+  end
+
+  defp extract_identifier_from_content(_items), do: nil
+
+  defp decode_identifier_text(text) when is_binary(text) do
+    case Jason.decode(text) do
+      {:ok, decoded} -> extract_identifier(decoded)
+      _ -> nil
+    end
+  end
+
+  defp decode_identifier_text(_text), do: nil
 
   defp normalize_identifier(value) when is_binary(value) do
     case String.trim(value) do

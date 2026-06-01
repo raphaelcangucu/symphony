@@ -339,14 +339,18 @@ export function ProjectAssistantPanel({
           )}
           aria-label="Project assistant"
         >
-          <div className={cn("border-b", isPageMode ? "px-6 py-3.5" : "px-4 py-3")}>
-            <h2 className="text-base font-semibold leading-tight">
+          <div
+            className={cn("border-b", isPageMode ? "px-6 py-3.5" : isEmbeddedMode ? "px-4 py-2" : "px-4 py-3")}
+          >
+            <h2 className={cn("font-semibold leading-tight", isEmbeddedMode ? "text-sm" : "text-base")}>
               {projectSlug ? "Project assistant" : "Freeform assistant"}
             </h2>
-            <p className="text-xs text-muted-foreground">
-              {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
-              {catalog ? ` Models from \`${catalog.command}\`.` : null}
-            </p>
+            {isEmbeddedMode ? null : (
+              <p className="text-xs text-muted-foreground">
+                {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
+                {catalog ? ` Models from \`${catalog.command}\`.` : null}
+              </p>
+            )}
           </div>
 
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">

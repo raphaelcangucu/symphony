@@ -114,17 +114,19 @@ export function IssueAuthoringPanel({
 
   const documentsPanel = (
     <>
-      <div className="shrink-0 rounded-xl border bg-card px-4 py-3 shadow-sm">
+      <div className={cn("shrink-0 rounded-xl border bg-card shadow-sm", compact ? "px-3 py-2.5" : "px-4 py-3")}>
         <h1 className="text-sm font-semibold">
           {normalizedIdentifier ? `Issue authoring: ${normalizedIdentifier}` : "New issue authoring"}
         </h1>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className={cn("text-xs text-muted-foreground", compact ? "mt-0.5" : "mt-1")}>
           {normalizedIdentifier
-            ? "Documents refresh when the assistant reports changes for the open issue. Choose Simple for a polished issue brief or Complex for a spec and implementation plan."
+            ? compact
+              ? "Simple for a polished brief, Complex for a spec + implementation plan."
+              : "Documents refresh when the assistant reports changes for the open issue. Choose Simple for a polished issue brief or Complex for a spec and implementation plan."
             : "Start by asking the assistant to draft an issue; documents appear once an identifier exists."}
         </p>
         {normalizedIdentifier ? (
-          <div className="mt-3 space-y-2">
+          <div className={cn("space-y-2", compact ? "mt-2" : "mt-3")}>
             <div className="flex flex-wrap gap-2" aria-label="Issue authoring mode">
               <Button
                 type="button"
@@ -162,12 +164,12 @@ export function IssueAuthoringPanel({
 
   if (compact) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden bg-muted/20 p-3">
-        <section className="flex min-h-0 flex-[1.15] overflow-hidden" aria-label="Issue authoring chat">
+      <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden bg-muted/20 p-2">
+        <section className="flex min-h-0 flex-[2.4] overflow-hidden" aria-label="Issue authoring chat">
           {assistantPanel}
         </section>
 
-        <aside className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" aria-label="Issue authoring documents">
+        <aside className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden" aria-label="Issue authoring documents">
           {documentsPanel}
         </aside>
       </div>

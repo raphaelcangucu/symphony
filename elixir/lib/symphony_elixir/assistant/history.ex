@@ -288,22 +288,56 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp tool_call_succeeded?(_call), do: false
 
-  defp draft_identifier_from_call(call) do
-    result = field_any(call, "result") || call
-    data = field_any(result, "data") || result
+  defp draft_identifier_from_call(call), do: identifier_from(call)
 
-    [field_any(data, "identifier"), field_any(result, "identifier"), field_any(call, "identifier")]
-    |> Enum.find_value(fn
-      value when is_binary(value) ->
-        case String.trim(value) do
-          "" -> nil
-          trimmed -> trimmed
-        end
+  # Walks the assorted shapes Codex app-server / runner emit for a tool result:
+  # `data.identifier`, `result.toolResult.data.identifier`, or a JSON blob inside
+  # `contentItems[].text`.
+  defp identifier_from(value) when is_map(value) do
+    direct =
+      field_any(value, "identifier") || field_any(value, "issue_identifier") ||
+        field_any(value, "issueIdentifier")
 
-      _other ->
-        nil
+    case normalize_identifier(direct) do
+      {:ok, identifier} ->
+        identifier
+
+      :error ->
+        identifier_from(field_any(value, "data")) ||
+          identifier_from(field_any(value, "result")) ||
+          identifier_from(field_any(value, "toolResult")) ||
+          identifier_from(field_any(value, "issue")) ||
+          identifier_from_content(field_any(value, "contentItems"))
+    end
+  end
+
+  defp identifier_from(_value), do: nil
+
+  defp identifier_from_content(items) when is_list(items) do
+    Enum.find_value(items, fn item ->
+      item |> field_any("text") |> decode_identifier_text()
     end)
   end
+
+  defp identifier_from_content(_items), do: nil
+
+  defp decode_identifier_text(text) when is_binary(text) do
+    case Jason.decode(text) do
+      {:ok, decoded} -> identifier_from(decoded)
+      _ -> nil
+    end
+  end
+
+  defp decode_identifier_text(_text), do: nil
+
+  defp normalize_identifier(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> :error
+      trimmed -> {:ok, trimmed}
+    end
+  end
+
+  defp normalize_identifier(_value), do: :error
 
   defp field_any(map, key) when is_map(map) and is_binary(key) do
     Map.get(map, key) || Map.get(map, safe_existing_atom(key))
