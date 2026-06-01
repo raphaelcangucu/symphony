@@ -325,6 +325,39 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert prompt_text =~ "current state"
     end
 
+    test "goal mode injects dispatch goal instructions into the prompt", %{thread: thread} do
+      {:ok, thread} = History.set_goal_mode(thread, true)
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "ship it", %{}, runner: runner)
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "GOAL MODE: ENABLED"
+      assert prompt =~ "dispatch_codex"
+      assert prompt =~ "goal"
+    end
+
+    test "goal mode off omits the goal dispatch instructions", %{thread: thread} do
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+
+      assert_receive {:prompt, prompt}
+      refute prompt =~ "GOAL MODE: ENABLED"
+    end
+
     test "documents_changed fires on_documents_changed when a turn writes a doc", %{thread: thread} do
       test_pid = self()
       ws = Workspace.path_for_issue("MAC-1")

@@ -46,6 +46,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread)
       }
+
       socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
       send(self(), {:assistant_history_loaded, payload})
       {:ok, payload, socket}
@@ -382,7 +383,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp error_reason({:missing_required_field, field}), do: "#{field} is required"
   defp error_reason(:project_not_found), do: "project not found"
   defp error_reason({:unsupported_mode, mode}), do: "unsupported mode: #{mode}. Expected one of: #{Enum.join(@issue_modes, ", ")}"
-  defp error_reason(:issue_thread_required), do: "set_mode is only supported for issue assistant threads"
+  defp error_reason(:issue_thread_required), do: "this action is only supported for issue assistant threads"
   defp error_reason(:message_required), do: "message is required"
   defp error_reason(%Ecto.Changeset{}), do: "failed to persist mode"
   defp error_reason(reason), do: inspect(reason)

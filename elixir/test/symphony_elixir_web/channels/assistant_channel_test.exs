@@ -215,6 +215,30 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     assert payload.mode == "triage"
+    assert payload.goal_mode == false
+  end
+
+  test "set_goal_mode persists the flag and the join rehydrates it", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.metadata["goal_mode"] == true
+
+    {:ok, payload, _rejoined} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join("assistant:issue:macro-markets:MAC-1", %{})
+
+    assert payload.goal_mode == true
+  end
+
+  test "set_goal_mode rejects non-issue assistant threads", %{socket: socket} do
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:macro-markets", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true})
+    assert_reply(ref, :error, %{reason: "this action is only supported for issue assistant threads"})
   end
 
   test "set_mode rejects unsupported modes for issue threads", %{socket: socket} do
@@ -228,7 +252,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:macro-markets", %{})
 
     ref = push(socket, "set_mode", %{"mode" => "simple"})
-    assert_reply(ref, :error, %{reason: "set_mode is only supported for issue assistant threads"})
+    assert_reply(ref, :error, %{reason: "this action is only supported for issue assistant threads"})
   end
 
   test "freeform send_message routes through send_message_to_thread", %{socket: socket} do

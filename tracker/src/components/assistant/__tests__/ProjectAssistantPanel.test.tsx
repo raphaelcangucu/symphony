@@ -290,6 +290,54 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() => expect(push.mock.calls.filter(([event]) => event === "set_mode")).toHaveLength(2));
   });
 
+  it("sends set_goal_mode through the issue channel when goal mode is enabled", async () => {
+    const { rerender } = render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueGoalMode={false}
+      />,
+    );
+
+    await waitFor(() => expect(join).toHaveBeenCalled());
+    expect(push).not.toHaveBeenCalledWith("set_goal_mode", expect.anything());
+
+    rerender(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueGoalMode={true}
+      />,
+    );
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("set_goal_mode", { goal_mode: true }));
+  });
+
+  it("rehydrates an enabled goal mode from the join response", async () => {
+    const onIssueGoalModeChanged = vi.fn();
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok" ? callback({ goal_mode: true, thread_id: 1 }) : undefined,
+    }));
+
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        issueGoalMode={false}
+        onIssueGoalModeChanged={onIssueGoalModeChanged}
+      />,
+    );
+
+    await waitFor(() => expect(onIssueGoalModeChanged).toHaveBeenCalledWith(true));
+  });
+
   it("renders an embedded assistant without viewport height", () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="embedded" />);
 

@@ -248,6 +248,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   defp build_issue_prompt(%{metadata: metadata, issue_identifier: identifier, project_slug: project_slug}, message, context, history) do
     mode = Map.get(metadata || %{}, "mode", "triage")
+    goal_mode = Map.get(metadata || %{}, "goal_mode", false) == true
 
     base = """
     You are the Symphony issue authoring assistant for `#{project_slug}`, working on issue `#{identifier}`.
@@ -292,7 +293,21 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           "\n\nMODE: TRIAGE. Collect the title and a short description, then help decide simple vs complex."
       end
 
-    String.trim(base <> mode_section)
+    String.trim(base <> mode_section <> goal_mode_section(goal_mode, identifier))
+  end
+
+  defp goal_mode_section(false, _identifier), do: ""
+
+  defp goal_mode_section(true, identifier) do
+    """
+
+    GOAL MODE: ENABLED (Codex long-running). When the user asks you to dispatch Codex for
+    `#{identifier}`, call the dispatch_codex tool WITH a `goal` argument. Derive the goal from the
+    issue artifacts in this working tree (the executive summary as the objective, the plan's
+    verification steps as the checks, and the spec's constraints), plus a clear stopping condition
+    (stop when complete or blocked). Keep the goal concise and self-contained so the orchestrator
+    can follow it across multiple turns. Do not dispatch on your own — only when the user asks.
+    """
   end
 
   defp default_runner(workspace, prompt, issue, opts) do

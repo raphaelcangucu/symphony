@@ -17,25 +17,36 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: ({
     issueIdentifier,
     issueMode,
+    issueGoalMode,
     mode,
     onIssueModeChanged,
+    onIssueGoalModeChanged,
     projectSlug,
     view,
   }: {
     issueIdentifier?: string;
     issueMode?: "triage" | "simple" | "complex";
+    issueGoalMode?: boolean;
     mode?: "sheet" | "page" | "embedded";
     onIssueModeChanged?: (mode: "triage" | "simple" | "complex") => void;
+    onIssueGoalModeChanged?: (enabled: boolean) => void;
     projectSlug?: string;
     view: "board" | "list";
   }) => (
     <div data-testid="project-assistant-panel">
-      Assistant {projectSlug}:{issueIdentifier}:{view}:{mode}:{issueMode ?? "unset"}
+      Assistant {projectSlug}:{issueIdentifier}:{view}:{mode}:{issueMode ?? "unset"}:goal=
+      {issueGoalMode === undefined ? "unset" : String(issueGoalMode)}
       <button type="button" onClick={() => onIssueModeChanged?.(issueMode ?? "triage")}>
         acknowledge mode
       </button>
       <button type="button" onClick={() => onIssueModeChanged?.("complex")}>
         hydrate complex
+      </button>
+      <button type="button" onClick={() => onIssueGoalModeChanged?.(issueGoalMode ?? false)}>
+        acknowledge goal
+      </button>
+      <button type="button" onClick={() => onIssueGoalModeChanged?.(true)}>
+        hydrate goal
       </button>
     </div>
   ),
@@ -93,6 +104,36 @@ describe("IssueAuthoringPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "acknowledge mode" }));
 
     expect(screen.getByText("Complex mode active.")).toBeTruthy();
+  });
+
+  it("exposes a Codex goal-mode toggle and confirms it when acknowledged", () => {
+    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+
+    const goalToggle = screen.getByRole("checkbox", { name: /codex goal mode/i });
+    expect(goalToggle).not.toBeChecked();
+    expect(screen.getByTestId("project-assistant-panel")).toHaveTextContent("goal=false");
+
+    fireEvent.click(goalToggle);
+
+    expect(goalToggle).toBeChecked();
+    expect(screen.getByTestId("project-assistant-panel")).toHaveTextContent("goal=true");
+
+    fireEvent.click(screen.getByRole("button", { name: "acknowledge goal" }));
+
+    expect(
+      screen.getByText("Goal mode on: Codex dispatches will follow a long-running goal."),
+    ).toBeTruthy();
+  });
+
+  it("reflects a goal mode rehydrated from the channel", () => {
+    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+
+    const goalToggle = screen.getByRole("checkbox", { name: /codex goal mode/i });
+    expect(goalToggle).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "hydrate goal" }));
+
+    expect(goalToggle).toBeChecked();
   });
 
   it("reflects a mode rehydrated from the channel without a fresh selection", () => {

@@ -49,11 +49,15 @@ interface ProjectAssistantPanelProps {
   mode?: "sheet" | "page" | "embedded";
   issueMode?: IssueAssistantMode;
   issueModeRequestId?: number;
+  issueGoalMode?: boolean;
+  issueGoalModeRequestId?: number;
   onDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
   onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
   onIssueCreated?: (issue: AssistantIssueCreatedPayload) => void;
   onIssueModeChanged?: (mode: IssueAssistantMode) => void;
   onIssueModeError?: (message: string) => void;
+  onIssueGoalModeChanged?: (enabled: boolean) => void;
+  onIssueGoalModeError?: (message: string) => void;
 }
 
 const STREAMING_ASSISTANT_ID = "assistant-streaming";
@@ -72,11 +76,15 @@ export function ProjectAssistantPanel({
   mode = "sheet",
   issueMode,
   issueModeRequestId = 0,
+  issueGoalMode,
+  issueGoalModeRequestId = 0,
   onDocumentChanged,
   onDraftIssueCreated,
   onIssueCreated,
   onIssueModeChanged,
   onIssueModeError,
+  onIssueGoalModeChanged,
+  onIssueGoalModeError,
 }: ProjectAssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -91,6 +99,8 @@ export function ProjectAssistantPanel({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const lastConfirmedIssueModeRef = useRef<IssueAssistantMode | null>(null);
   const pendingIssueModeRef = useRef<{ mode: IssueAssistantMode; requestId: number } | null>(null);
+  const lastConfirmedGoalModeRef = useRef<boolean | null>(null);
+  const pendingGoalModeRef = useRef<{ enabled: boolean; requestId: number } | null>(null);
   const [composerHeight, setComposerHeight] = useState(0);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
@@ -140,6 +150,8 @@ export function ProjectAssistantPanel({
     setChannelReady(false);
     lastConfirmedIssueModeRef.current = null;
     pendingIssueModeRef.current = null;
+    lastConfirmedGoalModeRef.current = null;
+    pendingGoalModeRef.current = null;
 
     const socket = createTrackerSocket();
     socket.connect();
@@ -187,6 +199,12 @@ export function ProjectAssistantPanel({
         lastConfirmedIssueModeRef.current = hydratedMode;
         onIssueModeChanged?.(hydratedMode);
       }
+
+      if (issueIdentifier) {
+        const hydratedGoalMode = goalModeFromResponse(response) ?? false;
+        lastConfirmedGoalModeRef.current = hydratedGoalMode;
+        if (hydratedGoalMode) onIssueGoalModeChanged?.(true);
+      }
     });
     joinPush.receive("error", (reason) => {
       setConnectionError(errorMessage(reason));
@@ -199,7 +217,7 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onIssueCreated, onIssueModeChanged, projectSlug, threadId]);
+  }, [active, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onIssueCreated, onIssueGoalModeChanged, onIssueModeChanged, projectSlug, threadId]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;
@@ -229,6 +247,35 @@ export function ProjectAssistantPanel({
       onIssueModeError?.("Assistant mode update timed out");
     });
   }, [active, channelReady, issueIdentifier, issueMode, issueModeRequestId, onIssueModeChanged, onIssueModeError]);
+
+  useEffect(() => {
+    if (!active || !channelReady || !issueIdentifier || typeof issueGoalMode !== "boolean") return;
+    if (lastConfirmedGoalModeRef.current === issueGoalMode) return;
+
+    const requestId = issueGoalModeRequestId;
+    const pending = pendingGoalModeRef.current;
+    if (pending?.enabled === issueGoalMode && pending.requestId === requestId) return;
+
+    const channel = channelRef.current;
+    if (!channel) return;
+
+    pendingGoalModeRef.current = { enabled: issueGoalMode, requestId };
+    const pushResult = channel.push("set_goal_mode", { goal_mode: issueGoalMode });
+    pushResult.receive("ok", (response) => {
+      const enabled = goalModeFromResponse(response) ?? issueGoalMode;
+      lastConfirmedGoalModeRef.current = enabled;
+      pendingGoalModeRef.current = null;
+      onIssueGoalModeChanged?.(enabled);
+    });
+    pushResult.receive("error", (reason) => {
+      pendingGoalModeRef.current = null;
+      onIssueGoalModeError?.(errorMessage(reason));
+    });
+    pushResult.receive("timeout", () => {
+      pendingGoalModeRef.current = null;
+      onIssueGoalModeError?.("Assistant goal mode update timed out");
+    });
+  }, [active, channelReady, issueIdentifier, issueGoalMode, issueGoalModeRequestId, onIssueGoalModeChanged, onIssueGoalModeError]);
 
   const sendMessage = useCallback(
     ({ message, settings, attachments }: AssistantComposerSubmit) => {
@@ -627,6 +674,12 @@ function modeFromResponse(response: unknown): IssueAssistantMode | null {
   if (!response || typeof response !== "object") return null;
   const mode = stringFromRecord(response as Record<string, unknown>, "mode");
   return isIssueAssistantMode(mode) ? mode : null;
+}
+
+function goalModeFromResponse(response: unknown): boolean | null {
+  if (!response || typeof response !== "object") return null;
+  const value = (response as Record<string, unknown>).goal_mode;
+  return typeof value === "boolean" ? value : null;
 }
 
 function stringFromRecord(record: Record<string, unknown>, key: string): string | null {

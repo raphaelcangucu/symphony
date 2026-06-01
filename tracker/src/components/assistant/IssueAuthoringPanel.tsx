@@ -38,6 +38,10 @@ export function IssueAuthoringPanel({
   const [issueModeRequestId, setIssueModeRequestId] = useState(0);
   const [issueModeStatus, setIssueModeStatus] = useState<string | null>(null);
   const [issueModeError, setIssueModeError] = useState<string | null>(null);
+  const [goalMode, setGoalMode] = useState(false);
+  const [goalModeRequestId, setGoalModeRequestId] = useState(0);
+  const [goalModeStatus, setGoalModeStatus] = useState<string | null>(null);
+  const [goalModeError, setGoalModeError] = useState<string | null>(null);
   const issueDocuments = useIssueDocuments({
     projectSlug,
     identifier: normalizedIdentifier,
@@ -73,6 +77,24 @@ export function IssueAuthoringPanel({
     setIssueModeStatus(null);
   }, []);
 
+  const toggleGoalMode = useCallback((enabled: boolean) => {
+    setGoalMode(enabled);
+    setGoalModeRequestId((current) => current + 1);
+    setGoalModeError(null);
+    setGoalModeStatus(enabled ? "Enabling Codex goal mode..." : "Disabling Codex goal mode...");
+  }, []);
+
+  const handleGoalModeChanged = useCallback((enabled: boolean) => {
+    setGoalMode(enabled);
+    setGoalModeError(null);
+    setGoalModeStatus(enabled ? "Goal mode on: Codex dispatches will follow a long-running goal." : "Goal mode off.");
+  }, []);
+
+  const handleGoalModeError = useCallback((message: string) => {
+    setGoalModeError(message);
+    setGoalModeStatus(null);
+  }, []);
+
   const assistantPanel = (
     <div
       className={cn(
@@ -88,11 +110,15 @@ export function IssueAuthoringPanel({
         mode={compact ? "embedded" : "page"}
         issueMode={normalizedIdentifier ? issueMode : undefined}
         issueModeRequestId={issueModeRequestId}
+        issueGoalMode={normalizedIdentifier ? goalMode : undefined}
+        issueGoalModeRequestId={goalModeRequestId}
         onDocumentChanged={handleDocumentChanged}
         onDraftIssueCreated={onDraftIssueCreated}
         onIssueCreated={onIssueCreated}
         onIssueModeChanged={handleIssueModeChanged}
         onIssueModeError={handleIssueModeError}
+        onIssueGoalModeChanged={handleGoalModeChanged}
+        onIssueGoalModeError={handleGoalModeError}
       />
     </div>
   );
@@ -154,6 +180,28 @@ export function IssueAuthoringPanel({
             ) : issueModeStatus ? (
               <p className="text-xs text-muted-foreground">{issueModeStatus}</p>
             ) : null}
+            <div className="border-t pt-2">
+              <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+                <input
+                  type="checkbox"
+                  checked={goalMode}
+                  aria-label="Codex goal mode"
+                  onChange={(event) => toggleGoalMode(event.target.checked)}
+                  className="h-4 w-4 rounded border-input"
+                />
+                Codex goal mode (long-running)
+              </label>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                When on, dispatched Codex runs follow the spec/plan as a long-running goal.
+              </p>
+              {goalModeError ? (
+                <p role="alert" className="mt-1 text-xs text-destructive">
+                  {goalModeError}
+                </p>
+              ) : goalModeStatus ? (
+                <p className="mt-1 text-xs text-muted-foreground">{goalModeStatus}</p>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
