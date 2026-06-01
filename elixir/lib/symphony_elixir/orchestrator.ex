@@ -185,6 +185,7 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp maybe_dispatch(%State{} = state) do
+    SymphonyElixir.Tracker.Sync.Engine.request_sync(force: true)
     state = reconcile_running_issues(state)
 
     with :ok <- Config.validate!(),
