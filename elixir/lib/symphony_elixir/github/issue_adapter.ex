@@ -126,7 +126,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
                "optionId" => option_id
              },
              []
-           ) do
+           ),
+         :ok <- maybe_apply_agent_routing_label(project, identifier, attrs) do
       {:ok,
        IssueDTO.build(%{
          identifier: identifier,
@@ -220,6 +221,58 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   end
 
   defp agent_label_ids(_by_name, _agent), do: []
+
+  # Applies the `symphony:<agent>` routing label so the orchestrator admits the
+  # issue and resolves the coding agent. GitHub `move_issue` only updates the
+  # Status field, so without this an assistant dispatch never enters observability.
+  defp maybe_apply_agent_routing_label(%Project{} = project, identifier, attrs) do
+    case normalize_agent_kind(Map.get(attrs, "agent") || Map.get(attrs, :agent)) do
+      nil -> :ok
+      agent -> apply_agent_routing_label(project, identifier, agent)
+    end
+  end
+
+  defp apply_agent_routing_label(%Project{} = project, identifier, agent) do
+    label_name = "symphony:" <> agent
+
+    with {:ok, {owner, name}} <- RepoSpec.split(config(project).repo),
+         {:ok, number} <- parse_issue_number(identifier),
+         {:ok, issue_node_id} <- fetch_issue_node_id(owner, name, number),
+         {:ok, meta} <- fetch_repo_metadata(owner, name),
+         {:ok, label_id} <- find_label_id(meta.labels, label_name),
+         {:ok, _} <- add_labels(issue_node_id, [label_id]) do
+      :ok
+    end
+  end
+
+  defp normalize_agent_kind(agent) when is_binary(agent) do
+    case agent |> String.trim() |> String.downcase() do
+      normalized when normalized in @agent_kinds -> normalized
+      _ -> nil
+    end
+  end
+
+  defp normalize_agent_kind(_agent), do: nil
+
+  defp find_label_id(labels, label_name) when is_list(labels) do
+    target = String.downcase(label_name)
+
+    labels
+    |> Enum.find(fn label -> String.downcase(label.name || "") == target end)
+    |> case do
+      %{id: id} when is_binary(id) -> {:ok, id}
+      _ -> {:error, {:agent_label_missing, label_name}}
+    end
+  end
+
+  defp add_labels(labelable_id, label_ids) do
+    variables = %{"labelableId" => labelable_id, "labelIds" => label_ids}
+
+    case client().graphql(Query.add_labels_mutation(), variables, []) do
+      {:ok, response} -> {:ok, response}
+      {:error, _} = error -> error
+    end
+  end
 
   defp priority_label_ids(by_name, priority) do
     case normalize_priority(priority) do
@@ -443,6 +496,15 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp map_error(:issue_not_found), do: :issue_not_found
   defp map_error(:status_not_found), do: :status_not_found
   defp map_error(:missing_github_token), do: :missing_credentials
+
+  defp map_error({:agent_label_missing, label_name}),
+    do:
+      {:remote_validation,
+       %{
+         agent_label: [
+           "repository is missing the \"#{label_name}\" label required to route this issue to the agent"
+         ]
+       }}
 
   defp map_error({:github_graphql_errors, errors}),
     do: {:remote_validation, %{errors: summarize_graphql_errors(errors)}}

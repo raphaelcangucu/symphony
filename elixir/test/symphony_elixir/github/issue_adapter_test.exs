@@ -190,6 +190,154 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
              )
   end
 
+  defmodule DispatchClientStub do
+    def graphql(query, vars, _opts) do
+      cond do
+        String.contains?(query, "SymphonyUiIssueNodeId") ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_510"}}}}}
+
+        String.contains?(query, "SymphonyUiResolveProjectItem") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "projectItems" => %{
+                   "nodes" => [%{"id" => "PVTI_510", "project" => %{"id" => "PVT_1"}}]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "fields(first") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "fields" => %{
+                   "nodes" => [
+                     %{
+                       "__typename" => "ProjectV2SingleSelectField",
+                       "id" => "FIELD_1",
+                       "name" => "Symphony State",
+                       "options" => [%{"id" => "OPT_IN_PROGRESS", "name" => "In Progress"}]
+                     }
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "updateProjectV2ItemFieldValue") ->
+          {:ok, %{"data" => %{"updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_510"}}}}}
+
+        String.contains?(query, "SymphonyUiRepoMetadata") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "id" => "REPO_1",
+                 "labels" => %{
+                   "nodes" => [
+                     %{"id" => "LBL_CODEX", "name" => "symphony:codex", "color" => "ededed"}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "addLabelsToLabelable") ->
+          send(self(), {:add_labels, vars})
+          {:ok, %{"data" => %{"addLabelsToLabelable" => %{"labelable" => %{"__typename" => "Issue"}}}}}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
+  test "move_issue applies the symphony:<agent> routing label when an agent is dispatched" do
+    Application.put_env(:symphony_elixir, :github_client_module, DispatchClientStub)
+
+    assert {:ok, %{status: %{name: "In Progress"}}} =
+             IssueAdapter.move_issue(
+               %{project() | tracker_config: Map.put(project().tracker_config, "status_field", "Symphony State")},
+               "510",
+               %{"status" => "In Progress", "agent" => "codex"}
+             )
+
+    assert_received {:add_labels, %{"labelableId" => "I_510", "labelIds" => ["LBL_CODEX"]}}
+  end
+
+  defmodule DispatchMissingLabelClientStub do
+    def graphql(query, _vars, _opts) do
+      cond do
+        String.contains?(query, "SymphonyUiIssueNodeId") ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_511"}}}}}
+
+        String.contains?(query, "SymphonyUiResolveProjectItem") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "projectItems" => %{
+                   "nodes" => [%{"id" => "PVTI_511", "project" => %{"id" => "PVT_1"}}]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "fields(first") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "fields" => %{
+                   "nodes" => [
+                     %{
+                       "__typename" => "ProjectV2SingleSelectField",
+                       "id" => "FIELD_1",
+                       "name" => "Symphony State",
+                       "options" => [%{"id" => "OPT_IN_PROGRESS", "name" => "In Progress"}]
+                     }
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "updateProjectV2ItemFieldValue") ->
+          {:ok, %{"data" => %{"updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_511"}}}}}
+
+        String.contains?(query, "SymphonyUiRepoMetadata") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "id" => "REPO_1",
+                 "labels" => %{"nodes" => []}
+               }
+             }
+           }}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
+  test "move_issue surfaces a validation error when the agent routing label is missing" do
+    Application.put_env(:symphony_elixir, :github_client_module, DispatchMissingLabelClientStub)
+
+    assert {:error, {:remote_validation, %{agent_label: [message]}}} =
+             IssueAdapter.move_issue(
+               %{project() | tracker_config: Map.put(project().tracker_config, "status_field", "Symphony State")},
+               "511",
+               %{"status" => "In Progress", "agent" => "codex"}
+             )
+
+    assert message =~ "symphony:codex"
+  end
+
   defmodule CreateClientStub do
     def graphql(query, vars, _opts) do
       cond do
