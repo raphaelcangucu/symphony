@@ -49,6 +49,7 @@ defmodule SymphonyElixir.Application do
       {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
       SymphonyElixir.GitHub.ReadCache,
       SymphonyElixir.GitHub.RequestGateway,
+      SymphonyElixir.Tracker.Sync.Engine,
       SymphonyElixir.WorkflowStore,
       SymphonyElixir.Orchestrator,
       SymphonyElixir.PublicRouting,
