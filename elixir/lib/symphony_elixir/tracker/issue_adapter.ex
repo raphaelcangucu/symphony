@@ -57,11 +57,17 @@ defmodule SymphonyElixir.Tracker.IssueAdapter do
     "linear" => SymphonyElixir.Linear.IssueAdapter
   }
 
+  @remote_kinds ["github", "linear"]
+
   @spec for(Project.t()) :: module()
   def for(%Project{tracker_kind: kind}) do
-    overrides = Application.get_env(:symphony_elixir, :issue_adapters, %{})
-    merged = Map.merge(@default_adapters, overrides)
-    Map.get(merged, kind, SymphonyElixir.LocalTracker.IssueAdapter)
+    if kind in @remote_kinds and SymphonyElixir.Config.tracker_sync_enabled?() do
+      SymphonyElixir.Tracker.Sync.LocalFirstAdapter
+    else
+      overrides = Application.get_env(:symphony_elixir, :issue_adapters, %{})
+      merged = Map.merge(@default_adapters, overrides)
+      Map.get(merged, kind, SymphonyElixir.LocalTracker.IssueAdapter)
+    end
   end
 
   @spec dispatch(Project.t(), atom(), list()) :: term()
