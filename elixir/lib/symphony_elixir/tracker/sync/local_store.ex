@@ -157,10 +157,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   defp ensure_label!(project_id, %{name: name} = label) do
     found =
-      cond do
-        is_binary(label[:remote_id]) -> Repo.get_by(Label, project_id: project_id, remote_id: label[:remote_id])
-        true -> nil
-      end || Repo.get_by(Label, project_id: project_id, name: name)
+      find_label_by_remote_id(project_id, label[:remote_id]) ||
+        Repo.get_by(Label, project_id: project_id, name: name)
 
     attrs = %{project_id: project_id, name: name, color: label[:color], remote_id: label[:remote_id]}
 
@@ -168,6 +166,11 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     |> Label.changeset(attrs)
     |> Repo.insert_or_update!()
   end
+
+  defp find_label_by_remote_id(project_id, remote_id) when is_binary(remote_id),
+    do: Repo.get_by(Label, project_id: project_id, remote_id: remote_id)
+
+  defp find_label_by_remote_id(_project_id, _remote_id), do: nil
 
   # -- comments ----------------------------------------------------------------
 
