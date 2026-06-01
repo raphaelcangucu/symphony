@@ -1,0 +1,55 @@
+defmodule SymphonyElixir.GitHub.SyncDriverTest do
+  use ExUnit.Case, async: false
+
+  alias SymphonyElixir.GitHub.SyncDriver
+  alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.Tracker.IssueDTO
+  alias SymphonyElixir.Tracker.Sync.OutboxEntry
+
+  defmodule StubAdapter do
+    def list_issues(_project, _filters) do
+      {:ok,
+       [
+         IssueDTO.build(%{
+           id: "I_1",
+           identifier: "1",
+           title: "Issue one",
+           status: %{name: "Todo"},
+           labels: ["bug"],
+           updated_at: "2026-06-01T00:00:00Z"
+         })
+       ]}
+    end
+
+    def list_comments(_project, "1"), do: {:ok, [%{remote_id: "IC_1", body: "hi", author: "octo", remote_updated_at: ~U[2026-06-01 00:00:00Z]}]}
+    def list_comments(_project, _id), do: {:ok, []}
+
+    def move_issue(_project, _id, %{"status" => state}), do: {:ok, IssueDTO.build(%{id: "I_1", identifier: "1", title: state, status: %{name: state}})}
+    def add_comment(_project, _id, _body, _attrs), do: {:ok, %{remote_id: "IC_new"}}
+    def create_issue(_project, _attrs), do: {:ok, IssueDTO.build(%{id: "I_new", identifier: "9", title: "new", status: %{name: "Todo"}})}
+  end
+
+  setup do
+    Application.put_env(:symphony_elixir, :github_sync_adapter, StubAdapter)
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :github_sync_adapter) end)
+    %{project: %Project{id: 1, slug: "mm", tracker_config: %{}}}
+  end
+
+  test "pull returns normalized issues with their comments", %{project: project} do
+    assert {:ok, [issue]} = SyncDriver.pull(project, [])
+    assert issue.remote_id == "I_1"
+    assert issue.state == "Todo"
+    assert Enum.map(issue.comments, & &1.remote_id) == ["IC_1"]
+    assert Enum.map(issue.labels, & &1.name) == ["bug"]
+  end
+
+  test "push of a state move calls move_issue", %{project: project} do
+    entry = %OutboxEntry{entity_type: "state", operation: "move", payload: %{"identifier" => "1", "state" => "Done"}}
+    assert {:ok, _remote_id} = SyncDriver.push(project, entry)
+  end
+
+  test "push of a comment create calls add_comment", %{project: project} do
+    entry = %OutboxEntry{entity_type: "comment", operation: "create", payload: %{"identifier" => "1", "body" => "hello"}}
+    assert {:ok, "IC_new"} = SyncDriver.push(project, entry)
+  end
+end
