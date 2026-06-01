@@ -1,0 +1,95 @@
+defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
+  use ExUnit.Case, async: false
+
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord}
+  alias SymphonyElixir.Repo
+  alias SymphonyElixir.Tracker.Sync.LocalStore
+
+  setup do
+    migrate_repo()
+    clean_repo()
+    {:ok, project} = Context.ensure_project(%{name: "MM", slug: "mm"})
+    %{project: project}
+  end
+
+  defp remote_issue(overrides) do
+    Map.merge(
+      %{
+        remote_id: "I_1",
+        remote_number: 507,
+        identifier: "507",
+        title: "Remote title",
+        description: "Remote body",
+        state: "Todo",
+        priority: nil,
+        assignee_id: "octocat",
+        branch_name: nil,
+        remote_url: "https://github.com/o/r/issues/507",
+        creator: "octocat",
+        position: 0,
+        remote_updated_at: DateTime.utc_now(),
+        labels: [],
+        comments: []
+      },
+      overrides
+    )
+  end
+
+  test "inserts a new remote issue mapped to a local status", %{project: project} do
+    assert {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
+
+    assert issue.remote_id == "I_1"
+    assert issue.identifier == "507"
+    assert issue.title == "Remote title"
+    assert issue.sync_status == "synced"
+    loaded = Repo.get(IssueRecord, issue.id) |> Repo.preload(:status)
+    assert loaded.status.name == "Todo"
+  end
+
+  test "upsert is idempotent on remote_id", %{project: project} do
+    {:ok, _} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
+    {:ok, _} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "Renamed remotely"}))
+
+    issues = Repo.all(IssueRecord)
+    assert length(issues) == 1
+    assert hd(issues).title == "Renamed remotely"
+  end
+
+  test "associates labels by name and remote_id", %{project: project} do
+    labels = [%{remote_id: "LA_1", name: "bug", color: "ff0000"}]
+    {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{labels: labels}))
+
+    loaded = Repo.get(IssueRecord, issue.id) |> Repo.preload(:labels)
+    assert Enum.map(loaded.labels, & &1.name) == ["bug"]
+    assert Enum.map(loaded.labels, & &1.remote_id) == ["LA_1"]
+  end
+
+  test "mirrors remote comments", %{project: project} do
+    comments = [%{remote_id: "IC_1", body: "hello", author: "octocat", remote_updated_at: DateTime.utc_now()}]
+    {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{comments: comments}))
+
+    loaded = Repo.get(IssueRecord, issue.id) |> Repo.preload(:comments)
+    assert Enum.map(loaded.comments, & &1.body) == ["hello"]
+    assert Enum.map(loaded.comments, & &1.remote_id) == ["IC_1"]
+  end
+
+  defp migrate_repo do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
+  end
+
+  defp clean_repo do
+    for table <- [
+          "tracker_pull_requests",
+          "local_tracker_issue_relations",
+          "local_tracker_issue_labels",
+          "local_tracker_labels",
+          "local_tracker_comments",
+          "local_tracker_issues",
+          "local_tracker_workflow_statuses",
+          "local_tracker_projects"
+        ] do
+      Repo.query!("delete from #{table}")
+    end
+  end
+end
