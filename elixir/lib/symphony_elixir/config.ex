@@ -265,6 +265,23 @@ defmodule SymphonyElixir.Config do
     end
   end
 
+  @spec tracker_sync_enabled?() :: boolean()
+  def tracker_sync_enabled? do
+    :symphony_elixir
+    |> Application.get_env(:tracker, [])
+    |> fetch_sync_enabled()
+    |> truthy?()
+  end
+
+  defp fetch_sync_enabled(config) when is_list(config), do: Keyword.get(config, :sync_enabled, false)
+  defp fetch_sync_enabled(%{} = config), do: Map.get(config, :sync_enabled, false)
+  defp fetch_sync_enabled(_config), do: false
+
+  defp truthy?(true), do: true
+  defp truthy?("true"), do: true
+  defp truthy?("1"), do: true
+  defp truthy?(_other), do: false
+
   @spec active_states() :: [String.t()]
   def active_states do
     get_in(validated_workflow_options(), [:tracker, :active_states])
