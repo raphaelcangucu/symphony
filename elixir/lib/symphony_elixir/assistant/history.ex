@@ -34,6 +34,34 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   @doc """
+  Returns the workspace path recorded on the active issue thread for `issue_identifier`.
+
+  This is the durable source of truth for an issue's authoring working tree: both the
+  document viewer (read) and the authoring turn (write) resolve to this path so they keep
+  agreeing even if the workspace-path computation later changes. Returns nil when there is
+  no active issue thread or when the persistence layer is unavailable.
+  """
+  @spec issue_workspace_path(String.t()) :: String.t() | nil
+  def issue_workspace_path(issue_identifier) when is_binary(issue_identifier) do
+    case String.trim(issue_identifier) do
+      "" ->
+        nil
+
+      identifier ->
+        Thread
+        |> Repo.get_by(issue_identifier: identifier, scope: "issue", status: "active")
+        |> case do
+          %Thread{workspace_path: path} when is_binary(path) and path != "" -> path
+          _ -> nil
+        end
+    end
+  rescue
+    _error -> nil
+  catch
+    :exit, _reason -> nil
+  end
+
+  @doc """
   Promotes the active project-scoped thread into the issue-scoped thread for `issue_identifier`.
 
   The `/assistant/new-issue` chat lives in the project's active thread until a draft issue is

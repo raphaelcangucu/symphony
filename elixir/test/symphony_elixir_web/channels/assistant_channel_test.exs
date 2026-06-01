@@ -247,7 +247,10 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     end)
 
     {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
-    {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ignored"})
+
+    {:ok, thread} =
+      History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: Workspace.path_for_issue("MAC-1")})
+
     test_pid = self()
 
     Application.put_env(:symphony_elixir, :assistant_runner, fn workspace, _prompt, _issue, _opts ->
@@ -322,7 +325,9 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     end)
 
     {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
-    {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ignored"})
+
+    {:ok, thread} =
+      History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: Workspace.path_for_issue("MAC-1")})
 
     Application.put_env(:symphony_elixir, :assistant_runner, fn workspace, _prompt, _issue, _opts ->
       File.mkdir_p!(Path.join([workspace, "docs", "superpowers", "specs"]))

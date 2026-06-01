@@ -79,7 +79,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
       )
       when is_binary(message) and is_map(context) and is_list(opts) do
     with {:ok, trimmed} <- normalize_message(message),
-         {:ok, workspace} <- ensure_issue_workspace(identifier),
+         {:ok, workspace} <- ensure_issue_workspace(thread),
          docs_before <- doc_fingerprint(identifier),
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
@@ -179,9 +179,38 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     |> normalize_runner_result()
   end
 
-  defp ensure_issue_workspace(identifier) do
-    Workspace.create_for_issue(identifier)
+  # Honor the working tree persisted on the issue thread so the authoring turn writes where the
+  # document viewer reads. If that path is unusable (e.g. a thread created while a divergent serve
+  # pointed at another workspace root), recompute the canonical issue tree, repair the thread so
+  # reads and writes realign, and continue instead of failing the turn.
+  defp ensure_issue_workspace(%{workspace_path: path, issue_identifier: identifier} = thread)
+       when is_binary(path) and path != "" do
+    case Workspace.ensure_at(path, identifier) do
+      {:ok, workspace} -> {:ok, workspace}
+      {:error, _reason} -> heal_issue_workspace(thread, identifier)
+    end
   end
+
+  defp ensure_issue_workspace(%{issue_identifier: identifier} = thread) do
+    heal_issue_workspace(thread, identifier)
+  end
+
+  defp heal_issue_workspace(thread, identifier) do
+    with {:ok, workspace} <- Workspace.create_for_issue(identifier) do
+      repair_thread_workspace_path(thread, workspace)
+      {:ok, workspace}
+    end
+  end
+
+  defp repair_thread_workspace_path(%{workspace_path: current} = thread, workspace)
+       when current != workspace do
+    case History.update_thread(thread, %{workspace_path: workspace}) do
+      {:ok, _updated} -> :ok
+      {:error, _reason} -> :ok
+    end
+  end
+
+  defp repair_thread_workspace_path(_thread, _workspace), do: :ok
 
   defp run_issue_turn(workspace, prompt, project_slug, identifier, opts) do
     runner = Keyword.get(opts, :runner, &default_runner/4)

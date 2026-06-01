@@ -347,6 +347,26 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     end
   end
 
+  describe "issue_workspace_path/1" do
+    test "returns the workspace path persisted on the active issue thread" do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+      {:ok, _thread} =
+        History.ensure_issue_thread("macro-markets", "MAC-77", %{workspace_path: "/tmp/issue/MAC-77"})
+
+      assert History.issue_workspace_path("MAC-77") == "/tmp/issue/MAC-77"
+    end
+
+    test "returns nil when no active issue thread exists for the identifier" do
+      assert History.issue_workspace_path("MAC-NONE") == nil
+    end
+
+    test "returns nil for blank identifiers" do
+      assert History.issue_workspace_path("") == nil
+      assert History.issue_workspace_path("   ") == nil
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

@@ -16,6 +16,7 @@ defmodule Symphony.DevServe do
   def run do
     workflow_path = resolve_workflow_path()
     ensure_workflow_exists!(workflow_path)
+    ensure_single_instance!(workflow_path)
 
     :ok = SymphonyElixir.Workflow.set_workflow_file_path(workflow_path)
     maybe_override_port(resolve_port())
@@ -44,6 +45,28 @@ defmodule Symphony.DevServe do
   defp ensure_workflow_exists!(path) do
     unless File.regular?(path) do
       fail("Workflow file not found: #{path}")
+    end
+  end
+
+  defp ensure_single_instance!(workflow_path) do
+    case SymphonyElixir.DevServeGuard.acquire(workflow_path: workflow_path) do
+      :ok ->
+        :ok
+
+      {:error, {:already_running, %{"pid" => pid} = info}} ->
+        running_workflow = Map.get(info, "workflow_path", "(unknown)")
+
+        fail("""
+        Another Symphony tracker serve is already running (pid #{pid}, workflow: #{running_workflow}).
+
+        Running two serves with different WORKFLOW files maps the same issue to divergent
+        workspaces, which makes authored documents disappear from one view. Stop the other
+        instance first:
+
+            make stop
+
+        Then start the serve you want.
+        """)
     end
   end
 

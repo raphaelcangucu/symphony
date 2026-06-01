@@ -37,6 +37,56 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     end
   end
 
+  test "ensure_at/2 prepares an explicit workspace path and runs the after_create hook on creation" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-workspace-ensure-at-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      marker = Path.join(test_root, "hook_ran.count")
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        hook_after_create: "echo x >> #{marker}"
+      )
+
+      target = Path.join([workspace_root, "clouapp", "front", "510"])
+
+      assert {:ok, ^target} = Workspace.ensure_at(target, "510")
+      assert File.dir?(target)
+      assert File.read!(marker) == "x\n"
+
+      assert {:ok, ^target} = Workspace.ensure_at(target, "510")
+      assert File.read!(marker) == "x\n"
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  test "ensure_at/2 rejects a path outside the configured workspace root" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-workspace-ensure-at-outside-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      File.mkdir_p!(workspace_root)
+      write_workflow_file!(Workflow.workflow_file_path(), workspace_root: workspace_root)
+
+      outside = Path.join(test_root, "outside-510")
+
+      assert {:error, {:workspace_outside_root, _expanded, _root}} =
+               Workspace.ensure_at(outside, "510")
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "workspace path is deterministic per issue identifier" do
     workspace_root =
       Path.join(

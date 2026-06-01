@@ -118,12 +118,12 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
   end
 
   describe "send_message_to_issue_thread/4" do
-    setup %{workspace_root: workspace_root} do
+    setup do
       {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
       {:ok, _issue} = Context.create_issue("macro", %{"title" => "Bound issue", "status" => "Todo"})
       {:ok, _other_issue} = Context.create_issue("macro", %{"title" => "Other issue", "status" => "Todo"})
 
-      thread_workspace = Path.join(workspace_root, "ignored")
+      thread_workspace = Workspace.path_for_issue("MAC-1")
       File.mkdir_p!(thread_workspace)
 
       {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: thread_workspace})
@@ -145,6 +145,54 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert result.assistant_message == "done"
       expected = Workspace.path_for_issue("MAC-1")
       assert_receive {:workspace, ^expected}
+    end
+
+    test "runs the turn in the thread's persisted workspace even when it differs from the computed path",
+         %{workspace_root: workspace_root} do
+      {:ok, _project} = Context.ensure_project(%{name: "Persist", slug: "persist"})
+
+      persisted = Path.join(workspace_root, "persisted-tree")
+      File.mkdir_p!(persisted)
+
+      {:ok, thread} = History.ensure_issue_thread("persist", "PER-1", %{workspace_path: persisted})
+
+      refute persisted == Workspace.path_for_issue("PER-1")
+
+      test_pid = self()
+
+      runner = fn workspace, _prompt, _issue, _opts ->
+        send(test_pid, {:workspace, workspace})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+
+      assert_receive {:workspace, ^persisted}
+    end
+
+    test "heals a stale out-of-root persisted workspace by recomputing and repairing the thread" do
+      {:ok, _project} = Context.ensure_project(%{name: "Heal", slug: "heal"})
+
+      stale = Path.join(System.tmp_dir!(), "outside-root-#{System.unique_integer([:positive])}")
+
+      {:ok, thread} = History.ensure_issue_thread("heal", "HEAL-1", %{workspace_path: stale})
+
+      refute stale == Workspace.path_for_issue("HEAL-1")
+
+      test_pid = self()
+
+      runner = fn workspace, _prompt, _issue, _opts ->
+        send(test_pid, {:workspace, workspace})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+
+      expected = Workspace.path_for_issue("HEAL-1")
+      assert_receive {:workspace, ^expected}
+      assert History.issue_workspace_path("HEAL-1") == expected
     end
 
     test "uses issue-bound tools, persists messages, updates thread id, and emits callback", %{thread: thread} do

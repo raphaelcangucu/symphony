@@ -11,12 +11,23 @@ defmodule SymphonyElixir.Workspace do
   @spec create_for_issue(map() | String.t() | nil) :: {:ok, Path.t()} | {:error, term()}
   def create_for_issue(issue_or_identifier) do
     issue_context = issue_context(issue_or_identifier)
+    workspace = workspace_path_for_issue(safe_identifier(issue_context.issue_identifier))
+
+    ensure_at(workspace, issue_or_identifier)
+  end
+
+  @doc """
+  Ensures the working tree exists at an explicit `workspace` path (validated against the
+  configured workspace root) and runs the after_create hook the first time it is created.
+
+  Used by the authoring assistant to honor the path persisted on the issue thread, so reads
+  and writes target the same tree regardless of how the path was originally computed.
+  """
+  @spec ensure_at(Path.t(), map() | String.t() | nil) :: {:ok, Path.t()} | {:error, term()}
+  def ensure_at(workspace, issue_or_identifier) when is_binary(workspace) do
+    issue_context = issue_context(issue_or_identifier)
 
     try do
-      safe_id = safe_identifier(issue_context.issue_identifier)
-
-      workspace = workspace_path_for_issue(safe_id)
-
       with :ok <- validate_workspace_path(workspace),
            {:ok, created?} <- ensure_workspace(workspace),
            :ok <- maybe_run_after_create_hook(workspace, issue_context, created?) do
@@ -24,7 +35,7 @@ defmodule SymphonyElixir.Workspace do
       end
     rescue
       error in [ArgumentError, ErlangError, File.Error] ->
-        Logger.error("Workspace creation failed #{issue_log_context(issue_context)} error=#{Exception.message(error)}")
+        Logger.error("Workspace ensure failed #{issue_log_context(issue_context)} error=#{Exception.message(error)}")
         {:error, error}
     end
   end

@@ -1,10 +1,16 @@
 defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.Assistant.IssueDocuments
+  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Workflow
 
   setup do
+    migrate_repo()
+    clean_threads()
+
     root = Path.join(System.tmp_dir!(), "idocs-#{System.unique_integer([:positive])}")
     workspace_root = Path.join(root, "workspaces")
     workflow_root = Path.join(root, "workflow")
@@ -28,6 +34,7 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
     File.write!(Path.join(specs_dir, "too-large.md"), String.duplicate("a", 512_001))
 
     on_exit(fn ->
+      clean_threads()
       Workflow.set_workflow_file_path(previous_workflow_path)
       File.rm_rf!(root)
     end)
@@ -140,6 +147,28 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
     assert %{available: false, reason: "workspace_missing", documents: []} = IssueDocuments.list("MAC-404")
   end
 
+  test "list/1 reads from the persisted thread workspace when it differs from the computed path", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+
+    persisted_root = Path.join(workspace_root, "persisted-tree")
+    specs_dir = Path.join([persisted_root, "docs", "superpowers", "specs"])
+    File.mkdir_p!(specs_dir)
+    File.write!(Path.join(specs_dir, "design.md"), "# Persisted Design\n\nbody")
+
+    {:ok, _thread} =
+      History.ensure_issue_thread("macro", "MAC-PERSISTED", %{workspace_path: persisted_root})
+
+    assert persisted_root != SymphonyElixir.Workspace.path_for_issue("MAC-PERSISTED")
+
+    assert %{available: true, documents: [%{title: "Persisted Design", kind: "spec"}]} =
+             IssueDocuments.list("MAC-PERSISTED")
+
+    assert {:ok, "# Persisted Design\n\nbody"} =
+             IssueDocuments.read("MAC-PERSISTED", "docs/superpowers/specs/design.md")
+  end
+
   test "read/2 returns the markdown body" do
     assert {:ok, "# X Design\n\nbody"} =
              IssueDocuments.read("MAC-1", "docs/superpowers/specs/2026-05-31-x-design.md")
@@ -163,5 +192,18 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
     File.rm_rf!(issue_root)
     File.mkdir_p!(issue_root)
     issue_root
+  end
+
+  defp migrate_repo do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(Repo, fn repo ->
+        Ecto.Migrator.run(repo, :up, all: true)
+      end)
+  end
+
+  defp clean_threads do
+    for table <- ["assistant_messages", "assistant_threads"] do
+      Repo.query!("DELETE FROM #{table}")
+    end
   end
 end

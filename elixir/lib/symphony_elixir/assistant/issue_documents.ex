@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.Assistant.IssueDocuments do
   @moduledoc "Sandboxed read access to docs/superpowers/* inside an issue working tree."
 
+  alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.Workspace
 
   @doc_root "docs/superpowers"
@@ -18,7 +19,7 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
 
   @spec list(String.t()) :: %{available: boolean(), reason: String.t() | nil, documents: [document()]}
   def list(identifier) when is_binary(identifier) do
-    workspace = Workspace.path_for_issue(identifier)
+    workspace = resolve_workspace(identifier)
     base = Path.join(workspace, @doc_root)
 
     with :ok <- safe_directory(base, workspace) do
@@ -30,7 +31,7 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
 
   @spec read(String.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
   def read(identifier, rel_path) when is_binary(identifier) and is_binary(rel_path) do
-    workspace = Workspace.path_for_issue(identifier)
+    workspace = resolve_workspace(identifier)
 
     with {:ok, abs} <- safe_join(workspace, rel_path),
          {:ok, %File.Stat{size: size}} when size <= @max_bytes <- File.stat(abs),
@@ -40,6 +41,16 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
       {:ok, %File.Stat{}} -> {:error, :too_large}
       {:error, :enoent} -> {:error, :not_found}
       {:error, _reason} = error -> error
+    end
+  end
+
+  # The active issue thread records the working tree where docs were written. Prefer it so the
+  # viewer keeps finding docs even if the path computation later changes; fall back to the
+  # computed path when no thread exists yet (first turn) or persistence is unavailable.
+  defp resolve_workspace(identifier) do
+    case History.issue_workspace_path(identifier) do
+      path when is_binary(path) and path != "" -> path
+      _ -> Workspace.path_for_issue(identifier)
     end
   end
 
