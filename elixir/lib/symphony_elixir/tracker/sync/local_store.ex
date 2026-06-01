@@ -10,7 +10,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   import Ecto.Query
 
-  alias SymphonyElixir.LocalTracker.{Comment, IssueLabel, IssueRecord, Label, Project, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, Label, Project, WorkflowStatus}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.{Merge, PullRequestRecord}
 
@@ -43,7 +43,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   """
   @spec mark_dirty(String.t(), String.t(), [atom()]) :: {:ok, IssueRecord.t()} | {:error, term()}
   def mark_dirty(identifier, project_slug, fields) when is_list(fields) do
-    with {:ok, issue} <- SymphonyElixir.LocalTracker.Context.get_issue(project_slug, identifier) do
+    with {:ok, issue} <- Context.get_issue(project_slug, identifier) do
       now_iso = DateTime.to_iso8601(DateTime.utc_now())
       dirty = Enum.reduce(fields, issue.dirty_fields || %{}, fn field, acc -> Map.put(acc, Atom.to_string(field), now_iso) end)
 

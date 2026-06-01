@@ -13,9 +13,21 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
 
     {:ok, _issue} =
       LocalStore.upsert_remote_issue(project, %{
-        remote_id: "I_1", remote_number: 1, identifier: "1", title: "t", description: nil,
-        state: "Todo", priority: nil, assignee_id: nil, branch_name: nil, remote_url: "u",
-        creator: nil, position: 0, remote_updated_at: DateTime.utc_now(), labels: [], comments: []
+        remote_id: "I_1",
+        remote_number: 1,
+        identifier: "1",
+        title: "t",
+        description: nil,
+        state: "Todo",
+        priority: nil,
+        assignee_id: nil,
+        branch_name: nil,
+        remote_url: "u",
+        creator: nil,
+        position: 0,
+        remote_updated_at: DateTime.utc_now(),
+        labels: [],
+        comments: []
       })
 
     %{project: project}

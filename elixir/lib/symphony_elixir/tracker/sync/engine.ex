@@ -43,7 +43,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
     with {:ok, push_summary} <- push_outbox(project, driver, max_attempts),
          {:ok, pulled} <- pull_remote(project, driver, pr_driver) do
-      mark_state(project, %{status: "idle", last_pull_at: now(), last_push_at: now(), last_error: nil})
+      mark_state(project, success_attrs(project))
       {:ok, Map.put(push_summary, :pulled, pulled)}
     else
       {:error, reason} = error ->
@@ -70,9 +70,15 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   defp run_project_sync(project, opts) do
     case sync_project(project, opts) do
-      {:ok, _summary} -> :ok
+      {:ok, summary} -> log_summary(project, summary)
       {:error, reason} -> Logger.warning("Tracker sync failed for #{project.slug}: #{inspect(reason)}")
     end
+  end
+
+  @doc "Emits a structured, single-line sync summary for observability."
+  @spec log_summary(map(), summary()) :: :ok
+  def log_summary(project, summary) do
+    Logger.info("tracker_sync project=#{project.slug} pushed=#{summary.pushed} failed=#{summary.failed} pulled=#{summary.pulled}")
   end
 
   # -- push --------------------------------------------------------------------
@@ -146,9 +152,21 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     |> Repo.insert_or_update!()
   end
 
+  defp success_attrs(project) do
+    base = %{status: "idle", last_pull_at: now(), last_push_at: now(), last_error: nil}
+
+    case Repo.get_by(StateRecord, project_id: project.id) do
+      %StateRecord{last_full_sync_at: %DateTime{}} -> base
+      _ -> Map.put(base, :last_full_sync_at, now())
+    end
+  end
+
   defp sync_enabled_projects do
-    Context.list_projects()
-    |> Enum.filter(&sync_enabled?/1)
+    if SymphonyElixir.Config.tracker_sync_enabled?() do
+      Context.list_projects() |> Enum.filter(&sync_enabled?/1)
+    else
+      []
+    end
   end
 
   defp sync_enabled?(project), do: project.tracker_kind in ["github", "linear"]
