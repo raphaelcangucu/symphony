@@ -1,15 +1,15 @@
-import { Bot, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useState } from "react";
-import { Link, Navigate, Outlet, useParams } from "react-router-dom";
+import { Navigate, Outlet, useParams } from "react-router-dom";
 
 import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
+import { ProjectAssistantMenu } from "@/components/layout/ProjectAssistantMenu";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { WorkspaceProvider, useWorkspace } from "@/components/layout/WorkspaceContext";
 import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
 import { Button } from "@/components/ui/button";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
-import { assistantPath } from "@/lib/workspaceRoutes";
 
 export function ProjectWorkspaceLayout() {
   const { projectSlug = "" } = useParams();
@@ -47,12 +47,7 @@ function WorkspaceChrome() {
             >
               <Settings className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="outline" size="sm" asChild>
-              <Link to={assistantPath(projectSlug)}>
-                <Bot className="h-4 w-4" />
-                Assistant
-              </Link>
-            </Button>
+            <ProjectAssistantMenu projectSlug={projectSlug} />
             <BoardFiltersTrigger />
           </>
         }

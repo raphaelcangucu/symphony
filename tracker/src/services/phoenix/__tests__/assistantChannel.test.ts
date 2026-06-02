@@ -69,6 +69,7 @@ describe("assistant channel binding", () => {
     handlers["assistant_completed"]({ message: { role: "assistant", content: "Olá!", tool_calls: [] } });
     handlers["assistant_error"]({ message: "Codex unavailable" });
     handlers["assistant_document_changed"]({ identifier: "MAC-1" });
+    handlers["assistant_document_changed"]({ thread_id: 7006 });
     handlers["assistant_issue_created"]({ identifier: "MAC-7", thread_id: 42 });
 
     expect(assistantTopic("macro-markets")).toBe("assistant:macro-markets");
@@ -80,6 +81,7 @@ describe("assistant channel binding", () => {
     expect(onAssistantCompleted).toHaveBeenCalledWith(expect.objectContaining({ role: "assistant", content: "Olá!" }));
     expect(onAssistantError).toHaveBeenCalledWith("Codex unavailable");
     expect(onAssistantDocumentChanged).toHaveBeenCalledWith({ identifier: "MAC-1" });
+    expect(onAssistantDocumentChanged).toHaveBeenCalledWith({ threadId: 7006 });
     expect(onAssistantIssueCreated).toHaveBeenCalledWith({ identifier: "MAC-7", threadId: 42 });
   });
 

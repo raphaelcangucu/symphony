@@ -1,5 +1,5 @@
 export type RecentKind = "chat" | "codex";
-export type RecentScope = "project" | "freeform" | "issue" | null;
+export type RecentScope = "project" | "project_explore" | "freeform" | "issue" | null;
 export type RecentStatusKind =
   | "running" | "waiting" | "retrying" | "idle" | "active"
   | "closed" | "error" | "done" | "in_progress" | "todo";

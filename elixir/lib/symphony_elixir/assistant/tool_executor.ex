@@ -4,12 +4,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   """
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.Assistant.ReadTools
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixirWeb.TrackerPresenter
 
-  @supported_tools ~w(list_issues create_issue create_draft_issue update_issue move_issue add_comment get_agent_executions dispatch_codex)
+  @supported_tools ~w(list_issues create_issue create_draft_issue update_issue move_issue add_comment get_agent_executions dispatch_codex) ++
+                     ReadTools.tools()
   # `add_comment` is intentionally absent from the advertised (`tool_specs/0`) and
   # issue-bound tool lists. The assistant's replies already stream to the user in the
   # chat UI, so re-posting them as GitHub issue comments is redundant and a major
@@ -17,7 +19,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   # comment via a direct IssueAdapter call, and `do_execute(_, "add_comment", _, _)`
   # remains for direct/server-side use.
   @issue_bound_mutable_tools ~w(update_issue move_issue dispatch_codex)
-  @issue_bound_supported_tools ~w(list_issues update_issue move_issue get_agent_executions dispatch_codex)
+  @issue_bound_supported_tools ~w(list_issues get_issue read_workspace_file update_issue move_issue get_agent_executions dispatch_codex)
   @in_progress_state "In Progress"
 
   @type result :: %{
@@ -32,14 +34,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   @spec tool_specs() :: [map()]
   def tool_specs do
     [
-      tool_spec("list_issues", "List tracker issues in the current project.", %{
+      tool_spec("list_issues", "List tracker issues in the current project (prefer get_issue when you know the identifier).", %{
         "type" => "object",
         "additionalProperties" => false,
-        "properties" => %{
-          "search" => string_schema("Optional full-text search query."),
-          "assignee" => string_schema("Optional assignee filter."),
-          "creator" => string_schema("Optional creator filter.")
-        }
+        "properties" => ReadTools.list_issues_schema_properties()
       }),
       tool_spec("create_issue", "Create a tracker issue in the current project.", %{
         "type" => "object",
@@ -96,7 +94,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "goal" => string_schema("Optional long-running Codex goal to persist for the orchestrator.")
         }
       })
-    ]
+    ] ++ ReadTools.tool_specs()
   end
 
   @spec issue_bound_tool_specs(String.t()) :: [map()]
@@ -122,8 +120,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       tool_name = to_string(tool)
       arguments = if is_map(arguments), do: stringify_keys(arguments), else: %{}
 
+      executor_opts = Keyword.put(opts, :bound_issue_identifier, identifier)
+
       case bind_issue_tool_arguments(tool_name, arguments, identifier) do
-        {:ok, bound_arguments} -> execute_for_codex(project_slug, tool_name, bound_arguments, opts)
+        {:ok, bound_arguments} -> execute_for_codex(project_slug, tool_name, bound_arguments, executor_opts)
         {:error, reason} -> codex_failure_response(reason)
       end
     end
@@ -147,6 +147,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       when is_binary(project_slug) and is_binary(tool) and is_map(arguments) do
     with {:ok, project_slug} <- normalize_required_string(project_slug, :project_slug),
          {:ok, project} <- Context.get_project(project_slug) do
+      opts = maybe_put_bound_issue(opts)
       do_execute(project, tool, arguments, opts)
     end
   end
@@ -161,7 +162,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       |> maybe_put_filter(:creator, Map.get(arguments, "creator"))
 
     with {:ok, issues} <- IssueAdapter.dispatch(project, :list_issues, [filters]) do
-      presented = Enum.map(issues, &TrackerPresenter.issue/1)
+      presented =
+        issues
+        |> Enum.map(&TrackerPresenter.issue/1)
+        |> ReadTools.apply_list_limits(arguments)
 
       {:ok,
        %{
@@ -170,6 +174,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          data: %{issues: presented}
        }}
     end
+  end
+
+  defp do_execute(project, tool, arguments, opts) when tool in ["get_issue", "get_project", "get_template", "get_workflow", "read_workspace_file"] do
+    ReadTools.execute(project, tool, arguments, opts)
   end
 
   defp do_execute(project, "create_issue", arguments, _opts) do
@@ -287,6 +295,33 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp do_execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
 
+  defp bind_tool_spec_identifier(%{"name" => "get_issue", "inputSchema" => schema} = spec, identifier) do
+    schema =
+      schema
+      |> update_in(["properties"], fn properties ->
+        Map.put(properties || %{}, "identifier", bound_identifier_schema(identifier))
+      end)
+      |> update_in(["required"], &remove_bound_identifier_requirement/1)
+
+    %{spec | "inputSchema" => schema}
+  end
+
+  defp bind_tool_spec_identifier(%{"name" => "read_workspace_file", "inputSchema" => schema} = spec, identifier) do
+    issue_schema = %{
+      "type" => "string",
+      "const" => identifier,
+      "description" => "Bound issue workspace for #{identifier}."
+    }
+
+    schema =
+      schema
+      |> update_in(["properties"], fn properties ->
+        (properties || %{}) |> Map.put("issue_identifier", issue_schema)
+      end)
+
+    %{spec | "inputSchema" => schema}
+  end
+
   defp bind_tool_spec_identifier(%{"name" => tool_name, "inputSchema" => schema} = spec, identifier)
        when tool_name in @issue_bound_mutable_tools do
     identifier_schema = %{
@@ -307,6 +342,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp bind_tool_spec_identifier(spec, _identifier), do: spec
 
+  defp bound_identifier_schema(identifier) do
+    %{
+      "type" => "string",
+      "const" => identifier,
+      "description" => "Bound issue identifier. Must be #{identifier}."
+    }
+  end
+
   defp remove_bound_identifier_requirement(required) when is_list(required) do
     Enum.reject(required, &(&1 == "identifier"))
   end
@@ -317,7 +360,21 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     {:error, {:unsupported_issue_bound_tool, tool_name}}
   end
 
+  defp bind_issue_tool_arguments("get_issue", arguments, identifier) do
+    bind_mutable_identifier("get_issue", arguments, identifier)
+  end
+
+  defp bind_issue_tool_arguments("read_workspace_file", arguments, identifier) do
+    {:ok, Map.put(arguments, "issue_identifier", identifier)}
+  end
+
   defp bind_issue_tool_arguments(tool_name, arguments, identifier) when tool_name in @issue_bound_mutable_tools do
+    bind_mutable_identifier(tool_name, arguments, identifier)
+  end
+
+  defp bind_issue_tool_arguments(_tool_name, arguments, _identifier), do: {:ok, arguments}
+
+  defp bind_mutable_identifier(_tool_name, arguments, identifier) do
     case normalize_optional_string(Map.get(arguments, "identifier")) do
       nil ->
         {:ok, Map.put(arguments, "identifier", identifier)}
@@ -330,7 +387,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp bind_issue_tool_arguments(_tool_name, arguments, _identifier), do: {:ok, arguments}
+  defp maybe_put_bound_issue(opts) do
+    case Keyword.get(opts, :bound_issue_identifier) do
+      identifier when is_binary(identifier) -> Keyword.put_new(opts, :bound_issue_identifier, identifier)
+      _ -> opts
+    end
+  end
 
   defp tool_spec(name, description, input_schema) do
     %{"name" => name, "description" => description, "inputSchema" => input_schema}
@@ -350,6 +412,18 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp codex_failure_response({:unsupported_tool, tool}) do
     codex_failure_response("Unsupported assistant tool: #{tool}.")
+  end
+
+  defp codex_failure_response(:workflow_example_not_found) do
+    codex_failure_response("Workflow example not found beside the running WORKFLOW file.")
+  end
+
+  defp codex_failure_response(:path_escape) do
+    codex_failure_response("Path escapes the workspace root.")
+  end
+
+  defp codex_failure_response(:file_not_found) do
+    codex_failure_response("File not found in the workspace.")
   end
 
   defp codex_failure_response({:missing_required_field, field}) do

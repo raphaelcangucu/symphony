@@ -4,10 +4,25 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
   alias SymphonyElixir.Assistant.{History, Message, Thread}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workflow
 
   setup do
     migrate_repo()
     clean_repo()
+
+    tmp_dir = Path.join(System.tmp_dir!(), "symphony-history-test-#{System.unique_integer([:positive])}")
+    File.rm_rf!(tmp_dir)
+    File.mkdir_p!(tmp_dir)
+
+    workflow_file = Path.join(tmp_dir, "WORKFLOW.md")
+    SymphonyElixir.TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: tmp_dir)
+    Workflow.set_workflow_file_path(workflow_file)
+
+    on_exit(fn ->
+      Workflow.clear_workflow_file_path()
+      File.rm_rf!(tmp_dir)
+    end)
+
     :ok
   end
 
@@ -101,6 +116,39 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
 
     assert {:error, changeset} = History.append_message(thread, %{role: "user", content: "   "})
     refute changeset.valid?
+  end
+
+  test "ensure_project_explore_thread/1 creates an explore thread with workspace path" do
+    {:ok, project} =
+      Context.create_workspace_project(%{
+        name: "Explore",
+        slug: "explore-demo",
+        repositories: [
+          %{
+            github_full_name: "org/api",
+            clone_url: "https://github.com/org/api.git",
+            default_branch: "main",
+            workspace_path: "api",
+            role: "backend"
+          }
+        ]
+      })
+
+    assert {:ok, thread} =
+             History.ensure_project_explore_thread(project.slug, %{
+               git: SymphonyElixir.Assistant.ProjectExploreWorkspaceTest.GitStub
+             })
+
+    assert thread.scope == "project_explore"
+    assert thread.project_slug == "explore-demo"
+    assert is_binary(thread.workspace_path)
+    assert thread.workspace_path != ""
+
+    assert {:ok, same} =
+             History.ensure_project_explore_thread("explore-demo", %{
+               git: SymphonyElixir.Assistant.ProjectExploreWorkspaceTest.GitStub
+             })
+    assert same.id == thread.id
   end
 
   test "create_freeform_thread/1 persists a project-less thread" do

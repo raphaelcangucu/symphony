@@ -164,6 +164,9 @@ defmodule SymphonyElixir.Recents do
   defp chat_title(_thread, preview) when is_binary(preview) and preview != "",
     do: String.slice(preview, 0, 80)
 
+  defp chat_title(%{scope: "project_explore", project_slug: slug}, _preview) when is_binary(slug),
+    do: "Explore #{slug}"
+
   defp chat_title(%{project_slug: slug}, _preview) when is_binary(slug), do: slug
   defp chat_title(_thread, _preview), do: "Freeform chat"
 
@@ -172,6 +175,7 @@ defmodule SymphonyElixir.Recents do
   defp preview_text(_), do: nil
 
   defp scope_atom("project"), do: :project
+  defp scope_atom("project_explore"), do: :project_explore
   defp scope_atom("freeform"), do: :freeform
   defp scope_atom("issue"), do: :issue
   defp scope_atom(_), do: :project

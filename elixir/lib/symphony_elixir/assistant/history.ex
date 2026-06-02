@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Assistant.History do
 
   import Ecto.Query
 
-  alias SymphonyElixir.Assistant.{Message, Thread}
+  alias SymphonyElixir.Assistant.{Message, ProjectExploreWorkspace, Thread}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
@@ -16,6 +16,28 @@ defmodule SymphonyElixir.Assistant.History do
       case active_thread(normalized_slug) do
         %Thread{} = thread -> {:ok, thread}
         nil -> create_thread(normalized_slug, attrs)
+      end
+    end
+  end
+
+  @spec ensure_project_explore_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
+  def ensure_project_explore_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
+    with {:ok, normalized_slug} <- normalize_required_string(project_slug, :project_slug),
+         {:ok, _project} <- Context.get_project(normalized_slug),
+         {:ok, workspace} <- ProjectExploreWorkspace.ensure(normalized_slug, explore_workspace_opts(attrs)) do
+      attrs = Map.put_new(attrs, :workspace_path, workspace)
+
+      case active_project_explore_thread(normalized_slug) do
+        %Thread{} = thread ->
+          {:ok, thread}
+
+        nil ->
+          attrs
+          |> Map.put(:scope, "project_explore")
+          |> Map.put(:project_slug, normalized_slug)
+          |> Map.put_new(:status, "active")
+          |> then(&Thread.changeset(%Thread{}, &1))
+          |> Repo.insert()
       end
     end
   end
@@ -258,6 +280,10 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp active_thread(project_slug) do
     Repo.get_by(Thread, project_slug: project_slug, scope: "project", status: "active")
+  end
+
+  defp active_project_explore_thread(project_slug) do
+    Repo.get_by(Thread, project_slug: project_slug, scope: "project_explore", status: "active")
   end
 
   defp active_issue_thread(slug, identifier) do
@@ -522,6 +548,12 @@ defmodule SymphonyElixir.Assistant.History do
       tool_calls: Map.get(message, :tool_calls) || Map.get(message, "tool_calls") || [],
       turn_id: Map.get(message, :turn_id) || Map.get(message, "turn_id")
     }
+  end
+
+  defp explore_workspace_opts(attrs) when is_map(attrs) do
+    attrs
+    |> Map.take([:git])
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
   end
 
   defp unique_sequence_error?(%Ecto.Changeset{errors: errors}) do

@@ -10,6 +10,7 @@ import {
   issueAssistantPath,
   issuePath,
   newIssueAssistantPath,
+  projectExploreAssistantPath,
   newIssuePath,
   projectsFiltersPath,
   projectsNewPath,
@@ -41,6 +42,7 @@ describe("workspaceRoutes", () => {
   it("builds assistant issue authoring paths", () => {
     expect(newIssueAssistantPath("acme")).toBe("/projects/acme/assistant/new-issue");
     expect(issueAssistantPath("acme", "ABC-1")).toBe("/projects/acme/assistant/issue/ABC-1");
+    expect(projectExploreAssistantPath("acme")).toBe("/projects/acme/assistant/explore");
   });
 
   it("encodes assistant issue authoring path parameters", () => {

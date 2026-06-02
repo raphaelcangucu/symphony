@@ -17,6 +17,18 @@ defmodule SymphonyElixir.Assistant.ThreadTest do
     assert %{project_slug: _} = errors_on(changeset)
   end
 
+  test "project_explore scope is valid with a project slug" do
+    assert changeset =
+             Thread.changeset(%Thread{}, %{
+               scope: "project_explore",
+               project_slug: "demo",
+               workspace_path: "/tmp/explore",
+               status: "active"
+             })
+
+    assert changeset.valid?
+  end
+
   test "freeform scope is valid without a project" do
     changeset =
       Thread.changeset(%Thread{}, %{scope: "freeform", title: "Brainstorm", workspace_path: "/tmp/a", status: "active"})

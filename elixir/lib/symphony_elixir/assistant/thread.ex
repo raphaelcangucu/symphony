@@ -8,7 +8,7 @@ defmodule SymphonyElixir.Assistant.Thread do
 
   @type t :: %__MODULE__{}
 
-  @scopes ["project", "freeform", "issue"]
+  @scopes ["project", "project_explore", "freeform", "issue"]
   @cast_fields [
     :scope,
     :project_slug,
@@ -46,12 +46,14 @@ defmodule SymphonyElixir.Assistant.Thread do
     |> normalize_project_slug()
     |> validate_scope_fields()
     |> unique_constraint(:project_slug, name: :assistant_threads_active_project_index)
+    |> unique_constraint(:project_slug, name: :assistant_threads_active_project_explore_index)
     |> unique_constraint(:issue_identifier, name: :assistant_threads_active_issue_index)
   end
 
   defp validate_scope_fields(changeset) do
     case get_field(changeset, :scope) do
       "project" -> validate_required(changeset, [:project_slug])
+      "project_explore" -> validate_required(changeset, [:project_slug])
       "issue" -> validate_required(changeset, [:project_slug, :issue_identifier])
       "freeform" -> reject_project(changeset)
       _ -> changeset

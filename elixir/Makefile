@@ -127,10 +127,13 @@ db-migrate: migrate
 # --- Run -------------------------------------------------------------------
 
 # Recommended local development server. Ensures deps + migrations, then boots
-# the full app through Mix (so native NIFs like the SQLite driver load). A
+# the full app through Mix (so native NIFs like the SQLite driver load). Loads
+# elixir/.env when present (GITHUB_TOKEN, SYMPHONY_TRACKER_TOKEN, etc.). A
 # dev-only tracker token is injected unless SYMPHONY_TRACKER_TOKEN is already set.
 serve: ensure-deps migrate
-	@token="$${SYMPHONY_TRACKER_TOKEN:-$(TRACKER_TOKEN)}"; \
+	@set -e; \
+	if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
+	token="$${SYMPHONY_TRACKER_TOKEN:-$(TRACKER_TOKEN)}"; \
 	echo "▶ Starting Symphony tracker"; \
 	echo "    URL      : http://localhost:$(TRACKER_PORT)/tracker"; \
 	echo "    Workflow : $(WORKFLOW)"; \

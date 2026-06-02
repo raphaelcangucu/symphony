@@ -132,6 +132,9 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     )
   end
 
+  def render(conn, :invalid_thread_id),
+    do: validation(conn, "thread_id must be a positive integer")
+
   def render(conn, :invalid_path),
     do:
       error(

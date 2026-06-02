@@ -72,7 +72,12 @@ defmodule SymphonyElixirWeb.PublicHostPlug do
       |> halt()
     else
       conn
-      |> ReverseProxyPlug.call(ReverseProxyPlug.init(upstream: "http://127.0.0.1:#{port}"))
+      |> ReverseProxyPlug.call(
+        ReverseProxyPlug.init(
+          upstream: "http://127.0.0.1:#{port}",
+          client: ReverseProxyPlug.HTTPClient.Adapters.Req
+        )
+      )
       |> halt()
     end
   end

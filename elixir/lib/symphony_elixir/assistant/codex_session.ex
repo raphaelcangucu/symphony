@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Assistant.CodexSession do
   @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
 
-  alias SymphonyElixir.Assistant.{History, IssueDocuments, ToolExecutor}
+  alias SymphonyElixir.Assistant.{History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolExecutor}
   alias SymphonyElixir.Codex.CodingAgent
   alias SymphonyElixir.Config
   alias SymphonyElixir.{Skills, Workspace}
@@ -49,12 +49,45 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     with {:ok, trimmed} <- normalize_message(message),
          workspace <- freeform_workspace(thread_id, opts),
          :ok <- File.mkdir_p(workspace),
+         docs_before <- thread_doc_fingerprint(thread_id),
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
            History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
          prompt <- build_freeform_prompt(trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_freeform_turn(workspace, prompt, opts),
+         {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
+         {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result),
+         :ok <- maybe_notify_thread_documents(thread_id, docs_before, opts) do
+      {:ok,
+       %{
+         assistant_message: assistant_message.content,
+         tool_calls: assistant_message.tool_calls,
+         codex_thread_id: Map.get(runner_result, :codex_thread_id),
+         turn_id: Map.get(runner_result, :turn_id),
+         user_message: History.message_payload(user_message),
+         assistant_chat_message: History.message_payload(assistant_message)
+       }}
+    end
+  end
+
+  @spec send_message_to_project_explore_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
+          {:ok, turn_result()} | {:error, term()}
+  def send_message_to_project_explore_thread(
+        %{scope: "project_explore", id: thread_id, project_slug: project_slug} = thread,
+        message,
+        context,
+        opts \\ []
+      )
+      when is_binary(message) and is_map(context) and is_list(opts) do
+    with {:ok, trimmed} <- normalize_message(message),
+         {:ok, workspace} <- ensure_project_explore_workspace(project_slug, thread, opts),
+         history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         {:ok, user_message} <-
+           History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
+         prompt <- build_project_explore_prompt(project_slug, trimmed, context, history),
+         :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
+         {:ok, runner_result} <- run_project_explore_turn(workspace, prompt, project_slug, opts),
          {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
       {:ok,
@@ -132,6 +165,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
     Behave like a real conversational coding assistant inside the tracker.
     Answer naturally in the user's language. Use tracker tools only when the user asks for tracker data or a concrete tracker action.
+    Prefer get_issue, get_project, get_template, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
     Do not post issue comments - your replies are shown to the user directly in this chat. Use update_issue when you need to record something on an issue.
     If the user asks for coding work, create or update tracker context and dispatch Codex through the tracker workflow instead of editing files directly from this chat.
     If a request is ambiguous, ask one concise clarifying question before taking action.
@@ -165,6 +199,19 @@ defmodule SymphonyElixir.Assistant.CodexSession do
       |> Keyword.put_new(:tool_executor, ToolExecutor.codex_tool_executor(project_slug))
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
+    |> normalize_runner_result()
+  end
+
+  defp run_project_explore_turn(workspace, prompt, project_slug, opts) do
+    runner = Keyword.get(opts, :runner, &default_runner/4)
+
+    runner_opts =
+      opts
+      |> Keyword.put(:project_slug, project_slug)
+      |> Keyword.put_new(:dynamic_tools, ToolExecutor.tool_specs())
+      |> Keyword.put_new(:tool_executor, ToolExecutor.codex_tool_executor(project_slug))
+
+    runner.(workspace, prompt, project_explore_issue(project_slug), runner_opts)
     |> normalize_runner_result()
   end
 
@@ -227,6 +274,42 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp freeform_issue, do: %{id: "assistant:freeform", identifier: "freeform", title: "Freeform assistant chat"}
+
+  defp project_explore_issue(project_slug),
+    do: %{id: "assistant:explore:#{project_slug}", identifier: project_slug, title: "Project explore assistant"}
+
+  defp ensure_project_explore_workspace(project_slug, %{workspace_path: path}, opts)
+       when is_binary(path) and path != "" do
+    case Workspace.ensure_at(path, ProjectExploreWorkspace.path(project_slug)) do
+      {:ok, workspace} -> {:ok, workspace}
+      {:error, _reason} -> ProjectExploreWorkspace.ensure(project_slug, opts)
+    end
+  end
+
+  defp ensure_project_explore_workspace(project_slug, _thread, opts),
+    do: ProjectExploreWorkspace.ensure(project_slug, opts)
+
+  defp build_project_explore_prompt(project_slug, message, context, history) do
+    """
+    You are the Symphony project explore assistant for `#{project_slug}`.
+    You are running inside the project's working tree. The repositories are cloned here on their default integration branches.
+    Behave like a real conversational coding assistant. Answer naturally in the user's language.
+    Help the user understand the codebase, architecture, and conventions. Read and search files as needed.
+    Do not create or update tracker issues unless the user explicitly asks. Do not dispatch Codex execution unless asked.
+    Do not post issue comments - your replies are shown to the user directly in this chat.
+    Prefer answering questions and exploring the code over making changes; only edit files when the user clearly wants that.
+
+    Recent conversation:
+    #{format_history(history)}
+
+    Context:
+    #{inspect(context)}
+
+    Current user message:
+    #{message}
+    """
+    |> String.trim()
+  end
 
   defp build_freeform_prompt(message, context, history) do
     """
@@ -463,6 +546,45 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   defp maybe_notify_documents(identifier, before, opts) do
     if doc_fingerprint(identifier) != before do
       maybe_call(opts, :on_documents_changed, identifier)
+    else
+      :ok
+    end
+  end
+
+  defp thread_doc_fingerprint(thread_id) do
+    case ThreadDocuments.list(thread_id) do
+      %{documents: documents} when is_list(documents) ->
+        documents
+        |> Enum.map(fn document ->
+          path = Map.get(document, :path)
+
+          {
+            path,
+            Map.get(document, :kind),
+            Map.get(document, :title),
+            Map.get(document, :updated_at),
+            thread_content_fingerprint(thread_id, path)
+          }
+        end)
+        |> Enum.sort()
+
+      _other ->
+        []
+    end
+  end
+
+  defp thread_content_fingerprint(thread_id, path) when is_binary(path) do
+    case ThreadDocuments.read(thread_id, path) do
+      {:ok, body} -> {:ok, :crypto.hash(:sha256, body) |> Base.encode16(case: :lower)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp thread_content_fingerprint(_thread_id, _path), do: {:error, :invalid_path}
+
+  defp maybe_notify_thread_documents(thread_id, before, opts) do
+    if thread_doc_fingerprint(thread_id) != before do
+      maybe_call(opts, :on_thread_documents_changed, thread_id)
     else
       :ok
     end

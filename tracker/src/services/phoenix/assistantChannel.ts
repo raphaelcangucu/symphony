@@ -25,7 +25,8 @@ export interface AssistantChannelHandlers {
 }
 
 export interface AssistantDocumentChangedPayload {
-  identifier: string;
+  identifier?: string;
+  threadId?: number;
 }
 
 export interface AssistantIssueCreatedPayload {
@@ -56,6 +57,8 @@ interface ErrorPayload {
 
 interface DocumentChangedPayload {
   identifier?: string | null;
+  thread_id?: number | string | null;
+  threadId?: number | string | null;
 }
 
 interface IssueCreatedPayload {
@@ -68,6 +71,12 @@ export function assistantTopic(projectSlug: string): string {
   const slug = projectSlug.trim();
   if (!slug) throw new Error("projectSlug is required");
   return `assistant:${slug}`;
+}
+
+export function assistantExploreTopic(projectSlug: string): string {
+  const slug = projectSlug.trim();
+  if (!slug) throw new Error("projectSlug is required");
+  return `assistant:explore:${encodeURIComponent(slug)}`;
 }
 
 export function assistantThreadTopic(threadId: number | string): string {
@@ -122,10 +131,13 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   });
 
   channel.on("assistant_document_changed", (payload) => {
-    const identifier = (payload as DocumentChangedPayload).identifier?.trim();
-    if (!identifier) return;
+    const data = payload as DocumentChangedPayload;
+    const identifier = data.identifier?.trim();
+    const threadId = normalizeThreadId(data.threadId ?? data.thread_id);
 
-    handlers.onAssistantDocumentChanged?.({ identifier });
+    if (!identifier && threadId == null) return;
+
+    handlers.onAssistantDocumentChanged?.({ identifier: identifier || undefined, threadId: threadId ?? undefined });
   });
 
   channel.on("assistant_issue_created", (payload) => {

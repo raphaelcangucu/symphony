@@ -3,9 +3,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
 
   import Ecto.Query
 
-  alias SymphonyElixir.Assistant.ToolExecutor
-  alias SymphonyElixir.LocalTracker.{Context, WorkflowStatus}
+  alias SymphonyElixir.Assistant.{ProjectExploreWorkspace, ToolExecutor}
+  alias SymphonyElixir.LocalTracker.{Context, Templates, WorkflowStatus}
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workflow
 
   @token_env "SYMPHONY_TRACKER_TOKEN"
 
@@ -282,6 +283,137 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert error_text =~ "Unsupported assistant tool"
   end
 
+  describe "read tools" do
+    setup do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+      {:ok, issue} = Context.create_issue("macro-markets", %{"title" => "Detail me", "status" => "Todo", "description" => "Body"})
+      {:ok, _comment} = Context.add_comment("macro-markets", issue.identifier, "Note", %{"author" => "human"})
+      {:ok, _template} = Templates.create_template(%{"name" => "Reference", "slug" => "reference", "description" => "Example board"})
+      :ok
+    end
+
+    test "get_issue returns one issue without comments by default" do
+      assert {:ok, result} = ToolExecutor.execute("macro-markets", "get_issue", %{"identifier" => "MAC-1"})
+      assert result.tool == "get_issue"
+      assert result.data.identifier == "MAC-1"
+      assert result.data.title == "Detail me"
+      refute Map.has_key?(result.data, :comments)
+    end
+
+    test "get_issue can include comments" do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "get_issue", %{
+                 "identifier" => "MAC-1",
+                 "include_comments" => true
+               })
+
+      assert [%{body: "Note", author: "human"}] = result.data.comments
+    end
+
+    test "get_project returns setup and statuses without listing issues" do
+      assert {:ok, result} = ToolExecutor.execute("macro-markets", "get_project", %{})
+      assert result.tool == "get_project"
+      assert result.data.slug == "macro-markets"
+      assert is_list(result.data.statuses)
+      refute Map.has_key?(result.data, :issues)
+    end
+
+    test "get_template returns json by default and yaml when requested" do
+      assert {:ok, json} = ToolExecutor.execute("macro-markets", "get_template", %{"slug" => "reference"})
+      assert json.data.slug == "reference"
+
+      assert {:ok, yaml} =
+               ToolExecutor.execute("macro-markets", "get_template", %{"slug" => "reference", "format" => "yaml"})
+
+      assert yaml.data.format == "yaml"
+      assert yaml.data.yaml =~ "reference"
+    end
+
+    test "get_workflow loads the running workflow file" do
+      tmp_dir = Path.join(System.tmp_dir!(), "symphony-read-tools-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp_dir)
+      workflow_file = Path.join(tmp_dir, "WORKFLOW.md")
+
+      SymphonyElixir.TestSupport.write_workflow_file!(workflow_file,
+        tracker_kind: "local",
+        workspace_root: tmp_dir,
+        prompt: "Running prompt"
+      )
+
+      Workflow.set_workflow_file_path(workflow_file)
+
+      on_exit(fn ->
+        Workflow.clear_workflow_file_path()
+        File.rm_rf(tmp_dir)
+      end)
+
+      assert {:ok, result} = ToolExecutor.execute("macro-markets", "get_workflow", %{})
+      assert result.data.source == "running"
+      assert result.data.prompt == "Running prompt"
+      assert result.data.path == workflow_file
+    end
+
+    test "get_workflow loads a named example sibling file" do
+      tmp_dir = Path.join(System.tmp_dir!(), "symphony-read-tools-example-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp_dir)
+      workflow_file = Path.join(tmp_dir, "WORKFLOW.md")
+      example_file = Path.join(tmp_dir, "WORKFLOW.macro-markets.md")
+
+      SymphonyElixir.TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: tmp_dir)
+      File.write!(example_file, "---\ntracker: {}\n---\nMacro markets body\n")
+
+      Workflow.set_workflow_file_path(workflow_file)
+
+      on_exit(fn ->
+        Workflow.clear_workflow_file_path()
+        File.rm_rf(tmp_dir)
+      end)
+
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "get_workflow", %{"source" => "example", "name" => "macro-markets"})
+
+      assert result.data.source == "example"
+      assert result.data.prompt == "Macro markets body"
+      assert result.data.path == example_file
+    end
+
+    test "read_workspace_file reads from the project explore workspace" do
+      explore = ProjectExploreWorkspace.path("macro-markets")
+      File.mkdir_p!(explore)
+      File.write!(Path.join(explore, "notes.txt"), "line1\nline2\nline3\n")
+
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "read_workspace_file", %{
+                 "path" => "notes.txt",
+                 "start_line" => 2,
+                 "end_line" => 2
+               })
+
+      assert result.data.content == "line2"
+      assert result.data.start_line == 2
+      assert result.data.end_line == 2
+    end
+
+    test "read_workspace_file rejects path escape" do
+      explore = ProjectExploreWorkspace.path("macro-markets")
+      File.mkdir_p!(explore)
+
+      assert {:error, :path_escape} =
+               ToolExecutor.execute("macro-markets", "read_workspace_file", %{"path" => "../outside.txt"})
+    end
+
+    test "list_issues applies a default limit" do
+      {:ok, _} = Context.ensure_project(%{name: "Limit Board", slug: "limit-board"})
+
+      for n <- 1..25 do
+        {:ok, _} = Context.create_issue("limit-board", %{"title" => "Issue #{n}", "status" => "Todo"})
+      end
+
+      assert {:ok, result} = ToolExecutor.execute("limit-board", "list_issues", %{})
+      assert length(result.data.issues) == 20
+    end
+  end
+
   describe "issue-bound Codex tools" do
     setup do
       {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
@@ -298,6 +430,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       refute "create_issue" in names
       refute "create_draft_issue" in names
       refute "add_comment" in names
+      assert "get_issue" in names
+      assert "read_workspace_file" in names
 
       for tool <- ["update_issue", "move_issue", "dispatch_codex"] do
         spec = Enum.find(specs, &(&1["name"] == tool))
@@ -368,7 +502,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
           "local_tracker_workflow_statuses",
           "local_tracker_project_setups",
           "local_tracker_repositories",
-          "local_tracker_projects"
+          "local_tracker_projects",
+          "local_tracker_workspace_template_repositories",
+          "local_tracker_workspace_templates"
         ] do
       Ecto.Adapters.SQL.query!(Repo, "DELETE FROM #{table}", [])
     end

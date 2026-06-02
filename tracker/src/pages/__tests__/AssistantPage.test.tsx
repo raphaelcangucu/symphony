@@ -11,9 +11,9 @@ import type { RecentSession } from "@/types/recents";
 vi.mock("@/hooks/useRecents");
 vi.mock("@/hooks/useCreateFreeformChat");
 
-vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
-  ProjectAssistantPanel: ({ threadId }: { threadId?: number }) => (
-    <div data-testid="assistant-panel">panel:{threadId ?? "none"}</div>
+vi.mock("@/components/assistant/FreeformAssistantPanel", () => ({
+  FreeformAssistantPanel: ({ threadId }: { threadId: number }) => (
+    <div data-testid="assistant-panel">panel:{threadId}</div>
   ),
 }));
 
@@ -80,7 +80,7 @@ describe("AssistantPage", () => {
     expect(createChat).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the full-width panel for the selected thread id", async () => {
+  it("opens the split chat and files panel for the selected thread id", async () => {
     renderAt("/assistant/7");
 
     expect(await screen.findByTestId("assistant-panel")).toHaveTextContent("panel:7");

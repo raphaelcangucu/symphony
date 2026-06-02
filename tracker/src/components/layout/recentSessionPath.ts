@@ -1,4 +1,4 @@
-import { issueAssistantPath, issuePath, withAgentSection } from "@/lib/workspaceRoutes";
+import { issueAssistantPath, issuePath, projectExploreAssistantPath, withAgentSection } from "@/lib/workspaceRoutes";
 import type { RecentSession } from "@/types/recents";
 
 export function recentSessionSubtitle(session: RecentSession): string {
@@ -11,6 +11,7 @@ export function recentSessionSubtitle(session: RecentSession): string {
   }
 
   if (session.scope === "freeform") return "Freeform chat";
+  if (session.scope === "project_explore") return session.projectName ?? session.projectSlug ?? "Explore project";
 
   return session.projectName ?? session.projectSlug ?? "Project chat";
 }
@@ -33,6 +34,10 @@ export function recentSessionPath(session: RecentSession): string {
 
   if (session.scope === "freeform") {
     return session.threadId != null ? `/assistant/${session.threadId}` : "/assistant";
+  }
+
+  if (session.scope === "project_explore" && session.projectSlug) {
+    return projectExploreAssistantPath(session.projectSlug);
   }
 
   if (session.projectSlug) {

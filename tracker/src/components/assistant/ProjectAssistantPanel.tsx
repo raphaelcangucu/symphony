@@ -13,6 +13,7 @@ import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
+import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   defaultComposerSettings,
@@ -25,6 +26,7 @@ import {
   type AssistantToolCall,
 } from "@/services/assistant";
 import {
+  assistantExploreTopic,
   assistantIssueTopic,
   assistantThreadTopic,
   assistantTopic,
@@ -43,11 +45,14 @@ export interface DraftIssueCreated {
   identifier: string;
 }
 
+export type ProjectAssistantMode = "project" | "explore" | "freeform";
+
 interface ProjectAssistantPanelProps {
   projectSlug?: string;
   threadId?: number;
   issueIdentifier?: string;
   view: WorkspaceView;
+  assistantMode?: ProjectAssistantMode;
   mode?: "sheet" | "page" | "embedded";
   issueMode?: IssueAssistantMode;
   issueModeRequestId?: number;
@@ -63,6 +68,7 @@ interface ProjectAssistantPanelProps {
   onIssueGoalModeError?: (message: string) => void;
   onDispatchSucceeded?: (message: string) => void;
   onDispatchError?: (message: string) => void;
+  onOpenDocumentPath?: (path: string) => void;
 }
 
 const STREAMING_ASSISTANT_ID = "assistant-streaming";
@@ -83,6 +89,7 @@ export function ProjectAssistantPanel({
   threadId,
   issueIdentifier,
   view,
+  assistantMode,
   mode = "sheet",
   issueMode,
   issueModeRequestId = 0,
@@ -98,6 +105,7 @@ export function ProjectAssistantPanel({
   onIssueGoalModeError,
   onDispatchSucceeded,
   onDispatchError,
+  onOpenDocumentPath,
 }: ProjectAssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -125,6 +133,9 @@ export function ProjectAssistantPanel({
   const isEmbeddedMode = mode === "embedded";
   const isPanelMode = isPageMode || isEmbeddedMode;
   const active = isPanelMode || open;
+  const resolvedAssistantMode: ProjectAssistantMode =
+    assistantMode ?? (projectSlug ? (issueIdentifier ? "project" : "project") : "freeform");
+  const isExploreMode = resolvedAssistantMode === "explore";
 
   catalogRef.current = catalog;
 
@@ -187,7 +198,9 @@ export function ProjectAssistantPanel({
         ? assistantThreadTopic(threadId)
         : issueIdentifier
           ? assistantIssueTopic(projectSlug ?? "", issueIdentifier)
-          : assistantTopic(projectSlug ?? "");
+          : isExploreMode
+            ? assistantExploreTopic(projectSlug ?? "")
+            : assistantTopic(projectSlug ?? "");
     const channel = socket.channel(topic);
     channelRef.current = channel;
 
@@ -268,7 +281,7 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onIssueCreated, onIssueGoalModeChanged, onIssueModeChanged, projectSlug, threadId]);
+  }, [active, isExploreMode, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onIssueCreated, onIssueGoalModeChanged, onIssueModeChanged, projectSlug, threadId]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;
@@ -503,7 +516,7 @@ export function ProjectAssistantPanel({
   const messageItems = (
     <>
       {visibleMessages.map((message) => (
-        <AssistantBubble key={message.id} message={message} />
+        <AssistantBubble key={message.id} message={message} onOpenDocumentPath={onOpenDocumentPath} />
       ))}
       {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
       {isRunning && runningStartedAt != null ? (
@@ -552,7 +565,7 @@ export function ProjectAssistantPanel({
         <section
           className={cn(
             "relative flex flex-col",
-            isPageMode && (projectSlug ? "h-[calc(100vh-4rem)]" : "h-screen"),
+            isPageMode && (projectSlug ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
             isEmbeddedMode && "h-full min-h-0",
           )}
           aria-label="Project assistant"
@@ -561,11 +574,15 @@ export function ProjectAssistantPanel({
             className={cn("border-b", isPageMode ? "px-6 py-3.5" : isEmbeddedMode ? "px-4 py-2" : "px-4 py-3")}
           >
             <h2 className={cn("font-semibold leading-tight", isEmbeddedMode ? "text-sm" : "text-base")}>
-              {projectSlug ? "Project assistant" : "Freeform assistant"}
+              {isExploreMode ? "Explore project" : projectSlug ? "Project assistant" : "Freeform assistant"}
             </h2>
             {isEmbeddedMode ? null : (
               <p className="text-xs text-muted-foreground">
-                {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
+                {isExploreMode
+                  ? `Ask questions about the codebase in \`${projectSlug}\` (default branches).`
+                  : projectSlug
+                    ? `Codex CLI assistant for \`${projectSlug}\`.`
+                    : "Codex CLI assistant for freeform chat."}
                 {catalog ? ` Models from \`${catalog.command}\`.` : null}
               </p>
             )}
@@ -654,7 +671,13 @@ export function ProjectAssistantPanel({
   );
 }
 
-function AssistantBubble({ message }: { message: AssistantChatMessage }) {
+function AssistantBubble({
+  message,
+  onOpenDocumentPath,
+}: {
+  message: AssistantChatMessage;
+  onOpenDocumentPath?: (path: string) => void;
+}) {
   const isUser = message.role === "user";
   const attachments = Array.isArray(message.metadata.attachments) ? message.metadata.attachments : [];
 
@@ -678,7 +701,7 @@ function AssistantBubble({ message }: { message: AssistantChatMessage }) {
         {isUser ? (
           <p className="whitespace-pre-wrap leading-6">{message.content}</p>
         ) : (
-          <Markdown className="max-w-none text-sm leading-7 text-inherit">{message.content}</Markdown>
+          <AssistantMarkdown content={message.content} onOpenDocumentPath={onOpenDocumentPath} />
         )}
         {message.toolCalls.length ? (
           <div className={cn("mt-3 space-y-2 border-t pt-2", isUser && "border-white/20")}>
@@ -736,6 +759,38 @@ function AttachmentPreview({ attachment, isUser }: { attachment: unknown; isUser
   }
 
   return null;
+}
+
+function AssistantMarkdown({
+  content,
+  onOpenDocumentPath,
+}: {
+  content: string;
+  onOpenDocumentPath?: (path: string) => void;
+}) {
+  return (
+    <Markdown
+      className="max-w-none text-sm leading-7 text-inherit"
+      linkRenderer={({ href, children }) => {
+        const documentPath = normalizeAssistantDocumentHref(href);
+        if (documentPath && onOpenDocumentPath) {
+          return (
+            <button
+              type="button"
+              className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+              onClick={() => onOpenDocumentPath(documentPath)}
+            >
+              {children}
+            </button>
+          );
+        }
+
+        return undefined;
+      }}
+    >
+      {content}
+    </Markdown>
+  );
 }
 
 function ToolCallSummary({ toolCall }: { toolCall: AssistantToolCall }) {

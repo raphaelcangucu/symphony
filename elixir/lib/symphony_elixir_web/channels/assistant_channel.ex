@@ -37,6 +37,27 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
+  def join("assistant:explore:" <> raw_project_slug, _payload, socket) do
+    with true <- authorized?(socket),
+         {:ok, project_slug} <- decode_required_topic_segment(raw_project_slug, :project_slug),
+         {:ok, thread} <- History.ensure_project_explore_thread(project_slug) do
+      payload = %{
+        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
+        thread_id: thread.id,
+        mode: History.thread_mode(thread),
+        goal_mode: History.thread_goal_mode(thread)
+      }
+
+      socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
+      send(self(), {:assistant_history_loaded, payload})
+      {:ok, payload, socket}
+    else
+      false -> {:error, %{reason: "unauthorized"}}
+      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+      _ -> {:error, %{reason: "invalid_topic"}}
+    end
+  end
+
   def join("assistant:thread:" <> raw_id, _payload, socket) do
     with true <- authorized?(socket),
          {:ok, id} <- parse_id(raw_id),
@@ -301,6 +322,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> Keyword.put(:on_documents_changed, fn identifier ->
             push(socket, "assistant_document_changed", %{identifier: identifier})
           end)
+          |> Keyword.put(:on_thread_documents_changed, fn thread_id ->
+            push(socket, "assistant_document_changed", %{thread_id: thread_id})
+          end)
           |> Keyword.put(:on_turn_started, fn turn_id -> send(channel_pid, {:assistant_turn_started, turn_id}) end)
 
         {:ok, pid} =
@@ -335,6 +359,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp run_send_turn(%{scope: "freeform"} = thread, _project_slug, trimmed, context, opts) do
     CodexSession.send_message_to_thread(thread, trimmed, context, opts)
+  end
+
+  defp run_send_turn(%{scope: "project_explore"} = thread, _project_slug, trimmed, context, opts) do
+    CodexSession.send_message_to_project_explore_thread(thread, trimmed, context, opts)
   end
 
   defp run_send_turn(_thread, project_slug, trimmed, context, opts) do
@@ -412,7 +440,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp normalize_context(context) when is_map(context), do: context
   defp normalize_context(_context), do: %{}
 
-  defp project_scoped_socket?(%Socket{assigns: %{thread: %{scope: scope}}}) when scope in ["issue", "freeform"], do: false
+  defp project_scoped_socket?(%Socket{assigns: %{thread: %{scope: scope}}})
+       when scope in ["issue", "freeform", "project_explore"],
+       do: false
   defp project_scoped_socket?(%Socket{assigns: %{project_slug: project_slug}}) when is_binary(project_slug), do: true
   defp project_scoped_socket?(_socket), do: false
 

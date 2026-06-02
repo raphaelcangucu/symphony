@@ -2,7 +2,7 @@ import { Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
+import { FreeformAssistantPanel } from "@/components/assistant/FreeformAssistantPanel";
 import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
 import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
 import { Button } from "@/components/ui/button";
@@ -117,5 +117,5 @@ export function AssistantPage() {
 
   if (selectedThreadId == null) return <ConversationsView />;
 
-  return <ProjectAssistantPanel key={selectedThreadId} threadId={selectedThreadId} view="board" mode="page" />;
+  return <FreeformAssistantPanel key={selectedThreadId} threadId={selectedThreadId} />;
 }

@@ -38,6 +38,10 @@ export function assistantPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/assistant`;
 }
 
+export function projectExploreAssistantPath(projectSlug: string): string {
+  return `/projects/${requireSlug(projectSlug)}/assistant/explore`;
+}
+
 export function newIssueAssistantPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/assistant/new-issue`;
 }

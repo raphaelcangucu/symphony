@@ -272,6 +272,20 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
              |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
   end
 
+  test "join assistant:explore:<project> creates a project explore thread", %{socket: socket} do
+    Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, _opts ->
+      {:ok, %{assistant_message: "explore reply", tool_calls: []}}
+    end)
+
+    {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:explore:macro-markets", %{})
+
+    assert %{messages: [], thread_id: thread_id} = payload
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.scope == "project_explore"
+    assert thread.project_slug == "macro-markets"
+    assert is_binary(thread.workspace_path)
+  end
+
   test "join assistant:thread:<id> loads that thread's history", %{socket: socket} do
     {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: System.tmp_dir!()})
     {:ok, _} = History.append_message(thread, %{role: "user", content: "hello freeform"})

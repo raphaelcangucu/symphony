@@ -35,7 +35,7 @@ function normalizeKind(value: string): RecentKind {
 }
 
 function normalizeScope(value: string | null | undefined): RecentScope {
-  if (value === "project" || value === "freeform" || value === "issue") return value;
+  if (value === "project" || value === "project_explore" || value === "freeform" || value === "issue") return value;
   return null;
 }
 
