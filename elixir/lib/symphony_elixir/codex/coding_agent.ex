@@ -17,6 +17,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @thread_start_id 2
   @turn_start_id 3
   @goal_set_id 4
+  @steer_base_id 100
   @default_max_goal_turns 50
   @max_goal_turns_cap 500
   @port_line_bytes 1_048_576
@@ -179,7 +180,14 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           metadata
         )
 
-        case await_turn_completion(port, on_message, tool_executor, auto_approve_requests) do
+        turn_ctx = %{
+          thread_id: thread_id,
+          turn_id: turn_id,
+          next_id: @steer_base_id,
+          pending: %{}
+        }
+
+        case await_turn_completion(port, on_message, tool_executor, auto_approve_requests, turn_ctx) do
           {:ok, completion_payload} ->
             Logger.info("Codex session completed for #{issue_context(issue)} session_id=#{session_id}")
 
@@ -479,15 +487,15 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp await_turn_completion(port, on_message, tool_executor, auto_approve_requests) do
-    receive_loop(port, on_message, Config.agent_turn_timeout_ms(), "", tool_executor, auto_approve_requests)
+  defp await_turn_completion(port, on_message, tool_executor, auto_approve_requests, turn_ctx) do
+    receive_loop(port, on_message, Config.agent_turn_timeout_ms(), "", tool_executor, auto_approve_requests, turn_ctx)
   end
 
-  defp receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests) do
+  defp receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx) do
     receive do
       {^port, {:data, {:eol, chunk}}} ->
         complete_line = pending_line <> to_string(chunk)
-        handle_incoming(port, on_message, complete_line, timeout_ms, tool_executor, auto_approve_requests)
+        handle_incoming(port, on_message, complete_line, timeout_ms, tool_executor, auto_approve_requests, turn_ctx)
 
       {^port, {:data, {:noeol, chunk}}} ->
         receive_loop(
@@ -496,18 +504,51 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           timeout_ms,
           pending_line <> to_string(chunk),
           tool_executor,
-          auto_approve_requests
+          auto_approve_requests,
+          turn_ctx
         )
 
       {^port, {:exit_status, status}} ->
         {:error, {:port_exit, status}}
+
+      {:codex_steer, input, reply_to} ->
+        turn_ctx = send_steer(port, turn_ctx, input, reply_to)
+        receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
+
+      {:codex_interrupt} ->
+        send_interrupt(port, turn_ctx)
+        receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
     after
       timeout_ms ->
         {:error, :turn_timeout}
     end
   end
 
-  defp handle_incoming(port, on_message, data, timeout_ms, tool_executor, auto_approve_requests) do
+  defp send_steer(port, %{thread_id: thread_id, turn_id: turn_id, next_id: next_id, pending: pending} = turn_ctx, input, reply_to) do
+    send_message(port, %{
+      "method" => "turn/steer",
+      "id" => next_id,
+      "params" => %{
+        "threadId" => thread_id,
+        "expectedTurnId" => turn_id,
+        "input" => input
+      }
+    })
+
+    %{turn_ctx | next_id: next_id + 1, pending: Map.put(pending, next_id, reply_to)}
+  end
+
+  defp send_interrupt(port, %{thread_id: thread_id, turn_id: turn_id, next_id: next_id}) do
+    send_message(port, %{
+      "method" => "turn/interrupt",
+      "id" => next_id,
+      "params" => %{"threadId" => thread_id, "turnId" => turn_id}
+    })
+
+    :ok
+  end
+
+  defp handle_incoming(port, on_message, data, timeout_ms, tool_executor, auto_approve_requests, turn_ctx) do
     payload_string = to_string(data)
 
     case Jason.decode(payload_string) do
@@ -539,6 +580,10 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
         {:error, {:turn_cancelled, Map.get(payload, "params")}}
 
+      {:ok, %{"id" => id} = payload} when is_map_key(turn_ctx.pending, id) ->
+        turn_ctx = route_steer_response(turn_ctx, id, payload)
+        receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests, turn_ctx)
+
       {:ok, %{"method" => method} = payload}
       when is_binary(method) ->
         handle_turn_method(
@@ -549,7 +594,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           method,
           timeout_ms,
           tool_executor,
-          auto_approve_requests
+          auto_approve_requests,
+          turn_ctx
         )
 
       {:ok, payload} ->
@@ -563,7 +609,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           metadata_from_message(port, payload)
         )
 
-        receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests)
+        receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests, turn_ctx)
 
       {:error, _reason} ->
         log_non_json_stream_line(payload_string, "turn stream")
@@ -578,8 +624,22 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           metadata_from_message(port, %{raw: payload_string})
         )
 
-        receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests)
+        receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests, turn_ctx)
     end
+  end
+
+  defp route_steer_response(%{pending: pending} = turn_ctx, id, payload) do
+    {reply_to, rest} = Map.pop(pending, id)
+
+    if is_pid(reply_to) do
+      case payload do
+        %{"error" => error} -> send(reply_to, {:steer_error, error})
+        %{"result" => result} -> send(reply_to, {:steer_ok, result})
+        _ -> :ok
+      end
+    end
+
+    %{turn_ctx | pending: rest}
   end
 
   defp emit_turn_event(on_message, event, payload, payload_string, port, payload_details) do
@@ -603,7 +663,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          method,
          timeout_ms,
          tool_executor,
-         auto_approve_requests
+         auto_approve_requests,
+         turn_ctx
        ) do
     metadata = metadata_from_message(port, payload)
 
@@ -628,7 +689,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         {:error, {:turn_input_required, payload}}
 
       :approved ->
-        receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests)
+        receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests, turn_ctx)
 
       :approval_required ->
         emit_message(
@@ -662,7 +723,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           )
 
           Logger.debug("Codex notification: #{inspect(method)}")
-          receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests)
+          receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests, turn_ctx)
         end
     end
   end
