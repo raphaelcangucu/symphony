@@ -43,6 +43,31 @@ defmodule SymphonyElixir.PromptBuilderTest do
     assert PromptBuilder.build_prompt(issue, workspace: root) == "Ticket MAC-2"
   end
 
+  test "appends recent discussion comments to the prompt" do
+    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
+
+    issue = %Issue{
+      identifier: "510",
+      title: "T",
+      description: "d",
+      state: "Rework",
+      comments: [
+        %{
+          author: "raphael",
+          body: "Temos alguns problemas aqui que devem ser corrigidos.",
+          created_at: ~U[2026-06-02 03:08:39Z],
+          source: "issue"
+        }
+      ]
+    }
+
+    prompt = PromptBuilder.build_prompt(issue)
+
+    assert prompt =~ "Ticket 510"
+    assert prompt =~ "## Recent discussion (issue + PR)"
+    assert prompt =~ "Temos alguns problemas aqui que devem ser corrigidos."
+  end
+
   test "appends superpowers artifacts in deterministic order and skips oversized files" do
     write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
 

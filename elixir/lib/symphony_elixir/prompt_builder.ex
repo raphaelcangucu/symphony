@@ -32,7 +32,7 @@ defmodule SymphonyElixir.PromptBuilder do
       |> IO.iodata_to_binary()
       |> ensure_utf8()
 
-    rendered <> artifacts_section(Keyword.get(opts, :workspace))
+    rendered <> discussion_section(issue) <> artifacts_section(Keyword.get(opts, :workspace))
   end
 
   defp prompt_template!({:ok, %{prompt_template: prompt}}), do: default_prompt(prompt)
@@ -79,6 +79,52 @@ defmodule SymphonyElixir.PromptBuilder do
   end
 
   defp artifacts_section(nil), do: ""
+
+  defp discussion_section(%SymphonyElixir.Issue{comments: comments}) when is_list(comments) and comments != [] do
+    body =
+      comments
+      |> Enum.map(&discussion_comment/1)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n\n")
+
+    if body == "" do
+      ""
+    else
+      """
+
+      ## Recent discussion (issue + PR)
+
+      Symphony injected the latest comments below. On **Rework**, treat human feedback here as required input before coding.
+
+      #{body}
+      """
+    end
+  end
+
+  defp discussion_section(_issue), do: ""
+
+  defp discussion_comment(%{author: author, body: body, created_at: created_at, source: source})
+       when is_binary(body) and body != "" do
+    header =
+      [author, source, format_comment_timestamp(created_at)]
+      |> Enum.reject(&(is_nil(&1) or &1 == ""))
+      |> Enum.join(" — ")
+
+    if header == "" do
+      body
+    else
+      "---\n**#{header}**\n\n#{body}"
+    end
+  end
+
+  defp discussion_comment(%{body: body}) when is_binary(body) and body != "", do: body
+  defp discussion_comment(_comment), do: ""
+
+  defp format_comment_timestamp(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
+  defp format_comment_timestamp(%NaiveDateTime{} = datetime), do: NaiveDateTime.to_iso8601(datetime)
+
+  defp format_comment_timestamp(value) when is_binary(value) and value != "", do: value
+  defp format_comment_timestamp(_value), do: nil
 
   defp artifacts_section(workspace) when is_binary(workspace) do
     base = Path.join(workspace, "docs/superpowers")

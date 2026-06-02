@@ -3,14 +3,15 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   Local-first implementation of the orchestrator's `SymphonyElixir.Tracker`
   behaviour for remote-backed projects (GitHub/Linear) when sync is enabled.
 
-  Reads are served from the local mirror (scoped to the configured project, in the
-  active states, filtered by the configured assignee so gating parity with the
-  remote is preserved). Writes persist locally, mark fields dirty for LWW, and
+  Reads are served from the local mirror across every non-archived project in the
+  SQLite store (or a single project when `:tracker_sync_project_slug` is set), in
+  the active states, filtered per project by assignee so gating parity with the
+  remote is preserved. Writes persist locally, mark fields dirty for LWW, and
   enqueue an `Outbox` entry the sync engine pushes to the remote.
 
-  Safety: when the assignee filter cannot be resolved (e.g. `assignee: me` with no
-  cached viewer login) reads return `{:ok, []}` so the orchestrator never picks up
-  issues that may not be assigned to this worker.
+  Safety: when a project's assignee filter cannot be resolved (e.g. `assignee: me`
+  with no cached viewer login) that project's issues are skipped so the
+  orchestrator never picks up issues that may not be assigned to this worker.
   """
 
   @behaviour SymphonyElixir.Tracker
@@ -40,38 +41,47 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
 
   @impl true
   def fetch_issues_by_states(states) when is_list(states) do
-    with {:ok, project} <- resolve_project(),
-         {:ok, filter} <- resolve_assignee_filter(project) do
-      {:ok, query_issues(project, states, filter)}
-    else
-      :skip -> {:ok, []}
-      {:error, _reason} -> {:ok, []}
-    end
+    issues =
+      list_orchestrator_projects()
+      |> Enum.flat_map(fn project ->
+        case resolve_assignee_filter(project) do
+          {:ok, filter} -> query_issues(project, states, filter)
+          {:error, _reason} -> []
+        end
+      end)
+
+    {:ok, issues}
   end
 
   def fetch_issues_by_states(_states), do: {:error, :invalid_states}
 
   @impl true
   def fetch_issue_states_by_ids(issue_ids) when is_list(issue_ids) do
-    with {:ok, project} <- resolve_project() do
-      ids = Enum.map(issue_ids, &to_string/1)
+    ids = Enum.map(issue_ids, &to_string/1)
+    database_ids = Enum.flat_map(ids, &parse_positive_integer/1)
+    project_ids = list_orchestrator_projects() |> Enum.map(& &1.id)
 
-      issues =
-        project
-        |> base_query()
-        |> where([issue], issue.identifier in ^ids)
+    issues =
+      if project_ids == [] do
+        []
+      else
+        IssueRecord
+        |> where([issue], issue.project_id in ^project_ids)
+        |> where([issue], issue.identifier in ^ids or issue.id in ^database_ids or issue.remote_id in ^ids)
+        |> order_by([issue], asc: issue.inserted_at, asc: issue.id)
+        |> preload(^issue_preloads())
         |> Repo.all()
         |> IssueMapper.to_issues()
+      end
 
-      {:ok, issues}
-    end
+    {:ok, issues}
   end
 
   def fetch_issue_states_by_ids(_issue_ids), do: {:error, :invalid_issue_ids}
 
   @impl true
   def create_comment(issue_id, body) when is_binary(issue_id) and is_binary(body) do
-    with {:ok, project} <- resolve_project(),
+    with {:ok, project} <- resolve_project_for_issue(issue_id),
          {:ok, identifier} <- resolve_identifier(project, issue_id),
          {:ok, _comment} <- Context.add_comment(project.slug, identifier, body) do
       enqueue(project, identifier, "comment", "create", %{"identifier" => identifier, "body" => body}, nil)
@@ -84,7 +94,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
 
   @impl true
   def update_issue_state(issue_id, state_name) when is_binary(issue_id) and is_binary(state_name) do
-    with {:ok, project} <- resolve_project(),
+    with {:ok, project} <- resolve_project_for_issue(issue_id),
          {:ok, identifier} <- resolve_identifier(project, issue_id),
          {:ok, _issue} <- Context.update_issue_state(project.slug, identifier, state_name) do
       LocalStore.mark_dirty(identifier, project.slug, [:state])
@@ -138,10 +148,30 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
 
   # -- project + assignee resolution ------------------------------------------
 
-  defp resolve_project do
-    case project_slug() do
-      slug when is_binary(slug) -> find_or_backfill_project(slug)
-      _ -> :skip
+  defp list_orchestrator_projects do
+    case Application.get_env(:symphony_elixir, :tracker_sync_project_slug) do
+      slug when is_binary(slug) ->
+        case find_or_backfill_project(slug) do
+          {:ok, project} -> [project]
+          :skip -> []
+        end
+
+      _ ->
+        Context.list_projects()
+    end
+  end
+
+  defp resolve_project_for_issue(issue_ref) do
+    list_orchestrator_projects()
+    |> Enum.reduce_while(:skip, fn project, _acc ->
+      case resolve_identifier(project, issue_ref) do
+        {:ok, _identifier} -> {:halt, {:ok, project}}
+        {:error, _} -> {:cont, :skip}
+      end
+    end)
+    |> case do
+      {:ok, project} -> {:ok, project}
+      :skip -> :skip
     end
   end
 
@@ -180,19 +210,6 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     Logger.warning("local_first_tracker backfill skipped project=#{slug} reason=#{inspect(reason)}")
     :skip
   end
-
-  defp project_slug do
-    case Application.get_env(:symphony_elixir, :tracker_sync_project_slug) do
-      slug when is_binary(slug) -> slug
-      _ -> slug_from_identity(remote_adapter().project_identity())
-    end
-  end
-
-  defp slug_from_identity(identity) when is_binary(identity) do
-    identity |> String.split("/") |> List.last() |> String.trim()
-  end
-
-  defp slug_from_identity(_identity), do: nil
 
   defp resolve_assignee_filter(project) do
     assignee_fun().(project)

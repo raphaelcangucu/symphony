@@ -9,6 +9,7 @@ defmodule SymphonyElixirWeb.UserSocket do
   channel("project:*", SymphonyElixirWeb.TrackerChannel)
   channel("assistant:*", SymphonyElixirWeb.AssistantChannel)
   channel("terminal:*", SymphonyElixirWeb.TerminalChannel)
+  channel("session_log:*", SymphonyElixirWeb.SessionLogChannel)
   channel("observability:global", SymphonyElixirWeb.ObservabilityChannel)
 
   @impl true

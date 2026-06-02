@@ -43,7 +43,7 @@ export function AgentTabs({ issue, projectSlug, execution, view }: AgentTabsProp
         <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} compact />
       </TabsContent>
       <TabsContent value="execution" className="mt-0">
-        <AgentTab issue={issue} execution={execution} />
+        <AgentTab issue={issue} execution={execution} projectSlug={projectSlug} />
       </TabsContent>
     </Tabs>
   );

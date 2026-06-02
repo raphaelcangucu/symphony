@@ -1,5 +1,6 @@
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
+import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
 import { Separator } from "@/components/ui/separator";
 import { formatDateTime } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -8,6 +9,7 @@ import type { Issue } from "@/types/issue";
 interface AgentTabProps {
   issue: Issue;
   execution?: AgentExecution;
+  projectSlug: string;
 }
 
 function formatRuntime(seconds: number | null): string {
@@ -24,7 +26,7 @@ function formatTokens(value: number): string {
   return value.toLocaleString();
 }
 
-export function AgentTab({ issue, execution }: AgentTabProps) {
+export function AgentTab({ issue, execution, projectSlug }: AgentTabProps) {
   return (
     <div className="space-y-4 text-sm">
       <section className="rounded-xl border p-4">
@@ -111,6 +113,12 @@ export function AgentTab({ issue, execution }: AgentTabProps) {
           </dl>
         </section>
       ) : null}
+
+      <IssueSessionLog
+        enabled={execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting"}
+        issueIdentifier={issue.identifier}
+        projectSlug={projectSlug}
+      />
 
       <Separator />
       <section>

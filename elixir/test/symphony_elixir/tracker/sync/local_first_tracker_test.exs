@@ -30,7 +30,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
     %{project: project}
   end
 
-  defp upsert(project, identifier, assignee) do
+  defp upsert(project, identifier, assignee, state \\ "Todo") do
     {:ok, _} =
       LocalStore.upsert_remote_issue(project, %{
         remote_id: "I_#{identifier}",
@@ -38,7 +38,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
         identifier: identifier,
         title: "t#{identifier}",
         description: nil,
-        state: "Todo",
+        state: state,
         priority: nil,
         assignee_id: assignee,
         branch_name: nil,
@@ -70,6 +70,63 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
   test "unresolved assignee returns nothing (safe: never grab wrong issues)" do
     stub_assignee({:error, :missing_viewer})
     assert {:ok, []} = LocalFirstTracker.fetch_issues_by_states(["Todo"])
+  end
+
+  test "fetch_issues_by_states reads all non-archived projects when slug override is unset" do
+    Application.delete_env(:symphony_elixir, :tracker_sync_project_slug)
+    stub_assignee({:ok, :any})
+
+    {:ok, board} =
+      Context.ensure_project(%{
+        name: "Macro Markets",
+        slug: "macro-markets",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "owner/repo", "project_id" => "PVT_2"}
+      })
+
+    upsert(board, "510", nil, "Rework")
+
+    assert {:ok, issues} = LocalFirstTracker.fetch_issues_by_states(["Todo", "Rework"])
+    assert Enum.sort(Enum.map(issues, & &1.identifier)) == ["1", "2", "510"]
+  end
+
+  test "archived projects are excluded from orchestrator reads" do
+    Application.delete_env(:symphony_elixir, :tracker_sync_project_slug)
+    stub_assignee({:ok, :any})
+
+    {:ok, board} =
+      Context.ensure_project(%{
+        name: "Macro Markets",
+        slug: "macro-markets",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "owner/repo", "project_id" => "PVT_2"}
+      })
+
+    upsert(board, "510", nil, "Rework")
+    assert {:ok, _} = Context.archive_project("macro-markets")
+
+    assert {:ok, issues} = LocalFirstTracker.fetch_issues_by_states(["Todo", "Rework"])
+    assert Enum.sort(Enum.map(issues, & &1.identifier)) == ["1", "2"]
+  end
+
+  test "fetch_issue_states_by_ids resolves local database ids across projects" do
+    Application.delete_env(:symphony_elixir, :tracker_sync_project_slug)
+    stub_assignee({:ok, :any})
+
+    {:ok, board} =
+      Context.ensure_project(%{
+        name: "Macro Markets",
+        slug: "macro-markets",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "owner/repo", "project_id" => "PVT_2"}
+      })
+
+    upsert(board, "510", nil, "Rework")
+    {:ok, [issue | _]} = LocalFirstTracker.fetch_issues_by_states(["Rework"])
+    assert issue.identifier == "510"
+
+    assert {:ok, [refreshed]} = LocalFirstTracker.fetch_issue_states_by_ids([issue.id])
+    assert refreshed.identifier == "510"
   end
 
   test "create_comment writes locally and enqueues", %{project: project} do
