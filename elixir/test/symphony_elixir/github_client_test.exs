@@ -1375,7 +1375,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                }
              }}
 
-          payload["query"] =~ "SymphonyGitHubReopenIssue" ->
+          payload["query"] =~ "SymphonyApiReopenIssue" ->
             assert payload["variables"]["issueId"] == "I_kw_99"
 
             {:ok,
@@ -1442,7 +1442,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
                }
              }}
 
-          payload["query"] =~ "SymphonyGitHubCloseIssue" ->
+          payload["query"] =~ "SymphonyApiCloseIssue" ->
             assert payload["variables"]["issueId"] == "I_kw_77"
             assert payload["query"] =~ "stateReason: COMPLETED"
 

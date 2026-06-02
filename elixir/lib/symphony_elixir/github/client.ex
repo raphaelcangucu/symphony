@@ -210,25 +210,6 @@ defmodule SymphonyElixir.GitHub.Client do
   }
   """
 
-  # `stateReason: COMPLETED` is fixed for now. Per-state mapping
-  # (NOT_PLANNED, DUPLICATE) can be added by extending Config or
-  # ProjectMetadata if needed.
-  @close_issue_mutation """
-  mutation SymphonyGitHubCloseIssue($issueId: ID!) {
-    closeIssue(input: { issueId: $issueId, stateReason: COMPLETED }) {
-      issue { id state }
-    }
-  }
-  """
-
-  @reopen_issue_mutation """
-  mutation SymphonyGitHubReopenIssue($issueId: ID!) {
-    reopenIssue(input: { issueId: $issueId }) {
-      issue { id state }
-    }
-  }
-  """
-
   @project_item_content_ids_query """
   query SymphonyGitHubProjectContentIds(
     $projectId: ID!,
@@ -1202,15 +1183,19 @@ defmodule SymphonyElixir.GitHub.Client do
   end
 
   defp close_issue(client, issue_id, graphql_opts) when is_atom(client) do
-    case client.graphql(@close_issue_mutation, %{"issueId" => issue_id}, graphql_opts) do
-      {:ok, _body} -> :ok
-      {:error, _} = error -> error
-    end
+    transition_via_api(issue_id, :close, graphql_opts)
   end
 
   defp reopen_issue(client, issue_id, graphql_opts) when is_atom(client) do
-    case client.graphql(@reopen_issue_mutation, %{"issueId" => issue_id}, graphql_opts) do
-      {:ok, _body} -> :ok
+    transition_via_api(issue_id, :reopen, graphql_opts)
+  end
+
+  # The GraphQL mutation operates on the issue node id. REST fallback would need
+  # the issue number (not available here), so under GraphQL rate limiting this
+  # defers with `:needs_issue_number` rather than crashing the state update.
+  defp transition_via_api(issue_id, action, graphql_opts) do
+    case GitHub.Api.transition_issue_open_state(GitHub.Config.repo(), issue_id, action, graphql_opts) do
+      {:ok, _state} -> :ok
       {:error, _} = error -> error
     end
   end
