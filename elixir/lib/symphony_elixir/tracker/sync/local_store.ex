@@ -38,6 +38,46 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   end
 
   @doc """
+  Upserts a project's workflow statuses from the remote (idempotent on
+  `(project_id, name)`). Must run before seeding issues so each issue's status
+  name resolves to a `status_id`; without it, issue inserts fail with a blank
+  `status_id`.
+  """
+  @spec upsert_statuses(Project.t(), [map()]) :: :ok
+  def upsert_statuses(%Project{} = project, statuses) when is_list(statuses) do
+    statuses
+    |> Enum.with_index()
+    |> Enum.each(fn {status, index} ->
+      name = status_attr(status, :name)
+
+      if is_binary(name) and name != "" do
+        upsert_status!(project.id, %{
+          project_id: project.id,
+          name: name,
+          category: status_attr(status, :category) || "active",
+          position: status_attr(status, :position) || index,
+          is_terminal: status_attr(status, :is_terminal) || false
+        })
+      end
+    end)
+
+    :ok
+  end
+
+  defp status_attr(status, key) when is_map(status) do
+    Map.get(status, key, Map.get(status, Atom.to_string(key)))
+  end
+
+  defp upsert_status!(project_id, %{name: name} = attrs) do
+    case Repo.get_by(WorkflowStatus, project_id: project_id, name: name) do
+      nil -> %WorkflowStatus{}
+      %WorkflowStatus{} = existing -> existing
+    end
+    |> WorkflowStatus.changeset(attrs)
+    |> Repo.insert_or_update!()
+  end
+
+  @doc """
   Marks `fields` as locally-edited on an issue (so a later remote pull respects
   LWW) and flips its `sync_status` to `pending`.
   """
@@ -227,14 +267,16 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     |> Repo.one()
   end
 
-  defp resolve_status_id(project_id, state_name) when is_binary(state_name) do
+  defp resolve_status_id(project_id, state_name) when is_binary(state_name) and state_name != "" do
     case Repo.get_by(WorkflowStatus, project_id: project_id, name: state_name) do
       %WorkflowStatus{id: id} -> id
-      nil -> first_status_id(project_id)
+      nil -> create_status_id!(project_id, state_name)
     end
   end
 
-  defp resolve_status_id(project_id, _state), do: first_status_id(project_id)
+  defp resolve_status_id(project_id, _state) do
+    first_status_id(project_id) || create_status_id!(project_id, "Todo")
+  end
 
   defp first_status_id(project_id) do
     WorkflowStatus
@@ -243,6 +285,27 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     |> limit(1)
     |> select([s], s.id)
     |> Repo.one()
+  end
+
+  # Safety net: a status name on a remote issue that isn't in the seeded status
+  # set still needs a row so the issue insert can succeed.
+  defp create_status_id!(project_id, name) do
+    next_position =
+      (Repo.aggregate(
+         from(s in WorkflowStatus, where: s.project_id == ^project_id),
+         :max,
+         :position
+       ) || -1) + 1
+
+    %WorkflowStatus{}
+    |> WorkflowStatus.changeset(%{
+      project_id: project_id,
+      name: name,
+      category: "active",
+      position: next_position
+    })
+    |> Repo.insert!()
+    |> Map.get(:id)
   end
 
   # -- labels ------------------------------------------------------------------

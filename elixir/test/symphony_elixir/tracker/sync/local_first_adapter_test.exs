@@ -99,7 +99,6 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
   end
 
   describe "seed on empty mirror" do
-    @describetag :seed_on_empty
     setup do
       SeedRemoteStub.reset()
       previous_seed = Application.get_env(:symphony_elixir, :tracker_seed_on_empty)
@@ -108,6 +107,11 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
       Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => SeedRemoteStub})
 
       on_exit(fn ->
+        # The seed fires a fire-and-forget `Engine.request_sync/0` cast. Drain the
+        # engine mailbox synchronously here (a no-op while sync is disabled in the
+        # test env) so a leftover cast cannot race into a later test that enables
+        # sync and pollute the shared DB.
+        if pid = Process.whereis(SymphonyElixir.Tracker.Sync.Engine), do: :sys.get_state(pid)
         restore(:tracker_seed_on_empty, previous_seed)
         restore(:issue_adapters, previous_adapters)
       end)

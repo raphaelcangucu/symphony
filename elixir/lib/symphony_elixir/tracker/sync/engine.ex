@@ -29,10 +29,19 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
 
-  @doc "Fire-and-forget request to sync all sync-enabled projects."
+  @doc """
+  Fire-and-forget request to sync all sync-enabled projects. No-op (still returns
+  `:ok`) when the engine is down or local-first sync is globally disabled, so a
+  stray request can never schedule background work that would otherwise race with
+  callers that toggle the flag (e.g. tests).
+  """
   @spec request_sync(keyword()) :: :ok
   def request_sync(opts \\ []) do
-    if alive?(), do: GenServer.cast(__MODULE__, {:sync_all, opts}), else: :ok
+    if alive?() and SymphonyElixir.Config.tracker_sync_enabled?() do
+      GenServer.cast(__MODULE__, {:sync_all, opts})
+    end
+
+    :ok
   end
 
   @doc "Synchronously sync one project. Returns a `summary`."
@@ -88,17 +97,54 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   defp seed_light(project) do
     mark_state(project, %{status: "syncing"})
+    seed_statuses(project)
 
     case remote_list_issues(project) do
       {:ok, dtos} ->
-        Enum.each(dtos, &seed_issue(project, &1))
-        mark_state(project, success_attrs(project))
-        request_sync()
-        {:ok, length(dtos)}
+        seeded = Enum.count(dtos, fn dto -> seed_issue(project, dto) == :ok end)
+        finalize_seed(project, dtos, seeded)
 
       {:error, reason} = error ->
         mark_state(project, %{status: "error", last_error: inspect(reason)})
         error
+    end
+  end
+
+  # Marks a full sync (locking re-seed) only when issues were actually mirrored
+  # or the remote is genuinely empty. A partial failure (had issues, seeded none)
+  # leaves `last_full_sync_at` unset so the next read retries instead of locking
+  # an empty board forever.
+  defp finalize_seed(project, _dtos, seeded) when seeded > 0 do
+    mark_state(project, success_attrs(project))
+    request_sync()
+    {:ok, seeded}
+  end
+
+  defp finalize_seed(project, [], 0) do
+    mark_state(project, success_attrs(project))
+    {:ok, 0}
+  end
+
+  defp finalize_seed(project, dtos, 0) do
+    mark_state(project, %{status: "error", last_error: "seeded 0 of #{length(dtos)} issues"})
+    {:error, :seed_incomplete}
+  end
+
+  defp seed_statuses(project) do
+    case remote_list_statuses(project) do
+      {:ok, statuses} -> LocalStore.upsert_statuses(project, statuses)
+      {:error, _reason} -> :ok
+    end
+  rescue
+    error ->
+      Logger.warning("Tracker seed statuses failed for #{project.slug}: #{inspect(error)}")
+      :ok
+  end
+
+  defp remote_list_statuses(project) do
+    case IssueAdapter.remote_for(project.tracker_kind) do
+      nil -> {:error, :no_remote_adapter}
+      adapter -> adapter.list_statuses(project)
     end
   end
 
@@ -110,11 +156,14 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   end
 
   defp seed_issue(project, dto) do
-    LocalStore.upsert_remote_issue(project, Normalize.issue(dto, comments: []))
+    case LocalStore.upsert_remote_issue(project, Normalize.issue(dto, comments: [])) do
+      {:ok, _issue} -> :ok
+      _other -> :error
+    end
   rescue
     error ->
       Logger.warning("Tracker seed upsert failed for #{project.slug}: #{inspect(error)}")
-      :ok
+      :error
   end
 
   defp seed_on_empty?, do: Application.get_env(:symphony_elixir, :tracker_seed_on_empty, true) == true

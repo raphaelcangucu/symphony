@@ -21,7 +21,10 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   end
 
   @impl true
-  def get_issue(%Project{} = project, identifier), do: IssueAdapter.get_issue(project, identifier)
+  def get_issue(%Project{} = project, identifier) do
+    Engine.ensure_seeded(project)
+    IssueAdapter.get_issue(project, identifier)
+  end
 
   @impl true
   def list_statuses(%Project{} = project), do: IssueAdapter.list_statuses(project)
