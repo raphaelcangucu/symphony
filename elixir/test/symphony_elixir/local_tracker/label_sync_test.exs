@@ -23,12 +23,6 @@ defmodule SymphonyElixir.LocalTracker.LabelSyncTest do
   end
 
   defp clean_repo do
-    for table <- [
-          "local_tracker_issue_labels",
-          "local_tracker_labels",
-          "local_tracker_projects"
-        ] do
-      Repo.query!("delete from #{table}")
-    end
+    SymphonyElixir.TestSupport.truncate_tracker!(Repo)
   end
 end

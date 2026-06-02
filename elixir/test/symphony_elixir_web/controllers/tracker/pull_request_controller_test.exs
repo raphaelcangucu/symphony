@@ -160,19 +160,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
   end
 
   defp clean_repo do
-    for table <- [
-          "local_tracker_activity_events",
-          "local_tracker_issue_relations",
-          "local_tracker_issue_labels",
-          "local_tracker_labels",
-          "local_tracker_comments",
-          "local_tracker_issues",
-          "local_tracker_workflow_statuses",
-          "local_tracker_repositories",
-          "local_tracker_projects"
-        ] do
-      Repo.query!("delete from #{table}")
-    end
+    SymphonyElixir.TestSupport.truncate_tracker!(Repo)
   end
 
   defp restore_env(key, nil), do: System.delete_env(key)

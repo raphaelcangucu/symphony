@@ -37,13 +37,6 @@ defmodule SymphonyElixir.LocalTracker.IssueRelationSyncTest do
   end
 
   defp clean_repo do
-    for table <- [
-          "local_tracker_issue_relations",
-          "local_tracker_issues",
-          "local_tracker_workflow_statuses",
-          "local_tracker_projects"
-        ] do
-      Repo.query!("delete from #{table}")
-    end
+    SymphonyElixir.TestSupport.truncate_tracker!(Repo)
   end
 end

@@ -73,6 +73,30 @@ defmodule SymphonyElixir.TestSupport do
   def restore_env(key, nil), do: System.delete_env(key)
   def restore_env(key, value), do: System.put_env(key, value)
 
+  @doc """
+  Truncates every local-tracker table in the test SQLite database, leaving the
+  schema intact. Runs inside a transaction with `PRAGMA defer_foreign_keys = ON`
+  so the delete order is irrelevant and foreign keys are validated (and satisfied,
+  since everything is emptied) only at commit. This is the canonical, FK-safe
+  reset used by setups to avoid order-dependent pollution from the shared DB.
+  """
+  def truncate_tracker!(repo \\ SymphonyElixir.Repo) do
+    {:ok, :ok} =
+      repo.transaction(fn ->
+        repo.query!("PRAGMA defer_foreign_keys = ON")
+
+        %{rows: rows} =
+          repo.query!(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations'"
+          )
+
+        Enum.each(rows, fn [name] -> repo.query!("DELETE FROM \"#{name}\"") end)
+        :ok
+      end)
+
+    :ok
+  end
+
   def stop_default_http_server do
     case Enum.find(Supervisor.which_children(SymphonyElixir.Supervisor), fn
            {SymphonyElixir.HttpServer, _pid, _type, _modules} -> true

@@ -121,18 +121,7 @@ defmodule SymphonyElixir.DevServerTest do
   end
 
   defp clean_repo do
-    for table <- [
-          "local_tracker_dev_servers",
-          "local_tracker_dev_env_step_runs",
-          "local_tracker_dev_env_runs",
-          "local_tracker_dev_env_steps",
-          "local_tracker_repositories",
-          "local_tracker_workflow_statuses",
-          "local_tracker_project_setups",
-          "local_tracker_projects"
-        ] do
-      Repo.query!("delete from #{table}")
-    end
+    SymphonyElixir.TestSupport.truncate_tracker!(Repo)
   end
 
   defp enable_dev_server! do
