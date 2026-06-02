@@ -9,6 +9,7 @@ import { AudioLines, Bot, ImageIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
+import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -94,6 +95,7 @@ export function ProjectAssistantPanel({
 }: ProjectAssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<AssistantCodexCatalog | null>(null);
@@ -115,6 +117,13 @@ export function ProjectAssistantPanel({
   const active = isPanelMode || open;
 
   catalogRef.current = catalog;
+
+  useEffect(() => {
+    setRunningStartedAt((current) => {
+      if (isRunning) return current ?? Date.now();
+      return null;
+    });
+  }, [isRunning]);
 
   useEffect(() => {
     if (!active) return;
@@ -387,13 +396,20 @@ export function ProjectAssistantPanel({
     ),
   );
 
+  const activeTool =
+    messages
+      .find((message) => message.id === STREAMING_ASSISTANT_ID)
+      ?.toolCalls.find((toolCall) => toolCall.status === "running")?.name ?? null;
+
   const messageItems = (
     <>
       {visibleMessages.map((message) => (
         <AssistantBubble key={message.id} message={message} />
       ))}
       {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
-      {isRunning ? <p className="text-sm text-muted-foreground">Assistant is working...</p> : null}
+      {isRunning && runningStartedAt != null ? (
+        <WorkingIndicator startedAt={runningStartedAt} activeTool={activeTool} />
+      ) : null}
     </>
   );
 
