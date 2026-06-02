@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   use Phoenix.Channel
 
   alias Phoenix.Socket
-  alias SymphonyElixir.Assistant.{CodexSession, History, Payload, ToolExecutor}
+  alias SymphonyElixir.Assistant.{CodexSession, History, Payload, SideQuery, ToolExecutor}
   alias SymphonyElixir.Config
   alias SymphonyElixirWeb.TrackerAuth
   alias SymphonyElixir.Workspace
@@ -151,6 +151,34 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("steer_turn", _payload, socket),
     do: {:reply, {:error, %{reason: "message is required"}}, socket}
 
+  def handle_in("btw", %{"message" => message}, socket) when is_binary(message) do
+    case String.trim(message) do
+      "" ->
+        {:reply, {:error, %{reason: "message is required"}}, socket}
+
+      question ->
+        thread = ensure_btw_thread(socket)
+        btw_id = "btw-" <> Integer.to_string(System.unique_integer([:positive]))
+        channel_pid = self()
+        side_runner = Application.get_env(:symphony_elixir, :assistant_side_runner)
+
+        run_opts =
+          [on_delta: fn delta -> push(socket, "btw_delta", %{btw_id: btw_id, delta: delta}) end]
+          |> maybe_put_side_runner(side_runner)
+
+        Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
+          case SideQuery.run(thread, question, run_opts) do
+            {:ok, answer} -> send(channel_pid, {:btw_finished, btw_id, {:ok, answer}})
+            {:error, reason} -> send(channel_pid, {:btw_finished, btw_id, {:error, reason}})
+          end
+        end)
+
+        {:reply, {:ok, %{btw_id: btw_id}}, socket}
+    end
+  end
+
+  def handle_in("btw", _payload, socket), do: {:reply, {:error, %{reason: "message is required"}}, socket}
+
   @impl true
   def handle_info({:assistant_history_loaded, payload}, socket) do
     push(socket, "history_loaded", payload)
@@ -191,7 +219,31 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:btw_finished, btw_id, {:ok, answer}}, socket) do
+    push(socket, "btw_completed", %{btw_id: btw_id, message: answer})
+    {:noreply, socket}
+  end
+
+  def handle_info({:btw_finished, btw_id, {:error, reason}}, socket) do
+    push(socket, "btw_error", %{btw_id: btw_id, message: error_reason(reason)})
+    {:noreply, socket}
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp ensure_btw_thread(%Socket{assigns: %{thread: %{} = thread}}), do: thread
+
+  defp ensure_btw_thread(%Socket{assigns: %{project_slug: project_slug}}) when is_binary(project_slug) do
+    case History.ensure_thread(project_slug, %{}) do
+      {:ok, thread} -> thread
+      _ -> %{id: nil, workspace_path: nil}
+    end
+  end
+
+  defp ensure_btw_thread(_socket), do: %{id: nil, workspace_path: nil}
+
+  defp maybe_put_side_runner(opts, runner) when is_function(runner, 4), do: Keyword.put(opts, :runner, runner)
+  defp maybe_put_side_runner(opts, _runner), do: opts
 
   defp maybe_persist_steer(%Socket{assigns: %{thread: %{id: id} = thread}} = socket, text) when is_integer(id) do
     case History.append_message(thread, %{role: "user", content: text, metadata: %{"steer" => true}}) do

@@ -143,6 +143,35 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
   end
 
+  test "btw runs an ephemeral side query and streams answer without persisting" do
+    side_runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_assistant_delta).("Yes")
+      {:ok, %{assistant_message: "Yes, useMemo memoizes values.", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_side_runner, side_runner)
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :assistant_side_runner) end)
+
+    {:ok, %{messages: []}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert_push("history_loaded", %{messages: []})
+
+    ref = push(socket, "btw", %{"message" => "what does useMemo do?"})
+    assert_reply(ref, :ok, %{btw_id: btw_id})
+    assert is_binary(btw_id)
+
+    assert_push("btw_delta", %{btw_id: ^btw_id, delta: "Yes"})
+    assert_push("btw_completed", %{btw_id: ^btw_id, message: "Yes, useMemo memoizes values."})
+
+    {:ok, %{messages: messages}, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert messages == []
+  end
+
   test "steer_turn replies error when no turn is running" do
     {:ok, %{messages: []}, socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
