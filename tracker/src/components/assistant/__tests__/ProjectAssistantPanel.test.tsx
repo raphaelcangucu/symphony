@@ -187,6 +187,27 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("prefer the simpler fix")).toBeTruthy();
   });
 
+  it("opens an overlay and streams the answer when /btw is submitted", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+
+    fireEvent.change(textarea, { target: { value: "/btw what is useMemo" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("btw", expect.objectContaining({ message: "what is useMemo" })),
+    );
+
+    const btwCallIndex = push.mock.calls.findIndex(([event]) => event === "btw");
+    pushReceives[btwCallIndex]?.ok?.({ btw_id: "btw-1" });
+
+    channelHandlers["btw_delta"]({ btw_id: "btw-1", delta: "useMemo memoizes" });
+    expect(await screen.findByText(/useMemo memoizes/)).toBeTruthy();
+
+    channelHandlers["btw_completed"]({ btw_id: "btw-1", message: "useMemo memoizes a value." });
+    expect(await screen.findByText("useMemo memoizes a value.")).toBeTruthy();
+  });
+
   it("joins an issue-scoped assistant topic when an issue identifier is provided", () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
 

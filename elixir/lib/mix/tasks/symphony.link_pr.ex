@@ -21,9 +21,9 @@ defmodule Mix.Tasks.Symphony.LinkPr do
     Mix.Task.run("app.start")
 
     with {:ok, parsed} <- PullRequestUrl.parse(url),
-         {:ok, issue} <- Context.get_issue(project_slug, identifier),
+         {:ok, project} <- Context.get_project(project_slug),
          {:ok, pr} <-
-           LocalStore.link_manual_pull_request(issue, %{
+           LocalStore.link_manual_pull_request(project.id, identifier, %{
              url: url,
              repo: parsed.repo,
              number: parsed.number

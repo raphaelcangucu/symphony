@@ -9,13 +9,16 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   @behaviour SymphonyElixir.Tracker.IssueAdapter
 
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter, Project}
-  alias SymphonyElixir.Tracker.Sync.{LocalStore, Outbox}
+  alias SymphonyElixir.Tracker.Sync.{Engine, LocalStore, Outbox}
 
   @impl true
   def kind, do: :github
 
   @impl true
-  def list_issues(%Project{} = project, filters), do: IssueAdapter.list_issues(project, filters)
+  def list_issues(%Project{} = project, filters) do
+    Engine.ensure_seeded(project)
+    IssueAdapter.list_issues(project, filters)
+  end
 
   @impl true
   def get_issue(%Project{} = project, identifier), do: IssueAdapter.get_issue(project, identifier)

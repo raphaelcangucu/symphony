@@ -12,6 +12,17 @@ config :symphony_elixir, ecto_repos: [SymphonyElixir.Repo]
 # `Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)`.
 config :symphony_elixir, :tracker, sync_enabled: Mix.env() != :test
 
+# Persist the resolved GitHub viewer identity (login/name/avatar) to disk so it
+# survives restarts and can be served when GitHub is rate-limited. Off in :test
+# so suites stay hermetic (pure in-memory ETS cache).
+config :symphony_elixir, :viewer_persist_enabled, Mix.env() != :test
+
+# Seed a cold local mirror on first read: when a remote project has never been
+# synced, fetch its issue list once (bounded — no comments/PRs) so the board is
+# not empty at cold start, then enrich in the background. Off in :test so the
+# local-first read suites stay hermetic (no remote calls).
+config :symphony_elixir, :tracker_seed_on_empty, Mix.env() != :test
+
 # Repo-root `skills/` directory for vendored, agent-agnostic skill definitions
 # loaded by `SymphonyElixir.Skills`. `__DIR__` here is `.../symphony/elixir/config`,
 # so `../../skills` resolves to the repo-root `skills/` dir.

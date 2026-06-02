@@ -9,7 +9,7 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequests do
 
   import Ecto.Query
 
-  alias SymphonyElixir.LocalTracker.{IssueRecord, Project}
+  alias SymphonyElixir.LocalTracker.Project
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.PullRequestRecord
 
@@ -25,13 +25,13 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequests do
 
   @spec for_issue(String.t(), String.t()) :: {:ok, [pr()]}
   def for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
+    normalized = identifier |> String.trim() |> String.trim_leading("#")
+
     prs =
       from(pr in PullRequestRecord,
-        join: issue in IssueRecord,
-        on: pr.issue_id == issue.id,
         join: project in Project,
-        on: issue.project_id == project.id,
-        where: project.slug == ^project_slug and issue.identifier == ^identifier,
+        on: pr.project_id == project.id,
+        where: project.slug == ^project_slug and pr.issue_identifier == ^normalized,
         order_by: [asc: pr.number, asc: pr.id]
       )
       |> Repo.all()

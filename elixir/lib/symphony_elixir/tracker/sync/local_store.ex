@@ -53,19 +53,28 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     end
   end
 
+  @doc """
+  Upserts PRs mirrored by the local-first sync engine. Keyed by
+  `(project_id, issue_identifier, remote_id)`; also records `issue_id`.
+  """
   @spec upsert_pull_requests(IssueRecord.t(), [map()]) :: :ok
   def upsert_pull_requests(%IssueRecord{} = issue, prs) when is_list(prs) do
-    now = DateTime.utc_now()
-
     Enum.each(prs, fn pr ->
-      attrs = pr |> Map.put(:issue_id, issue.id) |> Map.put(:last_synced_at, now)
+      upsert_one!(issue.project_id, issue.identifier, Map.put(pr, :issue_id, issue.id))
+    end)
 
-      case Repo.get_by(PullRequestRecord, issue_id: issue.id, remote_id: pr.remote_id) do
-        nil -> %PullRequestRecord{}
-        %PullRequestRecord{} = existing -> existing
-      end
-      |> PullRequestRecord.changeset(attrs)
-      |> Repo.insert_or_update!()
+    :ok
+  end
+
+  @doc """
+  Upserts PRs discovered live for an issue (live tracker mode; no local issue
+  row required). Defaults `origin` to `"auto"`.
+  """
+  @spec upsert_discovered_pull_requests(integer(), String.t(), [map()]) :: :ok
+  def upsert_discovered_pull_requests(project_id, identifier, prs)
+      when is_integer(project_id) and is_list(prs) do
+    Enum.each(prs, fn pr ->
+      upsert_one!(project_id, identifier, Map.put(pr, :origin, pr[:origin] || "auto"))
     end)
 
     :ok
@@ -74,13 +83,18 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   @doc """
   Links a pull request to an issue from a manual user action (e.g. pasting a
   cross-repo PR URL). Uses the URL as `remote_id` so the link survives even when
-  GitHub cannot be queried (no App access / 404). Idempotent on `(issue_id, url)`.
+  GitHub cannot be queried (no App access / 404). Keyed by
+  `(project_id, issue_identifier, url)` so it works in live tracker mode.
   """
-  @spec link_manual_pull_request(IssueRecord.t(), map()) ::
+  @spec link_manual_pull_request(integer(), String.t(), map()) ::
           {:ok, PullRequestRecord.t()} | {:error, Ecto.Changeset.t()}
-  def link_manual_pull_request(%IssueRecord{} = issue, %{url: url} = attrs) when is_binary(url) do
+  def link_manual_pull_request(project_id, identifier, %{url: url} = attrs)
+      when is_integer(project_id) and is_binary(url) do
+    identifier = normalize_identifier(identifier)
+
     base = %{
-      issue_id: issue.id,
+      project_id: project_id,
+      issue_identifier: identifier,
       remote_id: url,
       url: url,
       number: Map.get(attrs, :number),
@@ -91,7 +105,11 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
       last_synced_at: DateTime.utc_now()
     }
 
-    case Repo.get_by(PullRequestRecord, issue_id: issue.id, remote_id: url) do
+    case Repo.get_by(PullRequestRecord,
+           project_id: project_id,
+           issue_identifier: identifier,
+           remote_id: url
+         ) do
       nil -> %PullRequestRecord{}
       %PullRequestRecord{} = existing -> existing
     end
@@ -100,13 +118,48 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   end
 
   @doc """
-  Removes a pull request association (by `url`) from an issue.
+  Removes a manual pull request association (by `url`) from an issue.
   """
-  @spec unlink_pull_request(IssueRecord.t(), String.t()) :: :ok
-  def unlink_pull_request(%IssueRecord{} = issue, url) when is_binary(url) do
-    Repo.delete_all(from(pr in PullRequestRecord, where: pr.issue_id == ^issue.id and pr.remote_id == ^url))
+  @spec unlink_pull_request(integer(), String.t(), String.t()) :: :ok
+  def unlink_pull_request(project_id, identifier, url)
+      when is_integer(project_id) and is_binary(url) do
+    identifier = normalize_identifier(identifier)
+
+    Repo.delete_all(
+      from(pr in PullRequestRecord,
+        where:
+          pr.project_id == ^project_id and pr.issue_identifier == ^identifier and
+            pr.remote_id == ^url
+      )
+    )
 
     :ok
+  end
+
+  defp upsert_one!(project_id, identifier, %{remote_id: remote_id} = attrs)
+       when is_binary(remote_id) do
+    identifier = normalize_identifier(identifier)
+
+    base =
+      attrs
+      |> Map.put(:project_id, project_id)
+      |> Map.put(:issue_identifier, identifier)
+      |> Map.put_new(:last_synced_at, DateTime.utc_now())
+
+    case Repo.get_by(PullRequestRecord,
+           project_id: project_id,
+           issue_identifier: identifier,
+           remote_id: remote_id
+         ) do
+      nil -> %PullRequestRecord{}
+      %PullRequestRecord{} = existing -> existing
+    end
+    |> PullRequestRecord.changeset(base)
+    |> Repo.insert_or_update!()
+  end
+
+  defp normalize_identifier(identifier) when is_binary(identifier) do
+    identifier |> String.trim() |> String.trim_leading("#")
   end
 
   defp manual_title(number) when is_integer(number), do: "##{number}"

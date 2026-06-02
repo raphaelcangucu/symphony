@@ -148,10 +148,8 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
     end
 
     test "merges a manual cross-repo PR with live discovery", %{project: project} do
-      issue = insert_issue!(project, "510")
-
       {:ok, _} =
-        SymphonyElixir.Tracker.Sync.LocalStore.link_manual_pull_request(issue, %{
+        SymphonyElixir.Tracker.Sync.LocalStore.link_manual_pull_request(project.id, "510", %{
           url: "https://github.com/clouapp/back/pull/277",
           repo: "clouapp/back",
           number: 277
@@ -169,8 +167,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
       assert manual["origin"] == "manual"
     end
 
-    test "link then unlink a PR", %{project: project} do
-      insert_issue!(project, "510")
+    test "link then unlink a PR" do
       url = "https://github.com/clouapp/back/pull/277"
 
       conn =
@@ -196,31 +193,6 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
 
       assert json_response(conn, 422)["error"]["message"] =~ "Invalid"
     end
-  end
-
-  defp insert_issue!(project, identifier) do
-    Repo.insert!(%SymphonyElixir.LocalTracker.WorkflowStatus{
-      project_id: project.id,
-      name: "Todo",
-      category: "active",
-      position: 1
-    })
-
-    {:ok, issue} =
-      SymphonyElixir.Tracker.Sync.LocalStore.upsert_remote_issue(project, %{
-        remote_id: "I_#{identifier}",
-        remote_number: String.to_integer(identifier),
-        identifier: identifier,
-        title: "Issue #{identifier}",
-        state: "Todo",
-        remote_url: "https://github.com/o/r/issues/#{identifier}",
-        position: 0,
-        remote_updated_at: DateTime.utc_now(),
-        labels: [],
-        comments: []
-      })
-
-    issue
   end
 
   defp authorized_conn do

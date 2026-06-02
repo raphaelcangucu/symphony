@@ -9,6 +9,7 @@ import { AudioLines, Bot, Clock, ImageIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
+import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
@@ -102,6 +103,9 @@ export function ProjectAssistantPanel({
   const [isRunning, setIsRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
   const [queued, setQueued] = useState<QueuedMessage[]>([]);
+  const [btw, setBtw] = useState<{ id: string | null; question: string; answer: string; status: BtwStatus } | null>(
+    null,
+  );
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<AssistantCodexCatalog | null>(null);
@@ -224,6 +228,16 @@ export function ProjectAssistantPanel({
           },
         ]);
       },
+      onBtwDelta: ({ btwId, delta }) =>
+        setBtw((current) =>
+          current && (current.id === btwId || current.id === null)
+            ? { ...current, id: btwId, answer: current.answer + delta }
+            : current,
+        ),
+      onBtwCompleted: ({ btwId, message }) =>
+        setBtw((current) => (current && current.id === btwId ? { ...current, answer: message, status: "complete" } : current)),
+      onBtwError: ({ btwId, message }) =>
+        setBtw((current) => (current && current.id === btwId ? { ...current, answer: message, status: "error" } : current)),
     });
 
     const joinPush = channel.join();
@@ -386,6 +400,26 @@ export function ProjectAssistantPanel({
         } else {
           dispatchSend({ ...submit, kind: "message" });
         }
+        return;
+      }
+
+      if (submit.kind === "btw") {
+        const channel = channelRef.current;
+        const question = submit.message.trim();
+        if (!channel || !question) return;
+
+        setBtw({ id: null, question, answer: "", status: "streaming" });
+        channel
+          .push("btw", { message: question })
+          .receive("ok", (response) => {
+            const id = (response as { btw_id?: string }).btw_id ?? null;
+            setBtw((current) => (current ? { ...current, id } : current));
+          })
+          .receive("error", () => {
+            setBtw((current) =>
+              current ? { ...current, status: "error", answer: "Failed to start side question." } : current,
+            );
+          });
         return;
       }
 
@@ -578,6 +612,9 @@ export function ProjectAssistantPanel({
             </div>
           )}
         </section>
+        {btw ? (
+          <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
+        ) : null}
       </AssistantRuntimeProvider>
     );
   }
@@ -610,6 +647,9 @@ export function ProjectAssistantPanel({
           </div>
         </SheetContent>
       </Sheet>
+      {btw ? (
+        <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
+      ) : null}
     </AssistantRuntimeProvider>
   );
 }

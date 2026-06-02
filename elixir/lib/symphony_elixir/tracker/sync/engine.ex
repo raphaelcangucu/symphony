@@ -17,7 +17,10 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
-  alias SymphonyElixir.Tracker.Sync.{LocalStore, Outbox, StateRecord}
+  alias SymphonyElixir.Tracker.IssueAdapter
+  alias SymphonyElixir.Tracker.Sync.{LocalStore, Normalize, Outbox, StateRecord}
+
+  @default_seed_retry_seconds 60
 
   @default_max_attempts 5
 
@@ -49,6 +52,77 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
       {:error, reason} = error ->
         mark_state(project, %{status: "error", last_error: inspect(reason)})
         error
+    end
+  end
+
+  @doc """
+  Seeds a cold project's issue list from the remote on first read so the board is
+  not empty at cold start. Synchronous and bounded (issue list only — no comments
+  or PRs), then requests a full background sync to enrich. It is a no-op once the
+  project has been synced (`last_full_sync_at`), when a recent attempt already ran
+  (to avoid hammering a rate-limited remote), or when seeding is disabled.
+  """
+  @spec ensure_seeded(map()) :: :ok
+  def ensure_seeded(project) do
+    if seed_on_empty?() and seed_needed?(project), do: seed_light(project)
+    :ok
+  end
+
+  defp seed_needed?(project), do: mirror_empty?(project) and attempt_allowed?(project)
+
+  defp mirror_empty?(project) do
+    [project.id]
+    |> Context.count_issues_by_project_ids()
+    |> Map.get(project.id, 0) == 0
+  end
+
+  defp attempt_allowed?(project) do
+    case Repo.get_by(StateRecord, project_id: project.id) do
+      %StateRecord{last_full_sync_at: %DateTime{}} -> false
+      %StateRecord{updated_at: %DateTime{} = attempted_at} -> stale_attempt?(attempted_at)
+      _ -> true
+    end
+  end
+
+  defp stale_attempt?(attempted_at), do: DateTime.diff(now(), attempted_at, :second) >= seed_retry_seconds()
+
+  defp seed_light(project) do
+    mark_state(project, %{status: "syncing"})
+
+    case remote_list_issues(project) do
+      {:ok, dtos} ->
+        Enum.each(dtos, &seed_issue(project, &1))
+        mark_state(project, success_attrs(project))
+        request_sync()
+        {:ok, length(dtos)}
+
+      {:error, reason} = error ->
+        mark_state(project, %{status: "error", last_error: inspect(reason)})
+        error
+    end
+  end
+
+  defp remote_list_issues(project) do
+    case IssueAdapter.remote_for(project.tracker_kind) do
+      nil -> {:error, :no_remote_adapter}
+      adapter -> adapter.list_issues(project, [])
+    end
+  end
+
+  defp seed_issue(project, dto) do
+    LocalStore.upsert_remote_issue(project, Normalize.issue(dto, comments: []))
+  rescue
+    error ->
+      Logger.warning("Tracker seed upsert failed for #{project.slug}: #{inspect(error)}")
+      :ok
+  end
+
+  defp seed_on_empty?, do: Application.get_env(:symphony_elixir, :tracker_seed_on_empty, true) == true
+
+  defp seed_retry_seconds do
+    case Application.get_env(:symphony_elixir, :tracker_seed_retry_seconds, @default_seed_retry_seconds) do
+      seconds when is_integer(seconds) and seconds >= 0 -> seconds
+      _ -> @default_seed_retry_seconds
     end
   end
 

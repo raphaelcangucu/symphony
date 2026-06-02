@@ -4,7 +4,7 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias SymphonyElixir.LocalTracker.IssueRecord
+  alias SymphonyElixir.LocalTracker.{IssueRecord, Project}
 
   @type t :: %__MODULE__{}
 
@@ -12,6 +12,7 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
   @origins ~w(auto manual)
 
   schema "tracker_pull_requests" do
+    field(:issue_identifier, :string)
     field(:remote_id, :string)
     field(:number, :integer)
     field(:url, :string)
@@ -21,6 +22,7 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
     field(:origin, :string, default: "auto")
     field(:last_synced_at, :utc_datetime_usec)
 
+    belongs_to(:project, Project)
     belongs_to(:issue, IssueRecord)
 
     timestamps(type: :utc_datetime_usec)
@@ -29,10 +31,22 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(record, attrs) do
     record
-    |> cast(attrs, [:issue_id, :remote_id, :number, :url, :title, :state, :repo, :origin, :last_synced_at])
-    |> validate_required([:issue_id, :remote_id, :state])
+    |> cast(attrs, [
+      :project_id,
+      :issue_identifier,
+      :issue_id,
+      :remote_id,
+      :number,
+      :url,
+      :title,
+      :state,
+      :repo,
+      :origin,
+      :last_synced_at
+    ])
+    |> validate_required([:project_id, :issue_identifier, :remote_id, :state])
     |> validate_inclusion(:state, @states)
     |> validate_inclusion(:origin, @origins)
-    |> unique_constraint([:issue_id, :remote_id])
+    |> unique_constraint([:project_id, :issue_identifier, :remote_id])
   end
 end

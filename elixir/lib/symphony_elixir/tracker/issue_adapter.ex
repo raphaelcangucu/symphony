@@ -71,6 +71,19 @@ defmodule SymphonyElixir.Tracker.IssueAdapter do
     end
   end
 
+  @doc """
+  Resolves the remote adapter module for a tracker kind, bypassing the
+  local-first wrapper. Used by the sync engine to seed/refresh from the remote.
+  Returns `nil` for non-remote kinds.
+  """
+  @spec remote_for(String.t()) :: module() | nil
+  def remote_for(kind) when kind in @remote_kinds do
+    overrides = Application.get_env(:symphony_elixir, :issue_adapters, %{})
+    @default_adapters |> Map.merge(overrides) |> Map.get(kind)
+  end
+
+  def remote_for(_kind), do: nil
+
   @spec dispatch(Project.t(), atom(), list()) :: term()
   def dispatch(%Project{} = project, fun, args) when is_atom(fun) and is_list(args) do
     adapter = __MODULE__.for(project)

@@ -6,6 +6,9 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   conversation) with PRs persisted in `tracker_pull_requests` (manual links and
   previously discovered rows), deduped by URL. `link`/`unlink` manage manual
   cross-repo associations that live discovery cannot find (e.g. no App access).
+
+  Persisted associations are keyed by `(project_id, issue_identifier)`, so the
+  feature works in live tracker mode where `local_tracker_issues` is empty.
   """
 
   use Phoenix.Controller, formats: [:json]
@@ -30,9 +33,9 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   @spec link(Conn.t(), map()) :: Conn.t()
   def link(conn, %{"project_slug" => project_slug, "identifier" => identifier, "url" => url}) do
     with {:ok, parsed} <- PullRequestUrl.parse(url),
-         {:ok, issue} <- Context.get_issue(project_slug, identifier),
+         {:ok, project} <- Context.get_project(project_slug),
          {:ok, pr} <-
-           LocalStore.link_manual_pull_request(issue, %{
+           LocalStore.link_manual_pull_request(project.id, identifier, %{
              url: url,
              repo: parsed.repo,
              number: parsed.number
@@ -50,8 +53,8 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
 
   @spec unlink(Conn.t(), map()) :: Conn.t()
   def unlink(conn, %{"project_slug" => project_slug, "identifier" => identifier, "url" => url}) do
-    with {:ok, issue} <- Context.get_issue(project_slug, identifier),
-         :ok <- LocalStore.unlink_pull_request(issue, url) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         :ok <- LocalStore.unlink_pull_request(project.id, identifier, url) do
       json(conn, %{data: %{unlinked: true}})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -63,26 +66,27 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   defp respond(conn, project, identifier) do
     case PullRequests.resolve_repo(project) do
       {:ok, repo} ->
-        respond_github(conn, project.slug, repo, identifier)
+        respond_github(conn, project, repo, identifier)
 
       {:error, _reason} ->
         json(conn, %{data: persisted(project.slug, identifier), supported: false, available: false})
     end
   end
 
-  defp respond_github(conn, project_slug, repo, identifier) do
+  defp respond_github(conn, project, repo, identifier) do
     if PullRequests.available?() do
-      live = discover_live(repo, project_slug, identifier)
-      json(conn, %{data: merge(live, persisted(project_slug, identifier)), supported: true, available: true})
+      live = discover_live(project, repo, identifier)
+      data = merge(live, persisted(project.slug, identifier))
+      json(conn, %{data: data, supported: true, available: true})
     else
-      json(conn, %{data: persisted(project_slug, identifier), supported: true, available: false})
+      json(conn, %{data: persisted(project.slug, identifier), supported: true, available: false})
     end
   end
 
-  defp discover_live(repo, project_slug, identifier) do
+  defp discover_live(project, repo, identifier) do
     case PullRequests.for_issue(repo, identifier) do
       {:ok, prs} ->
-        persist_discovered(project_slug, identifier, prs)
+        persist_discovered(project, identifier, prs)
         Enum.map(prs, fn pr -> Map.put_new(pr, :origin, "auto") end)
 
       {:error, reason} ->
@@ -91,27 +95,23 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
     end
   end
 
-  defp persist_discovered(project_slug, identifier, prs) do
-    with {:ok, issue} <- Context.get_issue(project_slug, identifier) do
-      records =
-        prs
-        |> Enum.filter(&is_binary(&1[:url]))
-        |> Enum.map(fn pr ->
-          %{
-            remote_id: pr.url,
-            number: pr[:number],
-            url: pr.url,
-            title: pr[:title],
-            state: pr[:state] || "unknown",
-            repo: pr[:repo],
-            origin: "auto"
-          }
-        end)
+  defp persist_discovered(project, identifier, prs) do
+    records =
+      prs
+      |> Enum.filter(&is_binary(&1[:url]))
+      |> Enum.map(fn pr ->
+        %{
+          remote_id: pr.url,
+          number: pr[:number],
+          url: pr.url,
+          title: pr[:title],
+          state: pr[:state] || "unknown",
+          repo: pr[:repo],
+          origin: "auto"
+        }
+      end)
 
-      LocalStore.upsert_pull_requests(issue, records)
-    end
-
-    :ok
+    LocalStore.upsert_discovered_pull_requests(project.id, identifier, records)
   end
 
   defp persisted(project_slug, identifier) do
