@@ -380,6 +380,27 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     end
   end
 
+  test "count_issues_by_project_ids returns a per-project issue count map" do
+    {:ok, first_project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, second_project} = Context.ensure_project(%{name: "Macro Market Ops", slug: "macro-market-ops"})
+    {:ok, empty_project} = Context.ensure_project(%{name: "Empty", slug: "empty-project"})
+
+    {:ok, _} = Context.create_issue("macro-markets", %{title: "First", status: "Todo"})
+    {:ok, _} = Context.create_issue("macro-markets", %{title: "Second", status: "Backlog"})
+    {:ok, _} = Context.create_issue("macro-market-ops", %{title: "Only one", status: "Todo"})
+
+    counts = Context.count_issues_by_project_ids([first_project.id, second_project.id, empty_project.id])
+
+    assert counts[first_project.id] == 2
+    assert counts[second_project.id] == 1
+    refute Map.has_key?(counts, empty_project.id)
+  end
+
+  test "count_issues_by_project_ids returns an empty map when given no ids" do
+    assert Context.count_issues_by_project_ids([]) == %{}
+    assert Context.count_issues_by_project_ids([nil]) == %{}
+  end
+
   describe "list_issues/2 filters" do
     setup do
       {:ok, project} = Context.ensure_project(%{name: "F", slug: "filter-project"})

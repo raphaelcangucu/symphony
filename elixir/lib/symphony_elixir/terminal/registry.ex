@@ -94,8 +94,9 @@ defmodule SymphonyElixir.Terminal.Registry do
   end
 
   defp start_issue_session(project_slug, issue_identifier, opts) do
-    with {:ok, issue} <- fetch_issue(project_slug, issue_identifier, opts) do
-      open_issue_session(issue, opts)
+    with {:ok, issue} <- fetch_issue(project_slug, issue_identifier, opts),
+         {:ok, session} <- open_issue_session(issue, opts) do
+      {:ok, %{session | issue_identifier: issue_identifier}}
     end
   end
 

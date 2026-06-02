@@ -159,6 +159,22 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec count_issues_by_project_ids([integer()]) :: %{integer() => non_neg_integer()}
+  def count_issues_by_project_ids(project_ids) when is_list(project_ids) do
+    case Enum.reject(project_ids, &is_nil/1) do
+      [] ->
+        %{}
+
+      ids ->
+        IssueRecord
+        |> where([issue], issue.project_id in ^ids)
+        |> group_by([issue], issue.project_id)
+        |> select([issue], {issue.project_id, count(issue.id)})
+        |> Repo.all()
+        |> Map.new()
+    end
+  end
+
   @spec list_issues(String.t(), keyword()) :: [IssueRecord.t()]
   def list_issues(project_slug, opts \\ []) when is_binary(project_slug) and is_list(opts) do
     case fetch_project(project_slug) do

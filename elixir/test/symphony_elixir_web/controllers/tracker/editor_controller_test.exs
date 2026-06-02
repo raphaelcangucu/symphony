@@ -6,6 +6,8 @@ defmodule SymphonyElixirWeb.Tracker.EditorControllerTest do
 
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.TestSupport
+  alias SymphonyElixir.Workflow
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
@@ -15,14 +17,33 @@ defmodule SymphonyElixirWeb.Tracker.EditorControllerTest do
     migrate_repo()
     clean_repo()
 
+    workflow_root = hermetic_workflow!()
+
     previous_token = System.get_env(@token_env)
     System.put_env(@token_env, "secret")
 
     on_exit(fn ->
       restore_env(@token_env, previous_token)
+      Application.delete_env(:symphony_elixir, :workflow_file_path)
+      File.rm_rf(workflow_root)
     end)
 
     :ok
+  end
+
+  # Pin a hermetic WORKFLOW.md (no editor section -> editor disabled by default)
+  # so the suite never reads a developer's local WORKFLOW.md that enables the
+  # browser editor, which would otherwise make this test environment-dependent.
+  defp hermetic_workflow! do
+    workflow_root =
+      Path.join(System.tmp_dir!(), "symphony-editor-workflow-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(workflow_root)
+    workflow_file = Path.join(workflow_root, "WORKFLOW.md")
+    TestSupport.write_workflow_file!(workflow_file)
+    Workflow.set_workflow_file_path(workflow_file)
+
+    workflow_root
   end
 
   test "returns disabled when the editor is off" do
