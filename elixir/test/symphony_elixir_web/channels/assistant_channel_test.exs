@@ -105,6 +105,55 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
   end
 
+  test "steer_turn persists a steer message and forwards to the running turn" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-xyz")
+      send(test_pid, {:runner, self()})
+
+      receive do
+        {:codex_steer, input, reply_to} ->
+          send(test_pid, {:steered, input})
+          send(reply_to, {:steer_ok, %{"turnId" => "turn-xyz"}})
+      after
+        2_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "done", turn_id: "turn-xyz", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-1")
+
+    assert_push("history_loaded", %{})
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{"view" => "board"}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner, _pid}, 2_000
+
+    sref = push(socket, "steer_turn", %{"message" => "use the simpler approach"})
+    assert_reply(sref, :ok, %{})
+
+    assert_push("message_created", %{message: %{role: "user", content: "use the simpler approach"}})
+    assert_receive {:steered, [%{"type" => "text", "text" => "use the simpler approach"}]}, 2_000
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
+  end
+
+  test "steer_turn replies error when no turn is running" do
+    {:ok, %{messages: []}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert_push("history_loaded", %{messages: []})
+
+    ref = push(socket, "steer_turn", %{"message" => "hi"})
+    assert_reply(ref, :error, %{reason: "ActiveTurnNotSteerable"})
+  end
+
   test "project draft issue turn promotes the chat in place to the issue thread without leaving an orphan" do
     Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, _opts ->
       {:ok,

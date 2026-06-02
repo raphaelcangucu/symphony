@@ -130,6 +130,27 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
+  def handle_in("steer_turn", %{"message" => message}, socket) when is_binary(message) do
+    trimmed = String.trim(message)
+
+    cond do
+      trimmed == "" ->
+        {:reply, {:error, %{reason: "message is required"}}, socket}
+
+      socket.assigns[:turn_status] != :running or not is_pid(socket.assigns[:turn_pid]) or
+          is_nil(socket.assigns[:codex_turn_id]) ->
+        {:reply, {:error, %{reason: "ActiveTurnNotSteerable"}}, socket}
+
+      true ->
+        maybe_persist_steer(socket, trimmed)
+        send(socket.assigns.turn_pid, {:codex_steer, [%{"type" => "text", "text" => trimmed}], self()})
+        {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
+    end
+  end
+
+  def handle_in("steer_turn", _payload, socket),
+    do: {:reply, {:error, %{reason: "message is required"}}, socket}
+
   @impl true
   def handle_info({:assistant_history_loaded, payload}, socket) do
     push(socket, "history_loaded", payload)
@@ -159,7 +180,31 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:noreply, reset_turn(socket)}
   end
 
+  def handle_info({:steer_ok, _result}, socket), do: {:noreply, socket}
+
+  def handle_info({:steer_error, _error}, socket) do
+    push(socket, "steer_failed", %{
+      reason: "ActiveTurnNotSteerable",
+      message: socket.assigns[:last_steer_text] || ""
+    })
+
+    {:noreply, socket}
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp maybe_persist_steer(%Socket{assigns: %{thread: %{id: id} = thread}} = socket, text) when is_integer(id) do
+    case History.append_message(thread, %{role: "user", content: text, metadata: %{"steer" => true}}) do
+      {:ok, message} ->
+        push(socket, "message_created", %{message: History.message_payload(message)})
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp maybe_persist_steer(_socket, _text), do: :ok
 
   defp reset_turn(socket) do
     socket
