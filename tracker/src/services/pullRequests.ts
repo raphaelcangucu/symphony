@@ -76,6 +76,8 @@ interface BackendPullRequestDto {
   checksState?: string | null;
   base_behind_by?: number | null;
   baseBehindBy?: number | null;
+  repo?: string | null;
+  origin?: string | null;
   pipelines?: BackendPipelineDto[] | null;
   statuses?: BackendStatusDto[] | null;
   conversation?: BackendConversationDto[] | null;
@@ -141,6 +143,8 @@ export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
     title: dto.title ?? null,
     url: dto.url ?? null,
     state: normalizeState(dto.state),
+    repo: dto.repo ?? null,
+    origin: dto.origin === "manual" ? "manual" : "auto",
     rawState: dto.raw_state ?? dto.rawState ?? null,
     isDraft: dto.is_draft ?? dto.isDraft ?? false,
     merged: dto.merged ?? false,
@@ -175,6 +179,42 @@ export async function listPullRequests(projectSlug: string, identifier: string):
     supported: body.supported ?? false,
     available: body.available ?? false,
   };
+}
+
+export async function linkPullRequest(
+  projectSlug: string,
+  identifier: string,
+  url: string,
+): Promise<void> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!issueIdentifier) throw new Error("identifier is required");
+  if (!url.trim()) throw new Error("url is required");
+
+  await http.post(
+    trackerPath(
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/link`,
+    ),
+    { url: url.trim() },
+  );
+}
+
+export async function unlinkPullRequest(
+  projectSlug: string,
+  identifier: string,
+  url: string,
+): Promise<void> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!issueIdentifier) throw new Error("identifier is required");
+  if (!url.trim()) throw new Error("url is required");
+
+  await http.delete(
+    trackerPath(
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/link`,
+    ),
+    { data: { url: url.trim() } },
+  );
 }
 
 interface BackendFixEnvelope {

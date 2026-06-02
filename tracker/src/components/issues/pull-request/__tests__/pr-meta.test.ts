@@ -6,7 +6,7 @@ import { hasFailingChecks } from "../pr-meta";
 
 function pr(overrides: Partial<PullRequest>): PullRequest {
   return {
-    number: 1, title: null, url: null, state: "open", rawState: null, isDraft: false,
+    number: 1, title: null, url: null, state: "open", repo: null, origin: "auto", rawState: null, isDraft: false,
     merged: false, headRef: null, baseRef: null, author: null, createdAt: null,
     updatedAt: null, mergedAt: null, checksState: null, pipelines: [], statuses: [],
     conversation: [], baseBehindBy: null, ...overrides,

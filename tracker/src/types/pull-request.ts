@@ -48,11 +48,15 @@ export interface PullRequestConversationEntry {
   createdAt: string | null;
 }
 
+export type PullRequestOrigin = "auto" | "manual";
+
 export interface PullRequest {
   number: number;
   title: string | null;
   url: string | null;
   state: PullRequestState;
+  repo: string | null;
+  origin: PullRequestOrigin;
   rawState: string | null;
   isDraft: boolean;
   merged: boolean;

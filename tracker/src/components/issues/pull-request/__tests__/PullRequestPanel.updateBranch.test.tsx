@@ -15,6 +15,8 @@ function makePr(overrides: Partial<PullRequest> = {}): PullRequest {
     title: "x",
     url: "https://github.com/acme/app/pull/509",
     state: "open",
+    repo: "acme/app",
+    origin: "auto",
     rawState: "OPEN",
     isDraft: false,
     merged: false,

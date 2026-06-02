@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowDownToLine, ArrowRight, ExternalLink, GitBranch, GitMerge, ShieldCheck } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, ExternalLink, GitBranch, GitMerge, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
@@ -16,6 +16,7 @@ interface PullRequestPanelProps {
   projectSlug: string;
   issueIdentifier: string;
   onRefresh: () => void;
+  onRemove?: () => void;
 }
 
 export function PullRequestPanel({
@@ -23,6 +24,7 @@ export function PullRequestPanel({
   projectSlug,
   issueIdentifier,
   onRefresh,
+  onRemove,
 }: PullRequestPanelProps) {
   const [updating, setUpdating] = useState(false);
   const [merging, setMerging] = useState<"normal" | "force" | null>(null);
@@ -81,6 +83,16 @@ export function PullRequestPanel({
               {state.label}
             </span>
             <span className="font-mono text-xs text-muted-foreground">#{pr.number}</span>
+            {pr.repo ? (
+              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                {pr.repo}
+              </span>
+            ) : null}
+            {pr.origin === "manual" ? (
+              <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                linked
+              </span>
+            ) : null}
           </div>
           <h3 className="text-sm font-semibold leading-snug">{pr.title ?? `Pull request #${pr.number}`}</h3>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -164,6 +176,16 @@ export function PullRequestPanel({
               <ExternalLink className="h-3.5 w-3.5" />
               Open
             </a>
+          ) : null}
+          {onRemove ? (
+            <button
+              type="button"
+              onClick={onRemove}
+              title="Unlink this pull request"
+              className="inline-flex items-center justify-center rounded-md border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           ) : null}
         </div>
       </header>

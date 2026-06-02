@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 import { hasFailingChecks } from "@/components/issues/pull-request/pr-meta";
 import { PullRequestPanel } from "@/components/issues/pull-request/PullRequestPanel";
-import { requestPullRequestFix } from "@/services/pullRequests";
+import { linkPullRequest, requestPullRequestFix, unlinkPullRequest } from "@/services/pullRequests";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
 import type { PullRequest } from "@/types/pull-request";
@@ -31,6 +31,8 @@ export function PullRequestTab({
   onRefresh,
 }: PullRequestTabProps) {
   const [fixing, setFixing] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linking, setLinking] = useState(false);
   const canFix = pullRequests.some(hasFailingChecks);
 
   async function handleFix() {
@@ -46,6 +48,52 @@ export function PullRequestTab({
       setFixing(false);
     }
   }
+
+  async function handleLink() {
+    if (linking || !linkUrl.trim()) return;
+    setLinking(true);
+    try {
+      await linkPullRequest(projectSlug, issue.identifier, linkUrl);
+      setLinkUrl("");
+      toast.success("Pull request linked.");
+      onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not link the pull request.");
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  async function handleRemove(url: string | null) {
+    if (!url) return;
+    try {
+      await unlinkPullRequest(projectSlug, issue.identifier, url);
+      toast.success("Pull request unlinked.");
+      onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not unlink the pull request.");
+    }
+  }
+
+  const linkRow = (
+    <div className="flex items-center gap-2">
+      <input
+        type="url"
+        value={linkUrl}
+        onChange={(event) => setLinkUrl(event.target.value)}
+        placeholder="https://github.com/owner/repo/pull/123"
+        className="flex-1 rounded-md border px-2 py-1 text-xs"
+      />
+      <button
+        type="button"
+        onClick={() => void handleLink()}
+        disabled={linking || !linkUrl.trim()}
+        className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-60"
+      >
+        {linking ? "Linking…" : "Link PR"}
+      </button>
+    </div>
+  );
 
   if (!supported) {
     return (
@@ -85,10 +133,14 @@ export function PullRequestTab({
 
   if (pullRequests.length === 0) {
     return (
-      <EmptyState>
-        No pull request linked to this issue yet. Once an agent opens a PR that references{" "}
-        <span className="font-mono">{issue.identifier}</span> (or uses its linked branch), it will appear here.
-      </EmptyState>
+      <div className="space-y-4">
+        <EmptyState>
+          No pull request linked to this issue yet. Once an agent opens a PR that references{" "}
+          <span className="font-mono">{issue.identifier}</span> (or uses its linked branch), it will appear here.
+          You can also link one manually below (e.g. a PR in another repository).
+        </EmptyState>
+        {linkRow}
+      </div>
     );
   }
 
@@ -120,13 +172,15 @@ export function PullRequestTab({
           </button>
         </div>
       </div>
+      {linkRow}
       {pullRequests.map((pr) => (
         <PullRequestPanel
-          key={pr.number}
+          key={pr.url ?? `${pr.repo}#${pr.number}`}
           pullRequest={pr}
           projectSlug={projectSlug}
           issueIdentifier={issue.identifier}
           onRefresh={onRefresh}
+          onRemove={pr.origin === "manual" ? () => void handleRemove(pr.url) : undefined}
         />
       ))}
     </div>
