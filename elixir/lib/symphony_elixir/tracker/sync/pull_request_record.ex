@@ -8,7 +8,8 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
 
   @type t :: %__MODULE__{}
 
-  @states ~w(open closed merged)
+  @states ~w(open closed merged draft unknown)
+  @origins ~w(auto manual)
 
   schema "tracker_pull_requests" do
     field(:remote_id, :string)
@@ -16,6 +17,8 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
     field(:url, :string)
     field(:title, :string)
     field(:state, :string)
+    field(:repo, :string)
+    field(:origin, :string, default: "auto")
     field(:last_synced_at, :utc_datetime_usec)
 
     belongs_to(:issue, IssueRecord)
@@ -26,9 +29,10 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(record, attrs) do
     record
-    |> cast(attrs, [:issue_id, :remote_id, :number, :url, :title, :state, :last_synced_at])
+    |> cast(attrs, [:issue_id, :remote_id, :number, :url, :title, :state, :repo, :origin, :last_synced_at])
     |> validate_required([:issue_id, :remote_id, :state])
     |> validate_inclusion(:state, @states)
+    |> validate_inclusion(:origin, @origins)
     |> unique_constraint([:issue_id, :remote_id])
   end
 end
