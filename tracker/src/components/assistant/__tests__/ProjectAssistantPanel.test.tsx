@@ -166,6 +166,27 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() => expect(screen.queryByText("queued one")).toBeNull());
   });
 
+  it("steers a running turn when /infer is submitted, and falls back to queue on steer_failed", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+
+    fireEvent.change(textarea, { target: { value: "do work" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "do work" })),
+    );
+    channelHandlers["assistant_delta"]({ delta: "..." });
+
+    fireEvent.change(textarea, { target: { value: "/infer prefer the simpler fix" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("steer_turn", expect.objectContaining({ message: "prefer the simpler fix" })),
+    );
+
+    channelHandlers["steer_failed"]({ reason: "ActiveTurnNotSteerable", message: "prefer the simpler fix" });
+    expect(await screen.findByText("prefer the simpler fix")).toBeTruthy();
+  });
+
   it("joins an issue-scoped assistant topic when an issue identifier is provided", () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
 

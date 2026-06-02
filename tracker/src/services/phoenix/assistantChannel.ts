@@ -18,6 +18,7 @@ export interface AssistantChannelHandlers {
   onAssistantError: (message: string) => void;
   onAssistantDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
   onAssistantIssueCreated?: (payload: AssistantIssueCreatedPayload) => void;
+  onSteerFailed?: (payload: { reason: string; message: string }) => void;
 }
 
 export interface AssistantDocumentChangedPayload {
@@ -130,6 +131,14 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     if (!identifier) return;
 
     handlers.onAssistantIssueCreated?.({ identifier, threadId: normalizeThreadId(created.threadId ?? created.thread_id) });
+  });
+
+  channel.on("steer_failed", (payload) => {
+    const data = payload as { reason?: string | null; message?: string | null };
+    handlers.onSteerFailed?.({
+      reason: data.reason ?? "steer_failed",
+      message: data.message ?? "",
+    });
   });
 }
 

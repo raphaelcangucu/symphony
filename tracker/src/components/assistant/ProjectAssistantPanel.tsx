@@ -209,6 +209,21 @@ export function ProjectAssistantPanel({
       },
       onAssistantDocumentChanged: onDocumentChanged,
       onAssistantIssueCreated: onIssueCreated,
+      onSteerFailed: ({ message }) => {
+        if (!message) return;
+        setQueued((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            payload: {
+              kind: "message",
+              message,
+              settings: defaultComposerSettings(catalogRef.current ?? fallbackCodexCatalog()),
+              attachments: [],
+            },
+          },
+        ]);
+      },
     });
 
     const joinPush = channel.join();
@@ -352,20 +367,36 @@ export function ProjectAssistantPanel({
     [view],
   );
 
+  const steerTurn = useCallback((submit: AssistantComposerSubmit) => {
+    const channel = channelRef.current;
+    const text = submit.message.trim();
+    if (!channel || !text) return;
+    channel.push("steer_turn", { message: text });
+  }, []);
+
   const sendMessage = useCallback(
     (submit: AssistantComposerSubmit) => {
       const trimmed = submit.message.trim();
       const hasAttachments = submit.attachments.length > 0;
       if (!trimmed && !hasAttachments) return;
 
+      if (submit.kind === "infer") {
+        if (isRunning) {
+          steerTurn(submit);
+        } else {
+          dispatchSend({ ...submit, kind: "message" });
+        }
+        return;
+      }
+
       if (isRunning) {
-        setQueued((current) => [...current, { id: crypto.randomUUID(), payload: submit }]);
+        setQueued((current) => [...current, { id: crypto.randomUUID(), payload: { ...submit, kind: "message" } }]);
         return;
       }
 
       dispatchSend(submit);
     },
-    [dispatchSend, isRunning],
+    [dispatchSend, isRunning, steerTurn],
   );
 
   const wasRunningRef = useRef(false);
