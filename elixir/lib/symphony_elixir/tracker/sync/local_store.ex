@@ -71,6 +71,49 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     :ok
   end
 
+  @doc """
+  Links a pull request to an issue from a manual user action (e.g. pasting a
+  cross-repo PR URL). Uses the URL as `remote_id` so the link survives even when
+  GitHub cannot be queried (no App access / 404). Idempotent on `(issue_id, url)`.
+  """
+  @spec link_manual_pull_request(IssueRecord.t(), map()) ::
+          {:ok, PullRequestRecord.t()} | {:error, Ecto.Changeset.t()}
+  def link_manual_pull_request(%IssueRecord{} = issue, %{url: url} = attrs) when is_binary(url) do
+    base = %{
+      issue_id: issue.id,
+      remote_id: url,
+      url: url,
+      number: Map.get(attrs, :number),
+      repo: Map.get(attrs, :repo),
+      title: Map.get(attrs, :title) || manual_title(Map.get(attrs, :number)),
+      state: Map.get(attrs, :state) || "unknown",
+      origin: "manual",
+      last_synced_at: DateTime.utc_now()
+    }
+
+    case Repo.get_by(PullRequestRecord, issue_id: issue.id, remote_id: url) do
+      nil -> %PullRequestRecord{}
+      %PullRequestRecord{} = existing -> existing
+    end
+    |> PullRequestRecord.changeset(base)
+    |> Repo.insert_or_update()
+  end
+
+  @doc """
+  Removes a pull request association (by `url`) from an issue.
+  """
+  @spec unlink_pull_request(IssueRecord.t(), String.t()) :: :ok
+  def unlink_pull_request(%IssueRecord{} = issue, url) when is_binary(url) do
+    Repo.delete_all(
+      from(pr in PullRequestRecord, where: pr.issue_id == ^issue.id and pr.remote_id == ^url)
+    )
+
+    :ok
+  end
+
+  defp manual_title(number) when is_integer(number), do: "##{number}"
+  defp manual_title(_number), do: nil
+
   # -- issue insert/update -----------------------------------------------------
 
   defp insert_issue!(project, remote, status_id) do

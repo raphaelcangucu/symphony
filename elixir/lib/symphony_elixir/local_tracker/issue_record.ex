@@ -42,6 +42,7 @@ defmodule SymphonyElixir.LocalTracker.IssueRecord do
     belongs_to(:project, Project)
     belongs_to(:status, WorkflowStatus)
     has_many(:comments, Comment, foreign_key: :issue_id)
+    has_many(:pull_requests, SymphonyElixir.Tracker.Sync.PullRequestRecord, foreign_key: :issue_id)
     has_many(:source_relations, IssueRelation, foreign_key: :source_issue_id)
     has_many(:target_relations, IssueRelation, foreign_key: :target_issue_id)
     many_to_many(:labels, Label, join_through: IssueLabel, join_keys: [issue_id: :id, label_id: :id])

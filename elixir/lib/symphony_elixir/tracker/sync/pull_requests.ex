@@ -13,7 +13,15 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequests do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.PullRequestRecord
 
-  @type pr :: %{number: integer() | nil, url: String.t() | nil, title: String.t() | nil, state: String.t()}
+  @type pr :: %{
+          remote_id: String.t(),
+          number: integer() | nil,
+          url: String.t() | nil,
+          title: String.t() | nil,
+          state: String.t(),
+          repo: String.t() | nil,
+          origin: String.t()
+        }
 
   @spec for_issue(String.t(), String.t()) :: {:ok, [pr()]}
   def for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
@@ -33,6 +41,14 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequests do
   end
 
   defp to_map(%PullRequestRecord{} = pr) do
-    %{remote_id: pr.remote_id, number: pr.number, url: pr.url, title: pr.title, state: pr.state}
+    %{
+      remote_id: pr.remote_id,
+      number: pr.number,
+      url: pr.url,
+      title: pr.title,
+      state: pr.state,
+      repo: pr.repo,
+      origin: pr.origin
+    }
   end
 end
