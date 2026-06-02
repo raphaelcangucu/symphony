@@ -19,6 +19,9 @@ export interface AssistantChannelHandlers {
   onAssistantDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
   onAssistantIssueCreated?: (payload: AssistantIssueCreatedPayload) => void;
   onSteerFailed?: (payload: { reason: string; message: string }) => void;
+  onBtwDelta?: (payload: { btwId: string; delta: string }) => void;
+  onBtwCompleted?: (payload: { btwId: string; message: string }) => void;
+  onBtwError?: (payload: { btwId: string; message: string }) => void;
 }
 
 export interface AssistantDocumentChangedPayload {
@@ -139,6 +142,21 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
       reason: data.reason ?? "steer_failed",
       message: data.message ?? "",
     });
+  });
+
+  channel.on("btw_delta", (payload) => {
+    const data = payload as { btw_id?: string | null; delta?: string | null };
+    if (data.btw_id && typeof data.delta === "string") handlers.onBtwDelta?.({ btwId: data.btw_id, delta: data.delta });
+  });
+
+  channel.on("btw_completed", (payload) => {
+    const data = payload as { btw_id?: string | null; message?: string | null };
+    if (data.btw_id) handlers.onBtwCompleted?.({ btwId: data.btw_id, message: data.message ?? "" });
+  });
+
+  channel.on("btw_error", (payload) => {
+    const data = payload as { btw_id?: string | null; message?: string | null };
+    if (data.btw_id) handlers.onBtwError?.({ btwId: data.btw_id, message: data.message ?? "Side question failed" });
   });
 }
 
