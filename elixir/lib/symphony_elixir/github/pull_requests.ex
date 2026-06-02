@@ -30,6 +30,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   title
   url
   state
+  repository { nameWithOwner }
   isDraft
   merged
   mergedAt
@@ -163,21 +164,25 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   end
 
   defp resolve_from_issue(issue, owner, name, opts) do
-    case extract_closing_prs(issue) do
-      [_ | _] = prs -> {:ok, sort_prs(prs)}
-      [] -> resolve_without_closing_refs(issue, owner, name, opts)
-    end
-  end
-
-  defp resolve_without_closing_refs(issue, owner, name, opts) do
+    closing = extract_closing_prs(issue)
     cross_referenced = extract_cross_referenced_prs(issue)
 
-    case fetch_by_branch(extract_branch(issue), owner, name, opts) do
-      {:ok, [_ | _] = branch_prs} -> {:ok, branch_prs}
-      {:ok, []} -> {:ok, sort_prs(cross_referenced)}
-      {:error, _reason} when cross_referenced != [] -> {:ok, sort_prs(cross_referenced)}
-      {:error, reason} -> {:error, reason}
-    end
+    branch_prs =
+      case fetch_by_branch(extract_branch(issue), owner, name, opts) do
+        {:ok, prs} -> prs
+        {:error, _reason} -> []
+      end
+
+    merged =
+      (closing ++ branch_prs ++ cross_referenced)
+      |> dedupe_by_url()
+      |> sort_prs()
+
+    {:ok, merged}
+  end
+
+  defp dedupe_by_url(prs) do
+    Enum.uniq_by(prs, fn pr -> pr.url || {pr.repo, pr.number} end)
   end
 
   defp extract_closing_prs(issue) do
@@ -186,7 +191,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
     |> List.wrap()
     |> Enum.map(&parse_pr_node/1)
     |> Enum.reject(&is_nil/1)
-    |> Enum.uniq_by(& &1.number)
+    |> dedupe_by_url()
   end
 
   defp extract_cross_referenced_prs(issue) do
@@ -196,15 +201,10 @@ defmodule SymphonyElixir.GitHub.PullRequests do
     |> Enum.map(&cross_referenced_pr_node/1)
     |> Enum.map(&parse_pr_node/1)
     |> Enum.reject(&is_nil/1)
-    |> Enum.uniq_by(& &1.number)
+    |> dedupe_by_url()
   end
 
-  defp cross_referenced_pr_node(%{
-         "isCrossRepository" => false,
-         "source" => %{"__typename" => "PullRequest"} = pr
-       }),
-       do: pr
-
+  defp cross_referenced_pr_node(%{"source" => %{"__typename" => "PullRequest"} = pr}), do: pr
   defp cross_referenced_pr_node(_event), do: nil
 
   defp fetch_by_branch(nil, _owner, _name, _opts), do: {:ok, []}
@@ -252,6 +252,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       head_ref: string_or_nil(Map.get(node, "headRefName")),
       base_ref: string_or_nil(Map.get(node, "baseRefName")),
       author: extract_author(node),
+      repo: extract_repo(node),
       created_at: string_or_nil(Map.get(node, "createdAt")),
       updated_at: string_or_nil(Map.get(node, "updatedAt")),
       merged_at: string_or_nil(Map.get(node, "mergedAt")),
@@ -445,6 +446,22 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       _ -> nil
     end
   end
+
+  defp extract_repo(node) do
+    case get_in_safe(node, ["repository", "nameWithOwner"]) do
+      repo when is_binary(repo) and repo != "" -> repo
+      _ -> repo_from_url(string_or_nil(Map.get(node, "url")))
+    end
+  end
+
+  defp repo_from_url(url) when is_binary(url) do
+    case Regex.run(~r{github\.com/([^/]+/[^/]+)/pull/\d+}, url) do
+      [_, repo] -> repo
+      _ -> nil
+    end
+  end
+
+  defp repo_from_url(_url), do: nil
 
   defp extract_branch(issue) do
     case get_in_safe(issue, ["linkedBranches", "nodes"]) do

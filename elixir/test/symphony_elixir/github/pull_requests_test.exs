@@ -330,7 +330,7 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
                )
     end
 
-    test "ignores cross-repository cross-references and dedups by number" do
+    test "includes cross-repository cross-references and dedups by url" do
       request_fun = fn payload, _headers ->
         cond do
           payload["query"] =~ "SymphonyTrackerIssuePullRequests" ->
@@ -350,7 +350,9 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
                              "source" =>
                                Map.merge(pr_node(%{}), %{
                                  "__typename" => "PullRequest",
-                                 "number" => 999
+                                 "number" => 999,
+                                 "url" => "https://github.com/other/repo/pull/999",
+                                 "repository" => %{"nameWithOwner" => "other/repo"}
                                })
                            },
                            %{
@@ -371,11 +373,15 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
         end
       end
 
-      assert {:ok, [%{number: 503}]} =
+      assert {:ok, prs} =
                PullRequests.for_issue("acme/app", "508",
                  client_module: TestClient,
                  request_fun: request_fun
                )
+
+      numbers = prs |> Enum.map(& &1.number) |> Enum.sort()
+      assert numbers == [503, 999]
+      assert Enum.find(prs, &(&1.number == 999)).repo == "other/repo"
     end
 
     test "returns empty list when issue is missing" do
