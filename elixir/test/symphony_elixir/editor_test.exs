@@ -73,6 +73,37 @@ defmodule SymphonyElixir.EditorTest do
 
       assert Editor.editor_target("project", "MAC-REPO") == {:ok, expected_url}
     end
+
+    test "opens a multi-root .code-workspace file when front and back exist" do
+      load_workflow_with_front_matter(editor_front_matter())
+      put_status_fun(fn -> :ready end)
+
+      workspace = SymphonyElixir.Workspace.path_for_issue("MAC-MULTI")
+      front = Path.join(workspace, "front")
+      back = Path.join(workspace, "back")
+      File.mkdir_p!(front)
+      File.mkdir_p!(back)
+      File.write!(Path.join(front, "package.json"), "{}")
+      File.write!(Path.join(back, "composer.json"), "{}")
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      workspace_file = Path.join(workspace, ".symphony/editor.code-workspace")
+
+      expected_url =
+        SymphonyElixir.Config.editor_base_url() <>
+          "/?workspace=" <> URI.encode_www_form(workspace_file)
+
+      assert Editor.editor_target("project", "MAC-MULTI") == {:ok, expected_url}
+      assert File.regular?(workspace_file)
+
+      {:ok, contents} = File.read(workspace_file)
+      decoded = Jason.decode!(contents)
+
+      assert Enum.sort_by(decoded["folders"], & &1["name"]) == [
+               %{"name" => "back", "path" => back},
+               %{"name" => "front", "path" => front}
+             ]
+    end
   end
 
   defp editor_front_matter do

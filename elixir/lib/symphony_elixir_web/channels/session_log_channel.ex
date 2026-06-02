@@ -29,7 +29,7 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
 
       send(self(), :poll)
 
-      {:ok, %{lines: lines, offset: offset, path: path}, socket}
+      {:ok, %{entries: lines, offset: offset, path: path}, socket}
     else
       :error -> {:error, %{reason: "session_log_unavailable"}}
       {:error, reason} -> {:error, %{reason: error_reason(reason)}}
@@ -43,7 +43,7 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     socket =
       case SessionLog.read_from(path, offset) do
         {:ok, lines, new_offset} when lines != [] ->
-          push(socket, "lines", %{lines: lines, offset: new_offset})
+          push(socket, "entries", %{entries: lines, offset: new_offset})
           assign(socket, :offset, new_offset)
 
         {:ok, _lines, new_offset} ->

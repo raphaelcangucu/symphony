@@ -1,13 +1,12 @@
 defmodule SymphonyElixir.Codex.SessionLog do
   @moduledoc """
-  Reads and formats Codex rollout JSONL session logs for live UI streaming.
+  Reads and parses Codex rollout JSONL session logs for live UI streaming.
 
   Rollout files live under `~/.codex/sessions/**/rollout-*.jsonl`. The workspace
   sidecar (`.symphony/codex-session.json`) holds the active `thread_id`.
   """
 
   @default_tail_bytes 65_536
-  @max_line_bytes 1_048_576
 
   @spec resolve_rollout_path(Path.t(), keyword()) :: {:ok, Path.t()} | :error
   def resolve_rollout_path(workspace, opts \\ []) when is_binary(workspace) do
@@ -19,7 +18,7 @@ defmodule SymphonyElixir.Codex.SessionLog do
     end
   end
 
-  @spec tail(Path.t(), keyword()) :: {:ok, [String.t()], non_neg_integer()}
+  @spec tail(Path.t(), keyword()) :: {:ok, [map()], non_neg_integer()}
   def tail(path, opts \\ []) when is_binary(path) do
     max_bytes = Keyword.get(opts, :max_bytes, @default_tail_bytes)
 
@@ -33,7 +32,7 @@ defmodule SymphonyElixir.Codex.SessionLog do
     end
   end
 
-  @spec read_from(Path.t(), non_neg_integer()) :: {:ok, [String.t()], non_neg_integer()} | {:error, term()}
+  @spec read_from(Path.t(), non_neg_integer()) :: {:ok, [map()], non_neg_integer()} | {:error, term()}
   def read_from(path, offset) when is_binary(path) and is_integer(offset) and offset >= 0 do
     case File.stat(path) do
       {:ok, %File.Stat{size: size}} when size > offset ->
@@ -47,21 +46,34 @@ defmodule SymphonyElixir.Codex.SessionLog do
     end
   end
 
-  @spec format_line(String.t()) :: String.t() | nil
-  def format_line(line) when is_binary(line) do
+  @doc "Parses one rollout JSONL line into a UI-facing entry map."
+  @spec parse_line(String.t()) :: map() | nil
+  def parse_line(line) when is_binary(line) do
     trimmed = String.trim(line)
 
     if trimmed == "" do
       nil
     else
       case Jason.decode(trimmed) do
-        {:ok, decoded} -> format_decoded(decoded)
-        {:error, _} -> trim_display(trimmed)
+        {:ok, decoded} -> parse_decoded(decoded)
+        {:error, _} -> nil
       end
     end
   end
 
-  def format_line(_line), do: nil
+  def parse_line(_line), do: nil
+
+  @doc false
+  @spec format_line(String.t()) :: String.t() | nil
+  def format_line(line), do: line |> parse_line() |> entry_summary()
+
+  defp entry_summary(%{"title" => title, "body" => body})
+       when is_binary(title) and is_binary(body) and body != "" do
+    "#{title}: #{trim_display(body, 240)}"
+  end
+
+  defp entry_summary(%{"title" => title}) when is_binary(title), do: title
+  defp entry_summary(_entry), do: nil
 
   defp rollout_path_for_thread(thread_id, opts) when is_binary(thread_id) do
     sessions_dir(opts)
@@ -84,7 +96,7 @@ defmodule SymphonyElixir.Codex.SessionLog do
         try do
           :file.pread(io, offset, size - offset)
           |> case do
-            {:ok, binary} -> split_lines(binary, offset, size)
+            {:ok, binary} -> split_lines(binary, size)
             {:error, reason} -> {:error, reason}
           end
         after
@@ -96,76 +108,216 @@ defmodule SymphonyElixir.Codex.SessionLog do
     end
   end
 
-  defp split_lines(binary, offset, size) when is_binary(binary) do
-    lines =
+  defp split_lines(binary, size) when is_binary(binary) do
+    entries =
       binary
       |> String.split("\n", trim: false)
-      |> Enum.map(&format_line/1)
+      |> Enum.map(&parse_line/1)
       |> Enum.reject(&is_nil/1)
 
-    {:ok, lines, size}
+    {:ok, entries, size}
   end
 
-  defp format_decoded(%{"type" => "session_meta", "payload" => payload}) when is_map(payload) do
+  defp parse_decoded(%{"type" => "session_meta", "payload" => payload}) when is_map(payload) do
     cwd = Map.get(payload, "cwd") || Map.get(payload, "workspace")
-    "session started cwd=#{cwd}"
+
+    entry("meta", "Session started", cwd, language: "text", collapsed: false)
   end
 
-  defp format_decoded(%{"type" => "turn_context"}) do
-    "turn context updated"
+  defp parse_decoded(%{"type" => "turn_context"}) do
+    entry("meta", "Turn context updated", nil, collapsed: true)
   end
 
-  defp format_decoded(%{"type" => "event_msg", "payload" => payload}) when is_map(payload) do
-    type = Map.get(payload, "type") || Map.get(payload, "event")
-    message = Map.get(payload, "message") || Map.get(payload, "text")
-    prefix = if is_binary(type), do: type, else: "event"
+  defp parse_decoded(%{"type" => "event_msg", "payload" => payload}) when is_map(payload) do
+    parse_event_msg(payload)
+  end
 
-    case message do
-      msg when is_binary(msg) and msg != "" -> "#{prefix}: #{trim_display(msg)}"
-      _ -> prefix
+  defp parse_decoded(%{"type" => "response_item", "payload" => payload}) when is_map(payload) do
+    parse_response_item(payload)
+  end
+
+  defp parse_decoded(%{"type" => type}) when is_binary(type) do
+    entry("event", humanize_type(type), nil)
+  end
+
+  defp parse_decoded(_decoded), do: entry("event", "Log entry", nil)
+
+  defp parse_event_msg(%{"type" => "task_started"} = payload) do
+    model = Map.get(payload, "model_context_window")
+
+    body =
+      case model do
+        n when is_integer(n) -> "Context window: #{n} tokens"
+        _ -> nil
+      end
+
+    entry("event", "Task started", body, collapsed: false)
+  end
+
+  defp parse_event_msg(%{"type" => type, "message" => message}) when is_binary(message) and message != "" do
+    entry("event", humanize_type(type), message, collapsed: String.length(message) > 280)
+  end
+
+  defp parse_event_msg(%{"type" => type}) when is_binary(type) do
+    entry("event", humanize_type(type), nil)
+  end
+
+  defp parse_event_msg(_payload), do: nil
+
+  defp parse_response_item(%{"type" => "message", "role" => role, "content" => content}) when is_list(content) do
+    body = content_text(content)
+
+    cond do
+      role == "developer" ->
+        entry("system", "System instructions", body, collapsed: true)
+
+      role == "user" and byte_size(body || "") > 2_000 ->
+        entry("user", "Initial prompt", body, collapsed: true)
+
+      role == "user" ->
+        entry("user", "You", body, collapsed: false)
+
+      role == "assistant" ->
+        entry("assistant", "Codex", body, language: "markdown", collapsed: false)
+
+      true ->
+        entry("message", humanize_type(role || "message"), body, collapsed: byte_size(body || "") > 600)
     end
   end
 
-  defp format_decoded(%{"type" => "response_item", "payload" => payload}) when is_map(payload) do
-    type = Map.get(payload, "type") || "item"
-    role = Map.get(payload, "role")
+  defp parse_response_item(%{"type" => "reasoning"}) do
+    entry("reasoning", "Reasoning", "The model worked through the next step internally.", collapsed: true)
+  end
 
-    summary =
+  defp parse_response_item(%{"type" => "function_call", "name" => name} = payload) when is_binary(name) do
+    args = Map.get(payload, "arguments")
+
+    entry("tool_call", name, format_tool_input(args),
+      language: tool_language(name, args),
+      status: "running",
+      collapsed: false
+    )
+  end
+
+  defp parse_response_item(%{"type" => "function_call_output", "output" => output}) when is_binary(output) do
+    entry("tool_result", "Command output", output, language: "text", status: "completed", collapsed: output_long?(output))
+  end
+
+  defp parse_response_item(%{"type" => "custom_tool_call", "name" => name} = payload) when is_binary(name) do
+    input = Map.get(payload, "input")
+    status = Map.get(payload, "status")
+
+    entry("tool_call", name, format_tool_input(input),
+      language: tool_language(name, input),
+      status: normalize_status(status),
+      collapsed: false
+    )
+  end
+
+  defp parse_response_item(%{"type" => "custom_tool_call_output", "output" => output}) when is_binary(output) do
+    entry("tool_result", "Tool output", output, language: "text", status: "completed", collapsed: output_long?(output))
+  end
+
+  defp parse_response_item(%{"type" => type} = payload) when is_binary(type) do
+    body =
       payload
-      |> Map.get("content", [])
-      |> content_summary()
+      |> Map.drop(["type"])
+      |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" or value == %{} or value == [] end)
+      |> case do
+        [] -> nil
+        fields -> inspect(fields, pretty: true, limit: 12)
+      end
 
-    prefix =
-      [type, role]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.join("/")
-
-    if summary == "" do
-      prefix
-    else
-      "#{prefix}: #{summary}"
-    end
+    entry("event", humanize_type(type), body, collapsed: true)
   end
 
-  defp format_decoded(%{"type" => type}) when is_binary(type), do: type
-  defp format_decoded(_decoded), do: "log entry"
+  defp parse_response_item(_payload), do: nil
 
-  defp content_summary(content) when is_list(content) do
+  defp entry(kind, title, body, opts \\ []) do
+    body = if is_binary(body), do: String.trim(body), else: nil
+
+    %{
+      "kind" => kind,
+      "title" => title,
+      "body" => if(body in [nil, ""], do: nil, else: body),
+      "language" => Keyword.get(opts, :language, language_for(body)),
+      "status" => Keyword.get(opts, :status),
+      "collapsed" => Keyword.get(opts, :collapsed, output_long?(body))
+    }
+  end
+
+  defp content_text(content) when is_list(content) do
     content
-    |> Enum.find_value("", fn
-      %{"type" => "input_text", "text" => text} when is_binary(text) -> trim_display(text)
-      %{"type" => "output_text", "text" => text} when is_binary(text) -> trim_display(text)
-      %{"text" => text} when is_binary(text) -> trim_display(text)
+    |> Enum.map(fn
+      %{"type" => "input_text", "text" => text} when is_binary(text) -> text
+      %{"type" => "output_text", "text" => text} when is_binary(text) -> text
+      %{"text" => text} when is_binary(text) -> text
       _ -> nil
     end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n\n")
+    |> case do
+      "" -> nil
+      joined -> joined
+    end
   end
 
-  defp content_summary(_content), do: ""
+  defp content_text(_content), do: nil
 
-  defp trim_display(text) when is_binary(text) do
+  defp format_tool_input(input) when is_binary(input) do
+    input =
+      case Jason.decode(input) do
+        {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
+        {:error, _} -> input
+      end
+
+    String.trim(input)
+  end
+
+  defp format_tool_input(input) when is_map(input) or is_list(input), do: Jason.encode!(input, pretty: true)
+  defp format_tool_input(input) when not is_nil(input), do: to_string(input)
+  defp format_tool_input(_input), do: nil
+
+  defp tool_language("exec_command", arguments) when is_binary(arguments) do
+    case Jason.decode(arguments) do
+      {:ok, %{"cmd" => cmd}} when is_binary(cmd) -> "bash"
+      _ -> "json"
+    end
+  end
+
+  defp tool_language("apply_patch", _input), do: "diff"
+  defp tool_language(_name, arguments) when is_binary(arguments), do: "json"
+  defp tool_language(_name, _input), do: "text"
+
+  defp language_for(body) when is_binary(body) do
+    cond do
+      String.starts_with?(body, "```") -> "markdown"
+      String.contains?(body, "\n## ") -> "markdown"
+      true -> "text"
+    end
+  end
+
+  defp language_for(_body), do: "text"
+
+  defp normalize_status("completed"), do: "completed"
+  defp normalize_status("failed"), do: "failed"
+  defp normalize_status("in_progress"), do: "running"
+  defp normalize_status(_status), do: nil
+
+  defp output_long?(body) when is_binary(body), do: byte_size(body) > 700
+  defp output_long?(_body), do: false
+
+  defp humanize_type(type) when is_binary(type) do
+    type
+    |> String.replace("_", " ")
+    |> String.split()
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
+
+  defp trim_display(text, max) when is_binary(text) and is_integer(max) do
     text
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
-    |> String.slice(0, 240)
+    |> String.slice(0, max)
   end
 end

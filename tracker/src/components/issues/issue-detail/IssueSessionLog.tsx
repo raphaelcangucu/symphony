@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
+import { SessionLogEntryCard } from "@/components/issues/issue-detail/SessionLogEntryCard";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import { sessionLogTopic } from "@/services/session-log";
+import { payloadEntries, type SessionLogEntry } from "@/types/session-log";
 
 interface IssueSessionLogProps {
   projectSlug: string;
@@ -10,16 +12,16 @@ interface IssueSessionLogProps {
 }
 
 export function IssueSessionLog({ projectSlug, issueIdentifier, enabled }: IssueSessionLogProps) {
-  const [lines, setLines] = useState<string[]>([]);
+  const [entries, setEntries] = useState<SessionLogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
-  const containerRef = useRef<HTMLPreElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const project = projectSlug.trim();
     const identifier = issueIdentifier.trim();
     if (!enabled || !project || !identifier) {
-      setLines([]);
+      setEntries([]);
       setConnected(false);
       return undefined;
     }
@@ -30,10 +32,10 @@ export function IssueSessionLog({ projectSlug, issueIdentifier, enabled }: Issue
     const channel = socket.channel(sessionLogTopic(project, identifier), { project_slug: project });
     let cancelled = false;
 
-    channel.on("lines", (payload) => {
-      const next = payloadLines(payload);
+    channel.on("entries", (payload) => {
+      const next = payloadEntries(payload);
       if (next.length === 0) return;
-      setLines((current) => [...current, ...next]);
+      setEntries((current) => [...current, ...next]);
     });
 
     channel
@@ -42,7 +44,7 @@ export function IssueSessionLog({ projectSlug, issueIdentifier, enabled }: Issue
         if (cancelled) return;
         setConnected(true);
         setError(null);
-        setLines(payloadLines(payload));
+        setEntries(payloadEntries(payload));
       })
       .receive("error", (reason) => {
         if (cancelled) return;
@@ -66,7 +68,7 @@ export function IssueSessionLog({ projectSlug, issueIdentifier, enabled }: Issue
     const container = containerRef.current;
     if (!container) return;
     container.scrollTop = container.scrollHeight;
-  }, [lines]);
+  }, [entries]);
 
   if (!enabled) {
     return null;
@@ -81,23 +83,20 @@ export function IssueSessionLog({ projectSlug, issueIdentifier, enabled }: Issue
       {error ? (
         <p className="mt-3 text-sm text-destructive">{error}</p>
       ) : (
-        <pre
+        <div
           ref={containerRef}
           aria-label={`Session log for ${issueIdentifier}`}
-          className="mt-3 max-h-[420px] overflow-auto rounded-lg bg-slate-950 p-3 font-mono text-[11px] leading-5 text-slate-100"
+          className="mt-3 max-h-[520px] space-y-3 overflow-auto rounded-lg bg-muted/20 p-3"
         >
-          {lines.length > 0 ? lines.join("\n") : "Waiting for session output…"}
-        </pre>
+          {entries.length > 0 ? (
+            entries.map((entry, index) => <SessionLogEntryCard entry={entry} key={`${entry.kind}-${entry.title}-${index}`} />)
+          ) : (
+            <p className="px-2 py-6 text-center text-sm text-muted-foreground">Waiting for session output…</p>
+          )}
+        </div>
       )}
     </section>
   );
-}
-
-function payloadLines(payload: unknown): string[] {
-  if (typeof payload !== "object" || payload === null) return [];
-  const lines = (payload as Record<string, unknown>).lines;
-  if (!Array.isArray(lines)) return [];
-  return lines.filter((line): line is string => typeof line === "string" && line.trim() !== "");
 }
 
 function formatJoinError(reason: unknown): string {

@@ -88,7 +88,14 @@ defmodule SymphonyElixir.Editor do
   end
 
   defp build_url(path) do
-    "#{Config.editor_base_url()}/?folder=#{URI.encode_www_form(path)}"
+    param =
+      if String.ends_with?(path, ".code-workspace") do
+        "workspace"
+      else
+        "folder"
+      end
+
+    "#{Config.editor_base_url()}/?#{param}=#{URI.encode_www_form(path)}"
   end
 
   defp workspace_identifier(issue_identifier) do
