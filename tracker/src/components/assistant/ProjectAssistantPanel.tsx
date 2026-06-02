@@ -537,6 +537,7 @@ export function ProjectAssistantPanel({
             </div>
           ) : (
             <div className="shrink-0 bg-background">
+              {queuedChips}
               {composerNode ?? (
                 <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading Codex CLI models...</div>
               )}
@@ -568,6 +569,7 @@ export function ProjectAssistantPanel({
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">{messageItems}</div>
+            {queuedChips}
             {composerNode ?? (
               <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading Codex CLI models...</div>
             )}

@@ -123,6 +123,49 @@ describe("ProjectAssistantPanel", () => {
     expect(screen.getByText("list_issues")).toBeTruthy();
   });
 
+  it("queues a message submitted while running and auto-sends it on completion", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+
+    fireEvent.change(textarea, { target: { value: "first" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "first" })),
+    );
+    channelHandlers["assistant_delta"]({ delta: "working" });
+
+    fireEvent.change(textarea, { target: { value: "second" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(await screen.findByText("second")).toBeTruthy();
+    expect(push).not.toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "second" }));
+
+    channelHandlers["assistant_completed"]({ message: { id: 9, role: "assistant", content: "done", tool_calls: [] } });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "second" })),
+    );
+  });
+
+  it("removes a queued message when its chip remove button is clicked", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+
+    fireEvent.change(textarea, { target: { value: "first" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    channelHandlers["assistant_delta"]({ delta: "working" });
+
+    fireEvent.change(textarea, { target: { value: "queued one" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    const removeButton = await screen.findByRole("button", { name: /remove queued message/i });
+    fireEvent.click(removeButton);
+
+    await waitFor(() => expect(screen.queryByText("queued one")).toBeNull());
+  });
+
   it("joins an issue-scoped assistant topic when an issue identifier is provided", () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
 
