@@ -76,7 +76,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     test "returns issues whose Status is in active_states", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -147,7 +147,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     test "excludes items from other repos", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -184,7 +184,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     test "skips non-Issue content (DraftIssue, PullRequest)", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -227,7 +227,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     test "uses Status over a stale conflicting field value when both exist", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -292,7 +292,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     test "skips items with no Status value", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -334,7 +334,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
 
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -409,7 +409,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     test "normalizes labels excluding priority and admission_label", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -455,7 +455,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     test "returns :github_missing_end_cursor when hasNextPage is true but cursor is nil", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -517,7 +517,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
           payload["query"] =~ "SymphonyGitHubIssuePRDiscussion" ->
             flunk("poll must not enrich PR discussion (lazy enrichment)")
 
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -588,7 +588,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         Agent.update(calls, &[payload["query"] | &1])
 
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             assert payload["variables"]["owner"] == "owner"
             assert payload["variables"]["name"] == "repo"
             assert payload["variables"]["label"] in ["symphony", "symphony:codex", "symphony:claude"]
@@ -726,7 +726,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         Agent.update(calls, &[payload["query"] | &1])
 
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             {:ok,
              %{
                status: 200,
@@ -788,7 +788,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     test "propagates error from admission step", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             {:ok, %{status: 200, body: %{"errors" => [%{"message" => "rate limited"}]}}}
         end
       end
@@ -802,7 +802,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         capture_log(fn ->
           request_fun = fn payload, _headers ->
             cond do
-              payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+              payload["query"] =~ "SymphonyApiLabelIssues" ->
                 {:ok,
                  %{
                    status: 200,
@@ -906,7 +906,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
         capture_log(fn ->
           request_fun = fn payload, _headers ->
             cond do
-              payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+              payload["query"] =~ "SymphonyApiLabelIssues" ->
                 {:ok,
                  %{
                    status: 200,
@@ -1005,7 +1005,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     test "filters items by the provided state list", %{base_dir: base_dir} do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+          payload["query"] =~ "SymphonyApiLabelIssues" ->
             empty_admission_response()
 
           payload["query"] =~ "SymphonyGitHubPollItems" ->
@@ -2110,7 +2110,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
   defp poll_with_items(nodes) do
     fn payload, _headers ->
       cond do
-        payload["query"] =~ "SymphonyGitHubAdmissionIssues" ->
+        payload["query"] =~ "SymphonyApiLabelIssues" ->
           empty_admission_response()
 
         payload["query"] =~ "SymphonyGitHubIssuePRDiscussion" ->

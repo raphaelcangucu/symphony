@@ -229,26 +229,6 @@ defmodule SymphonyElixir.GitHub.Client do
   }
   """
 
-  @admission_issues_query """
-  query SymphonyGitHubAdmissionIssues(
-    $owner: String!,
-    $name: String!,
-    $label: String!,
-    $first: Int!,
-    $after: String
-  ) {
-    repository(owner: $owner, name: $name) {
-      issues(states: [OPEN], labels: [$label], first: $first, after: $after) {
-        nodes {
-          id
-          number
-        }
-        pageInfo { hasNextPage endCursor }
-      }
-    }
-  }
-  """
-
   @project_item_content_ids_query """
   query SymphonyGitHubProjectContentIds(
     $projectId: ID!,
@@ -966,73 +946,17 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
-  defp fetch_admission_candidates(client, owner, name, label, graphql_opts) do
-    fetch_admission_candidates_page(client, owner, name, label, nil, [], graphql_opts)
-  end
+  # Label-based admission discovery routes through `GitHub.Api`, which runs the
+  # GraphQL query first and transparently falls back to the GitHub REST issues
+  # endpoint under GraphQL rate limiting. Only the issue node ids are needed here.
+  defp fetch_admission_candidates(_client, owner, name, label, graphql_opts) do
+    repo = owner <> "/" <> name
 
-  defp fetch_admission_candidates_page(client, owner, name, label, after_cursor, acc, graphql_opts) do
-    variables = %{
-      "owner" => owner,
-      "name" => name,
-      "label" => label,
-      "first" => @project_item_page_size,
-      "after" => after_cursor
-    }
-
-    case client.graphql(@admission_issues_query, variables, graphql_opts) do
-      {:ok, body} ->
-        case decode_admission_page(body) do
-          {:ok, ids, %{has_next_page: true, end_cursor: cursor}}
-          when is_binary(cursor) and cursor != "" ->
-            fetch_admission_candidates_page(
-              client,
-              owner,
-              name,
-              label,
-              cursor,
-              prepend_nodes(ids, acc),
-              graphql_opts
-            )
-
-          {:ok, ids, %{has_next_page: false}} ->
-            {:ok, finalize_nodes(prepend_nodes(ids, acc))}
-
-          {:ok, _ids, %{has_next_page: true}} ->
-            {:error, :github_missing_end_cursor}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      {:error, _} = error ->
-        error
+    case GitHub.Api.list_label_issues(repo, label, graphql_opts) do
+      {:ok, rows} -> {:ok, Enum.map(rows, & &1.node_id)}
+      {:error, _} = error -> error
     end
   end
-
-  defp decode_admission_page(%{
-         "data" => %{
-           "repository" => %{
-             "issues" => %{
-               "nodes" => nodes,
-               "pageInfo" => %{"hasNextPage" => has_next, "endCursor" => cursor}
-             }
-           }
-         }
-       })
-       when is_list(nodes) do
-    ids =
-      Enum.flat_map(nodes, fn
-        %{"id" => id} when is_binary(id) -> [id]
-        _ -> []
-      end)
-
-    {:ok, ids, %{has_next_page: has_next == true, end_cursor: cursor}}
-  end
-
-  defp decode_admission_page(%{"data" => %{"repository" => nil}}),
-    do: {:error, :github_repo_not_found}
-
-  defp decode_admission_page(_body), do: {:error, :github_unknown_payload}
 
   defp fetch_project_content_ids(client, project_id, graphql_opts) do
     fetch_project_content_ids_page(client, project_id, nil, [], graphql_opts)

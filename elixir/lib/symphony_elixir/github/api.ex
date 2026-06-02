@@ -21,6 +21,18 @@ defmodule SymphonyElixir.GitHub.Api do
           updated_at: String.t() | nil
         }
 
+  @type pr :: %{
+          number: integer(),
+          url: String.t() | nil,
+          title: String.t() | nil,
+          state: String.t()
+        }
+
+  @type label_issue :: %{number: integer(), node_id: String.t()}
+
+  @default_comment_limit 50
+  @label_page_size 50
+
   @add_comment_mutation """
   mutation SymphonyApiAddComment($subjectId: ID!, $body: String!) {
     addComment(input: { subjectId: $subjectId, body: $body }) {
@@ -47,8 +59,6 @@ defmodule SymphonyElixir.GitHub.Api do
   }
   """
 
-  @default_comment_limit 50
-
   @close_issue_mutation """
   mutation SymphonyApiCloseIssue($issueId: ID!) {
     closeIssue(input: { issueId: $issueId, stateReason: COMPLETED }) { issue { id state } }
@@ -58,20 +68,6 @@ defmodule SymphonyElixir.GitHub.Api do
   @reopen_issue_mutation """
   mutation SymphonyApiReopenIssue($issueId: ID!) {
     reopenIssue(input: { issueId: $issueId }) { issue { id state } }
-  }
-  """
-
-  @label_page_size 50
-
-  @issue_prs_query """
-  query SymphonyApiIssuePRs($owner: String!, $name: String!, $number: Int!) {
-    repository(owner: $owner, name: $name) {
-      issue(number: $number) {
-        closedByPullRequestsReferences(first: 30) {
-          nodes { number url title state merged }
-        }
-      }
-    }
   }
   """
 
@@ -86,6 +82,20 @@ defmodule SymphonyElixir.GitHub.Api do
   }
   """
 
+  @issue_prs_query """
+  query SymphonyApiIssuePRs($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) {
+      issue(number: $number) {
+        closedByPullRequestsReferences(first: 30) {
+          nodes { number url title state merged }
+        }
+      }
+    }
+  }
+  """
+
+  # -- add_comment ------------------------------------------------------------
+
   @spec add_comment(String.t(), String.t(), String.t(), keyword()) ::
           {:ok, comment()} | {:error, term()}
   def add_comment(repo, identifier, body, opts \\ [])
@@ -99,6 +109,40 @@ defmodule SymphonyElixir.GitHub.Api do
       )
     end
   end
+
+  defp graphql_add_comment(owner, name, number, body, opts) do
+    graphql_opts = graphql_opts(opts)
+
+    with {:ok, node_id} <- fetch_issue_node_id(owner, name, number, graphql_opts),
+         {:ok, %{"data" => %{"addComment" => %{"commentEdge" => %{"node" => node}}}}} <-
+           Client.graphql(@add_comment_mutation, %{"subjectId" => node_id, "body" => body}, graphql_opts) do
+      {:ok, IssueComments.parse_node(node)}
+    else
+      {:ok, _unexpected} -> {:error, :remote_unavailable}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp fetch_issue_node_id(owner, name, number, graphql_opts) do
+    variables = %{"owner" => owner, "name" => name, "number" => number}
+
+    case Client.graphql(@issue_node_query, variables, graphql_opts) do
+      {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => id}}}}} when is_binary(id) -> {:ok, id}
+      {:ok, _payload} -> {:error, :issue_not_found}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp rest_add_comment(owner, name, number, body, opts) do
+    path = "/repos/#{owner}/#{name}/issues/#{number}/comments"
+
+    case Client.rest_post(path, %{"body" => body}, rest_opts(opts)) do
+      {:ok, %{body: raw}} when is_map(raw) -> {:ok, normalize_rest_comment(raw)}
+      {:error, _} = error -> error
+    end
+  end
+
+  # -- list_comments ----------------------------------------------------------
 
   @spec list_comments(String.t(), String.t(), keyword()) :: {:ok, [comment()]} | {:error, term()}
   def list_comments(repo, identifier, opts \\ []) when is_binary(repo) and is_binary(identifier) do
@@ -144,86 +188,77 @@ defmodule SymphonyElixir.GitHub.Api do
     end
   end
 
-  @spec list_issue_prs(String.t(), String.t(), String.t() | nil, keyword()) ::
-          {:ok, [%{number: integer(), url: String.t() | nil, title: String.t() | nil, state: String.t()}]}
-          | {:error, term()}
-  def list_issue_prs(repo, identifier, branch, opts \\ []) when is_binary(repo) and is_binary(identifier) do
-    with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, number} <- parse_issue_number(identifier) do
+  defp normalize_rest_comment(raw) do
+    IssueComments.parse_node(%{
+      "id" => stringify_id(raw["id"]),
+      "url" => raw["html_url"],
+      "body" => raw["body"],
+      "createdAt" => raw["created_at"],
+      "updatedAt" => raw["updated_at"],
+      "author" => raw["user"]
+    })
+  end
+
+  # -- transition_issue_open_state --------------------------------------------
+
+  @spec transition_issue_open_state(String.t(), String.t(), :close | :reopen, keyword()) ::
+          {:ok, %{state: String.t()}} | {:error, term()}
+  def transition_issue_open_state(repo, issue_node_id, action, opts \\ [])
+      when is_binary(repo) and is_binary(issue_node_id) and action in [:close, :reopen] do
+    with {:ok, {owner, name}} <- RepoSpec.split(repo) do
       with_fallback(
-        :list_issue_prs,
-        fn -> graphql_issue_prs(owner, name, number, opts) end,
-        fn -> rest_issue_prs(owner, name, branch, opts) end
+        :transition_issue_open_state,
+        fn -> graphql_transition(issue_node_id, action, opts) end,
+        fn -> rest_transition(owner, name, action, opts) end
       )
     end
   end
 
-  defp graphql_issue_prs(owner, name, number, opts) do
-    variables = %{"owner" => owner, "name" => name, "number" => number}
+  defp graphql_transition(issue_node_id, action, opts) do
+    {mutation, key} =
+      case action do
+        :close -> {@close_issue_mutation, "closeIssue"}
+        :reopen -> {@reopen_issue_mutation, "reopenIssue"}
+      end
 
-    case Client.graphql(@issue_prs_query, variables, graphql_opts(opts)) do
-      {:ok,
-       %{
-         "data" => %{
-           "repository" => %{"issue" => %{"closedByPullRequestsReferences" => %{"nodes" => nodes}}}
-         }
-       }}
-      when is_list(nodes) ->
-        {:ok, Enum.flat_map(nodes, &normalize_graphql_pr/1)}
-
-      {:ok, %{"data" => %{"repository" => %{"issue" => nil}}}} ->
-        {:ok, []}
+    case Client.graphql(mutation, %{"issueId" => issue_node_id}, graphql_opts(opts)) do
+      {:ok, %{"data" => %{^key => %{"issue" => %{"state" => state}}}}} when is_binary(state) ->
+        {:ok, %{state: state}}
 
       {:ok, _payload} ->
-        {:ok, []}
+        {:error, :remote_unavailable}
 
       {:error, _} = error ->
         error
     end
   end
 
-  defp normalize_graphql_pr(%{"number" => number} = pr) when is_integer(number) do
-    state =
-      cond do
-        pr["merged"] == true -> "merged"
-        pr["state"] == "OPEN" -> "open"
-        true -> "closed"
-      end
+  defp rest_transition(owner, name, action, opts) do
+    case Keyword.get(opts, :issue_number) do
+      number when is_integer(number) ->
+        state = if action == :close, do: "closed", else: "open"
+        path = "/repos/#{owner}/#{name}/issues/#{number}"
 
-    [%{number: number, url: pr["url"], title: pr["title"], state: state}]
-  end
+        case Client.rest_put(path, %{"state" => state}, rest_opts(opts)) do
+          {:ok, %{body: %{"state" => rest_state}}} when is_binary(rest_state) ->
+            {:ok, %{state: String.upcase(rest_state)}}
 
-  defp normalize_graphql_pr(_pr), do: []
+          {:ok, _other} ->
+            {:error, :remote_unavailable}
 
-  defp rest_issue_prs(_owner, _name, nil, _opts), do: {:ok, []}
+          {:error, _} = error ->
+            error
+        end
 
-  defp rest_issue_prs(owner, name, branch, opts) do
-    path = "/repos/#{owner}/#{name}/pulls?head=#{owner}:#{branch}&state=all&per_page=30"
-
-    case Client.rest_get(path, rest_opts(opts)) do
-      {:ok, %{body: list}} when is_list(list) ->
-        {:ok, Enum.flat_map(list, &normalize_rest_pr/1)}
-
-      {:error, _} = error ->
-        error
+      _ ->
+        {:error, {:rate_limited, %{reset_at: nil, capability: :needs_issue_number}}}
     end
   end
 
-  defp normalize_rest_pr(%{"number" => number} = pr) when is_integer(number) do
-    state =
-      cond do
-        is_binary(pr["merged_at"]) -> "merged"
-        pr["state"] == "open" -> "open"
-        true -> "closed"
-      end
-
-    [%{number: number, url: pr["html_url"], title: pr["title"], state: state}]
-  end
-
-  defp normalize_rest_pr(_pr), do: []
+  # -- list_label_issues ------------------------------------------------------
 
   @spec list_label_issues(String.t(), String.t(), keyword()) ::
-          {:ok, [%{number: integer(), node_id: String.t()}]} | {:error, term()}
+          {:ok, [label_issue()]} | {:error, term()}
   def list_label_issues(repo, label, opts \\ []) when is_binary(repo) and is_binary(label) do
     with {:ok, {owner, name}} <- RepoSpec.split(repo) do
       with_fallback(
@@ -323,102 +358,84 @@ defmodule SymphonyElixir.GitHub.Api do
 
   defp header_value(_headers, _name), do: nil
 
-  @spec transition_issue_open_state(String.t(), String.t(), :close | :reopen, keyword()) ::
-          {:ok, %{state: String.t()}} | {:error, term()}
-  def transition_issue_open_state(repo, issue_node_id, action, opts \\ [])
-      when is_binary(repo) and is_binary(issue_node_id) and action in [:close, :reopen] do
-    with {:ok, {owner, name}} <- RepoSpec.split(repo) do
+  # -- list_issue_prs ---------------------------------------------------------
+
+  @spec list_issue_prs(String.t(), String.t(), String.t() | nil, keyword()) ::
+          {:ok, [pr()]} | {:error, term()}
+  def list_issue_prs(repo, identifier, branch, opts \\ []) when is_binary(repo) and is_binary(identifier) do
+    with {:ok, {owner, name}} <- RepoSpec.split(repo),
+         {:ok, number} <- parse_issue_number(identifier) do
       with_fallback(
-        :transition_issue_open_state,
-        fn -> graphql_transition(issue_node_id, action, opts) end,
-        fn -> rest_transition(owner, name, action, opts) end
+        :list_issue_prs,
+        fn -> graphql_issue_prs(owner, name, number, opts) end,
+        fn -> rest_issue_prs(owner, name, branch, opts) end
       )
     end
   end
 
-  defp graphql_transition(issue_node_id, action, opts) do
-    {mutation, key} =
-      case action do
-        :close -> {@close_issue_mutation, "closeIssue"}
-        :reopen -> {@reopen_issue_mutation, "reopenIssue"}
-      end
+  defp graphql_issue_prs(owner, name, number, opts) do
+    variables = %{"owner" => owner, "name" => name, "number" => number}
 
-    case Client.graphql(mutation, %{"issueId" => issue_node_id}, graphql_opts(opts)) do
-      {:ok, %{"data" => %{^key => %{"issue" => %{"state" => state}}}}} when is_binary(state) ->
-        {:ok, %{state: state}}
+    case Client.graphql(@issue_prs_query, variables, graphql_opts(opts)) do
+      {:ok,
+       %{
+         "data" => %{
+           "repository" => %{"issue" => %{"closedByPullRequestsReferences" => %{"nodes" => nodes}}}
+         }
+       }}
+      when is_list(nodes) ->
+        {:ok, Enum.flat_map(nodes, &normalize_graphql_pr/1)}
+
+      {:ok, %{"data" => %{"repository" => %{"issue" => nil}}}} ->
+        {:ok, []}
 
       {:ok, _payload} ->
-        {:error, :remote_unavailable}
+        {:ok, []}
 
       {:error, _} = error ->
         error
     end
   end
 
-  defp rest_transition(owner, name, action, opts) do
-    case Keyword.get(opts, :issue_number) do
-      number when is_integer(number) ->
-        state = if action == :close, do: "closed", else: "open"
-        path = "/repos/#{owner}/#{name}/issues/#{number}"
+  defp normalize_graphql_pr(%{"number" => number} = pr) when is_integer(number) do
+    state =
+      cond do
+        pr["merged"] == true -> "merged"
+        pr["state"] == "OPEN" -> "open"
+        true -> "closed"
+      end
 
-        case Client.rest_put(path, %{"state" => state}, rest_opts(opts)) do
-          {:ok, %{body: %{"state" => rest_state}}} when is_binary(rest_state) ->
-            {:ok, %{state: String.upcase(rest_state)}}
+    [%{number: number, url: pr["url"], title: pr["title"], state: state}]
+  end
 
-          {:ok, _other} ->
-            {:error, :remote_unavailable}
+  defp normalize_graphql_pr(_pr), do: []
 
-          {:error, _} = error ->
-            error
-        end
+  defp rest_issue_prs(_owner, _name, nil, _opts), do: {:ok, []}
 
-      _ ->
-        {:error, {:rate_limited, %{reset_at: nil, capability: :needs_issue_number}}}
+  defp rest_issue_prs(owner, name, branch, opts) do
+    path = "/repos/#{owner}/#{name}/pulls?head=#{owner}:#{branch}&state=all&per_page=30"
+
+    case Client.rest_get(path, rest_opts(opts)) do
+      {:ok, %{body: list}} when is_list(list) ->
+        {:ok, Enum.flat_map(list, &normalize_rest_pr/1)}
+
+      {:error, _} = error ->
+        error
     end
   end
 
-  defp graphql_add_comment(owner, name, number, body, opts) do
-    graphql_opts = graphql_opts(opts)
+  defp normalize_rest_pr(%{"number" => number} = pr) when is_integer(number) do
+    state =
+      cond do
+        is_binary(pr["merged_at"]) -> "merged"
+        pr["state"] == "open" -> "open"
+        true -> "closed"
+      end
 
-    with {:ok, node_id} <- fetch_issue_node_id(owner, name, number, graphql_opts),
-         {:ok, %{"data" => %{"addComment" => %{"commentEdge" => %{"node" => node}}}}} <-
-           Client.graphql(@add_comment_mutation, %{"subjectId" => node_id, "body" => body}, graphql_opts) do
-      {:ok, IssueComments.parse_node(node)}
-    else
-      {:ok, _unexpected} -> {:error, :remote_unavailable}
-      {:error, _} = error -> error
-    end
+    [%{number: number, url: pr["html_url"], title: pr["title"], state: state}]
   end
 
-  defp fetch_issue_node_id(owner, name, number, graphql_opts) do
-    variables = %{"owner" => owner, "name" => name, "number" => number}
-
-    case Client.graphql(@issue_node_query, variables, graphql_opts) do
-      {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => id}}}}} when is_binary(id) -> {:ok, id}
-      {:ok, _payload} -> {:error, :issue_not_found}
-      {:error, _} = error -> error
-    end
-  end
-
-  defp rest_add_comment(owner, name, number, body, opts) do
-    path = "/repos/#{owner}/#{name}/issues/#{number}/comments"
-
-    case Client.rest_post(path, %{"body" => body}, rest_opts(opts)) do
-      {:ok, %{body: raw}} when is_map(raw) -> {:ok, normalize_rest_comment(raw)}
-      {:error, _} = error -> error
-    end
-  end
-
-  defp normalize_rest_comment(raw) do
-    IssueComments.parse_node(%{
-      "id" => stringify_id(raw["id"]),
-      "url" => raw["html_url"],
-      "body" => raw["body"],
-      "createdAt" => raw["created_at"],
-      "updatedAt" => raw["updated_at"],
-      "author" => raw["user"]
-    })
-  end
+  defp normalize_rest_pr(_pr), do: []
 
   # -- Fallback combinator (F1) ----------------------------------------------
 

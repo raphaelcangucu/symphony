@@ -2,9 +2,19 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.GitHub.SyncDriver
-  alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.LocalTracker.{IssueRecord, Project}
   alias SymphonyElixir.Tracker.IssueDTO
   alias SymphonyElixir.Tracker.Sync.OutboxEntry
+
+  defmodule RateLimitedPRs do
+    def resolve_repo(_project), do: {:ok, "owner/repo"}
+    def for_issue(_repo, _identifier, _opts \\ []), do: {:error, {:rate_limited, %{reset_at: nil}}}
+  end
+
+  defmodule StubApi do
+    def list_issue_prs(_repo, _identifier, _branch, _opts \\ []),
+      do: {:ok, [%{number: 7, url: "pr7", title: "t", state: "open"}]}
+  end
 
   defmodule StubAdapter do
     def list_issues(_project, _filters) do
@@ -51,5 +61,22 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
   test "push of a comment create calls add_comment", %{project: project} do
     entry = %OutboxEntry{entity_type: "comment", operation: "create", payload: %{"identifier" => "1", "body" => "hello"}}
     assert {:ok, "IC_new"} = SyncDriver.push(project, entry)
+  end
+
+  test "pull_pull_requests falls back to GitHub.Api when GraphQL PR lookup is rate-limited", %{
+    project: project
+  } do
+    Application.put_env(:symphony_elixir, :github_pr_module, RateLimitedPRs)
+    Application.put_env(:symphony_elixir, :github_api_module, StubApi)
+
+    on_exit(fn ->
+      Application.delete_env(:symphony_elixir, :github_pr_module)
+      Application.delete_env(:symphony_elixir, :github_api_module)
+    end)
+
+    issue = %IssueRecord{identifier: "42", branch_name: "feat/x"}
+
+    assert {:ok, [%{number: 7, state: "open", url: "pr7"}]} =
+             SyncDriver.pull_pull_requests(project, issue)
   end
 end

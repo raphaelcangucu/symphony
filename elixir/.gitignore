@@ -42,6 +42,8 @@ erl_crash.dump
 # Local environment and auth artifacts.
 .env
 .env.*
+# Tracked, secret-free hermetic env loaded by `make test` (see Makefile).
+!.env.testing
 .secrets
 .credentials
 status.txt

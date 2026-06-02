@@ -58,12 +58,24 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
          {:ok, prs} <- pull_requests_module().for_issue(repo, issue.identifier) do
       {:ok, Enum.map(prs, &to_pr_record/1)}
     else
+      {:error, {:rate_limited, _}} -> pr_fallback(project, issue)
       _ -> {:ok, []}
     end
   rescue
     error ->
       Logger.warning("PR pull failed for #{issue.identifier}: #{inspect(error)}")
       {:ok, []}
+  end
+
+  # GraphQL PR resolution is rate-limited: degrade to the REST-backed
+  # `GitHub.Api.list_issue_prs` (basic linkage + state) keyed by the issue branch.
+  defp pr_fallback(%Project{} = project, %IssueRecord{} = issue) do
+    with {:ok, repo} <- pull_requests_module().resolve_repo(project),
+         {:ok, prs} <- api_module().list_issue_prs(repo, issue.identifier, issue.branch_name) do
+      {:ok, Enum.map(prs, &to_pr_record/1)}
+    else
+      _ -> {:ok, []}
+    end
   end
 
   defp to_pr_record(pr) do
@@ -90,4 +102,6 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
   defp adapter, do: Application.get_env(:symphony_elixir, :github_sync_adapter, SymphonyElixir.GitHub.IssueAdapter)
 
   defp pull_requests_module, do: Application.get_env(:symphony_elixir, :github_pr_module, SymphonyElixir.GitHub.PullRequests)
+
+  defp api_module, do: Application.get_env(:symphony_elixir, :github_api_module, SymphonyElixir.GitHub.Api)
 end

@@ -264,6 +264,12 @@ Notes:
   the project dependencies in `hooks.after_create` before invoking `mise` later from other hooks.
 - `tracker.api_key` reads from `LINEAR_API_KEY` when unset or when value is `$LINEAR_API_KEY`.
 - For GitHub tracker, `GITHUB_TOKEN` is used for API authentication.
+- GitHub REST fallback (resilience): `SymphonyElixir.GitHub.Api` runs comment,
+  open/close, label-discovery, and PR-linkage operations on GraphQL first and
+  transparently falls back to the REST API when GraphQL is rate-limited (the two
+  share separate hourly buckets). The Projects v2 board status read/write is
+  GraphQL-only and defers until the rate limit resets; routing the other
+  operations to REST reduces GraphQL pressure so the board path survives longer.
 - For path values, `~` is expanded to the home directory.
 - For env-backed path values, use `$VAR`. `workspace.root` resolves `$VAR` before path handling,
   while `codex.command` / `claude.command` stays a shell command string and any `$VAR` expansion

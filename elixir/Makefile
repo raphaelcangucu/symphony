@@ -56,11 +56,16 @@ fmt-check:
 lint:
 	$(MIX) lint
 
+# Tests source `.env.testing` (blank secrets / no public tunnel) so a developer's
+# sourced `.env` does not leak real values into MIX_ENV=test and break
+# environment-dependent tests. Pass extra args via ARGS (e.g. `make test ARGS="--seed 0"`).
+ENV_TESTING ?= .env.testing
+
 coverage:
-	$(MIX) test --cover
+	@set -a; [ -f $(ENV_TESTING) ] && . ./$(ENV_TESTING); set +a; $(MIX) test --cover $(ARGS)
 
 test:
-	$(MIX) test
+	@set -a; [ -f $(ENV_TESTING) ] && . ./$(ENV_TESTING); set +a; $(MIX) test $(ARGS)
 
 dialyzer:
 	$(MIX) deps.get
