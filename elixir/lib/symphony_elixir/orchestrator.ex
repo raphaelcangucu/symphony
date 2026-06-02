@@ -921,6 +921,20 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
+  @spec steer(String.t(), String.t(), pid() | nil) :: :ok | {:error, term()}
+  def steer(identifier, message, reply_to \\ nil) do
+    steer(__MODULE__, identifier, message, reply_to)
+  end
+
+  @spec steer(GenServer.server(), String.t(), String.t(), pid() | nil) :: :ok | {:error, term()}
+  def steer(server, identifier, message, reply_to) do
+    if Process.whereis(server) do
+      GenServer.call(server, {:steer, identifier, message, reply_to})
+    else
+      {:error, :unavailable}
+    end
+  end
+
   @spec snapshot() :: map() | :timeout | :unavailable
   def snapshot, do: snapshot(__MODULE__, 15_000)
 
@@ -1008,6 +1022,34 @@ defmodule SymphonyElixir.Orchestrator do
        operations: ["poll", "reconcile"]
      }, state}
   end
+
+  def handle_call({:steer, identifier, message, reply_to}, _from, state) do
+    trimmed = if is_binary(message), do: String.trim(message), else: ""
+
+    case find_running_by_identifier(state, identifier) do
+      %{pid: pid} when is_pid(pid) and trimmed != "" ->
+        send(pid, {:codex_steer, [%{"type" => "text", "text" => trimmed}], reply_to})
+        {:reply, :ok, state}
+
+      %{pid: pid} when is_pid(pid) ->
+        {:reply, {:error, :empty_message}, state}
+
+      _other ->
+        {:reply, {:error, :ActiveTurnNotSteerable}, state}
+    end
+  end
+
+  defp find_running_by_identifier(%State{running: running}, identifier) when is_binary(identifier) do
+    normalized = String.trim(identifier)
+
+    running
+    |> Map.values()
+    |> Enum.find(fn metadata ->
+      is_binary(metadata.identifier) and String.trim(metadata.identifier) == normalized
+    end)
+  end
+
+  defp find_running_by_identifier(_state, _identifier), do: nil
 
   defp integrate_codex_update(running_entry, %{event: event, timestamp: timestamp} = update) do
     token_delta = extract_token_delta(running_entry, update)

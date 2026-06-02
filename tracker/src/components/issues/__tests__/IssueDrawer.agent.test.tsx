@@ -2,6 +2,8 @@ import "@testing-library/jest-dom/vitest";
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
@@ -65,6 +67,10 @@ vi.mock("@/components/issues/issue-detail/AgentTab", () => ({
   ),
 }));
 
+function renderDrawer(ui: ReactElement, initialEntries?: string[]) {
+  return render(<MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>);
+}
+
 vi.mock("@/components/issues/issue-detail/PreviewTab", () => ({
   PreviewTab: () => <div>Preview panel</div>,
 }));
@@ -115,7 +121,7 @@ describe("IssueDrawer Agent tab", () => {
   it("defaults to authoring and switches to the execution view", async () => {
     const user = userEvent.setup();
 
-    render(
+    renderDrawer(
       <IssueDrawer
         issue={issue}
         projectSlug="macro-markets"
@@ -136,6 +142,24 @@ describe("IssueDrawer Agent tab", () => {
     expect(screen.queryByTestId("agent-execution-panel")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /execution/i }));
+
+    expect(screen.getByTestId("agent-execution-panel")).toHaveTextContent("Execution panel for MAC-1:live");
+    expect(screen.queryByTestId("issue-authoring-panel")).not.toBeInTheDocument();
+  });
+
+  it("opens execution when ?agent=execution is present", () => {
+    renderDrawer(
+      <IssueDrawer
+        issue={issue}
+        projectSlug="macro-markets"
+        view="list"
+        execution={execution}
+        open
+        onOpenChange={() => {}}
+        tab="agent"
+      />,
+      ["/projects/macro-markets/list/issues/MAC-1/agent?agent=execution"],
+    );
 
     expect(screen.getByTestId("agent-execution-panel")).toHaveTextContent("Execution panel for MAC-1:live");
     expect(screen.queryByTestId("issue-authoring-panel")).not.toBeInTheDocument();

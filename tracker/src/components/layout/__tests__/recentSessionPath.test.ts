@@ -16,8 +16,10 @@ describe("recentSessionPath", () => {
   it("project chat → /projects/:slug/assistant", () => {
     expect(recentSessionPath({ ...base, kind: "chat", scope: "project", projectSlug: "demo", threadId: 3 })).toBe("/projects/demo/assistant");
   });
-  it("codex → issue detail", () => {
-    expect(recentSessionPath({ ...base, kind: "codex", scope: null, projectSlug: "demo", identifier: "ABC-1" })).toBe("/projects/demo/board/issues/ABC-1");
+  it("codex → issue agent execution tab", () => {
+    expect(recentSessionPath({ ...base, kind: "codex", scope: null, projectSlug: "demo", identifier: "ABC-1" })).toBe(
+      "/projects/demo/board/issues/ABC-1/agent?agent=execution",
+    );
   });
   it("issue chat → /projects/:slug/assistant/issue/:identifier", () => {
     expect(

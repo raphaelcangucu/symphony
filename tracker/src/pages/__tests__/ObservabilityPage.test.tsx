@@ -78,7 +78,7 @@ describe("ObservabilityPage", () => {
     expect((await screen.findAllByText("macro-markets")).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "508" })).toHaveAttribute(
       "href",
-      "/projects/macro-markets/board/issues/508/agent",
+      "/projects/macro-markets/board/issues/508/agent?agent=execution",
     );
     expect(screen.getByText(/online/i)).toBeInTheDocument();
   });

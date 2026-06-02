@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  agentSectionFromSearchParams,
   DEFAULT_ISSUE_TAB,
   devEnvPath,
   filtersPath,
@@ -13,6 +14,7 @@ import {
   projectsFiltersPath,
   projectsNewPath,
   viewFromPathname,
+  withAgentSection,
   workspaceBasePath,
 } from "@/lib/workspaceRoutes";
 
@@ -85,5 +87,19 @@ describe("workspaceRoutes", () => {
     expect(viewFromPathname("/projects/acme/board/issues/ABC-1")).toBe("board");
     expect(viewFromPathname("/projects/acme/list/filters")).toBe("list");
     expect(viewFromPathname("/projects/acme")).toBe("board");
+  });
+
+  it("reads and writes the agent sub-tab search param", () => {
+    expect(agentSectionFromSearchParams(new URLSearchParams())).toBe("authoring");
+    expect(agentSectionFromSearchParams(new URLSearchParams("agent=execution"))).toBe("execution");
+    expect(withAgentSection("/projects/acme/board/issues/1/agent", "", "execution")).toBe(
+      "/projects/acme/board/issues/1/agent?agent=execution",
+    );
+    expect(withAgentSection("/projects/acme/board/issues/1/agent", "q=test", "execution")).toBe(
+      "/projects/acme/board/issues/1/agent?q=test&agent=execution",
+    );
+    expect(withAgentSection("/projects/acme/board/issues/1/agent", "agent=execution", "authoring")).toBe(
+      "/projects/acme/board/issues/1/agent",
+    );
   });
 });

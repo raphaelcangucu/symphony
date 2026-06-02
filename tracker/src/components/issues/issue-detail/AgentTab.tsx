@@ -1,7 +1,9 @@
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
+import { ExecutionSteerComposer } from "@/components/issues/issue-detail/ExecutionSteerComposer";
 import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
 import { Separator } from "@/components/ui/separator";
+import { useSessionLogChannel } from "@/hooks/useSessionLogChannel";
 import { formatDateTime } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -27,6 +29,15 @@ function formatTokens(value: number): string {
 }
 
 export function AgentTab({ issue, execution, projectSlug }: AgentTabProps) {
+  const sessionLogEnabled =
+    execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting";
+  const sessionLog = useSessionLogChannel({
+    projectSlug,
+    issueIdentifier: issue.identifier,
+    enabled: sessionLogEnabled,
+  });
+  const canSteer = execution?.status === "live" || execution?.status === "waiting";
+
   return (
     <div className="space-y-4 text-sm">
       <section className="rounded-xl border p-4">
@@ -114,10 +125,18 @@ export function AgentTab({ issue, execution, projectSlug }: AgentTabProps) {
         </section>
       ) : null}
 
+      <ExecutionSteerComposer
+        disabled={!canSteer || !sessionLog.connected}
+        pending={sessionLog.steerPending}
+        error={sessionLog.steerError}
+        onSteer={sessionLog.steerTurn}
+      />
+
       <IssueSessionLog
-        enabled={execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting"}
         issueIdentifier={issue.identifier}
-        projectSlug={projectSlug}
+        connected={sessionLog.connected}
+        entries={sessionLog.entries}
+        error={sessionLog.error}
       />
 
       <Separator />

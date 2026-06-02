@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useObservability } from "@/hooks/useObservability";
-import { issuePath } from "@/lib/workspaceRoutes";
+import { issuePath, withAgentSection } from "@/lib/workspaceRoutes";
 import { listProjects } from "@/services/projects";
 import type { GlobalRunningRow, RuntimeObservability } from "@/types/observability";
 import type { Project } from "@/types/project";
@@ -224,7 +224,11 @@ export function ObservabilityPage() {
                       {row.resolvedProjectSlug && row.issueIdentifier.trim() ? (
                         <Link
                           className="text-primary underline-offset-2 hover:underline"
-                          to={issuePath(row.resolvedProjectSlug, "board", row.issueIdentifier, "agent")}
+                          to={withAgentSection(
+                            issuePath(row.resolvedProjectSlug, "board", row.issueIdentifier, "agent"),
+                            "",
+                            "execution",
+                          )}
                         >
                           {row.issueIdentifier}
                         </Link>

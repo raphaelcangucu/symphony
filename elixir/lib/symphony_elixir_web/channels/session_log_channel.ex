@@ -39,6 +39,37 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   def join(_topic, _payload, _socket), do: {:error, %{reason: "invalid_topic"}}
 
   @impl true
+  def handle_in("steer_turn", %{"message" => message}, socket) when is_binary(message) do
+    case SymphonyElixir.Orchestrator.steer(socket.assigns.issue_identifier, message, self()) do
+      :ok ->
+        {:reply, :ok, assign(socket, :last_steer_text, String.trim(message))}
+
+      {:error, reason} ->
+        push(socket, "steer_failed", %{
+          reason: steer_error_reason(reason),
+          message: String.trim(message)
+        })
+
+        {:reply, {:error, %{reason: steer_error_reason(reason)}}, socket}
+    end
+  end
+
+  def handle_in("steer_turn", _payload, socket),
+    do: {:reply, {:error, %{reason: "message is required"}}, socket}
+
+  @impl true
+  def handle_info({:steer_ok, _result}, socket), do: {:noreply, push(socket, "steer_ok", %{})}
+
+  def handle_info({:steer_error, error}, socket) do
+    push(socket, "steer_failed", %{
+      reason: steer_error_reason(error),
+      message: socket.assigns[:last_steer_text] || ""
+    })
+
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info(:poll, %{assigns: %{path: path, offset: offset}} = socket) do
     socket =
       case SessionLog.read_from(path, offset) do
@@ -86,4 +117,12 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   defp error_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp error_reason(reason) when is_binary(reason), do: reason
   defp error_reason(reason), do: inspect(reason)
+
+  defp steer_error_reason(:ActiveTurnNotSteerable), do: "ActiveTurnNotSteerable"
+  defp steer_error_reason(:empty_message), do: "message is required"
+  defp steer_error_reason(:unavailable), do: "orchestrator_unavailable"
+  defp steer_error_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp steer_error_reason(%{"message" => message}) when is_binary(message), do: message
+  defp steer_error_reason(reason) when is_binary(reason), do: reason
+  defp steer_error_reason(reason), do: inspect(reason)
 end

@@ -8,6 +8,12 @@ export type IssueTab = (typeof ISSUE_TABS)[number];
 
 export const DEFAULT_ISSUE_TAB: IssueTab = "summary";
 
+export const AGENT_SECTIONS = ["authoring", "execution"] as const;
+
+export type AgentSection = (typeof AGENT_SECTIONS)[number];
+
+export const DEFAULT_AGENT_SECTION: AgentSection = "authoring";
+
 const WORKSPACE_VIEWS: readonly WorkspaceView[] = ["board", "list"];
 
 export function isWorkspaceView(value: string | undefined | null): value is WorkspaceView {
@@ -89,4 +95,24 @@ export function viewFromPathname(pathname: string): WorkspaceView {
     if (pathname.includes(`/${view}`)) return view;
   }
   return "board";
+}
+
+export function isAgentSection(value: string | undefined | null): value is AgentSection {
+  return typeof value === "string" && (AGENT_SECTIONS as readonly string[]).includes(value);
+}
+
+export function agentSectionFromSearchParams(params: URLSearchParams): AgentSection {
+  const value = params.get("agent");
+  return isAgentSection(value) ? value : DEFAULT_AGENT_SECTION;
+}
+
+export function withAgentSection(pathname: string, search: string, section: AgentSection): string {
+  const params = new URLSearchParams(search);
+  if (section === DEFAULT_AGENT_SECTION) {
+    params.delete("agent");
+  } else {
+    params.set("agent", section);
+  }
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
 }

@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { WorkspaceView } from "@/lib/workspaceRoutes";
+import {
+  agentSectionFromSearchParams,
+  type AgentSection,
+  isAgentSection,
+  withAgentSection,
+  type WorkspaceView,
+} from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { AgentTab } from "./AgentTab";
-
-const AGENT_SECTIONS = ["authoring", "execution"] as const;
-
-type AgentSection = (typeof AGENT_SECTIONS)[number];
 
 interface AgentTabsProps {
   issue: Issue;
@@ -19,12 +22,17 @@ interface AgentTabsProps {
   view: WorkspaceView;
 }
 
-function isAgentSection(value: string): value is AgentSection {
-  return (AGENT_SECTIONS as readonly string[]).includes(value);
-}
-
 export function AgentTabs({ issue, projectSlug, execution, view }: AgentTabsProps) {
-  const [section, setSection] = useState<AgentSection>("authoring");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const section = agentSectionFromSearchParams(new URLSearchParams(location.search));
+
+  const setSection = useCallback(
+    (nextSection: AgentSection) => {
+      navigate(withAgentSection(location.pathname, location.search, nextSection), { replace: true });
+    },
+    [location.pathname, location.search, navigate],
+  );
 
   return (
     <Tabs

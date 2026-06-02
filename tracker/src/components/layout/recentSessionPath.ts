@@ -1,4 +1,4 @@
-import { issueAssistantPath } from "@/lib/workspaceRoutes";
+import { issueAssistantPath, issuePath, withAgentSection } from "@/lib/workspaceRoutes";
 import type { RecentSession } from "@/types/recents";
 
 export function recentSessionSubtitle(session: RecentSession): string {
@@ -18,7 +18,11 @@ export function recentSessionSubtitle(session: RecentSession): string {
 export function recentSessionPath(session: RecentSession): string {
   if (session.kind === "codex") {
     if (session.projectSlug && session.identifier) {
-      return `/projects/${session.projectSlug}/board/issues/${session.identifier}`;
+      return withAgentSection(
+        issuePath(session.projectSlug, "board", session.identifier, "agent"),
+        "",
+        "execution",
+      );
     }
     return session.projectSlug ? `/projects/${session.projectSlug}/board` : "/projects";
   }
