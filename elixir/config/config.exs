@@ -4,6 +4,14 @@ config :phoenix, :json_library, Jason
 
 config :symphony_elixir, ecto_repos: [SymphonyElixir.Repo]
 
+# Local-first tracker reads/sync. Enabled by default so the UI and orchestrator
+# read from the local mirror (and the background sync engine keeps it fresh),
+# instead of hitting the remote GitHub/Linear/Jira API on every request and
+# burning the rate limit. Disabled under :test so the existing suites that
+# exercise the remote adapters keep their behavior unless they opt in via
+# `Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)`.
+config :symphony_elixir, :tracker, sync_enabled: Mix.env() != :test
+
 # Repo-root `skills/` directory for vendored, agent-agnostic skill definitions
 # loaded by `SymphonyElixir.Skills`. `__DIR__` here is `.../symphony/elixir/config`,
 # so `../../skills` resolves to the repo-root `skills/` dir.

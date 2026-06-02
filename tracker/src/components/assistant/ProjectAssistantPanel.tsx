@@ -5,7 +5,7 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { AudioLines, Bot, ImageIcon } from "lucide-react";
+import { AudioLines, Bot, Clock, ImageIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
@@ -66,6 +66,11 @@ interface ProjectAssistantPanelProps {
 
 const STREAMING_ASSISTANT_ID = "assistant-streaming";
 
+interface QueuedMessage {
+  id: string;
+  payload: AssistantComposerSubmit;
+}
+
 const convertMessage = (message: AssistantChatMessage): ThreadMessageLike => ({
   id: message.id,
   role: message.role === "user" ? "user" : "assistant",
@@ -96,6 +101,7 @@ export function ProjectAssistantPanel({
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
+  const [queued, setQueued] = useState<QueuedMessage[]>([]);
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<AssistantCodexCatalog | null>(null);
@@ -313,11 +319,11 @@ export function ProjectAssistantPanel({
     });
   }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError]);
 
-  const sendMessage = useCallback(
-    ({ message, settings, attachments }: AssistantComposerSubmit) => {
-      const trimmed = message.trim();
-      const hasAttachments = attachments.length > 0;
-      if ((!trimmed && !hasAttachments) || isRunning) return;
+  const dispatchSend = useCallback(
+    (submit: AssistantComposerSubmit) => {
+      const trimmed = submit.message.trim();
+      const hasAttachments = submit.attachments.length > 0;
+      if (!trimmed && !hasAttachments) return;
 
       const channel = channelRef.current;
       if (!channel) {
@@ -326,14 +332,14 @@ export function ProjectAssistantPanel({
       }
 
       const payload = {
-        message: trimmed || fallbackAttachmentMessage(attachments),
+        message: trimmed || fallbackAttachmentMessage(submit.attachments),
         context: {
           view,
           agent: "codex",
-          model: settings.model,
-          effort: settings.effort,
+          model: submit.settings.model,
+          effort: submit.settings.effort,
         },
-        attachments,
+        attachments: submit.attachments,
       };
 
       setConnectionError(null);
@@ -343,8 +349,35 @@ export function ProjectAssistantPanel({
         setIsRunning(false);
       });
     },
-    [isRunning, view],
+    [view],
   );
+
+  const sendMessage = useCallback(
+    (submit: AssistantComposerSubmit) => {
+      const trimmed = submit.message.trim();
+      const hasAttachments = submit.attachments.length > 0;
+      if (!trimmed && !hasAttachments) return;
+
+      if (isRunning) {
+        setQueued((current) => [...current, { id: crypto.randomUUID(), payload: submit }]);
+        return;
+      }
+
+      dispatchSend(submit);
+    },
+    [dispatchSend, isRunning],
+  );
+
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    const justFinished = wasRunningRef.current && !isRunning;
+    wasRunningRef.current = isRunning;
+    if (!justFinished || queued.length === 0) return;
+
+    const [next, ...rest] = queued;
+    setQueued(rest);
+    dispatchSend(next.payload);
+  }, [isRunning, queued, dispatchSend]);
 
   const onNew = useCallback(
     async (message: AppendMessage) => {
@@ -414,6 +447,29 @@ export function ProjectAssistantPanel({
     </>
   );
 
+  const queuedChips =
+    queued.length > 0 ? (
+      <div className="flex flex-col gap-1.5 px-4 pb-2">
+        {queued.map((item) => (
+          <div
+            key={item.id}
+            className="flex items-center gap-2 rounded-lg border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground"
+          >
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">{item.payload.message.trim()}</span>
+            <button
+              type="button"
+              aria-label="Remove queued message"
+              onClick={() => setQueued((current) => current.filter((entry) => entry.id !== item.id))}
+              className="rounded p-0.5 hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+      </div>
+    ) : null;
+
   const composerNode =
     catalog || catalogError ? (
       <AssistantComposer
@@ -467,6 +523,7 @@ export function ProjectAssistantPanel({
               <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
               <div className="pointer-events-auto bg-background">
                 <div className="mx-auto w-full max-w-4xl px-4 pb-2 pt-1">
+                  {queuedChips}
                   {composerNode ?? (
                     <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
                       Loading Codex CLI models...

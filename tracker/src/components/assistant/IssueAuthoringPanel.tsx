@@ -1,4 +1,6 @@
+import { ExternalLink } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { DocumentViewer } from "@/components/assistant/DocumentViewer";
 import {
@@ -9,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useIssueDocuments } from "@/hooks/useIssueDocuments";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import type { WorkspaceView } from "@/lib/workspaceRoutes";
+import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import type { AssistantDocumentChangedPayload, AssistantIssueCreatedPayload } from "@/services/phoenix/assistantChannel";
 
@@ -167,8 +169,18 @@ export function IssueAuthoringPanel({
   const documentsPanel = (
     <>
       <div className={cn("shrink-0 rounded-xl border bg-card shadow-sm", compact ? "px-3 py-2.5" : "px-4 py-3")}>
-        <h1 className="text-sm font-semibold">
+        <h1 className="flex items-center gap-1.5 text-sm font-semibold">
           {normalizedIdentifier ? `Issue authoring: ${normalizedIdentifier}` : "New issue authoring"}
+          {normalizedIdentifier ? (
+            <Link
+              to={issuePath(projectSlug, view, normalizedIdentifier)}
+              className="text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={`Open issue ${normalizedIdentifier}`}
+              title={`Open issue ${normalizedIdentifier}`}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+          ) : null}
         </h1>
         <p className={cn("text-xs text-muted-foreground", compact ? "mt-0.5" : "mt-1")}>
           {normalizedIdentifier

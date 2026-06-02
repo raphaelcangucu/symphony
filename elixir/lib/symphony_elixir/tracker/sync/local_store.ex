@@ -104,9 +104,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   """
   @spec unlink_pull_request(IssueRecord.t(), String.t()) :: :ok
   def unlink_pull_request(%IssueRecord{} = issue, url) when is_binary(url) do
-    Repo.delete_all(
-      from(pr in PullRequestRecord, where: pr.issue_id == ^issue.id and pr.remote_id == ^url)
-    )
+    Repo.delete_all(from(pr in PullRequestRecord, where: pr.issue_id == ^issue.id and pr.remote_id == ^url))
 
     :ok
   end
