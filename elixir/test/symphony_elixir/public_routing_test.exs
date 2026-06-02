@@ -143,11 +143,18 @@ defmodule SymphonyElixir.PublicRoutingTest do
       "github:\n  repo: acme/app\npublic_tunnel:\n  enabled: #{enabled}\n" <> namespace_line
 
     content = "---\n" <> front_matter <> "---\n"
-    File.write!(Workflow.workflow_file_path(), content)
+    path = Workflow.workflow_file_path()
+    File.write!(path, content)
 
     if Process.whereis(SymphonyElixir.WorkflowStore) do
       SymphonyElixir.WorkflowStore.force_reload()
     end
+
+    # The global WorkflowStore keeps this `public_tunnel: enabled` config in memory
+    # until something reloads it. Revert to the default workflow when the test ends
+    # (while the per-test file still exists) so the enabled tunnel does not leak
+    # into later tests that share the store but do not reload it (e.g. DevServer).
+    on_exit(fn -> write_workflow_file!(path) end)
 
     :ok
   end

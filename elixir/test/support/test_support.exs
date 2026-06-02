@@ -43,13 +43,6 @@ defmodule SymphonyElixir.TestSupport do
         stop_default_http_server()
 
         on_exit(fn ->
-          # Revert any in-test workflow mutation (e.g. enabling the public tunnel)
-          # by rewriting the default content and reloading the global WorkflowStore.
-          # `force_reload` keeps the prior in-memory state if the target file is
-          # missing, so we reload a present, clean file *before* deleting the path
-          # override and removing the dir. Otherwise the mutated config leaks into
-          # later tests that share the store but do not reload it themselves.
-          write_workflow_file!(workflow_file)
           Application.delete_env(:symphony_elixir, :workflow_file_path)
           Application.delete_env(:symphony_elixir, :server_port_override)
           Application.delete_env(:symphony_elixir, :memory_tracker_issues)
