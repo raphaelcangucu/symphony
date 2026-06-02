@@ -354,6 +354,7 @@ export function ProjectAssistantPanel({
       if (!activeCatalog) return;
 
       sendMessage({
+        kind: "message",
         message: firstPart.text,
         settings: defaultComposerSettings(activeCatalog),
         attachments: [],

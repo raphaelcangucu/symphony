@@ -67,6 +67,27 @@ describe("AssistantComposer", () => {
     );
   });
 
+  it("submits a default kind of 'message' with the typed text", () => {
+    const onSubmit = vi.fn();
+    render(
+      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={onSubmit} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: "message", message: "hello" }));
+  });
+
+  it("keeps the textarea enabled while the assistant is running", () => {
+    render(
+      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} disabled onSubmit={vi.fn()} />,
+    );
+
+    expect(screen.getByPlaceholderText("Write a message...")).not.toBeDisabled();
+  });
+
   it("does not send on Shift+Enter", () => {
     const onSubmit = vi.fn();
 

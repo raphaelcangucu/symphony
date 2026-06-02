@@ -35,7 +35,10 @@ import {
 } from "@/lib/assistantSettings";
 import { cn } from "@/lib/utils";
 
+export type AssistantComposerSubmitKind = "message" | "infer" | "btw";
+
 export interface AssistantComposerSubmit {
+  kind: AssistantComposerSubmitKind;
   message: string;
   settings: AssistantComposerSettings;
   attachments: ReturnType<typeof serializeAttachments>;
@@ -100,11 +103,7 @@ export function AssistantComposer({
     recordingRef.current = recording;
   }, [recording]);
 
-  const canSend =
-    !disabled &&
-    !recording &&
-    !uploadingImage &&
-    (input.trim().length > 0 || attachments.length > 0);
+  const canSend = !recording && !uploadingImage && (input.trim().length > 0 || attachments.length > 0);
 
   function updateModel(model: string) {
     const modelOption = catalog.models.find((entry) => entry.model === model) ?? catalog.models[0];
@@ -149,6 +148,7 @@ export function AssistantComposer({
     if (!canSend) return;
 
     onSubmit({
+      kind: "message",
       message: input,
       settings,
       attachments: serializeAttachments(attachments),
@@ -248,7 +248,6 @@ export function AssistantComposer({
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Write a message..."
-          disabled={disabled}
           className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
         />
 
