@@ -1,17 +1,20 @@
 defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   @moduledoc """
-  Read-only endpoint exposing the pull request(s) related to an issue, including
-  CI pipelines, jobs, statuses, and the PR conversation.
+  Endpoint exposing the pull request(s) related to an issue.
 
-  Linkage is only available for GitHub-backed projects. Other tracker kinds
-  return an empty, `supported: false` payload so the UI can degrade gracefully.
+  `index` merges live GitHub discovery (CI pipelines, jobs, statuses,
+  conversation) with PRs persisted in `tracker_pull_requests` (manual links and
+  previously discovered rows), deduped by URL. `link`/`unlink` manage manual
+  cross-repo associations that live discovery cannot find (e.g. no App access).
   """
 
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.GitHub.PullRequests
+  alias SymphonyElixir.GitHub.{PullRequests, PullRequestUrl}
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Tracker.Sync.LocalStore
+  alias SymphonyElixir.Tracker.Sync.PullRequests, as: SyncPullRequests
   alias SymphonyElixirWeb.TrackerErrors
 
   require Logger
@@ -24,27 +27,122 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
     end
   end
 
-  defp respond(conn, project, identifier) do
-    case PullRequests.resolve_repo(project) do
-      {:ok, repo} -> respond_github(conn, repo, identifier)
-      {:error, _reason} -> json(conn, %{data: [], supported: false, available: false})
+  @spec link(Conn.t(), map()) :: Conn.t()
+  def link(conn, %{"project_slug" => project_slug, "identifier" => identifier, "url" => url}) do
+    with {:ok, parsed} <- PullRequestUrl.parse(url),
+         {:ok, issue} <- Context.get_issue(project_slug, identifier),
+         {:ok, pr} <-
+           LocalStore.link_manual_pull_request(issue, %{
+             url: url,
+             repo: parsed.repo,
+             number: parsed.number
+           }) do
+      json(conn, %{
+        data: %{url: pr.url, number: pr.number, repo: pr.repo, state: pr.state, origin: pr.origin}
+      })
+    else
+      {:error, :invalid_pr_url} -> error(conn, 422, "Invalid GitHub pull request URL.")
+      {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
-  defp respond_github(conn, repo, identifier) do
-    cond do
-      not PullRequests.available?() ->
-        json(conn, %{data: [], supported: true, available: false})
+  def link(conn, _params), do: error(conn, 422, "A pull request URL is required.")
 
-      true ->
-        case PullRequests.for_issue(repo, identifier) do
-          {:ok, pull_requests} ->
-            json(conn, %{data: pull_requests, supported: true, available: true})
-
-          {:error, reason} ->
-            Logger.warning("PR lookup failed for #{identifier}: #{inspect(reason)}")
-            json(conn, %{data: [], supported: true, available: true})
-        end
+  @spec unlink(Conn.t(), map()) :: Conn.t()
+  def unlink(conn, %{"project_slug" => project_slug, "identifier" => identifier, "url" => url}) do
+    with {:ok, issue} <- Context.get_issue(project_slug, identifier),
+         :ok <- LocalStore.unlink_pull_request(issue, url) do
+      json(conn, %{data: %{unlinked: true}})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
     end
+  end
+
+  def unlink(conn, _params), do: error(conn, 422, "A pull request URL is required.")
+
+  defp respond(conn, project, identifier) do
+    case PullRequests.resolve_repo(project) do
+      {:ok, repo} ->
+        respond_github(conn, project.slug, repo, identifier)
+
+      {:error, _reason} ->
+        json(conn, %{data: persisted(project.slug, identifier), supported: false, available: false})
+    end
+  end
+
+  defp respond_github(conn, project_slug, repo, identifier) do
+    if PullRequests.available?() do
+      live = discover_live(repo, project_slug, identifier)
+      json(conn, %{data: merge(live, persisted(project_slug, identifier)), supported: true, available: true})
+    else
+      json(conn, %{data: persisted(project_slug, identifier), supported: true, available: false})
+    end
+  end
+
+  defp discover_live(repo, project_slug, identifier) do
+    case PullRequests.for_issue(repo, identifier) do
+      {:ok, prs} ->
+        persist_discovered(project_slug, identifier, prs)
+        Enum.map(prs, fn pr -> Map.put_new(pr, :origin, "auto") end)
+
+      {:error, reason} ->
+        Logger.warning("PR lookup failed for #{identifier}: #{inspect(reason)}")
+        []
+    end
+  end
+
+  defp persist_discovered(project_slug, identifier, prs) do
+    with {:ok, issue} <- Context.get_issue(project_slug, identifier) do
+      records =
+        prs
+        |> Enum.filter(&is_binary(&1[:url]))
+        |> Enum.map(fn pr ->
+          %{
+            remote_id: pr.url,
+            number: pr[:number],
+            url: pr.url,
+            title: pr[:title],
+            state: pr[:state] || "unknown",
+            repo: pr[:repo],
+            origin: "auto"
+          }
+        end)
+
+      LocalStore.upsert_pull_requests(issue, records)
+    end
+
+    :ok
+  end
+
+  defp persisted(project_slug, identifier) do
+    {:ok, prs} = SyncPullRequests.for_issue(project_slug, identifier)
+    Enum.map(prs, &persisted_to_pr_map/1)
+  end
+
+  defp persisted_to_pr_map(pr) do
+    %{
+      number: pr.number,
+      title: pr.title,
+      url: pr.url,
+      state: pr.state,
+      repo: pr.repo,
+      origin: pr.origin,
+      pipelines: [],
+      statuses: [],
+      conversation: [],
+      base_behind_by: nil
+    }
+  end
+
+  defp merge(live, persisted) do
+    live_urls = live |> Enum.map(& &1[:url]) |> Enum.reject(&is_nil/1) |> MapSet.new()
+    extras = Enum.reject(persisted, fn pr -> pr.url && MapSet.member?(live_urls, pr.url) end)
+    live ++ extras
+  end
+
+  defp error(conn, status, message) do
+    conn
+    |> put_status(status)
+    |> json(%{error: %{message: message}})
   end
 end
