@@ -316,6 +316,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
       try do
         on_message = fn message ->
+          maybe_forward_turn_started(message, opts)
           relay_codex_event(message, collector, opts)
 
           case Keyword.get(opts, :on_message) do
@@ -373,6 +374,21 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp relay_codex_event(_message, _collector, _opts), do: :ok
+
+  defp maybe_forward_turn_started(message, opts) when is_map(message) do
+    if Map.get(message, :event) == :session_started do
+      turn_id = Map.get(message, :turn_id) || Map.get(message, "turn_id")
+
+      case Keyword.get(opts, :on_turn_started) do
+        callback when is_function(callback, 1) and is_binary(turn_id) -> callback.(turn_id)
+        _ -> :ok
+      end
+    end
+
+    :ok
+  end
+
+  defp maybe_forward_turn_started(_message, _opts), do: :ok
 
   defp extract_delta(payload) do
     get_in(payload, ["params", "delta"]) ||
