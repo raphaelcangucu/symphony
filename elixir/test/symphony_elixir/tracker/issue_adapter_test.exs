@@ -20,6 +20,11 @@ defmodule SymphonyElixir.Tracker.IssueAdapterTest do
                SymphonyElixir.Linear.IssueAdapter
     end
 
+    test "resolves jira adapter" do
+      assert IssueAdapter.for(%Project{tracker_kind: "jira"}) ==
+               SymphonyElixir.Jira.IssueAdapter
+    end
+
     test "falls back to local for nil/unknown kind" do
       assert IssueAdapter.for(%Project{tracker_kind: nil}) ==
                SymphonyElixir.LocalTracker.IssueAdapter

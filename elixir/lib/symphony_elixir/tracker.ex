@@ -63,7 +63,7 @@ defmodule SymphonyElixir.Tracker do
   def adapter do
     kind = Config.tracker_kind()
 
-    if kind in ["github", "linear"] and Config.tracker_sync_enabled?() do
+    if kind in ["github", "linear", "jira"] and Config.tracker_sync_enabled?() do
       SymphonyElixir.Tracker.Sync.LocalFirstTracker
     else
       remote_adapter(kind)
@@ -73,5 +73,6 @@ defmodule SymphonyElixir.Tracker do
   defp remote_adapter("local"), do: SymphonyElixir.LocalTracker.Tracker
   defp remote_adapter("memory"), do: SymphonyElixir.Memory.Tracker
   defp remote_adapter("linear"), do: SymphonyElixir.Linear.Tracker
+  defp remote_adapter("jira"), do: SymphonyElixir.Jira.Tracker
   defp remote_adapter(_kind), do: SymphonyElixir.GitHub.Tracker
 end

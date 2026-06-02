@@ -41,7 +41,7 @@ defmodule SymphonyElixir.Config do
   @default_github_max_retries 4
   @default_github_max_backoff_ms 60_000
 
-  @tracker_sections ["local", "linear", "github", "memory"]
+  @tracker_sections ["local", "linear", "jira", "github", "memory"]
   @agent_sections ["claude", "codex"]
 
   @workflow_options_schema NimbleOptions.new!(
@@ -747,6 +747,7 @@ defmodule SymphonyElixir.Config do
     case tracker_kind() do
       "local" -> SymphonyElixir.LocalTracker.Config
       "linear" -> SymphonyElixir.Linear.Config
+      "jira" -> SymphonyElixir.Jira.Config
       "github" -> SymphonyElixir.GitHub.Config
       "memory" -> SymphonyElixir.Memory.Config
     end

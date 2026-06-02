@@ -25,7 +25,7 @@ defmodule SymphonyElixir.LocalTracker.Project do
     timestamps(type: :utc_datetime_usec)
   end
 
-  @valid_tracker_kinds ~w(local github linear)
+  @valid_tracker_kinds ~w(local github linear jira)
 
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(project, attrs) do

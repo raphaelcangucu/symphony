@@ -169,12 +169,13 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     end
   end
 
-  defp sync_enabled?(project), do: project.tracker_kind in ["github", "linear"]
+  defp sync_enabled?(project), do: project.tracker_kind in ["github", "linear", "jira"]
 
   defp default_driver_for(project) do
     case project.tracker_kind do
       "github" -> SymphonyElixir.GitHub.SyncDriver
       "linear" -> SymphonyElixir.Linear.SyncDriver
+      "jira" -> SymphonyElixir.Jira.SyncDriver
       _ -> nil
     end
   end

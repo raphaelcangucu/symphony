@@ -49,7 +49,7 @@ defmodule SymphonyElixir.LocalTracker.ProjectTest do
 
     test "rejects unknown tracker_kind" do
       changeset =
-        Project.changeset(%Project{}, %{name: "X", slug: "x", tracker_kind: "jira"})
+        Project.changeset(%Project{}, %{name: "X", slug: "x", tracker_kind: "trello"})
 
       refute changeset.valid?
     end

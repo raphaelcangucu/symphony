@@ -25,6 +25,16 @@ defmodule SymphonyElixir.Tracker.IssueAdapterRoutingTest do
     assert IssueAdapter.for(%Project{tracker_kind: "github"}) == SymphonyElixir.GitHub.IssueAdapter
   end
 
+  test "jira project routes to LocalFirstAdapter when sync enabled" do
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+    assert IssueAdapter.for(%Project{tracker_kind: "jira"}) == LocalFirstAdapter
+  end
+
+  test "jira project routes to the remote adapter when sync disabled" do
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: false)
+    assert IssueAdapter.for(%Project{tracker_kind: "jira"}) == SymphonyElixir.Jira.IssueAdapter
+  end
+
   test "local project always routes to the local adapter" do
     Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
     assert IssueAdapter.for(%Project{tracker_kind: "local"}) == SymphonyElixir.LocalTracker.IssueAdapter
