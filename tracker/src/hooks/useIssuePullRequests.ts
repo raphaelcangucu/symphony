@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useWindowFocus } from "@/hooks/useWindowFocus";
 import { listPullRequests } from "@/services/pullRequests";
 import type { PullRequest } from "@/types/pull-request";
 
-const DEFAULT_INTERVAL_MS = 20_000;
+// Skip the open-time fetch when the last successful load is newer than this.
+const FRESH_WINDOW_MS = 60_000;
 
 interface UseIssuePullRequestsArgs {
   projectSlug: string;
   identifier: string | null;
   enabled?: boolean;
-  intervalMs?: number;
 }
 
 export interface UseIssuePullRequestsResult {
@@ -24,14 +23,15 @@ export interface UseIssuePullRequestsResult {
 
 /**
  * Loads the pull request(s) related to an issue, including CI pipelines, jobs,
- * statuses, and conversation. Polls lightly while enabled so check results stay
- * fresh without flashing the panel (loading is only true on the first fetch).
+ * statuses, and conversation. Fetches when the drawer opens, but only when the
+ * cached data is older than FRESH_WINDOW_MS — there is no background polling.
+ * Switching issues resets the cache; `refetch` forces a fresh load (e.g. after a
+ * manual link/unlink).
  */
 export function useIssuePullRequests({
   projectSlug,
   identifier,
   enabled = true,
-  intervalMs = DEFAULT_INTERVAL_MS,
 }: UseIssuePullRequestsArgs): UseIssuePullRequestsResult {
   const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
   const [supported, setSupported] = useState(false);
@@ -40,9 +40,7 @@ export function useIssuePullRequests({
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
   const hasLoadedRef = useRef(false);
-  const focused = useWindowFocus();
-  const focusedRef = useRef(focused);
-  focusedRef.current = focused;
+  const lastFetchedAtRef = useRef(0);
 
   const active = enabled && Boolean(identifier && projectSlug);
 
@@ -58,6 +56,7 @@ export function useIssuePullRequests({
       setAvailable(result.available);
       setError(null);
       hasLoadedRef.current = true;
+      lastFetchedAtRef.current = Date.now();
     } catch {
       setError("Could not load pull request details.");
     } finally {
@@ -66,30 +65,25 @@ export function useIssuePullRequests({
     }
   }, [identifier, projectSlug]);
 
+  // Reset the cache when the target issue changes so reopening it reloads.
   useEffect(() => {
     hasLoadedRef.current = false;
-    if (!active) {
-      setPullRequests([]);
-      setSupported(false);
-      setAvailable(false);
-      setError(null);
-      setLoading(false);
-      return undefined;
-    }
+    lastFetchedAtRef.current = 0;
+    setPullRequests([]);
+    setSupported(false);
+    setAvailable(false);
+    setError(null);
+    setLoading(false);
+  }, [identifier, projectSlug]);
 
-    void refetch();
-
-    const timer = setInterval(() => {
-      if (focusedRef.current) void refetch();
-    }, intervalMs);
-
-    return () => clearInterval(timer);
-  }, [active, intervalMs, refetch]);
-
+  // Fetch when the drawer opens, skipping if loaded within the fresh window.
   useEffect(() => {
-    if (!active || !focused) return;
+    if (!active) return;
+    const fresh =
+      hasLoadedRef.current && Date.now() - lastFetchedAtRef.current < FRESH_WINDOW_MS;
+    if (fresh) return;
     void refetch();
-  }, [active, focused, refetch]);
+  }, [active, refetch]);
 
   return { pullRequests, supported, available, loading, error, refetch };
 }

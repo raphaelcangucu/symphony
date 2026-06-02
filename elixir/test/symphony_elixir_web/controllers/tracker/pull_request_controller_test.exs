@@ -74,6 +74,59 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
              }
            }}
 
+        query =~ "SymphonyPullRequestByNumber" ->
+          send(self(), {:single_pr_query, variables})
+
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "pullRequest" => %{
+                   "number" => variables["number"],
+                   "title" => "Backend fix",
+                   "url" => "https://github.com/clouapp/back/pull/277",
+                   "state" => "OPEN",
+                   "isDraft" => false,
+                   "merged" => false,
+                   "headRefName" => "fix-277",
+                   "baseRefName" => "dev",
+                   "repository" => %{"nameWithOwner" => "clouapp/back"},
+                   "author" => %{"login" => "codex-bot"},
+                   "updatedAt" => "2026-06-01T12:00:00Z",
+                   "commits" => %{
+                     "nodes" => [
+                       %{
+                         "commit" => %{
+                           "statusCheckRollup" => %{
+                             "state" => "FAILURE",
+                             "contexts" => %{
+                               "nodes" => [
+                                 %{
+                                   "__typename" => "CheckRun",
+                                   "name" => "tests (1) / test",
+                                   "status" => "COMPLETED",
+                                   "conclusion" => "FAILURE",
+                                   "checkSuite" => %{
+                                     "workflowRun" => %{
+                                       "url" => "https://github.com/clouapp/back/actions/runs/9",
+                                       "workflow" => %{"name" => "CI/CD Pipeline"}
+                                     }
+                                   }
+                                 }
+                               ]
+                             }
+                           }
+                         }
+                       }
+                     ]
+                   },
+                   "comments" => %{"nodes" => []},
+                   "reviews" => %{"nodes" => []}
+                 }
+               }
+             }
+           }}
+
         true ->
           {:ok, %{"data" => %{}}}
       end
@@ -165,6 +218,13 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
       manual = Enum.find(body["data"], &(&1["url"] == "https://github.com/clouapp/back/pull/277"))
       assert manual["repo"] == "clouapp/back"
       assert manual["origin"] == "manual"
+
+      assert [%{"name" => "CI/CD Pipeline", "jobs" => [%{"name" => "tests (1) / test"}]}] =
+               manual["pipelines"]
+
+      assert manual["state"] == "open"
+      assert manual["checks_state"] == "FAILURE"
+      assert_received {:single_pr_query, %{"number" => 277}}
     end
 
     test "link then unlink a PR" do

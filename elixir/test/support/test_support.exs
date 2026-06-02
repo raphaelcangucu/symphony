@@ -86,9 +86,7 @@ defmodule SymphonyElixir.TestSupport do
         repo.query!("PRAGMA defer_foreign_keys = ON")
 
         %{rows: rows} =
-          repo.query!(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations'"
-          )
+          repo.query!("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations'")
 
         Enum.each(rows, fn [name] -> repo.query!("DELETE FROM \"#{name}\"") end)
         :ok

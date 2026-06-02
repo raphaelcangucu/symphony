@@ -66,9 +66,7 @@ defmodule SymphonyElixir.Editor.Server do
   defp reuse_or_spawn(state, executable) do
     case probe().({probe_host(Config.editor_host()), Config.editor_port()}) do
       :ok ->
-        Logger.info(
-          "Editor server reusing existing code-server host=#{Config.editor_host()} port=#{Config.editor_port()}"
-        )
+        Logger.info("Editor server reusing existing code-server host=#{Config.editor_host()} port=#{Config.editor_port()}")
 
         %{state | status: :ready}
 

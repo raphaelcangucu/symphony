@@ -402,6 +402,65 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
     end
   end
 
+  describe "for_pull_request/3" do
+    test "fetches a single PR with its rollup by repo and number" do
+      request_fun = fn payload, _headers ->
+        assert payload["query"] =~ "SymphonyPullRequestByNumber"
+        assert payload["variables"]["owner"] == "clouapp"
+        assert payload["variables"]["name"] == "back"
+        assert payload["variables"]["number"] == 277
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "repository" => %{
+                 "pullRequest" =>
+                   Map.merge(pr_node(%{}), %{
+                     "number" => 277,
+                     "url" => "https://github.com/clouapp/back/pull/277",
+                     "repository" => %{"nameWithOwner" => "clouapp/back"}
+                   })
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, pr} =
+               PullRequests.for_pull_request("clouapp/back", 277,
+                 client_module: TestClient,
+                 request_fun: request_fun
+               )
+
+      assert pr.number == 277
+      assert pr.repo == "clouapp/back"
+      assert pr.checks_state == "FAILURE"
+      assert [%{name: "CI"}] = pr.pipelines
+    end
+
+    test "returns nil when the PR is not visible" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 200, body: %{"data" => %{"repository" => %{"pullRequest" => nil}}}}}
+      end
+
+      assert {:ok, nil} =
+               PullRequests.for_pull_request("clouapp/back", 277,
+                 client_module: TestClient,
+                 request_fun: request_fun
+               )
+    end
+
+    test "rejects invalid arguments" do
+      assert {:error, :invalid_arguments} =
+               PullRequests.for_pull_request(nil, 277, client_module: TestClient)
+
+      assert {:error, :invalid_arguments} =
+               PullRequests.for_pull_request("clouapp/back", 0, client_module: TestClient)
+    end
+  end
+
   describe "resolve_repo/1" do
     test "returns repo for github projects" do
       project = %Project{tracker_kind: "github", tracker_config: %{"repo" => "acme/app"}}

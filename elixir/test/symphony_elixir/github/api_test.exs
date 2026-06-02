@@ -331,4 +331,165 @@ defmodule SymphonyElixir.GitHub.ApiTest do
                )
     end
   end
+
+  describe "pull_request_detail/3" do
+    test "GraphQL happy path returns the rich rollup" do
+      request_fun = fn payload, _headers ->
+        assert payload["query"] =~ "SymphonyPullRequestByNumber"
+        assert payload["variables"]["owner"] == "clouapp"
+        assert payload["variables"]["name"] == "back"
+        assert payload["variables"]["number"] == 277
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "repository" => %{
+                 "pullRequest" => %{
+                   "number" => 277,
+                   "title" => "Backend fix",
+                   "url" => "https://github.com/clouapp/back/pull/277",
+                   "state" => "OPEN",
+                   "isDraft" => false,
+                   "merged" => false,
+                   "headRefName" => "fix-277",
+                   "baseRefName" => "dev",
+                   "repository" => %{"nameWithOwner" => "clouapp/back"},
+                   "author" => %{"login" => "codex-bot"},
+                   "updatedAt" => "2026-06-01T12:00:00Z",
+                   "commits" => %{
+                     "nodes" => [
+                       %{
+                         "commit" => %{
+                           "statusCheckRollup" => %{
+                             "state" => "FAILURE",
+                             "contexts" => %{
+                               "nodes" => [
+                                 %{
+                                   "__typename" => "CheckRun",
+                                   "name" => "tests (1) / test",
+                                   "status" => "COMPLETED",
+                                   "conclusion" => "FAILURE",
+                                   "checkSuite" => %{
+                                     "workflowRun" => %{
+                                       "url" => "https://github.com/clouapp/back/actions/runs/9",
+                                       "workflow" => %{"name" => "CI/CD Pipeline"}
+                                     }
+                                   }
+                                 }
+                               ]
+                             }
+                           }
+                         }
+                       }
+                     ]
+                   },
+                   "comments" => %{"nodes" => []},
+                   "reviews" => %{"nodes" => []}
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, pr} =
+               Api.pull_request_detail("clouapp/back", 277, request_fun: request_fun)
+
+      assert pr.number == 277
+      assert pr.checks_state == "FAILURE"
+      assert [%{name: "CI/CD Pipeline", jobs: [%{name: "tests (1) / test"}]}] = pr.pipelines
+    end
+
+    test "falls back to REST check-runs when GraphQL is rate-limited" do
+      request_fun = fn _payload, _headers -> graphql_rate_limited() end
+
+      rest_fun = fn url, _headers ->
+        cond do
+          url == "https://api.github.com/repos/clouapp/back/pulls/277" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "html_url" => "https://github.com/clouapp/back/pull/277",
+                 "title" => "Backend fix",
+                 "state" => "open",
+                 "draft" => false,
+                 "merged" => false,
+                 "merged_at" => nil,
+                 "head" => %{"sha" => "075310af"}
+               }
+             }}
+
+          url =~ "/repos/clouapp/back/commits/075310af/check-runs" ->
+            {:ok,
+             %{
+               status: 200,
+               body: %{
+                 "total_count" => 3,
+                 "check_runs" => [
+                   %{
+                     "id" => 1,
+                     "name" => "tests (1) / test",
+                     "status" => "completed",
+                     "conclusion" => "failure",
+                     "details_url" => "https://github.com/clouapp/back/runs/1",
+                     "started_at" => "2026-06-01T11:00:00Z",
+                     "completed_at" => "2026-06-01T11:02:00Z",
+                     "app" => %{"name" => "GitHub Actions"}
+                   },
+                   %{
+                     "id" => 2,
+                     "name" => "deploy-macro",
+                     "status" => "completed",
+                     "conclusion" => "skipped",
+                     "details_url" => "https://github.com/clouapp/back/runs/2",
+                     "app" => %{"name" => "GitHub Actions"}
+                   }
+                 ]
+               }
+             }}
+
+          url =~ "/repos/clouapp/back/commits/075310af/status" ->
+            {:ok, %{status: 200, body: %{"state" => "failure", "statuses" => []}}}
+
+          true ->
+            flunk("unexpected REST url: #{url}")
+        end
+      end
+
+      assert {:ok, pr} =
+               Api.pull_request_detail("clouapp/back", 277,
+                 request_fun: request_fun,
+                 rest_request_fun: rest_fun
+               )
+
+      assert pr.number == 277
+      assert pr.repo == "clouapp/back"
+      assert pr.url == "https://github.com/clouapp/back/pull/277"
+      assert pr.title == "Backend fix"
+      assert pr.state == "open"
+      assert pr.checks_state == "FAILURE"
+
+      assert [%{name: "GitHub Actions", jobs: jobs}] = pr.pipelines
+      assert Enum.map(jobs, & &1.name) == ["tests (1) / test", "deploy-macro"]
+
+      failing = Enum.find(jobs, &(&1.name == "tests (1) / test"))
+      assert failing.conclusion == "FAILURE"
+      assert failing.status == "COMPLETED"
+      assert failing.job_id == 1
+    end
+
+    test "returns {:ok, nil} when the PR is not visible (REST 404)" do
+      request_fun = fn _payload, _headers -> graphql_rate_limited() end
+      rest_fun = fn _url, _headers -> {:ok, %{status: 404, body: %{"message" => "Not Found"}}} end
+
+      assert {:ok, nil} =
+               Api.pull_request_detail("clouapp/back", 277,
+                 request_fun: request_fun,
+                 rest_request_fun: rest_fun
+               )
+    end
+  end
 end

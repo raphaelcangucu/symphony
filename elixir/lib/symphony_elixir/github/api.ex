@@ -9,7 +9,7 @@ defmodule SymphonyElixir.GitHub.Api do
   """
 
   require Logger
-  alias SymphonyElixir.GitHub.{Client, IssueComments, RepoSpec}
+  alias SymphonyElixir.GitHub.{Client, IssueComments, PullRequests, RepoSpec}
 
   @type comment :: %{
           id: String.t() | nil,
@@ -32,6 +32,11 @@ defmodule SymphonyElixir.GitHub.Api do
 
   @default_comment_limit 50
   @label_page_size 50
+  @check_page_size 100
+
+  # REST check-run conclusions / statuses mapped to a GraphQL-style rollup state.
+  @failing_conclusions ~w(failure timed_out startup_failure action_required cancelled stale error)
+  @pending_check_statuses ~w(queued in_progress pending waiting requested)
 
   @add_comment_mutation """
   mutation SymphonyApiAddComment($subjectId: ID!, $body: String!) {
@@ -436,6 +441,169 @@ defmodule SymphonyElixir.GitHub.Api do
   end
 
   defp normalize_rest_pr(_pr), do: []
+
+  # -- pull_request_detail ----------------------------------------------------
+
+  @doc """
+  Fetches a single pull request with its CI rollup (pipelines, statuses, state)
+  by `repo` ("owner/name") and `number`.
+
+  GraphQL primary (the rich rollup via `GitHub.PullRequests.for_pull_request/3`);
+  on a GraphQL rate-limit, falls back to REST (`/pulls/:n` head sha →
+  `/commits/:sha/check-runs` + combined commit status), normalized to the same PR
+  map shape. Returns `{:ok, nil}` when the PR is not visible.
+  """
+  @spec pull_request_detail(String.t(), integer(), keyword()) ::
+          {:ok, map() | nil} | {:error, term()}
+  def pull_request_detail(repo, number, opts \\ [])
+
+  def pull_request_detail(repo, number, opts)
+      when is_binary(repo) and is_integer(number) and number > 0 do
+    with {:ok, {owner, name}} <- RepoSpec.split(repo) do
+      with_fallback(
+        :pull_request_detail,
+        fn -> PullRequests.for_pull_request(repo, number, graphql_opts(opts)) end,
+        fn -> rest_pull_request_detail(owner, name, repo, number, opts) end
+      )
+    end
+  end
+
+  def pull_request_detail(_repo, _number, _opts), do: {:error, :invalid_arguments}
+
+  defp rest_pull_request_detail(owner, name, repo, number, opts) do
+    case rest_get_json("/repos/#{owner}/#{name}/pulls/#{number}", opts) do
+      {:ok, pull} when is_map(pull) ->
+        sha = get_in(pull, ["head", "sha"])
+        check_runs = rest_check_runs(owner, name, sha, opts)
+        statuses = rest_commit_statuses(owner, name, sha, opts)
+        {:ok, normalize_rest_pull_detail(repo, number, pull, check_runs, statuses)}
+
+      {:ok, _other} ->
+        {:ok, nil}
+
+      {:error, {:github_api_status, 404}} ->
+        {:ok, nil}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp rest_get_json(path, opts) do
+    case Client.rest_get(path, rest_opts(opts)) do
+      {:ok, %{body: body}} -> {:ok, body}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp rest_check_runs(_owner, _name, sha, _opts) when not is_binary(sha), do: []
+
+  defp rest_check_runs(owner, name, sha, opts) do
+    path = "/repos/#{owner}/#{name}/commits/#{sha}/check-runs?per_page=#{@check_page_size}"
+
+    case rest_get_json(path, opts) do
+      {:ok, %{"check_runs" => runs}} when is_list(runs) -> runs
+      _ -> []
+    end
+  end
+
+  # Legacy commit statuses (e.g. Vercel). Best-effort: an empty list on any error.
+  defp rest_commit_statuses(_owner, _name, sha, _opts) when not is_binary(sha), do: []
+
+  defp rest_commit_statuses(owner, name, sha, opts) do
+    case rest_get_json("/repos/#{owner}/#{name}/commits/#{sha}/status", opts) do
+      {:ok, %{"statuses" => statuses}} when is_list(statuses) -> statuses
+      _ -> []
+    end
+  end
+
+  defp normalize_rest_pull_detail(repo, number, pull, check_runs, statuses) do
+    %{
+      number: number,
+      repo: repo,
+      url: pull["html_url"],
+      title: pull["title"],
+      state: rest_pr_state(pull),
+      checks_state: rest_checks_state(check_runs, statuses),
+      pipelines: rest_pipelines(check_runs),
+      statuses: rest_status_contexts(statuses),
+      conversation: [],
+      base_behind_by: nil
+    }
+  end
+
+  defp rest_pr_state(pull) do
+    cond do
+      is_binary(pull["merged_at"]) or pull["merged"] == true -> "merged"
+      pull["draft"] == true and pull["state"] == "open" -> "draft"
+      pull["state"] == "open" -> "open"
+      pull["state"] == "closed" -> "closed"
+      true -> "unknown"
+    end
+  end
+
+  # REST check-runs lack the workflow name GraphQL exposes, so pipelines are
+  # grouped by the producing app (e.g. "GitHub Actions"), falling back to "Checks".
+  defp rest_pipelines(check_runs) do
+    check_runs
+    |> Enum.group_by(&rest_pipeline_name/1)
+    |> Enum.map(fn {name, runs} -> %{name: name, url: nil, jobs: Enum.map(runs, &rest_job/1)} end)
+    |> Enum.sort_by(& &1.name)
+  end
+
+  defp rest_pipeline_name(run) do
+    case get_in(run, ["app", "name"]) do
+      name when is_binary(name) and name != "" -> name
+      _ -> "Checks"
+    end
+  end
+
+  defp rest_job(run) do
+    %{
+      name: run["name"],
+      job_id: rest_job_id(run["id"]),
+      status: upcase_or_nil(run["status"]),
+      conclusion: upcase_or_nil(run["conclusion"]),
+      url: run["details_url"] || run["html_url"],
+      started_at: run["started_at"],
+      completed_at: run["completed_at"]
+    }
+  end
+
+  defp rest_job_id(id) when is_integer(id) and id > 0, do: id
+  defp rest_job_id(_id), do: nil
+
+  defp rest_status_contexts(statuses) do
+    Enum.map(statuses, fn status ->
+      %{
+        context: status["context"],
+        state: upcase_or_nil(status["state"]),
+        url: status["target_url"],
+        description: status["description"]
+      }
+    end)
+  end
+
+  defp rest_checks_state(check_runs, statuses) do
+    conclusions = Enum.map(check_runs, &normalize_lower(&1["conclusion"]))
+    run_statuses = Enum.map(check_runs, &normalize_lower(&1["status"]))
+    status_states = Enum.map(statuses, &normalize_lower(&1["state"]))
+
+    cond do
+      Enum.any?(conclusions, &(&1 in @failing_conclusions)) -> "FAILURE"
+      Enum.any?(status_states, &(&1 in ["failure", "error"])) -> "FAILURE"
+      Enum.any?(run_statuses, &(&1 in @pending_check_statuses)) -> "PENDING"
+      Enum.any?(status_states, &(&1 == "pending")) -> "PENDING"
+      check_runs == [] and statuses == [] -> nil
+      true -> "SUCCESS"
+    end
+  end
+
+  defp upcase_or_nil(value) when is_binary(value) and value != "", do: String.upcase(value)
+  defp upcase_or_nil(_value), do: nil
+
+  defp normalize_lower(value) when is_binary(value), do: String.downcase(value)
+  defp normalize_lower(_value), do: nil
 
   # -- Fallback combinator (F1) ----------------------------------------------
 

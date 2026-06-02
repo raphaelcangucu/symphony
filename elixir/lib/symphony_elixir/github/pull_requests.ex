@@ -118,6 +118,14 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   }
   """
 
+  @pull_query """
+  query SymphonyPullRequestByNumber($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) {
+      pullRequest(number: $number) { #{@pr_fields} }
+    }
+  }
+  """
+
   @type pull_request :: %{atom() => term()}
 
   @doc """
@@ -138,6 +146,47 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       end
     else
       {:error, :invalid_arguments}
+    end
+  end
+
+  @doc """
+  Fetches a single pull request (including its CI rollup) by `repo` ("owner/name")
+  and `number`. Used to enrich PRs that issue-scoped discovery cannot surface
+  (cross-repo / non-default base branch), so manually-linked PRs still show
+  checks.
+
+  Returns `{:ok, pull_request}` when found, `{:ok, nil}` when the PR does not
+  exist or is not visible, or `{:error, reason}` on transport/config failures.
+  """
+  @spec for_pull_request(String.t() | nil, integer() | nil, keyword()) ::
+          {:ok, pull_request() | nil} | {:error, term()}
+  def for_pull_request(repo, number, opts \\ []) do
+    if is_binary(repo) and is_integer(number) and number > 0 do
+      with {:ok, {owner, name}} <- RepoSpec.split(repo) do
+        fetch_pull_request(owner, name, number, opts)
+      end
+    else
+      {:error, :invalid_arguments}
+    end
+  end
+
+  defp fetch_pull_request(owner, name, number, opts) do
+    client = client_module(opts)
+    graphql_opts = Keyword.take(opts, [:request_fun, :operation_name])
+    variables = %{"owner" => owner, "name" => name, "number" => number}
+
+    case client.graphql(@pull_query, variables, graphql_opts) do
+      {:ok, %{"data" => %{"repository" => %{"pullRequest" => node}}}} when is_map(node) ->
+        {:ok, parse_pr_node(node)}
+
+      {:ok, %{"data" => %{"repository" => %{"pullRequest" => nil}}}} ->
+        {:ok, nil}
+
+      {:ok, _payload} ->
+        {:ok, nil}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

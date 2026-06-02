@@ -4,8 +4,11 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
 
   `index` merges live GitHub discovery (CI pipelines, jobs, statuses,
   conversation) with PRs persisted in `tracker_pull_requests` (manual links and
-  previously discovered rows), deduped by URL. `link`/`unlink` manage manual
-  cross-repo associations that live discovery cannot find (e.g. no App access).
+  previously discovered rows), deduped by URL. Persisted-only PRs (which issue
+  discovery cannot surface, e.g. cross-repo or a non-default base branch) are
+  enriched with a direct per-PR checks lookup so their CI status still shows.
+  `link`/`unlink` manage manual cross-repo associations that live discovery
+  cannot find (e.g. no App access).
 
   Persisted associations are keyed by `(project_id, issue_identifier)`, so the
   feature works in live tracker mode where `local_tracker_issues` is empty.
@@ -14,7 +17,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.GitHub.{PullRequests, PullRequestUrl}
+  alias SymphonyElixir.GitHub.{Api, PullRequests, PullRequestUrl}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Tracker.Sync.LocalStore
   alias SymphonyElixir.Tracker.Sync.PullRequests, as: SyncPullRequests
@@ -136,9 +139,41 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
 
   defp merge(live, persisted) do
     live_urls = live |> Enum.map(& &1[:url]) |> Enum.reject(&is_nil/1) |> MapSet.new()
-    extras = Enum.reject(persisted, fn pr -> pr.url && MapSet.member?(live_urls, pr.url) end)
+
+    extras =
+      persisted
+      |> Enum.reject(fn pr -> pr.url && MapSet.member?(live_urls, pr.url) end)
+      |> Enum.map(&enrich_with_live_checks/1)
+
     live ++ extras
   end
+
+  # Issue-scoped discovery only surfaces PRs in the issue's own repo, so a
+  # manually-linked cross-repo PR (e.g. `clouapp/back#277` on a `clouapp/front`
+  # issue, or one targeting a non-default base branch) arrives here without CI
+  # data. Fetch its rollup directly by repo+number via `GitHub.Api` (GraphQL with
+  # a REST check-runs fallback under rate limit). Best-effort: keep the persisted
+  # fields when the PR is unreachable (no App access / both transports limited).
+  defp enrich_with_live_checks(%{repo: repo, number: number} = pr)
+       when is_binary(repo) and is_integer(number) do
+    case Api.pull_request_detail(repo, number) do
+      {:ok, live_pr} when is_map(live_pr) ->
+        Map.merge(pr, %{
+          title: live_pr[:title] || pr.title,
+          state: live_pr[:state] || pr.state,
+          checks_state: live_pr[:checks_state],
+          pipelines: live_pr[:pipelines] || [],
+          statuses: live_pr[:statuses] || [],
+          conversation: live_pr[:conversation] || [],
+          base_behind_by: live_pr[:base_behind_by]
+        })
+
+      _ ->
+        pr
+    end
+  end
+
+  defp enrich_with_live_checks(pr), do: pr
 
   defp error(conn, status, message) do
     conn

@@ -75,6 +75,18 @@ export function PullRequestTab({
     }
   }
 
+  const refreshButton = (
+    <button
+      type="button"
+      onClick={onRefresh}
+      disabled={loading}
+      className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-60"
+    >
+      <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+      Refresh
+    </button>
+  );
+
   const linkRow = (
     <div className="flex items-center gap-2">
       <input
@@ -134,6 +146,7 @@ export function PullRequestTab({
   if (pullRequests.length === 0) {
     return (
       <div className="space-y-4">
+        <div className="flex items-center justify-end">{refreshButton}</div>
         <EmptyState>
           No pull request linked to this issue yet. Once an agent opens a PR that references{" "}
           <span className="font-mono">{issue.identifier}</span> (or uses its linked branch), it will appear here.
@@ -162,14 +175,7 @@ export function PullRequestTab({
               {fixing ? "Sending…" : "Fix with agent"}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-            Refresh
-          </button>
+          {refreshButton}
         </div>
       </div>
       {linkRow}
