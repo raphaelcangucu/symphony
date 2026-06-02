@@ -9,6 +9,7 @@ import {
   serializeAttachments,
   validateImageFile,
 } from "@/components/assistant/assistantAttachments";
+import { matchingSlashCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { Button } from "@/components/ui/button";
 import {
@@ -105,6 +106,9 @@ export function AssistantComposer({
 
   const canSend = !recording && !uploadingImage && (input.trim().length > 0 || attachments.length > 0);
 
+  const paletteCommands = matchingSlashCommands(input);
+  const showPalette = paletteCommands.length > 0 && input.trim().split(" ").length === 1;
+
   function updateModel(model: string) {
     const modelOption = catalog.models.find((entry) => entry.model === model) ?? catalog.models[0];
     setSettings({
@@ -147,9 +151,12 @@ export function AssistantComposer({
   function submitCurrent() {
     if (!canSend) return;
 
+    const parsed = parseSlashCommand(input);
+    if (parsed.kind !== "message" && parsed.argument.length === 0) return;
+
     onSubmit({
-      kind: "message",
-      message: input,
+      kind: parsed.kind,
+      message: parsed.kind === "message" ? input : parsed.argument,
       settings,
       attachments: serializeAttachments(attachments),
     });
@@ -240,6 +247,22 @@ export function AssistantComposer({
                 </div>
               ),
             )}
+          </div>
+        ) : null}
+
+        {showPalette ? (
+          <div className="border-b px-2 py-1.5">
+            {paletteCommands.map((command) => (
+              <button
+                key={command.name}
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/60"
+                onClick={() => setInput(`${command.name} `)}
+              >
+                <span className="font-mono text-xs font-semibold">{command.name}</span>
+                <span className="truncate text-xs text-muted-foreground">{command.description}</span>
+              </button>
+            ))}
           </div>
         ) : null}
 

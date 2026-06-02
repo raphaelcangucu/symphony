@@ -80,6 +80,32 @@ describe("AssistantComposer", () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: "message", message: "hello" }));
   });
 
+  it("submits kind 'infer' when the message starts with /infer", () => {
+    const onSubmit = vi.fn();
+    render(
+      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={onSubmit} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "/infer look at the tests" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "infer", message: "look at the tests" }),
+    );
+  });
+
+  it("shows the slash-command palette when the input starts with a slash", () => {
+    render(
+      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={vi.fn()} />,
+    );
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "/" } });
+
+    expect(screen.getByText("/infer")).toBeInTheDocument();
+    expect(screen.getByText("/btw")).toBeInTheDocument();
+  });
+
   it("keeps the textarea enabled while the assistant is running", () => {
     render(
       <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} disabled onSubmit={vi.fn()} />,
