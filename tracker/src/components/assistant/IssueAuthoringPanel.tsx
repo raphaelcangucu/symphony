@@ -266,7 +266,7 @@ export function IssueAuthoringPanel({
         ) : null}
       </div>
 
-      {compact ? <div className="min-h-0 flex-1 overflow-hidden">{documentsContent}</div> : documentsContent}
+      <div className="min-h-0 flex-1 overflow-hidden">{documentsContent}</div>
     </>
   );
 
@@ -287,13 +287,13 @@ export function IssueAuthoringPanel({
   return (
     <main
       className={cn(
-        "grid min-h-[calc(100vh-4rem)] gap-4 bg-muted/20 p-4",
-        "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.85fr)]",
+        "grid h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] gap-4 overflow-hidden bg-muted/20 p-4",
+        "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.85fr)] xl:grid-rows-1",
       )}
     >
-      {assistantPanel}
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{assistantPanel}</div>
 
-      <aside className="flex min-h-0 flex-col gap-3" aria-label="Issue authoring documents">
+      <aside className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden" aria-label="Issue authoring documents">
         {documentsPanel}
       </aside>
     </main>

@@ -554,7 +554,7 @@ export function ProjectAssistantPanel({
         projectSlug={projectSlug ?? ""}
         catalog={catalog ?? fallbackCodexCatalog()}
         disabled={isRunning}
-        floating={isPageMode}
+        floating={isPageMode && Boolean(projectSlug)}
         onSubmit={sendMessage}
       />
     ) : null;
@@ -594,13 +594,13 @@ export function ProjectAssistantPanel({
                 "flex w-full flex-col",
                 isPageMode ? "mx-auto max-w-4xl gap-6 px-4 pt-8" : "gap-4 px-4 py-4",
               )}
-              style={isPageMode ? { paddingBottom: composerHeight + 16 } : undefined}
+              style={isPageMode && projectSlug ? { paddingBottom: composerHeight + 16 } : undefined}
             >
               {messageItems}
             </div>
           </div>
 
-          {isPageMode ? (
+          {isPageMode && projectSlug ? (
             <div ref={composerDockRef} className="pointer-events-none absolute inset-x-0 bottom-0">
               <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
               <div className="pointer-events-auto bg-background">
@@ -615,6 +615,20 @@ export function ProjectAssistantPanel({
                     <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
                   ) : null}
                 </div>
+              </div>
+            </div>
+          ) : isPageMode ? (
+            <div ref={composerDockRef} className="shrink-0 border-t bg-background">
+              <div className="mx-auto w-full max-w-4xl px-4 py-2">
+                {queuedChips}
+                {composerNode ?? (
+                  <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
+                    Loading Codex CLI models...
+                  </div>
+                )}
+                {catalogError ? (
+                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
+                ) : null}
               </div>
             </div>
           ) : (

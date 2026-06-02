@@ -51,7 +51,7 @@ function ConversationsView() {
   );
 
   return (
-    <section className="flex h-[calc(100vh-4rem)] flex-col" aria-label="Conversations">
+    <section className="flex h-full flex-col" aria-label="Conversations">
       <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
         <h1 className="text-base font-semibold">Conversations</h1>
         <Button type="button" size="sm" onClick={() => void createChat()} disabled={creating}>

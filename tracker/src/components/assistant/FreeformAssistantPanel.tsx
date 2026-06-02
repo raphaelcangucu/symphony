@@ -26,11 +26,14 @@ export function FreeformAssistantPanel({ threadId }: FreeformAssistantPanelProps
   return (
     <main
       className={cn(
-        "grid min-h-[calc(100vh-4rem)] gap-4 bg-muted/20 p-4",
-        "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.85fr)]",
+        "grid h-full max-h-full gap-4 overflow-hidden bg-muted/20 p-4",
+        "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.85fr)] xl:grid-rows-1",
       )}
     >
-      <section className="min-h-0 overflow-hidden rounded-xl border bg-background shadow-sm" aria-label="Assistant chat">
+      <section
+        className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-background shadow-sm"
+        aria-label="Assistant chat"
+      >
         <ProjectAssistantPanel
           threadId={threadId}
           view="board"
@@ -40,7 +43,7 @@ export function FreeformAssistantPanel({ threadId }: FreeformAssistantPanelProps
         />
       </section>
 
-      <aside className="flex min-h-0 flex-col gap-3" aria-label="Assistant chat files">
+      <aside className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden" aria-label="Assistant chat files">
         <div className="shrink-0 rounded-xl border bg-card px-4 py-3 shadow-sm">
           <h1 className="text-sm font-semibold">Conversation files</h1>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -48,14 +51,16 @@ export function FreeformAssistantPanel({ threadId }: FreeformAssistantPanelProps
           </p>
         </div>
 
-        <ThreadDocumentViewer
-          threadId={threadId}
-          documents={threadDocuments.documents}
-          available={threadDocuments.available}
-          reason={threadDocuments.reason}
-          selectedPath={selectedPath}
-          onSelectPath={setSelectedPath}
-        />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ThreadDocumentViewer
+            threadId={threadId}
+            documents={threadDocuments.documents}
+            available={threadDocuments.available}
+            reason={threadDocuments.reason}
+            selectedPath={selectedPath}
+            onSelectPath={setSelectedPath}
+          />
+        </div>
       </aside>
     </main>
   );

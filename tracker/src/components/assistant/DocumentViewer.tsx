@@ -116,14 +116,14 @@ export function DocumentViewer({
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-1 overflow-hidden rounded-xl border bg-card" aria-label="Issue documents">
-      <aside className="w-64 shrink-0 border-r bg-muted/20" aria-label="Document list">
-        <div className="border-b px-4 py-3">
+    <section className="flex h-full min-h-0 overflow-hidden rounded-xl border bg-card" aria-label="Issue documents">
+      <aside className="flex w-64 shrink-0 min-h-0 flex-col border-r bg-muted/20" aria-label="Document list">
+        <div className="shrink-0 border-b px-4 py-3">
           <h2 className="text-sm font-semibold">Documents</h2>
           <p className="text-xs text-muted-foreground">Generated specs, plans, and handoffs.</p>
         </div>
 
-        <div className="space-y-4 p-2">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-2">
           {groupedDocuments.map((group) => (
             <DocumentKindGroup
               key={group.kind}

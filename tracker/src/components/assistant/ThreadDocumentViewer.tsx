@@ -110,14 +110,14 @@ export function ThreadDocumentViewer({
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-1 overflow-hidden rounded-xl border bg-card" aria-label="Chat files">
-      <aside className="w-64 shrink-0 border-r bg-muted/20" aria-label="Chat file list">
-        <div className="border-b px-4 py-3">
+    <section className="flex h-full min-h-0 overflow-hidden rounded-xl border bg-card" aria-label="Chat files">
+      <aside className="flex w-64 shrink-0 min-h-0 flex-col border-r bg-muted/20" aria-label="Chat file list">
+        <div className="shrink-0 border-b px-4 py-3">
           <h2 className="text-sm font-semibold">Files</h2>
           <p className="text-xs text-muted-foreground">Markdown drafts written in this conversation.</p>
         </div>
 
-        <div className="space-y-1 p-2">
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
           {visibleDocuments.map((document) => (
             <Button
               key={document.path}
