@@ -78,42 +78,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   @impl true
   def handle_in("send_message", %{"message" => message} = payload, socket) when is_binary(message) do
-    project_slug = socket.assigns[:project_slug]
-    thread = socket.assigns[:thread]
-    context = normalize_context(Map.get(payload, "context", %{}))
-    {raw_attachments, attachments} = resolve_attachments(payload, thread, project_slug)
-    trimmed = message |> Payload.enrich_message(attachments) |> String.trim()
-
-    cond do
-      trimmed == "" ->
-        {:reply, {:error, %{reason: "message is required"}}, socket}
-
-      raw_attachments != [] and attachments == [] ->
-        {:reply, {:error, %{reason: "One or more attachments could not be processed. Try a smaller image (max 4 MB)."}}, socket}
-
-      true ->
-        context =
-          context
-          |> Map.put("attachments", Payload.attachment_summary(attachments))
-          |> Map.put("model", Map.get(context, "model") || Map.get(context, :model))
-          |> Map.put("effort", Map.get(context, "effort") || Map.get(context, :effort))
-
-        opts =
-          []
-          |> maybe_put_runner()
-          |> Keyword.merge(Payload.model_opts(context))
-          |> Keyword.put(:attachments, attachments)
-          |> Keyword.put(:on_message_created, fn message -> push(socket, "message_created", %{message: message}) end)
-          |> Keyword.put(:on_assistant_delta, fn delta -> push(socket, "assistant_delta", %{delta: delta}) end)
-          |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
-          |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
-          |> Keyword.put(:on_documents_changed, fn identifier ->
-            push(socket, "assistant_document_changed", %{identifier: identifier})
-          end)
-
-        thread
-        |> run_send_turn(project_slug, trimmed, context, opts)
-        |> handle_turn_result(socket)
+    if socket.assigns[:turn_status] == :running do
+      {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+    else
+      do_send_message(message, payload, socket)
     end
   end
 
@@ -168,6 +136,95 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:assistant_turn_started, turn_id}, socket) do
+    {:noreply, assign(socket, :codex_turn_id, turn_id)}
+  end
+
+  def handle_info({:assistant_turn_finished, {:ok, result}}, socket) do
+    push(socket, "assistant_completed", %{message: result.assistant_chat_message})
+    maybe_push_created_issue(result, socket)
+    {:noreply, reset_turn(socket)}
+  end
+
+  def handle_info({:assistant_turn_finished, {:error, reason}}, socket) do
+    push(socket, "assistant_error", %{message: error_reason(reason)})
+    {:noreply, reset_turn(socket)}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{assigns: %{turn_ref: ref}} = socket) do
+    if socket.assigns[:turn_status] == :running do
+      push(socket, "assistant_error", %{message: error_reason({:turn_crashed, reason})})
+    end
+
+    {:noreply, reset_turn(socket)}
+  end
+
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp reset_turn(socket) do
+    socket
+    |> assign(:turn_status, :idle)
+    |> assign(:turn_pid, nil)
+    |> assign(:turn_ref, nil)
+    |> assign(:codex_turn_id, nil)
+  end
+
+  defp do_send_message(message, payload, socket) do
+    project_slug = socket.assigns[:project_slug]
+    thread = socket.assigns[:thread]
+    context = normalize_context(Map.get(payload, "context", %{}))
+    {raw_attachments, attachments} = resolve_attachments(payload, thread, project_slug)
+    trimmed = message |> Payload.enrich_message(attachments) |> String.trim()
+
+    cond do
+      trimmed == "" ->
+        {:reply, {:error, %{reason: "message is required"}}, socket}
+
+      raw_attachments != [] and attachments == [] ->
+        {:reply, {:error, %{reason: "One or more attachments could not be processed. Try a smaller image (max 4 MB)."}}, socket}
+
+      true ->
+        channel_pid = self()
+
+        context =
+          context
+          |> Map.put("attachments", Payload.attachment_summary(attachments))
+          |> Map.put("model", Map.get(context, "model") || Map.get(context, :model))
+          |> Map.put("effort", Map.get(context, "effort") || Map.get(context, :effort))
+
+        opts =
+          []
+          |> maybe_put_runner()
+          |> Keyword.merge(Payload.model_opts(context))
+          |> Keyword.put(:attachments, attachments)
+          |> Keyword.put(:on_message_created, fn message -> push(socket, "message_created", %{message: message}) end)
+          |> Keyword.put(:on_assistant_delta, fn delta -> push(socket, "assistant_delta", %{delta: delta}) end)
+          |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
+          |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
+          |> Keyword.put(:on_documents_changed, fn identifier ->
+            push(socket, "assistant_document_changed", %{identifier: identifier})
+          end)
+          |> Keyword.put(:on_turn_started, fn turn_id -> send(channel_pid, {:assistant_turn_started, turn_id}) end)
+
+        {:ok, pid} =
+          Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
+            result = run_send_turn(thread, project_slug, trimmed, context, opts)
+            send(channel_pid, {:assistant_turn_finished, result})
+          end)
+
+        ref = Process.monitor(pid)
+
+        socket =
+          socket
+          |> assign(:turn_status, :running)
+          |> assign(:turn_pid, pid)
+          |> assign(:turn_ref, ref)
+          |> assign(:codex_turn_id, nil)
+
+        {:reply, :ok, socket}
+    end
+  end
+
   defp resolve_attachments(_payload, %{scope: "freeform"}, _project_slug), do: {[], []}
 
   defp resolve_attachments(payload, _thread, project_slug) do
@@ -185,17 +242,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp run_send_turn(_thread, project_slug, trimmed, context, opts) do
     CodexSession.send_message(project_slug, trimmed, context, opts)
-  end
-
-  defp handle_turn_result({:ok, result}, socket) do
-    push(socket, "assistant_completed", %{message: result.assistant_chat_message})
-    maybe_push_created_issue(result, socket)
-    {:reply, :ok, socket}
-  end
-
-  defp handle_turn_result({:error, reason}, socket) do
-    push(socket, "assistant_error", %{message: error_reason(reason)})
-    {:reply, {:error, %{reason: error_reason(reason)}}, socket}
   end
 
   defp maybe_push_created_issue(result, %Socket{assigns: %{project_slug: project_slug}} = socket)
@@ -435,6 +481,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp error_reason({:unsupported_mode, mode}), do: "unsupported mode: #{mode}. Expected one of: #{Enum.join(@issue_modes, ", ")}"
   defp error_reason(:issue_thread_required), do: "this action is only supported for issue assistant threads"
   defp error_reason(:message_required), do: "message is required"
+  defp error_reason({:turn_crashed, reason}), do: "assistant turn crashed: #{inspect(reason)}"
   defp error_reason(%Ecto.Changeset{}), do: "failed to persist mode"
   defp error_reason(reason), do: inspect(reason)
 end

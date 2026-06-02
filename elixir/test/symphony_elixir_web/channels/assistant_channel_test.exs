@@ -68,6 +68,43 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert Enum.map(messages, & &1.role) == ["user", "assistant"]
   end
 
+  test "runs the turn asynchronously and rejects a concurrent send while running" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(test_pid, {:runner_started, self()})
+
+      receive do
+        :finish -> :ok
+      after
+        2_000 -> :ok
+      end
+
+      Keyword.fetch!(opts, :on_assistant_delta).("hi")
+      {:ok, %{assistant_message: "done", codex_thread_id: "t1", turn_id: "turn-1", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, %{messages: []}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert_push("history_loaded", %{messages: []})
+
+    ref = push(socket, "send_message", %{"message" => "first", "context" => %{"view" => "board"}})
+    assert_reply(ref, :ok, %{})
+
+    assert_receive {:runner_started, runner_pid}, 2_000
+
+    ref2 = push(socket, "send_message", %{"message" => "second", "context" => %{"view" => "board"}})
+    assert_reply(ref2, :error, %{reason: "assistant is busy"})
+
+    send(runner_pid, :finish)
+    assert_push("assistant_delta", %{delta: "hi"})
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
+  end
+
   test "project draft issue turn promotes the chat in place to the issue thread without leaving an orphan" do
     Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, _opts ->
       {:ok,
