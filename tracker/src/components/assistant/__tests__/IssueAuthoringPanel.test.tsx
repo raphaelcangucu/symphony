@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
@@ -75,7 +76,11 @@ vi.mock("@/components/assistant/DocumentViewer", () => ({
 
 describe("IssueAuthoringPanel", () => {
   it("uses embedded drawer layout when compact", () => {
-    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="list" compact />);
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="list" compact />
+      </MemoryRouter>,
+    );
 
     expect(screen.queryByRole("main")).not.toBeInTheDocument();
     expect(screen.getByTestId("project-assistant-panel")).toHaveTextContent(
@@ -101,7 +106,11 @@ describe("IssueAuthoringPanel", () => {
   });
 
   it("renders simple and complex mode controls for issue authoring", () => {
-    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByRole("button", { name: "Simple" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Complex" })).toHaveAttribute("aria-pressed", "false");
@@ -120,7 +129,11 @@ describe("IssueAuthoringPanel", () => {
   });
 
   it("exposes a Codex goal-mode toggle and confirms it when acknowledged", () => {
-    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />
+      </MemoryRouter>,
+    );
 
     const goalToggle = screen.getByRole("checkbox", { name: /codex goal mode/i });
     expect(goalToggle).not.toBeChecked();
@@ -139,7 +152,11 @@ describe("IssueAuthoringPanel", () => {
   });
 
   it("reflects a goal mode rehydrated from the channel", () => {
-    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />
+      </MemoryRouter>,
+    );
 
     const goalToggle = screen.getByRole("checkbox", { name: /codex goal mode/i });
     expect(goalToggle).not.toBeChecked();
@@ -150,7 +167,11 @@ describe("IssueAuthoringPanel", () => {
   });
 
   it("requests a Codex dispatch and surfaces the confirmation", () => {
-    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByTestId("project-assistant-panel")).toHaveTextContent("dispatch=0");
 
@@ -165,7 +186,11 @@ describe("IssueAuthoringPanel", () => {
   });
 
   it("surfaces a dispatch error", () => {
-    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />
+      </MemoryRouter>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /dispatch to codex/i }));
     fireEvent.click(screen.getByRole("button", { name: "fail dispatch" }));
@@ -174,7 +199,11 @@ describe("IssueAuthoringPanel", () => {
   });
 
   it("reflects a mode rehydrated from the channel without a fresh selection", () => {
-    render(<IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />);
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByRole("button", { name: "Complex" })).toHaveAttribute("aria-pressed", "false");
 
