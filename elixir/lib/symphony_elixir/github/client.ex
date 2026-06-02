@@ -442,9 +442,9 @@ defmodule SymphonyElixir.GitHub.Client do
 
     with {:ok, token} <- require_token(),
          headers = rest_headers(token),
-         {:ok, %{status: status, body: body}} when status in 200..299 <-
+         {:ok, %{status: status} = response} when status in 200..299 <-
            request_fun.(url, headers) do
-      {:ok, %{status: status, body: body}}
+      {:ok, %{status: status, body: Map.get(response, :body), headers: Map.get(response, :headers, %{})}}
     else
       {:error, :missing_github_token} = error -> error
       {:ok, response} -> classify_rest_failure(response)
@@ -457,6 +457,25 @@ defmodule SymphonyElixir.GitHub.Client do
   def rest_put(path, body \\ %{}, opts \\ [])
       when is_binary(path) and is_map(body) and is_list(opts) do
     request_fun = Keyword.get(opts, :request_fun, &put_rest_request/3)
+    url = @rest_endpoint <> path
+
+    with {:ok, token} <- require_token(),
+         headers = rest_headers(token),
+         {:ok, %{status: status, body: resp}} when status in 200..299 <-
+           request_fun.(url, headers, body) do
+      {:ok, %{status: status, body: resp}}
+    else
+      {:error, :missing_github_token} = error -> error
+      {:ok, response} -> classify_rest_failure(response)
+      {:error, reason} -> {:error, {:github_api_request, reason}}
+    end
+  end
+
+  @spec rest_post(String.t(), map(), keyword()) ::
+          {:ok, %{status: pos_integer(), body: term()}} | {:error, term()}
+  def rest_post(path, body \\ %{}, opts \\ [])
+      when is_binary(path) and is_map(body) and is_list(opts) do
+    request_fun = Keyword.get(opts, :request_fun, &post_rest_request/3)
     url = @rest_endpoint <> path
 
     with {:ok, token} <- require_token(),
@@ -1363,6 +1382,12 @@ defmodule SymphonyElixir.GitHub.Client do
   defp put_rest_request(url, headers, body) do
     RequestGateway.run([kind: :mutation], fn ->
       Req.put(url, headers: headers, json: body, connect_options: [timeout: 30_000])
+    end)
+  end
+
+  defp post_rest_request(url, headers, body) do
+    RequestGateway.run([kind: :mutation], fn ->
+      Req.post(url, headers: headers, json: body, connect_options: [timeout: 30_000])
     end)
   end
 

@@ -125,6 +125,11 @@ defmodule SymphonyElixir.TestSupport do
           tracker_api_token: "token",
           tracker_project_slug: "project",
           tracker_assignee: nil,
+          jira_base_url: nil,
+          jira_email: nil,
+          jira_api_token: nil,
+          jira_project_key: nil,
+          jira_assignee: nil,
           tracker_active_states: ["Todo", "In Progress"],
           tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"],
           tracker_field_states: nil,
@@ -263,6 +268,25 @@ defmodule SymphonyElixir.TestSupport do
       status_field && "  status_field: #{yaml_value(status_field)}",
       admission_label && "  admission_label: #{yaml_value(admission_label)}",
       project_section
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
+  end
+
+  defp tracker_backend_yaml("jira", config) do
+    base_url = Keyword.get(config, :jira_base_url)
+    email = Keyword.get(config, :jira_email)
+    api_token = Keyword.get(config, :jira_api_token)
+    project_key = Keyword.get(config, :jira_project_key)
+    assignee = Keyword.get(config, :jira_assignee)
+
+    [
+      "jira:",
+      base_url && "  base_url: #{yaml_value(base_url)}",
+      email && "  email: #{yaml_value(email)}",
+      api_token && "  api_token: #{yaml_value(api_token)}",
+      project_key && "  project_key: #{yaml_value(project_key)}",
+      assignee && "  assignee: #{yaml_value(assignee)}"
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")

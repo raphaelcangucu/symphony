@@ -36,7 +36,7 @@ defmodule SymphonyElixir.Tracker.IssueAdapter do
           optional(:avatar_url) => String.t() | nil
         }
 
-  @callback kind() :: :local | :github | :linear
+  @callback kind() :: :local | :github | :linear | :jira
   @callback list_issues(Project.t(), filters()) :: {:ok, [IssueDTO.t()]} | {:error, tracker_error()}
   @callback get_issue(Project.t(), String.t()) :: {:ok, IssueDTO.t()} | {:error, tracker_error()}
   @callback create_issue(Project.t(), map()) :: {:ok, IssueDTO.t()} | {:error, tracker_error()}
@@ -54,10 +54,11 @@ defmodule SymphonyElixir.Tracker.IssueAdapter do
   @default_adapters %{
     "local" => SymphonyElixir.LocalTracker.IssueAdapter,
     "github" => SymphonyElixir.GitHub.IssueAdapter,
-    "linear" => SymphonyElixir.Linear.IssueAdapter
+    "linear" => SymphonyElixir.Linear.IssueAdapter,
+    "jira" => SymphonyElixir.Jira.IssueAdapter
   }
 
-  @remote_kinds ["github", "linear"]
+  @remote_kinds ["github", "linear", "jira"]
 
   @spec for(Project.t()) :: module()
   def for(%Project{tracker_kind: kind}) do

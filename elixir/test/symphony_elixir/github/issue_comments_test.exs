@@ -1,19 +1,13 @@
 defmodule SymphonyElixir.GitHub.IssueCommentsTest do
-  use ExUnit.Case, async: true
+  use SymphonyElixir.TestSupport
 
   alias SymphonyElixir.GitHub.IssueComments
 
-  defmodule TestClient do
-    @moduledoc false
-
-    def graphql(query, variables, opts) do
-      request_fun = Keyword.fetch!(opts, :request_fun)
-
-      case request_fun.(%{"query" => query, "variables" => variables}, []) do
-        {:ok, %{status: 200, body: body}} -> {:ok, body}
-        {:error, _reason} = error -> error
-      end
-    end
+  setup do
+    prev = System.get_env("GITHUB_TOKEN")
+    System.put_env("GITHUB_TOKEN", "test-gh-token")
+    on_exit(fn -> restore_env("GITHUB_TOKEN", prev) end)
+    :ok
   end
 
   describe "parse_node/1" do
@@ -40,7 +34,7 @@ defmodule SymphonyElixir.GitHub.IssueCommentsTest do
   describe "for_issue/3" do
     test "fetches and parses issue comments" do
       request_fun = fn payload, _headers ->
-        assert payload["query"] =~ "SymphonyTrackerIssueComments"
+        assert payload["query"] =~ "SymphonyApiIssueComments"
         assert payload["variables"]["number"] == 42
 
         {:ok,
@@ -64,10 +58,7 @@ defmodule SymphonyElixir.GitHub.IssueCommentsTest do
       end
 
       assert {:ok, [%{kind: "workpad"}, %{kind: "comment"}]} =
-               IssueComments.for_issue("o/r", "#42",
-                 client_module: TestClient,
-                 request_fun: request_fun
-               )
+               IssueComments.for_issue("o/r", "#42", request_fun: request_fun)
     end
 
     test "returns empty list for a missing issue" do
@@ -75,11 +66,15 @@ defmodule SymphonyElixir.GitHub.IssueCommentsTest do
         {:ok, %{status: 200, body: %{"data" => %{"repository" => %{"issue" => nil}}}}}
       end
 
-      assert {:ok, []} =
-               IssueComments.for_issue("o/r", "999",
-                 client_module: TestClient,
-                 request_fun: request_fun
-               )
+      assert {:ok, []} = IssueComments.for_issue("o/r", "999", request_fun: request_fun)
+    end
+
+    test "degrades a non-issue GraphQL error to an empty list" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 200, body: %{"errors" => [%{"type" => "NOT_FOUND", "message" => "Could not resolve to an Issue"}]}}}
+      end
+
+      assert {:ok, []} = IssueComments.for_issue("o/r", "42", request_fun: request_fun)
     end
   end
 
@@ -87,11 +82,11 @@ defmodule SymphonyElixir.GitHub.IssueCommentsTest do
     test "resolves the issue node id then posts the comment" do
       request_fun = fn payload, _headers ->
         cond do
-          payload["query"] =~ "SymphonyTrackerIssueNodeId" ->
+          payload["query"] =~ "SymphonyApiIssueNodeId" ->
             assert payload["variables"]["number"] == 42
             {:ok, %{status: 200, body: %{"data" => %{"repository" => %{"issue" => %{"id" => "I_99"}}}}}}
 
-          payload["query"] =~ "SymphonyTrackerAddIssueComment" ->
+          payload["query"] =~ "SymphonyApiAddComment" ->
             assert payload["variables"]["subjectId"] == "I_99"
             assert payload["variables"]["body"] == "## Codex Workpad"
 
@@ -118,10 +113,7 @@ defmodule SymphonyElixir.GitHub.IssueCommentsTest do
       end
 
       assert {:ok, %{id: "IC_99", kind: "workpad", author: "codex-bot"}} =
-               IssueComments.create("o/r", "#42", "## Codex Workpad",
-                 client_module: TestClient,
-                 request_fun: request_fun
-               )
+               IssueComments.create("o/r", "#42", "## Codex Workpad", request_fun: request_fun)
     end
 
     test "returns issue_not_found when the issue node is missing" do
@@ -130,9 +122,24 @@ defmodule SymphonyElixir.GitHub.IssueCommentsTest do
       end
 
       assert {:error, :issue_not_found} =
+               IssueComments.create("o/r", "#42", "hello", request_fun: request_fun)
+    end
+
+    test "falls back to REST when GraphQL is rate-limited" do
+      request_fun = fn _payload, _headers ->
+        {:ok, %{status: 200, body: %{"errors" => [%{"type" => "RATE_LIMITED"}]}}}
+      end
+
+      rest_fun = fn url, _headers, body ->
+        assert url == "https://api.github.com/repos/o/r/issues/42/comments"
+        assert body == %{"body" => "hello"}
+        {:ok, %{status: 201, body: %{"id" => 5, "html_url" => "u", "body" => "hello", "user" => %{"login" => "a"}}}}
+      end
+
+      assert {:ok, %{id: "5", body: "hello"}} =
                IssueComments.create("o/r", "#42", "hello",
-                 client_module: TestClient,
-                 request_fun: request_fun
+                 request_fun: request_fun,
+                 rest_request_fun: rest_fun
                )
     end
   end

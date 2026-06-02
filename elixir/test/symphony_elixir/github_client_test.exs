@@ -23,6 +23,33 @@ defmodule SymphonyElixir.GitHub.ClientTest do
     :ok
   end
 
+  describe "rest_post/3" do
+    test "posts JSON and returns the decoded body on 201" do
+      request_fun = fn url, _headers, body ->
+        assert url == "https://api.github.com/repos/owner/repo/issues/42/comments"
+        assert body == %{"body" => "hi"}
+        {:ok, %{status: 201, body: %{"id" => 123, "body" => "hi"}}}
+      end
+
+      assert {:ok, %{status: 201, body: %{"id" => 123}}} =
+               Client.rest_post("/repos/owner/repo/issues/42/comments", %{"body" => "hi"}, request_fun: request_fun)
+    end
+
+    test "maps a rate-limited REST response to {:error, {:rate_limited, info}}" do
+      request_fun = fn _url, _headers, _body ->
+        {:ok,
+         %{
+           status: 403,
+           headers: %{"x-ratelimit-remaining" => "0", "x-ratelimit-reset" => "4102444800"},
+           body: %{}
+         }}
+      end
+
+      assert {:error, {:rate_limited, %{reset_at: %DateTime{}}}} =
+               Client.rest_post("/repos/owner/repo/issues/42/comments", %{"body" => "hi"}, request_fun: request_fun)
+    end
+  end
+
   describe "fetch_candidate_issues/1 (GraphQL)" do
     setup do
       tmp = System.tmp_dir!() |> Path.join("sym-gh-poll-#{:erlang.unique_integer()}")
