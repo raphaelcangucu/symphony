@@ -1,5 +1,6 @@
 import type { WorkspaceRepository, RepositoryScan } from "./repository";
 import type { WorkflowStatus } from "./workflow-status";
+import type { WorkflowConfig } from "./workflow-config";
 
 export interface WorkspaceSuggestion {
   workflowStatuses: WorkflowStatus[];
@@ -17,7 +18,7 @@ export interface WorkspaceSuggestionInput {
 
 export interface ProjectSetup {
   id?: string;
-  workflowConfig?: Record<string, unknown>;
+  workflowConfig?: WorkflowConfig;
   afterCreateHook?: string | null;
   promptTemplate?: string | null;
   validationCommands: string[];
