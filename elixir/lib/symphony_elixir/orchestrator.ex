@@ -7,7 +7,10 @@ defmodule SymphonyElixir.Orchestrator do
   require Logger
   import Bitwise, only: [<<<: 2]
 
-  alias SymphonyElixir.{AgentRunner, Config, Issue, StatusDashboard, Tracker, Workspace}
+  alias SymphonyElixir.{AgentRunner, Config, Issue, ProjectConfig, Repo, StatusDashboard, Tracker, Workspace}
+  alias SymphonyElixir.LocalTracker.Context
+
+  @incomplete_run_label "symphony:incomplete"
 
   @continuation_retry_delay_ms 1_000
   @failure_retry_base_ms 10_000
@@ -151,6 +154,17 @@ defmodule SymphonyElixir.Orchestrator do
 
   def handle_info({:codex_worker_update, _issue_id, _update}, state), do: {:noreply, state}
 
+  def handle_info({:agent_outcome, issue_id, outcome}, %{running: running} = state) do
+    case Map.get(running, issue_id) do
+      nil ->
+        {:noreply, state}
+
+      running_entry ->
+        updated = Map.put(running_entry, :agent_outcome, outcome)
+        {:noreply, %{state | running: Map.put(running, issue_id, updated)}}
+    end
+  end
+
   def handle_info({:retry_issue, issue_id}, state) do
     result =
       case pop_retry_attempt_state(state, issue_id) do
@@ -216,12 +230,7 @@ defmodule SymphonyElixir.Orchestrator do
     else
       case Tracker.fetch_issue_states_by_ids(running_ids) do
         {:ok, issues} ->
-          reconcile_running_issue_states(
-            issues,
-            state,
-            active_state_set(),
-            terminal_state_set()
-          )
+          reconcile_running_issue_states(issues, state)
 
         {:error, reason} ->
           Logger.debug("Failed to refresh running issue states: #{inspect(reason)}; keeping active workers")
@@ -234,17 +243,18 @@ defmodule SymphonyElixir.Orchestrator do
   @doc false
   @spec reconcile_issue_states_for_test([Issue.t()], term()) :: term()
   def reconcile_issue_states_for_test(issues, %State{} = state) when is_list(issues) do
-    reconcile_running_issue_states(issues, state, active_state_set(), terminal_state_set())
+    reconcile_running_issue_states(issues, state)
   end
 
   def reconcile_issue_states_for_test(issues, state) when is_list(issues) do
-    reconcile_running_issue_states(issues, state, active_state_set(), terminal_state_set())
+    reconcile_running_issue_states(issues, state)
   end
 
   @doc false
   @spec should_dispatch_issue_for_test(Issue.t(), term()) :: boolean()
   def should_dispatch_issue_for_test(%Issue{} = issue, %State{} = state) do
-    should_dispatch_issue?(issue, state, dispatch_state_set(), terminal_state_set())
+    sets = project_state_sets(issue)
+    should_dispatch_issue?(issue, state, sets.dispatch, sets.terminal)
   end
 
   @doc false
@@ -252,7 +262,7 @@ defmodule SymphonyElixir.Orchestrator do
           {:ok, Issue.t()} | {:skip, Issue.t() | :missing} | {:error, term()}
   def revalidate_issue_for_dispatch_for_test(%Issue{} = issue, issue_fetcher)
       when is_function(issue_fetcher, 1) do
-    revalidate_issue_for_dispatch(issue, issue_fetcher, terminal_state_set())
+    revalidate_issue_for_dispatch(issue, issue_fetcher)
   end
 
   @doc false
@@ -261,15 +271,11 @@ defmodule SymphonyElixir.Orchestrator do
     sort_issues_for_dispatch(issues)
   end
 
-  defp reconcile_running_issue_states([], state, _active_states, _terminal_states), do: state
-
-  defp reconcile_running_issue_states([issue | rest], state, active_states, terminal_states) do
-    reconcile_running_issue_states(
-      rest,
-      reconcile_issue_state(issue, state, active_states, terminal_states),
-      active_states,
-      terminal_states
-    )
+  defp reconcile_running_issue_states(issues, state) do
+    Enum.reduce(issues, state, fn issue, state_acc ->
+      sets = project_state_sets(issue)
+      reconcile_issue_state(issue, state_acc, sets.active, sets.terminal)
+    end)
   end
 
   defp reconcile_issue_state(%Issue{} = issue, state, active_states, terminal_states) do
@@ -411,18 +417,24 @@ defmodule SymphonyElixir.Orchestrator do
   defp terminate_task(_pid), do: :ok
 
   defp choose_issues(issues, state) do
-    dispatch_states = dispatch_state_set()
-    terminal_states = terminal_state_set()
-
     issues
     |> sort_issues_for_dispatch()
-    |> Enum.reduce(state, fn issue, state_acc ->
-      if should_dispatch_issue?(issue, state_acc, dispatch_states, terminal_states) do
-        dispatch_issue(state_acc, issue)
-      else
-        state_acc
-      end
-    end)
+    |> Enum.reduce(state, &maybe_dispatch_candidate(&2, &1))
+  end
+
+  defp maybe_dispatch_candidate(state, issue) do
+    case dispatch_decision(issue) do
+      {:ok, sets} ->
+        if should_dispatch_issue?(issue, state, sets.dispatch, sets.terminal) do
+          dispatch_issue(state, issue)
+        else
+          state
+        end
+
+      {:skip, reason} ->
+        Logger.warning("Skipping dispatch; project not runnable for #{issue_context(issue)}: #{reason}")
+        state
+    end
   end
 
   defp sort_issues_for_dispatch(issues) when is_list(issues) do
@@ -554,8 +566,66 @@ defmodule SymphonyElixir.Orchestrator do
     |> MapSet.new()
   end
 
+  # Per-project state classification (global-less): each issue is evaluated
+  # against its OWN project's configured active/dispatch/terminal states. Issues
+  # without a resolvable project fall back to the code-default sets.
+  defp project_state_sets(%Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
+    case resolve_project_for_states(slug) do
+      {:ok, config} -> state_sets_from_config(config)
+      :error -> global_state_sets()
+    end
+  end
+
+  defp project_state_sets(_issue), do: global_state_sets()
+
+  defp global_state_sets do
+    %{active: active_state_set(), dispatch: dispatch_state_set(), terminal: terminal_state_set()}
+  end
+
+  defp state_sets_from_config(%ProjectConfig{} = config) do
+    %{
+      active: to_state_set(config.active_states || Config.active_states()),
+      dispatch: to_state_set(config.dispatch_states || Config.dispatch_states()),
+      terminal: to_state_set(config.terminal_states || Config.terminal_states())
+    }
+  end
+
+  defp resolve_project_for_states(slug) do
+    case Context.get_project(slug) do
+      {:ok, project} -> {:ok, project |> Repo.preload(:setup) |> ProjectConfig.resolve()}
+      _ -> :error
+    end
+  end
+
+  # Resolves the dispatch decision for a candidate issue: its per-project state
+  # sets, or a skip signal when the issue's project cannot run on its own (no
+  # prompt / no tracker identity). Issues without a project fall back to global.
+  defp dispatch_decision(%Issue{project_slug: slug} = _issue) when is_binary(slug) and slug != "" do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        case project |> Repo.preload(:setup) |> ProjectConfig.resolve_runnable() do
+          {:ok, config} -> {:ok, state_sets_from_config(config)}
+          {:skip, reason} -> {:skip, reason}
+        end
+
+      _ ->
+        {:ok, global_state_sets()}
+    end
+  end
+
+  defp dispatch_decision(_issue), do: {:ok, global_state_sets()}
+
+  defp to_state_set(states) when is_list(states) do
+    states
+    |> Enum.map(&normalize_issue_state/1)
+    |> Enum.filter(&(&1 != ""))
+    |> MapSet.new()
+  end
+
+  defp to_state_set(_states), do: MapSet.new()
+
   defp dispatch_issue(%State{} = state, issue, attempt \\ nil) do
-    case revalidate_issue_for_dispatch(issue, &Tracker.fetch_issue_states_by_ids/1, terminal_state_set()) do
+    case revalidate_issue_for_dispatch(issue, &Tracker.fetch_issue_states_by_ids/1) do
       {:ok, %Issue{} = refreshed_issue} ->
         do_dispatch_issue(state, refreshed_issue, attempt)
 
@@ -627,11 +697,11 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  defp revalidate_issue_for_dispatch(%Issue{id: issue_id}, issue_fetcher, terminal_states)
+  defp revalidate_issue_for_dispatch(%Issue{id: issue_id}, issue_fetcher)
        when is_binary(issue_id) and is_function(issue_fetcher, 1) do
     case issue_fetcher.([issue_id]) do
       {:ok, [%Issue{} = refreshed_issue | _]} ->
-        if retry_candidate_issue?(refreshed_issue, terminal_states) do
+        if retry_candidate_issue?(refreshed_issue) do
           {:ok, refreshed_issue}
         else
           {:skip, refreshed_issue}
@@ -645,7 +715,7 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  defp revalidate_issue_for_dispatch(issue, _issue_fetcher, _terminal_states), do: {:ok, issue}
+  defp revalidate_issue_for_dispatch(issue, _issue_fetcher), do: {:ok, issue}
 
   defp complete_issue(%State{} = state, issue_id) do
     %{
@@ -656,6 +726,8 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp apply_normal_completion(%State{} = state, running_entry, issue_id) do
+    maybe_annotate_incomplete(running_entry, issue_id)
+
     case apply_completion_transition(state, issue_id) do
       {:transitioned, transitioned_state} ->
         transitioned_state
@@ -703,6 +775,66 @@ defmodule SymphonyElixir.Orchestrator do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # When the agent run ended incomplete (e.g. it exhausted max_turns with the issue
+  # still active rather than finishing the work), the issue is still promoted per
+  # completion_transitions, but we leave a workpad note and a warning label so a human
+  # reviewer knows there may be no PR and the work likely is not done.
+  defp maybe_annotate_incomplete(running_entry, issue_id) do
+    case Map.get(running_entry, :agent_outcome) do
+      {:incomplete, reason} ->
+        Logger.warning("Agent run incomplete for issue_id=#{issue_id} reason=#{inspect(reason)}; annotating before completion transition")
+
+        post_incomplete_workpad_comment(issue_id, reason)
+        add_incomplete_label(running_entry)
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp post_incomplete_workpad_comment(issue_id, reason) do
+    case Tracker.create_comment(issue_id, incomplete_workpad_comment_body(reason)) do
+      :ok ->
+        :ok
+
+      {:error, error} ->
+        Logger.warning("Failed to post incomplete workpad comment issue_id=#{issue_id}: #{inspect(error)}")
+        :ok
+    end
+  end
+
+  @doc false
+  @spec incomplete_workpad_comment_body(term()) :: String.t()
+  def incomplete_workpad_comment_body(reason) do
+    """
+    ## Codex Workpad
+
+    > ⚠️ Symphony auto-note: this agent run ended **incomplete** (#{incomplete_reason_text(reason)}).
+    >
+    > - No pull request was confirmed for this issue at handoff.
+    > - The issue was moved to its review state automatically by the orchestrator, not by the agent finishing the work.
+    > - Please review the workspace state and move the issue back to Rework (or re-dispatch) if the task is not actually done.
+    """
+  end
+
+  defp incomplete_reason_text(:max_turns), do: "reached the configured max turns with the issue still active"
+  defp incomplete_reason_text(other), do: "reason=#{inspect(other)}"
+
+  defp add_incomplete_label(%{issue: %Issue{identifier: identifier, project_slug: slug}})
+       when is_binary(identifier) and is_binary(slug) and slug != "" do
+    case Context.add_issue_label(slug, identifier, @incomplete_run_label) do
+      {:ok, _issue} ->
+        :ok
+
+      {:error, error} ->
+        Logger.warning("Failed to add incomplete label issue=#{identifier} project=#{slug}: #{inspect(error)}")
+        :ok
+    end
+  end
+
+  defp add_incomplete_label(_running_entry), do: :ok
 
   defp schedule_issue_retry(%State{} = state, issue_id, attempt, metadata)
        when is_binary(issue_id) and is_map(metadata) do
@@ -776,7 +908,7 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp handle_retry_issue_lookup(%Issue{} = issue, state, issue_id, attempt, metadata) do
-    terminal_states = terminal_state_set()
+    terminal_states = project_state_sets(issue).terminal
 
     cond do
       terminal_issue_state?(issue.state, terminal_states) ->
@@ -785,7 +917,7 @@ defmodule SymphonyElixir.Orchestrator do
         cleanup_issue_workspace(issue.identifier)
         {:noreply, release_issue_claim(state, issue_id)}
 
-      retry_candidate_issue?(issue, terminal_states) ->
+      retry_candidate_issue?(issue) ->
         handle_active_retry(state, issue, attempt, metadata)
 
       true ->
@@ -828,7 +960,7 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp handle_active_retry(state, issue, attempt, metadata) do
-    if retry_candidate_issue?(issue, terminal_state_set()) and
+    if retry_candidate_issue?(issue) and
          dispatch_slots_available?(issue, state) do
       {:noreply, dispatch_issue(state, issue, attempt)}
     else
@@ -1187,9 +1319,11 @@ defmodule SymphonyElixir.Orchestrator do
     }
   end
 
-  defp retry_candidate_issue?(%Issue{} = issue, terminal_states) do
-    candidate_issue?(issue, dispatch_state_set(), terminal_states) and
-      !issue_blocked_by_non_terminal?(issue, terminal_states)
+  defp retry_candidate_issue?(%Issue{} = issue) do
+    sets = project_state_sets(issue)
+
+    candidate_issue?(issue, sets.dispatch, sets.terminal) and
+      !issue_blocked_by_non_terminal?(issue, sets.terminal)
   end
 
   defp dispatch_slots_available?(%Issue{} = issue, %State{} = state) do

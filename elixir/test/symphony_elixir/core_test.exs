@@ -36,6 +36,45 @@ defmodule SymphonyElixir.CoreTest do
     slug
   end
 
+  defp empty_dispatch_state do
+    %Orchestrator.State{
+      max_concurrent_agents: 3,
+      running: %{},
+      claimed: MapSet.new(),
+      agent_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
+      retry_attempts: %{}
+    }
+  end
+
+  test "dispatch eligibility resolves states from the issue's own project, not global defaults" do
+    slug =
+      seed_prompt_project!("Prompt", %{
+        "tracker" => %{
+          "active_states" => ["Doing"],
+          "terminal_states" => ["Shipped"]
+        }
+      })
+
+    state = empty_dispatch_state()
+
+    custom_active_issue = %Issue{
+      id: "per-project-doing",
+      identifier: "PP-1",
+      project_slug: slug,
+      title: "Custom active state",
+      state: "Doing",
+      labels: []
+    }
+
+    global_active_issue = %{custom_active_issue | id: "per-project-todo", identifier: "PP-2", state: "Todo"}
+
+    # "Doing" is not a global active state, but it is for this project.
+    assert Orchestrator.should_dispatch_issue_for_test(custom_active_issue, state)
+
+    # "Todo" is the global default active state, but this project does not use it.
+    refute Orchestrator.should_dispatch_issue_for_test(global_active_issue, state)
+  end
+
   test "config defaults and validation checks" do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_api_token: nil,
