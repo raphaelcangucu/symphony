@@ -5,25 +5,27 @@
 # `exqlite` SQLite driver are available. The packaged escript (`bin/symphony`)
 # cannot load those NIFs, which is why `make serve` boots through this script.
 #
-# Inputs (all optional):
-#   * first CLI argument or $SYMPHONY_WORKFLOW : path to the WORKFLOW.md file
+# Inputs (all optional — global-less orchestration boots with process settings only):
+#   * first CLI argument or $SYMPHONY_WORKFLOW : optional path to a WORKFLOW.md file
+#                                                (backward compat; not required)
 #   * $SYMPHONY_TRACKER_PORT                   : HTTP port override
 #   * $SYMPHONY_TRACKER_TOKEN                  : bearer token for the tracker API
 
 defmodule Symphony.DevServe do
-  @default_workflow "WORKFLOW.md"
+  alias SymphonyElixir.DevServe
 
   def run do
     workflow_path = resolve_workflow_path()
-    ensure_workflow_exists!(workflow_path)
     ensure_single_instance!(workflow_path)
+    maybe_set_workflow(workflow_path)
+    override_port!()
 
-    :ok = SymphonyElixir.Workflow.set_workflow_file_path(workflow_path)
-    maybe_override_port(resolve_port())
+    # Migrate before starting the app: the Orchestrator queries the projects
+    # table in `init`, so a fresh database must be migrated first.
+    migrate_repo!()
 
     case Application.ensure_all_started(:symphony_elixir) do
       {:ok, _started} ->
-        migrate_repo!()
         announce_ready(workflow_path)
         Process.sleep(:infinity)
 
@@ -32,19 +34,27 @@ defmodule Symphony.DevServe do
     end
   end
 
+  # Returns the optional workflow path (or nil). Boot no longer requires a
+  # workflow file; per-project config is DB-owned.
   defp resolve_workflow_path do
-    raw =
-      case System.argv() do
-        [path | _] when is_binary(path) and path != "" -> path
-        _ -> System.get_env("SYMPHONY_WORKFLOW") || @default_workflow
-      end
-
-    Path.expand(raw)
+    case DevServe.resolve_workflow_source(System.argv(), System.get_env()) do
+      {:ok, path} -> path
+      :none -> nil
+      {:missing, path} -> fail("Workflow file not found: #{path}")
+    end
   end
 
-  defp ensure_workflow_exists!(path) do
-    unless File.regular?(path) do
-      fail("Workflow file not found: #{path}")
+  defp maybe_set_workflow(nil), do: :ok
+
+  defp maybe_set_workflow(path) when is_binary(path) do
+    :ok = SymphonyElixir.Workflow.set_workflow_file_path(path)
+  end
+
+  defp override_port! do
+    case DevServe.resolve_port(System.get_env()) do
+      {:ok, nil} -> :ok
+      {:ok, port} -> maybe_override_port(port)
+      {:error, message} -> fail(message)
     end
   end
 
@@ -70,21 +80,6 @@ defmodule Symphony.DevServe do
     end
   end
 
-  defp resolve_port do
-    case System.get_env("SYMPHONY_TRACKER_PORT") do
-      nil ->
-        nil
-
-      value ->
-        case Integer.parse(String.trim(value)) do
-          {port, ""} when port >= 0 -> port
-          _ -> fail("Invalid SYMPHONY_TRACKER_PORT: #{inspect(value)}")
-        end
-    end
-  end
-
-  defp maybe_override_port(nil), do: :ok
-
   defp maybe_override_port(port) when is_integer(port) do
     Application.put_env(:symphony_elixir, :server_port_override, port)
     :ok
@@ -106,7 +101,7 @@ defmodule Symphony.DevServe do
     port = SymphonyElixir.HttpServer.bound_port()
     suffix = if is_integer(port), do: "http://localhost:#{port}/tracker", else: "(HTTP server not bound)"
     IO.puts("\nSymphony tracker is running → #{suffix}")
-    IO.puts("Workflow: #{workflow_path}")
+    IO.puts("Workflow: #{workflow_path || "(none — per-project config from DB)"}")
     IO.puts("Press Ctrl+C twice to stop.\n")
   end
 
