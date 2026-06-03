@@ -133,6 +133,7 @@ function parsePortRange(value: string): number[] {
 }
 
 export function buildWorkflowConfig(form: WorkflowConfigForm): WorkflowConfig {
+  // Prune falsy booleans/"none" auth: absent === false/"none" in the schema, so dropping them keeps configs minimal and round-trips losslessly.
   const editor: WorkflowConfigEditor = {
     enabled: form.editor.enabled || undefined,
     binary: form.editor.binary || undefined,
@@ -142,9 +143,10 @@ export function buildWorkflowConfig(form: WorkflowConfigForm): WorkflowConfig {
     password: form.editor.password || undefined,
     base_url: form.editor.base_url || undefined,
   };
+  const devPorts = parsePortRange(form.dev_server.port_range);
   const devServer: WorkflowConfigDevServer = {
     enabled: form.dev_server.enabled || undefined,
-    port_range: parsePortRange(form.dev_server.port_range).length ? parsePortRange(form.dev_server.port_range) : undefined,
+    port_range: devPorts.length ? devPorts : undefined,
     max_concurrent: form.dev_server.max_concurrent,
     idle_timeout_ms: form.dev_server.idle_timeout_ms,
     auto_start_on: form.dev_server.auto_start_on.length ? form.dev_server.auto_start_on : undefined,

@@ -41,4 +41,38 @@ describe("workflowConfig converters", () => {
 
     expect(buildWorkflowConfig(workflowConfigToForm(original))).toEqual(original);
   });
+
+  it("parses dev_server.port_range, filtering junk and non-positive entries", () => {
+    const form = workflowConfigToForm({});
+    form.dev_server.enabled = true;
+    form.dev_server.port_range = "4100, 4101, abc, -5";
+    form.dev_server.auto_start_on = ["pull_request"];
+
+    const built = buildWorkflowConfig(form);
+
+    expect(built.dev_server).toEqual({
+      enabled: true,
+      port_range: [4100, 4101],
+      auto_start_on: ["pull_request"],
+    });
+  });
+
+  it("prunes whitespace-only string fields", () => {
+    const form = workflowConfigToForm({});
+    form.workspace.root = "   ";
+
+    const built = buildWorkflowConfig(form);
+
+    expect(built.workspace).toBeUndefined();
+  });
+
+  it("drops a false editor.enabled while keeping a real port", () => {
+    const form = workflowConfigToForm({});
+    form.editor.enabled = false;
+    form.editor.port = 8443;
+
+    const built = buildWorkflowConfig(form);
+
+    expect(built).toEqual({ editor: { port: 8443 } });
+  });
 });
