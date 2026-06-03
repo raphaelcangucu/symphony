@@ -36,6 +36,7 @@ defmodule SymphonyElixir.Config do
   @default_public_tunnel_enabled false
   @default_public_tunnel_base_domain "tracker.cods.dev"
   @default_assistant_draft_status "Triage"
+  @default_agent_kind "codex"
   @default_github_read_interval_ms 150
   @default_github_mutation_interval_ms 1_000
   @default_github_max_retries 4
@@ -512,7 +513,10 @@ defmodule SymphonyElixir.Config do
   @doc """
   Default agent when an issue only has the base `symphony` label.
 
-  Prefers Codex when the WORKFLOW configures it; otherwise the first configured agent.
+  Prefers Codex when a (legacy) global WORKFLOW configures it, then the first
+  configured agent. With global-less per-project orchestration there is usually
+  no global agent section, so the process-level default falls back to the
+  `:default_agent_kind` application setting and finally the `codex` code default.
   """
   @spec default_agent_kind() :: String.t()
   def default_agent_kind do
@@ -521,7 +525,7 @@ defmodule SymphonyElixir.Config do
     cond do
       "codex" in kinds -> "codex"
       kinds != [] -> List.first(kinds)
-      true -> "claude"
+      true -> Application.get_env(:symphony_elixir, :default_agent_kind, @default_agent_kind)
     end
   end
 

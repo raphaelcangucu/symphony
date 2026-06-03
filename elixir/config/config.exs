@@ -12,6 +12,12 @@ config :symphony_elixir, ecto_repos: [SymphonyElixir.Repo]
 # `Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)`.
 config :symphony_elixir, :tracker, sync_enabled: Mix.env() != :test
 
+# Process-level default agent kind for global-less per-project orchestration.
+# A project's own WORKFLOW front matter (codex:/claude:) takes precedence; this
+# is the fallback when a project declares no agent section. Override per
+# deployment if a different default is desired.
+config :symphony_elixir, :default_agent_kind, "codex"
+
 # Persist the resolved GitHub viewer identity (login/name/avatar) to disk so it
 # survives restarts and can be served when GitHub is rate-limited. Off in :test
 # so suites stay hermetic (pure in-memory ETS cache).

@@ -88,6 +88,35 @@ defmodule SymphonyElixir.ConfigTest do
     end
   end
 
+  describe "default_agent_kind/0" do
+    test "uses the application-configured default when no global agent section is present" do
+      write_workflow_file!(Workflow.workflow_file_path(), agent_kind: nil)
+      previous = Application.get_env(:symphony_elixir, :default_agent_kind)
+      Application.put_env(:symphony_elixir, :default_agent_kind, "claude")
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:symphony_elixir, :default_agent_kind, previous),
+          else: Application.delete_env(:symphony_elixir, :default_agent_kind)
+      end)
+
+      assert SymphonyElixir.Config.configured_agent_kinds() == []
+      assert SymphonyElixir.Config.default_agent_kind() == "claude"
+    end
+
+    test "falls back to the codex code default when nothing is configured" do
+      write_workflow_file!(Workflow.workflow_file_path(), agent_kind: nil)
+      previous = Application.get_env(:symphony_elixir, :default_agent_kind)
+      Application.delete_env(:symphony_elixir, :default_agent_kind)
+
+      on_exit(fn ->
+        if previous, do: Application.put_env(:symphony_elixir, :default_agent_kind, previous)
+      end)
+
+      assert SymphonyElixir.Config.default_agent_kind() == "codex"
+    end
+  end
+
   describe "observability hub config" do
     test "defaults when observability section omits hub keys" do
       load_workflow_with_front_matter("""
