@@ -1,6 +1,9 @@
 defmodule SymphonyElixir.PromptBuilderTest do
   use SymphonyElixir.TestSupport
 
+  alias SymphonyElixir.LocalTracker.{Context, ProjectSetup}
+  alias SymphonyElixir.Repo
+
   test "appends superpowers artifacts when present in the workspace" do
     write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
 
@@ -164,6 +167,50 @@ defmodule SymphonyElixir.PromptBuilderTest do
     refute prompt =~ "docs/superpowers/specs/03.md"
     refute prompt =~ String.duplicate("c", 100)
     assert prompt =~ "_Skipped 1 additional authoring artifact(s) due to prompt size limits._"
+  end
+
+  test "builds the prompt from the issue's project template" do
+    migrate_repo()
+    clean_repo()
+    seed_project_with_setup("alpha", "ALPHA {{ issue.identifier }}")
+
+    issue = %Issue{identifier: "A-1", project_slug: "alpha", state: "Todo"}
+
+    prompt = PromptBuilder.build_prompt(issue, [])
+
+    assert prompt =~ "ALPHA A-1"
+  end
+
+  test "falls back to the global workflow prompt when project_slug is nil" do
+    issue = %Issue{identifier: "G-1", project_slug: nil, state: "Todo"}
+
+    assert is_binary(PromptBuilder.build_prompt(issue, []))
+  end
+
+  defp seed_project_with_setup(slug, prompt) do
+    {:ok, project} = Context.ensure_project(%{name: slug, slug: slug, tracker_kind: "local"})
+
+    {:ok, _setup} =
+      %ProjectSetup{}
+      |> ProjectSetup.changeset(%{
+        project_id: project.id,
+        workflow_config: %{},
+        prompt_template: prompt,
+        validation_commands: %{"commands" => []},
+        scan_summary: %{}
+      })
+      |> Repo.insert()
+
+    project
+  end
+
+  defp migrate_repo do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
+  end
+
+  defp clean_repo do
+    SymphonyElixir.TestSupport.truncate_tracker!(Repo)
   end
 
   defp temporary_workspace_root!(name) do

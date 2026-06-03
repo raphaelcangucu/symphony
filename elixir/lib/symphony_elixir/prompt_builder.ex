@@ -3,7 +3,8 @@ defmodule SymphonyElixir.PromptBuilder do
   Builds agent prompts from issue data.
   """
 
-  alias SymphonyElixir.{Config, Workflow}
+  alias SymphonyElixir.{Config, ProjectConfig, Repo, Workflow}
+  alias SymphonyElixir.LocalTracker.Context
 
   @render_opts [strict_filters: true]
   @artifact_max_bytes 512_000
@@ -16,8 +17,8 @@ defmodule SymphonyElixir.PromptBuilder do
   @spec build_prompt(SymphonyElixir.Issue.t(), keyword()) :: String.t()
   def build_prompt(issue, opts \\ []) do
     template =
-      Workflow.current()
-      |> prompt_template!()
+      issue
+      |> resolve_template()
       |> parse_template!()
 
     rendered =
@@ -34,6 +35,24 @@ defmodule SymphonyElixir.PromptBuilder do
 
     rendered <> discussion_section(issue) <> artifacts_section(Keyword.get(opts, :workspace))
   end
+
+  defp resolve_template(%SymphonyElixir.Issue{project_slug: slug}) when is_binary(slug) do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        project
+        |> Repo.preload(:setup)
+        |> ProjectConfig.resolve()
+        |> Map.get(:prompt_template)
+        |> default_prompt()
+
+      {:error, _reason} ->
+        global_template()
+    end
+  end
+
+  defp resolve_template(_issue), do: global_template()
+
+  defp global_template, do: Workflow.current() |> prompt_template!()
 
   defp prompt_template!({:ok, %{prompt_template: prompt}}), do: default_prompt(prompt)
 
