@@ -86,7 +86,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
     tool_executor =
       Keyword.get(opts, :tool_executor, fn tool, arguments ->
-        DynamicTool.execute(tool, arguments)
+        DynamicTool.execute(tool, arguments, issue: issue)
       end)
 
     goal_active = ensure_goal_active(session, opts)
@@ -390,7 +390,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         "approvalPolicy" => approval_policy,
         "sandbox" => thread_sandbox,
         "cwd" => Path.expand(workspace),
-        "dynamicTools" => Keyword.get(opts, :dynamic_tools, DynamicTool.tool_specs())
+        "dynamicTools" => Keyword.get(opts, :dynamic_tools, DynamicTool.coding_agent_tool_specs())
       }
     })
 

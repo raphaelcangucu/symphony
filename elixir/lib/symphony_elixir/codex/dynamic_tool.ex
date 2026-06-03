@@ -4,10 +4,14 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   """
 
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
+  alias SymphonyElixir.Issue
   alias SymphonyElixir.Linear.Client, as: LinearClient
+  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Tracker.IssueAdapter
 
   @linear_graphql_tool "linear_graphql"
   @github_graphql_tool "github_graphql"
+  @set_issue_status_tool "set_issue_status"
 
   @graphql_input_schema %{
     "type" => "object",
@@ -34,6 +38,25 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   Execute a raw GraphQL query or mutation against GitHub using Symphony's configured GITHUB_TOKEN.
   """
 
+  @set_issue_status_input_schema %{
+    "type" => "object",
+    "additionalProperties" => false,
+    "required" => ["status"],
+    "properties" => %{
+      "status" => %{
+        "type" => "string",
+        "description" =>
+          "Target workflow status for the issue you are working on (for example \"In Progress\" or \"Human Review\"). Must match a status configured on this project's board."
+      }
+    }
+  }
+
+  @set_issue_status_description """
+  Move the issue you are currently working on to a workflow status on Symphony's local-first board.
+
+  The change is written to Symphony's local tracker immediately and synced to GitHub/Linear in the background, so it never blocks on their API rate limits. Use this to follow the workflow instructions, e.g. move from "Todo" to "In Progress" when you start work, or to "Human Review" when a PR is ready.
+  """
+
   @spec execute(String.t() | nil, term(), keyword()) :: map()
   def execute(tool, arguments, opts \\ []) do
     case tool do
@@ -42,6 +65,9 @@ defmodule SymphonyElixir.Codex.DynamicTool do
 
       @github_graphql_tool ->
         execute_github_graphql(arguments, opts)
+
+      @set_issue_status_tool ->
+        execute_set_issue_status(arguments, opts)
 
       other ->
         failure_response(%{
@@ -69,6 +95,23 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     ]
   end
 
+  @doc """
+  Tools advertised to the autonomous coding agent. Extends `tool_specs/0` with
+  issue-bound tools (such as `set_issue_status`) that require the agent's current
+  issue context and therefore are not exposed to the project chat assistant.
+  """
+  @spec coding_agent_tool_specs() :: [map()]
+  def coding_agent_tool_specs do
+    tool_specs() ++
+      [
+        %{
+          "name" => @set_issue_status_tool,
+          "description" => @set_issue_status_description,
+          "inputSchema" => @set_issue_status_input_schema
+        }
+      ]
+  end
+
   defp execute_linear_graphql(arguments, opts) do
     linear_client = Keyword.get(opts, :linear_client, &LinearClient.graphql/3)
 
@@ -91,6 +134,61 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       {:error, reason} ->
         failure_response(github_tool_error_payload(reason))
     end
+  end
+
+  defp execute_set_issue_status(arguments, opts) do
+    with {:ok, issue} <- fetch_bound_issue(opts),
+         {:ok, status} <- normalize_status(arguments),
+         {:ok, project} <- Context.get_project(issue.project_slug),
+         {:ok, _moved} <-
+           IssueAdapter.dispatch(project, :move_issue, [issue.identifier, %{"status" => status}]) do
+      set_issue_status_success(issue.identifier, status)
+    else
+      {:error, reason} -> failure_response(set_issue_status_error_payload(reason, opts))
+    end
+  end
+
+  defp fetch_bound_issue(opts) do
+    case Keyword.get(opts, :issue) do
+      %Issue{project_slug: slug, identifier: identifier} = issue
+      when is_binary(slug) and is_binary(identifier) ->
+        {:ok, issue}
+
+      _ ->
+        {:error, :no_bound_issue}
+    end
+  end
+
+  defp normalize_status(arguments) when is_map(arguments) do
+    case Map.get(arguments, "status") || Map.get(arguments, :status) do
+      status when is_binary(status) ->
+        case String.trim(status) do
+          "" -> {:error, :missing_status}
+          trimmed -> {:ok, trimmed}
+        end
+
+      _ ->
+        {:error, :missing_status}
+    end
+  end
+
+  defp normalize_status(_arguments), do: {:error, :missing_status}
+
+  defp set_issue_status_success(identifier, status) do
+    %{
+      "success" => true,
+      "contentItems" => [
+        %{
+          "type" => "inputText",
+          "text" =>
+            encode_payload(%{
+              "status" => "ok",
+              "identifier" => identifier,
+              "movedTo" => status
+            })
+        }
+      ]
+    }
   end
 
   defp normalize_graphql_arguments(arguments) when is_binary(arguments) do
@@ -290,7 +388,65 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
+  defp set_issue_status_error_payload(:no_bound_issue, _opts) do
+    %{
+      "error" => %{
+        "message" =>
+          "`set_issue_status` can only move the issue you are currently working on, but no issue is bound to this session."
+      }
+    }
+  end
+
+  defp set_issue_status_error_payload(:missing_status, _opts) do
+    %{
+      "error" => %{
+        "message" => "`set_issue_status` requires a non-empty `status` string."
+      }
+    }
+  end
+
+  defp set_issue_status_error_payload(:project_not_found, _opts) do
+    %{
+      "error" => %{
+        "message" => "The project for the current issue could not be found in the local tracker."
+      }
+    }
+  end
+
+  defp set_issue_status_error_payload(reason, opts) do
+    base = %{
+      "message" => "Failed to move the issue to the requested status.",
+      "reason" => inspect(reason)
+    }
+
+    error =
+      case available_status_names(opts) do
+        [] -> base
+        names -> Map.put(base, "validStatuses", names)
+      end
+
+    %{"error" => error}
+  end
+
+  defp available_status_names(opts) do
+    with %Issue{project_slug: slug} when is_binary(slug) <- Keyword.get(opts, :issue),
+         {:ok, project} <- Context.get_project(slug),
+         {:ok, statuses} <- IssueAdapter.dispatch(project, :list_statuses, []) do
+      statuses
+      |> Enum.map(&status_name/1)
+      |> Enum.reject(&is_nil/1)
+    else
+      _ -> []
+    end
+  end
+
+  defp status_name(status) when is_map(status) do
+    Map.get(status, :name) || Map.get(status, "name")
+  end
+
+  defp status_name(_status), do: nil
+
   defp supported_tool_names do
-    Enum.map(tool_specs(), & &1["name"])
+    Enum.map(coding_agent_tool_specs(), & &1["name"])
   end
 end

@@ -2,6 +2,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
   use SymphonyElixir.TestSupport
 
   alias SymphonyElixir.Codex.DynamicTool
+  alias SymphonyElixir.Issue
 
   test "tool_specs advertises linear_graphql and github_graphql" do
     names = Enum.map(DynamicTool.tool_specs(), & &1["name"])
@@ -12,6 +13,38 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert linear["description"] =~ "Linear"
     github = Enum.find(DynamicTool.tool_specs(), &(&1["name"] == "github_graphql"))
     assert github["description"] =~ "GitHub"
+  end
+
+  test "tool_specs does not expose the issue-bound set_issue_status tool to the assistant" do
+    refute "set_issue_status" in Enum.map(DynamicTool.tool_specs(), & &1["name"])
+  end
+
+  test "coding_agent_tool_specs advertises set_issue_status with a required status" do
+    names = Enum.map(DynamicTool.coding_agent_tool_specs(), & &1["name"])
+    assert "linear_graphql" in names
+    assert "github_graphql" in names
+    assert "set_issue_status" in names
+
+    spec = Enum.find(DynamicTool.coding_agent_tool_specs(), &(&1["name"] == "set_issue_status"))
+    assert spec["inputSchema"]["required"] == ["status"]
+    assert spec["description"] =~ "local-first"
+  end
+
+  test "set_issue_status fails when no issue is bound to the session" do
+    response = DynamicTool.execute("set_issue_status", %{"status" => "In Progress"})
+
+    assert response["success"] == false
+    text = hd(response["contentItems"])["text"]
+    assert Jason.decode!(text)["error"]["message"] =~ "no issue is bound"
+  end
+
+  test "set_issue_status fails when status is missing even with a bound issue" do
+    issue = %Issue{project_slug: "demo", identifier: "DEMO-1"}
+    response = DynamicTool.execute("set_issue_status", %{}, issue: issue)
+
+    assert response["success"] == false
+    text = hd(response["contentItems"])["text"]
+    assert Jason.decode!(text)["error"]["message"] =~ "non-empty `status`"
   end
 
   test "unsupported tools return a failure payload with the supported tool list" do
@@ -29,7 +62,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert Jason.decode!(text) == %{
              "error" => %{
                "message" => ~s(Unsupported dynamic tool: "not_a_real_tool".),
-               "supportedTools" => ["linear_graphql", "github_graphql"]
+               "supportedTools" => ["linear_graphql", "github_graphql", "set_issue_status"]
              }
            }
   end
