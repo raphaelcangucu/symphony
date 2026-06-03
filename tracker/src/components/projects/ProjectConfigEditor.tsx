@@ -61,6 +61,7 @@ export function ProjectConfigEditor({ project, onSaved, onCancel }: ProjectConfi
         description: description.trim() || null,
         tracker: { kind: trackerKind, config: trackerKind === "local" ? {} : trackerConfig },
       });
+      // updateProjectSetup is awaited last because its response is the only one that includes the full project with `setup`; we return that as the saved project.
       const saved = await updateProjectSetup(project.slug, {
         promptTemplate,
         validationCommands: validationCommands

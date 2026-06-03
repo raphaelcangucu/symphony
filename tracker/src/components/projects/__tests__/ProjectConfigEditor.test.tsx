@@ -87,4 +87,18 @@ describe("ProjectConfigEditor", () => {
     expect(onSaved).not.toHaveBeenCalled();
     expect(await screen.findByText(/invalid workflow_config/i)).toBeInTheDocument();
   });
+
+  it("does not save when the name is empty", async () => {
+    vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
+    const onSaved = vi.fn();
+
+    render(<ProjectConfigEditor project={project()} onSaved={onSaved} />);
+
+    await userEvent.clear(screen.getByRole("textbox", { name: "Name" }));
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    expect(projects.updateProject).not.toHaveBeenCalled();
+    expect(projects.updateProjectSetup).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
 });
