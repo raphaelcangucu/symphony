@@ -26,8 +26,8 @@ defmodule SymphonyElixir.Observability.Reporter do
   def init(opts) do
     state = %{
       deliver_fun: Keyword.get(opts, :deliver_fun) || default_deliver_fun(),
-      snapshot_fun: Keyword.get(opts, :snapshot_fun) || (&default_snapshot/0),
-      identity_fun: Keyword.get(opts, :identity_fun) || (&default_identity/0),
+      snapshot_fun: Keyword.get(opts, :snapshot_fun) || (&default_snapshot/1),
+      identities_fun: Keyword.get(opts, :identities_fun) || (&project_identities/0),
       heartbeat_interval_ms:
         Keyword.get(opts, :heartbeat_interval_ms) ||
           Config.observability_heartbeat_interval_ms(),
@@ -83,14 +83,20 @@ defmodule SymphonyElixir.Observability.Reporter do
   end
 
   defp do_report(state) do
-    report = Map.put(state.identity_fun.(), "snapshot", state.snapshot_fun.())
+    reports =
+      state.identities_fun.()
+      |> Enum.map(fn identity ->
+        Map.put(identity, "snapshot", state.snapshot_fun.(Map.get(identity, "project_slug")))
+      end)
 
     consecutive_failures =
-      case safe_deliver(state.deliver_fun, report) do
-        :ok -> handle_delivery_success(state.consecutive_failures)
-        {:error, reason} -> handle_delivery_failure(state.consecutive_failures, reason)
-        other -> handle_delivery_failure(state.consecutive_failures, {:unexpected, other})
-      end
+      Enum.reduce(reports, state.consecutive_failures, fn report, acc ->
+        case safe_deliver(state.deliver_fun, report) do
+          :ok -> handle_delivery_success(acc)
+          {:error, reason} -> handle_delivery_failure(acc, reason)
+          other -> handle_delivery_failure(acc, {:unexpected, other})
+        end
+      end)
 
     %{
       state
@@ -128,13 +134,34 @@ defmodule SymphonyElixir.Observability.Reporter do
   defp schedule_heartbeat(state),
     do: Process.send_after(self(), :heartbeat, state.heartbeat_interval_ms)
 
-  defp default_snapshot do
-    Presenter.state_payload(SymphonyElixir.Orchestrator, @snapshot_timeout_ms)
+  defp default_snapshot(project_slug) do
+    Presenter.state_payload(SymphonyElixir.Orchestrator, @snapshot_timeout_ms, project_slug)
   end
 
-  defp default_identity do
+  @spec project_identities() :: [map()]
+  def project_identities do
+    base_runtime = Config.observability_runtime_id()
+
+    case SymphonyElixir.LocalTracker.Context.list_projects() do
+      [] -> [global_identity(base_runtime)]
+      projects -> Enum.map(projects, &project_identity(&1, base_runtime))
+    end
+  end
+
+  defp project_identity(project, base_runtime) do
     %{
-      "runtime_id" => Config.observability_runtime_id(),
+      "runtime_id" => "#{base_runtime}:#{project.slug}",
+      "label" => project.name,
+      "project_slug" => project.slug,
+      "tracker_kind" => project.tracker_kind,
+      "agent_kind" => Config.agent_kind(),
+      "source_url" => source_url()
+    }
+  end
+
+  defp global_identity(base_runtime) do
+    %{
+      "runtime_id" => base_runtime,
       "label" =>
         Config.observability_label() ||
           Path.basename(SymphonyElixir.Workflow.workflow_file_path()),

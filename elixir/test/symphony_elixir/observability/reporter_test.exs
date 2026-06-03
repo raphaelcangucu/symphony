@@ -25,8 +25,8 @@ defmodule SymphonyElixir.Observability.ReporterTest do
       [
         name: :"reporter_#{System.unique_integer([:positive])}",
         deliver_fun: deliver,
-        snapshot_fun: fn -> %{counts: %{running: 0, retrying: 0}, running: [], retrying: []} end,
-        identity_fun: fn -> %{"runtime_id" => "r1", "label" => "proj"} end,
+        snapshot_fun: fn _slug -> %{counts: %{running: 0, retrying: 0}, running: [], retrying: []} end,
+        identities_fun: fn -> [%{"runtime_id" => "r1", "label" => "proj"}] end,
         heartbeat_interval_ms: 30,
         min_report_interval_ms: 5
       ],
@@ -109,5 +109,27 @@ defmodule SymphonyElixir.Observability.ReporterTest do
     assert_receive {:reported, %{"runtime_id" => "r1"}}, 500
     assert_receive {:reported, %{"runtime_id" => "r1"}}, 500
     assert Process.alive?(pid)
+  end
+
+  test "delivers one report per identity with composite runtime_id", %{deliver: deliver} do
+    identities = fn ->
+      [
+        %{"runtime_id" => "base:a", "project_slug" => "a", "label" => "A"},
+        %{"runtime_id" => "base:b", "project_slug" => "b", "label" => "B"}
+      ]
+    end
+
+    start_supervised!(
+      {Reporter,
+       opts(deliver,
+         identities_fun: identities,
+         snapshot_fun: fn slug ->
+           %{counts: %{running: 0, retrying: 0}, running: [], retrying: [], slug: slug}
+         end
+       )}
+    )
+
+    assert_receive {:reported, %{"runtime_id" => "base:a", "snapshot" => %{slug: "a"}}}, 500
+    assert_receive {:reported, %{"runtime_id" => "base:b", "snapshot" => %{slug: "b"}}}, 500
   end
 end
