@@ -45,8 +45,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     "properties" => %{
       "status" => %{
         "type" => "string",
-        "description" =>
-          "Target workflow status for the issue you are working on (for example \"In Progress\" or \"Human Review\"). Must match a status configured on this project's board."
+        "description" => "Target workflow status for the issue you are working on (for example \"In Progress\" or \"Human Review\"). Must match a status configured on this project's board."
       }
     }
   }
@@ -391,8 +390,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   defp set_issue_status_error_payload(:no_bound_issue, _opts) do
     %{
       "error" => %{
-        "message" =>
-          "`set_issue_status` can only move the issue you are currently working on, but no issue is bound to this session."
+        "message" => "`set_issue_status` can only move the issue you are currently working on, but no issue is bound to this session."
       }
     }
   end

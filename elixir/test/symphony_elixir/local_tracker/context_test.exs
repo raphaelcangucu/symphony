@@ -581,6 +581,22 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert Enum.any?(Context.list_statuses("local-ws"), &(&1.name == "Todo"))
   end
 
+  test "add_issue_label attaches a label by name and is idempotent" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Incomplete run", status: "Todo"})
+
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "symphony:incomplete")
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "symphony:incomplete")
+
+    assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    assert Enum.count(issue.labels, &(&1.name == "symphony:incomplete")) == 1
+  end
+
+  test "add_issue_label returns project_not_found for an unknown project" do
+    assert {:error, :project_not_found} =
+             Context.add_issue_label("missing", "MAC-1", "symphony:incomplete")
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

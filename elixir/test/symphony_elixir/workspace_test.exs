@@ -2,6 +2,7 @@ defmodule SymphonyElixir.WorkspaceTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.{Issue, Repo, Workflow, Workspace}
+  alias SymphonyElixir.LocalTracker.Context
 
   setup do
     migrate_repo()
@@ -51,6 +52,43 @@ defmodule SymphonyElixir.WorkspaceTest do
 
   test "path_for_issue/1 falls back to the flat path when no project resolves", %{workspace_root: root} do
     assert Workspace.path_for_issue("loose-id") == Path.join(root, "loose-id")
+  end
+
+  test "path_for_issue/1 nests under the issue project's github repo, not a flat slug", %{
+    workspace_root: root
+  } do
+    {:ok, _project} =
+      Context.ensure_project(%{
+        name: "dm",
+        slug: "dm",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "clouapp/distributionmachine", "project_id" => "PVT_x"}
+      })
+
+    issue = %Issue{id: "DIS-1", identifier: "DIS-1", project_slug: "dm"}
+
+    assert Workspace.path_for_issue(issue) ==
+             Path.join([root, "clouapp/distributionmachine", "DIS-1"])
+  end
+
+  test "path_for_issue/1 resolves identically from an identifier-only input and an issue map", %{
+    workspace_root: root
+  } do
+    {:ok, _project} =
+      Context.ensure_project(%{
+        name: "dm",
+        slug: "dm",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "clouapp/distributionmachine", "project_id" => "PVT_x"}
+      })
+
+    {:ok, issue} = Context.create_issue("dm", %{title: "Remover menu duplicado"})
+
+    from_map = Workspace.path_for_issue(%{id: issue.id, identifier: issue.identifier, project_slug: "dm"})
+    from_identifier = Workspace.path_for_issue(issue.identifier)
+
+    assert from_map == from_identifier
+    assert String.starts_with?(from_map, Path.join(root, "clouapp/distributionmachine") <> "/")
   end
 
   test "remove_issue_workspaces/1 sweeps nested project subdirectories", %{workspace_root: root} do

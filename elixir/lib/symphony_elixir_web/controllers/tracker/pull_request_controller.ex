@@ -92,6 +92,11 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
         persist_discovered(project, identifier, prs)
         Enum.map(prs, fn pr -> Map.put_new(pr, :origin, "auto") end)
 
+      # Local-first identifiers (e.g. "DIS-1") are not GitHub issue numbers, so live
+      # issue-scoped discovery does not apply. Persisted/manually-linked PRs still merge.
+      {:error, {:invalid_issue_identifier, _}} ->
+        []
+
       {:error, reason} ->
         Logger.warning("PR lookup failed for #{identifier}: #{inspect(reason)}")
         []

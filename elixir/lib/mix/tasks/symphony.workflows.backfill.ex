@@ -59,7 +59,11 @@ defmodule Mix.Tasks.Symphony.Workflows.Backfill do
         Mix.shell().info("multi_orchestrator: skipped (db-owned) project=#{slug}")
 
       true ->
-        case Context.upsert_project_setup(slug, %{workflow_config: config, prompt_template: prompt}) do
+        case Context.upsert_project_setup(slug, %{
+               workflow_config: config,
+               prompt_template: prompt,
+               after_create_hook: get_in(config, ["hooks", "after_create"])
+             }) do
           {:ok, _setup} ->
             Mix.shell().info("multi_orchestrator: imported project=#{slug}")
 

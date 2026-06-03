@@ -4,14 +4,16 @@ defmodule SymphonyElixir.Workspace do
   """
 
   require Logger
-  alias SymphonyElixir.{Config, WorkspaceSkills}
+  alias SymphonyElixir.{Config, ProjectConfig, Repo, WorkspaceSkills}
+  alias SymphonyElixir.GitHub.Config, as: GitHubConfig
+  alias SymphonyElixir.LocalTracker.Context
 
   @excluded_entries MapSet.new([".elixir_ls", "tmp"])
 
   @spec create_for_issue(map() | String.t() | nil) :: {:ok, Path.t()} | {:error, term()}
   def create_for_issue(issue_or_identifier) do
     ctx = issue_context(issue_or_identifier)
-    workspace = workspace_path_for_issue(safe_identifier(ctx.issue_identifier), resolve_project_slug(ctx))
+    workspace = workspace_path_for_layout(safe_identifier(ctx.issue_identifier), layout_for(ctx))
 
     ensure_at(workspace, issue_or_identifier)
   end
@@ -26,11 +28,12 @@ defmodule SymphonyElixir.Workspace do
   @spec ensure_at(Path.t(), map() | String.t() | nil) :: {:ok, Path.t()} | {:error, term()}
   def ensure_at(workspace, issue_or_identifier) when is_binary(workspace) do
     issue_context = issue_context(issue_or_identifier)
+    layout = layout_for(issue_context)
 
     try do
-      with :ok <- validate_workspace_path(workspace),
+      with :ok <- validate_workspace_path(workspace, layout.root),
            {:ok, created?} <- ensure_workspace(workspace),
-           :ok <- maybe_run_after_create_hook(workspace, issue_context, created?),
+           :ok <- maybe_run_after_create_hook(workspace, issue_context, layout, created?),
            :ok <- WorkspaceSkills.prepare(workspace) do
         {:ok, workspace}
       end
@@ -65,7 +68,7 @@ defmodule SymphonyElixir.Workspace do
   @spec path_for_issue(map() | String.t() | nil) :: Path.t()
   def path_for_issue(issue_or_identifier) do
     ctx = issue_context(issue_or_identifier)
-    workspace_path_for_issue(safe_identifier(ctx.issue_identifier), resolve_project_slug(ctx))
+    workspace_path_for_layout(safe_identifier(ctx.issue_identifier), layout_for(ctx))
   end
 
   @spec remove(Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
@@ -134,18 +137,71 @@ defmodule SymphonyElixir.Workspace do
     end
   end
 
-  defp workspace_path_for_issue(safe_id, project_slug) when is_binary(safe_id) do
-    case Config.tracker_kind() do
-      "github" ->
-        repo = SymphonyElixir.GitHub.Config.repo() || ""
-        Path.join([Config.workspace_root(), repo, safe_id])
+  # Resolves the workspace layout (root, nesting segment, after_create hook) for an
+  # issue from its OWN project's config, falling back to the global active workflow
+  # only when the issue has no resolvable project. This keeps a per-project issue
+  # (e.g. a distributionmachine ticket) out of an unrelated project's workspace.
+  defp layout_for(ctx) do
+    case resolve_project_config(ctx) do
+      {:ok, config} ->
+        %{
+          root: config.workspace_root || Config.workspace_root(),
+          segment: project_segment(config),
+          after_create_hook: config.after_create_hook
+        }
 
-      _ when is_binary(project_slug) and project_slug != "" ->
-        Path.join([Config.workspace_root(), project_slug, safe_id])
+      :error ->
+        %{
+          root: Config.workspace_root(),
+          segment: global_segment(Map.get(ctx, :project_slug)),
+          after_create_hook: Config.workspace_hooks()[:after_create]
+        }
+    end
+  end
+
+  defp resolve_project_config(%{project_slug: slug}) when is_binary(slug) and slug != "" do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        {:ok, project |> Repo.preload(:setup) |> ProjectConfig.resolve()}
 
       _ ->
-        Path.join(Config.workspace_root(), safe_id)
+        :error
     end
+  end
+
+  defp resolve_project_config(%{issue_identifier: identifier}) when is_binary(identifier) do
+    case Context.find_project_slug(identifier) do
+      slug when is_binary(slug) and slug != "" -> resolve_project_config(%{project_slug: slug})
+      _ -> :error
+    end
+  end
+
+  defp resolve_project_config(_ctx), do: :error
+
+  defp project_segment(%ProjectConfig{tracker_kind: "github", repo: repo})
+       when is_binary(repo) and repo != "",
+       do: repo
+
+  defp project_segment(%ProjectConfig{project_slug: slug}) when is_binary(slug) and slug != "",
+    do: slug
+
+  defp project_segment(_config), do: ""
+
+  defp global_segment(slug) do
+    case Config.tracker_kind() do
+      "github" -> GitHubConfig.repo() || ""
+      _ when is_binary(slug) and slug != "" -> slug
+      _ -> ""
+    end
+  end
+
+  defp workspace_path_for_layout(safe_id, %{root: root, segment: segment})
+       when is_binary(safe_id) and is_binary(segment) and segment != "" do
+    Path.join([root, segment, safe_id])
+  end
+
+  defp workspace_path_for_layout(safe_id, %{root: root}) when is_binary(safe_id) do
+    Path.join(root, safe_id)
   end
 
   defp safe_identifier(identifier) do
@@ -158,21 +214,14 @@ defmodule SymphonyElixir.Workspace do
     end)
   end
 
-  defp maybe_run_after_create_hook(workspace, issue_context, created?) do
-    case created? do
-      true ->
-        case Config.workspace_hooks()[:after_create] do
-          nil ->
-            :ok
+  defp maybe_run_after_create_hook(_workspace, _issue_context, _layout, false), do: :ok
 
-          command ->
-            run_hook(command, workspace, issue_context, "after_create")
-        end
-
-      false ->
-        :ok
-    end
+  defp maybe_run_after_create_hook(workspace, issue_context, %{after_create_hook: command}, true)
+       when is_binary(command) and command != "" do
+    run_hook(command, workspace, issue_context, "after_create")
   end
+
+  defp maybe_run_after_create_hook(_workspace, _issue_context, _layout, true), do: :ok
 
   defp maybe_run_before_remove_hook(workspace) do
     case File.dir?(workspace) do
@@ -246,9 +295,11 @@ defmodule SymphonyElixir.Workspace do
     end
   end
 
-  defp validate_workspace_path(workspace) when is_binary(workspace) do
+  defp validate_workspace_path(workspace), do: validate_workspace_path(workspace, Config.workspace_root())
+
+  defp validate_workspace_path(workspace, root_value) when is_binary(workspace) do
     expanded_workspace = Path.expand(workspace)
-    root = Path.expand(Config.workspace_root())
+    root = Path.expand(root_value)
     root_prefix = root <> "/"
 
     cond do
@@ -314,14 +365,6 @@ defmodule SymphonyElixir.Workspace do
       project_slug: nil
     }
   end
-
-  defp resolve_project_slug(%{project_slug: slug}) when is_binary(slug) and slug != "", do: slug
-
-  defp resolve_project_slug(%{issue_identifier: identifier}) when is_binary(identifier) do
-    SymphonyElixir.LocalTracker.Context.find_project_slug(identifier)
-  end
-
-  defp resolve_project_slug(_context), do: nil
 
   defp issue_log_context(%{issue_id: issue_id, issue_identifier: issue_identifier}) do
     "issue_id=#{issue_id || "n/a"} issue_identifier=#{issue_identifier || "issue"}"

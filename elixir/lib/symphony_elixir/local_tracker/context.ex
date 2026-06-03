@@ -382,6 +382,22 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @doc """
+  Attaches a label (by name) to an issue, creating the label if needed. Idempotent:
+  re-attaching an existing label is a no-op success.
+  """
+  @spec add_issue_label(String.t(), String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def add_issue_label(project_slug, identifier, label_name)
+      when is_binary(project_slug) and is_binary(identifier) and is_binary(label_name) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier),
+         {:ok, label} <- ensure_label(project.id, label_name),
+         {:ok, _issue_label} <- ensure_issue_label_idempotent(issue.id, label.id) do
+      {:ok, issue}
+    end
+  end
+
   @spec list_comments(String.t(), String.t()) :: {:ok, [Comment.t()]} | {:error, missing_error()}
   def list_comments(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
     with {:ok, project} <- fetch_project(project_slug),
@@ -1176,6 +1192,13 @@ defmodule SymphonyElixir.LocalTracker.Context do
     %IssueLabel{}
     |> IssueLabel.changeset(%{issue_id: issue_id, label_id: label_id})
     |> Repo.insert()
+  end
+
+  defp ensure_issue_label_idempotent(issue_id, label_id) do
+    case Repo.get_by(IssueLabel, issue_id: issue_id, label_id: label_id) do
+      %IssueLabel{} = existing -> {:ok, existing}
+      nil -> ensure_issue_label(issue_id, label_id)
+    end
   end
 
   defp normalize_agent_kind(agent) when is_binary(agent) do

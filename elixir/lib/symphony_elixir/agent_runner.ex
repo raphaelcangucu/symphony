@@ -8,32 +8,59 @@ defmodule SymphonyElixir.AgentRunner do
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.LocalTracker.Context
 
+  @type run_outcome :: :completed | {:incomplete, :max_turns}
+
   @spec run(map(), pid() | nil, keyword()) :: :ok | no_return()
   def run(issue, codex_update_recipient \\ nil, opts \\ []) do
     opts = issue_goal_opts(issue, opts)
 
     Logger.info("Starting agent run for #{issue_context(issue)}")
 
+    outcome = do_run(issue, codex_update_recipient, opts)
+    report_outcome(codex_update_recipient, issue, outcome)
+    :ok
+  end
+
+  @spec do_run(map(), pid() | nil, keyword()) :: run_outcome() | no_return()
+  defp do_run(issue, codex_update_recipient, opts) do
     case Workspace.create_for_issue(issue) do
       {:ok, workspace} ->
         try do
-          with :ok <- Workspace.run_before_run_hook(workspace, issue),
-               :ok <- run_codex_turns(workspace, issue, codex_update_recipient, opts) do
-            :ok
-          else
+          case Workspace.run_before_run_hook(workspace, issue) do
+            :ok ->
+              workspace
+              |> run_codex_turns(issue, codex_update_recipient, opts)
+              |> handle_turns_result(issue)
+
             {:error, reason} ->
-              Logger.error("Agent run failed for #{issue_context(issue)}: #{inspect(reason)}")
-              raise RuntimeError, "Agent run failed for #{issue_context(issue)}: #{inspect(reason)}"
+              fail_run(issue, reason)
           end
         after
           Workspace.run_after_run_hook(workspace, issue)
         end
 
       {:error, reason} ->
-        Logger.error("Agent run failed for #{issue_context(issue)}: #{inspect(reason)}")
-        raise RuntimeError, "Agent run failed for #{issue_context(issue)}: #{inspect(reason)}"
+        fail_run(issue, reason)
     end
   end
+
+  defp handle_turns_result(:completed, _issue), do: :completed
+  defp handle_turns_result({:incomplete, _reason} = outcome, _issue), do: outcome
+  defp handle_turns_result({:error, reason}, issue), do: fail_run(issue, reason)
+
+  @spec fail_run(map(), term()) :: no_return()
+  defp fail_run(issue, reason) do
+    Logger.error("Agent run failed for #{issue_context(issue)}: #{inspect(reason)}")
+    raise RuntimeError, "Agent run failed for #{issue_context(issue)}: #{inspect(reason)}"
+  end
+
+  defp report_outcome(recipient, %Issue{id: id}, outcome)
+       when is_pid(recipient) and is_binary(id) do
+    send(recipient, {:agent_outcome, id, outcome})
+    :ok
+  end
+
+  defp report_outcome(_recipient, _issue, _outcome), do: :ok
 
   defp codex_message_handler(recipient, issue) do
     agent_kind = issue_agent_kind(issue)
@@ -152,7 +179,7 @@ defmodule SymphonyElixir.AgentRunner do
           )
 
         {:done, _refreshed_issue} ->
-          :ok
+          :completed
 
         {:error, reason} ->
           {:error, reason}
@@ -175,7 +202,7 @@ defmodule SymphonyElixir.AgentRunner do
       goal_mode?(opts) ->
         Logger.info("Stopping outer agent turn loop for #{issue_context(refreshed_issue)} because Codex goal mode handles continuation internally")
 
-        :ok
+        :completed
 
       turn_number < max_turns ->
         Logger.info("Continuing agent run for #{issue_context(refreshed_issue)} after normal turn completion turn=#{turn_number}/#{max_turns}")
@@ -195,7 +222,7 @@ defmodule SymphonyElixir.AgentRunner do
       true ->
         Logger.info("Reached agent.max_turns for #{issue_context(refreshed_issue)} with issue still active; returning control to orchestrator")
 
-        :ok
+        {:incomplete, :max_turns}
     end
   end
 

@@ -700,10 +700,10 @@ defmodule SymphonyElixir.AppServerTest do
 
       assert Enum.any?(String.split(trace, "\n", trim: true), fn line ->
                String.starts_with?(line, "JSON:") and
-                 (line
-                  |> String.trim_leading("JSON:")
-                  |> Jason.decode!()
-                  |> get_in(["result", "answers", "options-720", "answers"])) == ["Use default"]
+                 line
+                 |> String.trim_leading("JSON:")
+                 |> Jason.decode!()
+                 |> get_in(["result", "answers", "options-720", "answers"]) == ["Use default"]
              end)
     after
       File.rm_rf(test_root)
