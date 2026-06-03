@@ -4,8 +4,9 @@ defmodule SymphonyElixir.AgentRunner do
   """
 
   require Logger
-  alias SymphonyElixir.{CodingAgent, Config, Issue, PromptBuilder, Tracker, Workspace}
+  alias SymphonyElixir.{CodingAgent, Config, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
+  alias SymphonyElixir.LocalTracker.Context
 
   @spec run(map(), pid() | nil, keyword()) :: :ok | no_return()
   def run(issue, codex_update_recipient \\ nil, opts \\ []) do
@@ -43,8 +44,20 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
-  defp issue_agent_kind(%Issue{agent_kind: kind}) when is_binary(kind) and kind != "", do: kind
-  defp issue_agent_kind(_issue), do: Config.default_agent_kind()
+  @spec issue_agent_kind(SymphonyElixir.Issue.t()) :: String.t()
+  def issue_agent_kind(%Issue{agent_kind: kind}) when is_binary(kind) and kind != "", do: kind
+
+  def issue_agent_kind(%Issue{project_slug: slug}) when is_binary(slug) do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        project |> Repo.preload(:setup) |> ProjectConfig.resolve() |> Map.get(:agent_kind)
+
+      {:error, _reason} ->
+        Config.default_agent_kind()
+    end
+  end
+
+  def issue_agent_kind(_issue), do: Config.default_agent_kind()
 
   defp issue_goal_opts(issue, opts) do
     if Keyword.has_key?(opts, :goal) do

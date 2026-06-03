@@ -1,6 +1,40 @@
 defmodule SymphonyElixir.AgentRunnerTest do
   use SymphonyElixir.TestSupport
 
+  setup do
+    migrate_repo()
+    clean_repo()
+    :ok
+  end
+
+  test "explicit issue.agent_kind always wins" do
+    issue = %SymphonyElixir.Issue{identifier: "X-1", agent_kind: "claude", project_slug: "alpha"}
+    assert SymphonyElixir.AgentRunner.issue_agent_kind(issue) == "claude"
+  end
+
+  test "uses the project's resolved agent kind when issue.agent_kind is blank" do
+    {:ok, project} =
+      SymphonyElixir.LocalTracker.Context.ensure_project(%{name: "alpha", slug: "alpha", tracker_kind: "local"})
+
+    {:ok, _setup} =
+      %SymphonyElixir.LocalTracker.ProjectSetup{}
+      |> SymphonyElixir.LocalTracker.ProjectSetup.changeset(%{
+        project_id: project.id,
+        workflow_config: %{},
+        validation_commands: %{"commands" => []},
+        scan_summary: %{}
+      })
+      |> SymphonyElixir.Repo.insert()
+
+    issue = %SymphonyElixir.Issue{identifier: "A-1", project_slug: "alpha", agent_kind: nil}
+    assert SymphonyElixir.AgentRunner.issue_agent_kind(issue) == SymphonyElixir.Config.default_agent_kind()
+  end
+
+  test "falls back to the global default when there is no slug" do
+    issue = %SymphonyElixir.Issue{identifier: "G-1", project_slug: nil, agent_kind: nil}
+    assert SymphonyElixir.AgentRunner.issue_agent_kind(issue) == SymphonyElixir.Config.default_agent_kind()
+  end
+
   test "passes workspace artifacts into the first agent turn prompt" do
     test_root =
       Path.join(
@@ -353,5 +387,16 @@ defmodule SymphonyElixir.AgentRunnerTest do
 
   defp messages_with_method(messages, method) do
     Enum.filter(messages, &(Map.get(&1, "method") == method))
+  end
+
+  defp migrate_repo do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(SymphonyElixir.Repo, fn repo ->
+        Ecto.Migrator.run(repo, :up, all: true)
+      end)
+  end
+
+  defp clean_repo do
+    SymphonyElixir.TestSupport.truncate_tracker!(SymphonyElixir.Repo)
   end
 end
