@@ -26,11 +26,31 @@ defmodule Symphony.DevServe do
 
     case Application.ensure_all_started(:symphony_elixir) do
       {:ok, _started} ->
+        maybe_discover_projects()
         announce_ready(workflow_path)
         Process.sleep(:infinity)
 
       {:error, reason} ->
         fail("Failed to start Symphony: #{inspect(reason, pretty: true)}")
+    end
+  end
+
+  # Optional: create missing projects from WORKFLOW.<slug>.md files in the scan
+  # directory. Never overwrites DB-owned config. Runs post-start (the
+  # orchestrator re-lists projects each poll, so freshly discovered projects are
+  # picked up on the next cycle).
+  defp maybe_discover_projects do
+    case DevServe.discovery_dir(System.get_env()) do
+      {:ok, dir} ->
+        summary = SymphonyElixir.WorkflowDiscovery.discover(dir)
+
+        case summary.discovered do
+          [] -> :ok
+          slugs -> IO.puts("Discovered projects from WORKFLOW.<slug>.md: #{Enum.join(slugs, ", ")}")
+        end
+
+      :disabled ->
+        :ok
     end
   end
 

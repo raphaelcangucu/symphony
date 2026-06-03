@@ -50,6 +50,30 @@ defmodule SymphonyElixir.DevServeTest do
     end
   end
 
+  describe "discovery_dir/1" do
+    test "is enabled by default and defaults to the current working directory" do
+      assert {:ok, dir} = DevServe.discovery_dir(%{})
+      assert dir == File.cwd!()
+    end
+
+    test "honors an explicit scan directory" do
+      assert {:ok, dir} = DevServe.discovery_dir(%{"SYMPHONY_WORKFLOW_DIR" => "some/dir"})
+      assert dir == Path.expand("some/dir")
+    end
+
+    test "is disabled by falsy flag values" do
+      for value <- ["0", "false", "no", "OFF", " False "] do
+        assert :disabled = DevServe.discovery_dir(%{"SYMPHONY_WORKFLOW_DISCOVERY" => value}),
+               "expected #{inspect(value)} to disable discovery"
+      end
+    end
+
+    test "stays enabled for truthy / unrecognized flag values" do
+      assert {:ok, _} = DevServe.discovery_dir(%{"SYMPHONY_WORKFLOW_DISCOVERY" => "1"})
+      assert {:ok, _} = DevServe.discovery_dir(%{"SYMPHONY_WORKFLOW_DISCOVERY" => "true"})
+    end
+  end
+
   describe "resolve_port/1" do
     test "returns {:ok, nil} when no port override is configured" do
       assert DevServe.resolve_port(%{}) == {:ok, nil}
