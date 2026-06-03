@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GitHubProjectPicker } from "@/components/projects/GitHubProjectPicker";
 import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
 import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
+import { projectSettingsPath } from "@/lib/workspaceRoutes";
 import { createWorkspaceProject } from "@/services/projects";
 import { listGitHubOwners, listGitHubRepositories, scanRepositories, suggestWorkspaceSetup } from "@/services/projectSetup";
 import { instantiateTemplate, listTemplates } from "@/services/templates";
@@ -213,6 +214,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
         reset();
         setOpen(false);
         toast.success("Project connected");
+        navigate(projectSettingsPath(project.slug));
       } catch (cause) {
         toast.error(cause instanceof Error ? cause.message : "Failed to connect project");
       } finally {
@@ -244,12 +246,8 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
       onCreated?.(project);
       reset();
       setOpen(false);
-      toast.success("Workspace project created", {
-        action: {
-          label: "Set up dev env",
-          onClick: () => navigate(`/projects/${project.slug}/board`),
-        },
-      });
+      toast.success("Workspace project created");
+      navigate(projectSettingsPath(project.slug));
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Failed to create workspace project");
     } finally {
@@ -283,12 +281,8 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
       onCreated?.(project);
       reset();
       setOpen(false);
-      toast.success("Project created from template", {
-        action: {
-          label: "Open board",
-          onClick: () => navigate(`/projects/${project.slug}/board`),
-        },
-      });
+      toast.success("Project created from template");
+      navigate(projectSettingsPath(project.slug));
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Failed to create project from template");
     } finally {
