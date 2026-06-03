@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -20,18 +21,27 @@ vi.mock("@/components/board/BoardPaletteShortcuts", () => ({
 }));
 
 describe("ProjectWorkspaceLayout assistant entry", () => {
-  it("renders a route link to the project assistant in workspace chrome", () => {
+  it("exposes the project assistant entry points from workspace chrome", async () => {
+    const user = userEvent.setup();
+
     render(
       <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
         <Routes>
           <Route path="/projects/:projectSlug" element={<ProjectWorkspaceLayout />}>
             <Route path="board" element={<div>Board route</div>} />
-            <Route path="assistant" element={<div>Assistant route</div>} />
+            <Route path="assistant/new-issue" element={<div>Assistant route</div>} />
           </Route>
         </Routes>
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: /Assistant/i }).getAttribute("href")).toBe("/projects/macro-markets/assistant");
+    await user.click(screen.getByRole("button", { name: "Assistant options" }));
+
+    expect((await screen.findByRole("menuitem", { name: "Create issue" })).getAttribute("href")).toBe(
+      "/projects/macro-markets/assistant/new-issue",
+    );
+    expect(screen.getByRole("menuitem", { name: "Explore project" }).getAttribute("href")).toBe(
+      "/projects/macro-markets/assistant/explore",
+    );
   });
 });
