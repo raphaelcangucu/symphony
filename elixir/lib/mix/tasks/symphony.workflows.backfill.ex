@@ -37,16 +37,35 @@ defmodule Mix.Tasks.Symphony.Workflows.Backfill do
 
     with true <- is_binary(slug),
          {:ok, %{config: config, prompt_template: prompt}} <- Workflow.load(path) do
-      maybe_create_project(slug, config)
-
-      if needs_setup?(slug) do
-        {:ok, _} = Context.upsert_project_setup(slug, %{workflow_config: config, prompt_template: prompt})
-        Mix.shell().info("multi_orchestrator: imported project=#{slug}")
-      else
-        Mix.shell().info("multi_orchestrator: skipped (db-owned) project=#{slug}")
-      end
+      import_loaded(slug, config, prompt)
     else
       _ -> Mix.shell().info("multi_orchestrator: skipped (unreadable) path=#{path}")
+    end
+  end
+
+  defp import_loaded(slug, config, prompt) do
+    case maybe_create_project(slug, config) do
+      :ok ->
+        upsert_if_needed(slug, config, prompt)
+
+      {:error, reason} ->
+        Mix.shell().info("multi_orchestrator: skipped (create-failed) project=#{slug} reason=#{inspect(reason)}")
+    end
+  end
+
+  defp upsert_if_needed(slug, config, prompt) do
+    cond do
+      not needs_setup?(slug) ->
+        Mix.shell().info("multi_orchestrator: skipped (db-owned) project=#{slug}")
+
+      true ->
+        case Context.upsert_project_setup(slug, %{workflow_config: config, prompt_template: prompt}) do
+          {:ok, _setup} ->
+            Mix.shell().info("multi_orchestrator: imported project=#{slug}")
+
+          {:error, reason} ->
+            Mix.shell().info("multi_orchestrator: skipped (setup-failed) project=#{slug} reason=#{inspect(reason)}")
+        end
     end
   end
 
@@ -59,8 +78,14 @@ defmodule Mix.Tasks.Symphony.Workflows.Backfill do
 
   defp maybe_create_project(slug, config) do
     case Context.get_project(slug) do
-      {:ok, _project} -> :ok
-      {:error, :project_not_found} -> Context.ensure_project(project_attrs(slug, config))
+      {:ok, _project} ->
+        :ok
+
+      {:error, :project_not_found} ->
+        case Context.ensure_project(project_attrs(slug, config)) do
+          {:ok, _project} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
     end
   end
 

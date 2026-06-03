@@ -36,6 +36,24 @@ defmodule Mix.Tasks.Symphony.Workflows.BackfillTest do
     assert get_in(setup.workflow_config, ["tracker", "active_states"]) == ["Todo"]
   end
 
+  test "logs and skips a file whose project creation fails, still importing siblings" do
+    # github config missing repo/project_id => Context.ensure_project/1 returns
+    # {:error, changeset}; the per-file import must log and skip instead of raising.
+    File.write!(Path.join(@tmp, "WORKFLOW.aaa.md"), """
+    ---
+    github:
+      base: foo
+    ---
+    Broken project body.
+    """)
+
+    Mix.Tasks.Symphony.Workflows.Backfill.run(["--dir", @tmp])
+
+    assert {:error, :project_not_found} = Context.get_project("aaa")
+    assert {:ok, _project} = Context.get_project("alpha")
+    assert Context.get_project_setup("alpha").prompt_template =~ "Alpha prompt body."
+  end
+
   test "does not overwrite an existing project's DB-owned setup" do
     {:ok, _} = Context.ensure_project(%{name: "alpha", slug: "alpha", tracker_kind: "local"})
     {:ok, _} = Context.upsert_project_setup("alpha", %{prompt_template: "KEEP"})
