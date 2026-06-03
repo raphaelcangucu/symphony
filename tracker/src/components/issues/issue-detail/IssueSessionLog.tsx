@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 
 import { SessionLogEntryCard } from "@/components/issues/issue-detail/SessionLogEntryCard";
+import { pairSessionLogItems, sessionPairToView } from "@/components/issues/issue-detail/sessionToolCall";
+import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import type { SessionLogEntry } from "@/types/session-log";
 
 interface IssueSessionLogProps {
@@ -12,6 +14,7 @@ interface IssueSessionLogProps {
 
 export function IssueSessionLog({ issueIdentifier, connected, entries, error }: IssueSessionLogProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const items = pairSessionLogItems(entries);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -33,8 +36,14 @@ export function IssueSessionLog({ issueIdentifier, connected, entries, error }: 
           aria-label={`Session log for ${issueIdentifier}`}
           className="mt-3 max-h-[520px] space-y-3 overflow-auto rounded-lg bg-muted/20 p-3"
         >
-          {entries.length > 0 ? (
-            entries.map((entry, index) => <SessionLogEntryCard entry={entry} key={`${entry.kind}-${entry.title}-${index}`} />)
+          {items.length > 0 ? (
+            items.map((item, index) =>
+              item.type === "toolCall" ? (
+                <ToolCallBlock view={sessionPairToView(item.call, item.result)} key={`tool-${item.call.callId}-${index}`} />
+              ) : (
+                <SessionLogEntryCard entry={item.entry} key={`${item.entry.kind}-${item.entry.title}-${index}`} />
+              ),
+            )
           ) : (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">Waiting for session output…</p>
           )}

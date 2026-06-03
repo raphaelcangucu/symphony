@@ -1,4 +1,4 @@
-import { ChevronDown, TerminalSquare, Wrench } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { Markdown } from "@/components/ui/markdown";
@@ -41,26 +41,6 @@ export function SessionLogEntryCard({ entry }: SessionLogEntryCardProps) {
         tone="muted"
       >
         <p className="text-sm leading-6 text-muted-foreground">{entry.body ?? "Thinking…"}</p>
-      </CollapsibleCard>
-    );
-  }
-
-  if (entry.kind === "tool_call" || entry.kind === "tool_result") {
-    const Icon = entry.kind === "tool_call" ? Wrench : TerminalSquare;
-    const statusLabel =
-      entry.status === "running" ? "Running" : entry.status === "completed" ? "Completed" : entry.status === "failed" ? "Failed" : null;
-
-    return (
-      <CollapsibleCard
-        open={open}
-        onToggle={() => setOpen((current) => !current)}
-        title={entry.title}
-        subtitle={entry.kind === "tool_call" ? "Tool call" : "Tool result"}
-        tone="tool"
-        status={statusLabel}
-        icon={<Icon className="size-3.5" />}
-      >
-        {entry.body ? <CodeBody language={entry.language} value={entry.body} /> : null}
       </CollapsibleCard>
     );
   }
