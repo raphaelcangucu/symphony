@@ -1,6 +1,7 @@
 import type { Project, TrackerKind } from "@/types/project";
 import type { ProjectSetup } from "@/types/project-setup";
 import type { WorkspaceRepository } from "@/types/repository";
+import type { WorkflowConfig } from "@/types/workflow-config";
 import type { WorkflowStatus } from "@/types/workflow-status";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -27,7 +28,7 @@ export interface UpdateProjectInput {
 }
 
 export interface UpdateProjectSetupInput {
-  workflowConfig?: Record<string, unknown>;
+  workflowConfig?: WorkflowConfig;
   promptTemplate?: string | null;
   afterCreateHook?: string | null;
   validationCommands?: string[];
