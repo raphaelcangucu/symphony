@@ -1,15 +1,14 @@
 import { Settings } from "lucide-react";
-import { useState } from "react";
-import { Navigate, Outlet, useParams } from "react-router-dom";
+import { Navigate, Outlet, useNavigate, useParams } from "react-router-dom";
 
 import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
 import { ProjectAssistantMenu } from "@/components/layout/ProjectAssistantMenu";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { WorkspaceProvider, useWorkspace } from "@/components/layout/WorkspaceContext";
-import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
 import { Button } from "@/components/ui/button";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
+import { projectSettingsPath } from "@/lib/workspaceRoutes";
 
 export function ProjectWorkspaceLayout() {
   const { projectSlug = "" } = useParams();
@@ -24,10 +23,9 @@ export function ProjectWorkspaceLayout() {
 }
 
 function WorkspaceChrome() {
-  const { projectSlug, project, setProject, reloadProject, trackerKind, refetch, refreshing, setIssues } =
-    useWorkspace();
+  const { projectSlug, project, trackerKind, refetch, refreshing, setIssues } = useWorkspace();
   const pollingActive = useWindowFocus();
-  const [editing, setEditing] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen">
@@ -40,7 +38,7 @@ function WorkspaceChrome() {
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setEditing(true)}
+              onClick={() => navigate(projectSettingsPath(projectSlug))}
               disabled={!project}
               aria-label="Edit project"
               title="Edit project"
@@ -58,17 +56,6 @@ function WorkspaceChrome() {
         onIssueCreated={(issue) => setIssues((current) => [...current, issue])}
       />
       <BoardPaletteShortcuts />
-      {project ? (
-        <EditProjectDialog
-          project={project}
-          open={editing}
-          onOpenChange={setEditing}
-          onSaved={(updated) => {
-            setProject(updated);
-            void reloadProject();
-          }}
-        />
-      ) : null}
       <Outlet />
     </div>
   );

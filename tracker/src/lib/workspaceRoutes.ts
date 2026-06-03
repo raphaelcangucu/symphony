@@ -72,6 +72,10 @@ export function projectEditPath(projectSlug: string): string {
   return `${PROJECTS_PATH}/${requireSlug(projectSlug)}/edit`;
 }
 
+export function projectSettingsPath(projectSlug: string): string {
+  return `/projects/${requireSlug(projectSlug)}/settings`;
+}
+
 export function issuePath(
   projectSlug: string,
   view: WorkspaceView,
