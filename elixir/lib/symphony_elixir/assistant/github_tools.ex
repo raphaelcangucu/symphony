@@ -33,7 +33,7 @@ defmodule SymphonyElixir.Assistant.GitHubTools do
               "items" => %{"type" => "string"},
               "description" => "Workflow status option names to create on the board."
             },
-            "status_field" => string_schema("Single-select field name (default Symphony State).")
+            "status_field" => string_schema("Single-select field name (default Status, the built-in board field).")
           }
         }
       ),
@@ -56,7 +56,7 @@ defmodule SymphonyElixir.Assistant.GitHubTools do
               "items" => %{"type" => "string"},
               "description" => "Status names when provisioning a new GitHub Project."
             },
-            "status_field" => string_schema("Status field name when provisioning (default Symphony State).")
+            "status_field" => string_schema("Status field name when provisioning (default Status, the built-in board field).")
           }
         }
       )
@@ -126,7 +126,7 @@ defmodule SymphonyElixir.Assistant.GitHubTools do
         end
 
       project_id ->
-        status_field = normalize_optional_string(Map.get(arguments, "status_field")) || "Symphony State"
+        status_field = normalize_optional_string(Map.get(arguments, "status_field")) || "Status"
 
         {:ok,
          %{

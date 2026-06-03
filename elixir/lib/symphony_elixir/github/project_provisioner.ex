@@ -1,6 +1,13 @@
 defmodule SymphonyElixir.GitHub.ProjectProvisioner do
   @moduledoc """
-  Creates a GitHub Project v2 and a single-select status field via GraphQL.
+  Creates a GitHub Project v2 and configures its built-in `Status`
+  single-select field with the workflow states via GraphQL.
+
+  The built-in `Status` field is the single source of truth for GitHub
+  workflow control (see the GitHub Project status source design). Symphony
+  reconciles its options instead of creating a separate `Symphony State`
+  field, so the board view renders the workflow states as columns out of
+  the box.
 
   Uses Symphony's server-side `GITHUB_TOKEN` (not the Codex workspace shell).
   """
@@ -19,6 +26,36 @@ defmodule SymphonyElixir.GitHub.ProjectProvisioner do
   mutation SymphonyGitHubCreateProject($ownerId: ID!, $title: String!) {
     createProjectV2(input: { ownerId: $ownerId, title: $title }) {
       projectV2 { id number url }
+    }
+  }
+  """
+
+  @read_field_query """
+  query SymphonyGitHubReadStatusField($projectId: ID!, $name: String!) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        field(name: $name) {
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+            options { id name }
+          }
+        }
+      }
+    }
+  }
+  """
+
+  @update_field_mutation """
+  mutation SymphonyGitHubUpdateStatusField($input: UpdateProjectV2FieldInput!) {
+    updateProjectV2Field(input: $input) {
+      projectV2Field {
+        ... on ProjectV2SingleSelectField {
+          id
+          name
+          options { id name }
+        }
+      }
     }
   }
   """
@@ -62,7 +99,7 @@ defmodule SymphonyElixir.GitHub.ProjectProvisioner do
           state_options: %{String.t() => String.t()}
         }
 
-  @default_status_field "Symphony State"
+  @default_status_field "Status"
 
   @spec provision(provision_attrs(), keyword()) :: {:ok, provision_result()} | {:error, term()}
   def provision(attrs, opts \\ []) when is_map(attrs) do
@@ -72,8 +109,9 @@ defmodule SymphonyElixir.GitHub.ProjectProvisioner do
          {:ok, owner_id} <- resolve_owner_id(client, owner, name),
          {:ok, project} <- create_project(client, owner_id, Map.fetch!(attrs, :title)),
          {:ok, states} <- normalize_states(Map.get(attrs, :states)),
-         {:ok, field} <- create_status_field(client, project["id"], attrs, states) do
+         {:ok, field} <- configure_status_field(client, project["id"], attrs, states) do
       state_options = field_options_to_map(field)
+
       {:ok,
        %{
          project_id: project["id"],
@@ -115,14 +153,72 @@ defmodule SymphonyElixir.GitHub.ProjectProvisioner do
     end
   end
 
-  defp create_status_field(client, project_id, attrs, states) do
-    status_field = Map.get(attrs, :status_field, @default_status_field) |> to_string() |> String.trim()
-    status_field = if status_field == "", do: @default_status_field, else: status_field
+  defp configure_status_field(client, project_id, attrs, states) do
+    status_field = resolve_status_field_name(attrs)
 
-    options =
-      Enum.map(states, fn state ->
-        %{"name" => state, "color" => "GRAY", "description" => state}
-      end)
+    case read_status_field(client, project_id, status_field) do
+      {:ok, %{"id" => _} = field} ->
+        update_status_field_options(client, field, states)
+
+      {:ok, nil} ->
+        create_status_field(client, project_id, status_field, states)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp resolve_status_field_name(attrs) do
+    status_field = Map.get(attrs, :status_field, @default_status_field) |> to_string() |> String.trim()
+    if status_field == "", do: @default_status_field, else: status_field
+  end
+
+  defp read_status_field(client, project_id, status_field) do
+    case graphql(client, @read_field_query, %{"projectId" => project_id, "name" => status_field}) do
+      {:ok, %{"data" => %{"node" => %{"field" => %{"id" => _} = field}}}} ->
+        {:ok, field}
+
+      {:ok, %{"data" => %{"node" => %{"field" => nil}}}} ->
+        {:ok, nil}
+
+      {:ok, body} ->
+        {:error, {:read_status_field_unexpected, body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp update_status_field_options(client, field, states) do
+    existing_options = field_options_to_map(field)
+    options = build_options_input(states, existing_options)
+
+    variables = %{
+      "input" => %{
+        "fieldId" => field["id"],
+        "singleSelectOptions" => options
+      }
+    }
+
+    case graphql(client, @update_field_mutation, variables) do
+      {:ok,
+       %{
+         "data" => %{
+           "updateProjectV2Field" => %{"projectV2Field" => %{"id" => _} = updated}
+         }
+       }} ->
+        {:ok, updated}
+
+      {:ok, body} ->
+        {:error, {:update_status_field_unexpected, body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp create_status_field(client, project_id, status_field, states) do
+    options = build_options_input(states, %{})
 
     case graphql(client, @create_field_mutation, %{
            "projectId" => project_id,
@@ -143,6 +239,17 @@ defmodule SymphonyElixir.GitHub.ProjectProvisioner do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp build_options_input(states, existing_options) do
+    Enum.map(states, fn state ->
+      base = %{"name" => state, "color" => "GRAY", "description" => state}
+
+      case Map.get(existing_options, state) do
+        id when is_binary(id) -> Map.put(base, "id", id)
+        _ -> base
+      end
+    end)
   end
 
   defp normalize_states(states) when is_list(states) do

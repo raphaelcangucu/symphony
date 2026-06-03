@@ -94,7 +94,11 @@ describe("DocumentViewer", () => {
 
     renderViewer();
 
-    expect(screen.getByRole("region", { name: "Issue documents" })).toHaveClass("h-full", "flex-1", "min-h-0");
+    expect(screen.getByRole("region", { name: "Issue documents" })).toHaveClass(
+      "h-full",
+      "min-h-0",
+      "overflow-hidden",
+    );
     expect(await screen.findByRole("heading", { name: "Spec" })).toBeTruthy();
   });
 

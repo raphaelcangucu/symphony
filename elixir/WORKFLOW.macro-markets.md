@@ -267,11 +267,11 @@ When the Project **Status** is **Rework** (human moved the card after review):
 6. Move to **Human Review** only when feedback is addressed and tests are green.
 
 Do **not** ignore human comments that only appear on the PR — they are part of the rework scope.
-
+http://localhost:4000/tracker/assistant/7006
 ## Tests and validation (mandatory)
 
 Symphony does **not** run your test suite automatically. **You** must validate before **Human Review**, per `AGENTS.md` and [`.cursor/rules/testing-standards.mdc`](.cursor/rules/testing-standards.mdc):
-
+http://localhost:4000/tracker/assistant/7006
 - Treat ticket `Validation`, `Test Plan`, or `Testing` sections as required; mirror them in the workpad.
 - **Frontend (`front/`)** — when you changed frontend code:
   - Run lint: `cd front && npm run lint`
