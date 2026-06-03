@@ -53,8 +53,8 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
     assert SymphonyElixir.CodingAgent.adapter() == SymphonyElixir.Claude.CodingAgent
   end
 
-  test "CodingAgent routes to Claude by default" do
+  test "CodingAgent routes to the process default agent (Codex) when none is configured" do
     write_workflow_file!(Workflow.workflow_file_path(), agent_kind: nil)
-    assert SymphonyElixir.CodingAgent.adapter() == SymphonyElixir.Claude.CodingAgent
+    assert SymphonyElixir.CodingAgent.adapter() == SymphonyElixir.Codex.CodingAgent
   end
 end
