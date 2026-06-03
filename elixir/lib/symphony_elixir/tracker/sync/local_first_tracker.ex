@@ -135,6 +135,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
 
   defp issue_preloads do
     [
+      :project,
       :status,
       :labels,
       comments: from(comment in Comment, order_by: [asc: comment.inserted_at, asc: comment.id]),

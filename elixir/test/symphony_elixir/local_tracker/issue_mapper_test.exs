@@ -9,6 +9,7 @@ defmodule SymphonyElixir.LocalTracker.IssueMapperTest do
     IssueRecord,
     IssueRelation,
     Label,
+    Project,
     WorkflowStatus
   }
 
@@ -78,5 +79,33 @@ defmodule SymphonyElixir.LocalTracker.IssueMapperTest do
                source: "local"
              }
            ]
+  end
+
+  test "maps the owning project slug onto the issue when project is preloaded" do
+    record = %IssueRecord{
+      id: 1,
+      identifier: "ALP-1",
+      status: %WorkflowStatus{name: "Todo"},
+      labels: [],
+      comments: [],
+      source_relations: [],
+      project: %Project{slug: "alpha"}
+    }
+
+    assert IssueMapper.to_issue(record).project_slug == "alpha"
+  end
+
+  test "project_slug is nil when the project association is not loaded" do
+    record = %IssueRecord{
+      id: 2,
+      identifier: "ALP-2",
+      status: %WorkflowStatus{name: "Todo"},
+      labels: [],
+      comments: [],
+      source_relations: []
+    }
+
+    assert %Ecto.Association.NotLoaded{} = record.project
+    assert IssueMapper.to_issue(record).project_slug == nil
   end
 end

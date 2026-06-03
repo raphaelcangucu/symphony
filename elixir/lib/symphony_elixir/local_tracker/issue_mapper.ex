@@ -5,7 +5,7 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
 
   alias Ecto.Association.NotLoaded
   alias SymphonyElixir.{AgentRouting, Config, Issue}
-  alias SymphonyElixir.LocalTracker.{Comment, IssueRecord, IssueRelation, Label, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{Comment, IssueRecord, IssueRelation, Label, Project, WorkflowStatus}
 
   @spec to_issue(IssueRecord.t()) :: Issue.t()
   def to_issue(%IssueRecord{} = record) do
@@ -21,6 +21,7 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
     %Issue{
       id: to_string(record.id),
       identifier: record.identifier,
+      project_slug: project_slug(record),
       title: record.title,
       description: record.description,
       priority: record.priority,
@@ -101,4 +102,7 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
   defp status_name(%WorkflowStatus{name: name}), do: name
   defp status_name(%NotLoaded{}), do: nil
   defp status_name(_status), do: nil
+
+  defp project_slug(%IssueRecord{project: %Project{slug: slug}}), do: slug
+  defp project_slug(_record), do: nil
 end
