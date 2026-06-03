@@ -85,6 +85,51 @@ describe("assistant channel binding", () => {
     expect(onAssistantIssueCreated).toHaveBeenCalledWith({ identifier: "MAC-7", threadId: 42 });
   });
 
+  it("normalizes user_input_required questions", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onUserInputRequired = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onUserInputRequired,
+    });
+
+    handlers["user_input_required"]({
+      request_id: 112,
+      questions: [
+        {
+          id: "q1",
+          header: "Pick one",
+          question: "How?",
+          isOther: false,
+          isSecret: false,
+          options: [{ label: "A", description: "first" }],
+        },
+      ],
+    });
+
+    expect(onUserInputRequired).toHaveBeenCalledWith({
+      requestId: 112,
+      questions: [
+        {
+          id: "q1",
+          header: "Pick one",
+          question: "How?",
+          isOther: false,
+          isSecret: false,
+          options: [{ label: "A", description: "first" }],
+        },
+      ],
+    });
+  });
+
   it("does not emit document-change callbacks for malformed payloads", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
     const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;

@@ -3,9 +3,11 @@ import type { Channel } from "phoenix";
 import {
   normalizeAssistantChatMessage,
   normalizeToolCall,
+  normalizeUserQuestionsRequest,
   type AssistantChatMessage,
   type AssistantToolCall,
   type BackendAssistantChatMessageDto,
+  type UserQuestionsRequest,
 } from "@/services/assistant";
 
 export interface AssistantChannelHandlers {
@@ -19,6 +21,7 @@ export interface AssistantChannelHandlers {
   onAssistantDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
   onAssistantIssueCreated?: (payload: AssistantIssueCreatedPayload) => void;
   onSteerFailed?: (payload: { reason: string; message: string }) => void;
+  onUserInputRequired?: (request: UserQuestionsRequest) => void;
   onBtwDelta?: (payload: { btwId: string; delta: string }) => void;
   onBtwCompleted?: (payload: { btwId: string; message: string }) => void;
   onBtwError?: (payload: { btwId: string; message: string }) => void;
@@ -148,6 +151,11 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     handlers.onAssistantIssueCreated?.({ identifier, threadId: normalizeThreadId(created.threadId ?? created.thread_id) });
   });
 
+  channel.on("user_input_required", (payload) => {
+    const request = normalizeUserQuestionsRequest(payload as Parameters<typeof normalizeUserQuestionsRequest>[0]);
+    if (request) handlers.onUserInputRequired?.(request);
+  });
+
   channel.on("steer_failed", (payload) => {
     const data = payload as { reason?: string | null; message?: string | null };
     handlers.onSteerFailed?.({
@@ -170,6 +178,14 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     const data = payload as { btw_id?: string | null; message?: string | null };
     if (data.btw_id) handlers.onBtwError?.({ btwId: data.btw_id, message: data.message ?? "Side question failed" });
   });
+}
+
+export function submitUserInput(
+  channel: Channel,
+  requestId: string | number,
+  answers: Record<string, string>,
+): void {
+  channel.push("submit_user_input", { request_id: requestId, answers });
 }
 
 function normalizeThreadId(value: number | string | null | undefined): number | null {

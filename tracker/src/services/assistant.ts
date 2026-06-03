@@ -61,6 +61,65 @@ export interface AssistantChatMessage {
   metadata: Record<string, unknown>;
 }
 
+export interface UserQuestionOption {
+  label: string;
+  description?: string;
+}
+
+export interface UserQuestion {
+  id: string;
+  header: string;
+  question: string;
+  isOther: boolean;
+  isSecret: boolean;
+  options: UserQuestionOption[] | null;
+}
+
+export interface UserQuestionsRequest {
+  requestId: string | number;
+  questions: UserQuestion[];
+}
+
+export function normalizeUserQuestionsRequest(payload: {
+  request_id?: string | number | null;
+  requestId?: string | number | null;
+  questions?: unknown;
+}): UserQuestionsRequest | null {
+  const requestId = payload.requestId ?? payload.request_id;
+  if (requestId == null) return null;
+
+  const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
+  const questions = rawQuestions
+    .map((raw): UserQuestion | null => {
+      const q = raw as Record<string, unknown>;
+      const id = typeof q.id === "string" ? q.id : null;
+      if (!id) return null;
+
+      const options = Array.isArray(q.options)
+        ? q.options
+            .map((opt) => {
+              const o = opt as Record<string, unknown>;
+              return typeof o.label === "string"
+                ? { label: o.label, description: typeof o.description === "string" ? o.description : undefined }
+                : null;
+            })
+            .filter((opt): opt is UserQuestionOption => opt !== null)
+        : null;
+
+      return {
+        id,
+        header: typeof q.header === "string" ? q.header : "",
+        question: typeof q.question === "string" ? q.question : "",
+        isOther: q.isOther === true,
+        isSecret: q.isSecret === true,
+        options,
+      };
+    })
+    .filter((q): q is UserQuestion => q !== null);
+
+  return { requestId, questions };
+}
+
 interface BackendAssistantToolCallDto {
   name?: string | null;
   status?: string | null;
