@@ -9,8 +9,10 @@ import { AudioLines, Bot, Clock, ImageIcon, SendHorizontal, X } from "lucide-rea
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
+import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
+import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
@@ -785,7 +787,7 @@ function AssistantBubble({
         {message.toolCalls.length ? (
           <div className={cn("mt-3 space-y-2 border-t pt-2", isUser && "border-white/20")}>
             {message.toolCalls.map((toolCall, index) => (
-              <ToolCallSummary key={`${toolCall.name}-${index}`} toolCall={toolCall} />
+              <ToolCallBlock view={assistantToolCallToView(toolCall)} key={`${toolCall.name}-${index}`} />
             ))}
           </div>
         ) : null}
@@ -903,22 +905,6 @@ function AssistantMarkdown({
     >
       {content}
     </Markdown>
-  );
-}
-
-function ToolCallSummary({ toolCall }: { toolCall: AssistantToolCall }) {
-  const issue = toolCall.result.issue;
-
-  return (
-    <div className="rounded-lg bg-muted/60 p-2 text-xs">
-      <div className="font-mono font-semibold">{toolCall.name}</div>
-      {issue ? (
-        <div className="mt-1 flex items-center gap-2">
-          <span className="font-mono">{issue.identifier}</span>
-          <span className="truncate">{issue.title}</span>
-        </div>
-      ) : null}
-    </div>
   );
 }
 

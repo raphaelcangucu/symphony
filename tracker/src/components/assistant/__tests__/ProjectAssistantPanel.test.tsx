@@ -120,7 +120,7 @@ describe("ProjectAssistantPanel", () => {
 
     expect(await screen.findByText("Oi")).toBeTruthy();
     expect(await screen.findByText("Olá, posso ajudar.")).toBeTruthy();
-    expect(screen.getByText("list_issues")).toBeTruthy();
+    expect(screen.getByText("List issues")).toBeTruthy();
   });
 
   it("queues a message submitted while running and auto-sends it on completion", async () => {
