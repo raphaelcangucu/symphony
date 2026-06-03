@@ -138,6 +138,7 @@ defmodule SymphonyElixir.DevServer.Instance do
     step = Keyword.fetch!(opts, :step)
     slug = Map.fetch!(step, :slug)
     working_dir = Map.get(step, :working_dir)
+    public_tunnel = Keyword.get(opts, :public_tunnel) || []
 
     %{
       project_id: project_id,
@@ -148,7 +149,7 @@ defmodule SymphonyElixir.DevServer.Instance do
       slug: slug,
       working_dir: working_dir,
       base_url: Keyword.get(opts, :base_url),
-      public_host: PublicRouting.preview_host(project_slug, identifier, slug),
+      public_host: PublicRouting.preview_host(project_slug, identifier, slug, public_tunnel),
       idle_timeout_ms: Keyword.get(opts, :idle_timeout_ms, @default_idle_timeout_ms),
       tmux: Keyword.get(opts, :tmux, Registry),
       port_allocator: Keyword.get(opts, :port_allocator, &PortAllocator.allocate/2),

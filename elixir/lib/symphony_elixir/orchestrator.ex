@@ -405,7 +405,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp last_activity_timestamp(_running_entry), do: nil
 
   defp terminate_task(pid) when is_pid(pid) do
-    case Task.Supervisor.terminate_child(SymphonyElixir.TaskSupervisor, pid) do
+    case Task.Supervisor.terminate_child(SymphonyElixir.Orchestrator.TaskSupervisor, pid) do
       :ok ->
         :ok
 
@@ -633,7 +633,7 @@ defmodule SymphonyElixir.Orchestrator do
     recipient = self()
     issue = Tracker.enrich_issue(issue)
 
-    case Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
+    case Task.Supervisor.start_child(SymphonyElixir.Orchestrator.TaskSupervisor, fn ->
            AgentRunner.run(issue, recipient, attempt: attempt)
          end) do
       {:ok, pid} ->

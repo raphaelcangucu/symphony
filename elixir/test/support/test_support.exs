@@ -96,12 +96,12 @@ defmodule SymphonyElixir.TestSupport do
   end
 
   def stop_default_http_server do
-    case Enum.find(Supervisor.which_children(SymphonyElixir.Supervisor), fn
+    case Enum.find(Supervisor.which_children(SymphonyElixir.WebSupervisor), fn
            {SymphonyElixir.HttpServer, _pid, _type, _modules} -> true
            _child -> false
          end) do
       {SymphonyElixir.HttpServer, pid, _type, _modules} when is_pid(pid) ->
-        :ok = Supervisor.terminate_child(SymphonyElixir.Supervisor, SymphonyElixir.HttpServer)
+        :ok = Supervisor.terminate_child(SymphonyElixir.WebSupervisor, SymphonyElixir.HttpServer)
 
         if Process.alive?(pid) do
           Process.exit(pid, :normal)

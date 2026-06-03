@@ -10,7 +10,7 @@ defmodule SymphonyElixir.DevServer.Manager do
   alias SymphonyElixir.Config
   alias SymphonyElixir.DevServer.Instance
   alias SymphonyElixir.DevServer.PortAllocator
-  alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord}
+  alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord, ProjectSetup}
   alias SymphonyElixir.Terminal.Registry, as: TerminalRegistry
   alias SymphonyElixir.Workspace
 
@@ -60,14 +60,18 @@ defmodule SymphonyElixir.DevServer.Manager do
   def start_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
     identifier = canonical_identifier(identifier)
 
-    if Config.dev_server_enabled?() do
-      normalize_lock_result(
-        :global.trans({__MODULE__, :start_for_issue}, fn ->
-          do_start_for_issue(project_slug, identifier)
-        end)
-      )
-    else
-      {:error, :disabled}
+    with {:ok, project} <- Context.get_project(project_slug) do
+      runtime_options = project_runtime_options(project)
+
+      if runtime_options.dev_server_enabled? do
+        normalize_lock_result(
+          :global.trans({__MODULE__, :start_for_issue}, fn ->
+            do_start_for_issue(project, identifier, runtime_options)
+          end)
+        )
+      else
+        {:error, :disabled}
+      end
     end
   end
 
@@ -131,13 +135,12 @@ defmodule SymphonyElixir.DevServer.Manager do
   def normalize_lock_result(:aborted), do: {:error, :lock_unavailable}
   def normalize_lock_result(result), do: result
 
-  defp do_start_for_issue(project_slug, identifier) do
-    with {:ok, project} <- Context.get_project(project_slug),
-         {:ok, workspace_path} <- issue_workspace_path(identifier),
+  defp do_start_for_issue(project, identifier, runtime_options) do
+    with {:ok, workspace_path} <- issue_workspace_path(identifier),
          {:ok, serve_steps} <- serve_steps(project.slug, identifier),
-         {:ok, reserved_steps} <- reserve_ports(project.slug, identifier, serve_steps) do
+         {:ok, reserved_steps} <- reserve_ports(project.slug, identifier, serve_steps, runtime_options.dev_server_port_range) do
       setup_issue_session(project.slug, identifier, workspace_path)
-      start_instances(project, identifier, workspace_path, reserved_steps)
+      start_instances(project, identifier, workspace_path, reserved_steps, runtime_options)
     end
   end
 
@@ -158,12 +161,12 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp reserve_ports(project_slug, identifier, serve_steps) do
+  defp reserve_ports(project_slug, identifier, serve_steps, port_range) do
     serve_steps
     |> Enum.reduce_while({:ok, []}, fn step, {:ok, reserved_steps} ->
       claimed_ports = live_ports() ++ Enum.map(reserved_steps, fn {_step, port, _key} -> port end)
 
-      case PortAllocator.allocate(Config.dev_server_port_range(), claimed_ports) do
+      case PortAllocator.allocate(port_range, claimed_ports) do
         {:ok, port} ->
           key = {project_slug, identifier, Map.fetch!(step, :slug)}
           reserve_port_for_key(key, port)
@@ -244,12 +247,12 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   def setup_command_for_workspace(_workspace_path, _step), do: nil
 
-  defp start_instances(project, identifier, workspace_path, reserved_steps) do
+  defp start_instances(project, identifier, workspace_path, reserved_steps, runtime_options) do
     attempt_keys = Enum.map(reserved_steps, fn {_step, _port, key} -> key end)
 
     reserved_steps
     |> Enum.reduce_while({:ok, []}, fn {step, port, key}, {:ok, started} ->
-      case start_reserved_instance(project, identifier, workspace_path, step, port, key) do
+      case start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
         {:ok, started_instance} ->
           {:cont, {:ok, [started_instance | started]}}
 
@@ -264,8 +267,8 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp start_reserved_instance(project, identifier, workspace_path, step, port, key) do
-    case start_instance(project, identifier, workspace_path, step, port, key) do
+  defp start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
+    case start_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
       {:ok, pid} -> await_reserved_instance_boot(pid, key)
       {:error, reason} -> {:error, reason}
     end
@@ -282,7 +285,7 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp start_instance(project, identifier, workspace_path, step, port, key) do
+  defp start_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
     opts = [
       registry_name: {:via, Registry, {@registry, key}},
       project_id: project.id,
@@ -290,8 +293,9 @@ defmodule SymphonyElixir.DevServer.Manager do
       identifier: identifier,
       workspace_path: workspace_path,
       step: step,
-      base_url: Config.dev_server_base_url(),
-      idle_timeout_ms: Config.dev_server_idle_timeout_ms(),
+      base_url: runtime_options.dev_server_base_url,
+      idle_timeout_ms: runtime_options.dev_server_idle_timeout_ms,
+      public_tunnel: runtime_options.public_tunnel,
       claimed_ports: live_ports(),
       port_allocator: fn _range, _claimed_ports -> {:ok, port} end
     ]
@@ -541,6 +545,35 @@ defmodule SymphonyElixir.DevServer.Manager do
       session_name: record.session_name
     }
   end
+
+  defp project_runtime_options(project) do
+    opts =
+      project
+      |> project_workflow_config()
+      |> Config.validate_front_matter()
+
+    %{
+      dev_server_enabled?: get_in(opts, [:dev_server, :enabled]) == true,
+      dev_server_port_range: get_in(opts, [:dev_server, :port_range]),
+      dev_server_base_url: normalize_base_url(get_in(opts, [:dev_server, :base_url])),
+      dev_server_idle_timeout_ms: get_in(opts, [:dev_server, :idle_timeout_ms]),
+      public_tunnel: [
+        enabled: get_in(opts, [:public_tunnel, :enabled]),
+        base_domain: get_in(opts, [:public_tunnel, :base_domain]),
+        namespace: get_in(opts, [:public_tunnel, :namespace])
+      ]
+    }
+  end
+
+  defp project_workflow_config(project) do
+    case Context.get_project_setup(project.slug) do
+      %ProjectSetup{workflow_config: %{} = config} -> config
+      _setup -> %{}
+    end
+  end
+
+  defp normalize_base_url(url) when is_binary(url) and url != "", do: String.trim_trailing(url, "/")
+  defp normalize_base_url(_url), do: nil
 
   defp shell_quote(value) do
     "'" <> String.replace(value, "'", "'\"'\"'") <> "'"

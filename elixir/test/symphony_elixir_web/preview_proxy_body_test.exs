@@ -61,10 +61,30 @@ defmodule SymphonyElixirWeb.PreviewProxyBodyTest do
       File.rm_rf(workflow_root)
     end)
 
-    {:ok, sink: sink}
+    {:ok, sink: sink, workflow_file: workflow_file}
   end
 
   test "forwards the full JSON request body to the upstream dev server", %{sink: sink} do
+    payload = Jason.encode!(%{"_token" => "abc", "calls" => [%{"method" => "authenticate"}]})
+
+    conn =
+      :post
+      |> build_conn("/livewire/update", payload)
+      |> put_req_header("content-type", "application/json")
+      |> Map.put(:host, @preview_host)
+
+    conn = @endpoint.call(conn, @endpoint.init([]))
+
+    assert conn.halted
+    assert conn.status == 200
+    assert Agent.get(sink, & &1) == payload
+  end
+
+  test "forwards registered preview hosts when the global workflow tunnel is disabled", %{
+    sink: sink,
+    workflow_file: workflow_file
+  } do
+    disable_public_tunnel!(workflow_file)
     payload = Jason.encode!(%{"_token" => "abc", "calls" => [%{"method" => "authenticate"}]})
 
     conn =
@@ -84,6 +104,17 @@ defmodule SymphonyElixirWeb.PreviewProxyBodyTest do
     front_matter =
       "github:\n  repo: acme/app\n" <>
         "public_tunnel:\n  enabled: true\n  namespace: #{@namespace}\n  base_domain: #{@base_domain}\n"
+
+    File.write!(workflow_file, "---\n" <> front_matter <> "---\n")
+    Workflow.set_workflow_file_path(workflow_file)
+    reload_workflow_store!()
+    :ok
+  end
+
+  defp disable_public_tunnel!(workflow_file) do
+    front_matter =
+      "github:\n  repo: acme/app\n" <>
+        "public_tunnel:\n  enabled: false\n  namespace: #{@namespace}\n  base_domain: #{@base_domain}\n"
 
     File.write!(workflow_file, "---\n" <> front_matter <> "---\n")
     Workflow.set_workflow_file_path(workflow_file)

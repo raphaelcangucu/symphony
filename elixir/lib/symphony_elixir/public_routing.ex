@@ -75,7 +75,7 @@ defmodule SymphonyElixir.PublicRouting do
 
   @spec preview_host(String.t(), String.t(), String.t(), keyword()) :: String.t() | nil
   def preview_host(project_slug, identifier, step_slug, opts \\ []) do
-    if Config.public_tunnel_enabled?() do
+    if public_tunnel_enabled?(opts) do
       case host_for(project_slug, identifier, step_slug, opts) do
         {:ok, host} -> host
         {:error, _reason} -> nil
@@ -130,6 +130,10 @@ defmodule SymphonyElixir.PublicRouting do
 
   defp fetch_base_domain(opts) do
     Keyword.get(opts, :base_domain) || Config.public_tunnel_base_domain()
+  end
+
+  defp public_tunnel_enabled?(opts) do
+    Keyword.get(opts, :enabled, Config.public_tunnel_enabled?()) == true
   end
 
   defp strip_hash(identifier) when is_binary(identifier), do: String.trim_leading(identifier, "#")

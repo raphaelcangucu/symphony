@@ -76,6 +76,19 @@ defmodule SymphonyElixir.DevServeGuardTest do
     assert {:ok, %{"pid" => "555"}} = read_lock(lock_path)
   end
 
+  test "records the node name so ctl can discover the daemon", %{lock_path: lock_path} do
+    assert :ok =
+             DevServeGuard.acquire(
+               lock_path: lock_path,
+               self_pid: "111",
+               workflow_path: "/wf/A.md",
+               node_name: "symphony@127.0.0.1",
+               alive?: fn _ -> true end
+             )
+
+    assert {:ok, %{"node_name" => "symphony@127.0.0.1"}} = DevServeGuard.read(lock_path)
+  end
+
   defp write_lock(path, map), do: File.write!(path, Jason.encode!(map))
   defp read_lock(path), do: path |> File.read!() |> Jason.decode()
 end

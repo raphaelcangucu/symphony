@@ -60,6 +60,17 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.start_for_issue(project.slug, "#1") == {:error, :disabled}
   end
 
+  test "start_for_issue reads dev server enablement from project setup", %{project: project} do
+    enable_project_dev_server!(project, port_range: [4100, 4101], max_concurrent: 1)
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front"}
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#missing-workspace") == {:error, :workspace_missing}
+  end
+
   test "list_for_issue returns persisted record maps ordered primary first", %{project: project} do
     {:ok, primary} =
       DevServerRecord.upsert(project.id, "1", "front", %{
@@ -214,7 +225,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
   end
 
   test "start_for_issue releases all reserved ports when the first instance crashes", %{project: project} do
-    enable_dev_server!(port_range: [4100, 4101], max_concurrent: 2)
+    enable_project_dev_server!(project, port_range: [4100, 4101], max_concurrent: 2)
 
     workspace = SymphonyElixir.Workspace.path_for_issue("1")
     File.rm_rf!(workspace)
@@ -244,7 +255,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
   end
 
   test "start_for_issue does not block on max concurrent capacity", %{project: project} do
-    enable_dev_server!(port_range: [4100, 4101], max_concurrent: 1)
+    enable_project_dev_server!(project, port_range: [4100, 4101], max_concurrent: 1)
 
     workspace = SymphonyElixir.Workspace.path_for_issue("1")
     File.rm_rf!(workspace)
@@ -313,32 +324,22 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     ArgumentError -> :ok
   end
 
-  defp enable_dev_server!(opts) do
+  defp enable_project_dev_server!(project, opts) do
     port_range = Keyword.fetch!(opts, :port_range)
     max_concurrent = Keyword.fetch!(opts, :max_concurrent)
-    [first_port, last_port] = port_range
 
-    dev_server_yaml =
-      [
-        "",
-        "dev_server:",
-        "  enabled: true",
-        "  port_range:",
-        "    - #{first_port}",
-        "    - #{last_port}",
-        "  max_concurrent: #{max_concurrent}",
-        "  idle_timeout_ms: 60000",
-        "---",
-        ""
-      ]
-      |> Enum.join("\n")
+    {:ok, _setup} =
+      Context.upsert_project_setup(project.slug, %{
+        "workflow_config" => %{
+          "dev_server" => %{
+            "enabled" => true,
+            "port_range" => port_range,
+            "max_concurrent" => max_concurrent,
+            "idle_timeout_ms" => 60_000
+          }
+        }
+      })
 
-    updated =
-      Workflow.workflow_file_path()
-      |> File.read!()
-      |> String.replace(~r/\n---\n/, dev_server_yaml, global: false)
-
-    File.write!(Workflow.workflow_file_path(), updated)
-    assert :ok = SymphonyElixir.WorkflowStore.force_reload()
+    :ok
   end
 end

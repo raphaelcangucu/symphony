@@ -19,51 +19,12 @@ defmodule SymphonyElixir.Application do
 
   use Application
 
-  alias SymphonyElixir.LocalTracker.Templates
-
   @impl true
   def start(_type, _args) do
     :ok = SymphonyElixir.LogFile.configure()
 
-    base_children = [
-      {Phoenix.PubSub, name: SymphonyElixir.PubSub},
-      SymphonyElixir.Observability.Registry,
-      SymphonyElixir.Repo,
-      SymphonyElixir.LocalTracker.CloneSupervisor,
-      %{
-        id: :seed_builtin_templates,
-        start:
-          {Task, :start_link,
-           [
-             fn ->
-               try do
-                 Templates.import_builtins()
-               rescue
-                 _ -> :ok
-               end
-             end
-           ]},
-        restart: :temporary
-      },
-      SymphonyElixir.LocalTracker.Viewer.Server,
-      {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
-      SymphonyElixir.GitHub.ReadCache,
-      SymphonyElixir.GitHub.RequestGateway,
-      SymphonyElixir.Tracker.Sync.Engine,
-      SymphonyElixir.WorkflowStore,
-      SymphonyElixir.Orchestrator,
-      SymphonyElixir.PublicRouting,
-      SymphonyElixir.DevServer.Manager,
-      SymphonyElixir.DevServer.Reconciler,
-      SymphonyElixir.Observability.Reporter,
-      SymphonyElixir.HttpServer,
-      SymphonyElixir.StatusDashboard
-    ]
-
-    children = base_children ++ editor_children()
-
     Supervisor.start_link(
-      children,
+      root_children(),
       strategy: :one_for_one,
       name: SymphonyElixir.Supervisor
     )
@@ -75,17 +36,17 @@ defmodule SymphonyElixir.Application do
     :ok
   end
 
-  defp editor_children do
-    if editor_enabled?() do
-      [SymphonyElixir.Editor.Server]
-    else
-      []
-    end
-  end
-
-  defp editor_enabled? do
-    SymphonyElixir.Config.editor_enabled?()
-  rescue
-    _ -> false
+  @doc """
+  The four restartable sub-supervisors that make up the running daemon, in boot
+  order. `:shared` must start before the others (it owns Repo/PubSub/registries).
+  """
+  @spec root_children() :: [module()]
+  def root_children do
+    [
+      SymphonyElixir.SharedSupervisor,
+      SymphonyElixir.OrchestratorSupervisor,
+      SymphonyElixir.WebSupervisor,
+      SymphonyElixir.EditorSupervisor
+    ]
   end
 end

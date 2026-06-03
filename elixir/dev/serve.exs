@@ -79,7 +79,10 @@ defmodule Symphony.DevServe do
   end
 
   defp ensure_single_instance!(workflow_path) do
-    case SymphonyElixir.DevServeGuard.acquire(workflow_path: workflow_path) do
+    case SymphonyElixir.DevServeGuard.acquire(
+           workflow_path: workflow_path,
+           node_name: to_string(node())
+         ) do
       :ok ->
         :ok
 

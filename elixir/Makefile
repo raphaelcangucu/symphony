@@ -1,6 +1,6 @@
 .PHONY: help all setup deps ensure-deps build fmt fmt-check lint test coverage ci dialyzer repo-ci \
 	check-tools install-code-server configure-code-server db-create db-migrate migrate migration new-migration rollback \
-	serve stop tracker-setup tracker-deps tracker-build tracker-lint tracker-test tracker-ci \
+	serve update stop tracker-setup tracker-deps tracker-build tracker-lint tracker-test tracker-ci \
 	tracker-api tracker-api-escript tracker-dev
 
 # Prefer mise when available so targets work whether or not the shell has mise
@@ -27,7 +27,7 @@ WORKFLOW ?= ./WORKFLOW.md
 help:
 	@echo "Quality:  setup, deps, build, fmt, fmt-check, lint, test, coverage, dialyzer, ci, all"
 	@echo "Database: migrate (create+migrate), migration (alias), new-migration name=<desc>, rollback, db-create"
-	@echo "Run:      serve (recommended local dev server), stop, check-tools"
+	@echo "Run:      serve (boot daemon), update (restart web by default; ARGS=--orchestrator/--code-server/--all), stop, check-tools"
 	@echo "Editor:   install-code-server, configure-code-server (browser VS Code for task workspaces)"
 	@echo "Tracker:  tracker-setup, tracker-deps, tracker-build, tracker-lint, tracker-test, tracker-ci, tracker-dev, repo-ci"
 	@echo "Packaged: tracker-api (alias of serve), tracker-api-escript (raw escript; no SQLite NIF)"
@@ -126,27 +126,28 @@ db-migrate: migrate
 
 # --- Run -------------------------------------------------------------------
 
-# Recommended local development server. Ensures deps + migrations, then boots
-# the full app through Mix (so native NIFs like the SQLite driver load). Loads
-# elixir/.env when present (GITHUB_TOKEN, SYMPHONY_TRACKER_TOKEN, etc.). A
-# dev-only tracker token is injected unless SYMPHONY_TRACKER_TOKEN is already set.
+# Boot/ensure the long-lived Symphony daemon (detached). It owns the DB +
+# orchestrator + web + editor, each in its own restartable subtree, so restarting
+# one never disturbs the others. Ensures deps + migrations first. Loads elixir/.env
+# (GITHUB_TOKEN, SYMPHONY_TRACKER_TOKEN, node name/cookie, etc.). A dev-only tracker
+# token is injected unless SYMPHONY_TRACKER_TOKEN is already set. Logs: .symphony/serve.log
 serve: ensure-deps migrate
 	@set -e; \
 	if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
 	token="$${SYMPHONY_TRACKER_TOKEN:-$(TRACKER_TOKEN)}"; \
-	echo "▶ Starting Symphony tracker"; \
-	echo "    URL      : http://localhost:$(TRACKER_PORT)/tracker"; \
-	echo "    Workflow : $(WORKFLOW)"; \
-	echo "    Token    : $$token  (paste it on the /token page)"; \
 	SYMPHONY_TRACKER_TOKEN="$$token" SYMPHONY_TRACKER_PORT="$(TRACKER_PORT)" \
-		$(MIX) run --no-start dev/serve.exs "$(WORKFLOW)"
+	SYMPHONY_WORKFLOW="$(WORKFLOW)" \
+		$(MIX) symphony.ctl serve $(ARGS)
 
-# The bracket in the pattern keeps pkill from matching this recipe's own
-# command line (its argv contains the literal `dev/serve[.]exs`, which the
-# regex `dev/serve[.]exs` does not match).
+# Recompile + restart selected subtree(s) against the running daemon.
+# Default: web only (so web edits never kill in-flight orchestrator turns).
+# Examples: make update ARGS="--orchestrator" | "--code-server" | "--all"
+update: ensure-deps
+	@$(MIX) symphony.ctl update $(ARGS)
+
+# Default: full daemon shutdown. `make stop ARGS="--web"` stops one subtree only.
 stop:
-	@pkill -f 'dev/serve[.]exs' >/dev/null 2>&1 && echo "stopped running serve process" || echo "no running serve process found"
-	@pkill -f 'code-server.*--bind-addr' >/dev/null 2>&1 && echo "stopped code-server process" || echo "no code-server process found"
+	@$(MIX) symphony.ctl stop $(ARGS)
 
 # --- Tracker frontend ------------------------------------------------------
 

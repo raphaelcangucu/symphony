@@ -308,6 +308,27 @@ make serve            # http://localhost:4000/tracker  (dev token: dev-local-tok
 make stop             # stop the running server
 ```
 
+#### Running the dev daemon (restart only what you changed)
+
+`make serve` boots Symphony as a single long-lived **detached** BEAM (logs to
+`.symphony/serve.log`). It owns the SQLite DB, the orchestrator (and its in-flight
+Codex turns), the web server, and the code-server manager — each in its own
+restartable subtree. Restart only what you changed; the orchestrator keeps
+running otherwise:
+
+| Command | Restarts |
+|---|---|
+| `make update` | web only (default) |
+| `make update ARGS="--orchestrator"` | orchestrator only |
+| `make update ARGS="--code-server"` | code-server manager only |
+| `make update ARGS="--all"` | web + orchestrator + editor |
+| `make stop` | full daemon shutdown |
+| `make stop ARGS="--web"` | stop just the web subtree (daemon stays up) |
+
+`make update` recompiles first; a compile error aborts the restart (the daemon
+keeps running the old code). The daemon runs as a localhost-only distributed
+node — see `SYMPHONY_NODE_NAME` / `SYMPHONY_NODE_COOKIE` in `.env`.
+
 Override the token or port as needed:
 
 ```bash

@@ -360,6 +360,28 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
     assert_eventually(fn -> PublicRouting.lookup(host) == :error end)
   end
 
+  test "uses provided project public tunnel config instead of global workflow config", %{project: project} do
+    ensure_public_routing_started!()
+
+    pid =
+      start_ready_instance!(project,
+        port: 4123,
+        project_slug: "macro-markets",
+        identifier: "510",
+        step_slug: "front",
+        public_tunnel: [enabled: true, namespace: "octocat", base_domain: "tracker.cods.dev"]
+      )
+
+    host = "macro-markets-510-front.octocat.tracker.cods.dev"
+    assert {:ok, 4123} = PublicRouting.lookup(host)
+
+    assert [row] = DevServerRecord.list_for_issue(project.id, "510")
+    assert row.url == "https://macro-markets-510-front.octocat.tracker.cods.dev/"
+
+    :ok = Instance.stop(pid)
+    assert_eventually(fn -> PublicRouting.lookup(host) == :error end)
+  end
+
   test "ready transition uses configured base_url when set", %{project: project} do
     {:ok, pid} =
       Instance.start_link(
@@ -429,6 +451,7 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
           project_slug: Keyword.fetch!(opts, :project_slug),
           identifier: Keyword.fetch!(opts, :identifier),
           step: step,
+          public_tunnel: Keyword.get(opts, :public_tunnel),
           port_allocator: fn _range, _claimed -> {:ok, port} end,
           probe: fn "127.0.0.1", ^port, "tcp", "/" -> :ok end,
           probe_interval_ms: 5

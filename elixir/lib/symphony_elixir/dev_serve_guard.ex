@@ -32,28 +32,37 @@ defmodule SymphonyElixir.DevServeGuard do
     lock_path = Keyword.get(opts, :lock_path, default_lock_path())
     self_pid = opts |> Keyword.get(:self_pid, System.pid()) |> to_string()
     workflow_path = opts |> Keyword.get(:workflow_path) |> normalize_workflow_path()
+    node_name = Keyword.get(opts, :node_name, "")
     alive? = Keyword.get(opts, :alive?, &os_process_alive?/1)
 
     case read_lock(lock_path) do
       {:ok, %{"pid" => pid} = existing} when is_binary(pid) and pid != "" ->
         cond do
-          pid == self_pid -> write_lock(lock_path, self_pid, workflow_path)
+          pid == self_pid -> write_lock(lock_path, self_pid, workflow_path, node_name)
           alive?.(pid) -> {:error, {:already_running, existing}}
-          true -> write_lock(lock_path, self_pid, workflow_path)
+          true -> write_lock(lock_path, self_pid, workflow_path, node_name)
         end
 
       _ ->
-        write_lock(lock_path, self_pid, workflow_path)
+        write_lock(lock_path, self_pid, workflow_path, node_name)
     end
   end
 
   @spec default_lock_path() :: Path.t()
   def default_lock_path, do: Path.join(System.tmp_dir!(), @lock_name)
 
-  defp write_lock(lock_path, self_pid, workflow_path) do
+  @doc """
+  Reads the current lock contents, if any. Used by `mix symphony.ctl` to discover
+  the running daemon's node name without re-deriving it from the environment.
+  """
+  @spec read(Path.t()) :: {:ok, lock_info()} | :error
+  def read(lock_path \\ default_lock_path()), do: read_lock(lock_path)
+
+  defp write_lock(lock_path, self_pid, workflow_path, node_name) do
     payload = %{
       "pid" => self_pid,
       "workflow_path" => workflow_path,
+      "node_name" => node_name,
       "acquired_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
 

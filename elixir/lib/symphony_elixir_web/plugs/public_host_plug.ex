@@ -20,10 +20,18 @@ defmodule SymphonyElixirWeb.PublicHostPlug do
 
   @impl true
   def call(conn, _opts) do
-    if tunnel_enabled?() do
-      route(conn, conn.host)
-    else
-      conn
+    route_registered_or_configured(conn, conn.host)
+  end
+
+  defp route_registered_or_configured(conn, host) when host in @loopback_hosts, do: conn
+
+  defp route_registered_or_configured(conn, host) do
+    case PublicRouting.lookup(host) do
+      {:ok, port} when is_integer(port) and port > 0 and port <= 65_535 ->
+        proxy(conn, port)
+
+      _not_registered ->
+        if tunnel_enabled?(), do: route(conn, host), else: conn
     end
   end
 
