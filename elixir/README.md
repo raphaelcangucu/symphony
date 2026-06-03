@@ -344,6 +344,39 @@ The build writes to `elixir/priv/static/tracker`; when Phoenix is started with `
 and `/tracker/*` serve the SPA while existing dashboard routes and tracker API routes remain
 available.
 
+### Multi-orchestrator projects
+
+When the local tracker holds more than one project, Symphony orchestrates **every non-archived
+project** in the database on boot — a single process and single SQLite writer, with each project
+resolving its own configuration and prompt. There is no longer a single global workflow that gates
+which project runs.
+
+- **The database is the source of truth** for per-project config and prompt. Each project's
+  `local_tracker_project_setups` row stores `workflow_config` (WORKFLOW-shaped front matter) and
+  `prompt_template` (the agent prompt). At dispatch, `SymphonyElixir.ProjectConfig.resolve/1` layers
+  a project's front matter over the global `WORKFLOW.md` defaults, so an omitted key inherits the
+  global value and a blank prompt falls back to the global prompt.
+- **Per-project behavior**: candidate polling uses each project's `tracker.active_states`, and the
+  prompt, agent kind, and workspace path are resolved from the project's setup. Issue workspaces are
+  nested under the project slug (`<workspace.root>/<project_slug>/<issue>`).
+- **Observability** reports one runtime card per project, using a composite `runtime_id`
+  (`<base>:<project_slug>`) with that project's filtered snapshot.
+- **Editing**: create/edit a project's prompt and config from the tracker UI. The project modal
+  includes a Write/Preview **markdown editor** for the prompt and a **Load default** action that
+  pulls from the workspace templates. Saving persists via `PUT /api/tracker/v1/projects/:id/setup`.
+- **Seeding from `WORKFLOW.<slug>.md` files** (one-time, idempotent): import existing per-project
+  workflow files into the database with
+
+  ```bash
+  mise exec -- mix symphony.workflows.backfill --dir .
+  ```
+
+  For each `WORKFLOW.<slug>.md` (excluding `*.example.*`), the task creates the project if missing
+  and imports its front matter + prompt into the project's setup. It **never overwrites** a project
+  whose setup is already DB-owned, so re-running is safe and UI edits always win. Environment/profile
+  workflows that are not real projects (for example `WORKFLOW.local-dev.md`) should be kept out of
+  the scanned directory to avoid creating spurious projects.
+
 ## Web dashboard
 
 The observability UI now runs on a minimal Phoenix stack:
@@ -389,9 +422,11 @@ Issue authoring uses the same assistant surface as the primary **New issue** pat
 creates a draft issue in `assistant.draft_status`, redirects to
 `/projects/:slug/assistant/issue/:id`, and continues in an issue-scoped chat that runs inside that
 issue's workspace. **Simple** mode enriches the issue description directly; **Complex** mode follows
-the vendored superpowers methodology, writes spec/plan/handoff docs under `docs/superpowers/`, and
-keeps review read-only in the assistant and issue detail. Execution stays separate: the issue
-detail's Agent tab has **Authoring** for chat/docs and **Execution** for the orchestrator run.
+the vendored superpowers methodology as the desired design-first default, writes spec/plan/handoff
+docs under `docs/superpowers/`, and keeps review read-only in the assistant and issue detail. If the
+user explicitly authorizes implementation, Codex may proceed directly to code from that same issue
+chat. Execution stays separate: the issue detail's Agent tab has **Authoring** for chat/docs and
+**Execution** for the orchestrator run.
 Codex dispatch can opt into **Goal mode** when `codex.goals_enabled: true`; Symphony derives a goal
 from the issue docs for review, then sends it to Codex for long-running continuation.
 
