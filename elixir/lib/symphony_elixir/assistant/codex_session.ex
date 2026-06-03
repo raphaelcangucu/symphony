@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Assistant.CodexSession do
   @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
 
-  alias SymphonyElixir.Assistant.{History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolExecutor}
+  alias SymphonyElixir.Assistant.{History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolCallPresenter, ToolExecutor}
   alias SymphonyElixir.Codex.{CodingAgent, DynamicTool}
   alias SymphonyElixir.Config
   alias SymphonyElixir.{Skills, Workspace}
@@ -506,6 +506,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     %{
       name: name,
       status: tool_call_status(event),
+      arguments: ToolCallPresenter.arguments(payload),
+      output: ToolCallPresenter.output(result),
       result: result
     }
   end
