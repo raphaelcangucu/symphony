@@ -20,6 +20,7 @@ export interface SessionLogEntry {
   language: SessionLogEntryLanguage;
   status: SessionLogEntryStatus | null;
   collapsed: boolean;
+  callId: string | null;
 }
 
 export function normalizeSessionLogEntry(value: unknown): SessionLogEntry | null {
@@ -37,6 +38,8 @@ export function normalizeSessionLogEntry(value: unknown): SessionLogEntry | null
     language: normalizeLanguage(record.language),
     status: normalizeStatus(record.status),
     collapsed: record.collapsed === true,
+    callId:
+      typeof record.call_id === "string" ? record.call_id : typeof record.callId === "string" ? record.callId : null,
   };
 }
 
@@ -74,6 +77,7 @@ function legacyEntry(line: string): SessionLogEntry | null {
       language: "text",
       status: null,
       collapsed: false,
+      callId: null,
     };
   }
 
@@ -88,5 +92,6 @@ function legacyEntry(line: string): SessionLogEntry | null {
     language: "text",
     status: null,
     collapsed: body.length > 280,
+    callId: null,
   };
 }
