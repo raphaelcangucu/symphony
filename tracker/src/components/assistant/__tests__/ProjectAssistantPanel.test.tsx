@@ -166,6 +166,27 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() => expect(screen.queryByText("queued one")).toBeNull());
   });
 
+  it("force-sends a queued message via steer when its send button is clicked", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+
+    fireEvent.change(textarea, { target: { value: "first" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    channelHandlers["assistant_delta"]({ delta: "working" });
+
+    fireEvent.change(textarea, { target: { value: "send me now" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    const sendNow = await screen.findByRole("button", { name: /send queued message now/i });
+    fireEvent.click(sendNow);
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("steer_turn", expect.objectContaining({ message: "send me now" })),
+    );
+    await waitFor(() => expect(screen.queryByText("send me now")).toBeNull());
+  });
+
   it("steers a running turn when /infer is submitted, and falls back to queue on steer_failed", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
     const textarea = await screen.findByPlaceholderText("Write a message...");

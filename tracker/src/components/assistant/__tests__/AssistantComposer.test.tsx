@@ -106,6 +106,59 @@ describe("AssistantComposer", () => {
     expect(screen.getByText("/btw")).toBeInTheDocument();
   });
 
+  it("completes the slash command on Tab from the palette", () => {
+    render(
+      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={vi.fn()} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "/b" } });
+    fireEvent.keyDown(textarea, { key: "Tab", code: "Tab" });
+
+    expect(textarea).toHaveValue("/btw ");
+  });
+
+  it("forces the oldest queued message when Enter is pressed on an empty input", () => {
+    const onSubmit = vi.fn();
+    const onForceQueued = vi.fn();
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        catalog={mockAssistantCodexCatalog}
+        hasQueued
+        onForceQueued={onForceQueued}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(onForceQueued).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("does not force a queued message when there is text to submit", () => {
+    const onSubmit = vi.fn();
+    const onForceQueued = vi.fn();
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        catalog={mockAssistantCodexCatalog}
+        hasQueued
+        onForceQueued={onForceQueued}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "a real message" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onForceQueued).not.toHaveBeenCalled();
+  });
+
   it("keeps the textarea enabled while the assistant is running", () => {
     render(
       <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} disabled onSubmit={vi.fn()} />,

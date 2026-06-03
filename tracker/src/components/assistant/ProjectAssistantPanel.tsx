@@ -5,7 +5,7 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { AudioLines, Bot, Clock, ImageIcon, X } from "lucide-react";
+import { AudioLines, Bot, Clock, ImageIcon, SendHorizontal, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
@@ -457,6 +457,27 @@ export function ProjectAssistantPanel({
     dispatchSend(next.payload);
   }, [isRunning, queued, dispatchSend]);
 
+  const forceSendQueued = useCallback(
+    (id: string) => {
+      const item = queued.find((entry) => entry.id === id);
+      if (!item) return;
+
+      setQueued((current) => current.filter((entry) => entry.id !== id));
+
+      if (isRunning) {
+        steerTurn(item.payload);
+      } else {
+        dispatchSend(item.payload);
+      }
+    },
+    [queued, isRunning, steerTurn, dispatchSend],
+  );
+
+  const forceSendOldestQueued = useCallback(() => {
+    const [oldest] = queued;
+    if (oldest) forceSendQueued(oldest.id);
+  }, [queued, forceSendQueued]);
+
   const onNew = useCallback(
     async (message: AppendMessage) => {
       const firstPart = message.content[0];
@@ -537,7 +558,17 @@ export function ProjectAssistantPanel({
             <span className="min-w-0 flex-1 truncate">{item.payload.message.trim()}</span>
             <button
               type="button"
+              aria-label="Send queued message now"
+              title="Send now"
+              onClick={() => forceSendQueued(item.id)}
+              className="rounded p-0.5 hover:text-foreground"
+            >
+              <SendHorizontal className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
               aria-label="Remove queued message"
+              title="Remove"
               onClick={() => setQueued((current) => current.filter((entry) => entry.id !== item.id))}
               className="rounded p-0.5 hover:text-foreground"
             >
@@ -555,6 +586,8 @@ export function ProjectAssistantPanel({
         catalog={catalog ?? fallbackCodexCatalog()}
         disabled={isRunning}
         floating={isPageMode && Boolean(projectSlug)}
+        hasQueued={queued.length > 0}
+        onForceQueued={forceSendOldestQueued}
         onSubmit={sendMessage}
       />
     ) : null;

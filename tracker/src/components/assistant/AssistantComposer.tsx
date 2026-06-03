@@ -50,6 +50,8 @@ interface AssistantComposerProps {
   catalog: AssistantCodexCatalog;
   disabled?: boolean;
   floating?: boolean;
+  hasQueued?: boolean;
+  onForceQueued?: () => void;
   onSubmit: (payload: AssistantComposerSubmit) => void;
 }
 
@@ -58,6 +60,8 @@ export function AssistantComposer({
   catalog,
   disabled = false,
   floating = false,
+  hasQueued = false,
+  onForceQueued,
   onSubmit,
 }: AssistantComposerProps) {
   const [input, setInput] = useState("");
@@ -174,8 +178,22 @@ export function AssistantComposer({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    if (event.nativeEvent.isComposing) return;
+
+    if (event.key === "Tab" && !event.shiftKey && showPalette && paletteCommands.length > 0) {
+      event.preventDefault();
+      setInput(`${paletteCommands[0].name} `);
+      return;
+    }
+
+    if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
+
+    if (input.trim().length === 0) {
+      if (hasQueued) onForceQueued?.();
+      return;
+    }
+
     submitCurrent();
   }
 
@@ -263,6 +281,7 @@ export function AssistantComposer({
                 <span className="truncate text-xs text-muted-foreground">{command.description}</span>
               </button>
             ))}
+            <p className="px-2 pt-1 text-[10px] text-muted-foreground">Tab to complete</p>
           </div>
         ) : null}
 
