@@ -64,15 +64,52 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.prompt_template == "Alpha prompt"
   end
 
-  test "falls back to global defaults when setup omits a key and to default prompt when blank" do
+  test "falls back to code-default states when setup omits a key and to nil prompt when blank" do
     {:ok, project} = Context.ensure_project(%{name: "beta", slug: "beta", tracker_kind: "local"})
     project = SymphonyElixir.Repo.preload(project, :setup)
 
     config = ProjectConfig.resolve(project)
 
-    assert config.active_states == SymphonyElixir.Config.active_states()
-    assert config.prompt_template == SymphonyElixir.Config.workflow_prompt()
+    assert config.active_states == ["Todo", "In Progress"]
+    assert config.prompt_template == nil
     assert config.tracker_kind == "local"
+  end
+
+  test "resolve/1 uses code defaults, not the loaded global workflow's states" do
+    SymphonyElixir.TestSupport.write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "local",
+      tracker_active_states: ["GlobalOnly"]
+    )
+
+    if Process.whereis(SymphonyElixir.WorkflowStore), do: SymphonyElixir.WorkflowStore.force_reload()
+
+    {:ok, project} = Context.ensure_project(%{name: "eps", slug: "eps", tracker_kind: "local"})
+    project = Repo.preload(project, :setup)
+
+    config = ProjectConfig.resolve(project)
+
+    refute config.active_states == ["GlobalOnly"]
+    assert config.active_states == ["Todo", "In Progress"]
+  end
+
+  test "resolve_runnable/1 returns {:ok, cfg} for a project with prompt and tracker identity" do
+    project = project_with_setup("zeta", %{}, "Zeta prompt")
+
+    assert {:ok, %ProjectConfig{prompt_template: "Zeta prompt"}} =
+             ProjectConfig.resolve_runnable(project)
+  end
+
+  test "resolve_runnable/1 skips a project without a prompt" do
+    {:ok, project} = Context.ensure_project(%{name: "eta", slug: "eta", tracker_kind: "local"})
+    project = Repo.preload(project, :setup)
+
+    assert {:skip, "no prompt configured"} = ProjectConfig.resolve_runnable(project)
+  end
+
+  test "resolve_runnable/1 skips a project with no tracker identity" do
+    project = %Project{id: nil, slug: "no-kind", tracker_kind: nil, tracker_config: %{}, setup: nil}
+
+    assert {:skip, "no tracker identity"} = ProjectConfig.resolve_runnable(project)
   end
 
   test "resolves per-project agent_kind from the project's own agent section" do
@@ -90,6 +127,76 @@ defmodule SymphonyElixir.ProjectConfigTest do
     config = ProjectConfig.resolve(project)
 
     assert config.agent_kind == SymphonyElixir.Config.default_agent_kind()
+  end
+
+  test "resolve/1 exposes repo from tracker_config for github projects" do
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "dm",
+        slug: "dm",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "clouapp/distributionmachine", "project_id" => "PVT_x"}
+      })
+
+    config = ProjectConfig.resolve(project)
+
+    assert config.repo == "clouapp/distributionmachine"
+  end
+
+  test "resolve/1 leaves repo nil for non-github projects" do
+    {:ok, project} = Context.ensure_project(%{name: "loc", slug: "loc", tracker_kind: "local"})
+
+    config = ProjectConfig.resolve(project)
+
+    assert config.repo == nil
+  end
+
+  test "resolve/1 reads after_create_hook from workflow_config.hooks when no column value" do
+    project =
+      github_project_with_setup("dm2", "clouapp/x", %{
+        "hooks" => %{"after_create" => "gh repo clone clouapp/x . -- --depth 1"}
+      })
+
+    config = ProjectConfig.resolve(project)
+
+    assert config.after_create_hook == "gh repo clone clouapp/x . -- --depth 1"
+  end
+
+  test "resolve/1 prefers the ProjectSetup.after_create_hook column when present" do
+    project =
+      github_project_with_setup(
+        "dm3",
+        "clouapp/z",
+        %{"hooks" => %{"after_create" => "echo front-matter-loses"}},
+        "echo column-wins"
+      )
+
+    config = ProjectConfig.resolve(project)
+
+    assert config.after_create_hook == "echo column-wins"
+  end
+
+  defp github_project_with_setup(slug, repo, workflow_config, after_create_hook \\ nil) do
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: slug,
+        slug: slug,
+        tracker_kind: "github",
+        tracker_config: %{"repo" => repo, "project_id" => "PVT_#{slug}"}
+      })
+
+    {:ok, _setup} =
+      %ProjectSetup{}
+      |> ProjectSetup.changeset(%{
+        project_id: project.id,
+        workflow_config: workflow_config,
+        after_create_hook: after_create_hook,
+        validation_commands: %{"commands" => []},
+        scan_summary: %{}
+      })
+      |> Repo.insert()
+
+    Repo.get!(Project, project.id) |> Repo.preload(:setup)
   end
 
   defp migrate_repo do

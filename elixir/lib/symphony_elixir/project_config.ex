@@ -3,10 +3,11 @@ defmodule SymphonyElixir.ProjectConfig do
   Resolves the effective configuration + prompt for a single project.
 
   A project's DB-owned WORKFLOW front matter (`ProjectSetup.workflow_config`) is
-  deep-merged over the global workflow front matter (`Config.workflow_front_matter/0`),
-  then validated through the same schema the global config uses. Omitted keys
-  inherit the global defaults; the prompt falls back to the global default when
-  the project has no `prompt_template`.
+  validated through the same schema the global config uses. Omitted keys inherit
+  the **code-level defaults** from that schema (never a loaded global workflow).
+  The prompt comes solely from the project's `prompt_template`; a project without
+  a prompt resolves to `nil` and is treated as unresolved (`resolve_runnable/1`),
+  never falling back to a global prompt.
   """
 
   alias SymphonyElixir.Config
@@ -19,6 +20,7 @@ defmodule SymphonyElixir.ProjectConfig do
     :project_slug,
     :tracker_kind,
     :tracker_config,
+    :repo,
     :active_states,
     :dispatch_states,
     :wait_states,
@@ -36,24 +38,48 @@ defmodule SymphonyElixir.ProjectConfig do
   def resolve(%Project{} = project) do
     setup = load_setup(project)
     project_front_matter = setup_front_matter(setup)
-    merged = deep_merge(Config.workflow_front_matter(), project_front_matter)
-    opts = Config.validate_front_matter(merged)
+    opts = Config.validate_front_matter(project_front_matter)
 
     %__MODULE__{
       project_id: project.id,
       project_slug: project.slug,
       tracker_kind: project.tracker_kind,
       tracker_config: project.tracker_config || %{},
+      repo: project_repo(project),
       active_states: get_in(opts, [:tracker, :active_states]),
       dispatch_states: dispatch_states(opts),
       wait_states: get_in(opts, [:tracker, :wait_states]) || [],
       terminal_states: get_in(opts, [:tracker, :terminal_states]),
       field_states: field_states(opts),
-      workspace_root: get_in(opts, [:workspace, :root]),
-      after_create_hook: setup && setup.after_create_hook,
+      workspace_root: project_workspace_root(project_front_matter),
+      after_create_hook: resolve_after_create_hook(setup, project_front_matter),
       agent_kind: Config.agent_kind_from_config(project_front_matter),
       prompt_template: resolve_prompt(setup)
     }
+  end
+
+  @doc """
+  Resolves a project and classifies whether it can actually run.
+
+  Returns `{:ok, config}` when the project has both a tracker identity and a
+  prompt, or `{:skip, reason}` when it cannot run on its own (no tracker
+  identity or no prompt). Callers skip-with-warning rather than inheriting any
+  other project's identity or a global fallback.
+  """
+  @spec resolve_runnable(Project.t()) :: {:ok, t()} | {:skip, String.t()}
+  def resolve_runnable(%Project{} = project) do
+    config = resolve(project)
+
+    cond do
+      is_nil(config.tracker_kind) or config.tracker_kind == "" ->
+        {:skip, "no tracker identity"}
+
+      is_nil(config.prompt_template) or String.trim(config.prompt_template) == "" ->
+        {:skip, "no prompt configured"}
+
+      true ->
+        {:ok, config}
+    end
   end
 
   @doc """
@@ -69,6 +95,37 @@ defmodule SymphonyElixir.ProjectConfig do
     |> Config.validate_workflow_config()
   end
 
+  # Only an explicit per-project `workspace.root` overrides the process-level
+  # default (`Config.workspace_root/0`); otherwise stay `nil` so the caller's
+  # process default applies rather than the schema's filler default.
+  defp project_workspace_root(%{} = front_matter) do
+    case get_in(front_matter, ["workspace", "root"]) do
+      root when is_binary(root) and root != "" -> root
+      _ -> nil
+    end
+  end
+
+  defp project_workspace_root(_front_matter), do: nil
+
+  defp project_repo(%Project{tracker_config: %{} = config}) do
+    case Map.get(config, "repo") do
+      repo when is_binary(repo) and repo != "" -> repo
+      _ -> nil
+    end
+  end
+
+  defp project_repo(_project), do: nil
+
+  defp resolve_after_create_hook(%ProjectSetup{after_create_hook: hook}, _front_matter)
+       when is_binary(hook) and hook != "",
+       do: hook
+
+  defp resolve_after_create_hook(_setup, %{"hooks" => %{"after_create" => hook}})
+       when is_binary(hook) and hook != "",
+       do: hook
+
+  defp resolve_after_create_hook(_setup, _front_matter), do: nil
+
   defp load_setup(%Project{setup: %ProjectSetup{} = setup}), do: setup
 
   defp load_setup(%Project{setup: %Ecto.Association.NotLoaded{}} = project) do
@@ -83,10 +140,13 @@ defmodule SymphonyElixir.ProjectConfig do
   defp setup_front_matter(_setup), do: %{}
 
   defp resolve_prompt(%ProjectSetup{prompt_template: prompt}) when is_binary(prompt) do
-    if String.trim(prompt) == "", do: Config.workflow_prompt(), else: prompt
+    case String.trim(prompt) do
+      "" -> nil
+      _ -> prompt
+    end
   end
 
-  defp resolve_prompt(_setup), do: Config.workflow_prompt()
+  defp resolve_prompt(_setup), do: nil
 
   defp dispatch_states(opts) do
     case get_in(opts, [:tracker, :dispatch_states]) do
@@ -104,10 +164,4 @@ defmodule SymphonyElixir.ProjectConfig do
         Enum.uniq(get_in(opts, [:tracker, :active_states]) ++ get_in(opts, [:tracker, :terminal_states]))
     end
   end
-
-  defp deep_merge(left, right) when is_map(left) and is_map(right) do
-    Map.merge(left, right, fn _key, l, r -> deep_merge(l, r) end)
-  end
-
-  defp deep_merge(_left, right), do: right
 end
