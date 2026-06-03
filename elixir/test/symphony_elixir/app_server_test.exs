@@ -597,6 +597,119 @@ defmodule SymphonyElixir.AppServerTest do
     end
   end
 
+  test "app server surfaces clarifying questions interactively and resumes after the operator answers" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-app-server-interactive-user-input-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-720")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-interactive.trace")
+      previous_trace = System.get_env("SYMP_TEST_CODEx_TRACE")
+
+      on_exit(fn ->
+        if is_binary(previous_trace) do
+          System.put_env("SYMP_TEST_CODEx_TRACE", previous_trace)
+        else
+          System.delete_env("SYMP_TEST_CODEx_TRACE")
+        end
+      end)
+
+      System.put_env("SYMP_TEST_CODEx_TRACE", trace_file)
+      File.mkdir_p!(workspace)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      trace_file="${SYMP_TEST_CODEx_TRACE:-/tmp/codex-interactive.trace}"
+      count=0
+      while IFS= read -r line; do
+        count=$((count + 1))
+        printf 'JSON:%s\\n' \"$line\" >> \"$trace_file\"
+
+        case \"$count\" in
+          1)
+            printf '%s\\n' '{\"id\":1,\"result\":{}}'
+            ;;
+          2)
+            ;;
+          3)
+            printf '%s\\n' '{\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-720\"}}}'
+            ;;
+          4)
+            printf '%s\\n' '{\"id\":3,\"result\":{\"turn\":{\"id\":\"turn-720\"}}}'
+            printf '%s\\n' '{\"id\":113,\"method\":\"item/tool/requestUserInput\",\"params\":{\"itemId\":\"call-720\",\"questions\":[{\"header\":\"Choose an action\",\"id\":\"options-720\",\"isOther\":false,\"isSecret\":false,\"options\":[{\"description\":\"Use the default behavior.\",\"label\":\"Use default\"},{\"description\":\"Skip this step.\",\"label\":\"Skip\"}],\"question\":\"How should I proceed?\"}],\"threadId\":\"thread-720\",\"turnId\":\"turn-720\"}}'
+            ;;
+          5)
+            printf '%s\\n' '{\"method\":\"turn/completed\"}'
+            exit 0
+            ;;
+          *)
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server",
+        codex_approval_policy: "never"
+      )
+
+      issue = %Issue{
+        id: "issue-interactive-user-input",
+        identifier: "MT-720",
+        title: "Interactive clarifying question",
+        description: "Ensure clarifying questions pause the turn",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-720",
+        labels: ["backend"]
+      }
+
+      test_pid = self()
+
+      on_message = fn message ->
+        case message do
+          %{event: :user_input_required} = m -> send(test_pid, {:user_input_required, m})
+          _ -> :ok
+        end
+      end
+
+      task =
+        Task.async(fn ->
+          AppServer.run(workspace, "Ask me something", issue,
+            on_message: on_message,
+            interactive_user_input: true
+          )
+        end)
+
+      assert_receive {:user_input_required, %{request_id: 113, questions: [%{"id" => "options-720"}]}}, 5_000
+
+      send(task.pid, {:codex_user_input, 113, %{"options-720" => %{"answers" => ["Use default"]}}, test_pid})
+
+      assert {:ok, _result} = Task.await(task, 10_000)
+      assert_receive {:user_input_ok, 113}, 5_000
+
+      trace = File.read!(trace_file)
+
+      assert Enum.any?(String.split(trace, "\n", trim: true), fn line ->
+               String.starts_with?(line, "JSON:") and
+                 (line
+                  |> String.trim_leading("JSON:")
+                  |> Jason.decode!()
+                  |> get_in(["result", "answers", "options-720", "answers"])) == ["Use default"]
+             end)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "app server rejects unsupported dynamic tool calls without stalling" do
     test_root =
       Path.join(
