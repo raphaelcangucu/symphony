@@ -133,6 +133,30 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
     refute Enum.any?(pairs, fn {_slug, state} -> state == "Backlog" end)
   end
 
+  test "candidate fetch isolates a project whose resolution raises and keeps valid ones" do
+    Application.delete_env(:symphony_elixir, :tracker_sync_project_slug)
+    setup_global_workflow(["Todo", "In Progress"])
+
+    valid_project = local_project_with_active_states("valid", ["Doing"])
+    broken_project = local_project_with_active_states("broken", ["Doing"])
+
+    seed_issue(valid_project, "valid-doing", "Doing")
+    seed_issue(broken_project, "broken-doing", "Doing")
+
+    Application.put_env(:symphony_elixir, :tracker_sync_assignee_fun, fn
+      %{slug: "broken"} -> raise "boom: cannot resolve viewer login"
+      _project -> {:ok, :any}
+    end)
+
+    assert {:ok, issues} = LocalFirstTracker.fetch_candidate_issues()
+    slugs = issues |> Enum.map(& &1.project_slug) |> Enum.uniq()
+
+    assert "valid" in slugs
+    refute "broken" in slugs
+    assert Enum.any?(issues, &(&1.identifier == "valid-doing"))
+    refute Enum.any?(issues, &(&1.identifier == "broken-doing"))
+  end
+
   test "fetch_issues_by_states returns only the worker's issues with assigned_to_worker true" do
     stub_assignee({:ok, "alice"})
 

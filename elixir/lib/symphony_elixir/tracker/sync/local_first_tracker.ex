@@ -41,12 +41,14 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     issues =
       list_orchestrator_projects()
       |> Enum.flat_map(fn project ->
-        config = SymphonyElixir.ProjectConfig.resolve(project)
+        with_project_isolation(project, fn ->
+          config = SymphonyElixir.ProjectConfig.resolve(project)
 
-        case resolve_assignee_filter(project) do
-          {:ok, filter} -> query_issues(project, config.active_states, filter)
-          {:error, _reason} -> []
-        end
+          case resolve_assignee_filter(project) do
+            {:ok, filter} -> query_issues(project, config.active_states, filter)
+            {:error, _reason} -> []
+          end
+        end)
       end)
 
     {:ok, issues}
@@ -57,10 +59,12 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     issues =
       list_orchestrator_projects()
       |> Enum.flat_map(fn project ->
-        case resolve_assignee_filter(project) do
-          {:ok, filter} -> query_issues(project, states, filter)
-          {:error, _reason} -> []
-        end
+        with_project_isolation(project, fn ->
+          case resolve_assignee_filter(project) do
+            {:ok, filter} -> query_issues(project, states, filter)
+            {:error, _reason} -> []
+          end
+        end)
       end)
 
     {:ok, issues}
@@ -121,6 +125,17 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   end
 
   # -- reads -------------------------------------------------------------------
+
+  # Per-project isolation: a project whose config/assignee cannot be resolved is
+  # skipped with a logged warning so a single bad project never crashes the poll
+  # cycle and the remaining projects still contribute issues.
+  defp with_project_isolation(project, fun) do
+    fun.()
+  rescue
+    error ->
+      Logger.warning("multi_orchestrator: project=#{project.slug} skipped reason=#{Exception.message(error)}")
+      []
+  end
 
   defp query_issues(project, states, filter) do
     project
