@@ -108,6 +108,49 @@ defmodule SymphonyElixirWeb.Tracker.ProjectSetupUpdateTest do
     assert %{"data" => %{"setup" => nil}} = json_response(conn, 200)
   end
 
+  test "PUT then GET round-trips a fully structured workflow_config unchanged" do
+    {:ok, _project} = Context.ensure_project(%{name: "alpha", slug: "alpha", tracker_kind: "local"})
+
+    workflow_config = %{
+      "tracker" => %{
+        "active_states" => ["Todo", "In Progress"],
+        "dispatch_states" => ["Todo"],
+        "terminal_states" => ["Done"]
+      },
+      "agent" => %{
+        "max_turns" => 25,
+        "completion_transitions" => %{"In Review" => "Done"},
+        "max_concurrent_agents_by_state" => %{"In Progress" => 2}
+      },
+      "hooks" => %{"after_create" => "echo hi"},
+      "editor" => %{"enabled" => true, "port" => 8443, "auth" => "password"},
+      "dev_server" => %{"enabled" => true, "auto_start_on" => ["pull_request"]},
+      "public_tunnel" => %{"enabled" => true, "base_domain" => "preview.example.com"},
+      "github" => %{"max_retries" => 5}
+    }
+
+    conn =
+      put(authorized_conn(), "/api/tracker/v1/projects/alpha/setup", %{
+        "setup" => %{"workflow_config" => workflow_config, "prompt_template" => "Hello"}
+      })
+
+    assert %{"data" => %{"setup" => setup}} = json_response(conn, 200)
+    assert setup["workflow_config"]["tracker"]["active_states"] == ["Todo", "In Progress"]
+    assert setup["workflow_config"]["agent"]["completion_transitions"] == %{"In Review" => "Done"}
+    assert setup["workflow_config"]["agent"]["max_concurrent_agents_by_state"] == %{"In Progress" => 2}
+    assert setup["workflow_config"]["hooks"]["after_create"] == "echo hi"
+    assert setup["workflow_config"]["editor"]["auth"] == "password"
+    assert setup["workflow_config"]["dev_server"]["auto_start_on"] == ["pull_request"]
+    assert setup["workflow_config"]["public_tunnel"]["base_domain"] == "preview.example.com"
+    assert setup["prompt_template"] == "Hello"
+
+    show = get(authorized_conn(), "/api/tracker/v1/projects/alpha")
+    assert %{"data" => %{"setup" => persisted}} = json_response(show, 200)
+    assert persisted["workflow_config"] == workflow_config
+    assert persisted["workflow_config"]["github"]["max_retries"] == 5
+    assert persisted["prompt_template"] == "Hello"
+  end
+
   defp authorized_conn, do: build_conn() |> put_req_header("authorization", "Bearer secret")
 
   defp clean_repo do
