@@ -195,12 +195,18 @@ defmodule SymphonyElixir.Codex.SessionLog do
     entry("tool_call", name, format_tool_input(args),
       language: tool_language(name, args),
       status: "running",
-      collapsed: false
+      collapsed: false,
+      call_id: Map.get(payload, "call_id")
     )
   end
 
-  defp parse_response_item(%{"type" => "function_call_output", "output" => output}) when is_binary(output) do
-    entry("tool_result", "Command output", output, language: "text", status: "completed", collapsed: output_long?(output))
+  defp parse_response_item(%{"type" => "function_call_output", "output" => output} = payload) when is_binary(output) do
+    entry("tool_result", "Command output", output,
+      language: "text",
+      status: "completed",
+      collapsed: output_long?(output),
+      call_id: Map.get(payload, "call_id")
+    )
   end
 
   defp parse_response_item(%{"type" => "custom_tool_call", "name" => name} = payload) when is_binary(name) do
@@ -210,12 +216,18 @@ defmodule SymphonyElixir.Codex.SessionLog do
     entry("tool_call", name, format_tool_input(input),
       language: tool_language(name, input),
       status: normalize_status(status),
-      collapsed: false
+      collapsed: false,
+      call_id: Map.get(payload, "call_id")
     )
   end
 
-  defp parse_response_item(%{"type" => "custom_tool_call_output", "output" => output}) when is_binary(output) do
-    entry("tool_result", "Tool output", output, language: "text", status: "completed", collapsed: output_long?(output))
+  defp parse_response_item(%{"type" => "custom_tool_call_output", "output" => output} = payload) when is_binary(output) do
+    entry("tool_result", "Tool output", output,
+      language: "text",
+      status: "completed",
+      collapsed: output_long?(output),
+      call_id: Map.get(payload, "call_id")
+    )
   end
 
   defp parse_response_item(%{"type" => type} = payload) when is_binary(type) do
@@ -242,7 +254,8 @@ defmodule SymphonyElixir.Codex.SessionLog do
       "body" => if(body in [nil, ""], do: nil, else: body),
       "language" => Keyword.get(opts, :language, language_for(body)),
       "status" => Keyword.get(opts, :status),
-      "collapsed" => Keyword.get(opts, :collapsed, output_long?(body))
+      "collapsed" => Keyword.get(opts, :collapsed, output_long?(body)),
+      "call_id" => Keyword.get(opts, :call_id)
     }
   end
 

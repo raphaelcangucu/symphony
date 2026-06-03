@@ -10,12 +10,33 @@ defmodule SymphonyElixir.Codex.SessionLogTest do
              "body" => "**Done**",
              "language" => "markdown",
              "status" => nil,
-             "collapsed" => false
+             "collapsed" => false,
+             "call_id" => nil
            }
 
     assert SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\\"cmd\\":\\"pwd\\"}"}}))["kind"] == "tool_call"
 
     assert SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"function_call_output","output":"ok\\nline"}}))["kind"] == "tool_result"
+  end
+
+  test "parse_line threads call_id through tool entries for pairing" do
+    call =
+      SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\\"cmd\\":\\"pwd\\"}","call_id":"call_1"}}))
+
+    output =
+      SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"function_call_output","output":"ok","call_id":"call_1"}}))
+
+    assert call["call_id"] == "call_1"
+    assert call["language"] == "bash"
+    assert output["call_id"] == "call_1"
+  end
+
+  test "parse_line tolerates tool entries without call_id" do
+    call =
+      SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\\"cmd\\":\\"pwd\\"}"}}))
+
+    assert call["call_id"] == nil
+    assert call["kind"] == "tool_call"
   end
 
   test "tail and read_from stream appended entries" do
