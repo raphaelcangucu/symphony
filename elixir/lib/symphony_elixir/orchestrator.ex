@@ -254,7 +254,7 @@ defmodule SymphonyElixir.Orchestrator do
   @spec should_dispatch_issue_for_test(Issue.t(), term()) :: boolean()
   def should_dispatch_issue_for_test(%Issue{} = issue, %State{} = state) do
     sets = project_state_sets(issue)
-    should_dispatch_issue?(issue, state, sets.dispatch, sets.terminal)
+    should_dispatch_issue?(issue, state, dispatch_set(sets), terminal_set(sets))
   end
 
   @doc false
@@ -274,7 +274,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp reconcile_running_issue_states(issues, state) do
     Enum.reduce(issues, state, fn issue, state_acc ->
       sets = project_state_sets(issue)
-      reconcile_issue_state(issue, state_acc, sets.active, sets.terminal)
+      reconcile_issue_state(issue, state_acc, active_set(sets), terminal_set(sets))
     end)
   end
 
@@ -425,7 +425,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp maybe_dispatch_candidate(state, issue) do
     case dispatch_decision(issue) do
       {:ok, sets} ->
-        if should_dispatch_issue?(issue, state, sets.dispatch, sets.terminal) do
+        if should_dispatch_issue?(issue, state, dispatch_set(sets), terminal_set(sets)) do
           dispatch_issue(state, issue)
         else
           state
@@ -545,50 +545,44 @@ defmodule SymphonyElixir.Orchestrator do
     String.downcase(String.trim(state_name))
   end
 
-  defp terminal_state_set do
-    Config.terminal_states()
-    |> Enum.map(&normalize_issue_state/1)
-    |> Enum.filter(&(&1 != ""))
-    |> MapSet.new()
-  end
-
-  defp active_state_set do
-    Config.active_states()
-    |> Enum.map(&normalize_issue_state/1)
-    |> Enum.filter(&(&1 != ""))
-    |> MapSet.new()
-  end
-
-  defp dispatch_state_set do
-    Config.dispatch_states()
-    |> Enum.map(&normalize_issue_state/1)
-    |> Enum.filter(&(&1 != ""))
-    |> MapSet.new()
-  end
-
   # Per-project state classification (global-less): each issue is evaluated
   # against its OWN project's configured active/dispatch/terminal states. Issues
-  # without a resolvable project fall back to the code-default sets.
+  # without a resolvable project fall back to the code-default states.
+  #
+  # The resolver returns normalized state *lists* in a `{active, dispatch,
+  # terminal}` tuple; the `*_set/1` accessors build the MapSet fresh at the point
+  # of use. Routing plain lists (not MapSets) through the tuple avoids breaking
+  # the opaque MapSet type that membership checks rely on.
   defp project_state_sets(%Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
     case resolve_project_for_states(slug) do
-      {:ok, config} -> state_sets_from_config(config)
-      :error -> global_state_sets()
+      {:ok, config} -> state_lists_from_config(config)
+      :error -> global_state_lists()
     end
   end
 
-  defp project_state_sets(_issue), do: global_state_sets()
+  defp project_state_sets(_issue), do: global_state_lists()
 
-  defp global_state_sets do
-    %{active: active_state_set(), dispatch: dispatch_state_set(), terminal: terminal_state_set()}
+  defp global_state_lists do
+    {normalize_states(Config.active_states()), normalize_states(Config.dispatch_states()), normalize_states(Config.terminal_states())}
   end
 
-  defp state_sets_from_config(%ProjectConfig{} = config) do
-    %{
-      active: to_state_set(config.active_states || Config.active_states()),
-      dispatch: to_state_set(config.dispatch_states || Config.dispatch_states()),
-      terminal: to_state_set(config.terminal_states || Config.terminal_states())
+  defp state_lists_from_config(%ProjectConfig{} = config) do
+    {
+      normalize_states(config.active_states || Config.active_states()),
+      normalize_states(config.dispatch_states || Config.dispatch_states()),
+      normalize_states(config.terminal_states || Config.terminal_states())
     }
   end
+
+  defp normalize_states(states) when is_list(states) do
+    states |> Enum.map(&normalize_issue_state/1) |> Enum.filter(&(&1 != ""))
+  end
+
+  defp normalize_states(_states), do: []
+
+  defp active_set({active, _dispatch, _terminal}), do: MapSet.new(active)
+  defp dispatch_set({_active, dispatch, _terminal}), do: MapSet.new(dispatch)
+  defp terminal_set({_active, _dispatch, terminal}), do: MapSet.new(terminal)
 
   defp resolve_project_for_states(slug) do
     case Context.get_project(slug) do
@@ -604,25 +598,16 @@ defmodule SymphonyElixir.Orchestrator do
     case Context.get_project(slug) do
       {:ok, project} ->
         case project |> Repo.preload(:setup) |> ProjectConfig.resolve_runnable() do
-          {:ok, config} -> {:ok, state_sets_from_config(config)}
+          {:ok, config} -> {:ok, state_lists_from_config(config)}
           {:skip, reason} -> {:skip, reason}
         end
 
       _ ->
-        {:ok, global_state_sets()}
+        {:ok, global_state_lists()}
     end
   end
 
-  defp dispatch_decision(_issue), do: {:ok, global_state_sets()}
-
-  defp to_state_set(states) when is_list(states) do
-    states
-    |> Enum.map(&normalize_issue_state/1)
-    |> Enum.filter(&(&1 != ""))
-    |> MapSet.new()
-  end
-
-  defp to_state_set(_states), do: MapSet.new()
+  defp dispatch_decision(_issue), do: {:ok, global_state_lists()}
 
   defp dispatch_issue(%State{} = state, issue, attempt \\ nil) do
     case revalidate_issue_for_dispatch(issue, &Tracker.fetch_issue_states_by_ids/1) do
@@ -908,7 +893,7 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp handle_retry_issue_lookup(%Issue{} = issue, state, issue_id, attempt, metadata) do
-    terminal_states = project_state_sets(issue).terminal
+    terminal_states = terminal_set(project_state_sets(issue))
 
     cond do
       terminal_issue_state?(issue.state, terminal_states) ->
@@ -1322,8 +1307,8 @@ defmodule SymphonyElixir.Orchestrator do
   defp retry_candidate_issue?(%Issue{} = issue) do
     sets = project_state_sets(issue)
 
-    candidate_issue?(issue, sets.dispatch, sets.terminal) and
-      !issue_blocked_by_non_terminal?(issue, sets.terminal)
+    candidate_issue?(issue, dispatch_set(sets), terminal_set(sets)) and
+      !issue_blocked_by_non_terminal?(issue, terminal_set(sets))
   end
 
   defp dispatch_slots_available?(%Issue{} = issue, %State{} = state) do
