@@ -116,6 +116,7 @@ defmodule SymphonyElixir.Orchestrator do
 
               schedule_issue_retry(state, issue_id, next_attempt, %{
                 identifier: running_entry.identifier,
+                project_slug: running_entry.issue.project_slug,
                 error: "agent exited: #{inspect(reason)}"
               })
           end
@@ -371,6 +372,7 @@ defmodule SymphonyElixir.Orchestrator do
       |> terminate_running_issue(issue_id, false)
       |> schedule_issue_retry(issue_id, next_attempt, %{
         identifier: identifier,
+        project_slug: running_entry.issue.project_slug,
         error: "stalled for #{elapsed_ms}ms without codex activity"
       })
     else
@@ -619,6 +621,7 @@ defmodule SymphonyElixir.Orchestrator do
 
         schedule_issue_retry(state, issue.id, next_attempt, %{
           identifier: issue.identifier,
+          project_slug: issue.project_slug,
           error: "failed to spawn agent: #{inspect(reason)}"
         })
     end
@@ -662,12 +665,14 @@ defmodule SymphonyElixir.Orchestrator do
         |> complete_issue(issue_id)
         |> schedule_issue_retry(issue_id, 1, %{
           identifier: running_entry.identifier,
+          project_slug: running_entry.issue.project_slug,
           delay_type: :continuation
         })
 
       {:error, reason} ->
         schedule_issue_retry(state, issue_id, next_retry_attempt_from_running(running_entry), %{
           identifier: running_entry.identifier,
+          project_slug: running_entry.issue.project_slug,
           error: "completion transition failed: #{inspect(reason)}"
         })
     end
@@ -707,6 +712,7 @@ defmodule SymphonyElixir.Orchestrator do
     old_timer = Map.get(previous_retry, :timer_ref)
     due_at_ms = System.monotonic_time(:millisecond) + delay_ms
     identifier = pick_retry_identifier(issue_id, previous_retry, metadata)
+    project_slug = pick_retry_project_slug(previous_retry, metadata)
     error = pick_retry_error(previous_retry, metadata)
 
     if is_reference(old_timer) do
@@ -727,6 +733,7 @@ defmodule SymphonyElixir.Orchestrator do
             timer_ref: timer_ref,
             due_at_ms: due_at_ms,
             identifier: identifier,
+            project_slug: project_slug,
             error: error
           })
     }
@@ -737,6 +744,7 @@ defmodule SymphonyElixir.Orchestrator do
       %{attempt: attempt} = retry_entry ->
         metadata = %{
           identifier: Map.get(retry_entry, :identifier),
+          project_slug: Map.get(retry_entry, :project_slug),
           error: Map.get(retry_entry, :error)
         }
 
@@ -833,6 +841,7 @@ defmodule SymphonyElixir.Orchestrator do
          attempt + 1,
          Map.merge(metadata, %{
            identifier: issue.identifier,
+           project_slug: issue.project_slug,
            error: "no available orchestrator slots"
          })
        )}
@@ -868,6 +877,10 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp pick_retry_identifier(issue_id, previous_retry, metadata) do
     metadata[:identifier] || Map.get(previous_retry, :identifier) || issue_id
+  end
+
+  defp pick_retry_project_slug(previous_retry, metadata) do
+    metadata[:project_slug] || Map.get(previous_retry, :project_slug)
   end
 
   defp pick_retry_error(previous_retry, metadata) do
@@ -964,6 +977,7 @@ defmodule SymphonyElixir.Orchestrator do
         %{
           issue_id: issue_id,
           identifier: metadata.identifier,
+          project_slug: metadata.issue.project_slug,
           state: metadata.issue.state,
           session_id: metadata.session_id,
           codex_app_server_pid: metadata.codex_app_server_pid,
@@ -987,6 +1001,7 @@ defmodule SymphonyElixir.Orchestrator do
           attempt: attempt,
           due_in_ms: max(0, due_at_ms - now_ms),
           identifier: Map.get(retry, :identifier),
+          project_slug: Map.get(retry, :project_slug),
           error: Map.get(retry, :error)
         }
       end)

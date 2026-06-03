@@ -31,6 +31,30 @@ defmodule SymphonyElixirWeb.Presenter do
     end
   end
 
+  @spec state_payload(GenServer.name(), timeout(), String.t() | nil) :: map()
+  def state_payload(orchestrator, snapshot_timeout_ms, nil),
+    do: state_payload(orchestrator, snapshot_timeout_ms)
+
+  def state_payload(orchestrator, snapshot_timeout_ms, project_slug) when is_binary(project_slug) do
+    base = state_payload(orchestrator, snapshot_timeout_ms)
+
+    case base do
+      %{running: running, retrying: retrying} ->
+        filtered_running = Enum.filter(running, &(&1.project_slug == project_slug))
+        filtered_retrying = Enum.filter(retrying, &(&1.project_slug == project_slug))
+
+        %{
+          base
+          | running: filtered_running,
+            retrying: filtered_retrying,
+            counts: %{running: length(filtered_running), retrying: length(filtered_retrying)}
+        }
+
+      other ->
+        other
+    end
+  end
+
   @spec issue_payload(String.t(), GenServer.name(), timeout()) :: {:ok, map()} | {:error, :issue_not_found}
   def issue_payload(issue_identifier, orchestrator, snapshot_timeout_ms) when is_binary(issue_identifier) do
     case Orchestrator.snapshot(orchestrator, snapshot_timeout_ms) do
@@ -98,6 +122,7 @@ defmodule SymphonyElixirWeb.Presenter do
     %{
       issue_id: entry.issue_id,
       issue_identifier: entry.identifier,
+      project_slug: Map.get(entry, :project_slug),
       state: entry.state,
       session_id: entry.session_id,
       turn_count: Map.get(entry, :turn_count, 0),
@@ -117,6 +142,7 @@ defmodule SymphonyElixirWeb.Presenter do
     %{
       issue_id: entry.issue_id,
       issue_identifier: entry.identifier,
+      project_slug: Map.get(entry, :project_slug),
       attempt: entry.attempt,
       due_at: due_at_iso8601(entry.due_in_ms),
       error: entry.error
