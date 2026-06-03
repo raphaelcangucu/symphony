@@ -48,6 +48,7 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/workspace", ProjectController, :workspace)
     post("/projects/:id/archive", ProjectController, :archive)
     post("/projects/:id/restore", ProjectController, :restore)
+    put("/projects/:id/setup", ProjectController, :update_setup)
     resources("/projects", ProjectController, only: [:index, :create, :show, :update, :delete])
     get("/projects/:project_slug/issues/form_options", IssueController, :form_options)
     get("/assistant/threads", AssistantThreadController, :index)

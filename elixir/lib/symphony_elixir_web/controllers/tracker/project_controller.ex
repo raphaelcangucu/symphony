@@ -83,6 +83,26 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
     end
   end
 
+  @spec update_setup(Conn.t(), map()) :: Conn.t()
+  def update_setup(conn, %{"id" => slug, "setup" => setup}) when is_map(setup) do
+    case Context.upsert_project_setup(slug, setup) do
+      {:ok, _setup} ->
+        {:ok, project} = Context.get_project(slug)
+        statuses = Context.list_statuses(slug)
+        repositories = Context.list_repositories(slug)
+        setup_dto = Context.get_project_setup(slug)
+        json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup_dto)})
+
+      {:error, :project_not_found} ->
+        TrackerErrors.render(conn, :project_not_found)
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+    end
+  end
+
+  def update_setup(conn, _params), do: TrackerErrors.validation(conn, "setup is required")
+
   @spec archive(Conn.t(), map()) :: Conn.t()
   def archive(conn, %{"id" => project_slug}) do
     case Context.archive_project(project_slug) do
