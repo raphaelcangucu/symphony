@@ -324,6 +324,17 @@ defmodule SymphonyElixir.Config do
     |> trim_string()
   end
 
+  @spec workflow_front_matter() :: map()
+  def workflow_front_matter, do: workflow_config()
+
+  @spec validate_front_matter(map()) :: map()
+  def validate_front_matter(front_matter) when is_map(front_matter) do
+    front_matter
+    |> normalize_keys()
+    |> extract_workflow_options()
+    |> NimbleOptions.validate!(@workflow_options_schema)
+  end
+
   @spec assistant_draft_status() :: String.t()
   def assistant_draft_status do
     case section("assistant")["draft_status"] do
@@ -759,9 +770,7 @@ defmodule SymphonyElixir.Config do
   end
 
   defp validated_workflow_options do
-    workflow_config()
-    |> extract_workflow_options()
-    |> NimbleOptions.validate!(@workflow_options_schema)
+    validate_front_matter(workflow_config())
   end
 
   defp extract_workflow_options(config) do

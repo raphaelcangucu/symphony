@@ -7,6 +7,22 @@ defmodule SymphonyElixir.ConfigTest do
     end
   end
 
+  describe "validate_front_matter/1" do
+    test "validates an arbitrary front-matter map and applies schema defaults" do
+      opts =
+        SymphonyElixir.Config.validate_front_matter(%{
+          "tracker" => %{"active_states" => ["Todo", "In Progress"]}
+        })
+
+      assert get_in(opts, [:tracker, :active_states]) == ["Todo", "In Progress"]
+      assert is_list(get_in(opts, [:tracker, :terminal_states]))
+    end
+
+    test "workflow_front_matter/0 returns the normalized global front matter map" do
+      assert is_map(SymphonyElixir.Config.workflow_front_matter())
+    end
+  end
+
   describe "observability hub config" do
     test "defaults when observability section omits hub keys" do
       load_workflow_with_front_matter("""
