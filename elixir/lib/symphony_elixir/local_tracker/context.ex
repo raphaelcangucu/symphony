@@ -6,6 +6,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   import Ecto.Query
 
   alias SymphonyElixir.AgentRouting
+  alias SymphonyElixir.Config
 
   alias SymphonyElixir.LocalTracker.{
     ActivityEvent,
@@ -247,6 +248,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
           {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
   def create_issue(project_slug, attrs) when is_binary(project_slug) and is_map(attrs) do
     with {:ok, project} <- fetch_project(project_slug),
+         :ok <- ensure_project_statuses(project),
          {:ok, status} <- fetch_status(project.id, attr(attrs, :status, @default_issue_status)) do
       position = attr(attrs, :position, next_issue_position(project.id, status.id))
       agent = attr(attrs, :agent)
@@ -311,6 +313,30 @@ defmodule SymphonyElixir.LocalTracker.Context do
       project.id
       |> persist_moved_issue(issue, status, attrs)
       |> tap_issue_event("issue_moved", %{status: status.name})
+    end
+  end
+
+  @spec archive_issue(String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def archive_issue(project_slug, identifier)
+      when is_binary(project_slug) and is_binary(identifier) do
+    set_issue_archived_at(project_slug, identifier, DateTime.utc_now())
+  end
+
+  @spec restore_issue(String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def restore_issue(project_slug, identifier)
+      when is_binary(project_slug) and is_binary(identifier) do
+    set_issue_archived_at(project_slug, identifier, nil)
+  end
+
+  @spec delete_issue(String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, missing_error()}
+  def delete_issue(project_slug, identifier)
+      when is_binary(project_slug) and is_binary(identifier) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      delete_issue_with_children(issue)
     end
   end
 
@@ -631,11 +657,29 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   defp ensure_default_statuses(%Project{} = project) do
-    Seeds.default_statuses()
+    case insert_status_tuples(project.id, Seeds.default_statuses()) do
+      :ok -> {:ok, project}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # Local-first safety net: a remote-backed project skips status seeding at
+  # creation time (statuses come from the remote board). When the remote is
+  # unreachable the mirror can stay empty, which would block issue creation.
+  # Seeding from the configured workflow states keeps creation local-first.
+  defp ensure_project_statuses(%Project{id: project_id}) do
+    case statuses_for_project(project_id) do
+      [] -> insert_status_tuples(project_id, Config.workflow_statuses())
+      [_ | _] -> :ok
+    end
+  end
+
+  defp insert_status_tuples(project_id, status_tuples) do
+    status_tuples
     |> Enum.with_index()
-    |> Enum.reduce_while({:ok, project}, fn {{name, category, is_terminal}, position}, {:ok, project} ->
+    |> Enum.reduce_while(:ok, fn {{name, category, is_terminal}, position}, :ok ->
       attrs = %{
-        project_id: project.id,
+        project_id: project_id,
         name: name,
         category: category,
         position: position,
@@ -649,7 +693,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
         conflict_target: [:project_id, :name]
       )
       |> case do
-        {:ok, _status} -> {:cont, {:ok, project}}
+        {:ok, _status} -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
@@ -668,10 +712,14 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   defp apply_issue_filters(query, opts) do
     query
+    |> maybe_filter_archived(Keyword.get(opts, :include_archived, false))
     |> maybe_filter_search(Keyword.get(opts, :search))
     |> maybe_filter_assignee(Keyword.get(opts, :assignee))
     |> maybe_filter_creator(Keyword.get(opts, :creator))
   end
+
+  defp maybe_filter_archived(query, true), do: query
+  defp maybe_filter_archived(query, _include), do: where(query, [issue], is_nil(issue.archived_at))
 
   defp maybe_filter_search(query, nil), do: query
   defp maybe_filter_search(query, ""), do: query
@@ -814,6 +862,32 @@ defmodule SymphonyElixir.LocalTracker.Context do
       nil -> {:error, :issue_not_found}
       %IssueRecord{} = issue -> {:ok, issue}
     end
+  end
+
+  defp set_issue_archived_at(project_slug, identifier, archived_at) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      issue
+      |> IssueRecord.changeset(%{archived_at: archived_at})
+      |> Repo.update()
+      |> preload_issue_result()
+    end
+  end
+
+  defp delete_issue_with_children(%IssueRecord{id: issue_id} = issue) do
+    Repo.transaction(fn ->
+      Repo.delete_all(from(event in ActivityEvent, where: event.issue_id == ^issue_id))
+      Repo.delete_all(from(relation in IssueRelation, where: relation.source_issue_id == ^issue_id))
+      Repo.delete_all(from(relation in IssueRelation, where: relation.target_issue_id == ^issue_id))
+      Repo.delete_all(from(link in IssueLabel, where: link.issue_id == ^issue_id))
+      Repo.delete_all(from(comment in Comment, where: comment.issue_id == ^issue_id))
+      Repo.delete_all(from(pr in SymphonyElixir.Tracker.Sync.PullRequestRecord, where: pr.issue_id == ^issue_id))
+
+      case Repo.delete(issue) do
+        {:ok, deleted} -> deleted
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
 
   defp fetch_relation(source_issue_id, target_issue_id, type) do

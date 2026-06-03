@@ -9,7 +9,7 @@ defmodule SymphonyElixir.Tracker.Sync.OutboxEntry do
   @type t :: %__MODULE__{}
 
   @entity_types ~w(issue comment label state assignee)
-  @operations ~w(create update move add remove)
+  @operations ~w(create update move add remove archive restore delete)
   @statuses ~w(pending in_flight done failed conflict)
 
   schema "tracker_sync_outbox" do

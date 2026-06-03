@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ProjectSidebar } from "@/components/layout/ProjectSidebar";
+import { ProjectSidebar, resolveTrackerAssetPath } from "@/components/layout/ProjectSidebar";
 import { TRACKER_PROJECTS_CHANGED_EVENT } from "@/lib/projectEvents";
 import { listProjects } from "@/services/projects";
 import type { Project } from "@/types/project";
@@ -77,6 +77,17 @@ describe("ProjectSidebar", () => {
     expect(screen.getByText("Active Project")).toBeTruthy();
   });
 
+  it("uses the tracker favicon artwork as the sidebar brand icon", async () => {
+    vi.mocked(listProjects).mockResolvedValue([activeProject]);
+
+    renderProjectSidebar();
+
+    expect(await screen.findByAltText("Symphony Tracker icon")).toHaveAttribute(
+      "src",
+      resolveTrackerAssetPath(import.meta.env.BASE_URL, "favicon.svg"),
+    );
+  });
+
   it("keeps the newer reload result when the initial load resolves later", async () => {
     const mountLoad = deferred<Project[]>();
     const eventReload = deferred<Project[]>();
@@ -113,5 +124,23 @@ describe("ProjectSidebar", () => {
     window.dispatchEvent(new Event(TRACKER_PROJECTS_CHANGED_EVENT));
 
     await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("resolveTrackerAssetPath", () => {
+  it("keeps public assets under the configured tracker base path", () => {
+    expect(resolveTrackerAssetPath("/tracker/", "favicon.svg")).toBe("/tracker/favicon.svg");
+  });
+
+  it("keeps root-based development assets absolute", () => {
+    expect(resolveTrackerAssetPath("/", "favicon.svg")).toBe("/favicon.svg");
+  });
+
+  it("normalizes missing trailing and leading asset slashes", () => {
+    expect(resolveTrackerAssetPath("/tracker", "/favicon.svg")).toBe("/tracker/favicon.svg");
+  });
+
+  it("rejects empty asset names", () => {
+    expect(() => resolveTrackerAssetPath("/tracker/", "")).toThrow("Tracker asset name must not be empty");
   });
 });

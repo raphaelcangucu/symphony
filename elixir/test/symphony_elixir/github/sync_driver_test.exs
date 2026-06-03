@@ -37,6 +37,9 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
     def move_issue(_project, _id, %{"status" => state}), do: {:ok, IssueDTO.build(%{id: "I_1", identifier: "1", title: state, status: %{name: state}})}
     def add_comment(_project, _id, _body, _attrs), do: {:ok, %{remote_id: "IC_new"}}
     def create_issue(_project, _attrs), do: {:ok, IssueDTO.build(%{id: "I_new", identifier: "9", title: "new", status: %{name: "Todo"}})}
+    def archive_issue(_project, id), do: {:ok, "PVTI_archived_" <> id}
+    def restore_issue(_project, id), do: {:ok, "PVTI_restored_" <> id}
+    def delete_issue(_project, id), do: {:ok, "PVTI_deleted_" <> id}
   end
 
   setup do
@@ -61,6 +64,21 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
   test "push of a comment create calls add_comment", %{project: project} do
     entry = %OutboxEntry{entity_type: "comment", operation: "create", payload: %{"identifier" => "1", "body" => "hello"}}
     assert {:ok, "IC_new"} = SyncDriver.push(project, entry)
+  end
+
+  test "push of an issue archive calls archive_issue", %{project: project} do
+    entry = %OutboxEntry{entity_type: "issue", operation: "archive", payload: %{"identifier" => "1"}}
+    assert {:ok, "PVTI_archived_1"} = SyncDriver.push(project, entry)
+  end
+
+  test "push of an issue restore calls restore_issue", %{project: project} do
+    entry = %OutboxEntry{entity_type: "issue", operation: "restore", payload: %{"identifier" => "1"}}
+    assert {:ok, "PVTI_restored_1"} = SyncDriver.push(project, entry)
+  end
+
+  test "push of an issue delete calls delete_issue", %{project: project} do
+    entry = %OutboxEntry{entity_type: "issue", operation: "delete", payload: %{"identifier" => "1"}}
+    assert {:ok, "PVTI_deleted_1"} = SyncDriver.push(project, entry)
   end
 
   test "pull_pull_requests falls back to GitHub.Api when GraphQL PR lookup is rate-limited", %{

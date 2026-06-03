@@ -362,12 +362,11 @@ Check the serve step:
   is responsive and returns an HTTP response below 500.
 - `working_dir` is relative to the issue workspace unless omitted.
 
-### Preview capacity is full or no port is available
+### No preview port is available
 
 Symphony allocates ports from `dev_server.port_range` (default `[4100, 4199]`) and
-limits running previews with `dev_server.max_concurrent` (default `3`). Stop previews
-you no longer need, widen the range, or raise the concurrency cap if the host can
-support more servers.
+starts previews until no free port remains in that range. Stop previews you no
+longer need or widen the range if the host can support more servers.
 
 ### Preview is stale, stopped, or crashed
 
@@ -442,9 +441,8 @@ The host is inside the namespace but `PublicHostPlug` has no matching dev server
 
 The tunnel routes to dev-server loopback ports; if another process already holds a port
 in the dev-server range (`dev_server.port_range`, default `[4100, 4199]`), the preview
-cannot bind. Stop the conflicting process, widen the range, or reduce
-`dev_server.max_concurrent`. See **Preview capacity is full or no port is available**
-above.
+cannot bind. Stop the conflicting process or widen the range. See **No preview port
+is available** above.
 
 ## Checking Logs
 

@@ -1304,8 +1304,10 @@ An implementation may provide an issue authoring assistant as a pre-dispatch wor
 - The assistant creates an issue in `assistant.draft_status`, binds the assistant thread to that
   issue, and routes to `/projects/:slug/assistant/issue/:id`.
 - **Simple mode** enriches the issue description from workspace context. **Complex mode** injects
-  vendored methodology skills from `skills/superpowers/...`, writes specs/plans/handoff under
-  `docs/superpowers/`, and keeps document review read-only in the assistant and issue detail.
+  vendored methodology skills from `skills/superpowers/...` as the desired design-first default,
+  writes specs/plans/handoff under `docs/superpowers/`, and keeps document review read-only in the
+  assistant and issue detail. If the user explicitly authorizes implementation, Codex may proceed
+  directly to code from the issue chat.
 - Authoring and execution are separate surfaces: authoring owns chat and document revision;
   execution owns orchestrator dispatch, run state, and agent controls.
 - On dispatch, prompt construction should reuse the same issue workspace and include any

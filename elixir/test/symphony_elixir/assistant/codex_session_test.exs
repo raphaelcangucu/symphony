@@ -314,6 +314,11 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert_receive {:prompt, prompt}
       assert prompt =~ "brainstorming"
       assert prompt =~ "docs/superpowers/specs"
+      assert prompt =~ "Design-first authoring is desired"
+      assert prompt =~ "Codex is a coding agent"
+      assert prompt =~ "may proceed directly to code"
+      refute prompt =~ "<HARD-GATE>"
+      refute prompt =~ "Do not start writing feature code"
     end
 
     test "complex prompt instructs writing handoff.md", %{thread: thread} do

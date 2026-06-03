@@ -98,6 +98,21 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
     assert Outbox.pending_count(project.id) == 1
   end
 
+  test "archive_issue archives locally and enqueues an outbox entry", %{project: project} do
+    assert {:ok, _dto} = LocalFirstAdapter.archive_issue(project, "1")
+
+    reloaded = Repo.get_by(IssueRecord, project_id: project.id, identifier: "1")
+    assert reloaded.archived_at
+    assert Outbox.pending_count(project.id) == 1
+  end
+
+  test "delete_issue deletes locally and enqueues an outbox entry", %{project: project} do
+    assert {:ok, _dto} = LocalFirstAdapter.delete_issue(project, "1")
+
+    assert is_nil(Repo.get_by(IssueRecord, project_id: project.id, identifier: "1"))
+    assert Outbox.pending_count(project.id) == 1
+  end
+
   describe "seed on empty mirror" do
     setup do
       SeedRemoteStub.reset()

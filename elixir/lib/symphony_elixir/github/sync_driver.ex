@@ -48,6 +48,18 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
     end
   end
 
+  def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "archive", payload: payload}) do
+    adapter().archive_issue(project, payload["identifier"])
+  end
+
+  def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "restore", payload: payload}) do
+    adapter().restore_issue(project, payload["identifier"])
+  end
+
+  def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "delete", payload: payload}) do
+    adapter().delete_issue(project, payload["identifier"])
+  end
+
   def push(%Project{}, %OutboxEntry{entity_type: type, operation: op}) do
     {:error, {:unsupported_push, type, op}}
   end

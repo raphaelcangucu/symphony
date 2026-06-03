@@ -83,3 +83,30 @@ export async function moveIssue(projectSlug: string, identifier: string, input: 
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
+
+export async function archiveIssue(projectSlug: string, identifier: string): Promise<Issue> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  if (!identifier.trim()) throw new Error("identifier is required");
+  const response = await http.post(
+    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/archive`),
+  );
+  return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}
+
+export async function restoreIssue(projectSlug: string, identifier: string): Promise<Issue> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  if (!identifier.trim()) throw new Error("identifier is required");
+  const response = await http.post(
+    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/restore`),
+  );
+  return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}
+
+export async function deleteIssue(projectSlug: string, identifier: string): Promise<Issue> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  if (!identifier.trim()) throw new Error("identifier is required");
+  const response = await http.delete(
+    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`),
+  );
+  return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}

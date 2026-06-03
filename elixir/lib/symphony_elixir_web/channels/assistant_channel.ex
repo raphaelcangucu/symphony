@@ -443,6 +443,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp project_scoped_socket?(%Socket{assigns: %{thread: %{scope: scope}}})
        when scope in ["issue", "freeform", "project_explore"],
        do: false
+
   defp project_scoped_socket?(%Socket{assigns: %{project_slug: project_slug}}) when is_binary(project_slug), do: true
   defp project_scoped_socket?(_socket), do: false
 

@@ -1,0 +1,20 @@
+<svg width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title" xmlns="http://www.w3.org/2000/svg">
+  <title id="title">Symphony Tracker</title>
+  <defs>
+    <linearGradient id="background" x1="12" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C3AED" />
+      <stop offset="0.55" stop-color="#2563EB" />
+      <stop offset="1" stop-color="#0F172A" />
+    </linearGradient>
+    <linearGradient id="accent" x1="18" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FDE68A" />
+      <stop offset="1" stop-color="#F97316" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#background)" />
+  <path d="M15 43c9-6 23-6 34 0" fill="none" stroke="#E0F2FE" stroke-width="3" stroke-linecap="round" opacity="0.35" />
+  <path d="M18 26c8-6 21-6 30 0" fill="none" stroke="#E0F2FE" stroke-width="3" stroke-linecap="round" opacity="0.28" />
+  <path d="M42 14v29.4c0 5.8-5.2 10.6-11.6 10.6-5.2 0-9.4-3.1-9.4-7 0-4.4 4.8-7.8 10.6-7.8 2.3 0 4.5 0.5 6.3 1.5V20.8l-18.8 4.7V20L42 14Z" fill="#FFFFFF" />
+  <path d="M42 14v8.2l7-1.8v-8.1L42 14Z" fill="url(#accent)" />
+  <circle cx="30.6" cy="47" r="5.3" fill="url(#accent)" />
+</svg>

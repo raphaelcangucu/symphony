@@ -243,6 +243,36 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.live_ports() == []
   end
 
+  test "start_for_issue does not block on max concurrent capacity", %{project: project} do
+    enable_dev_server!(port_range: [4100, 4101], max_concurrent: 1)
+
+    workspace = SymphonyElixir.Workspace.path_for_issue("1")
+    File.rm_rf!(workspace)
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf(workspace) end)
+
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Broken front",
+          command: "npm run dev",
+          role: "serve",
+          working_dir: "missing-front"
+        },
+        %{
+          description: "Broken api",
+          command: "mix phx.server",
+          role: "serve",
+          working_dir: "missing-api"
+        }
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert Manager.live_ports() == []
+  end
+
   test "normalizes aborted global lock results" do
     assert Manager.normalize_lock_result(:aborted) == {:error, :lock_unavailable}
     assert Manager.normalize_lock_result({:ok, []}) == {:ok, []}

@@ -118,6 +118,12 @@ describe("PreviewTab", () => {
     expect(screen.getByText(/preview is already being changed/i)).toBeInTheDocument();
   });
 
+  it("does not render the removed capacity barrier message", () => {
+    renderPreview({ available: false, reason: "capacity" as unknown as IssueDevServersResponse["reason"], servers: [] });
+
+    expect(screen.queryByText(/preview capacity is full/i)).not.toBeInTheDocument();
+  });
+
   it("calls start when Start Preview is clicked", async () => {
     const user = userEvent.setup();
     renderPreview(response([]));

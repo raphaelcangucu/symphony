@@ -38,6 +38,7 @@ defmodule SymphonyElixir.LocalTracker.IssueRecord do
     field(:last_synced_at, :utc_datetime_usec)
     field(:dirty_fields, :map, default: %{})
     field(:last_sync_error, :string)
+    field(:archived_at, :utc_datetime_usec)
 
     belongs_to(:project, Project)
     belongs_to(:status, WorkflowStatus)
@@ -77,7 +78,8 @@ defmodule SymphonyElixir.LocalTracker.IssueRecord do
       :remote_updated_at,
       :last_synced_at,
       :dirty_fields,
-      :last_sync_error
+      :last_sync_error,
+      :archived_at
     ])
     |> validate_required([:project_id, :status_id, :identifier, :title, :position])
     |> validate_number(:priority, greater_than_or_equal_to: 0, less_than_or_equal_to: 4)

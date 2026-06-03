@@ -23,7 +23,6 @@ defmodule SymphonyElixir.DevServer.Manager do
           :disabled
           | :workspace_missing
           | :no_serve_step
-          | :capacity
           | :no_free_port
           | :crashed
           | :lock_unavailable
@@ -136,7 +135,6 @@ defmodule SymphonyElixir.DevServer.Manager do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, workspace_path} <- issue_workspace_path(identifier),
          {:ok, serve_steps} <- serve_steps(project.slug, identifier),
-         :ok <- ensure_capacity(serve_steps),
          {:ok, reserved_steps} <- reserve_ports(project.slug, identifier, serve_steps) do
       setup_issue_session(project.slug, identifier, workspace_path)
       start_instances(project, identifier, workspace_path, reserved_steps)
@@ -157,16 +155,6 @@ defmodule SymphonyElixir.DevServer.Manager do
     case DevEnv.list_serve_steps(project_slug) do
       [] -> {:error, :no_serve_step}
       steps -> {:ok, unique_serve_steps(project_slug, identifier, steps)}
-    end
-  end
-
-  defp ensure_capacity(serve_steps) do
-    live_count = live_instance_count()
-
-    if live_count + length(serve_steps) > Config.dev_server_max_concurrent() do
-      {:error, :capacity}
-    else
-      :ok
     end
   end
 
@@ -625,21 +613,6 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp cleanup_reservation_entry(_table, _entry), do: :ok
-
-  defp live_instance_count do
-    registry_keys =
-      @registry
-      |> all_registry_entries()
-      |> Enum.map(fn {key, _pid} -> key end)
-
-    reservation_keys =
-      reservation_entries()
-      |> Enum.map(fn {key, _port, _pid} -> key end)
-
-    (registry_keys ++ reservation_keys)
-    |> MapSet.new()
-    |> MapSet.size()
-  end
 
   defp ensure_reservation_table do
     case :ets.whereis(@reservation_table) do

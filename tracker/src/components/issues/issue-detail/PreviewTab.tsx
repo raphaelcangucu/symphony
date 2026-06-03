@@ -352,11 +352,6 @@ function availabilityMessage(reason: IssueDevServerReason): { title: string; bod
         title: "No serve step configured",
         body: "Availability is blocked because this project does not have a dev-server serve step configured.",
       };
-    case "capacity":
-      return {
-        title: "Preview capacity is full",
-        body: "Availability is temporarily blocked because all preview slots are in use. Auto-start polling can retry when capacity frees up.",
-      };
     case "no_free_port":
       return {
         title: "No free preview port",

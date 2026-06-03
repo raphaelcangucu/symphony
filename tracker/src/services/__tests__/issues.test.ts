@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { http } from "@/services/http";
-import { createIssue, getIssueFormOptions, listIssues } from "@/services/issues";
+import {
+  archiveIssue,
+  createIssue,
+  deleteIssue,
+  getIssueFormOptions,
+  listIssues,
+  restoreIssue,
+} from "@/services/issues";
 
 describe("issues service filters", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -120,6 +127,42 @@ describe("createIssue payload", () => {
       description: null,
       status: "Todo",
     });
+  });
+});
+
+describe("issue lifecycle actions", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const dto = { id: 1, identifier: "MAC-1", title: "Archive me", status: "Todo" };
+
+  it("posts to the archive endpoint", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: dto } });
+
+    const result = await archiveIssue("macro-markets", "MAC-1");
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues/MAC-1/archive");
+    expect(result.identifier).toBe("MAC-1");
+  });
+
+  it("posts to the restore endpoint", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: dto } });
+
+    await restoreIssue("macro-markets", "MAC-1");
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues/MAC-1/restore");
+  });
+
+  it("sends a DELETE to the issue endpoint", async () => {
+    const del = vi.spyOn(http, "delete").mockResolvedValueOnce({ data: { data: dto } });
+
+    await deleteIssue("macro-markets", "MAC-1");
+
+    expect(del).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues/MAC-1");
+  });
+
+  it("rejects blank identifiers", async () => {
+    await expect(archiveIssue("macro-markets", " ")).rejects.toThrow("identifier is required");
+    await expect(deleteIssue("macro-markets", "")).rejects.toThrow("identifier is required");
   });
 });
 

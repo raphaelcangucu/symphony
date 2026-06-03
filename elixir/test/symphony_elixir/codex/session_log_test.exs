@@ -4,9 +4,7 @@ defmodule SymphonyElixir.Codex.SessionLogTest do
   alias SymphonyElixir.Codex.SessionLog
 
   test "parse_line renders structured assistant and tool entries" do
-    assert SessionLog.parse_line(
-             ~s({"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"**Done**"}]}})
-           ) == %{
+    assert SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"**Done**"}]}})) == %{
              "kind" => "assistant",
              "title" => "Codex",
              "body" => "**Done**",
@@ -15,13 +13,9 @@ defmodule SymphonyElixir.Codex.SessionLogTest do
              "collapsed" => false
            }
 
-    assert SessionLog.parse_line(
-             ~s({"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\\"cmd\\":\\"pwd\\"}"}})
-           )["kind"] == "tool_call"
+    assert SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\\"cmd\\":\\"pwd\\"}"}}))["kind"] == "tool_call"
 
-    assert SessionLog.parse_line(
-             ~s({"type":"response_item","payload":{"type":"function_call_output","output":"ok\\nline"}})
-           )["kind"] == "tool_result"
+    assert SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"function_call_output","output":"ok\\nline"}}))["kind"] == "tool_result"
   end
 
   test "tail and read_from stream appended entries" do

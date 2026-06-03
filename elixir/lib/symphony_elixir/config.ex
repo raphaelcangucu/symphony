@@ -368,6 +368,29 @@ defmodule SymphonyElixir.Config do
   end
 
   @doc """
+  Workflow statuses derived from the configured board states, ordered to match
+  `field_states/0`. Each entry is `{name, category, is_terminal}` where the
+  category is inferred from the `terminal_states`/`wait_states`/`active_states`
+  lists. Used to seed a project's status set locally so the tracker stays
+  local-first when a remote board cannot be reached.
+  """
+  @spec workflow_statuses() :: [{String.t(), String.t(), boolean()}]
+  def workflow_statuses do
+    terminal = MapSet.new(terminal_states())
+    wait = MapSet.new(wait_states())
+    active = MapSet.new(active_states())
+
+    Enum.map(field_states(), fn name ->
+      cond do
+        MapSet.member?(terminal, name) -> {name, "terminal", true}
+        MapSet.member?(wait, name) -> {name, "wait", false}
+        MapSet.member?(active, name) -> {name, "active", false}
+        true -> {name, "backlog", false}
+      end
+    end)
+  end
+
+  @doc """
   States that may start a new agent run. Defaults to `active_states/0`.
   """
   @spec dispatch_states() :: [String.t()]

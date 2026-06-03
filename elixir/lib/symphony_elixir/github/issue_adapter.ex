@@ -146,6 +146,51 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
     end
   end
 
+  @spec archive_issue(Project.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def archive_issue(%Project{} = project, identifier) do
+    archive_project_item(project, identifier, Query.archive_project_item_mutation())
+  end
+
+  @spec restore_issue(Project.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def restore_issue(%Project{} = project, identifier) do
+    archive_project_item(project, identifier, Query.unarchive_project_item_mutation())
+  end
+
+  @spec delete_issue(Project.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def delete_issue(%Project{} = project, identifier) do
+    %{project_id: project_id} = config(project)
+
+    with {:ok, item_id} <- resolve_move_item_id(project, project_id, identifier, %{}),
+         {:ok, response} <-
+           client().graphql(
+             Query.delete_project_item_mutation(),
+             %{"projectId" => project_id, "itemId" => item_id},
+             []
+           ),
+         {:ok, deleted_id} <- Query.deleted_project_item_id(response) do
+      {:ok, deleted_id}
+    else
+      {:error, reason} -> {:error, map_error(reason)}
+    end
+  end
+
+  defp archive_project_item(%Project{} = project, identifier, mutation) do
+    %{project_id: project_id} = config(project)
+
+    with {:ok, item_id} <- resolve_move_item_id(project, project_id, identifier, %{}),
+         {:ok, response} <-
+           client().graphql(
+             mutation,
+             %{"projectId" => project_id, "itemId" => item_id},
+             []
+           ),
+         {:ok, archived_id} <- Query.archived_project_item_id(response) do
+      {:ok, archived_id}
+    else
+      {:error, reason} -> {:error, map_error(reason)}
+    end
+  end
+
   @impl true
   def list_comments(%Project{} = project, identifier) do
     case config(project) do

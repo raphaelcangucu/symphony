@@ -429,8 +429,10 @@ defp build_issue_prompt(%{metadata: metadata, issue_identifier: identifier, proj
         MODE: COMPLEX. Follow this vendored methodology exactly:
         #{Skills.load(["brainstorming", "writing-plans"])}
 
-        Write spec files to `docs/superpowers/specs/` and plan files to `docs/superpowers/plans/`
-        in this working tree. Get section-by-section approval in chat. Do not start writing feature code.
+        Design-first authoring is desired by default: write spec files to `docs/superpowers/specs/`
+        and plan files to `docs/superpowers/plans/` in this working tree, with section-by-section
+        approval in chat. Codex is a coding agent; when the user explicitly asks to skip spec/plan
+        work or authorizes implementation, acknowledge that direction and you may proceed directly to code.
         """
 
       "simple" ->

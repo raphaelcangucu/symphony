@@ -129,8 +129,59 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   }
   """
 
+  @archive_project_item """
+  mutation SymphonyUiArchiveProjectItem($projectId: ID!, $itemId: ID!) {
+    archiveProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+      item { id }
+    }
+  }
+  """
+
+  @unarchive_project_item """
+  mutation SymphonyUiUnarchiveProjectItem($projectId: ID!, $itemId: ID!) {
+    unarchiveProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+      item { id }
+    }
+  }
+  """
+
+  @delete_project_item """
+  mutation SymphonyUiDeleteProjectItem($projectId: ID!, $itemId: ID!) {
+    deleteProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+      deletedItemId
+    }
+  }
+  """
+
   @spec list_items_query() :: String.t()
   def list_items_query, do: @list_items
+
+  @spec archive_project_item_mutation() :: String.t()
+  def archive_project_item_mutation, do: @archive_project_item
+
+  @spec unarchive_project_item_mutation() :: String.t()
+  def unarchive_project_item_mutation, do: @unarchive_project_item
+
+  @spec delete_project_item_mutation() :: String.t()
+  def delete_project_item_mutation, do: @delete_project_item
+
+  @spec archived_project_item_id(map()) :: {:ok, String.t()} | {:error, :archive_item_failed}
+  def archived_project_item_id(%{"data" => %{"archiveProjectV2Item" => %{"item" => %{"id" => id}}}})
+      when is_binary(id),
+      do: {:ok, id}
+
+  def archived_project_item_id(%{"data" => %{"unarchiveProjectV2Item" => %{"item" => %{"id" => id}}}})
+      when is_binary(id),
+      do: {:ok, id}
+
+  def archived_project_item_id(_), do: {:error, :archive_item_failed}
+
+  @spec deleted_project_item_id(map()) :: {:ok, String.t()} | {:error, :delete_item_failed}
+  def deleted_project_item_id(%{"data" => %{"deleteProjectV2Item" => %{"deletedItemId" => id}}})
+      when is_binary(id),
+      do: {:ok, id}
+
+  def deleted_project_item_id(_), do: {:error, :delete_item_failed}
 
   @spec status_options_query() :: String.t()
   def status_options_query, do: @status_options

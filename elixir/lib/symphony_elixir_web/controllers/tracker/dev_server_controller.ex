@@ -10,7 +10,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixirWeb.{DevServerPresenter, TrackerErrors}
 
-  @availability_action_error_reasons ~w(disabled capacity workspace_missing no_serve_step no_free_port lock_unavailable crashed)a
+  @availability_action_error_reasons ~w(disabled workspace_missing no_serve_step no_free_port lock_unavailable crashed)a
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do

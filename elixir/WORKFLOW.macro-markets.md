@@ -68,7 +68,6 @@ editor:
 dev_server:
   enabled: true
   port_range: [4100, 4199]
-  max_concurrent: 3
   idle_timeout_ms: 1800000
   auto_start_on: pull_request,human_review
   # base_url: https://previews.example.com  # optional proxy-facing base URL

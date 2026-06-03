@@ -137,6 +137,38 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     assert response(delete_conn, 204) == ""
   end
 
+  test "archives, restores, and deletes a local issue" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Archive me", status: "Todo"})
+
+    archive_conn =
+      authorized_conn()
+      |> post("/api/tracker/v1/projects/macro-markets/issues/MAC-1/archive")
+
+    assert %{"data" => %{"identifier" => "MAC-1"}} = json_response(archive_conn, 200)
+
+    hidden_conn = get(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues")
+    assert %{"data" => []} = json_response(hidden_conn, 200)
+
+    restore_conn =
+      authorized_conn()
+      |> post("/api/tracker/v1/projects/macro-markets/issues/MAC-1/restore")
+
+    assert %{"data" => %{"identifier" => "MAC-1"}} = json_response(restore_conn, 200)
+
+    visible_conn = get(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues")
+    assert %{"data" => [%{"identifier" => "MAC-1"}]} = json_response(visible_conn, 200)
+
+    delete_conn =
+      authorized_conn()
+      |> delete("/api/tracker/v1/projects/macro-markets/issues/MAC-1")
+
+    assert %{"data" => %{"identifier" => "MAC-1"}} = json_response(delete_conn, 200)
+
+    gone_conn = get(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues")
+    assert %{"data" => []} = json_response(gone_conn, 200)
+  end
+
   test "returns clear errors for missing tracker records" do
     conn =
       authorized_conn()

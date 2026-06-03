@@ -96,6 +96,30 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     end
   end
 
+  @spec archive(Conn.t(), map()) :: Conn.t()
+  def archive(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    dispatch_issue_action(conn, project_slug, :archive_issue, [identifier])
+  end
+
+  @spec restore(Conn.t(), map()) :: Conn.t()
+  def restore(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    dispatch_issue_action(conn, project_slug, :restore_issue, [identifier])
+  end
+
+  @spec delete(Conn.t(), map()) :: Conn.t()
+  def delete(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    dispatch_issue_action(conn, project_slug, :delete_issue, [identifier])
+  end
+
+  defp dispatch_issue_action(conn, project_slug, action, args) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, issue} <- IssueAdapter.dispatch(project, action, args) do
+      json(conn, %{data: TrackerPresenter.issue(issue)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   defp build_filters(params) do
     with {:ok, assignee} <- resolve_me(Map.get(params, "assignee")),
          {:ok, creator} <- resolve_me(Map.get(params, "creator")) do

@@ -9,9 +9,9 @@ Help turn ideas into fully formed designs and specs through natural collaborativ
 
 Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
 
-<HARD-GATE>
-Do NOT write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
-</HARD-GATE>
+<DESIGN-FIRST-DEFAULT>
+Design-first authoring is desired while requirements are still being shaped: present the design and get user approval before implementation. If the user explicitly asks to skip spec/plan work or authorizes direct implementation, Codex is a coding agent and may proceed directly to code while preserving the agreed requirements and updating issue context as needed.
+</DESIGN-FIRST-DEFAULT>
 
 ## Anti-Pattern: "This Is Too Simple To Need A Design"
 

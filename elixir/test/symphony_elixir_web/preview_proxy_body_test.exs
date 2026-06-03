@@ -44,9 +44,7 @@ defmodule SymphonyElixirWeb.PreviewProxyBodyTest do
 
     sink = start_supervised!(%{id: :body_sink, start: {Agent, :start_link, [fn -> :no_request end]}})
 
-    start_supervised!(
-      {Bandit, plug: {EchoUpstream, sink: sink}, scheme: :http, ip: {127, 0, 0, 1}, port: @upstream_port}
-    )
+    start_supervised!({Bandit, plug: {EchoUpstream, sink: sink}, scheme: :http, ip: {127, 0, 0, 1}, port: @upstream_port})
 
     workflow_root =
       Path.join(System.tmp_dir!(), "symphony-preview-proxy-#{System.unique_integer([:positive])}")

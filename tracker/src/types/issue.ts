@@ -15,7 +15,6 @@ export type IssueDevServerReason =
   | "disabled"
   | "workspace_missing"
   | "no_serve_step"
-  | "capacity"
   | "no_free_port"
   | "lock_unavailable"
   | "start_failed"

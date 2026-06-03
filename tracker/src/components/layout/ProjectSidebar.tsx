@@ -1,4 +1,4 @@
-import { Activity, FolderKanban, KeyRound, LayoutTemplate, ListTodo } from "lucide-react";
+import { Activity, KeyRound, LayoutTemplate, ListTodo } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 
@@ -11,6 +11,19 @@ import { TRACKER_PROJECTS_CHANGED_EVENT } from "@/lib/projectEvents";
 import { cn } from "@/lib/utils";
 import { listProjects } from "@/services/projects";
 import type { Project } from "@/types/project";
+
+const TRACKER_BRAND_ICON_ALT = "Symphony Tracker icon";
+const TRACKER_BRAND_ICON_SRC = resolveTrackerAssetPath(import.meta.env.BASE_URL, "favicon.svg");
+
+export function resolveTrackerAssetPath(baseUrl: string, assetName: string): string {
+  const normalizedAssetName = assetName.replace(/^\/+/, "");
+  if (normalizedAssetName.length === 0) {
+    throw new Error("Tracker asset name must not be empty");
+  }
+
+  const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBaseUrl}${normalizedAssetName}`;
+}
 
 export function ProjectSidebar() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -46,9 +59,12 @@ export function ProjectSidebar() {
   return (
     <aside className="hidden h-screen w-72 shrink-0 flex-col border-r bg-muted/20 p-4 md:flex">
       <div className="mb-6 flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <FolderKanban className="h-4 w-4" />
-        </div>
+        <img
+          src={TRACKER_BRAND_ICON_SRC}
+          alt={TRACKER_BRAND_ICON_ALT}
+          className="h-9 w-9 rounded-lg shadow-sm"
+          decoding="async"
+        />
         <div>
           <div className="text-sm font-semibold">Symphony Tracker</div>
           <div className="text-xs text-muted-foreground">Local project board</div>

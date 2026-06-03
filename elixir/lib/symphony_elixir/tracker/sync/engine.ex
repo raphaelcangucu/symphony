@@ -120,9 +120,18 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     {:ok, seeded}
   end
 
+  # An empty remote board is only "fully synced" once its statuses are mirrored.
+  # If status seeding failed (e.g. the remote was rate limited) the mirror stays
+  # empty; leaving `last_full_sync_at` unset lets the next read retry instead of
+  # locking an empty, status-less board forever.
   defp finalize_seed(project, [], 0) do
-    mark_state(project, success_attrs(project))
-    {:ok, 0}
+    if has_statuses?(project) do
+      mark_state(project, success_attrs(project))
+      {:ok, 0}
+    else
+      mark_state(project, %{status: "error", last_error: "status seed incomplete; will retry"})
+      {:error, :status_seed_incomplete}
+    end
   end
 
   defp finalize_seed(project, dtos, 0) do
@@ -165,6 +174,8 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
       Logger.warning("Tracker seed upsert failed for #{project.slug}: #{inspect(error)}")
       :error
   end
+
+  defp has_statuses?(project), do: Context.list_statuses(project.slug) != []
 
   defp seed_on_empty?, do: Application.get_env(:symphony_elixir, :tracker_seed_on_empty, true) == true
 

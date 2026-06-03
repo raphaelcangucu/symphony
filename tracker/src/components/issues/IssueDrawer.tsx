@@ -1,18 +1,27 @@
 import {
   Activity,
   AlertTriangle,
+  Archive,
   Bot,
   Code2,
   FileText,
   GitPullRequest,
   MessageSquare,
+  MoreHorizontal,
   Server,
   ShieldAlert,
   TerminalSquare,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect } from "react";
 
 import { getStatusMeta } from "@/components/board/status-meta";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIssueComments } from "@/hooks/useIssueComments";
@@ -57,6 +66,8 @@ interface IssueDrawerProps {
   onOpenChange: (open: boolean) => void;
   tab?: IssueTab;
   onTabChange?: (tab: IssueTab) => void;
+  onArchive?: (issue: Issue) => void | Promise<void>;
+  onDelete?: (issue: Issue) => void | Promise<void>;
 }
 
 export function IssueDrawer({
@@ -68,6 +79,8 @@ export function IssueDrawer({
   onOpenChange,
   tab = DEFAULT_ISSUE_TAB,
   onTabChange,
+  onArchive,
+  onDelete,
 }: IssueDrawerProps) {
   const meta = issue ? getStatusMeta(issue.status) : null;
   const StatusIcon = meta?.Icon;
@@ -136,19 +149,60 @@ export function IssueDrawer({
                   </span>
                 ) : null}
                 {execution ? <AgentStatusBadge status={execution.status} /> : null}
-                {editorButtonHidden ? null : (
-                  <button
-                    type="button"
-                    onClick={openEditor}
-                    disabled={!editor.available}
-                    title={editorTitle}
-                    aria-label="Open in VS Code"
-                    className="ml-auto inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-0.5 font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Code2 className="h-3 w-3" />
-                    Open in VS Code
-                  </button>
-                )}
+                <div className="ml-auto flex items-center gap-2">
+                  {editorButtonHidden ? null : (
+                    <button
+                      type="button"
+                      onClick={openEditor}
+                      disabled={!editor.available}
+                      title={editorTitle}
+                      aria-label="Open in VS Code"
+                      className="inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-0.5 font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Code2 className="h-3 w-3" />
+                      Open in VS Code
+                    </button>
+                  )}
+                  {onArchive || onDelete ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Issue actions"
+                          title="Issue actions"
+                          className="inline-flex items-center justify-center rounded-md border border-border/60 px-1.5 py-1 text-foreground transition-colors hover:bg-accent"
+                        >
+                          <MoreHorizontal className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-40">
+                        {onArchive ? (
+                          <DropdownMenuItem onSelect={() => void onArchive(issue)}>
+                            <Archive className="mr-2 h-4 w-4" />
+                            Archive
+                          </DropdownMenuItem>
+                        ) : null}
+                        {onDelete ? (
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onSelect={() => {
+                              if (
+                                window.confirm(
+                                  `Delete ${issue.identifier} permanently? This removes it from the board and cannot be undone.`,
+                                )
+                              ) {
+                                void onDelete(issue);
+                              }
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
+                </div>
               </div>
               <SheetTitle className="pr-8 text-xl leading-tight">{issue.title}</SheetTitle>
               <SheetDescription asChild>

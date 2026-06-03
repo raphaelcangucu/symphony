@@ -172,6 +172,41 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert second_issue.status.name == "Backlog"
   end
 
+  test "archive_issue hides the issue from the board and restore_issue brings it back" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Archive me", status: "Todo"})
+
+    assert {:ok, archived} = Context.archive_issue("macro-markets", "MAC-1")
+    assert archived.archived_at
+
+    assert Context.list_issues("macro-markets") |> Enum.map(& &1.identifier) == []
+    assert Context.list_issues("macro-markets", include_archived: true) |> Enum.map(& &1.identifier) == ["MAC-1"]
+
+    assert {:ok, restored} = Context.restore_issue("macro-markets", "MAC-1")
+    assert is_nil(restored.archived_at)
+    assert Context.list_issues("macro-markets") |> Enum.map(& &1.identifier) == ["MAC-1"]
+  end
+
+  test "delete_issue removes the issue and its children" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Delete me", status: "Todo"})
+    {:ok, _comment} = Context.add_comment("macro-markets", "MAC-1", "a note")
+
+    assert {:ok, deleted} = Context.delete_issue("macro-markets", "MAC-1")
+    assert deleted.identifier == "MAC-1"
+
+    assert {:error, :issue_not_found} = Context.get_issue("macro-markets", "MAC-1")
+    assert Context.list_issues("macro-markets") == []
+  end
+
+  test "archive_issue returns issue_not_found for an unknown identifier" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:error, :issue_not_found} = Context.archive_issue("macro-markets", "MAC-404")
+    assert {:error, :issue_not_found} = Context.delete_issue("macro-markets", "MAC-404")
+    assert {:error, :project_not_found} = Context.archive_issue("nope", "MAC-1")
+  end
+
   test "create_issue stores Codex goal text for dispatch" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
@@ -509,6 +544,27 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert project.tracker_kind == "github"
     assert project.tracker_config["project_id"] == "PVT_1"
     assert Context.list_statuses("remote-gh") == []
+  end
+
+  test "create_issue seeds workflow statuses for a remote project with an empty mirror" do
+    {:ok, _project} =
+      Context.create_workspace_project(%{
+        "name" => "Remote GH",
+        "slug" => "remote-gh",
+        "tracker" => %{
+          "kind" => "github",
+          "config" => %{"repo" => "o/r", "project_id" => "PVT_1"}
+        },
+        "repositories" => [],
+        "setup" => %{}
+      })
+
+    assert Context.list_statuses("remote-gh") == []
+
+    assert {:ok, issue} = Context.create_issue("remote-gh", %{title: "Local first", status: "Todo"})
+    assert issue.status.name == "Todo"
+
+    assert "Todo" in Enum.map(Context.list_statuses("remote-gh"), & &1.name)
   end
 
   test "create_workspace_project defaults to local tracker" do

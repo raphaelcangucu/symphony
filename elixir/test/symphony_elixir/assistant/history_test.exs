@@ -148,6 +148,7 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
              History.ensure_project_explore_thread("explore-demo", %{
                git: SymphonyElixir.Assistant.ProjectExploreWorkspaceTest.GitStub
              })
+
     assert same.id == thread.id
   end
 

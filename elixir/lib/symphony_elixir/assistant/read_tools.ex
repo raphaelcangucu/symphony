@@ -291,6 +291,7 @@ defmodule SymphonyElixir.Assistant.ReadTools do
   defp normalize_workflow_source(source), do: {:error, {:invalid_workflow_source, source}}
 
   defp normalize_example_name(nil), do: {:error, {:missing_required_field, :name}}
+
   defp normalize_example_name(name) when is_binary(name) do
     case name |> String.trim() |> String.trim_trailing(".md") do
       "" -> {:error, {:missing_required_field, :name}}
@@ -301,6 +302,7 @@ defmodule SymphonyElixir.Assistant.ReadTools do
   defp normalize_example_name(_), do: {:error, {:missing_required_field, :name}}
 
   defp normalize_format(nil), do: :json
+
   defp normalize_format(format) when is_binary(format) do
     case String.trim(format) |> String.downcase() do
       "" -> :json

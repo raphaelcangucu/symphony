@@ -43,6 +43,27 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
     end
   end
 
+  @spec archive_issue(Project.t(), String.t()) :: {:ok, IssueDTO.t()} | {:error, term()}
+  def archive_issue(%Project{slug: slug}, identifier) do
+    with {:ok, issue} <- Context.archive_issue(slug, identifier) do
+      {:ok, to_dto(issue)}
+    end
+  end
+
+  @spec restore_issue(Project.t(), String.t()) :: {:ok, IssueDTO.t()} | {:error, term()}
+  def restore_issue(%Project{slug: slug}, identifier) do
+    with {:ok, issue} <- Context.restore_issue(slug, identifier) do
+      {:ok, to_dto(issue)}
+    end
+  end
+
+  @spec delete_issue(Project.t(), String.t()) :: {:ok, IssueDTO.t()} | {:error, term()}
+  def delete_issue(%Project{slug: slug}, identifier) do
+    with {:ok, issue} <- Context.delete_issue(slug, identifier) do
+      {:ok, to_dto(issue)}
+    end
+  end
+
   @impl true
   def list_statuses(%Project{slug: slug}) do
     statuses = slug |> Context.list_statuses() |> Enum.map(&status_to_map/1)

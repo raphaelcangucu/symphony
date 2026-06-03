@@ -66,6 +66,33 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
     end
   end
 
+  @spec archive_issue(Project.t(), String.t()) :: {:ok, term()} | {:error, term()}
+  def archive_issue(%Project{} = project, identifier) do
+    with {:ok, dto} <- IssueAdapter.archive_issue(project, identifier) do
+      payload = %{"identifier" => identifier}
+      enqueue(project, identifier, "issue", "archive", payload, "issue:archive:#{project.id}:#{identifier}")
+      {:ok, dto}
+    end
+  end
+
+  @spec restore_issue(Project.t(), String.t()) :: {:ok, term()} | {:error, term()}
+  def restore_issue(%Project{} = project, identifier) do
+    with {:ok, dto} <- IssueAdapter.restore_issue(project, identifier) do
+      payload = %{"identifier" => identifier}
+      enqueue(project, identifier, "issue", "restore", payload, "issue:archive:#{project.id}:#{identifier}")
+      {:ok, dto}
+    end
+  end
+
+  @spec delete_issue(Project.t(), String.t()) :: {:ok, term()} | {:error, term()}
+  def delete_issue(%Project{} = project, identifier) do
+    with {:ok, dto} <- IssueAdapter.delete_issue(project, identifier) do
+      payload = %{"identifier" => identifier}
+      enqueue(project, identifier, "issue", "delete", payload, "issue:delete:#{project.id}:#{identifier}")
+      {:ok, dto}
+    end
+  end
+
   @impl true
   def add_comment(%Project{} = project, identifier, body, attrs) do
     with {:ok, comment} <- IssueAdapter.add_comment(project, identifier, body, attrs) do

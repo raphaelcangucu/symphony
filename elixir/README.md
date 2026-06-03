@@ -464,12 +464,11 @@ tracker. Enable the feature in `WORKFLOW.md` front matter:
 dev_server:
   enabled: true
   port_range: [4100, 4199]
-  max_concurrent: 3
   idle_timeout_ms: 1800000
   auto_start_on: pull_request,human_review
 ```
 
-Defaults are `enabled: false`, `port_range: [4100, 4199]`, `max_concurrent: 3`,
+Defaults are `enabled: false`, `port_range: [4100, 4199]`,
 `idle_timeout_ms: 1800000`, and `auto_start_on: [pull_request, human_review]`.
 When `base_url` is omitted, each preview URL is built as
 `http://127.0.0.1:<allocated-port><url_path>`.
