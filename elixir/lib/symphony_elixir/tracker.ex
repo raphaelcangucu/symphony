@@ -61,12 +61,10 @@ defmodule SymphonyElixir.Tracker do
 
   @spec adapter() :: module()
   def adapter do
-    kind = Config.tracker_kind()
-
-    if kind in ["github", "linear", "jira"] and Config.tracker_sync_enabled?() do
+    if Config.tracker_sync_enabled?() do
       SymphonyElixir.Tracker.Sync.LocalFirstTracker
     else
-      remote_adapter(kind)
+      remote_adapter(Config.tracker_kind())
     end
   end
 
