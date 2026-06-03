@@ -91,7 +91,11 @@ defmodule SymphonyElixir.Workspace do
     root = Config.workspace_root()
 
     candidates =
-      [Path.join(root, safe_id) | Path.wildcard(Path.join([root, "*", safe_id]))]
+      [
+        Path.join(root, safe_id)
+        | Path.wildcard(Path.join([root, "*", safe_id])) ++
+            Path.wildcard(Path.join([root, "*", "*", safe_id]))
+      ]
       |> Enum.uniq()
 
     Enum.each(candidates, &remove/1)

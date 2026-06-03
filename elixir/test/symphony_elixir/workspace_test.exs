@@ -58,6 +58,15 @@ defmodule SymphonyElixir.WorkspaceTest do
     refute File.exists?(nested)
   end
 
+  test "remove_issue_workspaces/1 sweeps github two-level nested workspaces", %{workspace_root: root} do
+    nested = Path.join([root, "owner", "name", "A-1"])
+    File.mkdir_p!(nested)
+    assert File.dir?(nested)
+
+    assert :ok = Workspace.remove_issue_workspaces("A-1")
+    refute File.exists?(nested)
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
