@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { EditProjectDialog } from "@/components/projects/EditProjectDialog";
@@ -30,6 +30,7 @@ describe("EditProjectDialog", () => {
   it("saves edited name and description for a local project", async () => {
     const updated = localProject({ name: "Renamed" });
     vi.mocked(projects.updateProject).mockResolvedValue(updated);
+    vi.mocked(projects.updateProjectSetup).mockResolvedValue(updated);
     const onSaved = vi.fn();
 
     render(<EditProjectDialog project={localProject()} open onOpenChange={vi.fn()} onSaved={onSaved} />);
@@ -111,6 +112,23 @@ describe("EditProjectDialog", () => {
       const link = screen.getByRole("link", { name: /Open on GitHub/i });
       expect(link).toHaveAttribute("href", "https://github.com/orgs/clouapp/projects/2");
     });
+  });
+
+  it("saves prompt via updateProjectSetup on save", async () => {
+    const fixture = localProject({ setup: { promptTemplate: "Old prompt", validationCommands: [] } });
+    const updateSetup = vi.mocked(projects.updateProjectSetup).mockResolvedValue(fixture);
+    vi.mocked(projects.updateProject).mockResolvedValue(fixture);
+    const onSaved = vi.fn();
+
+    render(<EditProjectDialog project={fixture} open onOpenChange={vi.fn()} onSaved={onSaved} />);
+
+    fireEvent.change(screen.getByRole("textbox", { name: /prompt/i }), { target: { value: "New prompt" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() =>
+      expect(updateSetup).toHaveBeenCalledWith("macro-markets", expect.objectContaining({ promptTemplate: "New prompt" })),
+    );
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(fixture));
   });
 
   it("blocks saving a GitHub source without a selected board", async () => {

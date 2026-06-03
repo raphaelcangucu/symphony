@@ -3,12 +3,14 @@ import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
+import { LoadDefaultMenu } from "@/components/projects/LoadDefaultMenu";
 import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Textarea } from "@/components/ui/textarea";
-import { updateProject } from "@/services/projects";
+import { updateProject, updateProjectSetup } from "@/services/projects";
 import { discoverGitHubProjects, type GitHubProjectSummary } from "@/services/remoteTrackers";
 import type { Project, ProjectTrackerConfig, TrackerKind } from "@/types/project";
 
@@ -26,6 +28,7 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Edit
   const [description, setDescription] = useState(project.description ?? "");
   const [trackerKind, setTrackerKind] = useState<TrackerKind>(project.tracker.kind);
   const [config, setConfig] = useState<Record<string, unknown>>(project.tracker.config);
+  const [promptTemplate, setPromptTemplate] = useState(project.setup?.promptTemplate ?? "");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -34,6 +37,7 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Edit
     setDescription(project.description ?? "");
     setTrackerKind(project.tracker.kind);
     setConfig(project.tracker.config);
+    setPromptTemplate(project.setup?.promptTemplate ?? "");
   }, [open, project]);
 
   function handleTrackerKindChange(kind: TrackerKind) {
@@ -62,12 +66,13 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Edit
 
     setSubmitting(true);
     try {
-      const updated = await updateProject(project.slug, {
+      await updateProject(project.slug, {
         name: trimmedName,
         description: description.trim() || null,
         tracker: { kind: trackerKind, config: trackerKind === "local" ? {} : config },
       });
-      onSaved(updated);
+      const saved = await updateProjectSetup(project.slug, { promptTemplate });
+      onSaved(saved);
       onOpenChange(false);
       toast.success("Project updated");
     } catch (cause) {
@@ -130,6 +135,21 @@ export function EditProjectDialog({ project, open, onOpenChange, onSaved }: Edit
               Issues will be stored in Symphony&apos;s local board. Remote configuration is cleared.
             </p>
           ) : null}
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium" htmlFor="edit-project-prompt">
+                Prompt
+              </label>
+              <LoadDefaultMenu onLoad={(loaded) => setPromptTemplate(loaded.promptTemplate)} />
+            </div>
+            <MarkdownEditor
+              id="edit-project-prompt"
+              value={promptTemplate}
+              onChange={setPromptTemplate}
+              placeholder="Per-project agent prompt (markdown)"
+            />
+          </div>
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>

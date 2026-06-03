@@ -10,9 +10,10 @@ interface MarkdownEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   rows?: number;
+  id?: string;
 }
 
-export function MarkdownEditor({ value, onChange, placeholder, rows = 12 }: MarkdownEditorProps) {
+export function MarkdownEditor({ value, onChange, placeholder, rows = 12, id }: MarkdownEditorProps) {
   const [tab, setTab] = useState<"write" | "preview">("write");
 
   return (
@@ -27,6 +28,7 @@ export function MarkdownEditor({ value, onChange, placeholder, rows = 12 }: Mark
       </div>
       {tab === "write" ? (
         <Textarea
+          id={id}
           className="rounded-none border-0 focus-visible:ring-0"
           value={value}
           rows={rows}
