@@ -53,6 +53,30 @@ describe("assistant service", () => {
     });
   });
 
+  it("normalizes tool call arguments and output", async () => {
+    vi.spyOn(http, "post").mockResolvedValueOnce({
+      data: {
+        data: {
+          assistant_message: "done",
+          tool_calls: [
+            {
+              name: "move_issue",
+              status: "complete",
+              arguments: { identifier: "MAC-1", status: "In Progress" },
+              output: "Moved issue MAC-1 to In Progress.",
+              result: {},
+            },
+          ],
+        },
+      },
+    });
+
+    const response = await sendAssistantMessage("macro-markets", { message: "move MAC-1" });
+
+    expect(response.toolCalls[0].arguments).toEqual({ identifier: "MAC-1", status: "In Progress" });
+    expect(response.toolCalls[0].output).toBe("Moved issue MAC-1 to In Progress.");
+  });
+
   it("normalizes Codex CLI assistant catalog payloads", () => {
     const catalog = normalizeAssistantCodexCatalog({
       agent: "codex",

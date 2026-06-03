@@ -34,6 +34,8 @@ export type AssistantToolStatus = "running" | "complete" | "error";
 export interface AssistantToolCall {
   name: string;
   status: AssistantToolStatus;
+  arguments?: Record<string, unknown> | null;
+  output?: string | null;
   result: {
     issue?: Issue;
     issues?: Issue[];
@@ -124,6 +126,8 @@ export function normalizeUserQuestionsRequest(payload: {
 interface BackendAssistantToolCallDto {
   name?: string | null;
   status?: string | null;
+  arguments?: Record<string, unknown> | null;
+  output?: string | null;
   result?: {
     issue?: BackendIssueDto | null;
     issues?: BackendIssueDto[] | null;
@@ -374,6 +378,8 @@ export function normalizeToolCall(dto: BackendAssistantToolCallDto): AssistantTo
   return {
     name: dto.name ?? "unknown",
     status: normalizeToolStatus(dto.status),
+    arguments: dto.arguments ?? null,
+    output: typeof dto.output === "string" ? dto.output : null,
     result: {
       ...result,
       issue: result.issue ? normalizeIssue(result.issue) : undefined,
