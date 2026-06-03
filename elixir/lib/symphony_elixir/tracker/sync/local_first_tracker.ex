@@ -37,7 +37,20 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   def enrich_issue(issue), do: issue
 
   @impl true
-  def fetch_candidate_issues, do: fetch_issues_by_states(Config.active_states())
+  def fetch_candidate_issues do
+    issues =
+      list_orchestrator_projects()
+      |> Enum.flat_map(fn project ->
+        config = SymphonyElixir.ProjectConfig.resolve(project)
+
+        case resolve_assignee_filter(project) do
+          {:ok, filter} -> query_issues(project, config.active_states, filter)
+          {:error, _reason} -> []
+        end
+      end)
+
+    {:ok, issues}
+  end
 
   @impl true
   def fetch_issues_by_states(states) when is_list(states) do
@@ -153,12 +166,12 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     case Application.get_env(:symphony_elixir, :tracker_sync_project_slug) do
       slug when is_binary(slug) ->
         case find_or_backfill_project(slug) do
-          {:ok, project} -> [project]
+          {:ok, project} -> [Repo.preload(project, :setup)]
           :skip -> []
         end
 
       _ ->
-        Context.list_projects()
+        Context.list_projects() |> Repo.preload(:setup)
     end
   end
 
