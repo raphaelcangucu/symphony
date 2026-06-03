@@ -133,6 +133,19 @@ export async function updateProjectSetup(projectSlug: string, input: UpdateProje
   return normalizeProject(unwrapData<BackendProjectDto>(response));
 }
 
+export async function updateProjectRepositories(
+  projectSlug: string,
+  repositories: WorkspaceRepository[],
+): Promise<Project> {
+  const slug = requireProjectSlug(projectSlug);
+
+  const response = await http.put(trackerPath(`/projects/${encodeURIComponent(slug)}/repositories`), {
+    repositories: repositories.map(repositoryPayload),
+  });
+
+  return normalizeProject(unwrapData<BackendProjectDto>(response));
+}
+
 export async function archiveProject(projectSlug: string): Promise<Project> {
   const slug = requireProjectSlug(projectSlug);
   const response = await http.post(trackerPath(`/projects/${encodeURIComponent(slug)}/archive`));

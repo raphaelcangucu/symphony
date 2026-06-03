@@ -5,7 +5,7 @@ defmodule SymphonyElixir.CodingAgent do
 
   alias SymphonyElixir.Config
 
-  @callback start_session(Path.t()) :: {:ok, map()} | {:error, term()}
+  @callback start_session(Path.t(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback run_turn(map(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   @callback stop_session(map()) :: :ok
   @callback normalize_event(map()) :: map()
@@ -18,9 +18,9 @@ defmodule SymphonyElixir.CodingAgent do
   def adapter_for("claude"), do: SymphonyElixir.Claude.CodingAgent
   def adapter_for(_), do: adapter_for(Config.default_agent_kind())
 
-  @spec start_session(Path.t(), String.t() | nil) :: {:ok, map()} | {:error, term()}
-  def start_session(workspace, agent_kind \\ nil),
-    do: adapter_for(agent_kind).start_session(workspace)
+  @spec start_session(Path.t(), String.t() | nil, keyword()) :: {:ok, map()} | {:error, term()}
+  def start_session(workspace, agent_kind \\ nil, opts \\ []),
+    do: adapter_for(agent_kind).start_session(workspace, opts)
 
   @spec run_turn(map(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def run_turn(session, prompt, issue, opts \\ []) do

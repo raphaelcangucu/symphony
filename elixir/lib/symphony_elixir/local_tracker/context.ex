@@ -152,6 +152,28 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec replace_repositories(String.t(), [map()]) ::
+          {:ok, [Repository.t()]} | {:error, :project_not_found | Ecto.Changeset.t()}
+  def replace_repositories(project_slug, repositories)
+      when is_binary(project_slug) and is_list(repositories) do
+    with {:ok, project} <- fetch_project(project_slug) do
+      Repo.transaction(fn ->
+        Repository
+        |> where([repository], repository.project_id == ^project.id)
+        |> Repo.delete_all()
+
+        case insert_workspace_repositories(project, repositories) do
+          {:ok, inserted} ->
+            Broadcaster.project_changed("project_updated", project)
+            inserted
+
+          {:error, reason} ->
+            Repo.rollback(reason)
+        end
+      end)
+    end
+  end
+
   @spec get_project_setup(String.t()) :: ProjectSetup.t() | nil
   def get_project_setup(project_slug) when is_binary(project_slug) do
     case Repo.get_by(Project, slug: project_slug) do

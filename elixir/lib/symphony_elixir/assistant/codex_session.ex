@@ -267,6 +267,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     runner_opts =
       opts
       |> Keyword.put(:project_slug, project_slug)
+      |> Keyword.put_new(:workspace_root, Workspace.workspace_root_for(identifier))
       |> Keyword.put(:dynamic_tools, ToolExecutor.issue_bound_tool_specs(identifier) ++ DynamicTool.tool_specs())
       |> Keyword.put(:tool_executor, ToolExecutor.issue_bound_combined_codex_tool_executor(project_slug, identifier))
 

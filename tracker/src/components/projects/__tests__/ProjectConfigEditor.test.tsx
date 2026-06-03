@@ -5,10 +5,12 @@ import userEvent from "@testing-library/user-event";
 
 import { ProjectConfigEditor } from "@/components/projects/ProjectConfigEditor";
 import * as projects from "@/services/projects";
+import * as projectSetup from "@/services/projectSetup";
 import * as remote from "@/services/remoteTrackers";
 import type { Project } from "@/types/project";
 
 vi.mock("@/services/projects");
+vi.mock("@/services/projectSetup");
 vi.mock("@/services/remoteTrackers");
 
 function project(overrides: Partial<Project> = {}): Project {
@@ -86,6 +88,46 @@ describe("ProjectConfigEditor", () => {
     await waitFor(() => expect(projects.updateProjectSetup).toHaveBeenCalled());
     expect(onSaved).not.toHaveBeenCalled();
     expect(await screen.findByText(/invalid workflow_config/i)).toBeInTheDocument();
+  });
+
+  it("replaces repositories only when they change", async () => {
+    vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
+    vi.mocked(projectSetup.listGitHubOwners).mockResolvedValue([]);
+    const withRepos = project({
+      repositories: [{ fullName: "acme/web", workspacePath: "acme/web", role: "frontend", selectedBranch: "main" }],
+    });
+    vi.mocked(projects.updateProject).mockResolvedValue(withRepos);
+    vi.mocked(projects.updateProjectRepositories).mockResolvedValue(withRepos);
+    vi.mocked(projects.updateProjectSetup).mockResolvedValue(withRepos);
+
+    render(<ProjectConfigEditor project={withRepos} onSaved={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: /workspace/i }));
+    await userEvent.type(screen.getByLabelText("Workspace path for acme/web"), "-app");
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(projects.updateProjectRepositories).toHaveBeenCalledTimes(1));
+    expect(projects.updateProjectRepositories).toHaveBeenCalledWith("macro-markets", [
+      expect.objectContaining({ fullName: "acme/web", workspacePath: "acme/web-app" }),
+    ]);
+  });
+
+  it("does not replace repositories when they are unchanged", async () => {
+    vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
+    vi.mocked(projectSetup.listGitHubOwners).mockResolvedValue([]);
+    const withRepos = project({
+      repositories: [{ fullName: "acme/web", workspacePath: "acme/web", role: "frontend", selectedBranch: "main" }],
+    });
+    vi.mocked(projects.updateProject).mockResolvedValue(withRepos);
+    vi.mocked(projects.updateProjectSetup).mockResolvedValue(withRepos);
+
+    render(<ProjectConfigEditor project={withRepos} onSaved={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: /workspace/i }));
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(projects.updateProjectSetup).toHaveBeenCalledTimes(1));
+    expect(projects.updateProjectRepositories).not.toHaveBeenCalled();
   });
 
   it("does not save when the name is empty", async () => {

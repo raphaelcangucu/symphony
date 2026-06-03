@@ -120,8 +120,9 @@ defmodule SymphonyElixir.AgentRunner do
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
     agent_kind = issue_agent_kind(issue)
+    workspace_root = Workspace.workspace_root_for(issue)
 
-    with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind) do
+    with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, workspace_root: workspace_root) do
       try do
         do_run_codex_turns(
           session,

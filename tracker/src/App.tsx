@@ -77,6 +77,7 @@ export function App() {
               <Route path="assistant/new-issue" element={<IssueAssistantRoute />} />
               <Route path="assistant/issue/:issueId" element={<IssueAssistantRoute />} />
               <Route path="settings" element={<ProjectSettingsPage />} />
+              <Route path="settings/:tab" element={<ProjectSettingsPage />} />
             </Route>
             <Route path="templates" element={<TemplateListPage />} />
             <Route path="templates/:slug" element={<TemplateEditPage />} />

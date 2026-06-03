@@ -49,7 +49,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
   @spec start_session(Path.t(), keyword()) :: {:ok, session()} | {:error, term()}
   def start_session(workspace, opts \\ []) do
-    with :ok <- validate_workspace_cwd(workspace),
+    with :ok <- validate_workspace_cwd(workspace, opts),
          {:ok, port} <- start_port(workspace) do
       metadata = port_metadata(port)
       expanded_workspace = Path.expand(workspace)
@@ -296,9 +296,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     stop_port(port)
   end
 
-  defp validate_workspace_cwd(workspace) when is_binary(workspace) do
+  defp validate_workspace_cwd(workspace, opts) when is_binary(workspace) and is_list(opts) do
     workspace_path = Path.expand(workspace)
-    workspace_root = Path.expand(Config.workspace_root())
+    workspace_root = opts |> resolve_workspace_root() |> Path.expand()
 
     root_prefix = workspace_root <> "/"
 
@@ -311,6 +311,13 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
       true ->
         :ok
+    end
+  end
+
+  defp resolve_workspace_root(opts) do
+    case Keyword.get(opts, :workspace_root) do
+      root when is_binary(root) and root != "" -> root
+      _ -> Config.workspace_root()
     end
   end
 

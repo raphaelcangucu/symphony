@@ -72,8 +72,29 @@ export function projectEditPath(projectSlug: string): string {
   return `${PROJECTS_PATH}/${requireSlug(projectSlug)}/edit`;
 }
 
-export function projectSettingsPath(projectSlug: string): string {
-  return `/projects/${requireSlug(projectSlug)}/settings`;
+export const PROJECT_SETTINGS_TABS = [
+  "general",
+  "tracker",
+  "states",
+  "agent",
+  "hooks",
+  "workspace",
+  "editor",
+  "dev",
+  "github",
+] as const;
+
+export type ProjectSettingsTab = (typeof PROJECT_SETTINGS_TABS)[number];
+
+export const DEFAULT_PROJECT_SETTINGS_TAB: ProjectSettingsTab = "general";
+
+export function isProjectSettingsTab(value: string | undefined | null): value is ProjectSettingsTab {
+  return typeof value === "string" && (PROJECT_SETTINGS_TABS as readonly string[]).includes(value);
+}
+
+export function projectSettingsPath(projectSlug: string, tab?: ProjectSettingsTab): string {
+  const base = `/projects/${requireSlug(projectSlug)}/settings`;
+  return tab && tab !== DEFAULT_PROJECT_SETTINGS_TAB ? `${base}/${tab}` : base;
 }
 
 export function issuePath(

@@ -11,6 +11,7 @@ import {
   listProjects,
   restoreProject,
   updateProject,
+  updateProjectRepositories,
   updateProjectSetup,
 } from "@/services/projects";
 
@@ -241,6 +242,38 @@ describe("project service", () => {
     const put = vi.spyOn(http, "put");
 
     await expect(updateProjectSetup("   ", { promptTemplate: "Hi" })).rejects.toThrow("projectSlug is required");
+
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("updateProjectRepositories PUTs the compacted repository payload", async () => {
+    const put = vi.spyOn(http, "put").mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 7,
+          name: "Macro Markets",
+          slug: "alpha",
+          repositories: [{ id: 1, github_full_name: "acme/web", workspace_path: "acme/web", role: "frontend" }],
+        },
+      },
+    });
+
+    const project = await updateProjectRepositories(" alpha ", [
+      { fullName: "acme/web", workspacePath: "acme/web", role: "frontend", selectedBranch: "main" },
+    ]);
+
+    expect(put).toHaveBeenCalledWith("/api/tracker/v1/projects/alpha/repositories", {
+      repositories: [
+        { github_full_name: "acme/web", workspace_path: "acme/web", role: "frontend", selected_branch: "main" },
+      ],
+    });
+    expect(project.repositories?.[0]).toMatchObject({ fullName: "acme/web", workspacePath: "acme/web" });
+  });
+
+  it("rejects blank slugs before updating repositories", async () => {
+    const put = vi.spyOn(http, "put");
+
+    await expect(updateProjectRepositories("   ", [])).rejects.toThrow("projectSlug is required");
 
     expect(put).not.toHaveBeenCalled();
   });

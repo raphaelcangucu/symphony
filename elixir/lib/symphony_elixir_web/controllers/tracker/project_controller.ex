@@ -96,6 +96,26 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
 
   def update_setup(conn, _params), do: TrackerErrors.validation(conn, "setup is required")
 
+  @spec update_repositories(Conn.t(), map()) :: Conn.t()
+  def update_repositories(conn, %{"id" => slug, "repositories" => repositories}) when is_list(repositories) do
+    case Context.replace_repositories(slug, repositories) do
+      {:ok, _repositories} ->
+        {:ok, project} = Context.get_project(slug)
+        statuses = Context.list_statuses(slug)
+        repositories = Context.list_repositories(slug)
+        setup = Context.get_project_setup(slug)
+        json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup)})
+
+      {:error, :project_not_found} ->
+        TrackerErrors.render(conn, :project_not_found)
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+    end
+  end
+
+  def update_repositories(conn, _params), do: TrackerErrors.validation(conn, "repositories must be a list")
+
   defp upsert_setup(conn, slug, setup) do
     case Context.upsert_project_setup(slug, setup) do
       {:ok, _setup} ->

@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GitHubProjectPicker } from "@/components/projects/GitHubProjectPicker";
 import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
 import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
+import { defaultWorkspacePath, inferRole, sanitizeWorkspaceSegment } from "@/lib/workspaceRepositories";
 import { projectSettingsPath } from "@/lib/workspaceRoutes";
 import { createWorkspaceProject } from "@/services/projects";
 import { listGitHubOwners, listGitHubRepositories, scanRepositories, suggestWorkspaceSetup } from "@/services/projectSetup";
@@ -644,21 +645,6 @@ function RepositoryIdentityAvatar({ avatarUrl, label }: { avatarUrl?: string | n
       {initialsFor(label)}
     </span>
   );
-}
-
-function defaultWorkspacePath(name: string): string {
-  return sanitizeWorkspaceSegment(name) || "repository";
-}
-
-function sanitizeWorkspaceSegment(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function inferRole(name: string): string {
-  const normalized = name.toLowerCase();
-  if (normalized.includes("front") || normalized.includes("web")) return "frontend";
-  if (normalized.includes("api") || normalized.includes("back")) return "backend";
-  return "service";
 }
 
 function initialsFor(label: string): string {

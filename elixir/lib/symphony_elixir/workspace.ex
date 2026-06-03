@@ -71,6 +71,21 @@ defmodule SymphonyElixir.Workspace do
     workspace_path_for_layout(safe_identifier(ctx.issue_identifier), layout_for(ctx))
   end
 
+  @doc """
+  Resolves the workspace root an issue's tree lives under.
+
+  Mirrors the per-project resolution used by `create_for_issue/1`/`path_for_issue/1`
+  so callers (e.g. the coding-agent cwd guard) validate against the same root the
+  tree was actually created under, instead of the process-level global root.
+  """
+  @spec workspace_root_for(map() | String.t() | nil) :: Path.t()
+  def workspace_root_for(issue_or_identifier) do
+    issue_or_identifier
+    |> issue_context()
+    |> layout_for()
+    |> Map.fetch!(:root)
+  end
+
   @spec remove(Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
   def remove(workspace) do
     case File.exists?(workspace) do

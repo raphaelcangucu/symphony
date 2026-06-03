@@ -62,9 +62,12 @@ defmodule SymphonyElixirWeb.Tracker.RemoteDiscoveryController do
   defp linear_client, do: Application.get_env(:symphony_elixir, :linear_client_module, LinearClient)
 
   defp github_error(:missing_github_token), do: :missing_credentials
+  defp github_error({:rate_limited, _info} = reason), do: reason
   defp github_error({:github_api_status, 401}), do: :remote_unauthorized
+  defp github_error({:github_api_status, 403}), do: :remote_forbidden
   defp github_error(_), do: :remote_unavailable
 
+  defp linear_error({:rate_limited, _info} = reason), do: reason
   defp linear_error({:linear_api_status, 401}), do: :remote_unauthorized
   defp linear_error(_), do: :remote_unavailable
 end
