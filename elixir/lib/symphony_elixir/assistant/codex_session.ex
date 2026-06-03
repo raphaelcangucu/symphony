@@ -463,6 +463,13 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call(state.tool_calls, tool_call)} end)
         maybe_call(opts, :on_tool_call_completed, tool_call)
 
+      Map.get(message, :event) == :user_input_required ->
+        maybe_call(opts, :on_user_input_required, %{
+          request_id: Map.get(message, :request_id),
+          item_id: Map.get(message, :item_id),
+          questions: Map.get(message, :questions) || []
+        })
+
       true ->
         :ok
     end
