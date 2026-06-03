@@ -4,7 +4,7 @@ defmodule SymphonyElixir.Workspace do
   """
 
   require Logger
-  alias SymphonyElixir.Config
+  alias SymphonyElixir.{Config, WorkspaceSkills}
 
   @excluded_entries MapSet.new([".elixir_ls", "tmp"])
 
@@ -30,7 +30,8 @@ defmodule SymphonyElixir.Workspace do
     try do
       with :ok <- validate_workspace_path(workspace),
            {:ok, created?} <- ensure_workspace(workspace),
-           :ok <- maybe_run_after_create_hook(workspace, issue_context, created?) do
+           :ok <- maybe_run_after_create_hook(workspace, issue_context, created?),
+           :ok <- WorkspaceSkills.prepare(workspace) do
         {:ok, workspace}
       end
     rescue

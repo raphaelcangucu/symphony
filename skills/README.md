@@ -25,11 +25,26 @@ duplication and every skill is shared across agents:
   `brainstorming` + `writing-plans` into the issue authoring assistant in
   complex mode. The `brainstorming`/`writing-plans` `SKILL.md` files are
   intentionally adapted for Symphony injection and may differ slightly from
-  upstream. Because these live one level deeper, CLI auto-discovery does not
-  surface them — they are consumed through Symphony injection.
+  upstream. Because these live one level deeper, repo-local CLI auto-discovery
+  does not surface them directly from this canonical tree.
 - `commit/`, `debug/`, `github-projects/`, `land/`, `linear/`, `pull/`,
   `push/` — operational workflow skills (git, PRs, tracker).
 - `release/` — release workflow skill.
+
+## Workspace discovery
+
+When Symphony creates or opens an issue workspace, it prepares a generated flat
+skill mirror at `.symphony/skills/`. That mirror links both top-level project
+skills and vendored `superpowers/<name>` skills as `skills/<name>/SKILL.md`,
+which is the layout Codex and Claude Code expect for native discovery.
+
+Symphony then links `.codex/skills` and `.claude/skills` to that generated
+mirror in the workspace root. For browser VS Code multi-root workspaces, it
+also adds those links inside direct editor roots such as `front/`, `repo/`,
+`back/`, and `docs/` when they exist.
+
+These generated links are workspace-local runtime artifacts. They should not be
+edited by hand; update the canonical files in this `skills/` directory instead.
 
 ## Notes
 

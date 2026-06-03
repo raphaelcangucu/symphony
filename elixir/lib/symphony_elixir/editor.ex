@@ -10,8 +10,11 @@ defmodule SymphonyElixir.Editor do
   alias SymphonyElixir.Config
   alias SymphonyElixir.Editor.Server
   alias SymphonyElixir.Workspace
+  alias SymphonyElixir.WorkspaceSkills
 
-  @type reason :: :disabled | :starting | :unavailable | :workspace_missing
+  require Logger
+
+  @type reason :: :disabled | :starting | :unavailable | :workspace_missing | :workspace_skills_unavailable
 
   @spec editor_target(String.t(), String.t()) :: {:ok, String.t()} | {:error, reason()}
   def editor_target(_project_slug, issue_identifier) when is_binary(issue_identifier) do
@@ -37,10 +40,16 @@ defmodule SymphonyElixir.Editor do
   defp ensure_workspace(issue_identifier) do
     workspace_path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
 
-    if File.dir?(workspace_path) do
-      {:ok, resolve_editor_folder(workspace_path)}
-    else
-      {:error, :workspace_missing}
+    cond do
+      not File.dir?(workspace_path) ->
+        {:error, :workspace_missing}
+
+      WorkspaceSkills.prepare(workspace_path) == :ok ->
+        {:ok, resolve_editor_folder(workspace_path)}
+
+      true ->
+        Logger.warning("Editor workspace skills preparation failed workspace=#{workspace_path}")
+        {:error, :workspace_skills_unavailable}
     end
   end
 
@@ -57,7 +66,13 @@ defmodule SymphonyElixir.Editor do
       end)
       |> Enum.map(fn name -> {name, Path.join(workspace_path, name)} end)
 
-    case dev_roots do
+    editor_roots =
+      case docs_root(workspace_path, dev_roots) do
+        nil -> dev_roots
+        docs -> dev_roots ++ [docs]
+      end
+
+    case editor_roots do
       [{_name, single_path}] ->
         single_path
 
@@ -67,6 +82,14 @@ defmodule SymphonyElixir.Editor do
       [] ->
         workspace_path
     end
+  end
+
+  defp docs_root(_workspace_path, []), do: nil
+
+  defp docs_root(workspace_path, _dev_roots) do
+    docs = Path.join(workspace_path, "docs")
+
+    if File.dir?(docs), do: {"docs", docs}
   end
 
   defp dev_root?(path) do

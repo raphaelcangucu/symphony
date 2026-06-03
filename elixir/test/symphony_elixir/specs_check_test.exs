@@ -30,6 +30,22 @@ defmodule SymphonyElixir.SpecsCheckTest do
     assert SpecsCheck.missing_public_specs([dir]) == []
   end
 
+  test "accepts adjacent @spec before public function head with defaults" do
+    dir = create_tmp_dir()
+
+    write_module!(dir, "sample.ex", """
+    defmodule Sample do
+      @spec execute(String.t(), keyword()) :: :ok | :error
+      def execute(value, opts \\\\ [])
+
+      def execute(value, opts) when is_binary(value) and is_list(opts), do: :ok
+      def execute(_value, _opts), do: :error
+    end
+    """)
+
+    assert SpecsCheck.missing_public_specs([dir]) == []
+  end
+
   test "allows defp without @spec" do
     dir = create_tmp_dir()
 

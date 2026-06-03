@@ -6,11 +6,16 @@ defmodule SymphonyElixir.WorkspaceTest do
   setup do
     migrate_repo()
     clean_repo()
+    previous_skills_root = Application.get_env(:symphony_elixir, :skills_root)
 
     workspace_root =
       Path.join(System.tmp_dir!(), "symphony-workspace-nested-#{System.unique_integer([:positive])}")
 
     File.mkdir_p!(workspace_root)
+    skills_root = Path.join(workspace_root, "_skills")
+    write_skill!(Path.join(skills_root, "superpowers"), "brainstorming")
+    Application.put_env(:symphony_elixir, :skills_root, skills_root)
+
     workflow_file = Path.join(workspace_root, "WORKFLOW.md")
 
     SymphonyElixir.TestSupport.write_workflow_file!(workflow_file,
@@ -23,10 +28,11 @@ defmodule SymphonyElixir.WorkspaceTest do
 
     on_exit(fn ->
       Workflow.clear_workflow_file_path()
+      restore_skills_root(previous_skills_root)
       File.rm_rf!(workspace_root)
     end)
 
-    {:ok, workspace_root: workspace_root}
+    {:ok, workspace_root: workspace_root, workflow_file: workflow_file}
   end
 
   test "create_for_issue/1 nests the workspace under the project slug", %{workspace_root: root} do
@@ -67,6 +73,30 @@ defmodule SymphonyElixir.WorkspaceTest do
     refute File.exists?(nested)
   end
 
+  test "create_for_issue/1 prepares agent skills after running the after_create hook", %{
+    workspace_root: root,
+    workflow_file: workflow_file
+  } do
+    SymphonyElixir.TestSupport.write_workflow_file!(workflow_file,
+      tracker_kind: "local",
+      workspace_root: root,
+      hook_after_create: "mkdir -p front/.git/info"
+    )
+
+    issue = %Issue{project_slug: "alpha", identifier: "A-2"}
+    workspace = Path.join([root, "alpha", "A-2"])
+    front = Path.join(workspace, "front")
+
+    assert {:ok, ^workspace} = Workspace.create_for_issue(issue)
+    assert File.dir?(front)
+    assert File.regular?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
+    assert File.regular?(Path.join([front, ".claude", "skills", "brainstorming", "SKILL.md"]))
+
+    exclude = File.read!(Path.join([front, ".git", "info", "exclude"]))
+    assert exclude =~ "/.codex/"
+    assert exclude =~ "/.claude/"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
@@ -75,4 +105,13 @@ defmodule SymphonyElixir.WorkspaceTest do
   defp clean_repo do
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
   end
+
+  defp write_skill!(root, name) do
+    dir = Path.join(root, name)
+    File.mkdir_p!(dir)
+    File.write!(Path.join(dir, "SKILL.md"), "# #{name}\n")
+  end
+
+  defp restore_skills_root(nil), do: Application.delete_env(:symphony_elixir, :skills_root)
+  defp restore_skills_root(value), do: Application.put_env(:symphony_elixir, :skills_root, value)
 end

@@ -104,6 +104,94 @@ defmodule SymphonyElixir.EditorTest do
                %{"name" => "front", "path" => front}
              ]
     end
+
+    test "includes docs as an additional root when a multi-root workspace has docs" do
+      load_workflow_with_front_matter(editor_front_matter())
+      put_status_fun(fn -> :ready end)
+
+      workspace = SymphonyElixir.Workspace.path_for_issue("MAC-MULTI-DOCS")
+      front = Path.join(workspace, "front")
+      back = Path.join(workspace, "back")
+      docs = Path.join(workspace, "docs")
+      File.mkdir_p!(front)
+      File.mkdir_p!(back)
+      File.mkdir_p!(docs)
+      File.write!(Path.join(front, "package.json"), "{}")
+      File.write!(Path.join(back, "composer.json"), "{}")
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      workspace_file = Path.join(workspace, ".symphony/editor.code-workspace")
+
+      expected_url =
+        SymphonyElixir.Config.editor_base_url() <>
+          "/?workspace=" <> URI.encode_www_form(workspace_file)
+
+      assert Editor.editor_target("project", "MAC-MULTI-DOCS") == {:ok, expected_url}
+      assert File.regular?(workspace_file)
+
+      {:ok, contents} = File.read(workspace_file)
+      decoded = Jason.decode!(contents)
+
+      assert Enum.sort_by(decoded["folders"], & &1["name"]) == [
+               %{"name" => "back", "path" => back},
+               %{"name" => "docs", "path" => docs},
+               %{"name" => "front", "path" => front}
+             ]
+    end
+
+    test "opens a workspace file when a single repo subdirectory has workspace docs" do
+      load_workflow_with_front_matter(editor_front_matter())
+      put_status_fun(fn -> :ready end)
+
+      workspace = SymphonyElixir.Workspace.path_for_issue("MAC-REPO-DOCS")
+      repo = Path.join(workspace, "repo")
+      docs = Path.join(workspace, "docs")
+      File.mkdir_p!(repo)
+      File.mkdir_p!(docs)
+      File.write!(Path.join(repo, "package.json"), "{}")
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      workspace_file = Path.join(workspace, ".symphony/editor.code-workspace")
+
+      expected_url =
+        SymphonyElixir.Config.editor_base_url() <>
+          "/?workspace=" <> URI.encode_www_form(workspace_file)
+
+      assert Editor.editor_target("project", "MAC-REPO-DOCS") == {:ok, expected_url}
+      assert File.regular?(workspace_file)
+
+      {:ok, contents} = File.read(workspace_file)
+      decoded = Jason.decode!(contents)
+
+      assert decoded["folders"] == [
+               %{"name" => "repo", "path" => repo},
+               %{"name" => "docs", "path" => docs}
+             ]
+    end
+
+    test "prepares workspace skills before returning the editor URL" do
+      previous_skills_root = Application.get_env(:symphony_elixir, :skills_root)
+      load_workflow_with_front_matter(editor_front_matter())
+      put_status_fun(fn -> :ready end)
+
+      path = SymphonyElixir.Workspace.path_for_issue("MAC-SKILLS")
+      skills_root = Path.join(path, "_skills")
+      File.mkdir_p!(path)
+      write_skill!(Path.join(skills_root, "superpowers"), "brainstorming")
+      Application.put_env(:symphony_elixir, :skills_root, skills_root)
+
+      on_exit(fn ->
+        restore_skills_root(previous_skills_root)
+        File.rm_rf(path)
+      end)
+
+      expected_url =
+        SymphonyElixir.Config.editor_base_url() <> "/?folder=" <> URI.encode_www_form(path)
+
+      assert Editor.editor_target("project", "MAC-SKILLS") == {:ok, expected_url}
+      assert File.regular?(Path.join([path, ".codex", "skills", "brainstorming", "SKILL.md"]))
+      assert File.regular?(Path.join([path, ".claude", "skills", "brainstorming", "SKILL.md"]))
+    end
   end
 
   defp editor_front_matter do
@@ -122,6 +210,15 @@ defmodule SymphonyElixir.EditorTest do
 
   defp restore_status_fun(nil), do: Application.delete_env(:symphony_elixir, :editor_status_fun)
   defp restore_status_fun(fun), do: Application.put_env(:symphony_elixir, :editor_status_fun, fun)
+
+  defp write_skill!(root, name) do
+    dir = Path.join(root, name)
+    File.mkdir_p!(dir)
+    File.write!(Path.join(dir, "SKILL.md"), "# #{name}\n")
+  end
+
+  defp restore_skills_root(nil), do: Application.delete_env(:symphony_elixir, :skills_root)
+  defp restore_skills_root(value), do: Application.put_env(:symphony_elixir, :skills_root, value)
 
   defp load_workflow_with_front_matter(front_matter) do
     content = "---\n" <> front_matter <> "---\n"

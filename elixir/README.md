@@ -619,8 +619,18 @@ editor:
 - When enabled, Symphony supervises a single `code-server` process — spawned on startup
   and bound to `host:port`.
 - In the tracker `IssueDrawer`, an **Open in VS Code** button (and the `.` keyboard
-  shortcut) opens the task's workspace via `<base_url>/?folder=<workspace path>` in a new
-  browser tab (`base_url` defaults to `http://<host>:<port>`).
+  shortcut) opens the task's workspace in a new browser tab (`base_url` defaults to
+  `http://<host>:<port>`). Workspaces without repo subdirectories use
+  `<base_url>/?folder=<workspace path>`; workspaces with multiple editor roots use a
+  generated `.symphony/editor.code-workspace` and `<base_url>/?workspace=<workspace file>`.
+- When task hooks clone buildable repositories under `front/`, `repo/`, or `back/`,
+  Symphony opens those roots directly. If the task workspace also has a `docs/`
+  directory, it is included as an additional VS Code root so specs, plans, and handoff
+  files remain visible beside the repos.
+- Before opening or creating a workspace, Symphony prepares discoverable agent skills for
+  Codex and Claude Code by linking `.codex/skills` and `.claude/skills` to a generated
+  flat mirror under `.symphony/skills`. The same links are added inside direct editor
+  roots such as `front/`, `back/`, and `docs/` when they exist.
 - The button is disabled while the editor is starting or unavailable, and when the
   workspace directory does not exist yet (it is not auto-created — run the agent or open
   the Terminal tab first).

@@ -245,7 +245,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     end
   end
 
-  test "workspace creates an empty directory when no bootstrap hook is configured" do
+  test "workspace creates a directory with generated agent skill links when no bootstrap hook is configured" do
     workspace_root =
       Path.join(
         System.tmp_dir!(),
@@ -259,7 +259,8 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
       assert {:ok, ^workspace} = Workspace.create_for_issue("MT-608")
       assert File.dir?(workspace)
-      assert {:ok, []} = File.ls(workspace)
+      assert {:ok, entries} = File.ls(workspace)
+      assert Enum.sort(entries) == [".claude", ".codex", ".symphony"]
     after
       File.rm_rf(workspace_root)
     end
