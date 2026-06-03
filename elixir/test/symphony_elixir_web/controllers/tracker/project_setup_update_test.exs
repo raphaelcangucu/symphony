@@ -35,6 +35,26 @@ defmodule SymphonyElixirWeb.Tracker.ProjectSetupUpdateTest do
     assert %{"data" => %{"setup" => %{"prompt_template" => "Hello"}}} = json_response(conn, 200)
   end
 
+  test "PUT /projects/:id/setup rejects an invalid workflow_config with 422 and does not persist" do
+    {:ok, _project} = Context.ensure_project(%{name: "alpha", slug: "alpha", tracker_kind: "local"})
+
+    conn =
+      put(authorized_conn(), "/api/tracker/v1/projects/alpha/setup", %{
+        "setup" => %{
+          "prompt_template" => "Hello",
+          "workflow_config" => "not-a-map"
+        }
+      })
+
+    body = json_response(conn, 422)
+    assert body["error"]["code"] == "validation_failed"
+    assert body["error"]["message"] =~ "invalid workflow_config"
+
+    setup = Context.get_project_setup("alpha")
+    assert is_nil(setup) or setup.workflow_config == %{}
+    refute setup && setup.prompt_template == "Hello"
+  end
+
   test "PUT /projects/:id/setup returns 404 for unknown project" do
     conn =
       put(authorized_conn(), "/api/tracker/v1/projects/nope/setup", %{

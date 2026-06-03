@@ -4,6 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
+  alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
@@ -85,6 +86,15 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
 
   @spec update_setup(Conn.t(), map()) :: Conn.t()
   def update_setup(conn, %{"id" => slug, "setup" => setup}) when is_map(setup) do
+    case validate_workflow_config(setup) do
+      :ok -> upsert_setup(conn, slug, setup)
+      {:error, message} -> TrackerErrors.validation(conn, message)
+    end
+  end
+
+  def update_setup(conn, _params), do: TrackerErrors.validation(conn, "setup is required")
+
+  defp upsert_setup(conn, slug, setup) do
     case Context.upsert_project_setup(slug, setup) do
       {:ok, _setup} ->
         {:ok, project} = Context.get_project(slug)
@@ -101,7 +111,23 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
     end
   end
 
-  def update_setup(conn, _params), do: TrackerErrors.validation(conn, "setup is required")
+  # SPEC: validate workflow_config against the same option schema on save (not
+  # just on resolve) so a malformed config is rejected at the API boundary
+  # instead of becoming a latent failure when the orchestrator resolves it.
+  defp validate_workflow_config(setup) do
+    case Map.get(setup, "workflow_config") do
+      nil -> :ok
+      config when config == %{} -> :ok
+      config -> validate_workflow_config_value(config)
+    end
+  end
+
+  defp validate_workflow_config_value(config) do
+    _ = Config.validate_front_matter(config)
+    :ok
+  rescue
+    error -> {:error, "invalid workflow_config: #{Exception.message(error)}"}
+  end
 
   @spec archive(Conn.t(), map()) :: Conn.t()
   def archive(conn, %{"id" => project_slug}) do
