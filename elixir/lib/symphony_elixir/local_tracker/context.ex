@@ -159,6 +159,26 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec upsert_project_setup(String.t(), map()) ::
+          {:ok, ProjectSetup.t()} | {:error, :project_not_found | Ecto.Changeset.t()}
+  def upsert_project_setup(project_slug, attrs) when is_binary(project_slug) and is_map(attrs) do
+    with {:ok, project} <- fetch_project(project_slug) do
+      existing = Repo.get_by(ProjectSetup, project_id: project.id) || %ProjectSetup{}
+
+      existing
+      |> ProjectSetup.changeset(upsert_setup_attrs(project, normalize_setup_attrs(attrs)))
+      |> Repo.insert_or_update()
+      |> case do
+        {:ok, setup} ->
+          Broadcaster.project_changed("project_updated", project)
+          {:ok, setup}
+
+        {:error, changeset} ->
+          {:error, changeset}
+      end
+    end
+  end
+
   @spec count_issues_by_project_ids([integer()]) :: %{integer() => non_neg_integer()}
   def count_issues_by_project_ids(project_ids) when is_list(project_ids) do
     case Enum.reject(project_ids, &is_nil/1) do
@@ -577,6 +597,30 @@ defmodule SymphonyElixir.LocalTracker.Context do
       scan_summary: attr(attrs, :scan_summary, %{})
     }
   end
+
+  @setup_update_fields [
+    :workflow_config,
+    :prompt_template,
+    :after_create_hook,
+    :validation_commands,
+    :scan_summary
+  ]
+
+  defp normalize_setup_attrs(attrs) do
+    Map.new(attrs, fn {key, value} -> {to_string(key), value} end)
+  end
+
+  defp upsert_setup_attrs(%Project{} = project, attrs) do
+    Enum.reduce(@setup_update_fields, %{project_id: project.id}, fn field, acc ->
+      case Map.fetch(attrs, Atom.to_string(field)) do
+        {:ok, value} -> Map.put(acc, field, setup_field_value(field, value))
+        :error -> acc
+      end
+    end)
+  end
+
+  defp setup_field_value(:validation_commands, value), do: validation_commands_attrs(value)
+  defp setup_field_value(_field, value), do: value
 
   defp validation_commands_attrs(commands) when is_list(commands), do: %{"commands" => commands}
   defp validation_commands_attrs(%{} = commands), do: commands
