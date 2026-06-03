@@ -183,6 +183,73 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_reply(ref, :error, %{reason: "ActiveTurnNotSteerable"})
   end
 
+  test "submit_user_input forwards normalized answers to the running turn and persists the Q&A" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-q")
+
+      Keyword.fetch!(opts, :on_user_input_required).(%{
+        request_id: 112,
+        item_id: "call-q",
+        questions: [
+          %{
+            "id" => "q1",
+            "header" => "Pick one",
+            "question" => "How should I proceed?",
+            "isOther" => false,
+            "isSecret" => false,
+            "options" => [%{"label" => "Use default", "description" => "default"}]
+          }
+        ]
+      })
+
+      send(test_pid, {:runner, self()})
+
+      receive do
+        {:codex_user_input, request_id, answers, reply_to} ->
+          send(test_pid, {:answered, request_id, answers})
+          send(reply_to, {:user_input_ok, request_id})
+      after
+        2_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "done", turn_id: "turn-q", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-1")
+
+    assert_push("history_loaded", %{})
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{"view" => "board"}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner, _pid}, 2_000
+
+    assert_push("user_input_required", %{request_id: 112, questions: [%{"id" => "q1"}]})
+
+    sref = push(socket, "submit_user_input", %{"request_id" => 112, "answers" => %{"q1" => "Use default"}})
+    assert_reply(sref, :ok, %{})
+
+    assert_receive {:answered, 112, %{"q1" => %{"answers" => ["Use default"]}}}, 2_000
+    assert_push("message_created", %{message: %{metadata: %{"kind" => "user_questions"}}})
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
+  end
+
+  test "submit_user_input replies error when no turn is running" do
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert_push("history_loaded", %{messages: []})
+
+    ref = push(socket, "submit_user_input", %{"request_id" => 1, "answers" => %{"q1" => "A"}})
+    assert_reply(ref, :error, %{reason: "ActiveTurnNotAwaitingInput"})
+  end
+
   test "project draft issue turn promotes the chat in place to the issue thread without leaving an orphan" do
     Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, _opts ->
       {:ok,

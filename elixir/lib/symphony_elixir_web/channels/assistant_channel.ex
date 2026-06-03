@@ -172,6 +172,24 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("steer_turn", _payload, socket),
     do: {:reply, {:error, %{reason: "message is required"}}, socket}
 
+  def handle_in("submit_user_input", %{"request_id" => request_id, "answers" => answers}, socket)
+      when is_map(answers) do
+    if socket.assigns[:turn_status] != :running or not is_pid(socket.assigns[:turn_pid]) do
+      {:reply, {:error, %{reason: "ActiveTurnNotAwaitingInput"}}, socket}
+    else
+      pending = socket.assigns[:pending_user_inputs] || %{}
+      {questions, rest} = Map.pop(pending, request_id, [])
+
+      maybe_persist_user_questions(socket, questions, answers)
+      send(socket.assigns.turn_pid, {:codex_user_input, request_id, normalize_user_answers(answers), self()})
+
+      {:reply, :ok, assign(socket, :pending_user_inputs, rest)}
+    end
+  end
+
+  def handle_in("submit_user_input", _payload, socket),
+    do: {:reply, {:error, %{reason: "answers are required"}}, socket}
+
   def handle_in("btw", %{"message" => message}, socket) when is_binary(message) do
     case String.trim(message) do
       "" ->
@@ -229,6 +247,14 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:noreply, reset_turn(socket)}
   end
 
+  def handle_info({:assistant_user_input_required, %{request_id: request_id, questions: questions}}, socket) do
+    pending = Map.put(socket.assigns[:pending_user_inputs] || %{}, request_id, questions)
+    push(socket, "user_input_required", %{request_id: request_id, questions: questions})
+    {:noreply, assign(socket, :pending_user_inputs, pending)}
+  end
+
+  def handle_info({:user_input_ok, _request_id}, socket), do: {:noreply, socket}
+
   def handle_info({:steer_ok, _result}, socket), do: {:noreply, socket}
 
   def handle_info({:steer_error, _error}, socket) do
@@ -279,12 +305,57 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp maybe_persist_steer(_socket, _text), do: :ok
 
+  defp normalize_user_answers(answers) when is_map(answers) do
+    Map.new(answers, fn {question_id, value} -> {question_id, %{"answers" => [to_string(value)]}} end)
+  end
+
+  defp maybe_persist_user_questions(socket, questions, answers) do
+    case resolve_user_questions_thread(socket) do
+      %{id: id} = thread when is_integer(id) ->
+        attrs = %{
+          role: "user",
+          content: user_questions_summary(answers),
+          metadata: %{"kind" => "user_questions", "questions" => questions, "answers" => answers}
+        }
+
+        case History.append_message(thread, attrs) do
+          {:ok, message} ->
+            push(socket, "message_created", %{message: History.message_payload(message)})
+            :ok
+
+          _ ->
+            :ok
+        end
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp resolve_user_questions_thread(%Socket{assigns: %{thread: %{id: id} = thread}}) when is_integer(id),
+    do: thread
+
+  defp resolve_user_questions_thread(%Socket{assigns: %{project_slug: slug}}) when is_binary(slug) do
+    case History.ensure_thread(slug, %{}) do
+      {:ok, thread} -> thread
+      _ -> nil
+    end
+  end
+
+  defp resolve_user_questions_thread(_socket), do: nil
+
+  defp user_questions_summary(answers) when is_map(answers) do
+    count = map_size(answers)
+    "Answered #{count} clarifying question" <> if(count == 1, do: ".", else: "s.")
+  end
+
   defp reset_turn(socket) do
     socket
     |> assign(:turn_status, :idle)
     |> assign(:turn_pid, nil)
     |> assign(:turn_ref, nil)
     |> assign(:codex_turn_id, nil)
+    |> assign(:pending_user_inputs, %{})
   end
 
   defp do_send_message(message, payload, socket) do
@@ -326,6 +397,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
             push(socket, "assistant_document_changed", %{thread_id: thread_id})
           end)
           |> Keyword.put(:on_turn_started, fn turn_id -> send(channel_pid, {:assistant_turn_started, turn_id}) end)
+          |> Keyword.put(:interactive_user_input, true)
+          |> Keyword.put(:on_user_input_required, fn request ->
+            send(channel_pid, {:assistant_user_input_required, request})
+          end)
 
         {:ok, pid} =
           Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
