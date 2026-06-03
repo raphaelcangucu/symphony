@@ -4,9 +4,16 @@ defmodule SymphonyElixir.PromptBuilderTest do
   alias SymphonyElixir.LocalTracker.{Context, ProjectSetup}
   alias SymphonyElixir.Repo
 
-  test "appends superpowers artifacts when present in the workspace" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
+  @default_prompt "Ticket {{ issue.identifier }}"
 
+  setup do
+    migrate_repo()
+    clean_repo()
+    seed_project_with_setup("mac", @default_prompt)
+    :ok
+  end
+
+  test "appends superpowers artifacts when present in the workspace" do
     root = temporary_workspace_root!("pb-artifacts")
     File.mkdir_p!(Path.join([root, "docs", "superpowers", "specs"]))
     File.write!(Path.join([root, "docs", "superpowers", "specs", "x.md"]), "# Spec X")
@@ -14,6 +21,7 @@ defmodule SymphonyElixir.PromptBuilderTest do
 
     issue = %Issue{
       identifier: "MAC-1",
+      project_slug: "mac",
       title: "T",
       description: "d",
       state: "In Progress"
@@ -31,12 +39,11 @@ defmodule SymphonyElixir.PromptBuilderTest do
   end
 
   test "appends no superpowers artifacts without a workspace or docs directory" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
-
     root = temporary_workspace_root!("pb-no-artifacts")
 
     issue = %Issue{
       identifier: "MAC-2",
+      project_slug: "mac",
       title: "T",
       description: "d",
       state: "In Progress"
@@ -47,10 +54,9 @@ defmodule SymphonyElixir.PromptBuilderTest do
   end
 
   test "appends recent discussion comments to the prompt" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
-
     issue = %Issue{
       identifier: "510",
+      project_slug: "mac",
       title: "T",
       description: "d",
       state: "Rework",
@@ -72,8 +78,6 @@ defmodule SymphonyElixir.PromptBuilderTest do
   end
 
   test "appends superpowers artifacts in deterministic order and skips oversized files" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
-
     root = temporary_workspace_root!("pb-ordered-artifacts")
     File.mkdir_p!(Path.join([root, "docs", "superpowers", "specs"]))
     File.mkdir_p!(Path.join([root, "docs", "superpowers", "plans"]))
@@ -87,6 +91,7 @@ defmodule SymphonyElixir.PromptBuilderTest do
 
     issue = %Issue{
       identifier: "MAC-3",
+      project_slug: "mac",
       title: "T",
       description: "d",
       state: "In Progress"
@@ -116,8 +121,6 @@ defmodule SymphonyElixir.PromptBuilderTest do
   end
 
   test "limits injected artifacts by deterministic aggregate count" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
-
     root = temporary_workspace_root!("pb-count-budget")
     File.mkdir_p!(Path.join([root, "docs", "superpowers", "specs"]))
 
@@ -128,6 +131,7 @@ defmodule SymphonyElixir.PromptBuilderTest do
 
     issue = %Issue{
       identifier: "MAC-4",
+      project_slug: "mac",
       title: "T",
       description: "d",
       state: "In Progress"
@@ -144,8 +148,6 @@ defmodule SymphonyElixir.PromptBuilderTest do
   end
 
   test "limits injected artifacts by aggregate byte budget" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
-
     root = temporary_workspace_root!("pb-byte-budget")
     File.mkdir_p!(Path.join([root, "docs", "superpowers", "specs"]))
 
@@ -155,6 +157,7 @@ defmodule SymphonyElixir.PromptBuilderTest do
 
     issue = %Issue{
       identifier: "MAC-5",
+      project_slug: "mac",
       title: "T",
       description: "d",
       state: "In Progress"
@@ -170,8 +173,6 @@ defmodule SymphonyElixir.PromptBuilderTest do
   end
 
   test "builds the prompt from the issue's project template" do
-    migrate_repo()
-    clean_repo()
     seed_project_with_setup("alpha", "ALPHA {{ issue.identifier }}")
 
     issue = %Issue{identifier: "A-1", project_slug: "alpha", state: "Todo"}
@@ -181,10 +182,33 @@ defmodule SymphonyElixir.PromptBuilderTest do
     assert prompt =~ "ALPHA A-1"
   end
 
-  test "falls back to the global workflow prompt when project_slug is nil" do
+  test "raises a tagged error when the issue has no project_slug (no global fallback)" do
     issue = %Issue{identifier: "G-1", project_slug: nil, state: "Todo"}
 
-    assert is_binary(PromptBuilder.build_prompt(issue, []))
+    assert_raise RuntimeError, ~r/prompt_unresolved/, fn ->
+      PromptBuilder.build_prompt(issue, [])
+    end
+  end
+
+  test "raises a tagged error when the issue's project has no prompt (no global fallback)" do
+    {:ok, project} = Context.ensure_project(%{name: "noprompt", slug: "noprompt", tracker_kind: "local"})
+
+    {:ok, _setup} =
+      %ProjectSetup{}
+      |> ProjectSetup.changeset(%{
+        project_id: project.id,
+        workflow_config: %{},
+        prompt_template: nil,
+        validation_commands: %{"commands" => []},
+        scan_summary: %{}
+      })
+      |> Repo.insert()
+
+    issue = %Issue{identifier: "NP-1", project_slug: "noprompt", state: "Todo"}
+
+    assert_raise RuntimeError, ~r/prompt_unresolved.*noprompt/, fn ->
+      PromptBuilder.build_prompt(issue, [])
+    end
   end
 
   defp seed_project_with_setup(slug, prompt) do

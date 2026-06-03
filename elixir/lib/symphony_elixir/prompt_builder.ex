@@ -3,7 +3,7 @@ defmodule SymphonyElixir.PromptBuilder do
   Builds agent prompts from issue data.
   """
 
-  alias SymphonyElixir.{Config, ProjectConfig, Repo, Workflow}
+  alias SymphonyElixir.{ProjectConfig, Repo}
   alias SymphonyElixir.LocalTracker.Context
 
   @render_opts [strict_filters: true]
@@ -36,28 +36,27 @@ defmodule SymphonyElixir.PromptBuilder do
     rendered <> discussion_section(issue) <> artifacts_section(Keyword.get(opts, :workspace))
   end
 
-  defp resolve_template(%SymphonyElixir.Issue{project_slug: slug}) when is_binary(slug) do
+  defp resolve_template(%SymphonyElixir.Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
     case Context.get_project(slug) do
       {:ok, project} ->
         project
         |> Repo.preload(:setup)
-        |> ProjectConfig.resolve()
-        |> Map.get(:prompt_template)
-        |> default_prompt()
+        |> ProjectConfig.resolve_runnable()
+        |> case do
+          {:ok, %ProjectConfig{prompt_template: prompt}} when is_binary(prompt) ->
+            prompt
 
-      {:error, _reason} ->
-        global_template()
+          {:skip, reason} ->
+            raise RuntimeError, "prompt_unresolved: project=#{slug} reason=#{reason}"
+        end
+
+      {:error, reason} ->
+        raise RuntimeError, "prompt_unresolved: project=#{slug} reason=#{inspect(reason)}"
     end
   end
 
-  defp resolve_template(_issue), do: global_template()
-
-  defp global_template, do: Workflow.current() |> prompt_template!()
-
-  defp prompt_template!({:ok, %{prompt_template: prompt}}), do: default_prompt(prompt)
-
-  defp prompt_template!({:error, reason}) do
-    raise RuntimeError, "workflow_unavailable: #{inspect(reason)}"
+  defp resolve_template(%SymphonyElixir.Issue{} = issue) do
+    raise RuntimeError, "prompt_unresolved: issue=#{inspect(issue.id)} reason=no project_slug"
   end
 
   defp parse_template!(prompt) when is_binary(prompt) do
@@ -96,8 +95,6 @@ defmodule SymphonyElixir.PromptBuilder do
       end
     end
   end
-
-  defp artifacts_section(nil), do: ""
 
   defp discussion_section(%SymphonyElixir.Issue{comments: comments}) when is_list(comments) and comments != [] do
     body =
@@ -277,13 +274,5 @@ defmodule SymphonyElixir.PromptBuilder do
 
   defp append_artifact_budget_marker(artifacts, skipped_count) do
     artifacts ++ ["_Skipped #{skipped_count} additional authoring artifact(s) due to prompt size limits._"]
-  end
-
-  defp default_prompt(prompt) when is_binary(prompt) do
-    if String.trim(prompt) == "" do
-      Config.workflow_prompt()
-    else
-      prompt
-    end
   end
 end

@@ -4,7 +4,26 @@ defmodule SymphonyElixir.AgentRunnerTest do
   setup do
     migrate_repo()
     clean_repo()
+    seed_project_with_prompt("mac", "Ticket {{ issue.identifier }}")
     :ok
+  end
+
+  defp seed_project_with_prompt(slug, prompt, workflow_config \\ %{}) do
+    {:ok, project} =
+      SymphonyElixir.LocalTracker.Context.ensure_project(%{name: slug, slug: slug, tracker_kind: "local"})
+
+    {:ok, _setup} =
+      %SymphonyElixir.LocalTracker.ProjectSetup{}
+      |> SymphonyElixir.LocalTracker.ProjectSetup.changeset(%{
+        project_id: project.id,
+        workflow_config: workflow_config,
+        prompt_template: prompt,
+        validation_commands: %{"commands" => []},
+        scan_summary: %{}
+      })
+      |> SymphonyElixir.Repo.insert()
+
+    project
   end
 
   test "explicit issue.agent_kind always wins" do
@@ -87,15 +106,22 @@ defmodule SymphonyElixir.AgentRunnerTest do
 
       File.chmod!(codex_binary, 0o755)
 
+      after_create_hook =
+        "mkdir -p docs/superpowers && printf '%s\\n' '# Handoff' 'from runner workspace' > docs/superpowers/handoff.md"
+
       write_workflow_file!(Workflow.workflow_file_path(),
         workspace_root: workspace_root,
-        hook_after_create: "mkdir -p docs/superpowers && printf '%s\\n' '# Handoff' 'from runner workspace' > docs/superpowers/handoff.md",
         command: "#{codex_binary} app-server",
         prompt: "Ticket {{ issue.identifier }}"
       )
 
+      seed_project_with_prompt("mac-artifacts", "Ticket {{ issue.identifier }}", %{
+        "hooks" => %{"after_create" => after_create_hook}
+      })
+
       issue = %Issue{
         identifier: "MAC-10",
+        project_slug: "mac-artifacts",
         title: "Inject workspace artifacts",
         description: "Runner should pass workspace",
         state: "In Progress"
@@ -181,6 +207,7 @@ defmodule SymphonyElixir.AgentRunnerTest do
 
       issue = %Issue{
         identifier: "MAC-11",
+        project_slug: "mac",
         title: "Pass goal option",
         description: "Runner should pass goal",
         state: "In Progress"
@@ -259,6 +286,7 @@ defmodule SymphonyElixir.AgentRunnerTest do
 
       issue = %Issue{
         identifier: "MAC-12",
+        project_slug: "mac",
         title: "Pass issue goal",
         description: "Runner should pass issue goal",
         state: "In Progress",
@@ -339,6 +367,7 @@ defmodule SymphonyElixir.AgentRunnerTest do
       issue = %Issue{
         id: "issue-runner-goal-budget",
         identifier: "MAC-12",
+        project_slug: "mac",
         title: "Keep goal budget scoped",
         description: "Runner should not reset goal budget",
         state: "In Progress"
@@ -363,6 +392,75 @@ defmodule SymphonyElixir.AgentRunnerTest do
 
       assert messages |> messages_with_method("thread/goal/set") |> length() == 1
       assert messages |> messages_with_method("turn/start") |> length() == 2
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  test "run/3 reports {:incomplete, :max_turns} when the loop exhausts turns with the issue still active" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-agent-runner-incomplete-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-incomplete.trace")
+
+      File.mkdir_p!(test_root)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      trace_file="#{trace_file}"
+
+      while IFS= read -r line; do
+        printf 'JSON:%s\\n' "$line" >> "$trace_file"
+
+        case "$line" in
+          *'"method":"initialize"'*)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          *'"method":"initialized"'*)
+            ;;
+          *'"method":"thread/start"'*)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-incomplete"}}}'
+            ;;
+          *'"method":"turn/start"'*)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-incomplete"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "local",
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server",
+        prompt: "Ticket {{ issue.identifier }}"
+      )
+
+      issue = %Issue{
+        id: "issue-incomplete",
+        identifier: "MAC-99",
+        project_slug: "mac",
+        title: "Never finishes",
+        state: "In Progress"
+      }
+
+      issue_state_fetcher = fn ["issue-incomplete"] -> {:ok, [%{issue | state: "In Progress"}]} end
+
+      assert :ok =
+               AgentRunner.run(issue, self(),
+                 max_turns: 2,
+                 issue_state_fetcher: issue_state_fetcher
+               )
+
+      assert_received {:agent_outcome, "issue-incomplete", {:incomplete, :max_turns}}
     after
       File.rm_rf(test_root)
     end

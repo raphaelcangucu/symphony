@@ -1,6 +1,41 @@
 defmodule SymphonyElixir.CoreTest do
   use SymphonyElixir.TestSupport
 
+  @prompt_project_default "You are an agent for this repository."
+
+  # Seeds a DB-owned project carrying the given prompt template (and optional
+  # workflow_config, e.g. hooks). Global-less orchestration resolves prompts
+  # only from a project's setup, so prompt-builder/agent-runner tests bind their
+  # issue to this project via `project_slug`. Cleans the tracker before and
+  # after so projects never leak across the shared CoreTest database.
+  defp seed_prompt_project!(prompt, workflow_config \\ %{}) do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(SymphonyElixir.Repo, fn repo ->
+        Ecto.Migrator.run(repo, :up, all: true)
+      end)
+
+    SymphonyElixir.TestSupport.truncate_tracker!(SymphonyElixir.Repo)
+    on_exit(fn -> SymphonyElixir.TestSupport.truncate_tracker!(SymphonyElixir.Repo) end)
+
+    slug = "core-prompt-#{System.unique_integer([:positive])}"
+
+    {:ok, project} =
+      SymphonyElixir.LocalTracker.Context.ensure_project(%{name: slug, slug: slug, tracker_kind: "local"})
+
+    {:ok, _setup} =
+      %SymphonyElixir.LocalTracker.ProjectSetup{}
+      |> SymphonyElixir.LocalTracker.ProjectSetup.changeset(%{
+        project_id: project.id,
+        workflow_config: workflow_config,
+        prompt_template: prompt,
+        validation_commands: %{"commands" => []},
+        scan_summary: %{}
+      })
+      |> SymphonyElixir.Repo.insert()
+
+    slug
+  end
+
   test "config defaults and validation checks" do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_api_token: nil,
@@ -564,10 +599,11 @@ defmodule SymphonyElixir.CoreTest do
     workflow_prompt =
       "Ticket {{ issue.identifier }} {{ issue.title }} labels={{ issue.labels }} attempt={{ attempt }}"
 
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: workflow_prompt)
+    slug = seed_prompt_project!(workflow_prompt)
 
     issue = %Issue{
       identifier: "S-1",
+      project_slug: slug,
       title: "Refactor backend request path",
       description: "Replace transport layer",
       state: "Todo",
@@ -585,13 +621,14 @@ defmodule SymphonyElixir.CoreTest do
   test "prompt builder renders issue datetime fields without crashing" do
     workflow_prompt = "Ticket {{ issue.identifier }} created={{ issue.created_at }} updated={{ issue.updated_at }}"
 
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: workflow_prompt)
+    slug = seed_prompt_project!(workflow_prompt)
 
     created_at = DateTime.from_naive!(~N[2026-02-26 18:06:48], "Etc/UTC")
     updated_at = DateTime.from_naive!(~N[2026-02-26 18:07:03], "Etc/UTC")
 
     issue = %Issue{
       identifier: "MT-697",
+      project_slug: slug,
       title: "Live smoke",
       description: "Prompt should serialize datetimes",
       state: "Todo",
@@ -609,10 +646,11 @@ defmodule SymphonyElixir.CoreTest do
   end
 
   test "prompt builder normalizes nested date-like values, maps, and structs in issue fields" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "Ticket {{ issue.identifier }}")
+    slug = seed_prompt_project!("Ticket {{ issue.identifier }}")
 
     issue = %Issue{
       identifier: "MT-701",
+      project_slug: slug,
       title: "Serialize nested values",
       description: "Prompt builder should normalize nested terms",
       state: "Todo",
@@ -632,10 +670,11 @@ defmodule SymphonyElixir.CoreTest do
   test "prompt builder renders undefined variables as empty strings" do
     workflow_prompt = "Work on ticket {{ missing.ticket_id }} and follow these steps."
 
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: workflow_prompt)
+    slug = seed_prompt_project!(workflow_prompt)
 
     issue = %Issue{
       identifier: "MT-123",
+      project_slug: slug,
       title: "Investigate broken sync",
       description: "Reproduce and fix",
       state: "In Progress",
@@ -648,10 +687,11 @@ defmodule SymphonyElixir.CoreTest do
   end
 
   test "prompt builder surfaces invalid template content with prompt context" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "{% if issue.identifier %}")
+    slug = seed_prompt_project!("{% if issue.identifier %}")
 
     issue = %Issue{
       identifier: "MT-999",
+      project_slug: slug,
       title: "Broken prompt",
       description: "Invalid template syntax",
       state: "Todo",
@@ -664,117 +704,19 @@ defmodule SymphonyElixir.CoreTest do
     end
   end
 
-  test "prompt builder uses a sensible default template when workflow prompt is blank" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "   \n")
-
-    issue = %Issue{
-      identifier: "MT-777",
-      title: "Make fallback prompt useful",
-      description: "Include enough issue context to start working.",
-      state: "In Progress",
-      url: "https://example.org/issues/MT-777",
-      labels: ["prompt"]
-    }
-
-    prompt = PromptBuilder.build_prompt(issue)
-
-    assert prompt =~ "You are working on a Linear issue."
-    assert prompt =~ "Identifier: MT-777"
-    assert prompt =~ "Title: Make fallback prompt useful"
-    assert prompt =~ "Body:"
-    assert prompt =~ "Include enough issue context to start working."
-    assert Config.workflow_prompt() =~ "{{ issue.identifier }}"
-    assert Config.workflow_prompt() =~ "{{ issue.title }}"
-    assert Config.workflow_prompt() =~ "{{ issue.description }}"
-  end
-
-  test "prompt builder default template handles missing issue body" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "")
-
-    issue = %Issue{
-      identifier: "MT-778",
-      title: "Handle empty body",
-      description: nil,
-      state: "Todo",
-      url: "https://example.org/issues/MT-778",
-      labels: []
-    }
-
-    prompt = PromptBuilder.build_prompt(issue)
-
-    assert prompt =~ "Identifier: MT-778"
-    assert prompt =~ "Title: Handle empty body"
-    assert prompt =~ "No description provided."
-  end
-
-  test "prompt builder reports workflow load failures separately from template parse errors" do
-    original_workflow_path = Workflow.workflow_file_path()
-    workflow_store_pid = Process.whereis(SymphonyElixir.WorkflowStore)
-
-    on_exit(fn ->
-      Workflow.set_workflow_file_path(original_workflow_path)
-
-      if is_pid(workflow_store_pid) and is_nil(Process.whereis(SymphonyElixir.WorkflowStore)) do
-        Supervisor.restart_child(SymphonyElixir.Supervisor, SymphonyElixir.WorkflowStore)
-      end
-    end)
-
-    assert :ok = Supervisor.terminate_child(SymphonyElixir.Supervisor, SymphonyElixir.WorkflowStore)
-
-    Workflow.set_workflow_file_path(Path.join(System.tmp_dir!(), "missing-workflow-#{System.unique_integer([:positive])}.md"))
-
-    issue = %Issue{
-      identifier: "MT-780",
-      title: "Workflow unavailable",
-      description: "Missing workflow file",
-      state: "Todo",
-      url: "https://example.org/issues/MT-780",
-      labels: []
-    }
-
-    assert_raise RuntimeError, ~r/workflow_unavailable:/, fn ->
-      PromptBuilder.build_prompt(issue)
-    end
-  end
-
-  test "in-repo WORKFLOW.md renders correctly" do
-    workflow_path = Workflow.workflow_file_path()
-    Workflow.set_workflow_file_path(Path.expand("WORKFLOW.md", File.cwd!()))
-
-    issue = %Issue{
-      identifier: "MT-616",
-      title: "Use rich templates for WORKFLOW.md",
-      description: "Render with rich template variables",
-      state: "In Progress",
-      url: "https://example.org/issues/MT-616/use-rich-templates-for-workflowmd",
-      labels: ["templating", "workflow"]
-    }
-
-    on_exit(fn -> Workflow.set_workflow_file_path(workflow_path) end)
-
-    prompt = PromptBuilder.build_prompt(issue, attempt: 2)
-
-    assert prompt =~ "You are working on a Linear ticket `MT-616`"
-    assert prompt =~ "Issue context:"
-    assert prompt =~ "Identifier: MT-616"
-    assert prompt =~ "Title: Use rich templates for WORKFLOW.md"
-    assert prompt =~ "Current status: In Progress"
-    assert prompt =~ "https://example.org/issues/MT-616/use-rich-templates-for-workflowmd"
-    assert prompt =~ "This is an unattended orchestration session."
-    assert prompt =~ "Only stop early for a true blocker"
-    assert prompt =~ "Do not include \"next steps for user\""
-    assert prompt =~ "open and follow `.codex/skills/land/SKILL.md`"
-    assert prompt =~ "Do not call `gh pr merge` directly"
-    assert prompt =~ "Continuation context:"
-    assert prompt =~ "retry attempt #2"
-  end
+  # Removed with global-less per-project orchestration: blank/absent prompts now
+  # resolve as unresolved (skip), there is no default-template fallback, and the
+  # `workflow_unavailable` path and in-repo global WORKFLOW.md prompt source no
+  # longer exist. Prompt resolution is exercised per-project above and in
+  # prompt_builder_test.exs.
 
   test "prompt builder adds continuation guidance for retries" do
     workflow_prompt = "{% if attempt %}Retry #" <> "{{ attempt }}" <> "{% endif %}"
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: workflow_prompt)
+    slug = seed_prompt_project!(workflow_prompt)
 
     issue = %Issue{
       identifier: "MT-201",
+      project_slug: slug,
       title: "Continue autonomous ticket",
       description: "Retry flow",
       state: "In Progress",
@@ -788,10 +730,11 @@ defmodule SymphonyElixir.CoreTest do
   end
 
   test "prompt builder ensures valid UTF-8 output" do
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: "{{ issue.title }}")
+    slug = seed_prompt_project!("{{ issue.title }}")
 
     issue = %Issue{
       identifier: "MT-900",
+      project_slug: slug,
       title: "Valid ASCII title",
       description: "test",
       state: "Todo",
@@ -808,10 +751,11 @@ defmodule SymphonyElixir.CoreTest do
     workflow_prompt =
       ~S"Issue #{{ issue.number }} assigned to {{ issue.assignees }} title={{ issue.title }}"
 
-    write_workflow_file!(Workflow.workflow_file_path(), prompt: workflow_prompt)
+    slug = seed_prompt_project!(workflow_prompt)
 
     issue = %Issue{
       identifier: "42",
+      project_slug: slug,
       title: "Fix login bug",
       description: "Users can't log in",
       state: "todo",
@@ -922,12 +866,17 @@ defmodule SymphonyElixir.CoreTest do
 
       write_workflow_file!(Workflow.workflow_file_path(),
         workspace_root: workspace_root,
-        hook_after_create: "cp #{Path.join(template_repo, "README.md")} README.md",
         command: "#{codex_binary} app-server"
       )
 
+      slug =
+        seed_prompt_project!(@prompt_project_default, %{
+          "hooks" => %{"after_create" => "cp #{Path.join(template_repo, "README.md")} README.md"}
+        })
+
       issue = %Issue{
         identifier: "S-99",
+        project_slug: slug,
         title: "Smoke test",
         description: "Run and keep workspace",
         state: "In Progress",
@@ -935,20 +884,10 @@ defmodule SymphonyElixir.CoreTest do
         labels: ["backend"]
       }
 
-      before = MapSet.new(File.ls!(workspace_root))
       assert :ok = AgentRunner.run(issue)
-      entries_after = MapSet.new(File.ls!(workspace_root))
 
-      created =
-        MapSet.difference(entries_after, before) |> Enum.filter(&(&1 == "S-99"))
-
-      created = MapSet.new(created)
-
-      assert MapSet.size(created) == 1
-      workspace_name = created |> Enum.to_list() |> List.first()
-      assert workspace_name == "S-99"
-
-      workspace = Path.join(workspace_root, workspace_name)
+      # Per-project orchestration nests the workspace under the project slug.
+      workspace = Path.join([workspace_root, slug, "S-99"])
       assert File.exists?(workspace)
       assert File.exists?(Path.join(workspace, "README.md"))
     after
@@ -1007,13 +946,18 @@ defmodule SymphonyElixir.CoreTest do
 
       write_workflow_file!(Workflow.workflow_file_path(),
         workspace_root: workspace_root,
-        hook_after_create: "cp #{Path.join(template_repo, "README.md")} README.md",
         command: "#{codex_binary} app-server"
       )
+
+      slug =
+        seed_prompt_project!(@prompt_project_default, %{
+          "hooks" => %{"after_create" => "cp #{Path.join(template_repo, "README.md")} README.md"}
+        })
 
       issue = %Issue{
         id: "issue-live-updates",
         identifier: "MT-99",
+        project_slug: slug,
         title: "Smoke test",
         description: "Capture codex updates",
         state: "In Progress",
@@ -1103,10 +1047,14 @@ defmodule SymphonyElixir.CoreTest do
 
       write_workflow_file!(Workflow.workflow_file_path(),
         workspace_root: workspace_root,
-        hook_after_create: "cp #{Path.join(template_repo, "README.md")} README.md",
         command: "#{codex_binary} app-server",
         max_turns: 3
       )
+
+      slug =
+        seed_prompt_project!(@prompt_project_default, %{
+          "hooks" => %{"after_create" => "cp #{Path.join(template_repo, "README.md")} README.md"}
+        })
 
       parent = self()
 
@@ -1127,6 +1075,7 @@ defmodule SymphonyElixir.CoreTest do
            %Issue{
              id: "issue-continue",
              identifier: "MT-247",
+             project_slug: slug,
              title: "Continue until done",
              description: "Still active after first turn",
              state: state
@@ -1137,6 +1086,7 @@ defmodule SymphonyElixir.CoreTest do
       issue = %Issue{
         id: "issue-continue",
         identifier: "MT-247",
+        project_slug: slug,
         title: "Continue until done",
         description: "Still active after first turn",
         state: "In Progress",
@@ -1233,10 +1183,14 @@ defmodule SymphonyElixir.CoreTest do
 
       write_workflow_file!(Workflow.workflow_file_path(),
         workspace_root: workspace_root,
-        hook_after_create: "cp #{Path.join(template_repo, "README.md")} README.md",
         command: "#{codex_binary} app-server",
         max_turns: 2
       )
+
+      slug =
+        seed_prompt_project!(@prompt_project_default, %{
+          "hooks" => %{"after_create" => "cp #{Path.join(template_repo, "README.md")} README.md"}
+        })
 
       state_fetcher = fn [_issue_id] ->
         {:ok,
@@ -1244,6 +1198,7 @@ defmodule SymphonyElixir.CoreTest do
            %Issue{
              id: "issue-max-turns",
              identifier: "MT-248",
+             project_slug: slug,
              title: "Stop at max turns",
              description: "Still active",
              state: "In Progress"
@@ -1254,6 +1209,7 @@ defmodule SymphonyElixir.CoreTest do
       issue = %Issue{
         id: "issue-max-turns",
         identifier: "MT-248",
+        project_slug: slug,
         title: "Stop at max turns",
         description: "Still active",
         state: "In Progress",
