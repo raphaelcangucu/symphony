@@ -56,6 +56,33 @@ describe("PreviewTab", () => {
     );
   });
 
+  it("shows the localhost URL alongside a public tunnel preview", () => {
+    renderPreview(
+      response([
+        server({
+          id: 1,
+          slug: "back",
+          status: "ready",
+          port: 4102,
+          url: "https://macro-markets-510-back.example.tracker.cods.dev/admin",
+          primary: true,
+        }),
+      ]),
+    );
+
+    const localLinks = screen.getAllByRole("link", { name: "http://127.0.0.1:4102/admin" });
+    expect(localLinks.length).toBeGreaterThan(0);
+    for (const link of localLinks) {
+      expect(link).toHaveAttribute("href", "http://127.0.0.1:4102/admin");
+    }
+  });
+
+  it("does not duplicate a localhost URL when the preview already points at loopback", () => {
+    renderPreview(response([server({ status: "ready", port: 5173, url: "http://127.0.0.1:5173" })]));
+
+    expect(screen.queryByText(/^Local:/)).not.toBeInTheDocument();
+  });
+
   it("renders a disabled availability message", () => {
     renderPreview({ available: false, reason: "disabled", servers: [] });
 

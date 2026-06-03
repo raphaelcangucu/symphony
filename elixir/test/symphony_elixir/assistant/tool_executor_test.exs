@@ -248,8 +248,18 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Existing", "status" => "Todo"})
 
+    assert Enum.any?(ToolExecutor.combined_tool_specs(), fn
+             %{"name" => "github_graphql", "inputSchema" => %{"required" => required}} -> "query" in required
+             _ -> false
+           end)
+
     assert Enum.any?(ToolExecutor.tool_specs(), fn
              %{"name" => "list_issues", "inputSchema" => %{"type" => "object"}} -> true
+             _ -> false
+           end)
+
+    assert Enum.any?(ToolExecutor.tool_specs(), fn
+             %{"name" => "provision_github_project"} -> true
              _ -> false
            end)
 
@@ -411,6 +421,21 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
 
       assert {:ok, result} = ToolExecutor.execute("limit-board", "list_issues", %{})
       assert length(result.data.issues) == 20
+    end
+  end
+
+  describe "combined Codex tools" do
+    test "routes github_graphql to the server-side dynamic tool executor" do
+      client = fn query, _variables, _opts ->
+        {:ok, %{"data" => %{"viewer" => %{"login" => "tester"}}, "query" => query}}
+      end
+
+      executor = ToolExecutor.combined_codex_tool_executor("macro-markets", github_client: client)
+
+      assert %{"success" => true, "contentItems" => [%{"text" => text}]} =
+               executor.("github_graphql", %{"query" => "query { viewer { login } }"})
+
+      assert text =~ "tester"
     end
   end
 

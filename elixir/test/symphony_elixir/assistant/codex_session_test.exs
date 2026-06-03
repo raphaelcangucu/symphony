@@ -62,7 +62,10 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     assert issue.id == "assistant:macro-markets"
     assert issue.title == "Project assistant chat"
     assert Keyword.fetch!(opts, :project_slug) == "macro-markets"
-    assert Keyword.fetch!(opts, :dynamic_tools) |> Enum.any?(&(&1["name"] == "list_issues"))
+    tool_names = opts |> Keyword.fetch!(:dynamic_tools) |> Enum.map(& &1["name"])
+    assert "list_issues" in tool_names
+    assert "github_graphql" in tool_names
+    assert "provision_github_project" in tool_names
     assert is_function(Keyword.fetch!(opts, :tool_executor), 2)
 
     assert {:ok, messages} = History.list_messages("macro-markets")
@@ -100,7 +103,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     assert prompt =~ "Current user message:\nVoce lembra?"
   end
 
-  test "send_message_to_thread/4 runs a freeform turn without tracker tools" do
+  test "send_message_to_thread/4 runs a freeform turn with project-agnostic tools only" do
     {:ok, thread} = SymphonyElixir.Assistant.History.create_freeform_thread(%{title: "F", workspace_path: tmp_dir()})
 
     runner = fn _workspace, _prompt, _issue, opts ->
@@ -113,7 +116,19 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
     assert result.assistant_message == "ok"
     assert_received {:opts, opts}
-    assert Keyword.get(opts, :dynamic_tools) == []
+
+    tool_names = opts |> Keyword.get(:dynamic_tools) |> Enum.map(& &1["name"])
+
+    assert "create_github_tracker_project" in tool_names
+    assert "provision_github_project" in tool_names
+    assert "list_github_projects" in tool_names
+    assert "get_workflow" in tool_names
+    assert "get_template" in tool_names
+
+    refute "list_issues" in tool_names
+    refute "get_issue" in tool_names
+    refute "read_workspace_file" in tool_names
+
     assert is_function(Keyword.get(opts, :tool_executor), 2)
   end
 

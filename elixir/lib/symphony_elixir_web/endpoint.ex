@@ -24,6 +24,12 @@ defmodule SymphonyElixirWeb.Endpoint do
   plug(Plug.RequestId)
   plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
 
+  # Reverse-proxy preview-host traffic before Plug.Parsers so the upstream
+  # receives the raw request body. Parsing here would consume the body and
+  # leave the proxied request with a Content-Length header but no payload,
+  # causing the upstream dev server to hang on POSTs (e.g. Livewire updates).
+  plug(SymphonyElixirWeb.PublicHostPlug)
+
   plug(Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
@@ -33,6 +39,5 @@ defmodule SymphonyElixirWeb.Endpoint do
   plug(Plug.MethodOverride)
   plug(Plug.Head)
   plug(Plug.Session, @session_options)
-  plug(SymphonyElixirWeb.PublicHostPlug)
   plug(SymphonyElixirWeb.Router)
 end

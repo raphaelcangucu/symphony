@@ -2,7 +2,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
 
   alias SymphonyElixir.Assistant.{History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolExecutor}
-  alias SymphonyElixir.Codex.CodingAgent
+  alias SymphonyElixir.Codex.{CodingAgent, DynamicTool}
   alias SymphonyElixir.Config
   alias SymphonyElixir.{Skills, Workspace}
 
@@ -166,6 +166,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Behave like a real conversational coding assistant inside the tracker.
     Answer naturally in the user's language. Use tracker tools only when the user asks for tracker data or a concrete tracker action.
     Prefer get_issue, get_project, get_template, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
+    For GitHub Projects use list_github_projects, provision_github_project, or create_github_tracker_project — or github_graphql — with Symphony's server GITHUB_TOKEN. Do not run gh/curl in the shell for tracker setup.
     Do not post issue comments - your replies are shown to the user directly in this chat. Use update_issue when you need to record something on an issue.
     If the user asks for coding work, create or update tracker context and dispatch Codex through the tracker workflow instead of editing files directly from this chat.
     If a request is ambiguous, ask one concise clarifying question before taking action.
@@ -195,8 +196,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     runner_opts =
       opts
       |> Keyword.put(:project_slug, project_slug)
-      |> Keyword.put_new(:dynamic_tools, ToolExecutor.tool_specs())
-      |> Keyword.put_new(:tool_executor, ToolExecutor.codex_tool_executor(project_slug))
+      |> Keyword.put_new(:dynamic_tools, ToolExecutor.combined_tool_specs())
+      |> Keyword.put_new(:tool_executor, ToolExecutor.combined_codex_tool_executor(project_slug))
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
     |> normalize_runner_result()
@@ -208,8 +209,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     runner_opts =
       opts
       |> Keyword.put(:project_slug, project_slug)
-      |> Keyword.put_new(:dynamic_tools, ToolExecutor.tool_specs())
-      |> Keyword.put_new(:tool_executor, ToolExecutor.codex_tool_executor(project_slug))
+      |> Keyword.put_new(:dynamic_tools, ToolExecutor.combined_tool_specs())
+      |> Keyword.put_new(:tool_executor, ToolExecutor.combined_codex_tool_executor(project_slug))
 
     runner.(workspace, prompt, project_explore_issue(project_slug), runner_opts)
     |> normalize_runner_result()
@@ -220,8 +221,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
     runner_opts =
       opts
-      |> Keyword.put(:dynamic_tools, [])
-      |> Keyword.put(:tool_executor, fn _tool, _arguments -> {:error, :no_tools_in_freeform_chat} end)
+      |> Keyword.put_new(:dynamic_tools, ToolExecutor.freeform_tool_specs())
+      |> Keyword.put_new(:tool_executor, ToolExecutor.freeform_codex_tool_executor())
 
     runner.(workspace, prompt, freeform_issue(), runner_opts)
     |> normalize_runner_result()
@@ -266,8 +267,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     runner_opts =
       opts
       |> Keyword.put(:project_slug, project_slug)
-      |> Keyword.put(:dynamic_tools, ToolExecutor.issue_bound_tool_specs(identifier))
-      |> Keyword.put(:tool_executor, ToolExecutor.issue_bound_codex_tool_executor(project_slug, identifier))
+      |> Keyword.put(:dynamic_tools, ToolExecutor.issue_bound_tool_specs(identifier) ++ DynamicTool.tool_specs())
+      |> Keyword.put(:tool_executor, ToolExecutor.issue_bound_combined_codex_tool_executor(project_slug, identifier))
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
     |> normalize_runner_result()
@@ -313,9 +314,18 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   defp build_freeform_prompt(message, context, history) do
     """
-    You are the Symphony freeform assistant. There is no project or repository context.
+    You are the Symphony freeform assistant. There is no existing project or repository context.
     Behave like a real conversational coding assistant. Answer naturally in the user's language.
-    Do not call tracker tools; none are available in this chat.
+
+    Tools available in this chat (project-agnostic only):
+    - list_github_projects: list GitHub Projects v2 visible to Symphony's token.
+    - provision_github_project: create a GitHub Project v2 board with status field/states.
+    - create_github_tracker_project: create the GitHub Project AND the local tracker project together.
+    - github_graphql / linear_graphql: raw GraphQL calls when no higher-level tool fits.
+    - get_workflow / get_template: inspect workflow files and workspace templates.
+    Use these structured tools instead of shell commands (gh, curl) for GitHub/tracker setup.
+    Per-project tools (list_issues, get_issue, get_project, read_workspace_file) are NOT available here;
+    they require opening a project-scoped assistant.
 
     Recent conversation:
     #{format_history(history)}

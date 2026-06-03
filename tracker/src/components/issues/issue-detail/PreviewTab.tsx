@@ -32,6 +32,7 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
   const { data, error, loading, restart, start, stop } = useIssueDevServers(projectSlug, issueIdentifier);
   const primaryServer = selectPrimaryServer(data?.servers ?? []);
   const primaryUrl = readyPreviewUrl(primaryServer);
+  const primaryLocalUrl = localPreviewUrl(primaryServer);
   const hasRequiredIdentifiers = projectSlug.trim().length > 0 && issueIdentifier.trim().length > 0;
 
   if (!hasRequiredIdentifiers) {
@@ -116,6 +117,14 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
                   <p className="mt-1 break-all font-mono text-xs text-emerald-700 dark:text-emerald-300">
                     {primaryUrl}
                   </p>
+                  {primaryLocalUrl ? (
+                    <p className="mt-1 break-all font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">
+                      Local:{" "}
+                      <a href={primaryLocalUrl} target="_blank" rel="noreferrer noopener" className="underline">
+                        {primaryLocalUrl}
+                      </a>
+                    </p>
+                  ) : null}
                 </div>
                 <Button asChild size="sm">
                   <a href={primaryUrl} target="_blank" rel="noreferrer noopener">
@@ -193,6 +202,7 @@ function PreviewControls({
 
 function ServerRow({ server }: { server: IssueDevServer }) {
   const previewUrl = readyPreviewUrl(server);
+  const localUrl = localPreviewUrl(server);
 
   return (
     <div className="rounded-lg border p-3">
@@ -207,6 +217,14 @@ function ServerRow({ server }: { server: IssueDevServer }) {
             {server.working_dir ? `Working directory: ${server.working_dir}` : "No working directory reported"}
             {server.port ? ` · Port ${server.port}` : ""}
           </p>
+          {localUrl ? (
+            <p className="break-all font-mono text-xs text-muted-foreground">
+              Local:{" "}
+              <a href={localUrl} target="_blank" rel="noreferrer noopener" className="underline">
+                {localUrl}
+              </a>
+            </p>
+          ) : null}
           {server.session_name ? <p className="font-mono text-xs text-muted-foreground">{server.session_name}</p> : null}
         </div>
         {previewUrl ? (
@@ -269,6 +287,44 @@ function readyPreviewUrl(server: IssueDevServer | null): string | null {
   }
 
   return server.url;
+}
+
+function localPreviewUrl(server: IssueDevServer | null): string | null {
+  if (!server || server.status !== "ready" || !server.port) {
+    return null;
+  }
+
+  if (isLoopbackUrl(server.url)) {
+    return null;
+  }
+
+  return `http://127.0.0.1:${server.port}${pathFromUrl(server.url)}`;
+}
+
+function pathFromUrl(url: string | null): string {
+  if (!url) {
+    return "/";
+  }
+
+  try {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}` || "/";
+  } catch {
+    return "/";
+  }
+}
+
+function isLoopbackUrl(url: string | null): boolean {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+  } catch {
+    return false;
+  }
 }
 
 function canRunManualActions(available: boolean, reason: IssueDevServerReason): boolean {

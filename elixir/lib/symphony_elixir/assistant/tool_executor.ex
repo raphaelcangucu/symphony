@@ -4,14 +4,18 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   """
 
   alias SymphonyElixir.AgentExecution
-  alias SymphonyElixir.Assistant.ReadTools
+  alias SymphonyElixir.Assistant.{GitHubTools, ReadTools}
+  alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixirWeb.TrackerPresenter
 
-  @supported_tools ~w(list_issues create_issue create_draft_issue update_issue move_issue add_comment get_agent_executions dispatch_codex) ++
-                     ReadTools.tools()
+  @tracker_tools ~w(list_issues create_issue create_draft_issue update_issue move_issue add_comment get_agent_executions dispatch_codex)
+  @read_tools ReadTools.tools()
+  @github_tools GitHubTools.tools()
+  @dynamic_tools Enum.map(DynamicTool.tool_specs(), & &1["name"])
+  @supported_tools @tracker_tools ++ @read_tools ++ @github_tools
   # `add_comment` is intentionally absent from the advertised (`tool_specs/0`) and
   # issue-bound tool lists. The assistant's replies already stream to the user in the
   # chat UI, so re-posting them as GitHub issue comments is redundant and a major
@@ -94,8 +98,81 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "goal" => string_schema("Optional long-running Codex goal to persist for the orchestrator.")
         }
       })
-    ] ++ ReadTools.tool_specs()
+    ] ++ ReadTools.tool_specs() ++ GitHubTools.tool_specs()
   end
+
+  @spec combined_tool_specs() :: [map()]
+  def combined_tool_specs, do: tool_specs() ++ DynamicTool.tool_specs()
+
+  @spec combined_codex_tool_executor(String.t(), keyword()) :: (String.t() | nil, term() -> map())
+  def combined_codex_tool_executor(project_slug, opts \\ []) when is_binary(project_slug) and is_list(opts) do
+    tracker = codex_tool_executor(project_slug, opts)
+
+    fn tool, arguments ->
+      name = to_string(tool)
+
+      if name in @dynamic_tools do
+        DynamicTool.execute(name, arguments, opts)
+      else
+        tracker.(tool, arguments)
+      end
+    end
+  end
+
+  @spec issue_bound_combined_codex_tool_executor(String.t(), String.t(), keyword()) ::
+          (String.t() | nil, term() -> map())
+  def issue_bound_combined_codex_tool_executor(project_slug, issue_identifier, opts \\ [])
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_list(opts) do
+    tracker = issue_bound_codex_tool_executor(project_slug, issue_identifier, opts)
+
+    fn tool, arguments ->
+      name = to_string(tool)
+
+      if name in @dynamic_tools do
+        DynamicTool.execute(name, arguments, opts)
+      else
+        tracker.(tool, arguments)
+      end
+    end
+  end
+
+  # Project-agnostic tools available in freeform chat (no existing project context):
+  # GitHub project provisioning, raw GraphQL, and workflow/template lookups.
+  @freeform_project_agnostic_read_tools ~w(get_workflow get_template)
+
+  @spec freeform_tool_specs() :: [map()]
+  def freeform_tool_specs do
+    read_specs =
+      ReadTools.tool_specs()
+      |> Enum.filter(&(&1["name"] in @freeform_project_agnostic_read_tools))
+
+    read_specs ++ GitHubTools.tool_specs() ++ DynamicTool.tool_specs()
+  end
+
+  @spec freeform_codex_tool_executor(keyword()) :: (String.t() | nil, term() -> map())
+  def freeform_codex_tool_executor(opts \\ []) when is_list(opts) do
+    fn tool, arguments ->
+      name = to_string(tool)
+      arguments = if is_map(arguments), do: stringify_keys(arguments), else: %{}
+
+      cond do
+        name in @dynamic_tools ->
+          DynamicTool.execute(name, arguments, opts)
+
+        name in @github_tools ->
+          wrap_for_codex(GitHubTools.execute(name, arguments, opts))
+
+        name in @freeform_project_agnostic_read_tools ->
+          wrap_for_codex(ReadTools.execute(nil, name, arguments, opts))
+
+        true ->
+          codex_failure_response({:unsupported_tool, name})
+      end
+    end
+  end
+
+  defp wrap_for_codex({:ok, result}), do: codex_success_response(result)
+  defp wrap_for_codex({:error, reason}), do: codex_failure_response(reason)
 
   @spec issue_bound_tool_specs(String.t()) :: [map()]
   def issue_bound_tool_specs(issue_identifier) when is_binary(issue_identifier) do
@@ -176,8 +253,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp do_execute(project, tool, arguments, opts) when tool in ["get_issue", "get_project", "get_template", "get_workflow", "read_workspace_file"] do
+  defp do_execute(project, tool, arguments, opts) when tool in @read_tools do
     ReadTools.execute(project, tool, arguments, opts)
+  end
+
+  defp do_execute(_project, tool, arguments, opts) when tool in @github_tools do
+    GitHubTools.execute(tool, arguments, opts)
   end
 
   defp do_execute(project, "create_issue", arguments, _opts) do
@@ -424,6 +505,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp codex_failure_response(:file_not_found) do
     codex_failure_response("File not found in the workspace.")
+  end
+
+  defp codex_failure_response(:missing_github_token) do
+    codex_failure_response("GITHUB_TOKEN is not configured on the Symphony server (elixir/.env).")
+  end
+
+  defp codex_failure_response(:repository_not_found) do
+    codex_failure_response("GitHub repository not found for the given repo.")
   end
 
   defp codex_failure_response({:missing_required_field, field}) do
