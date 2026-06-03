@@ -11,6 +11,7 @@ import {
   listProjects,
   restoreProject,
   updateProject,
+  updateProjectSetup,
 } from "@/services/projects";
 
 describe("project service", () => {
@@ -197,6 +198,49 @@ describe("project service", () => {
     const put = vi.spyOn(http, "put");
 
     await expect(updateProject("macro-markets", { name: "   " })).rejects.toThrow("Project name is required");
+
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("updateProjectSetup PUTs the setup payload to the setup endpoint", async () => {
+    const put = vi.spyOn(http, "put").mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 5,
+          name: "Macro Markets",
+          slug: "alpha",
+          setup: { prompt_template: "Hi", workflow_config: { tracker: { active_states: ["Todo"] } } },
+        },
+      },
+    });
+
+    const project = await updateProjectSetup("alpha", {
+      promptTemplate: "Hi",
+      workflowConfig: { tracker: { active_states: ["Todo"] } },
+    });
+
+    expect(put).toHaveBeenCalledWith("/api/tracker/v1/projects/alpha/setup", {
+      setup: { prompt_template: "Hi", workflow_config: { tracker: { active_states: ["Todo"] } } },
+    });
+    expect(project.setup?.promptTemplate).toBe("Hi");
+  });
+
+  it("trims the slug before updating a project's setup", async () => {
+    const put = vi.spyOn(http, "put").mockResolvedValueOnce({
+      data: { data: { id: 5, name: "Macro Markets", slug: "alpha" } },
+    });
+
+    await updateProjectSetup(" alpha ", { validationCommands: ["pnpm test"] });
+
+    expect(put).toHaveBeenCalledWith("/api/tracker/v1/projects/alpha/setup", {
+      setup: { validation_commands: ["pnpm test"] },
+    });
+  });
+
+  it("rejects blank slugs before updating a project's setup", async () => {
+    const put = vi.spyOn(http, "put");
+
+    await expect(updateProjectSetup("   ", { promptTemplate: "Hi" })).rejects.toThrow("projectSlug is required");
 
     expect(put).not.toHaveBeenCalled();
   });

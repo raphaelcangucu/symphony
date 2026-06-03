@@ -26,6 +26,13 @@ export interface UpdateProjectInput {
   tracker?: { kind: TrackerKind; config: Record<string, unknown> };
 }
 
+export interface UpdateProjectSetupInput {
+  workflowConfig?: Record<string, unknown>;
+  promptTemplate?: string | null;
+  afterCreateHook?: string | null;
+  validationCommands?: string[];
+}
+
 export async function listProjects(options: { includeArchived?: boolean } = {}): Promise<Project[]> {
   const response = options.includeArchived
     ? await http.get(trackerPath("/projects"), { params: { include_archived: "true" } })
@@ -108,6 +115,20 @@ export async function updateProject(projectSlug: string, input: UpdateProjectInp
   }
 
   const response = await http.put(trackerPath(`/projects/${encodeURIComponent(slug)}`), payload);
+  return normalizeProject(unwrapData<BackendProjectDto>(response));
+}
+
+export async function updateProjectSetup(projectSlug: string, input: UpdateProjectSetupInput): Promise<Project> {
+  const slug = requireProjectSlug(projectSlug);
+
+  const setup = compactPayload({
+    workflow_config: input.workflowConfig,
+    prompt_template: input.promptTemplate,
+    after_create_hook: input.afterCreateHook,
+    validation_commands: input.validationCommands,
+  });
+
+  const response = await http.put(trackerPath(`/projects/${encodeURIComponent(slug)}/setup`), { setup });
   return normalizeProject(unwrapData<BackendProjectDto>(response));
 }
 
