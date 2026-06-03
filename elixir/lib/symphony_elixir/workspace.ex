@@ -10,8 +10,8 @@ defmodule SymphonyElixir.Workspace do
 
   @spec create_for_issue(map() | String.t() | nil) :: {:ok, Path.t()} | {:error, term()}
   def create_for_issue(issue_or_identifier) do
-    issue_context = issue_context(issue_or_identifier)
-    workspace = workspace_path_for_issue(safe_identifier(issue_context.issue_identifier))
+    ctx = issue_context(issue_or_identifier)
+    workspace = workspace_path_for_issue(safe_identifier(ctx.issue_identifier), resolve_project_slug(ctx))
 
     ensure_at(workspace, issue_or_identifier)
   end
@@ -63,11 +63,8 @@ defmodule SymphonyElixir.Workspace do
 
   @spec path_for_issue(map() | String.t() | nil) :: Path.t()
   def path_for_issue(issue_or_identifier) do
-    issue_or_identifier
-    |> issue_context()
-    |> Map.fetch!(:issue_identifier)
-    |> safe_identifier()
-    |> workspace_path_for_issue()
+    ctx = issue_context(issue_or_identifier)
+    workspace_path_for_issue(safe_identifier(ctx.issue_identifier), resolve_project_slug(ctx))
   end
 
   @spec remove(Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
@@ -91,9 +88,13 @@ defmodule SymphonyElixir.Workspace do
   @spec remove_issue_workspaces(term()) :: :ok
   def remove_issue_workspaces(identifier) when is_binary(identifier) do
     safe_id = safe_identifier(identifier)
-    workspace = workspace_path_for_issue(safe_id)
+    root = Config.workspace_root()
 
-    remove(workspace)
+    candidates =
+      [Path.join(root, safe_id) | Path.wildcard(Path.join([root, "*", safe_id]))]
+      |> Enum.uniq()
+
+    Enum.each(candidates, &remove/1)
     :ok
   end
 
@@ -128,11 +129,14 @@ defmodule SymphonyElixir.Workspace do
     end
   end
 
-  defp workspace_path_for_issue(safe_id) when is_binary(safe_id) do
+  defp workspace_path_for_issue(safe_id, project_slug) when is_binary(safe_id) do
     case Config.tracker_kind() do
       "github" ->
         repo = SymphonyElixir.GitHub.Config.repo() || ""
         Path.join([Config.workspace_root(), repo, safe_id])
+
+      _ when is_binary(project_slug) and project_slug != "" ->
+        Path.join([Config.workspace_root(), project_slug, safe_id])
 
       _ ->
         Path.join(Config.workspace_root(), safe_id)
@@ -282,26 +286,37 @@ defmodule SymphonyElixir.Workspace do
     end
   end
 
-  defp issue_context(%{id: issue_id, identifier: identifier}) do
+  defp issue_context(%{id: issue_id, identifier: identifier} = issue) do
     %{
       issue_id: issue_id,
-      issue_identifier: identifier || "issue"
+      issue_identifier: identifier || "issue",
+      project_slug: Map.get(issue, :project_slug)
     }
   end
 
   defp issue_context(identifier) when is_binary(identifier) do
     %{
       issue_id: nil,
-      issue_identifier: identifier
+      issue_identifier: identifier,
+      project_slug: nil
     }
   end
 
   defp issue_context(_identifier) do
     %{
       issue_id: nil,
-      issue_identifier: "issue"
+      issue_identifier: "issue",
+      project_slug: nil
     }
   end
+
+  defp resolve_project_slug(%{project_slug: slug}) when is_binary(slug) and slug != "", do: slug
+
+  defp resolve_project_slug(%{issue_identifier: identifier}) when is_binary(identifier) do
+    SymphonyElixir.LocalTracker.Context.find_project_slug(identifier)
+  end
+
+  defp resolve_project_slug(_context), do: nil
 
   defp issue_log_context(%{issue_id: issue_id, issue_identifier: issue_identifier}) do
     "issue_id=#{issue_id || "n/a"} issue_identifier=#{issue_identifier || "issue"}"

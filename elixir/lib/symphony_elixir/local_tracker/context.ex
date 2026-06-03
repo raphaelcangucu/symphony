@@ -199,6 +199,30 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @doc """
+  Resolves the project slug for an issue identifier alone. Returns `nil` when no
+  issue matches or when the identifier maps to more than one distinct project
+  (ambiguous), so callers can fall back to a non-project-scoped behavior.
+  """
+  @spec find_project_slug(String.t()) :: String.t() | nil
+  def find_project_slug(identifier) when is_binary(identifier) do
+    slugs =
+      from(issue in IssueRecord,
+        join: project in assoc(issue, :project),
+        where: issue.identifier == ^identifier,
+        distinct: true,
+        select: project.slug
+      )
+      |> Repo.all()
+
+    case slugs do
+      [slug] -> slug
+      _ -> nil
+    end
+  end
+
+  def find_project_slug(_identifier), do: nil
+
   @spec create_issue(String.t(), map()) ::
           {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
   def create_issue(project_slug, attrs) when is_binary(project_slug) and is_map(attrs) do
