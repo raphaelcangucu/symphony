@@ -75,6 +75,23 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.tracker_kind == "local"
   end
 
+  test "resolves per-project agent_kind from the project's own agent section" do
+    project = project_with_setup("gamma", %{"claude" => %{}}, "Gamma prompt")
+
+    config = ProjectConfig.resolve(project)
+
+    assert config.agent_kind == "claude"
+  end
+
+  test "falls back to the global default agent_kind when the project declares none" do
+    {:ok, project} = Context.ensure_project(%{name: "delta", slug: "delta", tracker_kind: "local"})
+    project = SymphonyElixir.Repo.preload(project, :setup)
+
+    config = ProjectConfig.resolve(project)
+
+    assert config.agent_kind == SymphonyElixir.Config.default_agent_kind()
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

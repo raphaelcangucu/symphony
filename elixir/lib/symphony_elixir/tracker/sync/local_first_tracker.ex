@@ -130,7 +130,15 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   # skipped with a logged warning so a single bad project never crashes the poll
   # cycle and the remaining projects still contribute issues.
   defp with_project_isolation(project, fun) do
-    fun.()
+    case SymphonyElixir.ProjectConfig.validate(project) do
+      :ok ->
+        fun.()
+
+      {:error, issues} ->
+        Logger.warning("multi_orchestrator: project=#{project.slug} skipped reason=invalid workflow_config: #{Enum.join(issues, "; ")}")
+
+        []
+    end
   rescue
     error ->
       Logger.warning("multi_orchestrator: project=#{project.slug} skipped reason=#{Exception.message(error)}")

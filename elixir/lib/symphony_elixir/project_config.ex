@@ -51,9 +51,22 @@ defmodule SymphonyElixir.ProjectConfig do
       field_states: field_states(opts),
       workspace_root: get_in(opts, [:workspace, :root]),
       after_create_hook: setup && setup.after_create_hook,
-      agent_kind: Config.default_agent_kind(),
+      agent_kind: Config.agent_kind_from_config(project_front_matter),
       prompt_template: resolve_prompt(setup)
     }
+  end
+
+  @doc """
+  Strictly validates a project's own DB-owned `workflow_config` against the
+  schema. Returns `:ok` for an absent/empty config (it inherits global defaults)
+  or `{:error, issues}` when a stored value is malformed.
+  """
+  @spec validate(Project.t()) :: :ok | {:error, [String.t()]}
+  def validate(%Project{} = project) do
+    project
+    |> load_setup()
+    |> setup_front_matter()
+    |> Config.validate_workflow_config()
   end
 
   defp load_setup(%Project{setup: %ProjectSetup{} = setup}), do: setup

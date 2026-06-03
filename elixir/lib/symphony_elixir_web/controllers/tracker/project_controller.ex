@@ -111,22 +111,21 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
     end
   end
 
-  # SPEC: validate workflow_config against the same option schema on save (not
+  # SPEC: strictly validate workflow_config against the option schema on save (not
   # just on resolve) so a malformed config is rejected at the API boundary
-  # instead of becoming a latent failure when the orchestrator resolves it.
+  # instead of being silently coerced or becoming a latent failure when the
+  # orchestrator resolves it.
   defp validate_workflow_config(setup) do
     case Map.get(setup, "workflow_config") do
-      nil -> :ok
-      config when config == %{} -> :ok
-      config -> validate_workflow_config_value(config)
-    end
-  end
+      nil ->
+        :ok
 
-  defp validate_workflow_config_value(config) do
-    _ = Config.validate_front_matter(config)
-    :ok
-  rescue
-    error -> {:error, "invalid workflow_config: #{Exception.message(error)}"}
+      config ->
+        case Config.validate_workflow_config(config) do
+          :ok -> :ok
+          {:error, issues} -> {:error, "invalid workflow_config: " <> Enum.join(issues, "; ")}
+        end
+    end
   end
 
   @spec archive(Conn.t(), map()) :: Conn.t()

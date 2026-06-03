@@ -44,6 +44,45 @@ defmodule SymphonyElixir.Config do
   @tracker_sections ["local", "linear", "jira", "github", "memory"]
   @agent_sections ["claude", "codex"]
 
+  # Type expectations for the per-project workflow_config sections that
+  # `validate_workflow_config/1` strictly validates. Each entry is
+  # `{section_key, [{field_key, expected_type}]}`. Sections/keys not listed here
+  # (e.g. codex:/claude:/linear:/local:) are validated by their own modules.
+  @strict_workflow_sections %{
+    "tracker" => [
+      {"active_states", :string_list},
+      {"terminal_states", :string_list},
+      {"field_states", :string_list},
+      {"dispatch_states", :string_list},
+      {"wait_states", :string_list}
+    ],
+    "polling" => [{"interval_ms", :integer}],
+    "workspace" => [{"root", :string}],
+    "github" => [
+      {"read_interval_ms", :integer},
+      {"mutation_interval_ms", :integer},
+      {"max_retries", :integer},
+      {"max_backoff_ms", :integer}
+    ],
+    "agent" => [
+      {"max_concurrent_agents", :integer},
+      {"max_turns", :integer},
+      {"max_retry_backoff_ms", :integer},
+      {"max_concurrent_agents_by_state", :map},
+      {"completion_transitions", :map},
+      {"turn_timeout_ms", :integer},
+      {"read_timeout_ms", :integer},
+      {"stall_timeout_ms", :integer}
+    ],
+    "hooks" => [
+      {"after_create", :string},
+      {"before_run", :string},
+      {"after_run", :string},
+      {"before_remove", :string},
+      {"timeout_ms", :integer}
+    ]
+  }
+
   @workflow_options_schema NimbleOptions.new!(
                              tracker: [
                                type: :map,
@@ -334,6 +373,52 @@ defmodule SymphonyElixir.Config do
     |> extract_workflow_options()
     |> NimbleOptions.validate!(@workflow_options_schema)
   end
+
+  @doc """
+  Strictly validates a per-project `workflow_config` map.
+
+  Unlike `validate_front_matter/1` (which leniently coerces/omits malformed
+  values for the operator-owned global file), this rejects type-mismatched
+  values for the known per-project sections so that a malformed config is
+  caught at the save boundary instead of silently coerced. Absent sections and
+  `nil` values are accepted (they inherit the global defaults).
+  """
+  @spec validate_workflow_config(map()) :: :ok | {:error, [String.t()]}
+  def validate_workflow_config(front_matter) when is_map(front_matter) do
+    normalized = normalize_keys(front_matter)
+
+    issues =
+      @strict_workflow_sections
+      |> Enum.flat_map(fn {section, fields} ->
+        strict_section_issues(section, Map.get(normalized, section), fields)
+      end)
+      |> Enum.sort()
+
+    if issues == [], do: :ok, else: {:error, issues}
+  end
+
+  def validate_workflow_config(_front_matter), do: {:error, ["workflow_config must be a mapping"]}
+
+  @doc """
+  Resolves the agent kind from a project's own front-matter map.
+
+  The agent backend is determined by which agent section (`codex:`/`claude:`)
+  the project declares — `codex` wins when both are present. When the project
+  declares neither, the global default agent kind is used.
+  """
+  @spec agent_kind_from_config(map()) :: String.t()
+  def agent_kind_from_config(front_matter) when is_map(front_matter) do
+    normalized = normalize_keys(front_matter)
+    kinds = Enum.filter(@agent_sections, &Map.has_key?(normalized, &1))
+
+    cond do
+      "codex" in kinds -> "codex"
+      kinds != [] -> List.first(kinds)
+      true -> default_agent_kind()
+    end
+  end
+
+  def agent_kind_from_config(_front_matter), do: default_agent_kind()
 
   @spec assistant_draft_status() :: String.t()
   def assistant_draft_status do
@@ -924,6 +1009,39 @@ defmodule SymphonyElixir.Config do
       _ -> %{}
     end
   end
+
+  defp strict_section_issues(_section, nil, _fields), do: []
+
+  defp strict_section_issues(section, value, _fields) when not is_map(value),
+    do: ["#{section} must be a mapping"]
+
+  defp strict_section_issues(section, section_map, fields) do
+    Enum.flat_map(fields, fn {field, type} ->
+      case Map.get(section_map, field) do
+        nil ->
+          []
+
+        field_value ->
+          if valid_strict_type?(type, field_value),
+            do: [],
+            else: ["#{section}.#{field} #{strict_type_hint(type)}"]
+      end
+    end)
+  end
+
+  defp valid_strict_type?(:string_list, value), do: is_list(value) or is_binary(value)
+
+  defp valid_strict_type?(:integer, value) do
+    is_integer(value) or (is_binary(value) and match?({:ok, _}, parse_integer(value)))
+  end
+
+  defp valid_strict_type?(:string, value), do: is_binary(value)
+  defp valid_strict_type?(:map, value), do: is_map(value)
+
+  defp strict_type_hint(:string_list), do: "must be a list or comma-separated string"
+  defp strict_type_hint(:integer), do: "must be an integer"
+  defp strict_type_hint(:string), do: "must be a string"
+  defp strict_type_hint(:map), do: "must be a mapping"
 
   defp put_if_present(map, _key, :omit), do: map
   defp put_if_present(map, key, value), do: Map.put(map, key, value)

@@ -91,6 +91,22 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
     Repo.get!(Project, project.id) |> Repo.preload(:setup)
   end
 
+  defp local_project_with_config(slug, workflow_config) do
+    {:ok, project} = Context.ensure_project(%{name: slug, slug: slug, tracker_kind: "local"})
+
+    {:ok, _setup} =
+      %ProjectSetup{}
+      |> ProjectSetup.changeset(%{
+        project_id: project.id,
+        workflow_config: workflow_config,
+        validation_commands: %{"commands" => []},
+        scan_summary: %{}
+      })
+      |> Repo.insert()
+
+    Repo.get!(Project, project.id) |> Repo.preload(:setup)
+  end
+
   defp seed_issue(project, identifier, state) do
     {:ok, _} =
       LocalStore.upsert_remote_issue(project, %{
@@ -155,6 +171,24 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
     refute "broken" in slugs
     assert Enum.any?(issues, &(&1.identifier == "valid-doing"))
     refute Enum.any?(issues, &(&1.identifier == "broken-doing"))
+  end
+
+  test "candidate fetch skips a project with a malformed workflow_config and keeps valid ones" do
+    Application.delete_env(:symphony_elixir, :tracker_sync_project_slug)
+    stub_assignee({:ok, :any})
+    setup_global_workflow(["Todo", "In Progress"])
+
+    valid_project = local_project_with_active_states("valid", ["Doing"])
+    malformed_project = local_project_with_config("malformed", %{"tracker" => %{"active_states" => 123}})
+
+    seed_issue(valid_project, "valid-doing", "Doing")
+    seed_issue(malformed_project, "malformed-doing", "Doing")
+
+    assert {:ok, issues} = LocalFirstTracker.fetch_candidate_issues()
+    slugs = issues |> Enum.map(& &1.project_slug) |> Enum.uniq()
+
+    assert "valid" in slugs
+    refute "malformed" in slugs
   end
 
   test "fetch_issues_by_states returns only the worker's issues with assigned_to_worker true" do

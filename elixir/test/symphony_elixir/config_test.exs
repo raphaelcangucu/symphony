@@ -23,6 +23,71 @@ defmodule SymphonyElixir.ConfigTest do
     end
   end
 
+  describe "validate_workflow_config/1 (strict)" do
+    test "accepts well-formed config (lists, integers, csv strings)" do
+      assert :ok =
+               SymphonyElixir.Config.validate_workflow_config(%{
+                 "tracker" => %{"active_states" => ["Todo", "In Progress"]},
+                 "polling" => %{"interval_ms" => 5000},
+                 "workspace" => %{"root" => "~/code"}
+               })
+
+      assert :ok =
+               SymphonyElixir.Config.validate_workflow_config(%{
+                 "tracker" => %{"active_states" => "Todo,In Progress"}
+               })
+    end
+
+    test "accepts an empty map and absent sections" do
+      assert :ok = SymphonyElixir.Config.validate_workflow_config(%{})
+    end
+
+    test "rejects a state list given as a non-list/non-string scalar" do
+      assert {:error, issues} =
+               SymphonyElixir.Config.validate_workflow_config(%{
+                 "tracker" => %{"active_states" => 123}
+               })
+
+      assert Enum.any?(issues, &(&1 =~ "tracker.active_states"))
+    end
+
+    test "rejects a section provided as a non-map" do
+      assert {:error, issues} =
+               SymphonyElixir.Config.validate_workflow_config(%{"tracker" => "nope"})
+
+      assert Enum.any?(issues, &(&1 =~ "tracker must be a mapping"))
+    end
+
+    test "rejects an unparseable integer field" do
+      assert {:error, issues} =
+               SymphonyElixir.Config.validate_workflow_config(%{
+                 "polling" => %{"interval_ms" => "abc"}
+               })
+
+      assert Enum.any?(issues, &(&1 =~ "polling.interval_ms"))
+    end
+
+    test "rejects non-map input entirely" do
+      assert {:error, _} = SymphonyElixir.Config.validate_workflow_config("not-a-map")
+    end
+  end
+
+  describe "agent_kind_from_config/1" do
+    test "returns claude when only the claude section is present" do
+      assert SymphonyElixir.Config.agent_kind_from_config(%{"claude" => %{}}) == "claude"
+    end
+
+    test "prefers codex when both agent sections are present" do
+      assert SymphonyElixir.Config.agent_kind_from_config(%{"codex" => %{}, "claude" => %{}}) ==
+               "codex"
+    end
+
+    test "falls back to the global default when no agent section is present" do
+      assert SymphonyElixir.Config.agent_kind_from_config(%{}) ==
+               SymphonyElixir.Config.default_agent_kind()
+    end
+  end
+
   describe "observability hub config" do
     test "defaults when observability section omits hub keys" do
       load_workflow_with_front_matter("""
