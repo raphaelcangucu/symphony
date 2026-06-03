@@ -24,13 +24,17 @@ import {
   fetchAssistantCodexCatalog,
   type AssistantChatMessage,
   type AssistantToolCall,
+  type UserQuestion,
+  type UserQuestionsRequest,
 } from "@/services/assistant";
+import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
   assistantExploreTopic,
   assistantIssueTopic,
   assistantThreadTopic,
   assistantTopic,
   bindAssistantEvents,
+  submitUserInput,
   type AssistantDocumentChangedPayload,
   type AssistantIssueCreatedPayload,
 } from "@/services/phoenix/assistantChannel";
@@ -115,6 +119,7 @@ export function ProjectAssistantPanel({
     null,
   );
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
+  const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<AssistantCodexCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -216,6 +221,7 @@ export function ProjectAssistantPanel({
       onAssistantCompleted: (message) => {
         setMessages((current) => replaceStreamingMessage(current, message));
         setIsRunning(false);
+        setPendingQuestions(null);
         const createdIssue = draftIssueCreatedFromMessage(message);
         if (createdIssue) onDraftIssueCreated?.(createdIssue);
       },
@@ -223,7 +229,9 @@ export function ProjectAssistantPanel({
         setMessages((current) => appendMessage(current, assistantMessage("assistant-error", message)));
         setConnectionError(message);
         setIsRunning(false);
+        setPendingQuestions(null);
       },
+      onUserInputRequired: (request) => setPendingQuestions(request),
       onAssistantDocumentChanged: onDocumentChanged,
       onAssistantIssueCreated: onIssueCreated,
       onSteerFailed: ({ message }) => {
@@ -579,6 +587,22 @@ export function ProjectAssistantPanel({
       </div>
     ) : null;
 
+  const submitQuestions = useCallback(
+    (requestId: string | number, answers: Record<string, string>) => {
+      const channel = channelRef.current;
+      if (!channel) return;
+      submitUserInput(channel, requestId, answers);
+      setPendingQuestions(null);
+    },
+    [],
+  );
+
+  const questionsNode = pendingQuestions ? (
+    <div className="px-4 pb-2">
+      <UserQuestionsCard request={pendingQuestions} onSubmit={submitQuestions} disabled={!channelReady} />
+    </div>
+  ) : null;
+
   const composerNode =
     catalog || catalogError ? (
       <AssistantComposer
@@ -639,6 +663,7 @@ export function ProjectAssistantPanel({
               <div className="pointer-events-auto bg-background">
                 <div className="mx-auto w-full max-w-4xl px-4 pb-2 pt-1">
                   {queuedChips}
+                  {questionsNode}
                   {composerNode ?? (
                     <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
                       Loading Codex CLI models...
@@ -654,6 +679,7 @@ export function ProjectAssistantPanel({
             <div ref={composerDockRef} className="shrink-0 border-t bg-background">
               <div className="mx-auto w-full max-w-4xl px-4 py-2">
                 {queuedChips}
+                {questionsNode}
                 {composerNode ?? (
                   <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
                     Loading Codex CLI models...
@@ -667,6 +693,7 @@ export function ProjectAssistantPanel({
           ) : (
             <div className="shrink-0 bg-background">
               {queuedChips}
+              {questionsNode}
               {composerNode ?? (
                 <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading Codex CLI models...</div>
               )}
@@ -702,6 +729,7 @@ export function ProjectAssistantPanel({
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">{messageItems}</div>
             {queuedChips}
+            {questionsNode}
             {composerNode ?? (
               <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading Codex CLI models...</div>
             )}
@@ -727,6 +755,10 @@ function AssistantBubble({
 }) {
   const isUser = message.role === "user";
   const attachments = Array.isArray(message.metadata.attachments) ? message.metadata.attachments : [];
+
+  if (isUserQuestionsMessage(message)) {
+    return <UserQuestionsReceipt message={message} />;
+  }
 
   return (
     <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
@@ -757,6 +789,40 @@ function AssistantBubble({
             ))}
           </div>
         ) : null}
+      </article>
+    </div>
+  );
+}
+
+function isUserQuestionsMessage(message: AssistantChatMessage): boolean {
+  return message.metadata.kind === "user_questions";
+}
+
+function UserQuestionsReceipt({ message }: { message: AssistantChatMessage }) {
+  const rawQuestions = Array.isArray(message.metadata.questions)
+    ? (message.metadata.questions as UserQuestion[])
+    : [];
+  const answers =
+    message.metadata.answers && typeof message.metadata.answers === "object"
+      ? (message.metadata.answers as Record<string, string>)
+      : {};
+
+  if (rawQuestions.length === 0) return null;
+
+  return (
+    <div className="flex w-full justify-start">
+      <article className="w-full max-w-none rounded-2xl border bg-muted/30 p-3 text-sm">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Clarifying questions
+        </p>
+        <dl className="space-y-2">
+          {rawQuestions.map((question) => (
+            <div key={question.id}>
+              <dt className="font-medium">{question.question || question.header}</dt>
+              <dd className="text-muted-foreground">{answers[question.id] ?? "—"}</dd>
+            </div>
+          ))}
+        </dl>
       </article>
     </div>
   );

@@ -97,11 +97,12 @@ export function normalizeUserQuestionsRequest(payload: {
 
       const options = Array.isArray(q.options)
         ? q.options
-            .map((opt) => {
+            .map((opt): UserQuestionOption | null => {
               const o = opt as Record<string, unknown>;
-              return typeof o.label === "string"
-                ? { label: o.label, description: typeof o.description === "string" ? o.description : undefined }
-                : null;
+              if (typeof o.label !== "string") return null;
+              const option: UserQuestionOption = { label: o.label };
+              if (typeof o.description === "string") option.description = o.description;
+              return option;
             })
             .filter((opt): opt is UserQuestionOption => opt !== null)
         : null;
