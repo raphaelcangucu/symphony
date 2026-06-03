@@ -40,9 +40,9 @@ export function AgentTab({ issue, execution, projectSlug }: AgentTabProps) {
 
   return (
     <div className="space-y-4 text-sm">
-      <section className="rounded-xl border p-4">
+      <section className="rounded-xl border border-border/70 bg-card/40 p-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Execution</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Execution</div>
           {execution ? (
             <AgentStatusBadge status={execution.status} />
           ) : (
@@ -85,8 +85,8 @@ export function AgentTab({ issue, execution, projectSlug }: AgentTabProps) {
       </section>
 
       {execution?.lastMessage || execution?.lastEvent ? (
-        <section className="rounded-xl border p-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Latest update</div>
+        <section className="rounded-xl border border-border/70 bg-card/40 p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Latest update</div>
           {execution.lastEvent ? (
             <div className="mt-2 inline-flex items-center rounded-full border border-border/60 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
               {execution.lastEvent}
@@ -100,14 +100,14 @@ export function AgentTab({ issue, execution, projectSlug }: AgentTabProps) {
 
       {execution?.error ? (
         <section className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-destructive">Last error</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-destructive">Last error</div>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-destructive">{execution.error}</p>
         </section>
       ) : null}
 
       {execution?.tokens ? (
-        <section className="rounded-xl border p-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tokens</div>
+        <section className="rounded-xl border border-border/70 bg-card/40 p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Tokens</div>
           <dl className="mt-3 grid grid-cols-3 gap-3 text-center">
             <div className="rounded-lg bg-muted/50 p-2">
               <dt className="text-[10px] uppercase text-muted-foreground">Input</dt>
@@ -141,7 +141,7 @@ export function AgentTab({ issue, execution, projectSlug }: AgentTabProps) {
 
       <Separator />
       <section>
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assignment</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Assignment</div>
         <div className="mt-2 flex items-center gap-2">
           <AssigneeAvatar login={issue.assignee} />
           <span>{issue.assignee || "No agent assigned"}</span>

@@ -162,6 +162,44 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert_receive {:workspace, ^expected}
     end
 
+    test "resolves the per-project workspace root from the thread project, not the bare identifier" do
+      # Mirrors a GitHub-backed project: a per-project workspace root distinct from the
+      # global root and no local IssueRecord for the identifier, so identifier-only
+      # resolution (find_project_slug/1) returns nil and would fall back to the global
+      # root, tripping the coding-agent :invalid_workspace_cwd guard.
+      custom_root = Path.join(System.tmp_dir!(), "distrib-workspaces-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(custom_root)
+      on_exit(fn -> File.rm_rf!(custom_root) end)
+
+      {:ok, _project} = Context.ensure_project(%{name: "Distrib", slug: "distrib"})
+
+      {:ok, _setup} =
+        Context.upsert_project_setup("distrib", %{workflow_config: %{"workspace" => %{"root" => custom_root}}})
+
+      issue_ref = %{id: nil, identifier: "DIS-1", project_slug: "distrib"}
+      expected_root = Workspace.workspace_root_for(issue_ref)
+      expected_tree = Workspace.path_for_issue(issue_ref)
+      File.mkdir_p!(expected_tree)
+
+      assert expected_root == Path.expand(custom_root)
+      assert is_nil(Context.find_project_slug("DIS-1"))
+
+      {:ok, thread} = History.ensure_issue_thread("distrib", "DIS-1", %{workspace_path: expected_tree})
+
+      test_pid = self()
+
+      runner = fn workspace, _prompt, _issue, opts ->
+        send(test_pid, {:issue_run, workspace, opts})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} = CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+
+      assert_receive {:issue_run, workspace, opts}
+      assert Keyword.get(opts, :workspace_root) == expected_root
+      assert String.starts_with?(workspace, expected_root <> "/")
+    end
+
     test "runs the turn in the thread's persisted workspace even when it differs from the computed path",
          %{workspace_root: workspace_root} do
       {:ok, _project} = Context.ensure_project(%{name: "Persist", slug: "persist"})
@@ -193,7 +231,10 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
       {:ok, thread} = History.ensure_issue_thread("heal", "HEAL-1", %{workspace_path: stale})
 
-      refute stale == Workspace.path_for_issue("HEAL-1")
+      # Healing recomputes the tree using the thread's project, so the canonical path
+      # nests under the project segment even when no local issue record exists.
+      issue_ref = %{id: nil, identifier: "HEAL-1", project_slug: "heal"}
+      refute stale == Workspace.path_for_issue(issue_ref)
 
       test_pid = self()
 
@@ -205,7 +246,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert {:ok, _result} =
                CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
 
-      expected = Workspace.path_for_issue("HEAL-1")
+      expected = Workspace.path_for_issue(issue_ref)
       assert_receive {:workspace, ^expected}
       assert History.issue_workspace_path("HEAL-1") == expected
     end

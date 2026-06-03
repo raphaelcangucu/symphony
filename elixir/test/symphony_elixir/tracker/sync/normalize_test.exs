@@ -39,4 +39,43 @@ defmodule SymphonyElixir.Tracker.Sync.NormalizeTest do
     norm = Normalize.issue(dto, [])
     assert %DateTime{} = norm.remote_updated_at
   end
+
+  test "maps GitHub-shaped comments (id/updated_at/kind) into the local-store shape" do
+    dto = IssueDTO.build(%{id: "I_3", identifier: "510", title: "t", status: %{name: "Human Review"}})
+
+    github_comments = [
+      %{
+        id: "IC_workpad",
+        body: "## Codex Workpad\n\nProgress notes",
+        author: "symphony-bot",
+        kind: "workpad",
+        url: "https://github.com/o/r/issues/510#issuecomment-1",
+        created_at: "2026-06-01T10:00:00Z",
+        updated_at: "2026-06-02T12:00:00Z"
+      },
+      %{
+        id: "IC_reply",
+        body: "looks good",
+        author: "octocat",
+        kind: "comment",
+        url: nil,
+        created_at: "2026-06-02T13:00:00Z",
+        updated_at: "2026-06-02T13:00:00Z"
+      }
+    ]
+
+    norm = Normalize.issue(dto, comments: github_comments)
+
+    assert Enum.map(norm.comments, & &1.remote_id) == ["IC_workpad", "IC_reply"]
+    assert Enum.map(norm.comments, & &1.kind) == ["workpad", "comment"]
+    assert Enum.all?(norm.comments, &match?(%DateTime{}, &1.remote_updated_at))
+  end
+
+  test "defaults comment kind to comment when absent" do
+    dto = IssueDTO.build(%{id: "I_4", identifier: "1", title: "t", status: %{name: "Todo"}})
+
+    norm = Normalize.issue(dto, comments: [%{id: "IC_1", body: "hi", author: "octo"}])
+
+    assert [%{kind: "comment", remote_id: "IC_1"}] = norm.comments
+  end
 end

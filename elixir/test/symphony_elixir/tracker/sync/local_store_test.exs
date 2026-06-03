@@ -73,6 +73,21 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     assert Enum.map(loaded.comments, & &1.remote_id) == ["IC_1"]
   end
 
+  test "preserves the workpad kind of a synced comment", %{project: project} do
+    comments = [
+      %{remote_id: "IC_pad", body: "## Codex Workpad", author: "bot", kind: "workpad", remote_updated_at: DateTime.utc_now()},
+      %{remote_id: "IC_msg", body: "thanks", author: "octocat", kind: "comment", remote_updated_at: DateTime.utc_now()}
+    ]
+
+    {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{comments: comments}))
+
+    loaded = Repo.get(IssueRecord, issue.id) |> Repo.preload(:comments)
+    by_remote_id = Map.new(loaded.comments, &{&1.remote_id, &1.kind})
+
+    assert by_remote_id["IC_pad"] == "workpad"
+    assert by_remote_id["IC_msg"] == "comment"
+  end
+
   test "remote update overwrites fields with no pending local edit", %{project: project} do
     {:ok, _} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "v1"}))
     {:ok, updated} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "v2", remote_updated_at: DateTime.utc_now()}))

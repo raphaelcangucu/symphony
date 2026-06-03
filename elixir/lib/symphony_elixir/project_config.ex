@@ -98,9 +98,15 @@ defmodule SymphonyElixir.ProjectConfig do
   # Only an explicit per-project `workspace.root` overrides the process-level
   # default (`Config.workspace_root/0`); otherwise stay `nil` so the caller's
   # process default applies rather than the schema's filler default.
+  #
+  # Expand the configured value (mirroring the global `Config.workspace_root/0`)
+  # so a leading `~` resolves to the user's home. Otherwise the literal tilde
+  # leaks into every derived path — `File.mkdir_p!` creates a stray `~` directory,
+  # the coding agent's `cd` cannot resolve it, and the code-server editor URL
+  # (`?folder=~%2F...`) points at a non-existent tree.
   defp project_workspace_root(%{} = front_matter) do
     case get_in(front_matter, ["workspace", "root"]) do
-      root when is_binary(root) and root != "" -> root
+      root when is_binary(root) and root != "" -> Path.expand(root)
       _ -> nil
     end
   end

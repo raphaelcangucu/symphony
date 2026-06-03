@@ -23,12 +23,25 @@ defmodule SymphonyElixir.Tracker.Sync.Normalize do
       position: dto.position,
       remote_updated_at: parse_dt(dto.updated_at),
       labels: Enum.map(List.wrap(dto.labels), &label/1),
-      comments: Keyword.get(opts, :comments, [])
+      comments: opts |> Keyword.get(:comments, []) |> Enum.map(&comment/1)
     }
   end
 
   defp label(name) when is_binary(name), do: %{name: name}
   defp label(%{} = label), do: Map.take(label, [:name, :color, :remote_id])
+
+  # Remote comment maps arrive in the adapter's read shape (`:id`, `:updated_at`,
+  # `:kind`); the local store keys on `:remote_id`/`:remote_updated_at` and relies
+  # on `:kind` to surface the agent's `## Codex Workpad` note in the issue summary.
+  defp comment(%{} = comment) do
+    %{
+      remote_id: comment[:remote_id] || comment[:id],
+      body: comment[:body],
+      author: comment[:author],
+      kind: comment[:kind] || "comment",
+      remote_updated_at: parse_dt(comment[:remote_updated_at] || comment[:updated_at])
+    }
+  end
 
   defp status_name(%{name: name}) when is_binary(name), do: name
   defp status_name(_), do: nil

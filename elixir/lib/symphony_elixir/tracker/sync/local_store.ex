@@ -351,7 +351,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     Enum.each(comments, fn comment ->
       attrs = %{
         issue_id: issue.id,
-        kind: "comment",
+        kind: comment[:kind] || "comment",
         body: comment[:body],
         author: comment[:author] || "remote",
         remote_id: comment[:remote_id],

@@ -151,6 +151,29 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.repo == nil
   end
 
+  test "resolve/1 expands a leading tilde in the per-project workspace root" do
+    project =
+      project_with_setup(
+        "tilde",
+        %{"workspace" => %{"root" => "~/code/distributionmachine-workspaces"}},
+        "prompt"
+      )
+
+    config = ProjectConfig.resolve(project)
+
+    assert config.workspace_root == Path.expand("~/code/distributionmachine-workspaces")
+    assert String.starts_with?(config.workspace_root, "/")
+    refute String.contains?(config.workspace_root, "~")
+  end
+
+  test "resolve/1 leaves workspace_root nil when the project sets no root (inherits global)" do
+    project = project_with_setup("noroot", %{}, "prompt")
+
+    config = ProjectConfig.resolve(project)
+
+    assert config.workspace_root == nil
+  end
+
   test "resolve/1 reads after_create_hook from workflow_config.hooks when no column value" do
     project =
       github_project_with_setup("dm2", "clouapp/x", %{

@@ -1,3 +1,4 @@
+import { PenLine, Play } from "lucide-react";
 import { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -40,12 +41,34 @@ export function AgentTabs({ issue, projectSlug, execution, view }: AgentTabsProp
       onValueChange={(value) => {
         if (isAgentSection(value)) setSection(value);
       }}
-      className="flex h-full min-h-0 flex-col gap-3"
+      className="flex h-full min-h-0 flex-col gap-4"
     >
-      <TabsList aria-label="Agent sections" className="w-fit">
-        <TabsTrigger value="authoring">Authoring</TabsTrigger>
-        <TabsTrigger value="execution">Execution</TabsTrigger>
-      </TabsList>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          {section === "authoring"
+            ? "Shape the brief and plan before dispatching the agent."
+            : "Live execution status, session log, and steering."}
+        </p>
+        <TabsList
+          aria-label="Agent sections"
+          className="h-8 shrink-0 gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
+        >
+          <TabsTrigger
+            value="authoring"
+            className="gap-1.5 rounded-md px-2.5 text-xs data-[state=active]:shadow-sm"
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            Authoring
+          </TabsTrigger>
+          <TabsTrigger
+            value="execution"
+            className="gap-1.5 rounded-md px-2.5 text-xs data-[state=active]:shadow-sm"
+          >
+            <Play className="h-3.5 w-3.5" />
+            Execution
+          </TabsTrigger>
+        </TabsList>
+      </div>
 
       <TabsContent value="authoring" className="mt-0 min-h-0 flex-1 overflow-hidden">
         <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} compact />

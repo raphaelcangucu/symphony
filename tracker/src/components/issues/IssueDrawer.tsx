@@ -13,7 +13,7 @@ import {
   TerminalSquare,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect } from "react";
+import { type ReactNode, useCallback, useEffect } from "react";
 
 import { getStatusMeta } from "@/components/board/status-meta";
 import {
@@ -28,7 +28,7 @@ import { useIssueComments } from "@/hooks/useIssueComments";
 import { useIssueEditor } from "@/hooks/useIssueEditor";
 import type { EditorReason } from "@/services/editor";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
-import { cn } from "@/lib/utils";
+import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { DEFAULT_ISSUE_TAB, type IssueTab, type WorkspaceView } from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -127,6 +127,8 @@ export function IssueDrawer({
     return () => window.removeEventListener("keydown", handler);
   }, [open, openEditor]);
 
+  const commentsCount = commentsState.comments.length;
+  const blockersCount = issue?.blockedBy.length ?? 0;
   const editorButtonHidden = editor.reason === "disabled";
   const editorTitle = editor.available
     ? "Open this task's workspace in VS Code (.)"
@@ -137,19 +139,21 @@ export function IssueDrawer({
       <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-3xl lg:max-w-4xl xl:max-w-5xl">
         {issue ? (
           <>
-            <SheetHeader className="border-b p-6 pb-4">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="font-mono font-semibold uppercase tracking-wide text-muted-foreground">
-                  {issue.identifier}
-                </span>
-                {issue.blockedBy.length > 0 ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-300">
-                    <AlertTriangle className="h-3 w-3" />
-                    Blocked
+            <SheetHeader className="gap-0 space-y-0 border-b border-border/70 px-6 pb-0 pt-5">
+              <div className="flex items-start gap-3 pr-9">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {issue.identifier}
                   </span>
-                ) : null}
-                {execution ? <AgentStatusBadge status={execution.status} /> : null}
-                <div className="ml-auto flex items-center gap-2">
+                  {issue.blockedBy.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-300">
+                      <AlertTriangle className="h-3 w-3" />
+                      Blocked
+                    </span>
+                  ) : null}
+                  {execution ? <AgentStatusBadge status={execution.status} /> : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
                   {editorButtonHidden ? null : (
                     <button
                       type="button"
@@ -157,10 +161,10 @@ export function IssueDrawer({
                       disabled={!editor.available}
                       title={editorTitle}
                       aria-label="Open in VS Code"
-                      className="inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-0.5 font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <Code2 className="h-3 w-3" />
-                      Open in VS Code
+                      <Code2 className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">VS Code</span>
                     </button>
                   )}
                   {onArchive || onDelete ? (
@@ -170,7 +174,7 @@ export function IssueDrawer({
                           type="button"
                           aria-label="Issue actions"
                           title="Issue actions"
-                          className="inline-flex items-center justify-center rounded-md border border-border/60 px-1.5 py-1 text-foreground transition-colors hover:bg-accent"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                         >
                           <MoreHorizontal className="h-3.5 w-3.5" />
                         </button>
@@ -204,18 +208,20 @@ export function IssueDrawer({
                   ) : null}
                 </div>
               </div>
-              <SheetTitle className="pr-8 text-xl leading-tight">{issue.title}</SheetTitle>
+              <SheetTitle className="mt-3 text-[1.35rem] font-semibold leading-snug tracking-tight text-foreground">
+                {issue.title}
+              </SheetTitle>
               <SheetDescription asChild>
-                <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-xs font-medium text-foreground">
+                <div className="mb-4 mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-1 font-medium text-foreground">
                     {StatusIcon ? <StatusIcon className={cn("h-3.5 w-3.5", meta?.iconClass)} /> : null}
                     {issue.status}
                   </span>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-1 text-muted-foreground">
                     <PriorityIndicator priority={issue.priority} />
                     {priorityLabel(issue.priority)}
                   </span>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-1 text-muted-foreground">
                     <AssigneeAvatar login={issue.assignee} />
                     {issue.assignee ?? "Unassigned"}
                   </span>
@@ -225,24 +231,35 @@ export function IssueDrawer({
             <Tabs
               value={tab}
               onValueChange={(value) => onTabChange?.(value as IssueTab)}
-              className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
             >
-              <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0">
+              <TabsList
+                className={cn(
+                  "h-auto w-full shrink-0 justify-start gap-0.5 overflow-x-auto rounded-none border-b border-border/70 bg-transparent px-4 py-0",
+                  "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                )}
+              >
                 {TABS.map(({ value, label, Icon }) => (
                   <TabsTrigger
                     key={value}
                     value={value}
-                    className="gap-1.5 rounded-none border-b-2 border-transparent px-2.5 pb-2 pt-1 text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                    className={cn(
+                      "group relative shrink-0 gap-1.5 rounded-none border-0 bg-transparent px-3 pb-3 pt-2.5 text-[13px] font-medium text-muted-foreground shadow-none transition-colors",
+                      "hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none",
+                      "after:pointer-events-none after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-transparent after:transition-colors data-[state=active]:after:bg-primary",
+                    )}
                   >
-                    <Icon className="h-3.5 w-3.5" />
+                    <Icon className="h-3.5 w-3.5 opacity-80 group-data-[state=active]:opacity-100" />
                     {label}
                     {value === "pr" && prRollup ? (
                       <prRollup.Icon className={cn("h-3 w-3", prRollup.className, prRollup.spin && "animate-spin")} />
                     ) : null}
+                    {value === "comments" && commentsCount > 0 ? <TabCount>{commentsCount}</TabCount> : null}
+                    {value === "blockers" && blockersCount > 0 ? <TabCount tone="amber">{blockersCount}</TabCount> : null}
                   </TabsTrigger>
                 ))}
               </TabsList>
-              <div className="mt-3 min-h-0 flex-1 overflow-auto pr-1">
+              <div className={cn("min-h-0 flex-1 overflow-auto px-6 py-5", SCROLLBAR_THIN)}>
                 <TabsContent value="summary">
                   <SummaryTab
                     issue={issue}
@@ -289,6 +306,21 @@ export function IssueDrawer({
         ) : null}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function TabCount({ children, tone = "muted" }: { children: ReactNode; tone?: "muted" | "amber" }) {
+  return (
+    <span
+      className={cn(
+        "ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none tabular-nums",
+        tone === "amber"
+          ? "bg-amber-500/15 text-amber-600 dark:text-amber-300"
+          : "bg-muted text-muted-foreground group-data-[state=active]:bg-primary/10 group-data-[state=active]:text-primary",
+      )}
+    >
+      {children}
+    </span>
   );
 }
 

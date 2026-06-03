@@ -234,21 +234,32 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   # reads and writes realign, and continue instead of failing the turn.
   defp ensure_issue_workspace(%{workspace_path: path, issue_identifier: identifier} = thread)
        when is_binary(path) and path != "" do
-    case Workspace.ensure_at(path, identifier) do
+    issue_ref = issue_workspace_ref(Map.get(thread, :project_slug), identifier)
+
+    case Workspace.ensure_at(path, issue_ref) do
       {:ok, workspace} -> {:ok, workspace}
-      {:error, _reason} -> heal_issue_workspace(thread, identifier)
+      {:error, _reason} -> heal_issue_workspace(thread, issue_ref)
     end
   end
 
   defp ensure_issue_workspace(%{issue_identifier: identifier} = thread) do
-    heal_issue_workspace(thread, identifier)
+    heal_issue_workspace(thread, issue_workspace_ref(Map.get(thread, :project_slug), identifier))
   end
 
-  defp heal_issue_workspace(thread, identifier) do
-    with {:ok, workspace} <- Workspace.create_for_issue(identifier) do
+  defp heal_issue_workspace(thread, issue_ref) do
+    with {:ok, workspace} <- Workspace.create_for_issue(issue_ref) do
       repair_thread_workspace_path(thread, workspace)
       {:ok, workspace}
     end
+  end
+
+  # Carry the thread's known project into workspace resolution so tree creation and
+  # the coding-agent cwd guard agree on the SAME per-project root. The bare identifier
+  # alone forces a `find_project_slug/1` lookup that returns nil for ambiguous or
+  # non-local (e.g. GitHub) identifiers, silently falling back to the global workspace
+  # root and tripping `:invalid_workspace_cwd`.
+  defp issue_workspace_ref(project_slug, identifier) do
+    %{id: nil, identifier: identifier, project_slug: project_slug}
   end
 
   defp repair_thread_workspace_path(%{workspace_path: current} = thread, workspace)
@@ -267,7 +278,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     runner_opts =
       opts
       |> Keyword.put(:project_slug, project_slug)
-      |> Keyword.put_new(:workspace_root, Workspace.workspace_root_for(identifier))
+      |> Keyword.put_new(:workspace_root, Workspace.workspace_root_for(issue_workspace_ref(project_slug, identifier)))
       |> Keyword.put(:dynamic_tools, ToolExecutor.issue_bound_tool_specs(identifier) ++ DynamicTool.tool_specs())
       |> Keyword.put(:tool_executor, ToolExecutor.issue_bound_combined_codex_tool_executor(project_slug, identifier))
 
