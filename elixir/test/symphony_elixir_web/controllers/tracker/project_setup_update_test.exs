@@ -83,6 +83,31 @@ defmodule SymphonyElixirWeb.Tracker.ProjectSetupUpdateTest do
     assert json_response(conn, 404)["error"]["code"] == "project_not_found"
   end
 
+  test "GET /projects/:id includes the persisted setup so the edit modal reflects it" do
+    {:ok, _project} = Context.ensure_project(%{name: "alpha", slug: "alpha", tracker_kind: "local"})
+
+    {:ok, _setup} =
+      Context.upsert_project_setup("alpha", %{
+        prompt_template: "Imported prompt",
+        workflow_config: %{"tracker" => %{"active_states" => ["Todo"]}}
+      })
+
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/alpha")
+
+    assert %{"data" => %{"setup" => setup}} = json_response(conn, 200)
+    refute is_nil(setup)
+    assert setup["prompt_template"] == "Imported prompt"
+    assert get_in(setup, ["workflow_config", "tracker", "active_states"]) == ["Todo"]
+  end
+
+  test "GET /projects/:id returns setup: nil when no setup exists" do
+    {:ok, _project} = Context.ensure_project(%{name: "beta", slug: "beta", tracker_kind: "local"})
+
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/beta")
+
+    assert %{"data" => %{"setup" => nil}} = json_response(conn, 200)
+  end
+
   defp authorized_conn, do: build_conn() |> put_req_header("authorization", "Bearer secret")
 
   defp clean_repo do

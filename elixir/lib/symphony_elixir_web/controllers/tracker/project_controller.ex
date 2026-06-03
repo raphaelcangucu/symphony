@@ -77,7 +77,9 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
     case Context.get_project(project_slug) do
       {:ok, project} ->
         statuses = Context.list_statuses(project.slug)
-        json(conn, %{data: TrackerPresenter.project(project, statuses)})
+        repositories = Context.list_repositories(project.slug)
+        setup = Context.get_project_setup(project.slug)
+        json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup)})
 
       {:error, :project_not_found} ->
         TrackerErrors.render(conn, :project_not_found)
