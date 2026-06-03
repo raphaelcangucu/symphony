@@ -298,14 +298,15 @@ SQLite path configured by `local.database_path`. The React app uses `SYMPHONY_TR
 bearer token for `/api/tracker/v1/*` and the tracker channel.
 
 The simplest way to run the tracker locally is the resilient `make serve` target. It ensures
-dependencies and database migrations, injects a dev bearer token, and boots the app through Mix —
-which is required because the packaged escript (`bin/symphony`) cannot load the native SQLite
-driver NIF:
+dependencies and database migrations and boots the app through Mix — which is required because
+the packaged escript (`bin/symphony`) cannot load the native SQLite driver NIF. Per-project config
+is DB-owned, so no global `WORKFLOW.md` is required; set `SYMPHONY_TRACKER_TOKEN` in `elixir/.env`
+for the tracker UI/API bearer token:
 
 ```bash
 cd elixir
-make serve            # http://localhost:4000/tracker  (dev token: dev-local-token)
-make stop             # stop the running server
+make serve            # http://localhost:4000/tracker  (token: $SYMPHONY_TRACKER_TOKEN from .env)
+make stop             # stop the running daemon
 ```
 
 #### Running the dev daemon (restart only what you changed)

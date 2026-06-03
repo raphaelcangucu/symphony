@@ -53,17 +53,26 @@ defmodule Mix.Tasks.Symphony.Ctl do
   end
 
   defp boot_detached(node, cookie) do
-    workflow = System.get_env("SYMPHONY_WORKFLOW", "WORKFLOW.md")
     elixir = System.find_executable("elixir") || Mix.raise("`elixir` not found on PATH")
     File.mkdir_p!(".symphony")
 
     command =
       "setsid #{shell_escape(elixir)} --name #{node} --cookie #{cookie} " <>
-        "-S mix run --no-start dev/serve.exs #{shell_escape(workflow)} " <>
+        "-S mix run --no-start dev/serve.exs#{workflow_arg()} " <>
         "> .symphony/serve.log 2>&1 < /dev/null &"
 
     {_out, 0} = System.cmd("sh", ["-c", command])
     :ok
+  end
+
+  # Per-project config is DB-owned; a global workflow is optional. Pass one only
+  # when SYMPHONY_WORKFLOW is explicitly set (back-compat), otherwise boot
+  # global-less and let dev/serve.exs resolve per-project config from the DB.
+  defp workflow_arg do
+    case System.get_env("SYMPHONY_WORKFLOW") do
+      value when is_binary(value) and value != "" -> " " <> shell_escape(value)
+      _ -> ""
+    end
   end
 
   defp rpc_restart(targets) do

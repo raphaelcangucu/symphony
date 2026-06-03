@@ -19,10 +19,6 @@ endif
 NPM ?= npm
 TRACKER_DIR ?= ../tracker
 TRACKER_PORT ?= 4000
-# Dev-only default bearer token for the tracker UI/API. Override with a real
-# secret via the SYMPHONY_TRACKER_TOKEN environment variable in any real setup.
-TRACKER_TOKEN ?= dev-local-token
-WORKFLOW ?= ./WORKFLOW.md
 
 help:
 	@echo "Quality:  setup, deps, build, fmt, fmt-check, lint, test, coverage, dialyzer, ci, all"
@@ -128,15 +124,14 @@ db-migrate: migrate
 
 # Boot/ensure the long-lived Symphony daemon (detached). It owns the DB +
 # orchestrator + web + editor, each in its own restartable subtree, so restarting
-# one never disturbs the others. Ensures deps + migrations first. Loads elixir/.env
-# (GITHUB_TOKEN, SYMPHONY_TRACKER_TOKEN, node name/cookie, etc.). A dev-only tracker
-# token is injected unless SYMPHONY_TRACKER_TOKEN is already set. Logs: .symphony/serve.log
+# one never disturbs the others. Ensures deps + migrations first. Per-project config
+# is DB-owned (global-less): no global WORKFLOW is required. Loads elixir/.env for
+# host/process settings and secrets (GITHUB_TOKEN, SYMPHONY_TRACKER_TOKEN, node
+# name/cookie, optional SYMPHONY_WORKFLOW). Logs: .symphony/serve.log
 serve: ensure-deps migrate
 	@set -e; \
 	if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
-	token="$${SYMPHONY_TRACKER_TOKEN:-$(TRACKER_TOKEN)}"; \
-	SYMPHONY_TRACKER_TOKEN="$$token" SYMPHONY_TRACKER_PORT="$(TRACKER_PORT)" \
-	SYMPHONY_WORKFLOW="$(WORKFLOW)" \
+	SYMPHONY_TRACKER_PORT="$(TRACKER_PORT)" \
 		$(MIX) symphony.ctl serve $(ARGS)
 
 # Recompile + restart selected subtree(s) against the running daemon.
@@ -180,8 +175,9 @@ tracker-api: serve
 
 # Raw packaged escript. NOTE: the escript does not bundle native NIFs, so the
 # SQLite-backed local tracker cannot run from it. Kept for parity / debugging.
+# (Legacy: with no positional arg the escript falls back to ./WORKFLOW.md.)
 tracker-api-escript: build migrate
-	$(ESCRIPT) --i-understand-that-this-will-be-running-without-the-usual-guardrails --port $(TRACKER_PORT) $(WORKFLOW)
+	$(ESCRIPT) --i-understand-that-this-will-be-running-without-the-usual-guardrails --port $(TRACKER_PORT)
 
 tracker-dev:
 	$(NPM) --prefix $(TRACKER_DIR) run dev
