@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useState } from "react";
 
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ interface ExecutionSteerComposerProps {
   disabled?: boolean;
   pending?: boolean;
   error?: string | null;
+  seedMessage?: string | null;
   onSteer: (message: string) => void;
 }
 
@@ -15,9 +16,15 @@ export function ExecutionSteerComposer({
   disabled = false,
   pending = false,
   error = null,
+  seedMessage = null,
   onSteer,
 }: ExecutionSteerComposerProps) {
   const [input, setInput] = useState("");
+
+  useEffect(() => {
+    if (!seedMessage?.trim()) return;
+    setInput(seedMessage);
+  }, [seedMessage]);
 
   function submitCurrent() {
     const parsed = parseSlashCommand(input);

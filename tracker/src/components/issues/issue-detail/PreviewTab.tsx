@@ -1,15 +1,28 @@
-import { AlertTriangle, ExternalLink, Loader2, Play, RotateCcw, Server, Square } from "lucide-react";
+import { AlertTriangle, Bot, ExternalLink, Loader2, Play, RotateCcw, Server, Square } from "lucide-react";
+import { useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
+import {
+  buildPreviewFailurePrompt,
+  isPreviewFailureReason,
+  isPreviewFailureServerStatus,
+  previewHandoffTarget,
+  stashPreviewAssistantHandoff,
+} from "@/lib/previewAssistantHandoff";
+import { issueAgentTabPath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
-import type { IssueDevServer, IssueDevServerReason, IssueDevServerStatus } from "@/types/issue";
+import type { AgentExecution } from "@/types/agent-execution";
+import type { IssueDevServer, IssueDevServerReason, IssueDevServerStatus, IssueDevServersResponse } from "@/types/issue";
 
 interface PreviewTabProps {
   projectSlug: string;
   issueIdentifier: string;
+  view: WorkspaceView;
+  execution?: AgentExecution;
 }
 
 const STATUS_BADGE_CLASS: Record<IssueDevServerStatus, string> = {
@@ -28,11 +41,36 @@ const RETRYABLE_UNAVAILABLE_REASONS = new Set<IssueDevServerReason>([
   "crashed",
 ]);
 
-export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
+export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: PreviewTabProps) {
+  const navigate = useNavigate();
   const { data, error, loading, restart, start, stop } = useIssueDevServers(projectSlug, issueIdentifier);
+
+  const askAssistantToFix = useCallback(
+    (snapshot: IssueDevServersResponse, server?: IssueDevServer | null) => {
+      const target = previewHandoffTarget(execution);
+      stashPreviewAssistantHandoff({
+        projectSlug,
+        issueIdentifier,
+        target,
+        message: buildPreviewFailurePrompt(snapshot, server),
+        createdAt: Date.now(),
+      });
+      navigate(
+        issueAgentTabPath(
+          projectSlug,
+          view,
+          issueIdentifier,
+          target === "execution-steer" ? "execution" : "authoring",
+        ),
+      );
+    },
+    [execution, issueIdentifier, navigate, projectSlug, view],
+  );
   const primaryServer = selectPrimaryServer(data?.servers ?? []);
   const primaryUrl = readyPreviewUrl(primaryServer);
+  const primaryPublicUrl = publicTunnelPreviewUrl(primaryServer);
   const primaryLocalUrl = localPreviewUrl(primaryServer);
+  const hasPublicTunnelPreviews = (data?.servers ?? []).some((server) => publicTunnelPreviewUrl(server) != null);
   const hasRequiredIdentifiers = projectSlug.trim().length > 0 && issueIdentifier.trim().length > 0;
 
   if (!hasRequiredIdentifiers) {
@@ -76,12 +114,22 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
   const provisioningMessage =
     data.available && !primaryUrl && primaryServer != null ? provisioningStatusMessage(primaryServer) : null;
   const controlsDisabled = loading || !canRunManualActions(data.available, data.reason);
+  const failureReason = data.reason && isPreviewFailureReason(data.reason);
 
   return (
     <div className="space-y-4 text-sm">
       {error ? (
         <StateCallout tone="error" title="Could not refresh preview status">
           {error}
+        </StateCallout>
+      ) : null}
+
+      {hasPublicTunnelPreviews ? (
+        <StateCallout tone="default" title="Public preview URLs">
+          These hosts are routed through the Cloudflare tunnel to your machine. Start it from{" "}
+          <span className="font-mono">elixir/</span> with <span className="font-mono">make tunnel</span> (or{" "}
+          <span className="font-mono">make tunnel-bg</span>) so teammates can open the links. Local links still work
+          on this machine without the tunnel.
         </StateCallout>
       ) : null}
 
@@ -104,7 +152,12 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
         <CardContent className="space-y-4">
           {unavailableMessage ? (
             <StateCallout tone="warning" title={unavailableMessage.title}>
-              {unavailableMessage.body}
+              <div className="space-y-3">
+                <p>{unavailableMessage.body}</p>
+                {failureReason ? (
+                  <AskAssistantButton onClick={() => askAssistantToFix(data)} />
+                ) : null}
+              </div>
             </StateCallout>
           ) : null}
 
@@ -118,6 +171,14 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
                   <p className="mt-1 break-all font-mono text-xs text-emerald-700 dark:text-emerald-300">
                     {primaryUrl}
                   </p>
+                  {primaryPublicUrl ? (
+                    <p className="mt-1 break-all font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">
+                      Public (Cloudflare tunnel):{" "}
+                      <a href={primaryPublicUrl} target="_blank" rel="noreferrer noopener" className="underline">
+                        {primaryPublicUrl}
+                      </a>
+                    </p>
+                  ) : null}
                   {primaryLocalUrl ? (
                     <p className="mt-1 break-all font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">
                       Local:{" "}
@@ -144,7 +205,12 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
               role="status"
               title="Preview is being provisioned..."
             >
-              {provisioningMessage}
+              <div className="space-y-3">
+                <p>{provisioningMessage}</p>
+                {primaryServer && isPreviewFailureServerStatus(primaryServer.status) ? (
+                  <AskAssistantButton onClick={() => askAssistantToFix(data, primaryServer)} />
+                ) : null}
+              </div>
             </StateCallout>
           ) : null}
 
@@ -161,7 +227,15 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
             ) : (
               <div className="space-y-2">
                 {data.servers.map((server) => (
-                  <ServerRow key={server.id} server={server} />
+                  <ServerRow
+                    key={server.id}
+                    onAskAssistant={
+                      isPreviewFailureServerStatus(server.status)
+                        ? () => askAssistantToFix(data, server)
+                        : undefined
+                    }
+                    server={server}
+                  />
                 ))}
               </div>
             )}
@@ -201,8 +275,18 @@ function PreviewControls({
   );
 }
 
-function ServerRow({ server }: { server: IssueDevServer }) {
+function AskAssistantButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button type="button" size="sm" variant="outline" onClick={onClick}>
+      <Bot className="h-3.5 w-3.5" />
+      Ask assistant to fix
+    </Button>
+  );
+}
+
+function ServerRow({ server, onAskAssistant }: { server: IssueDevServer; onAskAssistant?: () => void }) {
   const previewUrl = readyPreviewUrl(server);
+  const publicUrl = publicTunnelPreviewUrl(server);
   const localUrl = localPreviewUrl(server);
 
   return (
@@ -218,6 +302,14 @@ function ServerRow({ server }: { server: IssueDevServer }) {
             {server.working_dir ? `Working directory: ${server.working_dir}` : "No working directory reported"}
             {server.port ? ` · Port ${server.port}` : ""}
           </p>
+          {publicUrl ? (
+            <p className="break-all font-mono text-xs text-muted-foreground">
+              Public (Cloudflare tunnel):{" "}
+              <a href={publicUrl} target="_blank" rel="noreferrer noopener" className="underline">
+                {publicUrl}
+              </a>
+            </p>
+          ) : null}
           {localUrl ? (
             <p className="break-all font-mono text-xs text-muted-foreground">
               Local:{" "}
@@ -228,16 +320,19 @@ function ServerRow({ server }: { server: IssueDevServer }) {
           ) : null}
           {server.session_name ? <p className="font-mono text-xs text-muted-foreground">{server.session_name}</p> : null}
         </div>
-        {previewUrl ? (
-          <Button asChild size="sm" variant="outline">
-            <a href={previewUrl} target="_blank" rel="noreferrer noopener">
-              <ExternalLink className="h-3.5 w-3.5" />
-              Open {server.slug} preview
-            </a>
-          </Button>
-        ) : (
-          <span className="text-xs text-muted-foreground">No URL yet</span>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {onAskAssistant ? <AskAssistantButton onClick={onAskAssistant} /> : null}
+          {previewUrl ? (
+            <Button asChild size="sm" variant="outline">
+              <a href={previewUrl} target="_blank" rel="noreferrer noopener">
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open {server.slug} preview
+              </a>
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">No URL yet</span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -288,6 +383,15 @@ function readyPreviewUrl(server: IssueDevServer | null): string | null {
   }
 
   return server.url;
+}
+
+function publicTunnelPreviewUrl(server: IssueDevServer | null): string | null {
+  const url = readyPreviewUrl(server);
+  if (!url || isLoopbackUrl(url)) {
+    return null;
+  }
+
+  return url;
 }
 
 function localPreviewUrl(server: IssueDevServer | null): string | null {

@@ -12,6 +12,7 @@ interface AgentTabProps {
   issue: Issue;
   execution?: AgentExecution;
   projectSlug: string;
+  steerSeedMessage?: string | null;
 }
 
 function formatRuntime(seconds: number | null): string {
@@ -28,7 +29,7 @@ function formatTokens(value: number): string {
   return value.toLocaleString();
 }
 
-export function AgentTab({ issue, execution, projectSlug }: AgentTabProps) {
+export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = null }: AgentTabProps) {
   const sessionLogEnabled =
     execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting";
   const sessionLog = useSessionLogChannel({
@@ -129,6 +130,7 @@ export function AgentTab({ issue, execution, projectSlug }: AgentTabProps) {
         disabled={!canSteer || !sessionLog.connected}
         pending={sessionLog.steerPending}
         error={sessionLog.steerError}
+        seedMessage={steerSeedMessage}
         onSteer={sessionLog.steerTurn}
       />
 

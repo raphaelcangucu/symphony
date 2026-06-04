@@ -312,7 +312,12 @@ export function IssueDrawer({
                   <AgentTabs issue={issue} projectSlug={projectSlug} execution={execution} view={view} />
                 </TabsContent>
                 <TabsContent value="preview">
-                  <PreviewTab projectSlug={projectSlug} issueIdentifier={issue.identifier} />
+                  <PreviewTab
+                    projectSlug={projectSlug}
+                    issueIdentifier={issue.identifier}
+                    view={view}
+                    execution={execution}
+                  />
                 </TabsContent>
                 <TabsContent value="activity">
                   <ActivityTab projectSlug={projectSlug} issue={issue} execution={execution} />

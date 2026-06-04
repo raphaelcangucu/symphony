@@ -1,5 +1,5 @@
 import { ExternalLink, Rocket, Sparkles } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 
 import { DocumentViewer } from "@/components/assistant/DocumentViewer";
@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useIssueDocuments } from "@/hooks/useIssueDocuments";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import type { AssistantDocumentChangedPayload, AssistantIssueCreatedPayload } from "@/services/phoenix/assistantChannel";
@@ -48,12 +49,22 @@ export function IssueAuthoringPanel({
   const [dispatching, setDispatching] = useState(false);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [composerSeedMessage, setComposerSeedMessage] = useState<string | null>(null);
   const issueDocuments = useIssueDocuments({
     projectSlug,
     identifier: normalizedIdentifier,
     enabled: normalizedIdentifier !== null,
     refreshKey,
   });
+
+  useEffect(() => {
+    if (!normalizedIdentifier) return;
+
+    const handoff = consumePreviewAssistantHandoff(projectSlug, normalizedIdentifier);
+    if (!handoff || handoff.target !== "authoring") return;
+
+    setComposerSeedMessage(composerSeedFromHandoff(handoff));
+  }, [normalizedIdentifier, projectSlug]);
 
   const handleDocumentChanged = useCallback(
     (payload: AssistantDocumentChangedPayload) => {
@@ -147,6 +158,7 @@ export function IssueAuthoringPanel({
         onIssueGoalModeError={handleGoalModeError}
         onDispatchSucceeded={handleDispatchSucceeded}
         onDispatchError={handleDispatchError}
+        composerSeedMessage={composerSeedMessage}
       />
     </div>
   );

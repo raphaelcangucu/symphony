@@ -75,6 +75,7 @@ interface ProjectAssistantPanelProps {
   onDispatchSucceeded?: (message: string) => void;
   onDispatchError?: (message: string) => void;
   onOpenDocumentPath?: (path: string) => void;
+  composerSeedMessage?: string | null;
 }
 
 const STREAMING_ASSISTANT_ID = "assistant-streaming";
@@ -112,6 +113,7 @@ export function ProjectAssistantPanel({
   onDispatchSucceeded,
   onDispatchError,
   onOpenDocumentPath,
+  composerSeedMessage = null,
 }: ProjectAssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -613,6 +615,7 @@ export function ProjectAssistantPanel({
         disabled={isRunning}
         floating={isPageMode && Boolean(projectSlug)}
         hasQueued={queued.length > 0}
+        seedMessage={composerSeedMessage}
         onForceQueued={forceSendOldestQueued}
         onSubmit={sendMessage}
       />

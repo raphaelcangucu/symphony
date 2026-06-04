@@ -7,6 +7,7 @@ import {
   filtersPath,
   isIssueTab,
   isWorkspaceView,
+  issueAgentTabPath,
   issueAssistantPath,
   issuePath,
   newIssueAssistantPath,
@@ -89,6 +90,13 @@ describe("workspaceRoutes", () => {
     expect(viewFromPathname("/projects/acme/board/issues/ABC-1")).toBe("board");
     expect(viewFromPathname("/projects/acme/list/filters")).toBe("list");
     expect(viewFromPathname("/projects/acme")).toBe("board");
+  });
+
+  it("builds the issue agent tab path with an optional section", () => {
+    expect(issueAgentTabPath("macro-markets", "board", "510")).toBe("/projects/macro-markets/board/issues/510/agent");
+    expect(issueAgentTabPath("macro-markets", "board", "510", "execution")).toBe(
+      "/projects/macro-markets/board/issues/510/agent?agent=execution",
+    );
   });
 
   it("reads and writes the agent sub-tab search param", () => {

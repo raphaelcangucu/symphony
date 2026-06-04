@@ -51,6 +51,7 @@ interface AssistantComposerProps {
   disabled?: boolean;
   floating?: boolean;
   hasQueued?: boolean;
+  seedMessage?: string | null;
   onForceQueued?: () => void;
   onSubmit: (payload: AssistantComposerSubmit) => void;
 }
@@ -61,6 +62,7 @@ export function AssistantComposer({
   disabled = false,
   floating = false,
   hasQueued = false,
+  seedMessage = null,
   onForceQueued,
   onSubmit,
 }: AssistantComposerProps) {
@@ -97,6 +99,11 @@ export function AssistantComposer({
       };
     });
   }, [catalog]);
+
+  useEffect(() => {
+    if (!seedMessage?.trim()) return;
+    setInput(seedMessage);
+  }, [seedMessage]);
 
   useEffect(() => {
     return () => {

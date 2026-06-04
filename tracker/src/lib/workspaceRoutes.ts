@@ -152,3 +152,13 @@ export function withAgentSection(pathname: string, search: string, section: Agen
   const query = params.toString();
   return query ? `${pathname}?${query}` : pathname;
 }
+
+export function issueAgentTabPath(
+  projectSlug: string,
+  view: WorkspaceView,
+  identifier: string,
+  section: AgentSection = DEFAULT_AGENT_SECTION,
+): string {
+  const pathname = issuePath(projectSlug, view, identifier, "agent");
+  return withAgentSection(pathname, "", section);
+}

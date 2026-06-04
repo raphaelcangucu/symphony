@@ -1,9 +1,10 @@
 import { PenLine, Play } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import {
   agentSectionFromSearchParams,
   type AgentSection,
@@ -27,6 +28,7 @@ export function AgentTabs({ issue, projectSlug, execution, view }: AgentTabsProp
   const location = useLocation();
   const navigate = useNavigate();
   const section = agentSectionFromSearchParams(new URLSearchParams(location.search));
+  const [steerSeedMessage, setSteerSeedMessage] = useState<string | null>(null);
 
   const setSection = useCallback(
     (nextSection: AgentSection) => {
@@ -34,6 +36,14 @@ export function AgentTabs({ issue, projectSlug, execution, view }: AgentTabsProp
     },
     [location.pathname, location.search, navigate],
   );
+
+  useEffect(() => {
+    const handoff = consumePreviewAssistantHandoff(projectSlug, issue.identifier);
+    if (!handoff || handoff.target !== "execution-steer") return;
+
+    setSteerSeedMessage(composerSeedFromHandoff(handoff));
+    setSection("execution");
+  }, [issue.identifier, projectSlug, setSection]);
 
   return (
     <Tabs
@@ -74,7 +84,12 @@ export function AgentTabs({ issue, projectSlug, execution, view }: AgentTabsProp
         <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} compact />
       </TabsContent>
       <TabsContent value="execution" className="mt-0">
-        <AgentTab issue={issue} execution={execution} projectSlug={projectSlug} />
+        <AgentTab
+          issue={issue}
+          execution={execution}
+          projectSlug={projectSlug}
+          steerSeedMessage={steerSeedMessage}
+        />
       </TabsContent>
     </Tabs>
   );

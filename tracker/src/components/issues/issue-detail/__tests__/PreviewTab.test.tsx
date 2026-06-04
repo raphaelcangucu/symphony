@@ -13,6 +13,16 @@ vi.mock("@/hooks/useIssueDevServers", () => ({
   useIssueDevServers: vi.fn(),
 }));
 
+const navigate = vi.fn();
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+  };
+});
+
 const hookActions = {
   refresh: vi.fn(),
   restart: vi.fn(),
@@ -23,6 +33,8 @@ const hookActions = {
 describe("PreviewTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
+    navigate.mockReset();
     for (const action of Object.values(hookActions)) {
       action.mockResolvedValue(undefined);
     }
@@ -56,7 +68,7 @@ describe("PreviewTab", () => {
     );
   });
 
-  it("shows the localhost URL alongside a public tunnel preview", () => {
+  it("shows public tunnel and localhost URLs for a ready server", () => {
     renderPreview(
       response([
         server({
@@ -70,6 +82,14 @@ describe("PreviewTab", () => {
       ]),
     );
 
+    expect(screen.getByText(/public preview urls/i)).toBeInTheDocument();
+    const publicLinks = screen.getAllByRole("link", {
+      name: "https://macro-markets-510-back.example.tracker.cods.dev/admin",
+    });
+    expect(publicLinks.length).toBeGreaterThan(0);
+    for (const link of publicLinks) {
+      expect(link).toHaveAttribute("href", "https://macro-markets-510-back.example.tracker.cods.dev/admin");
+    }
     const localLinks = screen.getAllByRole("link", { name: "http://127.0.0.1:4102/admin" });
     expect(localLinks.length).toBeGreaterThan(0);
     for (const link of localLinks) {
@@ -124,6 +144,29 @@ describe("PreviewTab", () => {
     expect(screen.queryByText(/preview capacity is full/i)).not.toBeInTheDocument();
   });
 
+  it("offers assistant handoff when preview start failed", async () => {
+    const user = userEvent.setup();
+    renderPreview({ available: false, reason: "start_failed", servers: [] });
+
+    await user.click(screen.getByRole("button", { name: /ask assistant to fix/i }));
+
+    expect(navigate).toHaveBeenCalledWith("/projects/macro-markets/board/issues/MAC-1/agent");
+    expect(sessionStorage.getItem("symphony:preview-assistant-handoff")).toContain("preview dev server failed");
+  });
+
+  it("offers assistant handoff when a dev server crashed", async () => {
+    const user = userEvent.setup();
+    renderPreview(response([server({ status: "crashed", url: null, port: 4100 })]));
+
+    const handoffButtons = screen.getAllByRole("button", { name: /ask assistant to fix/i });
+    await user.click(handoffButtons[0]!);
+
+    expect(navigate).toHaveBeenCalledWith("/projects/macro-markets/board/issues/MAC-1/agent");
+    const stored = sessionStorage.getItem("symphony:preview-assistant-handoff");
+    expect(stored).toContain("preview dev server failed");
+    expect(stored).toContain("sym-issue-macro-markets-MAC-1-web");
+  });
+
   it("calls start when Start Preview is clicked", async () => {
     const user = userEvent.setup();
     renderPreview(response([]));
@@ -143,7 +186,7 @@ function renderPreview(data: IssueDevServersResponse, overrides: Partial<UseIssu
     ...overrides,
   });
 
-  render(<PreviewTab projectSlug="macro-markets" issueIdentifier="MAC-1" />);
+  render(<PreviewTab projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" />);
 }
 
 function response(servers: IssueDevServer[]): IssueDevServersResponse {
