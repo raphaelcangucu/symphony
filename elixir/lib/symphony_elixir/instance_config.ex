@@ -41,6 +41,15 @@ defmodule SymphonyElixir.InstanceConfig do
   def max_concurrent_agents, do: get(:max_concurrent_agents, @default_max_concurrent_agents)
 
   @spec max_concurrent_agents_for_state(term()) :: pos_integer()
+  def max_concurrent_agents_for_state(state) when is_binary(state) do
+    normalized = normalize_state(state)
+
+    :max_concurrent_agents_by_state
+    |> get(%{})
+    |> Map.new(fn {k, v} -> {normalize_state(to_string(k)), v} end)
+    |> Map.get(normalized, max_concurrent_agents())
+  end
+
   def max_concurrent_agents_for_state(_state), do: max_concurrent_agents()
 
   @spec default_max_turns() :: pos_integer()
@@ -67,11 +76,17 @@ defmodule SymphonyElixir.InstanceConfig do
   @spec server_host() :: String.t()
   def server_host, do: get(:server_host, @default_server_host)
 
-  @spec server_port() :: non_neg_integer()
+  @spec server_port() :: non_neg_integer() | nil
   def server_port do
     case Application.get_env(:symphony_elixir, :server_port_override) do
-      port when is_integer(port) and port >= 0 -> port
-      _ -> get(:server_port, @default_server_port)
+      port when is_integer(port) and port >= 0 ->
+        port
+
+      _ ->
+        # Read directly (not via get/2) so an explicit `nil` (e.g. test config,
+        # which suppresses the HTTP listener) is honored rather than coalesced
+        # to the default port.
+        Application.get_env(:symphony_elixir, :server_port, @default_server_port)
     end
   end
 
@@ -145,7 +160,10 @@ defmodule SymphonyElixir.InstanceConfig do
     end
   end
 
+  defp normalize_state(state), do: state |> String.trim() |> String.downcase()
+
   defp browser_host("0.0.0.0"), do: "127.0.0.1"
+  defp browser_host("::"), do: "[::1]"
   defp browser_host(host) when is_binary(host) and host != "", do: host
   defp browser_host(_host), do: "127.0.0.1"
 end

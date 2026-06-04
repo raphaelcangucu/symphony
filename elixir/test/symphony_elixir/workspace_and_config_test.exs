@@ -756,46 +756,20 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     write_workflow_file!(Workflow.workflow_file_path(), tracker_active_states: ",")
     assert Config.active_states() == ["Todo", "In Progress"]
 
-    write_workflow_file!(Workflow.workflow_file_path(), max_concurrent_agents: "bad")
-    assert Config.max_concurrent_agents() == 10
-
-    write_workflow_file!(Workflow.workflow_file_path(), agent_turn_timeout_ms: "bad")
-    assert Config.agent_turn_timeout_ms() == 3_600_000
-
-    write_workflow_file!(Workflow.workflow_file_path(), agent_read_timeout_ms: "bad")
-    assert Config.agent_read_timeout_ms() == 5_000
-
-    write_workflow_file!(Workflow.workflow_file_path(), agent_stall_timeout_ms: "bad")
-    assert Config.agent_stall_timeout_ms() == 300_000
-
+    # NOTE: process-level settings (concurrency, timeouts, poll, observability,
+    # server) are now sourced from SYMPHONY_* env via InstanceConfig and are
+    # trusted, so the old global-file coercion of invalid values no longer
+    # applies. Those defaults are covered by InstanceConfigTest. The file-driven
+    # tracker/workspace/codex coercion below still applies.
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_active_states: %{todo: true},
       tracker_terminal_states: %{done: true},
-      poll_interval_ms: %{bad: true},
-      workspace_root: 123,
-      max_retry_backoff_ms: 0,
-      max_concurrent_agents_by_state: %{"Todo" => "1", "Review" => 0, "Done" => "bad"},
-      hook_timeout_ms: 0,
-      observability_enabled: "maybe",
-      observability_refresh_ms: %{bad: true},
-      observability_render_interval_ms: %{bad: true},
-      server_port: -1,
-      server_host: 123
+      workspace_root: 123
     )
 
     assert Config.active_states() == ["Todo", "In Progress"]
     assert Config.terminal_states() == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
-    assert Config.poll_interval_ms() == 60_000
     assert Config.workspace_root() == Path.join(System.tmp_dir!(), "symphony_workspaces")
-    assert Config.max_retry_backoff_ms() == 300_000
-    assert Config.max_concurrent_agents_for_state("Todo") == 1
-    assert Config.max_concurrent_agents_for_state("Review") == 10
-    assert Config.hook_timeout_ms() == 60_000
-    assert Config.observability_enabled?()
-    assert Config.observability_refresh_ms() == 1_000
-    assert Config.observability_render_interval_ms() == 16
-    assert Config.server_port() == nil
-    assert Config.server_host() == "123"
 
     write_workflow_file!(Workflow.workflow_file_path(), codex_approval_policy: "")
 
@@ -905,18 +879,10 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
   end
 
   test "config supports per-state max concurrent agent overrides" do
-    workflow = """
-    ---
-    agent:
-      max_concurrent_agents: 10
-      max_concurrent_agents_by_state:
-        todo: 1
-        "In Progress": 4
-        "In Review": 2
-    ---
-    """
-
-    File.write!(Workflow.workflow_file_path(), workflow)
+    write_workflow_file!(Workflow.workflow_file_path(),
+      max_concurrent_agents: 10,
+      max_concurrent_agents_by_state: %{"todo" => 1, "In Progress" => 4, "In Review" => 2}
+    )
 
     assert Config.max_concurrent_agents() == 10
     assert Config.max_concurrent_agents_for_state("Todo") == 1

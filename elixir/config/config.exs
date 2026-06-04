@@ -73,6 +73,13 @@ config :symphony_elixir, SymphonyElixir.Repo,
   stacktrace: Mix.env() in [:dev, :test],
   show_sensitive_data_on_connection_error: Mix.env() in [:dev, :test]
 
+# Tests drive the endpoint via Phoenix.ConnTest (no real listener), so suppress
+# the HTTP listener under :test. `nil` makes SymphonyElixir.HttpServer `:ignore`
+# instead of binding a port (which would collide with a running dev server).
+if Mix.env() == :test do
+  config :symphony_elixir, server_port: nil
+end
+
 config :symphony_elixir, SymphonyElixirWeb.Endpoint,
   adapter: Bandit.PhoenixAdapter,
   url: [host: "localhost"],

@@ -47,6 +47,29 @@ defmodule SymphonyElixir.TestSupport do
           Application.delete_env(:symphony_elixir, :server_port_override)
           Application.delete_env(:symphony_elixir, :memory_tracker_issues)
           Application.delete_env(:symphony_elixir, :memory_tracker_recipient)
+
+          Enum.each(
+            [
+              :poll_interval_ms,
+              :max_concurrent_agents,
+              :default_max_turns,
+              :max_retry_backoff_ms,
+              :max_concurrent_agents_by_state,
+              :turn_timeout_ms,
+              :read_timeout_ms,
+              :stall_timeout_ms,
+              :hook_timeout_ms,
+              :completion_transitions,
+              :observability_enabled,
+              :observability_refresh_ms,
+              :observability_render_interval_ms,
+              :default_agent_kind,
+              :codex_command,
+              :claude_command
+            ],
+            &Application.delete_env(:symphony_elixir, &1)
+          )
+
           File.rm_rf(workflow_root)
         end)
 
@@ -56,8 +79,9 @@ defmodule SymphonyElixir.TestSupport do
   end
 
   def write_workflow_file!(path, overrides \\ []) do
-    workflow = workflow_content(overrides)
-    File.write!(path, workflow)
+    config = merged_workflow_config(overrides)
+    File.write!(path, workflow_content_from(config))
+    apply_instance_env!(config)
 
     if Process.whereis(SymphonyElixir.WorkflowStore) do
       try do
@@ -66,6 +90,46 @@ defmodule SymphonyElixir.TestSupport do
         :exit, _reason -> :ok
       end
     end
+
+    :ok
+  end
+
+  # Process-level settings now resolve from SYMPHONY_* env via
+  # SymphonyElixir.InstanceConfig (no longer from the global WORKFLOW.md). Tests
+  # still describe these via write_workflow_file! overrides, so mirror the
+  # resolved values into the application env that InstanceConfig reads. The
+  # shared on_exit in __using__ would not clean these, so callers that need
+  # strict isolation can reset them; the values are deterministic per setup.
+  defp apply_instance_env!(config) do
+    agent_kind = Keyword.get(config, :agent_kind)
+
+    [
+      {:poll_interval_ms, Keyword.get(config, :poll_interval_ms)},
+      {:max_concurrent_agents, Keyword.get(config, :max_concurrent_agents)},
+      {:default_max_turns, Keyword.get(config, :max_turns)},
+      {:max_retry_backoff_ms, Keyword.get(config, :max_retry_backoff_ms)},
+      {:max_concurrent_agents_by_state, Keyword.get(config, :max_concurrent_agents_by_state)},
+      {:turn_timeout_ms, Keyword.get(config, :agent_turn_timeout_ms)},
+      {:read_timeout_ms, Keyword.get(config, :agent_read_timeout_ms)},
+      {:stall_timeout_ms, Keyword.get(config, :agent_stall_timeout_ms)},
+      {:hook_timeout_ms, Keyword.get(config, :hook_timeout_ms)},
+      {:completion_transitions, Keyword.get(config, :agent_completion_transitions) || %{}},
+      {:observability_enabled, Keyword.get(config, :observability_enabled)},
+      {:observability_refresh_ms, Keyword.get(config, :observability_refresh_ms)},
+      {:observability_render_interval_ms, Keyword.get(config, :observability_render_interval_ms)},
+      {:server_port, Keyword.get(config, :server_port)},
+      {:server_host, Keyword.get(config, :server_host)}
+    ]
+    |> Enum.each(fn {key, value} -> Application.put_env(:symphony_elixir, key, value) end)
+
+    if is_binary(agent_kind) do
+      Application.put_env(:symphony_elixir, :default_agent_kind, agent_kind)
+    else
+      Application.delete_env(:symphony_elixir, :default_agent_kind)
+    end
+
+    if agent_kind == "codex", do: Application.put_env(:symphony_elixir, :codex_command, Keyword.get(config, :command))
+    if agent_kind == "claude", do: Application.put_env(:symphony_elixir, :claude_command, Keyword.get(config, :command))
 
     :ok
   end
@@ -114,10 +178,9 @@ defmodule SymphonyElixir.TestSupport do
     end
   end
 
-  defp workflow_content(overrides) do
-    config =
-      Keyword.merge(
-        [
+  defp merged_workflow_config(overrides) do
+    Keyword.merge(
+      [
           tracker_kind: "linear",
           tracker_endpoint: "https://api.linear.app/graphql",
           tracker_api_token: "token",
@@ -170,10 +233,12 @@ defmodule SymphonyElixir.TestSupport do
           server_port: nil,
           server_host: nil,
           prompt: @workflow_prompt
-        ],
-        overrides
-      )
+      ],
+      overrides
+    )
+  end
 
+  defp workflow_content_from(config) do
     tracker_kind = Keyword.get(config, :tracker_kind)
     tracker_active_states = Keyword.get(config, :tracker_active_states)
     tracker_terminal_states = Keyword.get(config, :tracker_terminal_states)

@@ -85,23 +85,12 @@ defmodule SymphonyElixir.CoreTest do
       command: nil
     )
 
-    assert Config.poll_interval_ms() == 60_000
+    # poll_interval_ms / max_turns are process config (InstanceConfig) now and
+    # covered by InstanceConfigTest. Tracker states, Linear and Codex validation
+    # remain file/front-matter driven and are exercised below.
     assert Config.active_states() == ["Todo", "In Progress"]
     assert Config.terminal_states() == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
     assert LinearConfig.assignee() == nil
-    assert Config.agent_max_turns() == 20
-
-    write_workflow_file!(Workflow.workflow_file_path(), poll_interval_ms: "invalid")
-    assert Config.poll_interval_ms() == 60_000
-
-    write_workflow_file!(Workflow.workflow_file_path(), poll_interval_ms: 45_000)
-    assert Config.poll_interval_ms() == 45_000
-
-    write_workflow_file!(Workflow.workflow_file_path(), max_turns: 0)
-    assert Config.agent_max_turns() == 20
-
-    write_workflow_file!(Workflow.workflow_file_path(), max_turns: 5)
-    assert Config.agent_max_turns() == 5
 
     write_workflow_file!(Workflow.workflow_file_path(), tracker_active_states: "Todo,  Review,")
     assert Config.active_states() == ["Todo", "Review"]
@@ -152,35 +141,6 @@ defmodule SymphonyElixir.CoreTest do
 
     write_workflow_file!(Workflow.workflow_file_path(), codex_thread_sandbox: 123)
     assert {:error, "Invalid codex.thread_sandbox" <> _} = CodexConfig.validate!()
-  end
-
-  test "current WORKFLOW.md file is valid and complete" do
-    original_workflow_path = Workflow.workflow_file_path()
-    on_exit(fn -> Workflow.set_workflow_file_path(original_workflow_path) end)
-    Workflow.clear_workflow_file_path()
-
-    assert {:ok, %{config: config, prompt: prompt}} = Workflow.load()
-    assert is_map(config)
-
-    linear = Map.get(config, "linear", %{})
-    assert is_map(linear)
-    assert is_binary(Map.get(linear, "project_slug"))
-
-    tracker = Map.get(config, "tracker", %{})
-    assert is_map(tracker)
-    assert is_list(Map.get(tracker, "active_states"))
-    assert is_list(Map.get(tracker, "terminal_states"))
-
-    hooks = Map.get(config, "hooks", %{})
-    assert is_map(hooks)
-    assert Map.get(hooks, "after_create") =~ "git clone --depth 1 https://github.com/openai/symphony ."
-    assert Map.get(hooks, "after_create") =~ "cd elixir && mise trust"
-    assert Map.get(hooks, "after_create") =~ "mise exec -- mix deps.get"
-    assert Map.get(hooks, "before_remove") =~ "cd elixir && mise exec -- mix workspace.before_remove"
-
-    assert String.trim(prompt) != ""
-    assert is_binary(Config.workflow_prompt())
-    assert Config.workflow_prompt() == prompt
   end
 
   test "linear api token resolves from LINEAR_API_KEY env var" do

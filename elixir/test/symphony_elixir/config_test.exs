@@ -144,28 +144,30 @@ defmodule SymphonyElixir.ConfigTest do
   end
 
   describe "observability hub config" do
-    test "defaults when observability section omits hub keys" do
-      load_workflow_with_front_matter("""
-      github:
-        repo: acme/app
-      """)
+    @observability_hub_env [
+      :observability_hub_url,
+      :observability_heartbeat_interval_ms,
+      :observability_min_report_interval_ms,
+      :observability_label,
+      :observability_runtime_id
+    ]
+
+    test "defaults when no observability hub env is set" do
+      clear_instance_env(@observability_hub_env)
 
       assert SymphonyElixir.Config.observability_hub_url() == nil
       assert SymphonyElixir.Config.observability_heartbeat_interval_ms() == 5_000
       assert SymphonyElixir.Config.observability_min_report_interval_ms() == 250
     end
 
-    test "reads configured hub keys" do
-      load_workflow_with_front_matter("""
-      github:
-        repo: acme/app
-      observability:
-        hub_url: http://localhost:4000
-        heartbeat_interval_ms: 2000
-        min_report_interval_ms: 100
-        label: acme-app
-        runtime_id: acme-runtime-1
-      """)
+    test "reads configured hub keys from env" do
+      put_instance_env(
+        observability_hub_url: "http://localhost:4000",
+        observability_heartbeat_interval_ms: 2_000,
+        observability_min_report_interval_ms: 100,
+        observability_label: "acme-app",
+        observability_runtime_id: "acme-runtime-1"
+      )
 
       assert SymphonyElixir.Config.observability_hub_url() == "http://localhost:4000"
       assert SymphonyElixir.Config.observability_heartbeat_interval_ms() == 2_000
@@ -174,23 +176,26 @@ defmodule SymphonyElixir.ConfigTest do
       assert SymphonyElixir.Config.observability_runtime_id() == "acme-runtime-1"
     end
 
-    test "runtime_id falls back to the workflow file path" do
-      load_workflow_with_front_matter("""
-      github:
-        repo: acme/app
-      """)
+    test "runtime_id falls back to a stable default when unset" do
+      clear_instance_env(@observability_hub_env)
 
-      assert SymphonyElixir.Config.observability_runtime_id() ==
-               SymphonyElixir.Workflow.workflow_file_path()
+      assert SymphonyElixir.Config.observability_runtime_id() == "symphony"
     end
   end
 
   describe "editor config" do
-    test "defaults when the editor section is omitted" do
-      load_workflow_with_front_matter("""
-      github:
-        repo: acme/app
-      """)
+    @editor_env [
+      :editor_enabled,
+      :editor_binary,
+      :editor_host,
+      :editor_port,
+      :editor_auth,
+      :editor_password,
+      :editor_base_url
+    ]
+
+    test "defaults when no editor env is set" do
+      clear_instance_env(@editor_env)
 
       refute SymphonyElixir.Config.editor_enabled?()
       assert SymphonyElixir.Config.editor_binary() == "code-server"
@@ -201,19 +206,16 @@ defmodule SymphonyElixir.ConfigTest do
       assert SymphonyElixir.Config.editor_base_url() == "http://127.0.0.1:4002"
     end
 
-    test "reads configured editor keys" do
-      load_workflow_with_front_matter("""
-      github:
-        repo: acme/app
-      editor:
-        enabled: true
-        binary: /opt/code-server/bin/code-server
-        host: 0.0.0.0
-        port: 5000
-        auth: password
-        password: hunter2
-        base_url: https://editor.example.com
-      """)
+    test "reads configured editor keys from env" do
+      put_instance_env(
+        editor_enabled: true,
+        editor_binary: "/opt/code-server/bin/code-server",
+        editor_host: "0.0.0.0",
+        editor_port: 5000,
+        editor_auth: "password",
+        editor_password: "hunter2",
+        editor_base_url: "https://editor.example.com"
+      )
 
       assert SymphonyElixir.Config.editor_enabled?()
       assert SymphonyElixir.Config.editor_binary() == "/opt/code-server/bin/code-server"
@@ -225,50 +227,30 @@ defmodule SymphonyElixir.ConfigTest do
     end
 
     test "editor_base_url trims a trailing slash from a configured base_url" do
-      load_workflow_with_front_matter("""
-      github:
-        repo: acme/app
-      editor:
-        base_url: https://editor.example.com/
-      """)
+      clear_instance_env(@editor_env)
+      put_instance_env(editor_base_url: "https://editor.example.com/")
 
       assert SymphonyElixir.Config.editor_base_url() == "https://editor.example.com"
     end
 
     test "editor_base_url falls back to host and port when base_url is empty" do
-      load_workflow_with_front_matter("""
-      github:
-        repo: acme/app
-      editor:
-        host: 127.0.0.1
-        port: 4002
-        base_url: ""
-      """)
+      clear_instance_env(@editor_env)
+      put_instance_env(editor_host: "127.0.0.1", editor_port: 4002, editor_base_url: "")
 
       assert SymphonyElixir.Config.editor_base_url() == "http://127.0.0.1:4002"
     end
 
     test "editor_base_url maps wildcard IPv4 bind host to loopback in fallback" do
-      load_workflow_with_front_matter("""
-      github:
-        repo: acme/app
-      editor:
-        host: 0.0.0.0
-        port: 4002
-      """)
+      clear_instance_env(@editor_env)
+      put_instance_env(editor_host: "0.0.0.0", editor_port: 4002)
 
       assert SymphonyElixir.Config.editor_host() == "0.0.0.0"
       assert SymphonyElixir.Config.editor_base_url() == "http://127.0.0.1:4002"
     end
 
     test "editor_base_url maps wildcard IPv6 bind host to bracketed loopback in fallback" do
-      load_workflow_with_front_matter("""
-      github:
-        repo: acme/app
-      editor:
-        host: "::"
-        port: 4002
-      """)
+      clear_instance_env(@editor_env)
+      put_instance_env(editor_host: "::", editor_port: 4002)
 
       assert SymphonyElixir.Config.editor_host() == "::"
       assert SymphonyElixir.Config.editor_base_url() == "http://[::1]:4002"
@@ -350,4 +332,26 @@ defmodule SymphonyElixir.ConfigTest do
 
     :ok
   end
+
+  defp put_instance_env(pairs) do
+    Enum.each(pairs, fn {key, value} ->
+      Application.put_env(:symphony_elixir, key, value)
+      on_exit(fn -> Application.delete_env(:symphony_elixir, key) end)
+    end)
+
+    :ok
+  end
+
+  defp clear_instance_env(keys) do
+    Enum.each(keys, fn key ->
+      previous = Application.get_env(:symphony_elixir, key)
+      Application.delete_env(:symphony_elixir, key)
+      on_exit(fn -> restore_env_value(key, previous) end)
+    end)
+
+    :ok
+  end
+
+  defp restore_env_value(_key, nil), do: :ok
+  defp restore_env_value(key, value), do: Application.put_env(:symphony_elixir, key, value)
 end

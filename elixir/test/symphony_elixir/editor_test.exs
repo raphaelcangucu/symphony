@@ -27,6 +27,7 @@ defmodule SymphonyElixir.EditorTest do
 
     test "returns {:error, :starting} when the editor server is still starting" do
       load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
       put_status_fun(fn -> :starting end)
 
       assert Editor.editor_target("project", "MAC-1") == {:error, :starting}
@@ -34,6 +35,7 @@ defmodule SymphonyElixir.EditorTest do
 
     test "returns {:error, :workspace_missing} when enabled and ready but the dir is absent" do
       load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
       put_status_fun(fn -> :ready end)
 
       path = SymphonyElixir.Workspace.path_for_issue("MAC-EXISTS")
@@ -45,6 +47,7 @@ defmodule SymphonyElixir.EditorTest do
 
     test "returns {:ok, url} and strips a leading # when enabled, ready, and the dir exists" do
       load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
       put_status_fun(fn -> :ready end)
 
       path = SymphonyElixir.Workspace.path_for_issue("MAC-EXISTS")
@@ -60,6 +63,7 @@ defmodule SymphonyElixir.EditorTest do
 
     test "opens a repo subdirectory when the workspace root is not buildable" do
       load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
       put_status_fun(fn -> :ready end)
 
       workspace = SymphonyElixir.Workspace.path_for_issue("MAC-REPO")
@@ -76,6 +80,7 @@ defmodule SymphonyElixir.EditorTest do
 
     test "opens a multi-root .code-workspace file when front and back exist" do
       load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
       put_status_fun(fn -> :ready end)
 
       workspace = SymphonyElixir.Workspace.path_for_issue("MAC-MULTI")
@@ -107,6 +112,7 @@ defmodule SymphonyElixir.EditorTest do
 
     test "includes docs as an additional root when a multi-root workspace has docs" do
       load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
       put_status_fun(fn -> :ready end)
 
       workspace = SymphonyElixir.Workspace.path_for_issue("MAC-MULTI-DOCS")
@@ -141,6 +147,7 @@ defmodule SymphonyElixir.EditorTest do
 
     test "opens a workspace file when a single repo subdirectory has workspace docs" do
       load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
       put_status_fun(fn -> :ready end)
 
       workspace = SymphonyElixir.Workspace.path_for_issue("MAC-REPO-DOCS")
@@ -172,6 +179,7 @@ defmodule SymphonyElixir.EditorTest do
     test "prepares workspace skills before returning the editor URL" do
       previous_skills_root = Application.get_env(:symphony_elixir, :skills_root)
       load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
       put_status_fun(fn -> :ready end)
 
       path = SymphonyElixir.Workspace.path_for_issue("MAC-SKILLS")
@@ -203,6 +211,24 @@ defmodule SymphonyElixir.EditorTest do
       base_url: https://editor.example.com
     """
   end
+
+  defp enable_editor! do
+    previous_enabled = Application.get_env(:symphony_elixir, :editor_enabled)
+    previous_base_url = Application.get_env(:symphony_elixir, :editor_base_url)
+
+    Application.put_env(:symphony_elixir, :editor_enabled, true)
+    Application.put_env(:symphony_elixir, :editor_base_url, "https://editor.example.com")
+
+    on_exit(fn ->
+      restore_editor_env(:editor_enabled, previous_enabled)
+      restore_editor_env(:editor_base_url, previous_base_url)
+    end)
+
+    :ok
+  end
+
+  defp restore_editor_env(key, nil), do: Application.delete_env(:symphony_elixir, key)
+  defp restore_editor_env(key, value), do: Application.put_env(:symphony_elixir, key, value)
 
   defp put_status_fun(fun) do
     Application.put_env(:symphony_elixir, :editor_status_fun, fun)

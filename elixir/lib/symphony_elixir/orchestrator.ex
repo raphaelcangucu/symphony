@@ -733,7 +733,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp apply_normal_completion(%State{} = state, running_entry, issue_id) do
     maybe_annotate_incomplete(running_entry, issue_id)
 
-    case apply_completion_transition(state, issue_id) do
+    case apply_completion_transition(state, issue_id, running_entry.issue) do
       {:transitioned, transitioned_state} ->
         transitioned_state
 
@@ -755,10 +755,34 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  defp apply_completion_transition(%State{} = state, issue_id) do
+  # Resolve completion transitions from the issue we already hold (so the
+  # per-project config is keyed off its project_slug). Only when transitions are
+  # actually configured do we re-fetch the issue's current state from the tracker
+  # to decide the destination; with no transitions we short-circuit to
+  # :not_configured without touching the tracker.
+  defp apply_completion_transition(%State{} = state, issue_id, %Issue{} = running_issue) do
+    transitions = completion_transitions_for(running_issue)
+
+    if map_size(transitions) > 0 do
+      case Tracker.fetch_issue_states_by_ids([issue_id]) do
+        {:ok, [%Issue{} = issue | _]} ->
+          apply_completion_transition_for_issue(state, issue_id, issue, transitions)
+
+        {:ok, _other} ->
+          :not_visible
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      :not_configured
+    end
+  end
+
+  defp apply_completion_transition(%State{} = state, issue_id, _running_issue) do
     case Tracker.fetch_issue_states_by_ids([issue_id]) do
       {:ok, [%Issue{} = issue | _]} ->
-        apply_completion_transition_for_issue(state, issue_id, issue)
+        apply_completion_transition_for_issue(state, issue_id, issue, completion_transitions_for(issue))
 
       {:ok, _other} ->
         :not_visible
@@ -768,9 +792,7 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  defp apply_completion_transition_for_issue(%State{} = state, issue_id, %Issue{} = issue) do
-    transitions = completion_transitions_for(issue)
-
+  defp apply_completion_transition_for_issue(%State{} = state, issue_id, %Issue{} = issue, transitions) do
     case Map.get(transitions, issue.state) do
       destination when is_binary(destination) ->
         case Tracker.update_issue_state(issue.id, destination) do
