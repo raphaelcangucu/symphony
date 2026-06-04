@@ -84,8 +84,10 @@ defmodule SymphonyElixir.WorkspaceTest do
     {:ok, issue} = Context.create_issue("dm", %{title: "Remover menu duplicado"})
 
     from_map = Workspace.path_for_issue(%{id: issue.id, identifier: issue.identifier, project_slug: "dm"})
+    from_slug_map = Workspace.path_for_issue(%{identifier: issue.identifier, project_slug: "dm"})
     from_identifier = Workspace.path_for_issue(issue.identifier)
 
+    assert from_map == from_slug_map
     assert from_map == from_identifier
     assert String.starts_with?(from_map, Path.join(root, "clouapp/distributionmachine") <> "/")
   end

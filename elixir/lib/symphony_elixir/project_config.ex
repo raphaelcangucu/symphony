@@ -208,6 +208,34 @@ defmodule SymphonyElixir.ProjectConfig do
   def dev_server_enabled?(%__MODULE__{dev_server: %{enabled: true}}), do: true
   def dev_server_enabled?(_config), do: false
 
+  @doc """
+  Returns configured auto-start triggers for this project's dev server.
+
+  Reads the raw `dev_server.auto_start_on` front matter only. When the key is
+  omitted, returns `[]` (manual preview only). Set `pull_request` and/or
+  `human_review` explicitly to enable polling-based auto-start.
+  """
+  @spec dev_server_auto_start_on(t()) :: [String.t()]
+  def dev_server_auto_start_on(%__MODULE__{dev_server: dev_server}) when is_map(dev_server) do
+    case Map.get(dev_server, "auto_start_on") || Map.get(dev_server, :auto_start_on) do
+      triggers when is_list(triggers) ->
+        triggers
+        |> Enum.map(&to_string/1)
+        |> Enum.filter(&(&1 in ["pull_request", "human_review"]))
+
+      triggers when is_binary(triggers) ->
+        triggers
+        |> String.split(",", trim: true)
+        |> Enum.map(&String.trim/1)
+        |> Enum.filter(&(&1 in ["pull_request", "human_review"]))
+
+      _ ->
+        []
+    end
+  end
+
+  def dev_server_auto_start_on(_config), do: []
+
   defp dispatch_states(opts) do
     case get_in(opts, [:tracker, :dispatch_states]) do
       states when is_list(states) and states != [] -> states

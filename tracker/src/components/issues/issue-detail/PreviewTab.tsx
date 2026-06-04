@@ -73,7 +73,8 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
   }
 
   const unavailableMessage = data.available ? null : availabilityMessage(data.reason);
-  const provisioningMessage = data.available && !primaryUrl ? provisioningStatusMessage(primaryServer) : null;
+  const provisioningMessage =
+    data.available && !primaryUrl && primaryServer != null ? provisioningStatusMessage(primaryServer) : null;
   const controlsDisabled = loading || !canRunManualActions(data.available, data.reason);
 
   return (
@@ -155,7 +156,7 @@ export function PreviewTab({ projectSlug, issueIdentifier }: PreviewTabProps) {
                 role="status"
                 className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
               >
-                No dev servers have reported yet. Auto-start polling may still be provisioning the preview.
+                No dev servers are running yet. Use Start Preview when you want to provision one.
               </p>
             ) : (
               <div className="space-y-2">
@@ -340,7 +341,7 @@ function availabilityMessage(reason: IssueDevServerReason): { title: string; bod
     case "disabled":
       return {
         title: "Dev-server previews are disabled",
-        body: "Availability is disabled for this project, so auto-start polling will not provision a preview.",
+        body: "Availability is disabled for this project. Enable dev-server previews in the project workflow before using Start Preview.",
       };
     case "workspace_missing":
       return {
@@ -380,14 +381,14 @@ function availabilityMessage(reason: IssueDevServerReason): { title: string; bod
     default:
       return {
         title: "Preview unavailable",
-        body: "Availability is blocked right now. Auto-start polling will update this tab when the preview can be provisioned.",
+        body: "Availability is blocked right now. Resolve the issue above, then use Start Preview when you are ready.",
       };
   }
 }
 
 function provisioningStatusMessage(primaryServer: IssueDevServer | null): string {
   if (!primaryServer) {
-    return "Auto-start polling has not reported a dev server yet. This tab will update when provisioning starts.";
+    return "No preview is running yet. Use Start Preview when you want to provision the dev server.";
   }
 
   if (primaryServer.status === "crashed") {

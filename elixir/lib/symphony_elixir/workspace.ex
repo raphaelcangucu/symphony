@@ -357,12 +357,18 @@ defmodule SymphonyElixir.Workspace do
     end
   end
 
-  defp issue_context(%{id: issue_id, identifier: identifier} = issue) do
-    %{
-      issue_id: issue_id,
-      issue_identifier: identifier || "issue",
-      project_slug: Map.get(issue, :project_slug)
-    }
+  defp issue_context(%{} = issue) do
+    identifier = Map.get(issue, :identifier) || Map.get(issue, "identifier")
+
+    if is_binary(identifier) and identifier != "" do
+      %{
+        issue_id: Map.get(issue, :id) || Map.get(issue, "id"),
+        issue_identifier: identifier,
+        project_slug: Map.get(issue, :project_slug) || Map.get(issue, "project_slug")
+      }
+    else
+      issue_context_fallback(issue)
+    end
   end
 
   defp issue_context(identifier) when is_binary(identifier) do
@@ -373,7 +379,9 @@ defmodule SymphonyElixir.Workspace do
     }
   end
 
-  defp issue_context(_identifier) do
+  defp issue_context(other), do: issue_context_fallback(other)
+
+  defp issue_context_fallback(_issue) do
     %{
       issue_id: nil,
       issue_identifier: "issue",

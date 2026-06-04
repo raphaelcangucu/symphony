@@ -13,11 +13,12 @@ defmodule SymphonyElixir.DevServer.Reconciler do
 
   require Logger
 
-  alias SymphonyElixir.{Config, Tracker}
+  alias SymphonyElixir.{Config, Repo, Tracker}
   alias SymphonyElixir.DevServer.Manager
   alias SymphonyElixir.GitHub.Config, as: GitHubConfig
   alias SymphonyElixir.GitHub.PullRequests
   alias SymphonyElixir.LocalTracker.{Context, Project}
+  alias SymphonyElixir.ProjectConfig
 
   @fallback_poll_interval_ms 30_000
 
@@ -112,7 +113,7 @@ defmodule SymphonyElixir.DevServer.Reconciler do
   end
 
   defp run_cycle do
-    auto_start_on = Config.dev_server_auto_start_on()
+    auto_start_on = configured_auto_start_triggers()
 
     if known_trigger_requested?(auto_start_on) do
       wait_state_issues = fetch_wait_state_issues()
@@ -129,6 +130,17 @@ defmodule SymphonyElixir.DevServer.Reconciler do
   end
 
   defp known_trigger_requested?(_auto_start_on), do: false
+
+  defp configured_auto_start_triggers do
+    Context.list_projects()
+    |> Enum.flat_map(fn project ->
+      project
+      |> Repo.preload(:setup)
+      |> ProjectConfig.resolve()
+      |> ProjectConfig.dev_server_auto_start_on()
+    end)
+    |> Enum.uniq()
+  end
 
   defp fetch_wait_state_issues do
     case Config.wait_states() do
@@ -277,12 +289,24 @@ defmodule SymphonyElixir.DevServer.Reconciler do
         Logger.debug("Dev server auto-start skipped issue=#{identifier} reason=:missing_project_slug")
 
       project_slug ->
-        case Manager.start_for_issue(project_slug, identifier) do
-          {:ok, _pids} ->
-            :ok
+        case Context.get_project(project_slug) do
+          {:ok, project} ->
+            config = project |> Repo.preload(:setup) |> ProjectConfig.resolve()
 
-          {:error, reason} ->
-            Logger.debug("Dev server auto-start skipped project=#{project_slug} issue=#{identifier} reason=#{inspect(reason)}")
+            if ProjectConfig.dev_server_auto_start_on(config) != [] do
+              case Manager.start_for_issue(project_slug, identifier) do
+                {:ok, _pids} ->
+                  :ok
+
+                {:error, reason} ->
+                  Logger.debug(
+                    "Dev server auto-start skipped project=#{project_slug} issue=#{identifier} reason=#{inspect(reason)}"
+                  )
+              end
+            end
+
+          {:error, :project_not_found} ->
+            Logger.debug("Dev server auto-start skipped issue=#{identifier} reason=:project_not_found")
         end
     end
   rescue

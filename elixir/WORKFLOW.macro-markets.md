@@ -69,7 +69,8 @@ dev_server:
   enabled: true
   port_range: [4100, 4199]
   idle_timeout_ms: 1800000
-  auto_start_on: pull_request,human_review
+  # Omit auto_start_on for manual-only previews (Start Preview in the tracker).
+  # auto_start_on: pull_request,human_review
   # base_url: https://previews.example.com  # optional proxy-facing base URL
 # Public preview tunnel (Cloudflare). Exposes the tracker and ready dev-server
 # previews publicly via a named tunnel. Previews become UNAUTHENTICATED to anyone

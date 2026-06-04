@@ -126,6 +126,26 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.agent_kind == SymphonyElixir.Config.default_agent_kind()
   end
 
+  test "dev_server_auto_start_on/1 returns [] when auto_start_on is omitted" do
+    project = project_with_setup("manual-preview", %{"dev_server" => %{"enabled" => true}}, "prompt")
+    config = ProjectConfig.resolve(project)
+
+    assert ProjectConfig.dev_server_auto_start_on(config) == []
+  end
+
+  test "dev_server_auto_start_on/1 parses configured triggers from workflow markdown" do
+    project =
+      project_with_setup(
+        "auto-preview",
+        %{"dev_server" => %{"enabled" => true, "auto_start_on" => "pull_request,human_review"}},
+        "prompt"
+      )
+
+    config = ProjectConfig.resolve(project)
+
+    assert ProjectConfig.dev_server_auto_start_on(config) == ["pull_request", "human_review"]
+  end
+
   test "resolve/1 exposes repo from tracker_config for github projects" do
     {:ok, project} =
       Context.ensure_project(%{
