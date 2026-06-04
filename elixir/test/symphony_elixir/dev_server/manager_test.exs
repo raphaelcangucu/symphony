@@ -324,6 +324,24 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     ArgumentError -> :ok
   end
 
+  test "serve_step_with_setup chains matching setup commands in the dev-server session", %{project: project} do
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Install", command: "npm ci", role: "setup", working_dir: "front"},
+        %{description: "API deps", command: "composer install", role: "setup", working_dir: "back"},
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front"},
+        %{description: "Back", command: "docker compose up", role: "serve", working_dir: "back"}
+      ])
+
+    assert Manager.serve_step_with_setup(project.slug, %{command: "npm run dev", working_dir: "front"})[:command] ==
+             ~s(bash -lc 'export PATH="$PWD/node_modules/.bin:$PATH" && npm ci && npm run dev')
+
+    assert Manager.serve_step_with_setup(project.slug, %{command: "docker compose up", working_dir: "back"})[:command] ==
+             ~s(bash -lc 'export PATH="$PWD/node_modules/.bin:$PATH" && composer install && docker compose up')
+
+    assert Manager.serve_step_with_setup(project.slug, %{command: "echo ok", working_dir: "api"})[:command] == "echo ok"
+  end
+
   defp enable_project_dev_server!(project, opts) do
     port_range = Keyword.fetch!(opts, :port_range)
     max_concurrent = Keyword.fetch!(opts, :max_concurrent)

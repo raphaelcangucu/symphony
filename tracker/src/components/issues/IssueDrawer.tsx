@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Archive,
   Bot,
+  ChevronDown,
   Code2,
   FileText,
   GitPullRequest,
@@ -108,11 +109,25 @@ export function IssueDrawer({
     enabled: open && Boolean(issue),
   });
 
-  const openEditor = useCallback(() => {
-    if (editor.available && editor.url) {
-      window.open(editor.url, "_blank", "noopener");
+  const openBrowserEditor = useCallback(() => {
+    if (editor.browser.available && editor.browser.url) {
+      window.open(editor.browser.url, "_blank", "noopener");
     }
-  }, [editor.available, editor.url]);
+  }, [editor.browser.available, editor.browser.url]);
+
+  const openCursorDesktop = useCallback(() => {
+    if (editor.cursorDesktop.available && editor.cursorDesktop.url) {
+      openDesktopProtocolUrl(editor.cursorDesktop.url);
+    }
+  }, [editor.cursorDesktop.available, editor.cursorDesktop.url]);
+
+  const openDefaultEditor = useCallback(() => {
+    if (editor.browser.available) {
+      openBrowserEditor();
+      return;
+    }
+    openCursorDesktop();
+  }, [editor.browser.available, openBrowserEditor, openCursorDesktop]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -123,12 +138,12 @@ export function IssueDrawer({
       const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
       event.preventDefault();
-      openEditor();
+      openDefaultEditor();
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, openEditor]);
+  }, [open, openDefaultEditor]);
 
   const handleForceSync = useCallback(
     async (target: Issue) => {
@@ -141,10 +156,11 @@ export function IssueDrawer({
 
   const commentsCount = commentsState.comments.length;
   const blockersCount = issue?.blockedBy.length ?? 0;
-  const editorButtonHidden = editor.reason === "disabled";
-  const editorTitle = editor.available
+  const showBrowserEditor = editor.browser.reason !== "disabled";
+  const anyEditorAvailable = editor.browser.available || editor.cursorDesktop.available;
+  const editorMenuTitle = editor.browser.available
     ? "Open this task's workspace in VS Code (.)"
-    : editorUnavailableTitle(editor.reason, editor.loading);
+    : editorUnavailableTitle(editor.browser.reason ?? editor.cursorDesktop.reason, editor.loading);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -166,19 +182,49 @@ export function IssueDrawer({
                   {execution ? <AgentStatusBadge status={execution.status} /> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  {editorButtonHidden ? null : (
-                    <button
-                      type="button"
-                      onClick={openEditor}
-                      disabled={!editor.available}
-                      title={editorTitle}
-                      aria-label="Open in VS Code"
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Code2 className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">VS Code</span>
-                    </button>
-                  )}
+                  <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={!anyEditorAvailable && !editor.loading}
+                          title={editorMenuTitle}
+                          aria-label="Open in VS Code"
+                          className="inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Code2 className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">VS Code</span>
+                          <ChevronDown className="h-3 w-3 opacity-60" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-44">
+                        {showBrowserEditor ? (
+                          <DropdownMenuItem
+                            disabled={!editor.browser.available}
+                            title={
+                              editor.browser.available
+                                ? "Open in VS Code (browser)"
+                                : editorUnavailableTitle(editor.browser.reason, editor.loading)
+                            }
+                            onSelect={() => openBrowserEditor()}
+                          >
+                            <Code2 className="mr-2 h-4 w-4" />
+                            VS Code
+                          </DropdownMenuItem>
+                        ) : null}
+                        <DropdownMenuItem
+                          disabled={!editor.cursorDesktop.available}
+                          title={
+                            editor.cursorDesktop.available
+                              ? "Open in Cursor Desktop (local app)"
+                              : editorUnavailableTitle(editor.cursorDesktop.reason, editor.loading)
+                          }
+                          onSelect={() => openCursorDesktop()}
+                        >
+                          <Code2 className="mr-2 h-4 w-4" />
+                          Cursor Desktop
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   {onArchive || onDelete || onForceSync ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -347,6 +393,15 @@ function TabCount({ children, tone = "muted" }: { children: ReactNode; tone?: "m
   );
 }
 
+function openDesktopProtocolUrl(url: string) {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 function editorUnavailableTitle(reason: EditorReason | null, loading: boolean): string {
   if (loading) return "Checking editor…";
   switch (reason) {
@@ -354,6 +409,10 @@ function editorUnavailableTitle(reason: EditorReason | null, loading: boolean): 
       return "Editor is starting…";
     case "workspace_missing":
       return "Workspace not created yet — run the agent or open the terminal first";
+    case "workspace_skills_unavailable":
+      return "Workspace is still preparing — try again in a moment";
+    case "unavailable":
+      return "Editor unavailable — restart Symphony after upgrading (make build && make update)";
     default:
       return "Editor unavailable";
   }

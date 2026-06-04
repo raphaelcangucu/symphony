@@ -18,6 +18,8 @@ defmodule SymphonyElixir.DevServer.Manager do
   @instance_supervisor Module.concat(__MODULE__, InstanceSupervisor)
   @reservation_table Module.concat(__MODULE__, PortReservations)
   @initial_boot_timeout_ms 250
+  @serve_with_setup_probe_interval_ms 2_000
+  @serve_with_setup_max_probe_attempts 300
 
   @type start_error ::
           :disabled
@@ -184,10 +186,18 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp setup_issue_session(project_slug, identifier, workspace_path) do
+    serve_working_dirs =
+      project_slug
+      |> DevEnv.list_serve_steps()
+      |> Enum.map(&normalized_working_dir(&1.working_dir))
+      |> MapSet.new()
+
     setup_steps =
       project_slug
       |> DevEnv.list_steps()
-      |> Enum.filter(&(&1.role == "setup"))
+      |> Enum.filter(fn step ->
+        step.role == "setup" and not MapSet.member?(serve_working_dirs, normalized_working_dir(step.working_dir))
+      end)
 
     if setup_steps != [] do
       send_setup_steps(project_slug, identifier, workspace_path, setup_steps)
@@ -286,19 +296,22 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp start_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
-    opts = [
-      registry_name: {:via, Registry, {@registry, key}},
-      project_id: project.id,
-      project_slug: project.slug,
-      identifier: identifier,
-      workspace_path: workspace_path,
-      step: step,
-      base_url: runtime_options.dev_server_base_url,
-      idle_timeout_ms: runtime_options.dev_server_idle_timeout_ms,
-      public_tunnel: runtime_options.public_tunnel,
-      claimed_ports: live_ports(),
-      port_allocator: fn _range, _claimed_ports -> {:ok, port} end
-    ]
+    step = serve_step_with_setup(project.slug, step)
+
+    opts =
+      [
+        registry_name: {:via, Registry, {@registry, key}},
+        project_id: project.id,
+        project_slug: project.slug,
+        identifier: identifier,
+        workspace_path: workspace_path,
+        step: step,
+        base_url: runtime_options.dev_server_base_url,
+        idle_timeout_ms: runtime_options.dev_server_idle_timeout_ms,
+        public_tunnel: runtime_options.public_tunnel,
+        claimed_ports: live_ports(),
+        port_allocator: fn _range, _claimed_ports -> {:ok, port} end
+      ] ++ serve_probe_opts(project.slug, step)
 
     case DynamicSupervisor.start_child(@instance_supervisor, instance_child_spec(key, opts)) do
       {:ok, pid} ->
@@ -673,6 +686,53 @@ defmodule SymphonyElixir.DevServer.Manager do
     case :ets.whereis(@reservation_table) do
       :undefined -> :error
       table -> {:ok, table}
+    end
+  end
+
+  @doc false
+  @spec serve_step_with_setup(String.t(), map()) :: map()
+  def serve_step_with_setup(project_slug, step) when is_binary(project_slug) and is_map(step) do
+    step = step_to_map(step)
+
+    case setup_commands_for_working_dir(project_slug, Map.get(step, :working_dir)) do
+      [] ->
+        step
+
+      setup_commands ->
+        command =
+          (setup_commands ++ [Map.fetch!(step, :command)])
+          |> Enum.map(&String.trim/1)
+          |> Enum.reject(&(&1 == ""))
+          |> Enum.join(" && ")
+
+        Map.put(step, :command, wrap_shell_serve_command(command))
+    end
+  end
+
+  defp wrap_shell_serve_command(command) when is_binary(command) do
+    inner = ~s(export PATH="$PWD/node_modules/.bin:$PATH" && #{command})
+    "bash -lc #{shell_quote(inner)}"
+  end
+
+  defp setup_commands_for_working_dir(project_slug, working_dir) do
+    wd = normalized_working_dir(working_dir)
+
+    project_slug
+    |> DevEnv.list_steps()
+    |> Enum.filter(fn step -> step.role == "setup" and normalized_working_dir(step.working_dir) == wd end)
+    |> Enum.sort_by(& &1.position)
+    |> Enum.map(fn step -> String.trim(step.command) end)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp serve_probe_opts(project_slug, step) do
+    if setup_commands_for_working_dir(project_slug, Map.get(step, :working_dir)) == [] do
+      []
+    else
+      [
+        max_probe_attempts: @serve_with_setup_max_probe_attempts,
+        probe_interval_ms: @serve_with_setup_probe_interval_ms
+      ]
     end
   end
 

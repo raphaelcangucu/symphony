@@ -14,14 +14,27 @@ defmodule SymphonyElixir.Editor do
 
   require Logger
 
-  @type reason :: :disabled | :starting | :unavailable | :workspace_missing | :workspace_skills_unavailable
+  @type reason ::
+          :disabled
+          | :starting
+          | :unavailable
+          | :workspace_missing
+          | :workspace_skills_unavailable
 
   @spec editor_target(String.t(), String.t()) :: {:ok, String.t()} | {:error, reason()}
   def editor_target(_project_slug, issue_identifier) when is_binary(issue_identifier) do
     with :ok <- ensure_enabled(),
          :ok <- ensure_ready(),
-         {:ok, path} <- ensure_workspace(issue_identifier) do
-      {:ok, build_url(path)}
+         {:ok, path} <- ensure_browser_workspace(issue_identifier) do
+      {:ok, build_browser_url(path)}
+    end
+  end
+
+  @spec cursor_desktop_target(String.t(), String.t()) :: {:ok, String.t()} | {:error, reason()}
+  def cursor_desktop_target(_project_slug, issue_identifier) when is_binary(issue_identifier) do
+    case ensure_workspace_path(issue_identifier) do
+      {:ok, path} -> {:ok, build_cursor_url(path)}
+      {:error, _} = error -> error
     end
   end
 
@@ -37,7 +50,17 @@ defmodule SymphonyElixir.Editor do
     end
   end
 
-  defp ensure_workspace(issue_identifier) do
+  defp ensure_workspace_path(issue_identifier) do
+    workspace_path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
+
+    if File.dir?(workspace_path) do
+      {:ok, resolve_editor_folder(workspace_path)}
+    else
+      {:error, :workspace_missing}
+    end
+  end
+
+  defp ensure_browser_workspace(issue_identifier) do
     workspace_path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
 
     cond do
@@ -110,7 +133,7 @@ defmodule SymphonyElixir.Editor do
     file
   end
 
-  defp build_url(path) do
+  defp build_browser_url(path) do
     param =
       if String.ends_with?(path, ".code-workspace") do
         "workspace"
@@ -120,6 +143,30 @@ defmodule SymphonyElixir.Editor do
 
     "#{Config.editor_base_url()}/?#{param}=#{URI.encode_www_form(path)}"
   end
+
+  defp build_cursor_url(path) do
+    normalized = path |> Path.expand() |> String.replace("\\", "/")
+
+    case wsl_cursor_url(normalized) do
+      nil -> "cursor://file/" <> URI.encode(normalized)
+      url -> url
+    end
+  end
+
+  # When Symphony runs in WSL and the user opens the tracker from a Windows browser,
+  # Cursor Desktop needs the vscode-remote form instead of a Linux file:// path.
+  defp wsl_cursor_url("/" <> _ = path) do
+    case System.get_env("WSL_DISTRO_NAME") do
+      nil ->
+        nil
+
+      distro ->
+        remote = "wsl+" <> String.downcase(distro)
+        "cursor://vscode-remote/" <> remote <> path
+    end
+  end
+
+  defp wsl_cursor_url(_), do: nil
 
   defp workspace_identifier(issue_identifier) do
     String.trim_leading(issue_identifier, "#")

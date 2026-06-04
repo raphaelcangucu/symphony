@@ -202,6 +202,46 @@ defmodule SymphonyElixir.EditorTest do
     end
   end
 
+  describe "cursor_desktop_target/2" do
+    test "returns {:error, :workspace_missing} when the workspace is absent" do
+      path = SymphonyElixir.Workspace.path_for_issue("MAC-EXISTS")
+      File.rm_rf(path)
+      refute File.dir?(path)
+
+      assert Editor.cursor_desktop_target("project", "MAC-EXISTS") == {:error, :workspace_missing}
+    end
+
+    test "returns a cursor:// URL when the workspace exists (no server-side Cursor CLI check)" do
+      path = SymphonyElixir.Workspace.path_for_issue("MAC-EXISTS")
+      File.mkdir_p!(path)
+      on_exit(fn -> File.rm_rf(path) end)
+
+      expanded = Path.expand(path)
+      previous_wsl = System.get_env("WSL_DISTRO_NAME")
+      System.delete_env("WSL_DISTRO_NAME")
+      on_exit(fn -> restore_env("WSL_DISTRO_NAME", previous_wsl) end)
+
+      expected_url = "cursor://file/" <> URI.encode(expanded)
+
+      assert Editor.cursor_desktop_target("project", "MAC-EXISTS") == {:ok, expected_url}
+    end
+
+    test "returns a vscode-remote WSL URL when running inside WSL" do
+      path = SymphonyElixir.Workspace.path_for_issue("MAC-WSL")
+      File.mkdir_p!(path)
+      on_exit(fn -> File.rm_rf(path) end)
+
+      expanded = Path.expand(path)
+      previous_wsl = System.get_env("WSL_DISTRO_NAME")
+      System.put_env("WSL_DISTRO_NAME", "Ubuntu")
+      on_exit(fn -> restore_env("WSL_DISTRO_NAME", previous_wsl) end)
+
+      expected_url = "cursor://vscode-remote/wsl+ubuntu" <> expanded
+
+      assert Editor.cursor_desktop_target("project", "MAC-WSL") == {:ok, expected_url}
+    end
+  end
+
   defp editor_front_matter do
     """
     github:
