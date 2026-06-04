@@ -44,6 +44,54 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     def pull_pull_requests(_project, _issue), do: {:ok, [%{remote_id: "PR_1", number: 7, url: "u", title: "t", state: "open"}]}
   end
 
+  defmodule FakeRemoteAdapter do
+    @behaviour SymphonyElixir.Tracker.IssueAdapter
+
+    alias SymphonyElixir.Tracker.IssueDTO
+
+    @impl true
+    def kind, do: :github
+
+    @impl true
+    def get_issue(_project, identifier) do
+      {:ok,
+       IssueDTO.build(%{
+         id: "I_#{identifier}",
+         identifier: identifier,
+         title: "Remote issue #{identifier}",
+         description: "body",
+         status: %{name: "Todo"},
+         updated_at: "2026-06-01T00:00:00Z"
+       })}
+    end
+
+    @impl true
+    def list_comments(_project, _identifier) do
+      {:ok,
+       [
+         %{id: "IC_pad", body: "## Codex Workpad\n- plan", author: "codex", kind: "workpad", updated_at: "2026-06-02T00:00:00Z"},
+         %{id: "IC_msg", body: "looks good", author: "octocat", kind: "comment", updated_at: "2026-06-02T01:00:00Z"}
+       ]}
+    end
+
+    @impl true
+    def list_issues(_project, _filters), do: {:ok, []}
+    @impl true
+    def create_issue(_project, _attrs), do: {:error, :not_supported_on_remote}
+    @impl true
+    def update_issue(_project, _identifier, _attrs), do: {:error, :not_supported_on_remote}
+    @impl true
+    def move_issue(_project, _identifier, _attrs), do: {:error, :not_supported_on_remote}
+    @impl true
+    def list_statuses(_project), do: {:ok, []}
+    @impl true
+    def list_labels(_project), do: {:ok, []}
+    @impl true
+    def list_assignable_users(_project), do: {:ok, []}
+    @impl true
+    def add_comment(_project, _identifier, _body, _opts), do: {:error, :not_supported_on_remote}
+  end
+
   setup do
     migrate_repo()
     clean_repo()
@@ -94,6 +142,104 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     failed = Repo.one(OutboxEntry)
     assert failed.status == "failed"
   end
+
+  test "a pushed comment-create records the remote id on the local comment", %{project: project} do
+    {:ok, issue} =
+      SymphonyElixir.Tracker.Sync.LocalStore.upsert_remote_issue(project, %{
+        remote_id: "I_42",
+        remote_number: 42,
+        identifier: "42",
+        title: "t",
+        description: nil,
+        state: "Todo",
+        priority: nil,
+        assignee_id: nil,
+        branch_name: nil,
+        remote_url: nil,
+        creator: nil,
+        position: 0,
+        remote_updated_at: DateTime.utc_now(),
+        labels: [],
+        comments: []
+      })
+
+    {:ok, comment} =
+      %SymphonyElixir.LocalTracker.Comment{}
+      |> SymphonyElixir.LocalTracker.Comment.changeset(%{
+        issue_id: issue.id,
+        kind: "comment",
+        body: "hi remote",
+        author: "raphael"
+      })
+      |> Repo.insert()
+
+    {:ok, _} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: issue.id,
+        entity_type: "comment",
+        operation: "create",
+        payload: %{"identifier" => "42", "body" => "hi remote", "comment_id" => comment.id},
+        dedup_key: nil
+      })
+
+    assert {:ok, _summary} = Engine.sync_project(project, driver: FakeDriver)
+
+    reloaded = Repo.get(SymphonyElixir.LocalTracker.Comment, comment.id)
+    refute is_nil(reloaded.remote_id)
+    assert String.starts_with?(reloaded.remote_id, "REMOTE_")
+    assert reloaded.sync_status == "synced"
+  end
+
+  test "sync_issue force-pulls one issue with classified comments and its PRs" do
+    prev_adapters = Application.get_env(:symphony_elixir, :issue_adapters)
+    prev_tracker = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => FakeRemoteAdapter})
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+
+    on_exit(fn ->
+      restore_env(:issue_adapters, prev_adapters)
+      restore_env(:tracker, prev_tracker)
+    end)
+
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Front",
+        slug: "front",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "clouapp/front", "project_id" => "PVT_1"}
+      })
+
+    assert {:ok, issue} = Engine.sync_issue(project, "510", pr_driver: FakeDriver)
+    assert issue.identifier == "510"
+
+    loaded = Repo.get(IssueRecord, issue.id) |> Repo.preload(:comments)
+    kinds = loaded.comments |> Enum.map(&{&1.remote_id, &1.kind}) |> Map.new()
+    assert kinds["IC_pad"] == "workpad"
+    assert kinds["IC_msg"] == "comment"
+
+    prs = Repo.all(SymphonyElixir.Tracker.Sync.PullRequestRecord)
+    assert Enum.map(prs, & &1.remote_id) == ["PR_1"]
+  end
+
+  test "sync_issue is not supported on local projects", %{project: project} do
+    prev_tracker = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+    on_exit(fn -> restore_env(:tracker, prev_tracker) end)
+
+    assert {:error, :not_supported_on_remote} = Engine.sync_issue(project, "1")
+  end
+
+  test "sync_issue is disabled when local-first sync is off", %{project: project} do
+    prev_tracker = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: false)
+    on_exit(fn -> restore_env(:tracker, prev_tracker) end)
+
+    assert {:error, :sync_disabled} = Engine.sync_issue(project, "1")
+  end
+
+  defp restore_env(key, nil), do: Application.delete_env(:symphony_elixir, key)
+  defp restore_env(key, value), do: Application.put_env(:symphony_elixir, key, value)
 
   defp migrate_repo do
     {:ok, _repo, _apps} =

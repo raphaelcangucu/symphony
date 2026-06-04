@@ -69,6 +69,12 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :not_supported_on_remote),
     do: error(conn, 501, "tracker_not_supported", "This action is not supported on the remote tracker")
 
+  def render(conn, :sync_disabled),
+    do: error(conn, 409, "tracker_sync_disabled", "Local-first sync is disabled on this server.")
+
+  def render(conn, :no_remote_adapter),
+    do: error(conn, 422, "tracker_no_remote_adapter", "This project has no remote tracker to sync from.")
+
   def render(conn, {:remote_validation, details}),
     do: error(conn, 422, "tracker_validation_failed", "Remote tracker rejected the request", details)
 

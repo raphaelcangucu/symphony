@@ -105,6 +105,48 @@ defmodule SymphonyElixirWeb.PresenterTest do
     assert payload.counts.retrying == 1
   end
 
+  test "state_payload/3 scopes agent_totals to the given project_slug" do
+    running = %{
+      "issue-a1" => running_entry("issue-a1", "MT-10", "alpha"),
+      "issue-b1" => running_entry("issue-b1", "MT-20", "beta")
+    }
+
+    orchestrator = start_orchestrator_with(running, %{})
+
+    :sys.replace_state(orchestrator, fn state ->
+      %{
+        state
+        | agent_totals: %{input_tokens: 30, output_tokens: 12, total_tokens: 42, seconds_running: 9},
+          agent_totals_by_project: %{
+            "alpha" => %{input_tokens: 10, output_tokens: 5, total_tokens: 15, seconds_running: 4},
+            "beta" => %{input_tokens: 20, output_tokens: 7, total_tokens: 27, seconds_running: 5}
+          }
+      }
+    end)
+
+    alpha = Presenter.state_payload(orchestrator, 1_000, "alpha")
+    beta = Presenter.state_payload(orchestrator, 1_000, "beta")
+    global = Presenter.state_payload(orchestrator, 1_000)
+
+    assert alpha.agent_totals == %{input_tokens: 10, output_tokens: 5, total_tokens: 15, seconds_running: 4}
+    assert beta.agent_totals == %{input_tokens: 20, output_tokens: 7, total_tokens: 27, seconds_running: 5}
+    assert global.agent_totals == %{input_tokens: 30, output_tokens: 12, total_tokens: 42, seconds_running: 9}
+  end
+
+  test "state_payload/3 returns zeroed agent_totals for an unknown project_slug" do
+    running = %{"issue-a1" => running_entry("issue-a1", "MT-10", "alpha")}
+    orchestrator = start_orchestrator_with(running, %{})
+
+    payload = Presenter.state_payload(orchestrator, 1_000, "no-such-project")
+
+    assert payload.agent_totals == %{
+             input_tokens: 0,
+             output_tokens: 0,
+             total_tokens: 0,
+             seconds_running: 0
+           }
+  end
+
   test "state_payload/3 with nil project_slug equals state_payload/2" do
     running = %{
       "issue-a" => running_entry("issue-a", "MT-1", "alpha"),

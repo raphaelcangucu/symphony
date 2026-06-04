@@ -65,6 +65,56 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   end
 
   @doc """
+  Force-sync a single issue straight from the remote, bypassing the background
+  cadence. Pulls the issue, its comments (classified, including workpads) and its
+  pull requests, then upserts them into the local store. Used by the on-demand
+  "Sync from remote" action so a user can immediately reconcile a discrepancy.
+
+  Returns `{:error, :sync_disabled}` when local-first sync is off globally and
+  `{:error, :not_supported_on_remote}` for projects without a remote tracker.
+  """
+  @spec sync_issue(map(), String.t(), keyword()) :: {:ok, struct()} | {:error, term()}
+  def sync_issue(project, identifier, opts \\ []) do
+    cond do
+      not SymphonyElixir.Config.tracker_sync_enabled?() -> {:error, :sync_disabled}
+      not sync_enabled?(project) -> {:error, :not_supported_on_remote}
+      true -> do_sync_issue(project, identifier, opts)
+    end
+  end
+
+  defp do_sync_issue(project, identifier, opts) do
+    case IssueAdapter.remote_for(project.tracker_kind) do
+      nil ->
+        {:error, :no_remote_adapter}
+
+      adapter ->
+        with {:ok, dto} <- adapter.get_issue(project, identifier) do
+          remote = Normalize.issue(dto, comments: remote_comments(adapter, project, identifier))
+          pr_driver = Keyword.get(opts, :pr_driver, default_driver_for(project))
+
+          case LocalStore.upsert_remote_issue(project, remote) do
+            {:ok, issue} ->
+              maybe_sync_pull_requests(project, issue, pr_driver)
+              {:ok, issue}
+
+            {:error, _reason} = error ->
+              error
+          end
+        end
+    end
+  end
+
+  defp remote_comments(adapter, project, identifier) do
+    case adapter.list_comments(project, identifier) do
+      {:ok, comments} -> comments
+      _other -> []
+    end
+  end
+
+  defp maybe_sync_pull_requests(_project, _issue, nil), do: :ok
+  defp maybe_sync_pull_requests(project, issue, pr_driver), do: sync_pull_requests(project, issue, pr_driver)
+
+  @doc """
   Seeds a cold project's issue list from the remote on first read so the board is
   not empty at cold start. Synchronous and bounded (issue list only — no comments
   or PRs), then requests a full background sync to enrich. It is a no-op once the
@@ -235,8 +285,16 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   defp record_pushed(acc, entry, remote_id) do
     Outbox.mark_done(entry, remote_id)
+    link_pushed_comment(entry, remote_id)
     %{acc | pushed: acc.pushed + 1}
   end
+
+  defp link_pushed_comment(%{entity_type: "comment", operation: "create", payload: payload}, remote_id)
+       when is_map(payload) do
+    LocalStore.link_comment_remote_id(payload["comment_id"], remote_id)
+  end
+
+  defp link_pushed_comment(_entry, _remote_id), do: :ok
 
   defp record_failed(acc, entry, reason, max_attempts) do
     {:ok, updated} = Outbox.mark_failed(entry, inspect(reason), max_attempts)

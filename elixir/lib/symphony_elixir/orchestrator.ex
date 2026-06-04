@@ -38,6 +38,7 @@ defmodule SymphonyElixir.Orchestrator do
       claimed: MapSet.new(),
       retry_attempts: %{},
       agent_totals: nil,
+      agent_totals_by_project: %{},
       agent_rate_limits: nil
     ]
   end
@@ -60,6 +61,7 @@ defmodule SymphonyElixir.Orchestrator do
       next_poll_due_at_ms: now_ms,
       poll_check_in_progress: false,
       agent_totals: @empty_agent_totals,
+      agent_totals_by_project: %{},
       agent_rate_limits: nil
     }
 
@@ -144,7 +146,7 @@ defmodule SymphonyElixir.Orchestrator do
 
         state =
           state
-          |> apply_codex_token_delta(token_delta)
+          |> apply_codex_token_delta(running_entry_project_slug(running_entry), token_delta)
           |> apply_agent_rate_limits(update)
 
         notify_dashboard()
@@ -203,7 +205,7 @@ defmodule SymphonyElixir.Orchestrator do
     SymphonyElixir.Tracker.Sync.Engine.request_sync(force: true)
     state = reconcile_running_issues(state)
 
-    with :ok <- Config.validate!(),
+    with :ok <- global_config_gate(),
          {:ok, issues} <- Tracker.fetch_candidate_issues(),
          true <- available_slots(state) > 0 do
       choose_issues(issues, state)
@@ -218,6 +220,24 @@ defmodule SymphonyElixir.Orchestrator do
 
       false ->
         state
+    end
+  end
+
+  @doc false
+  @spec global_config_gate_for_test() :: :ok | {:error, term()}
+  def global_config_gate_for_test, do: global_config_gate()
+
+  # In the global-less, multi-project orchestration model (`tracker_sync_enabled?`)
+  # each project's config is validated in isolation by the tracker reader and
+  # `dispatch_decision/1`. A misconfigured GLOBAL tracker (e.g. a linear
+  # `WORKFLOW.md` without an API key) must therefore NOT abort the dispatch loop
+  # for every project. Only the legacy single-global-tracker mode gates the whole
+  # loop on `Config.validate!/0`.
+  defp global_config_gate do
+    if Config.tracker_sync_enabled?() do
+      :ok
+    else
+      Config.validate!()
     end
   end
 
@@ -1128,6 +1148,7 @@ defmodule SymphonyElixir.Orchestrator do
        running: running,
        retrying: retrying,
        agent_totals: state.agent_totals,
+       agent_totals_by_project: Map.get(state, :agent_totals_by_project, %{}),
        rate_limits: Map.get(state, :agent_rate_limits),
        polling: %{
          checking?: state.poll_check_in_progress == true,
@@ -1280,18 +1301,23 @@ defmodule SymphonyElixir.Orchestrator do
   defp record_session_completion_totals(state, running_entry) when is_map(running_entry) do
     runtime_seconds = running_seconds(running_entry.started_at, DateTime.utc_now())
 
-    agent_totals =
-      apply_token_delta(
-        state.agent_totals,
-        %{
-          input_tokens: 0,
-          output_tokens: 0,
-          total_tokens: 0,
-          seconds_running: runtime_seconds
-        }
-      )
+    completion_delta = %{
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      seconds_running: runtime_seconds
+    }
 
-    %{state | agent_totals: agent_totals}
+    %{
+      state
+      | agent_totals: apply_token_delta(state.agent_totals, completion_delta),
+        agent_totals_by_project:
+          apply_project_token_delta(
+            state.agent_totals_by_project,
+            running_entry_project_slug(running_entry),
+            completion_delta
+          )
+    }
   end
 
   defp record_session_completion_totals(state, _running_entry), do: state
@@ -1316,14 +1342,31 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp apply_codex_token_delta(
-         %{agent_totals: agent_totals} = state,
+         %{agent_totals: agent_totals, agent_totals_by_project: by_project} = state,
+         project_slug,
          %{input_tokens: input, output_tokens: output, total_tokens: total} = token_delta
        )
        when is_integer(input) and is_integer(output) and is_integer(total) do
-    %{state | agent_totals: apply_token_delta(agent_totals, token_delta)}
+    %{
+      state
+      | agent_totals: apply_token_delta(agent_totals, token_delta),
+        agent_totals_by_project: apply_project_token_delta(by_project, project_slug, token_delta)
+    }
   end
 
-  defp apply_codex_token_delta(state, _token_delta), do: state
+  defp apply_codex_token_delta(state, _project_slug, _token_delta), do: state
+
+  defp apply_project_token_delta(by_project, project_slug, token_delta)
+       when is_map(by_project) and is_binary(project_slug) and project_slug != "" do
+    current = Map.get(by_project, project_slug, @empty_agent_totals)
+    Map.put(by_project, project_slug, apply_token_delta(current, token_delta))
+  end
+
+  defp apply_project_token_delta(by_project, _project_slug, _token_delta), do: by_project
+
+  defp running_entry_project_slug(%{issue: %{project_slug: slug}}), do: slug
+  defp running_entry_project_slug(%{project_slug: slug}), do: slug
+  defp running_entry_project_slug(_running_entry), do: nil
 
   defp apply_agent_rate_limits(%State{} = state, %{rate_limits: %{} = rate_limits}),
     do: %{state | agent_rate_limits: rate_limits}

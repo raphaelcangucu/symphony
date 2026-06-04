@@ -64,6 +64,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/:identifier/documents", IssueDocumentController, :index)
     get("/projects/:project_slug/issues/:identifier/documents/*path", IssueDocumentController, :show)
     post("/projects/:project_slug/issues/:identifier/move", IssueController, :move)
+    post("/projects/:project_slug/issues/:identifier/sync", IssueController, :sync)
     post("/projects/:project_slug/issues/:identifier/archive", IssueController, :archive)
     post("/projects/:project_slug/issues/:identifier/restore", IssueController, :restore)
     delete("/projects/:project_slug/issues/:identifier", IssueController, :delete)

@@ -8,6 +8,7 @@ import {
   GitPullRequest,
   MessageSquare,
   MoreHorizontal,
+  RefreshCw,
   Server,
   ShieldAlert,
   TerminalSquare,
@@ -68,6 +69,7 @@ interface IssueDrawerProps {
   onTabChange?: (tab: IssueTab) => void;
   onArchive?: (issue: Issue) => void | Promise<void>;
   onDelete?: (issue: Issue) => void | Promise<void>;
+  onForceSync?: (issue: Issue) => void | Promise<void>;
 }
 
 export function IssueDrawer({
@@ -81,6 +83,7 @@ export function IssueDrawer({
   onTabChange,
   onArchive,
   onDelete,
+  onForceSync,
 }: IssueDrawerProps) {
   const meta = issue ? getStatusMeta(issue.status) : null;
   const StatusIcon = meta?.Icon;
@@ -127,6 +130,15 @@ export function IssueDrawer({
     return () => window.removeEventListener("keydown", handler);
   }, [open, openEditor]);
 
+  const handleForceSync = useCallback(
+    async (target: Issue) => {
+      if (!onForceSync) return;
+      await onForceSync(target);
+      await commentsState.refetch();
+    },
+    [onForceSync, commentsState],
+  );
+
   const commentsCount = commentsState.comments.length;
   const blockersCount = issue?.blockedBy.length ?? 0;
   const editorButtonHidden = editor.reason === "disabled";
@@ -167,7 +179,7 @@ export function IssueDrawer({
                       <span className="hidden sm:inline">VS Code</span>
                     </button>
                   )}
-                  {onArchive || onDelete ? (
+                  {onArchive || onDelete || onForceSync ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
@@ -180,6 +192,12 @@ export function IssueDrawer({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-40">
+                        {onForceSync ? (
+                          <DropdownMenuItem onSelect={() => void handleForceSync(issue)}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Sync from remote
+                          </DropdownMenuItem>
+                        ) : null}
                         {onArchive ? (
                           <DropdownMenuItem onSelect={() => void onArchive(issue)}>
                             <Archive className="mr-2 h-4 w-4" />

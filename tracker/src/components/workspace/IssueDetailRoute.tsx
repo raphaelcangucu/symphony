@@ -5,12 +5,12 @@ import { toast } from "sonner";
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { DEFAULT_ISSUE_TAB, isIssueTab, issuePath, workspaceBasePath, type IssueTab } from "@/lib/workspaceRoutes";
-import { archiveIssue, deleteIssue, getIssue } from "@/services/issues";
+import { archiveIssue, deleteIssue, forceSyncIssue, getIssue } from "@/services/issues";
 import type { Issue } from "@/types/issue";
 
 export function IssueDetailRoute() {
   const { identifier = "", tab: tabParam } = useParams();
-  const { projectSlug, view, issues, setIssues, agentExecutions, loading } = useWorkspace();
+  const { projectSlug, view, issues, setIssues, agentExecutions, loading, trackerKind } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -51,6 +51,19 @@ export function IssueDetailRoute() {
     }
   }
 
+  async function handleForceSync(target: Issue) {
+    try {
+      const refreshed = await forceSyncIssue(projectSlug, target.identifier);
+      setIssues((current) =>
+        current.map((candidate) => (candidate.identifier === refreshed.identifier ? refreshed : candidate)),
+      );
+      if (fetchedIssue?.identifier === refreshed.identifier) setFetchedIssue(refreshed);
+      toast.success(`${target.identifier} synced from remote`);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to sync issue from remote");
+    }
+  }
+
   useEffect(() => {
     if (!identifier || issueFromList || loading) return;
     if (fetchedIssue?.identifier === identifier) return;
@@ -87,6 +100,7 @@ export function IssueDetailRoute() {
       }}
       onArchive={handleArchive}
       onDelete={handleDelete}
+      onForceSync={trackerKind === "local" ? undefined : handleForceSync}
     />
   );
 }

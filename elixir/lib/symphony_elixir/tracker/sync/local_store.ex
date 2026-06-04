@@ -347,27 +347,90 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   # -- comments ----------------------------------------------------------------
 
+  @doc """
+  Records the remote id on a locally authored comment after the outbox push
+  succeeds, so a later remote pull recognises it (by `remote_id`) instead of
+  re-inserting a duplicate. No-op when the id is unknown, the comment is gone, or
+  it already carries a remote id. Conflicts (a remote twin already adopted the id
+  during a pull) are swallowed — the local comment stays unlinked and the pull's
+  body-based adoption reconciles it.
+  """
+  @spec link_comment_remote_id(term(), term()) :: :ok
+  def link_comment_remote_id(nil, _remote_id), do: :ok
+  def link_comment_remote_id(_comment_id, remote_id) when not is_binary(remote_id), do: :ok
+
+  def link_comment_remote_id(comment_id, remote_id) do
+    case Repo.get(Comment, comment_id) do
+      nil ->
+        :ok
+
+      %Comment{remote_id: existing} when is_binary(existing) ->
+        :ok
+
+      %Comment{} = comment ->
+        comment
+        |> Comment.changeset(%{remote_id: remote_id, sync_status: "synced", last_synced_at: DateTime.utc_now()})
+        |> Repo.update()
+        |> case do
+          {:ok, _updated} -> :ok
+          {:error, _changeset} -> :ok
+        end
+    end
+  end
+
   defp upsert_comments!(issue, comments) when is_list(comments) do
     Enum.each(comments, fn comment ->
+      remote_id = comment[:remote_id] || comment[:id]
+
       attrs = %{
         issue_id: issue.id,
         kind: comment[:kind] || "comment",
         body: comment[:body],
         author: comment[:author] || "remote",
-        remote_id: comment[:remote_id],
+        remote_id: remote_id,
         remote_updated_at: comment[:remote_updated_at],
         last_synced_at: DateTime.utc_now(),
         sync_status: "synced"
       }
 
-      case Repo.get_by(Comment, issue_id: issue.id, remote_id: comment[:remote_id]) do
-        nil -> %Comment{}
-        %Comment{} = existing -> existing
-      end
+      issue.id
+      |> find_comment_for_upsert(remote_id, comment[:body])
       |> Comment.changeset(attrs)
       |> Repo.insert_or_update!()
     end)
 
     :ok
+  end
+
+  # Reconcile an incoming remote comment with an existing local row so a pull
+  # never duplicates a comment that already exists locally:
+  #   1. Prefer the row already linked to this remote_id (idempotent re-sync).
+  #   2. Otherwise adopt a local-only comment (remote_id is nil) whose body is
+  #      identical — the locally authored comment that was pushed to the remote
+  #      but never had its remote_id recorded. Adopting it in place avoids the
+  #      duplicate that previously appeared after a remote pull.
+  #   3. Fall back to inserting a brand new row.
+  defp find_comment_for_upsert(issue_id, remote_id, body) do
+    comment_by_remote_id(issue_id, remote_id) ||
+      orphan_comment_with_body(issue_id, body) ||
+      %Comment{}
+  end
+
+  defp comment_by_remote_id(_issue_id, nil), do: nil
+
+  defp comment_by_remote_id(issue_id, remote_id),
+    do: Repo.get_by(Comment, issue_id: issue_id, remote_id: remote_id)
+
+  defp orphan_comment_with_body(_issue_id, nil), do: nil
+  defp orphan_comment_with_body(_issue_id, ""), do: nil
+
+  defp orphan_comment_with_body(issue_id, body) do
+    Repo.one(
+      from(c in Comment,
+        where: c.issue_id == ^issue_id and is_nil(c.remote_id) and c.body == ^body,
+        order_by: [asc: c.id],
+        limit: 1
+      )
+    )
   end
 end

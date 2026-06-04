@@ -169,6 +169,26 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
              IssueDocuments.read("MAC-PERSISTED", "docs/superpowers/specs/design.md")
   end
 
+  test "list/1 expands a persisted workspace path that uses ~ so reads land on the real tree" do
+    {:ok, _project} = Context.ensure_project(%{name: "Tilde", slug: "tilde"})
+
+    unique = "idocs-tilde-#{System.unique_integer([:positive])}"
+    home_root = Path.join(System.user_home!(), unique)
+    specs_dir = Path.join([home_root, "docs", "superpowers", "specs"])
+    File.mkdir_p!(specs_dir)
+    File.write!(Path.join(specs_dir, "design.md"), "# Tilde Design\n\nbody")
+    on_exit(fn -> File.rm_rf!(home_root) end)
+
+    {:ok, _thread} =
+      History.ensure_issue_thread("tilde", "MAC-TILDE", %{workspace_path: Path.join("~", unique)})
+
+    assert %{available: true, documents: [%{title: "Tilde Design", kind: "spec"}]} =
+             IssueDocuments.list("MAC-TILDE")
+
+    assert {:ok, "# Tilde Design\n\nbody"} =
+             IssueDocuments.read("MAC-TILDE", "docs/superpowers/specs/design.md")
+  end
+
   test "read/2 returns the markdown body" do
     assert {:ok, "# X Design\n\nbody"} =
              IssueDocuments.read("MAC-1", "docs/superpowers/specs/2026-05-31-x-design.md")

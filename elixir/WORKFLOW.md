@@ -1,13 +1,14 @@
 ---
-linear:
-  project_slug: "symphony-0c79b11b75ea"
-# To use the built-in local tracker instead of Linear/GitHub, remove the
-# `linear:`/`github:` section and uncomment:
-#
-# local:
-#   database_path: .symphony/tracker.sqlite3
-#   project_slug: symphony
-#   api_token_env: SYMPHONY_TRACKER_TOKEN
+# This global file now holds ONLY process/host-level settings (editor, tunnel,
+# codex command, agent concurrency, workspace root, hooks). Per-project tracker
+# identity, prompts, and states are DB-owned (ProjectSetup) and resolved per
+# project by the orchestrator — so boot never depends on a remote Linear/GitHub
+# token. The built-in local tracker keeps `Config.validate!/0` green without any
+# external API key.
+local:
+  database_path: .symphony/tracker.sqlite3
+  project_slug: symphony
+  api_token_env: SYMPHONY_TRACKER_TOKEN
 tracker:
   field_states:
     - Backlog

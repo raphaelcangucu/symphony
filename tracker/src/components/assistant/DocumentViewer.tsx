@@ -116,14 +116,17 @@ export function DocumentViewer({
   }
 
   return (
-    <section className="flex h-full min-h-0 overflow-hidden rounded-xl border bg-card" aria-label="Issue documents">
-      <aside className="flex w-64 shrink-0 min-h-0 flex-col border-r bg-muted/20" aria-label="Document list">
-        <div className="shrink-0 border-b px-4 py-3">
-          <h2 className="text-sm font-semibold">Documents</h2>
+    <section
+      className="flex h-full min-h-0 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-14px_rgba(0,0,0,0.1)] ring-1 ring-black/[0.02]"
+      aria-label="Issue documents"
+    >
+      <aside className="flex min-h-0 w-72 shrink-0 flex-col border-r border-border/60 bg-muted/30" aria-label="Document list">
+        <div className="sticky top-0 z-10 shrink-0 border-b border-border/60 bg-muted/30 px-4 py-3 backdrop-blur-sm">
+          <h2 className="text-sm font-semibold tracking-tight">Documents</h2>
           <p className="text-xs text-muted-foreground">Generated specs, plans, and handoffs.</p>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-2.5">
           {groupedDocuments.map((group) => (
             <DocumentKindGroup
               key={group.kind}
@@ -136,23 +139,23 @@ export function DocumentViewer({
         </div>
       </aside>
 
-      <article className="min-w-0 flex-1 overflow-auto p-6" aria-live="polite">
+      <article className="min-w-0 flex-1 overflow-auto bg-background/40 p-6" aria-live="polite">
         {loading ? <DocumentContentState>Loading document...</DocumentContentState> : null}
 
         {!loading && loadError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
             <p className="text-sm font-medium text-destructive">Could not load this document.</p>
             <p className="mt-1 text-sm text-muted-foreground">
               Use Retry to load it again, or ask the assistant to regenerate the document.
             </p>
-            <Button type="button" variant="outline" size="sm" className="mt-3" onClick={retrySelectedDocument}>
+            <Button type="button" variant="outline" size="sm" className="mt-3 rounded-lg" onClick={retrySelectedDocument}>
               Retry
             </Button>
           </div>
         ) : null}
 
         {!loading && !loadError && content ? (
-          <Markdown className="max-w-none text-sm leading-7">{content}</Markdown>
+          <Markdown className="mx-auto max-w-3xl text-sm leading-7">{content}</Markdown>
         ) : null}
 
         {!loading && !loadError && !content ? <DocumentContentState>No content to display.</DocumentContentState> : null}
@@ -177,10 +180,21 @@ function DocumentKindGroup({
 
   return (
     <section aria-labelledby={headingId}>
-      <h3 id={headingId} className="px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {groupLabel}
-      </h3>
-      <div className="mt-1 space-y-1">
+      <div className="flex items-center gap-2 px-2">
+        <h3
+          id={headingId}
+          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80"
+        >
+          {groupLabel}
+        </h3>
+        <span
+          aria-hidden
+          className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium text-muted-foreground"
+        >
+          {documents.length}
+        </span>
+      </div>
+      <div className="mt-1.5 space-y-1">
         {documents.map((document) => (
           <DocumentListItem
             key={document.path}
@@ -210,19 +224,37 @@ function DocumentListItem({
       type="button"
       variant="ghost"
       className={cn(
-        "h-auto w-full justify-start gap-3 rounded-lg px-3 py-2 text-left",
-        selected && "bg-background text-foreground shadow-sm hover:bg-background",
+        "group relative h-auto w-full justify-start gap-3 rounded-xl px-2.5 py-2 text-left transition-colors",
+        selected
+          ? "bg-background text-foreground shadow-sm ring-1 ring-border/60 hover:bg-background"
+          : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
       )}
       aria-current={selected ? "true" : undefined}
       aria-label={`${label} ${document.title}`}
       onClick={onSelect}
     >
-      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      {selected ? (
+        <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary" />
+      ) : null}
+      <span
+        aria-hidden
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors",
+          selected ? "bg-primary/10 text-primary" : "bg-muted/70 text-muted-foreground group-hover:text-foreground",
+        )}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{document.title}</span>
-        <span className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="block truncate text-sm font-medium leading-tight">{document.title}</span>
+        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span>{label}</span>
-          {document.updatedAt ? <span>{formatUpdatedAt(document.updatedAt)}</span> : null}
+          {document.updatedAt ? (
+            <>
+              <span aria-hidden className="h-0.5 w-0.5 rounded-full bg-muted-foreground/50" />
+              <span>{formatUpdatedAt(document.updatedAt)}</span>
+            </>
+          ) : null}
         </span>
       </span>
     </Button>
@@ -231,12 +263,21 @@ function DocumentListItem({
 
 function DocumentViewerEmptyState({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border bg-card px-6 py-8 text-center text-sm text-muted-foreground">{children}</div>
+    <div className="flex h-full min-h-0 flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/60 px-6 py-10 text-center shadow-sm backdrop-blur-sm">
+      <span aria-hidden className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+        <FileText className="h-5 w-5" />
+      </span>
+      <p className="max-w-xs text-sm text-muted-foreground">{children}</p>
+    </div>
   );
 }
 
 function DocumentContentState({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">{children}</div>;
+  return (
+    <div className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+      {children}
+    </div>
+  );
 }
 
 function hasReadablePath(document: IssueDocument): boolean {

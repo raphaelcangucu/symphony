@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Rocket, Sparkles } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -123,7 +123,7 @@ export function IssueAuthoringPanel({
   const assistantPanel = (
     <div
       className={cn(
-        "min-h-0 overflow-hidden rounded-xl border bg-background shadow-sm",
+        "min-h-0 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.02]",
         compact && "h-full flex-1",
       )}
     >
@@ -160,7 +160,7 @@ export function IssueAuthoringPanel({
       reason={issueDocuments.reason}
     />
   ) : (
-    <div className="rounded-xl border bg-card px-6 py-8 text-center text-sm text-muted-foreground shadow-sm">
+    <div className="rounded-2xl border border-dashed border-border/70 bg-card/60 px-6 py-10 text-center text-sm text-muted-foreground shadow-sm backdrop-blur-sm">
       Draft documents appear here after the assistant creates or links an issue. Start by asking the project assistant
       to draft the issue, then open the issue authoring route once an identifier exists.
     </div>
@@ -168,45 +168,71 @@ export function IssueAuthoringPanel({
 
   const documentsPanel = (
     <>
-      <div className={cn("shrink-0 rounded-xl border bg-card shadow-sm", compact ? "px-3 py-2.5" : "px-4 py-3")}>
-        <h1 className="flex items-center gap-1.5 text-sm font-semibold">
-          {normalizedIdentifier ? `Issue authoring: ${normalizedIdentifier}` : "New issue authoring"}
-          {normalizedIdentifier ? (
-            <Link
-              to={issuePath(projectSlug, view, normalizedIdentifier)}
-              className="text-muted-foreground transition-colors hover:text-foreground"
-              aria-label={`Open issue ${normalizedIdentifier}`}
-              title={`Open issue ${normalizedIdentifier}`}
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </Link>
-          ) : null}
-        </h1>
-        <p className={cn("text-xs text-muted-foreground", compact ? "mt-0.5" : "mt-1")}>
-          {normalizedIdentifier
-            ? compact
-              ? "Simple for a polished brief, Complex for a spec + implementation plan."
-              : "Documents refresh when the assistant reports changes for the open issue. Choose Simple for a polished issue brief or Complex for a spec and implementation plan."
-            : "Start by asking the assistant to draft an issue; documents appear once an identifier exists."}
-        </p>
+      <div
+        className={cn(
+          "shrink-0 rounded-2xl border border-border/60 bg-gradient-to-b from-card to-muted/30 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-14px_rgba(0,0,0,0.1)]",
+          compact ? "px-3 py-3" : "px-5 py-4",
+        )}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden
+            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+          >
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+              {normalizedIdentifier ? `Issue authoring: ${normalizedIdentifier}` : "New issue authoring"}
+              {normalizedIdentifier ? (
+                <Link
+                  to={issuePath(projectSlug, view, normalizedIdentifier)}
+                  className="text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label={`Open issue ${normalizedIdentifier}`}
+                  title={`Open issue ${normalizedIdentifier}`}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              ) : null}
+            </h1>
+            <p className={cn("text-xs leading-relaxed text-muted-foreground", compact ? "mt-0.5" : "mt-1")}>
+              {normalizedIdentifier
+                ? compact
+                  ? "Simple for a polished brief, Complex for a spec + implementation plan."
+                  : "Documents refresh when the assistant reports changes for the open issue. Choose Simple for a polished issue brief or Complex for a spec and implementation plan."
+                : "Start by asking the assistant to draft an issue; documents appear once an identifier exists."}
+            </p>
+          </div>
+        </div>
         {normalizedIdentifier ? (
-          <div className={cn("space-y-2", compact ? "mt-2" : "mt-3")}>
-            <div className="flex flex-wrap gap-2" aria-label="Issue authoring mode">
+          <div className={cn("space-y-3", compact ? "mt-3" : "mt-4")}>
+            <div
+              className="inline-flex w-full items-center gap-1 rounded-xl bg-muted/70 p-1 ring-1 ring-inset ring-border/50"
+              aria-label="Issue authoring mode"
+            >
               <Button
                 type="button"
                 size="sm"
-                variant={issueMode === "simple" ? "default" : "outline"}
+                variant={issueMode === "simple" ? "default" : "ghost"}
                 aria-pressed={issueMode === "simple"}
                 onClick={() => selectIssueMode("simple")}
+                className={cn(
+                  "h-8 flex-1 rounded-lg text-xs font-medium transition-all",
+                  issueMode === "simple" ? "shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 Simple
               </Button>
               <Button
                 type="button"
                 size="sm"
-                variant={issueMode === "complex" ? "default" : "outline"}
+                variant={issueMode === "complex" ? "default" : "ghost"}
                 aria-pressed={issueMode === "complex"}
                 onClick={() => selectIssueMode("complex")}
+                className={cn(
+                  "h-8 flex-1 rounded-lg text-xs font-medium transition-all",
+                  issueMode === "complex" ? "shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 Complex
               </Button>
@@ -218,39 +244,43 @@ export function IssueAuthoringPanel({
             ) : issueModeStatus ? (
               <p className="text-xs text-muted-foreground">{issueModeStatus}</p>
             ) : null}
-            <div className="border-t pt-2">
-              <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2.5">
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-foreground">Codex goal mode (long-running)</span>
+                <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                  When on, dispatched Codex runs follow the spec/plan as a long-running goal.
+                </span>
+              </span>
+              <span className="relative inline-flex shrink-0 items-center">
                 <input
                   type="checkbox"
                   checked={goalMode}
                   aria-label="Codex goal mode"
                   onChange={(event) => toggleGoalMode(event.target.checked)}
-                  className="h-4 w-4 rounded border-input"
+                  className="peer sr-only"
                 />
-                Codex goal mode (long-running)
-              </label>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                When on, dispatched Codex runs follow the spec/plan as a long-running goal.
+                <span className="h-5 w-9 rounded-full bg-input transition-colors duration-200 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2" />
+                <span className="absolute left-0.5 h-4 w-4 rounded-full bg-background shadow-sm transition-transform duration-200 peer-checked:translate-x-4" />
+              </span>
+            </label>
+            {goalModeError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {goalModeError}
               </p>
-              {goalModeError ? (
-                <p role="alert" className="mt-1 text-xs text-destructive">
-                  {goalModeError}
-                </p>
-              ) : goalModeStatus ? (
-                <p className="mt-1 text-xs text-muted-foreground">{goalModeStatus}</p>
-              ) : null}
-            </div>
-            <div className="border-t pt-2">
+            ) : goalModeStatus ? (
+              <p className="text-xs text-muted-foreground">{goalModeStatus}</p>
+            ) : null}
+            <div>
               <Button
                 type="button"
-                size="sm"
-                className="w-full"
+                className="group h-10 w-full rounded-xl bg-primary text-sm font-semibold shadow-[0_4px_14px_-4px_hsl(var(--primary)/0.5)] transition-all hover:shadow-[0_6px_20px_-4px_hsl(var(--primary)/0.55)] active:scale-[0.99]"
                 disabled={dispatching}
                 onClick={handleDispatch}
               >
+                <Rocket className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                 {dispatching ? "Dispatching..." : goalMode ? "Dispatch to Codex (goal)" : "Dispatch to Codex"}
               </Button>
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
                 Moves this issue to In Progress and hands it to the Codex orchestrator
                 {goalMode ? " as a long-running goal" : ""}.
               </p>
@@ -272,7 +302,7 @@ export function IssueAuthoringPanel({
 
   if (compact) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden bg-muted/20 p-2">
+      <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden bg-gradient-to-b from-muted/30 to-muted/10 p-2">
         <section className="flex min-h-0 flex-[2.4] overflow-hidden" aria-label="Issue authoring chat">
           {assistantPanel}
         </section>
@@ -287,8 +317,8 @@ export function IssueAuthoringPanel({
   return (
     <main
       className={cn(
-        "grid h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] gap-4 overflow-hidden bg-muted/20 p-4",
-        "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.85fr)] xl:grid-rows-1",
+        "grid h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] gap-5 overflow-hidden bg-gradient-to-br from-muted/40 via-background to-muted/20 p-5",
+        "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.82fr)] xl:grid-rows-1",
       )}
     >
       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{assistantPanel}</div>

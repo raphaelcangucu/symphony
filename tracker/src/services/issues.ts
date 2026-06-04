@@ -84,6 +84,15 @@ export async function moveIssue(projectSlug: string, identifier: string, input: 
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
 
+export async function forceSyncIssue(projectSlug: string, identifier: string): Promise<Issue> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  if (!identifier.trim()) throw new Error("identifier is required");
+  const response = await http.post(
+    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/sync`),
+  );
+  return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}
+
 export async function archiveIssue(projectSlug: string, identifier: string): Promise<Issue> {
   if (!projectSlug.trim()) throw new Error("projectSlug is required");
   if (!identifier.trim()) throw new Error("identifier is required");

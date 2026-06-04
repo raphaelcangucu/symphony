@@ -100,8 +100,9 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   def create_comment(issue_id, body) when is_binary(issue_id) and is_binary(body) do
     with {:ok, project} <- resolve_project_for_issue(issue_id),
          {:ok, identifier} <- resolve_identifier(project, issue_id),
-         {:ok, _comment} <- Context.add_comment(project.slug, identifier, body) do
-      enqueue(project, identifier, "comment", "create", %{"identifier" => identifier, "body" => body}, nil)
+         {:ok, comment} <- Context.add_comment(project.slug, identifier, body) do
+      payload = %{"identifier" => identifier, "body" => body, "comment_id" => comment.id}
+      enqueue(project, identifier, "comment", "create", payload, nil)
       :ok
     else
       :skip -> {:error, :project_not_resolved}

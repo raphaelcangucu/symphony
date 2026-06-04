@@ -96,6 +96,18 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     end
   end
 
+  @spec sync(Conn.t(), map()) :: Conn.t()
+  def sync(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _record} <- SymphonyElixir.Tracker.Sync.Engine.sync_issue(project, identifier),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      json(conn, %{data: TrackerPresenter.issue(issue)})
+    else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec archive(Conn.t(), map()) :: Conn.t()
   def archive(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
     dispatch_issue_action(conn, project_slug, :archive_issue, [identifier])

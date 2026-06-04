@@ -5,23 +5,25 @@ defmodule SymphonyElixirWeb.Presenter do
 
   alias SymphonyElixir.{Config, Orchestrator, StatusDashboard}
 
+  @empty_agent_totals %{
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+    seconds_running: 0
+  }
+
   @spec state_payload(GenServer.name(), timeout()) :: map()
-  def state_payload(orchestrator, snapshot_timeout_ms) do
+  def state_payload(orchestrator, snapshot_timeout_ms),
+    do: state_payload(orchestrator, snapshot_timeout_ms, nil)
+
+  @spec state_payload(GenServer.name(), timeout(), String.t() | nil) :: map()
+  def state_payload(orchestrator, snapshot_timeout_ms, project_slug)
+      when is_nil(project_slug) or is_binary(project_slug) do
     generated_at = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
 
     case Orchestrator.snapshot(orchestrator, snapshot_timeout_ms) do
       %{} = snapshot ->
-        %{
-          generated_at: generated_at,
-          counts: %{
-            running: length(snapshot.running),
-            retrying: length(snapshot.retrying)
-          },
-          running: Enum.map(snapshot.running, &running_entry_payload/1),
-          retrying: Enum.map(snapshot.retrying, &retry_entry_payload/1),
-          agent_totals: snapshot.agent_totals,
-          rate_limits: snapshot.rate_limits
-        }
+        build_state_payload(snapshot, generated_at, project_slug)
 
       :timeout ->
         %{generated_at: generated_at, error: %{code: "snapshot_timeout", message: "Snapshot timed out"}}
@@ -31,28 +33,31 @@ defmodule SymphonyElixirWeb.Presenter do
     end
   end
 
-  @spec state_payload(GenServer.name(), timeout(), String.t() | nil) :: map()
-  def state_payload(orchestrator, snapshot_timeout_ms, nil),
-    do: state_payload(orchestrator, snapshot_timeout_ms)
+  defp build_state_payload(snapshot, generated_at, project_slug) do
+    running = scope_entries(snapshot.running, project_slug)
+    retrying = scope_entries(snapshot.retrying, project_slug)
 
-  def state_payload(orchestrator, snapshot_timeout_ms, project_slug) when is_binary(project_slug) do
-    base = state_payload(orchestrator, snapshot_timeout_ms)
+    %{
+      generated_at: generated_at,
+      counts: %{running: length(running), retrying: length(retrying)},
+      running: Enum.map(running, &running_entry_payload/1),
+      retrying: Enum.map(retrying, &retry_entry_payload/1),
+      agent_totals: scope_agent_totals(snapshot, project_slug),
+      rate_limits: snapshot.rate_limits
+    }
+  end
 
-    case base do
-      %{running: running, retrying: retrying} ->
-        filtered_running = Enum.filter(running, &(&1.project_slug == project_slug))
-        filtered_retrying = Enum.filter(retrying, &(&1.project_slug == project_slug))
+  defp scope_entries(entries, nil), do: entries
 
-        %{
-          base
-          | running: filtered_running,
-            retrying: filtered_retrying,
-            counts: %{running: length(filtered_running), retrying: length(filtered_retrying)}
-        }
+  defp scope_entries(entries, project_slug) when is_binary(project_slug),
+    do: Enum.filter(entries, &(Map.get(&1, :project_slug) == project_slug))
 
-      other ->
-        other
-    end
+  defp scope_agent_totals(snapshot, nil), do: snapshot.agent_totals
+
+  defp scope_agent_totals(snapshot, project_slug) when is_binary(project_slug) do
+    snapshot
+    |> Map.get(:agent_totals_by_project, %{})
+    |> Map.get(project_slug, @empty_agent_totals)
   end
 
   @spec issue_payload(String.t(), GenServer.name(), timeout()) :: {:ok, map()} | {:error, :issue_not_found}

@@ -88,6 +88,71 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     assert by_remote_id["IC_msg"] == "comment"
   end
 
+  test "adopts a local-only comment with a matching body instead of duplicating it", %{project: project} do
+    {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
+
+    # A locally authored comment that was pushed to the remote but never had its
+    # remote_id recorded locally (the source of the post-sync duplicate).
+    {:ok, _orphan} =
+      %SymphonyElixir.LocalTracker.Comment{}
+      |> SymphonyElixir.LocalTracker.Comment.changeset(%{
+        issue_id: issue.id,
+        kind: "comment",
+        body: "Temos um problema aqui",
+        author: "raphael"
+      })
+      |> Repo.insert()
+
+    comments = [
+      %{remote_id: "IC_remote", body: "Temos um problema aqui", author: "raphael", kind: "comment", remote_updated_at: DateTime.utc_now()}
+    ]
+
+    {:ok, _} = LocalStore.upsert_remote_issue(project, remote_issue(%{comments: comments}))
+
+    loaded = Repo.get(IssueRecord, issue.id) |> Repo.preload(:comments)
+    assert length(loaded.comments) == 1
+    [comment] = loaded.comments
+    assert comment.remote_id == "IC_remote"
+    assert comment.sync_status == "synced"
+  end
+
+  test "link_comment_remote_id records the remote id on a locally authored comment", %{project: project} do
+    {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
+
+    {:ok, comment} =
+      %SymphonyElixir.LocalTracker.Comment{}
+      |> SymphonyElixir.LocalTracker.Comment.changeset(%{
+        issue_id: issue.id,
+        kind: "comment",
+        body: "local note",
+        author: "raphael"
+      })
+      |> Repo.insert()
+
+    assert is_nil(comment.remote_id)
+    assert :ok = LocalStore.link_comment_remote_id(comment.id, "IC_pushed")
+
+    reloaded = Repo.get(SymphonyElixir.LocalTracker.Comment, comment.id)
+    assert reloaded.remote_id == "IC_pushed"
+    assert reloaded.sync_status == "synced"
+  end
+
+  test "link_comment_remote_id is a no-op for unknown ids or a nil remote id", %{project: project} do
+    {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
+
+    {:ok, comment} =
+      %SymphonyElixir.LocalTracker.Comment{}
+      |> SymphonyElixir.LocalTracker.Comment.changeset(%{issue_id: issue.id, kind: "comment", body: "x", author: "raphael"})
+      |> Repo.insert()
+
+    assert :ok = LocalStore.link_comment_remote_id(nil, "ignored")
+    assert :ok = LocalStore.link_comment_remote_id(999_999, "ignored")
+    assert :ok = LocalStore.link_comment_remote_id(comment.id, nil)
+
+    reloaded = Repo.get(SymphonyElixir.LocalTracker.Comment, comment.id)
+    assert is_nil(reloaded.remote_id)
+  end
+
   test "remote update overwrites fields with no pending local edit", %{project: project} do
     {:ok, _} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "v1"}))
     {:ok, updated} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "v2", remote_updated_at: DateTime.utc_now()}))

@@ -47,10 +47,15 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
   # The active issue thread records the working tree where docs were written. Prefer it so the
   # viewer keeps finding docs even if the path computation later changes; fall back to the
   # computed path when no thread exists yet (first turn) or persistence is unavailable.
+  #
+  # Always expand the resolved path: persisted thread workspace paths (and older configs) can
+  # contain a literal `~`, which `File.*` operations never resolve to the home directory. An
+  # unexpanded tilde makes reads land on a stray `~/...` tree instead of the real workspace, so
+  # the viewer reports `workspace_missing` even though the documents exist on disk.
   defp resolve_workspace(identifier) do
     case History.issue_workspace_path(identifier) do
-      path when is_binary(path) and path != "" -> path
-      _ -> Workspace.path_for_issue(identifier)
+      path when is_binary(path) and path != "" -> Path.expand(path)
+      _ -> Path.expand(Workspace.path_for_issue(identifier))
     end
   end
 

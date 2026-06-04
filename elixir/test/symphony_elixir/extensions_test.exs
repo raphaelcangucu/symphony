@@ -348,6 +348,7 @@ defmodule SymphonyElixir.ExtensionsTest do
                %{
                  "issue_id" => "issue-http",
                  "issue_identifier" => "MT-HTTP",
+                 "project_slug" => nil,
                  "state" => "In Progress",
                  "session_id" => "thread-http",
                  "turn_count" => 7,
@@ -362,6 +363,7 @@ defmodule SymphonyElixir.ExtensionsTest do
                %{
                  "issue_id" => "issue-retry",
                  "issue_identifier" => "MT-RETRY",
+                 "project_slug" => nil,
                  "attempt" => 2,
                  "due_at" => state_payload["retrying"] |> List.first() |> Map.fetch!("due_at"),
                  "error" => "boom"
