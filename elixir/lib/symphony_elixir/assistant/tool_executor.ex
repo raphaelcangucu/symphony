@@ -4,24 +4,34 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   """
 
   alias SymphonyElixir.AgentExecution
-  alias SymphonyElixir.Assistant.{GitHubTools, ReadTools}
+  alias SymphonyElixir.Assistant.{DiscoveryTools, GitHubTools, ProjectBoardTools, PullRequestLookup, ReadTools}
+  alias SymphonyElixir.{Config, DevServer}
+  alias SymphonyElixir.DevServer.Manager
   alias SymphonyElixir.Codex.DynamicTool
-  alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixirWeb.TrackerPresenter
 
-  @tracker_tools ~w(list_issues create_issue create_draft_issue update_issue move_issue add_comment get_agent_executions dispatch_codex)
+  @tracker_tools ~w(
+    list_issues
+    create_issue
+    create_draft_issue
+    update_issue
+    move_issue
+    add_comment
+    list_pull_requests
+    manage_preview
+    update_project_workflow
+    get_agent_executions
+    dispatch_codex
+  )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
+  @discovery_tools DiscoveryTools.tools()
   @dynamic_tools Enum.map(DynamicTool.tool_specs(), & &1["name"])
   @supported_tools @tracker_tools ++ @read_tools ++ @github_tools
-  # `add_comment` is intentionally absent from the advertised (`tool_specs/0`) and
-  # issue-bound tool lists. The assistant's replies already stream to the user in the
-  # chat UI, so re-posting them as GitHub issue comments is redundant and a major
-  # source of rate-limit pressure. `dispatch_codex` still posts its single milestone
-  # comment via a direct IssueAdapter call, and `do_execute(_, "add_comment", _, _)`
-  # remains for direct/server-side use.
+  # Routine assistant chat replies should not be mirrored as issue comments; use
+  # `add_comment` only when the user asks to record a comment on the issue.
   @issue_bound_mutable_tools ~w(update_issue move_issue dispatch_codex)
   @issue_bound_supported_tools ~w(list_issues get_issue read_workspace_file update_issue move_issue get_agent_executions dispatch_codex)
   @in_progress_state "In Progress"
@@ -83,6 +93,63 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "status" => string_schema("Target workflow status.")
         }
       }),
+      tool_spec(
+        "add_comment",
+        "Add a comment on a tracker issue (use when the user wants it recorded on the issue, not for normal chat replies).",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["identifier", "body"],
+          "properties" => %{
+            "identifier" => string_schema("Issue identifier, for example MAC-1."),
+            "body" => string_schema("Comment body markdown/text.")
+          }
+        }
+      ),
+      tool_spec(
+        "list_pull_requests",
+        "List pull requests linked to an issue (GitHub discovery + persisted links).",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["identifier"],
+          "properties" => %{
+            "identifier" => string_schema("Issue identifier, for example MAC-1.")
+          }
+        }
+      ),
+      tool_spec(
+        "manage_preview",
+        "Inspect or control the issue dev-server preview (start, stop, restart, or status).",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["identifier", "action"],
+          "properties" => %{
+            "identifier" => string_schema("Issue identifier, for example MAC-1."),
+            "action" => %{
+              "type" => "string",
+              "enum" => ["status", "start", "stop", "restart"],
+              "description" => "Preview action."
+            }
+          }
+        }
+      ),
+      tool_spec(
+        "update_project_workflow",
+        "Update this project's workflow markdown (YAML front matter + prompt body).",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["workflow_markdown"],
+          "properties" => %{
+            "workflow_markdown" => %{
+              "type" => "string",
+              "description" => "Full WORKFLOW markdown stored on the project."
+            }
+          }
+        }
+      ),
       tool_spec("get_agent_executions", "List active or retrying coding-agent executions for this project.", %{
         "type" => "object",
         "additionalProperties" => false,
@@ -138,7 +205,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   # Project-agnostic tools available in freeform chat (no existing project context):
   # GitHub project provisioning, raw GraphQL, and workflow/template lookups.
-  @freeform_project_agnostic_read_tools ~w(get_workflow get_template)
+  @freeform_project_agnostic_read_tools ~w(get_template)
 
   @spec freeform_tool_specs() :: [map()]
   def freeform_tool_specs do
@@ -146,7 +213,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       ReadTools.tool_specs()
       |> Enum.filter(&(&1["name"] in @freeform_project_agnostic_read_tools))
 
-    read_specs ++ GitHubTools.tool_specs() ++ DynamicTool.tool_specs()
+    DiscoveryTools.tool_specs() ++
+      ProjectBoardTools.tool_specs() ++
+      GitHubTools.tool_specs() ++
+      read_specs ++
+      DynamicTool.tool_specs()
   end
 
   @spec freeform_codex_tool_executor(keyword()) :: (String.t() | nil, term() -> map())
@@ -158,6 +229,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       cond do
         name in @dynamic_tools ->
           DynamicTool.execute(name, arguments, opts)
+
+        name in @discovery_tools ->
+          wrap_for_codex(DiscoveryTools.execute(name, arguments, opts))
+
+        name in ProjectBoardTools.tools() ->
+          wrap_for_codex(ProjectBoardTools.execute(name, arguments, opts))
 
         name in @github_tools ->
           wrap_for_codex(GitHubTools.execute(name, arguments, opts))
@@ -218,6 +295,34 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   @spec execute(String.t(), String.t(), map()) :: {:ok, result()} | {:error, term()}
   def execute(project_slug, tool, arguments), do: execute(project_slug, tool, arguments, [])
+
+  @spec execute_create_tracker_project(map(), keyword()) :: {:ok, result()} | {:error, term()}
+  def execute_create_tracker_project(arguments, _opts \\ []) when is_map(arguments) do
+    with {:ok, name} <- normalize_required_string(Map.get(arguments, "name"), :name),
+         {:ok, slug} <- normalize_required_string(Map.get(arguments, "slug"), :slug) do
+      attrs = %{
+        "name" => name,
+        "slug" => slug,
+        "description" => normalize_optional_string(Map.get(arguments, "description")),
+        "tracker" => %{"kind" => "local"}
+      }
+
+      case Context.create_workspace_project(attrs) do
+        {:ok, project} ->
+          statuses = Context.list_statuses(project.slug)
+
+          {:ok,
+           %{
+             tool: "create_tracker_project",
+             message: "Created local tracker project #{project.slug}.",
+             data: TrackerPresenter.project(project, statuses)
+           }}
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          {:error, {:invalid_changeset, changeset}}
+      end
+    end
+  end
 
   @spec execute(String.t(), String.t(), map(), keyword()) :: {:ok, result()} | {:error, term()}
   def execute(project_slug, tool, arguments, opts)
@@ -333,6 +438,80 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          tool: "add_comment",
          message: "Added comment to #{identifier}.",
          data: %{comment: presented}
+       }}
+    end
+  end
+
+  defp do_execute(project, "list_pull_requests", arguments, opts) do
+    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
+         {:ok, payload} <- PullRequestLookup.list_for_issue(project, identifier, opts) do
+      prs = Map.get(payload, :pull_requests, [])
+
+      {:ok,
+       %{
+         tool: "list_pull_requests",
+         message: "Found #{length(prs)} pull request(s) for #{identifier}.",
+         data: payload
+       }}
+    end
+  end
+
+  defp do_execute(project, "manage_preview", arguments, _opts) do
+    slug = project_slug(project)
+
+    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
+         {:ok, action} <- normalize_preview_action(Map.get(arguments, "action")) do
+      case action do
+        :status ->
+          with {:ok, view} <- DevServer.issue_targets(slug, identifier) do
+            {:ok,
+             %{
+               tool: "manage_preview",
+               message: "Preview status for #{identifier}.",
+               data: view
+             }}
+          end
+
+        :start ->
+          case Manager.start_for_issue(slug, identifier) do
+            {:ok, _} ->
+              {:ok, preview_action_result("Started preview for #{identifier}.", slug, identifier)}
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+
+        :stop ->
+          Manager.stop_for_issue(slug, identifier)
+          {:ok, preview_action_result("Stopped preview for #{identifier}.", slug, identifier)}
+
+        :restart ->
+          case Manager.restart_for_issue(slug, identifier) do
+            {:ok, _} ->
+              {:ok, preview_action_result("Restarted preview for #{identifier}.", slug, identifier)}
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+      end
+    end
+  end
+
+  defp do_execute(project, "update_project_workflow", arguments, _opts) do
+    slug = project_slug(project)
+
+    with {:ok, markdown} <- normalize_required_string(Map.get(arguments, "workflow_markdown"), :workflow_markdown),
+         :ok <- validate_workflow_markdown(markdown),
+         {:ok, _setup} <- Context.upsert_project_setup(slug, %{"workflow_markdown" => markdown}) do
+      statuses = Context.list_statuses(slug)
+      repositories = Context.list_repositories(slug)
+      setup = Context.get_project_setup(slug)
+
+      {:ok,
+       %{
+         tool: "update_project_workflow",
+         message: "Updated workflow for #{slug}.",
+         data: TrackerPresenter.project(project, statuses, repositories, setup)
        }}
     end
   end
@@ -509,6 +688,28 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp codex_failure_response(:missing_github_token) do
     codex_failure_response("GITHUB_TOKEN is not configured on the Symphony server (elixir/.env).")
+  end
+
+  defp codex_failure_response(:missing_jira_credentials) do
+    codex_failure_response(
+      "Jira credentials are not configured on the Symphony server (jira: section in WORKFLOW.md or JIRA_* env vars)."
+    )
+  end
+
+  defp codex_failure_response(:disabled) do
+    codex_failure_response("Dev-server preview is disabled in this project's workflow.")
+  end
+
+  defp codex_failure_response({:invalid_changeset, changeset}) do
+    codex_failure_response("Invalid project attributes: #{inspect(changeset.errors)}")
+  end
+
+  defp codex_failure_response({:invalid_preview_action, action}) do
+    codex_failure_response("Invalid preview action: #{inspect(action)}. Use status, start, stop, or restart.")
+  end
+
+  defp codex_failure_response({:invalid_workflow_markdown, reason}) do
+    codex_failure_response("Invalid workflow_markdown: #{reason}")
   end
 
   defp codex_failure_response(:repository_not_found) do
@@ -715,4 +916,36 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   defp maybe_put_attr(attrs, _key, nil), do: attrs
   defp maybe_put_attr(attrs, _key, []), do: attrs
   defp maybe_put_attr(attrs, key, value), do: Map.put(attrs, key, value)
+
+  defp project_slug(%{slug: slug}) when is_binary(slug), do: slug
+  defp project_slug(%{"slug" => slug}) when is_binary(slug), do: slug
+
+  defp preview_action_result(message, project_slug, identifier) do
+    {:ok, view} = DevServer.issue_targets(project_slug, identifier)
+
+    %{
+      tool: "manage_preview",
+      message: message,
+      data: view
+    }
+  end
+
+  defp normalize_preview_action(action) when is_binary(action) do
+    case String.trim(action) |> String.downcase() do
+      "status" -> {:ok, :status}
+      "start" -> {:ok, :start}
+      "stop" -> {:ok, :stop}
+      "restart" -> {:ok, :restart}
+      other -> {:error, {:invalid_preview_action, other}}
+    end
+  end
+
+  defp normalize_preview_action(action), do: {:error, {:invalid_preview_action, action}}
+
+  defp validate_workflow_markdown(markdown) when is_binary(markdown) do
+    case Config.parse_workflow_markdown(markdown) do
+      {:ok, %{front_matter: _, body: _}} -> :ok
+      {:error, reason} -> {:error, {:invalid_workflow_markdown, reason}}
+    end
+  end
 end

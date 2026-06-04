@@ -1,5 +1,8 @@
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useState } from "react";
+import { Link } from "react-router-dom";
 
+import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { ThreadDocumentViewer } from "@/components/assistant/ThreadDocumentViewer";
 import { useThreadDocuments } from "@/hooks/useThreadDocuments";
@@ -8,9 +11,11 @@ import type { AssistantDocumentChangedPayload } from "@/services/phoenix/assista
 
 interface FreeformAssistantPanelProps {
   threadId: number;
+  archiving?: boolean;
+  onArchive?: () => void;
 }
 
-export function FreeformAssistantPanel({ threadId }: FreeformAssistantPanelProps) {
+export function FreeformAssistantPanel({ threadId, archiving = false, onArchive }: FreeformAssistantPanelProps) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const threadDocuments = useThreadDocuments({ threadId, refreshKey });
@@ -34,6 +39,22 @@ export function FreeformAssistantPanel({ threadId }: FreeformAssistantPanelProps
         className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-background shadow-sm"
         aria-label="Assistant chat"
       >
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+          <Link
+            to="/assistant"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Conversations
+          </Link>
+          {onArchive ? (
+            <ArchiveChatButton
+              threadId={threadId}
+              archiving={archiving}
+              onArchive={() => onArchive()}
+            />
+          ) : null}
+        </div>
         <ProjectAssistantPanel
           threadId={threadId}
           view="board"

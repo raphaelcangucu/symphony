@@ -41,3 +41,12 @@ export async function createFreeformThread(title?: string): Promise<AssistantThr
   const response = await http.post(trackerPath("/assistant/threads"), { scope: "freeform", title });
   return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
 }
+
+export async function archiveAssistantThread(threadId: number): Promise<AssistantThread> {
+  if (!Number.isInteger(threadId) || threadId <= 0) throw new Error("threadId is required");
+
+  const response = await http.post(
+    trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}/archive`),
+  );
+  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+}

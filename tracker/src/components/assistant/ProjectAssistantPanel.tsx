@@ -644,7 +644,7 @@ export function ProjectAssistantPanel({
                   ? `Ask questions about the codebase in \`${projectSlug}\` (default branches).`
                   : projectSlug
                     ? `Codex CLI assistant for \`${projectSlug}\`.`
-                    : "Codex CLI assistant for freeform chat."}
+                    : "Codex CLI assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
                 {catalog ? ` Models from \`${catalog.command}\`.` : null}
               </p>
             )}
@@ -728,7 +728,9 @@ export function ProjectAssistantPanel({
           <SheetHeader className="border-b px-6 py-4">
             <SheetTitle>{projectSlug ? "Project assistant" : "Freeform assistant"}</SheetTitle>
             <SheetDescription>
-              {projectSlug ? `Codex CLI assistant for \`${projectSlug}\`.` : "Codex CLI assistant for freeform chat."}
+              {projectSlug
+                ? `Codex CLI assistant for \`${projectSlug}\`.`
+                : "Codex CLI assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
             </SheetDescription>
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col">

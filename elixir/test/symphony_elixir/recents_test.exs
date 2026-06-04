@@ -57,6 +57,14 @@ defmodule SymphonyElixir.RecentsTest do
     assert chat.project_slug == "demo"
   end
 
+  test "excludes archived chat threads" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Gone", workspace_path: System.tmp_dir!()})
+    {:ok, _} = History.archive_thread(thread.id)
+
+    items = Recents.list(limit: 20, executions: [], issue_lister: fn _ -> [] end, projects: [])
+    refute Enum.any?(items, &(&1.thread_id == thread.id))
+  end
+
   test "respects limit" do
     {:ok, _} = History.create_freeform_thread(%{title: "old", workspace_path: System.tmp_dir!()})
     items = Recents.list(limit: 1, executions: [], issue_lister: fn _ -> [] end, projects: [])

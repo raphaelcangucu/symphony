@@ -182,11 +182,13 @@ defmodule SymphonyElixir.Recents do
 
   defp humanize_thread_status("active"), do: "Active"
   defp humanize_thread_status("closed"), do: "Closed"
+  defp humanize_thread_status("archived"), do: "Archived"
   defp humanize_thread_status("error"), do: "Error"
   defp humanize_thread_status(other), do: to_string(other)
 
   defp thread_status_kind("active"), do: :active
   defp thread_status_kind("closed"), do: :closed
+  defp thread_status_kind("archived"), do: :closed
   defp thread_status_kind("error"), do: :error
   defp thread_status_kind(_), do: :active
 

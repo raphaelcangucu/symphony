@@ -275,7 +275,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
                false
            end)
 
-    refute Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "add_comment"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "add_comment"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_pull_requests"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_preview"))
 
     executor = ToolExecutor.codex_tool_executor("macro-markets")
     response = executor.("list_issues", %{})

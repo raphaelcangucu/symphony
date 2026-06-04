@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
-  alias SymphonyElixir.Assistant.History
+  alias SymphonyElixir.Assistant.{CodexSession, History}
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
@@ -30,12 +30,37 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
              json_response(conn, 201)
   end
 
+  test "POST freeform thread stores a per-thread workspace path, not the shared root" do
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{scope: "freeform", title: "Scoped"})
+
+    assert %{"data" => %{"id" => id}} = json_response(conn, 201)
+
+    {:ok, thread} = History.get_thread(id)
+
+    assert thread.workspace_path == CodexSession.freeform_workspace(id)
+    refute thread.workspace_path == CodexSession.freeform_workspace_root()
+  end
+
   test "GET lists freeform threads" do
     {:ok, _} = History.create_freeform_thread(%{title: "A", workspace_path: System.tmp_dir!()})
 
     conn = get(authorize(), "/api/tracker/v1/assistant/threads?scope=freeform")
 
     assert %{"data" => [%{"scope" => "freeform"} | _]} = json_response(conn, 200)
+  end
+
+  test "POST archive hides thread from list" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Old", workspace_path: System.tmp_dir!()})
+    id = thread.id
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads/#{id}/archive")
+
+    assert %{"data" => %{"id" => ^id, "status" => "archived"}} = json_response(conn, 200)
+    refute Enum.any?(History.list_threads(scope: "freeform"), &(&1.id == id))
   end
 
   test "POST with unsupported scope returns 422" do

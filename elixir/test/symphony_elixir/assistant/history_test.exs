@@ -158,6 +158,14 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert thread.project_slug == nil
   end
 
+  test "archive_thread/1 removes thread from default list_threads" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Archive me", workspace_path: "/tmp/a"})
+    assert {:ok, archived} = History.archive_thread(thread.id)
+    assert archived.status == "archived"
+    refute Enum.any?(History.list_threads(scope: "freeform"), &(&1.id == thread.id))
+    assert Enum.any?(History.list_threads(scope: "freeform", include_archived: true), &(&1.id == thread.id))
+  end
+
   test "list_threads/1 returns freeform threads newest first" do
     {:ok, t1} = History.create_freeform_thread(%{title: "A", workspace_path: "/tmp/a"})
     {:ok, t2} = History.create_freeform_thread(%{title: "B", workspace_path: "/tmp/b"})

@@ -187,6 +187,14 @@ defmodule SymphonyElixir.Assistant.History do
     |> Repo.update()
   end
 
+  @spec archive_thread(integer()) :: {:ok, Thread.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def archive_thread(id) when is_integer(id) do
+    case get_thread(id) do
+      {:ok, thread} -> update_thread(thread, %{status: "archived"})
+      {:error, :not_found} -> {:error, :not_found}
+    end
+  end
+
   @spec list_messages(String.t()) :: {:ok, [Message.t()]} | {:error, term()}
   def list_messages(project_slug) when is_binary(project_slug) do
     with {:ok, normalized_slug} <- normalize_required_string(project_slug, :project_slug),
@@ -238,6 +246,7 @@ defmodule SymphonyElixir.Assistant.History do
     Thread
     |> filter_scope(Keyword.get(opts, :scope))
     |> filter_project(Keyword.get(opts, :project_slug))
+    |> filter_archived(Keyword.get(opts, :include_archived, false))
     |> order_by([t], desc: t.updated_at, desc: t.id)
     |> limit(^Keyword.get(opts, :limit, 50))
     |> Repo.all()
@@ -452,6 +461,9 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp filter_project(query, nil), do: query
   defp filter_project(query, slug) when is_binary(slug), do: where(query, [t], t.project_slug == ^slug)
+
+  defp filter_archived(query, true), do: query
+  defp filter_archived(query, _), do: where(query, [t], t.status != "archived")
 
   defp append_message_with_retry(thread, attrs, attempts_left) do
     case append_message_once(thread, attrs) do

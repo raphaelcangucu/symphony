@@ -1,14 +1,25 @@
 import { Plus } from "lucide-react";
+import { useCallback } from "react";
 import { Link } from "react-router-dom";
 
+import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
 import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
 import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
+import { useArchiveChat } from "@/hooks/useArchiveChat";
 import { useCreateFreeformChat } from "@/hooks/useCreateFreeformChat";
 import { useRecents } from "@/hooks/useRecents";
 
 export function RecentsSection() {
   const { sessions, loading, refetch } = useRecents();
   const { creating, createChat } = useCreateFreeformChat(() => void refetch());
+  const { archiving, archiveChat } = useArchiveChat(() => void refetch());
+
+  const handleArchive = useCallback(
+    (threadId: number) => {
+      void archiveChat(threadId);
+    },
+    [archiveChat],
+  );
 
   return (
     <div className="mb-3">
@@ -41,17 +52,26 @@ export function RecentsSection() {
           <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">No recent sessions yet.</div>
         ) : null}
         {sessions.map((session) => (
-          <Link
-            key={session.id}
-            to={recentSessionPath(session)}
-            className="flex items-start gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium">{session.title}</span>
-              <span className="block truncate text-xs opacity-70">{recentSessionSubtitle(session)}</span>
-            </span>
-          </Link>
+          <div key={session.id} className="group flex items-start gap-1 rounded-md hover:bg-accent">
+            <Link
+              to={recentSessionPath(session)}
+              className="flex min-w-0 flex-1 items-start gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{session.title}</span>
+                <span className="block truncate text-xs opacity-70">{recentSessionSubtitle(session)}</span>
+              </span>
+            </Link>
+            {session.kind === "chat" && session.threadId != null ? (
+              <ArchiveChatButton
+                threadId={session.threadId}
+                archiving={archiving}
+                onArchive={handleArchive}
+                className="mr-0.5 mt-1 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              />
+            ) : null}
+          </div>
         ))}
       </div>
     </div>

@@ -19,6 +19,17 @@ defmodule SymphonyElixir.Ctl do
   @default_node_name "symphony"
   @default_cookie "symphony-dev-cookie"
 
+  # Assistant tool modules are hot-reloaded on every `make update` so dev edits
+  # are picked up even when :code.modified_modules/0 is empty in a long-lived node.
+  @assistant_reload_modules [
+    SymphonyElixir.Assistant.CodexSession,
+    SymphonyElixir.Assistant.DiscoveryTools,
+    SymphonyElixir.Assistant.ProjectBoardTools,
+    SymphonyElixir.Assistant.PullRequestLookup,
+    SymphonyElixir.Assistant.ToolExecutor,
+    SymphonyElixir.Assistant.ToolSchema
+  ]
+
   @spec restart([target()], keyword()) :: {:ok, %{reloaded: [module()], restarted: [target()]}}
   def restart(targets, opts \\ []) when is_list(targets) do
     supervisor = Keyword.get(opts, :supervisor, SymphonyElixir.Supervisor)
@@ -59,11 +70,16 @@ defmodule SymphonyElixir.Ctl do
 
   @spec reload_modified_modules() :: [module()]
   def reload_modified_modules do
-    Enum.map(:code.modified_modules(), fn module ->
-      :code.purge(module)
-      :code.load_file(module)
-      module
-    end)
+    (:code.modified_modules() ++ @assistant_reload_modules)
+    |> Enum.uniq()
+    |> Enum.filter(&:code.which/1)
+    |> Enum.map(&reload_module/1)
+  end
+
+  defp reload_module(module) do
+    :code.purge(module)
+    :code.load_file(module)
+    module
   end
 
   @spec node_name(map()) :: String.t()

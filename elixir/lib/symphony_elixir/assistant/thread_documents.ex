@@ -53,8 +53,12 @@ defmodule SymphonyElixir.Assistant.ThreadDocuments do
 
   defp resolve_workspace(%{scope: "freeform", id: thread_id, workspace_path: path})
        when is_integer(thread_id) do
+    # Never walk the shared freeform root: early threads were created with the
+    # parent `assistant/freeform` directory as a placeholder workspace_path, which
+    # would surface every sibling thread's drafts here. Always scope to the
+    # per-thread directory in that case so reads match where turns actually write.
     cond do
-      is_binary(path) and path != "" and File.dir?(path) ->
+      is_binary(path) and path != "" and not shared_freeform_root?(path) and File.dir?(path) ->
         Path.expand(path)
 
       true ->
@@ -64,6 +68,10 @@ defmodule SymphonyElixir.Assistant.ThreadDocuments do
 
   defp resolve_workspace(%{id: thread_id}) when is_integer(thread_id) do
     CodexSession.freeform_workspace(thread_id)
+  end
+
+  defp shared_freeform_root?(path) do
+    Path.expand(path) == Path.expand(CodexSession.freeform_workspace_root())
   end
 
   defp collect_markdown(workspace) do

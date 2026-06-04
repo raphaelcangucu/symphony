@@ -58,6 +58,26 @@ defmodule SymphonyElixir.CtlTest do
     assert is_pid(pid)
   end
 
+  test "reload_modified_modules/0 always includes assistant tool modules when loaded" do
+    loaded =
+      Enum.filter(
+        [
+          SymphonyElixir.Assistant.ProjectBoardTools,
+          SymphonyElixir.Assistant.ToolExecutor,
+          SymphonyElixir.Assistant.ToolSchema
+        ],
+        &:code.which/1
+      )
+
+    assert loaded != []
+
+    reloaded = Ctl.reload_modified_modules()
+
+    for module <- loaded do
+      assert module in reloaded
+    end
+  end
+
   test "node_name/0 and cookie/0 honor env overrides with dev defaults" do
     assert Ctl.node_name(%{}) == "symphony@127.0.0.1"
     assert Ctl.node_name(%{"SYMPHONY_NODE_NAME" => "sym2"}) == "sym2@127.0.0.1"

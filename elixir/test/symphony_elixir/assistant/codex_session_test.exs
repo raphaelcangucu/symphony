@@ -119,15 +119,22 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
     tool_names = opts |> Keyword.get(:dynamic_tools) |> Enum.map(& &1["name"])
 
+    assert Enum.at(tool_names, 0) == "list_tracker_projects"
+    assert "list_issues" in tool_names
+    assert "create_tracker_project" in tool_names
+    assert "list_pull_requests" in tool_names
+    assert "manage_preview" in tool_names
+    assert "list_linear_projects" in tool_names
+    assert "list_jira_projects" in tool_names
     assert "create_github_tracker_project" in tool_names
     assert "provision_github_project" in tool_names
     assert "list_github_projects" in tool_names
     assert "get_workflow" in tool_names
     assert "get_template" in tool_names
 
-    refute "list_issues" in tool_names
-    refute "get_issue" in tool_names
-    refute "read_workspace_file" in tool_names
+    assert "list_issues" in tool_names
+    assert "get_issue" in tool_names
+    assert "read_workspace_file" in tool_names
 
     assert is_function(Keyword.get(opts, :tool_executor), 2)
   end

@@ -42,7 +42,7 @@ defmodule SymphonyElixir.Assistant.Thread do
     |> validate_required([:scope])
     |> validate_required([:workspace_path, :status])
     |> validate_inclusion(:scope, @scopes)
-    |> validate_inclusion(:status, ["active", "closed", "error"])
+    |> validate_inclusion(:status, ["active", "closed", "error", "archived"])
     |> normalize_project_slug()
     |> validate_scope_fields()
     |> unique_constraint(:project_slug, name: :assistant_threads_active_project_index)

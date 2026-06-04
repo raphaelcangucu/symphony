@@ -85,4 +85,10 @@ describe("AssistantPage", () => {
 
     expect(await screen.findByTestId("assistant-panel")).toHaveTextContent("panel:7");
   });
+
+  it("shows archive on conversation rows", async () => {
+    renderAt("/assistant");
+
+    expect(await screen.findByRole("button", { name: /archive conversation/i })).toBeInTheDocument();
+  });
 });

@@ -30,14 +30,19 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"scope" => "freeform"} = params) do
+    # workspace_path is NOT NULL, but the canonical per-thread directory depends on
+    # the autoincrement id we only learn after insert. Seed with the freeform root
+    # as a placeholder, then immediately rewrite it to the per-thread path so the
+    # document viewer scopes reads to this thread instead of the shared parent.
     attrs = %{title: params["title"], workspace_path: CodexSession.freeform_workspace_root()}
 
-    case History.create_freeform_thread(attrs) do
-      {:ok, thread} ->
-        conn
-        |> put_status(:created)
-        |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})
-
+    with {:ok, thread} <- History.create_freeform_thread(attrs),
+         {:ok, thread} <-
+           History.update_thread(thread, %{workspace_path: CodexSession.freeform_workspace(thread.id)}) do
+      conn
+      |> put_status(:created)
+      |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+    else
       {:error, %Ecto.Changeset{} = changeset} ->
         TrackerErrors.render(conn, changeset)
     end
@@ -46,6 +51,38 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   def create(conn, _params) do
     TrackerErrors.validation(conn, "only scope=freeform is supported")
   end
+
+  @spec archive(Conn.t(), map()) :: Conn.t()
+  def archive(conn, %{"thread_id" => raw_id}) do
+    with {:ok, id} <- parse_thread_id(raw_id),
+         {:ok, thread} <- History.archive_thread(id) do
+      json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+    else
+      {:error, :not_found} ->
+        TrackerErrors.render(conn, :thread_not_found)
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+
+      {:error, :invalid_thread_id} ->
+        TrackerErrors.render(conn, :invalid_thread_id)
+    end
+  end
+
+  def archive(conn, _params) do
+    TrackerErrors.validation(conn, "thread id is required")
+  end
+
+  defp parse_thread_id(id) when is_integer(id) and id > 0, do: {:ok, id}
+
+  defp parse_thread_id(id) when is_binary(id) do
+    case Integer.parse(String.trim(id)) do
+      {parsed, ""} when parsed > 0 -> {:ok, parsed}
+      _ -> {:error, :invalid_thread_id}
+    end
+  end
+
+  defp parse_thread_id(_), do: {:error, :invalid_thread_id}
 
   defp put_opt(opts, _key, nil), do: opts
   defp put_opt(opts, _key, ""), do: opts

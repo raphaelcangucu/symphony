@@ -59,9 +59,37 @@ defmodule SymphonyElixir.Assistant.ThreadDocumentsTest do
     fallback = CodexSession.freeform_workspace(thread.id)
     File.mkdir_p!(fallback)
     File.write!(Path.join(fallback, "fallback.md"), "# Fallback\n\nok")
+    on_exit(fn -> File.rm_rf!(fallback) end)
 
     assert %{available: true, documents: documents} = ThreadDocuments.list(thread.id)
     assert Enum.any?(documents, &(&1.path == "fallback.md"))
+  end
+
+  test "list/1 isolates to the per-thread workspace when workspace_path is the shared freeform root" do
+    freeform_root = CodexSession.freeform_workspace_root()
+    File.mkdir_p!(freeform_root)
+
+    sibling_dir = Path.join(freeform_root, "sibling-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(sibling_dir)
+    File.write!(Path.join(sibling_dir, "leak.md"), "# Leak\n\nshould not appear")
+
+    {:ok, thread} =
+      History.create_freeform_thread(%{title: "Leaky", workspace_path: freeform_root})
+
+    own_dir = CodexSession.freeform_workspace(thread.id)
+    File.mkdir_p!(own_dir)
+    File.write!(Path.join(own_dir, "own.md"), "# Own\n\nmine")
+
+    on_exit(fn ->
+      File.rm_rf!(sibling_dir)
+      File.rm_rf!(own_dir)
+    end)
+
+    assert %{available: true, documents: documents} = ThreadDocuments.list(thread.id)
+    paths = Enum.map(documents, & &1.path)
+
+    assert "own.md" in paths
+    refute Enum.any?(paths, &String.contains?(&1, "leak.md"))
   end
 
   defp migrate_repo do

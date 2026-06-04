@@ -5,18 +5,8 @@ defmodule SymphonyElixirWeb.Tracker.RemoteDiscoveryController do
 
   alias Plug.Conn
   alias SymphonyElixir.GitHub.Discovery
-  alias SymphonyElixir.Linear.Client, as: LinearClient
+  alias SymphonyElixir.Linear.Discovery, as: LinearDiscovery
   alias SymphonyElixirWeb.TrackerErrors
-
-  @linear_projects """
-  query SymphonyDiscoverLinearProjects {
-    viewer {
-      teamMemberships(first: 50) {
-        nodes { team { id name projects(first: 50) { nodes { id slugId name state } } } }
-      }
-    }
-  }
-  """
 
   @spec github_discover(Conn.t(), map()) :: Conn.t()
   def github_discover(conn, _params) do
@@ -31,35 +21,14 @@ defmodule SymphonyElixirWeb.Tracker.RemoteDiscoveryController do
 
   @spec linear_discover(Conn.t(), map()) :: Conn.t()
   def linear_discover(conn, _params) do
-    case linear_client().graphql(@linear_projects, %{}, []) do
-      {:ok, response} ->
-        json(conn, %{data: linear_projects_dto(response)})
+    case LinearDiscovery.list_projects() do
+      {:ok, projects} ->
+        json(conn, %{data: projects})
 
       {:error, reason} ->
         TrackerErrors.render(conn, linear_error(reason))
     end
   end
-
-  defp linear_projects_dto(%{"data" => %{"viewer" => %{"teamMemberships" => %{"nodes" => memberships}}}}) do
-    Enum.flat_map(memberships, fn %{"team" => team} ->
-      team
-      |> get_in(["projects", "nodes"])
-      |> List.wrap()
-      |> Enum.map(fn project ->
-        %{
-          id: project["id"],
-          slugId: project["slugId"],
-          name: project["name"],
-          state: project["state"],
-          team: %{id: team["id"], name: team["name"]}
-        }
-      end)
-    end)
-  end
-
-  defp linear_projects_dto(_), do: []
-
-  defp linear_client, do: Application.get_env(:symphony_elixir, :linear_client_module, LinearClient)
 
   defp github_error(:missing_github_token), do: :missing_credentials
   defp github_error({:rate_limited, _info} = reason), do: reason
