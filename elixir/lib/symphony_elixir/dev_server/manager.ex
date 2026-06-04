@@ -567,8 +567,14 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   defp project_workflow_config(project) do
     case Context.get_project_setup(project.slug) do
-      %ProjectSetup{workflow_config: %{} = config} -> config
-      _setup -> %{}
+      %ProjectSetup{workflow_markdown: md} when is_binary(md) and md != "" ->
+        case SymphonyElixir.Workflow.parse_string(md) do
+          {:ok, %{config: %{} = config}} -> config
+          _ -> %{}
+        end
+
+      _setup ->
+        %{}
     end
   end
 

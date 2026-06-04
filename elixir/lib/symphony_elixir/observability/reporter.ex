@@ -162,9 +162,7 @@ defmodule SymphonyElixir.Observability.Reporter do
   defp global_identity(base_runtime) do
     %{
       "runtime_id" => base_runtime,
-      "label" =>
-        Config.observability_label() ||
-          Path.basename(SymphonyElixir.Workflow.workflow_file_path()),
+      "label" => Config.observability_label() || "symphony",
       "project_slug" => Config.local_project_slug(),
       "tracker_kind" => Config.tracker_kind(),
       "agent_kind" => Config.agent_kind(),

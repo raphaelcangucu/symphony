@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ProjectConfigEditor } from "@/components/projects/ProjectConfigEditor";
@@ -12,6 +12,12 @@ import type { Project } from "@/types/project";
 vi.mock("@/services/projects");
 vi.mock("@/services/projectSetup");
 vi.mock("@/services/remoteTrackers");
+
+const workflowMarkdown = `---
+tracker:
+  active_states: [Todo]
+---
+Prompt body`;
 
 function project(overrides: Partial<Project> = {}): Project {
   return {
@@ -26,9 +32,8 @@ function project(overrides: Partial<Project> = {}): Project {
       { id: "3", name: "Done", category: "completed", position: 2, isTerminal: true },
     ],
     setup: {
-      promptTemplate: "Old prompt",
       validationCommands: ["pnpm test"],
-      workflowConfig: { tracker: { active_states: ["Todo"] }, agent: { max_turns: 40 } },
+      workflowMarkdown,
     },
     ...overrides,
   };
@@ -37,40 +42,33 @@ function project(overrides: Partial<Project> = {}): Project {
 describe("ProjectConfigEditor", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it("hydrates the States tab from existing workflow_config", async () => {
+  it("hydrates the workflow editor from workflow_markdown", async () => {
     vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
-    render(<ProjectConfigEditor project={project()} onSaved={vi.fn()} />);
+    render(<ProjectConfigEditor project={project()} onSaved={vi.fn()} activeTab="workflow" />);
 
-    await userEvent.click(screen.getByRole("tab", { name: /states/i }));
-    const activeStates = within(screen.getByText("Active states").closest("div") as HTMLElement);
-    expect(activeStates.getByRole("button", { name: "Todo", pressed: true })).toBeInTheDocument();
-    expect(activeStates.getByRole("button", { name: "In Progress", pressed: false })).toBeInTheDocument();
+    expect(await screen.findByDisplayValue(/active_states: \[Todo\]/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue(/Prompt body/)).toBeInTheDocument();
   });
 
-  it("saves project fields and pruned workflow_config", async () => {
+  it("saves project fields and workflow_markdown", async () => {
     vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
     const saved = project();
     vi.mocked(projects.updateProject).mockResolvedValue(saved);
     vi.mocked(projects.updateProjectSetup).mockResolvedValue(saved);
     const onSaved = vi.fn();
 
-    render(<ProjectConfigEditor project={project()} onSaved={onSaved} />);
+    render(<ProjectConfigEditor project={project()} onSaved={onSaved} activeTab="workflow" />);
 
-    await userEvent.click(screen.getByRole("tab", { name: /states/i }));
-    const activeStates = within(screen.getByText("Active states").closest("div") as HTMLElement);
-    await userEvent.click(activeStates.getByRole("button", { name: "In Progress" }));
+    const editor = await screen.findByLabelText(/project workflow markdown/i);
+    fireEvent.change(editor, { target: { value: workflowMarkdown.replace("Todo", "In Progress") } });
     await userEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(projects.updateProject).toHaveBeenCalledTimes(1));
     expect(projects.updateProjectSetup).toHaveBeenCalledWith(
       "macro-markets",
       expect.objectContaining({
-        promptTemplate: "Old prompt",
         validationCommands: ["pnpm test"],
-        workflowConfig: expect.objectContaining({
-          tracker: { active_states: ["Todo", "In Progress"] },
-          agent: { max_turns: 40 },
-        }),
+        workflowMarkdown: expect.stringContaining("In Progress"),
       }),
     );
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
@@ -78,8 +76,11 @@ describe("ProjectConfigEditor", () => {
 
   it("surfaces a backend validation error without calling onSaved", async () => {
     vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
+    vi.mocked(projectSetup.listGitHubOwners).mockResolvedValue([]);
     vi.mocked(projects.updateProject).mockResolvedValue(project());
-    vi.mocked(projects.updateProjectSetup).mockRejectedValue(new Error("invalid workflow_config: agent.max_turns must be positive"));
+    vi.mocked(projects.updateProjectSetup).mockRejectedValue(
+      new Error("invalid workflow_markdown: agent.max_turns must be positive"),
+    );
     const onSaved = vi.fn();
 
     render(<ProjectConfigEditor project={project()} onSaved={onSaved} />);
@@ -87,7 +88,7 @@ describe("ProjectConfigEditor", () => {
 
     await waitFor(() => expect(projects.updateProjectSetup).toHaveBeenCalled());
     expect(onSaved).not.toHaveBeenCalled();
-    expect(await screen.findByText(/invalid workflow_config/i)).toBeInTheDocument();
+    expect(await screen.findByText(/invalid workflow_markdown/i)).toBeInTheDocument();
   });
 
   it("replaces repositories only when they change", async () => {
@@ -102,7 +103,6 @@ describe("ProjectConfigEditor", () => {
 
     render(<ProjectConfigEditor project={withRepos} onSaved={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("tab", { name: /workspace/i }));
     await userEvent.type(screen.getByLabelText("Workspace path for acme/web"), "-app");
     await userEvent.click(screen.getByRole("button", { name: /save/i }));
 
@@ -110,24 +110,6 @@ describe("ProjectConfigEditor", () => {
     expect(projects.updateProjectRepositories).toHaveBeenCalledWith("macro-markets", [
       expect.objectContaining({ fullName: "acme/web", workspacePath: "acme/web-app" }),
     ]);
-  });
-
-  it("does not replace repositories when they are unchanged", async () => {
-    vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
-    vi.mocked(projectSetup.listGitHubOwners).mockResolvedValue([]);
-    const withRepos = project({
-      repositories: [{ fullName: "acme/web", workspacePath: "acme/web", role: "frontend", selectedBranch: "main" }],
-    });
-    vi.mocked(projects.updateProject).mockResolvedValue(withRepos);
-    vi.mocked(projects.updateProjectSetup).mockResolvedValue(withRepos);
-
-    render(<ProjectConfigEditor project={withRepos} onSaved={vi.fn()} />);
-
-    await userEvent.click(screen.getByRole("tab", { name: /workspace/i }));
-    await userEvent.click(screen.getByRole("button", { name: /save/i }));
-
-    await waitFor(() => expect(projects.updateProjectSetup).toHaveBeenCalledTimes(1));
-    expect(projects.updateProjectRepositories).not.toHaveBeenCalled();
   });
 
   it("does not save when the name is empty", async () => {

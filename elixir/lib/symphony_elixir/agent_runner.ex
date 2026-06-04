@@ -135,7 +135,11 @@ defmodule SymphonyElixir.AgentRunner do
     agent_kind = issue_agent_kind(issue)
     workspace_root = Workspace.workspace_root_for(issue)
 
-    with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, workspace_root: workspace_root) do
+    session_opts =
+      [workspace_root: workspace_root]
+      |> maybe_put_codex_config(Keyword.get(opts, :project_config))
+
+    with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, session_opts) do
       try do
         do_run_codex_turns(
           session,
@@ -311,6 +315,15 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp open_pr_should_stop_turns?(_issue, _project_config), do: false
+
+  # Thread the project's own `codex:` section to the Codex agent so its
+  # `command`/`approval_policy`/sandbox are honored at dispatch (the agent reads
+  # the process-global section otherwise, which no longer carries per-project
+  # behavior).
+  defp maybe_put_codex_config(opts, %ProjectConfig{codex: %{} = codex}),
+    do: Keyword.put(opts, :codex_config, codex)
+
+  defp maybe_put_codex_config(opts, _project_config), do: opts
 
   defp project_max_turns(%ProjectConfig{max_turns: n}) when is_integer(n) and n > 0, do: n
   defp project_max_turns(_project_config), do: Config.agent_max_turns()

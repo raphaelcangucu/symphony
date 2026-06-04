@@ -185,11 +185,6 @@ defmodule SymphonyElixir.Editor.ServerTest do
   defp load_workflow_with_front_matter(front_matter) do
     content = "---\n" <> front_matter <> "---\n"
     File.write!(Workflow.workflow_file_path(), content)
-
-    if Process.whereis(SymphonyElixir.WorkflowStore) do
-      SymphonyElixir.WorkflowStore.force_reload()
-    end
-
     :ok
   end
 end

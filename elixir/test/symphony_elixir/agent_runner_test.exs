@@ -16,8 +16,7 @@ defmodule SymphonyElixir.AgentRunnerTest do
       %SymphonyElixir.LocalTracker.ProjectSetup{}
       |> SymphonyElixir.LocalTracker.ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_config: workflow_config,
-        prompt_template: prompt,
+        workflow_markdown: SymphonyElixir.Workflow.to_markdown(workflow_config, prompt || ""),
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })
@@ -39,7 +38,7 @@ defmodule SymphonyElixir.AgentRunnerTest do
       %SymphonyElixir.LocalTracker.ProjectSetup{}
       |> SymphonyElixir.LocalTracker.ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_config: %{},
+        workflow_markdown: "",
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })
@@ -475,11 +474,6 @@ defmodule SymphonyElixir.AgentRunnerTest do
       |> String.replace("codex:\n", "codex:\n  goals_enabled: true\n", global: false)
 
     File.write!(workflow_file, updated_workflow)
-
-    if Process.whereis(SymphonyElixir.WorkflowStore) do
-      SymphonyElixir.WorkflowStore.force_reload()
-    end
-
     :ok
   end
 

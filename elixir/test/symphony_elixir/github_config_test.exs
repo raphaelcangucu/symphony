@@ -202,16 +202,4 @@ defmodule SymphonyElixir.GitHub.ConfigTest do
     end
   end
 
-  describe "Macro Markets example workflow" do
-    test "uses Project Status and completion transitions instead of Symphony State" do
-      workflow_text = File.read!("WORKFLOW.macromarkets.example.md")
-
-      refute workflow_text =~ "status_field: Symphony State"
-      refute workflow_text =~ "native_status_field"
-      refute workflow_text =~ "sync_native_status"
-      assert workflow_text =~ "completion_transitions:"
-      assert workflow_text =~ "In Progress: Human Review"
-      assert workflow_text =~ "Rework: Human Review"
-    end
-  end
 end

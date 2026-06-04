@@ -6,6 +6,7 @@ defmodule SymphonyElixir.DevServerTest do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.TestSupport
   alias SymphonyElixir.Workflow
+  alias SymphonyElixir.Workspace
 
   @workflow_statuses [
     %{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false}
@@ -80,16 +81,16 @@ defmodule SymphonyElixir.DevServerTest do
   end
 
   test "issue_targets returns workspace_missing when enabled and issue workspace does not exist", %{project: project} do
-    enable_dev_server!()
-    File.rm_rf!(SymphonyElixir.Workspace.path_for_issue("1"))
+    enable_dev_server!(project)
+    File.rm_rf!(Workspace.path_for_issue(%{identifier: "1", project_slug: project.slug}))
 
     assert {:ok, %{available: false, reason: :workspace_missing, servers: []}} =
              DevServer.issue_targets(project.slug, "#1")
   end
 
   test "issue_targets returns no_serve_step when enabled workspace exists without serve steps", %{project: project} do
-    enable_dev_server!()
-    create_issue_workspace!("1")
+    enable_dev_server!(project)
+    create_issue_workspace!(project.slug, "1")
 
     {:ok, _steps} =
       DevEnv.save_steps(project.slug, [
@@ -100,9 +101,22 @@ defmodule SymphonyElixir.DevServerTest do
              DevServer.issue_targets(project.slug, "#1")
   end
 
+  test "issue_targets is available from per-project dev_server config when global dev_server is off", %{project: project} do
+    enable_project_dev_server!(project)
+    create_issue_workspace!(project.slug, "1")
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front"}
+      ])
+
+    assert {:ok, %{available: true, reason: nil, servers: []}} =
+             DevServer.issue_targets(project.slug, "#1")
+  end
+
   test "issue_targets is available when enabled workspace exists and serve steps are configured", %{project: project} do
-    enable_dev_server!()
-    create_issue_workspace!("1")
+    enable_dev_server!(project)
+    create_issue_workspace!(project.slug, "1")
 
     {:ok, _steps} =
       DevEnv.save_steps(project.slug, [
@@ -124,28 +138,22 @@ defmodule SymphonyElixir.DevServerTest do
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
   end
 
-  defp enable_dev_server! do
-    dev_server_yaml =
-      [
-        "",
-        "dev_server:",
-        "  enabled: true",
-        "---",
-        ""
-      ]
-      |> Enum.join("\n")
-
-    updated =
-      Workflow.workflow_file_path()
-      |> File.read!()
-      |> String.replace(~r/\n---\n/, dev_server_yaml, global: false)
-
-    File.write!(Workflow.workflow_file_path(), updated)
-    assert :ok = SymphonyElixir.WorkflowStore.force_reload()
+  defp enable_dev_server!(project) do
+    enable_project_dev_server!(project)
   end
 
-  defp create_issue_workspace!(identifier) do
-    identifier
+  defp enable_project_dev_server!(project) do
+    workflow_markdown =
+      Workflow.to_markdown(%{"dev_server" => %{"enabled" => true, "port_range" => [4100, 4199]}}, "")
+
+    {:ok, _setup} =
+      Context.upsert_project_setup(project.slug, %{"workflow_markdown" => workflow_markdown})
+
+    :ok
+  end
+
+  defp create_issue_workspace!(project_slug, identifier) do
+    %{identifier: identifier, project_slug: project_slug}
     |> SymphonyElixir.Workspace.path_for_issue()
     |> File.mkdir_p!()
   end

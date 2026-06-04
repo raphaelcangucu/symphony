@@ -1,4 +1,4 @@
-import { Activity, KeyRound, LayoutTemplate, ListTodo } from "lucide-react";
+import { Activity, HardDrive, KeyRound, LayoutTemplate, ListTodo } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 
@@ -108,6 +108,19 @@ export function ProjectSidebar() {
       >
         <Activity className="h-4 w-4" />
         Observability
+      </NavLink>
+
+      <NavLink
+        to="/backups"
+        className={({ isActive }) =>
+          cn(
+            "mb-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground",
+            isActive && "bg-accent text-foreground",
+          )
+        }
+      >
+        <HardDrive className="h-4 w-4" />
+        Backups
       </NavLink>
 
       <RecentsSection />

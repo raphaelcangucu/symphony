@@ -88,7 +88,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
 
   @spec update_setup(Conn.t(), map()) :: Conn.t()
   def update_setup(conn, %{"id" => slug, "setup" => setup}) when is_map(setup) do
-    case validate_workflow_config(setup) do
+    case validate_workflow_markdown(setup) do
       :ok -> upsert_setup(conn, slug, setup)
       {:error, message} -> TrackerErrors.validation(conn, message)
     end
@@ -133,20 +133,23 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
     end
   end
 
-  # SPEC: strictly validate workflow_config against the option schema on save (not
-  # just on resolve) so a malformed config is rejected at the API boundary
-  # instead of being silently coerced or becoming a latent failure when the
-  # orchestrator resolves it.
-  defp validate_workflow_config(setup) do
-    case Map.get(setup, "workflow_config") do
+  # SPEC: strictly validate workflow_markdown (YAML front matter + prompt body)
+  # against the option schema on save (not just on resolve), rejecting malformed
+  # YAML, invalid option values, and process-/connection-owned sections at the
+  # API boundary instead of letting them become latent runtime failures.
+  defp validate_workflow_markdown(setup) do
+    case Map.get(setup, "workflow_markdown") do
       nil ->
         :ok
 
-      config ->
-        case Config.validate_workflow_config(config) do
-          :ok -> :ok
-          {:error, issues} -> {:error, "invalid workflow_config: " <> Enum.join(issues, "; ")}
+      markdown when is_binary(markdown) ->
+        case Config.parse_workflow_markdown(markdown) do
+          {:ok, %{front_matter: _, body: _}} -> :ok
+          {:error, reason} -> {:error, "invalid workflow_markdown: " <> reason}
         end
+
+      _other ->
+        {:error, "workflow_markdown must be a string"}
     end
   end
 

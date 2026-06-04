@@ -332,11 +332,65 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:tracker, :terminal_states])
   end
 
+  @spec local_tracker_database_path() :: String.t()
+  def local_tracker_database_path do
+    root = Application.get_env(:symphony_elixir, :root_dir, File.cwd!())
+
+    env_path =
+      case System.get_env("SYMPHONY_LOCAL_TRACKER_DATABASE") do
+        path when is_binary(path) and path != "" -> expand_under_root(path, root)
+        _ -> nil
+      end
+
+    repo_path =
+      case Application.get_env(:symphony_elixir, SymphonyElixir.Repo) do
+        config when is_list(config) -> Keyword.get(config, :database)
+        _ -> nil
+      end
+
+    env_path || repo_path || local_database_path()
+  end
+
   @spec local_database_path() :: String.t()
   def local_database_path do
+    root = Application.get_env(:symphony_elixir, :root_dir, File.cwd!())
+
     section("local")
     |> Map.get("database_path")
     |> resolve_path_value(".symphony/tracker.sqlite3")
+    |> expand_under_root(root)
+  end
+
+  @spec local_tracker_database_info() :: map()
+  def local_tracker_database_info do
+    path = local_tracker_database_path()
+
+    size_bytes =
+      case File.stat(path) do
+        {:ok, %{size: size}} -> size
+        _ -> 0
+      end
+
+    %{
+      path: path,
+      size_bytes: size_bytes,
+      exists: File.exists?(path)
+    }
+  end
+
+  @spec backup_local_dir() :: String.t()
+  def backup_local_dir do
+    Application.get_env(:symphony_elixir, :backup_local_dir, ".symphony/backups")
+    |> resolve_path_value(".symphony/backups")
+  end
+
+  @spec backup_retention_days() :: pos_integer()
+  def backup_retention_days do
+    Application.get_env(:symphony_elixir, :backup_retention_days, 30)
+    |> case do
+      days when is_integer(days) and days > 0 -> days
+      _ -> 30
+    end
   end
 
   @spec local_project_slug() :: String.t() | nil
@@ -1289,5 +1343,9 @@ defmodule SymphonyElixir.Config do
       nil -> :missing
       env_value -> env_value
     end
+  end
+
+  defp expand_under_root(path, root) when is_binary(path) do
+    if Path.type(path) == :absolute, do: path, else: Path.expand(path, root)
   end
 end

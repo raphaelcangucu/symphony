@@ -67,7 +67,6 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
     )
 
     Workflow.set_workflow_file_path(workflow_file)
-    if Process.whereis(SymphonyElixir.WorkflowStore), do: SymphonyElixir.WorkflowStore.force_reload()
 
     on_exit(fn ->
       Workflow.clear_workflow_file_path()
@@ -82,7 +81,11 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
       %ProjectSetup{}
       |> ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_config: %{"tracker" => %{"active_states" => active_states}},
+        workflow_markdown:
+          SymphonyElixir.Workflow.to_markdown(
+            %{"tracker" => %{"active_states" => active_states}},
+            ""
+          ),
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })
@@ -98,7 +101,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
       %ProjectSetup{}
       |> ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_config: workflow_config,
+        workflow_markdown: SymphonyElixir.Workflow.to_markdown(workflow_config, ""),
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })

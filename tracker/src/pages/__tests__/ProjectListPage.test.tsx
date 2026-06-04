@@ -426,10 +426,9 @@ describe("ProjectListPage", () => {
     ]);
     vi.mocked(suggestWorkspaceSetup).mockResolvedValue({
       workflowStatuses: [{ id: "todo", name: "Todo", category: "active", position: 0, isTerminal: false }],
-      workflowConfig: { active_states: ["Todo"] },
+      workflowMarkdown: "---\ntracker:\n  active_states: [Todo]\n---\n\nUse frontend/.",
       validationCommands: ["pnpm test"],
       afterCreateHook: "git clone --branch homolog https://github.com/clouapp/front.git frontend",
-      promptTemplate: "Use frontend/.",
       scanSummary: { repository_count: 1 },
     });
     vi.mocked(createWorkspaceProject).mockResolvedValue({
@@ -484,10 +483,9 @@ describe("ProjectListPage", () => {
           },
         ],
         setup: {
-          workflowConfig: { active_states: ["Todo"] },
+          workflowMarkdown: "---\ntracker:\n  active_states: [Todo]\n---\n\nUse frontend/.",
           validationCommands: ["pnpm test"],
           afterCreateHook: "git clone --branch homolog https://github.com/clouapp/front.git frontend",
-          promptTemplate: "Use frontend/.",
           scanSummary: { repository_count: 1 },
         },
       }),

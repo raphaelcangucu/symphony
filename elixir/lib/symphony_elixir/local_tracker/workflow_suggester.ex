@@ -13,11 +13,13 @@ defmodule SymphonyElixir.LocalTracker.WorkflowSuggester do
     %{name: "Duplicate", category: "terminal", position: 8, is_terminal: true}
   ]
 
-  @workflow_config %{
-    field_states: ["Backlog", "Todo", "In Progress", "Human Review", "Rework", "Merging", "Done", "Cancelled", "Duplicate"],
-    active_states: ["Todo", "In Progress", "Rework", "Merging"],
-    wait_states: ["Human Review"],
-    terminal_states: ["Done", "Cancelled", "Duplicate"]
+  @workflow_front_matter %{
+    "tracker" => %{
+      "field_states" => ["Backlog", "Todo", "In Progress", "Human Review", "Rework", "Merging", "Done", "Cancelled", "Duplicate"],
+      "active_states" => ["Todo", "In Progress", "Rework", "Merging"],
+      "wait_states" => ["Human Review"],
+      "terminal_states" => ["Done", "Cancelled", "Duplicate"]
+    }
   }
 
   @spec suggest(map()) :: {:ok, map()} | {:error, term()}
@@ -29,12 +31,15 @@ defmodule SymphonyElixir.LocalTracker.WorkflowSuggester do
     {:ok,
      %{
        workflow_statuses: @workflow_statuses,
-       workflow_config: @workflow_config,
+       workflow_markdown: workflow_markdown(repositories),
        validation_commands: validation_commands,
        after_create_hook: after_create_hook(repositories),
-       prompt_template: prompt_template(repositories),
        scan_summary: scan_summary(repositories, scans)
      }}
+  end
+
+  defp workflow_markdown(repositories) do
+    SymphonyElixir.Workflow.to_markdown(@workflow_front_matter, prompt_template(repositories))
   end
 
   defp after_create_hook(repositories) do

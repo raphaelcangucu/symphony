@@ -49,12 +49,14 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
   @spec start_session(Path.t(), keyword()) :: {:ok, session()} | {:error, term()}
   def start_session(workspace, opts \\ []) do
+    codex_section = codex_section(opts)
+
     with :ok <- validate_workspace_cwd(workspace, opts),
-         {:ok, port} <- start_port(workspace) do
+         {:ok, port} <- start_port(workspace, codex_section) do
       metadata = port_metadata(port)
       expanded_workspace = Path.expand(workspace)
 
-      with {:ok, session_policies} <- session_policies(expanded_workspace),
+      with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section),
            {:ok, thread_id} <- do_start_session(port, expanded_workspace, session_policies, opts) do
         goal_state = maybe_set_goal(port, thread_id, Keyword.get(opts, :goal))
         Session.write(expanded_workspace, thread_id)
@@ -321,7 +323,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp start_port(workspace) do
+  defp start_port(workspace, codex_section) do
     executable = System.find_executable("bash")
 
     if is_nil(executable) do
@@ -334,7 +336,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
             :binary,
             :exit_status,
             :stderr_to_stdout,
-            args: [~c"-lc", String.to_charlist(SymphonyElixir.Codex.Config.command())],
+            args: [~c"-lc", String.to_charlist(CodexConfig.command(codex_section))],
             cd: String.to_charlist(workspace),
             line: @port_line_bytes
           ]
@@ -378,8 +380,26 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp session_policies(workspace) do
-    SymphonyElixir.Codex.Config.runtime_settings(workspace)
+  defp session_policies(workspace, codex_section) do
+    CodexConfig.runtime_settings(codex_section, workspace)
+  end
+
+  # The per-project `codex:` section is threaded via opts at dispatch
+  # (`agent_runner`). Fall back to the process-global codex section when absent
+  # (e.g. ad-hoc sessions), and normalize to an empty map so callers can rely on
+  # `Map.get/2`.
+  defp codex_section(opts) do
+    case Keyword.get(opts, :codex_config) do
+      %{} = section -> section
+      _ -> global_codex_section()
+    end
+  end
+
+  defp global_codex_section do
+    case Config.section("codex") do
+      %{} = section -> section
+      _ -> %{}
+    end
   end
 
   defp do_start_session(port, workspace, session_policies, opts) do

@@ -1,9 +1,9 @@
 defmodule SymphonyElixir.SharedSupervisor do
   @moduledoc """
   Always-on infrastructure subtree: the single SQLite-writing `Repo`, PubSub,
-  registries, the shared `Task.Supervisor`, sync engine, workflow store, and
-  public routing. Never restarted by `mix symphony.ctl update`; only torn down
-  on a full daemon stop.
+  registries, the shared `Task.Supervisor`, sync engine, and public routing.
+  Never restarted by `mix symphony.ctl update`; only torn down on a full daemon
+  stop.
   """
 
   use Supervisor
@@ -47,7 +47,6 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.GitHub.ReadCache,
       SymphonyElixir.GitHub.RequestGateway,
       SymphonyElixir.Tracker.Sync.Engine,
-      SymphonyElixir.WorkflowStore,
       SymphonyElixir.PublicRouting
     ]
   end

@@ -103,11 +103,6 @@ defmodule SymphonyElixirWeb.PublicHostPlugTest do
     end
   end
 
-  defp reload_workflow_store! do
-    if Process.whereis(SymphonyElixir.WorkflowStore) do
-      SymphonyElixir.WorkflowStore.force_reload()
-    end
-
-    :ok
+  defp reload_workflow_store! do    :ok
   end
 end

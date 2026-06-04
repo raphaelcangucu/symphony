@@ -5,57 +5,57 @@ defmodule SymphonyElixir.Codex.Config do
 
   @behaviour SymphonyElixir.AgentConfig
 
-  @default_approval_policy %{
-    "reject" => %{
-      "sandbox_approval" => true,
-      "rules" => true,
-      "mcp_elicitations" => true
-    }
-  }
+  # Codex app-server only accepts these `approvalPolicy` variants:
+  # `untrusted`, `on-failure`, `on-request`, `granular`, `never`. The safe
+  # default when a project does not configure one is `untrusted` (ask before
+  # running untrusted commands). A previous default sent an object keyed
+  # `reject`, which the current app-server rejects with
+  # `unknown variant `reject``.
+  @default_approval_policy "untrusted"
   @default_thread_sandbox "workspace-write"
 
-  @spec command() :: String.t()
-  def command do
-    case section_value("command") do
+  @spec command(map()) :: String.t()
+  def command(section \\ codex_section()) do
+    case Map.get(section, "command") do
       value when is_binary(value) and value != "" -> String.trim(value)
       _ -> SymphonyElixir.InstanceConfig.codex_command()
     end
   end
 
-  @spec approval_policy() :: String.t() | map()
-  def approval_policy do
-    case resolve_approval_policy() do
+  @spec approval_policy(map()) :: String.t() | map()
+  def approval_policy(section \\ codex_section()) do
+    case resolve_approval_policy(section) do
       {:ok, value} -> value
       {:error, _} -> @default_approval_policy
     end
   end
 
-  @spec thread_sandbox() :: String.t()
-  def thread_sandbox do
-    case resolve_thread_sandbox() do
+  @spec thread_sandbox(map()) :: String.t()
+  def thread_sandbox(section \\ codex_section()) do
+    case resolve_thread_sandbox(section) do
       {:ok, value} -> value
       {:error, _} -> @default_thread_sandbox
     end
   end
 
-  @spec goals_enabled?() :: boolean()
-  def goals_enabled? do
-    section_value("goals_enabled") == true
+  @spec goals_enabled?(map()) :: boolean()
+  def goals_enabled?(section \\ codex_section()) do
+    Map.get(section, "goals_enabled") == true
   end
 
-  @spec turn_sandbox_policy(Path.t() | nil) :: map()
-  def turn_sandbox_policy(workspace \\ nil) do
-    case resolve_turn_sandbox_policy(workspace) do
+  @spec turn_sandbox_policy(map(), Path.t() | nil) :: map()
+  def turn_sandbox_policy(section \\ codex_section(), workspace \\ nil) do
+    case resolve_turn_sandbox_policy(section, workspace) do
       {:ok, value} -> value
       {:error, _} -> default_turn_sandbox_policy(workspace)
     end
   end
 
-  @spec runtime_settings(Path.t() | nil) :: {:ok, map()} | {:error, term()}
-  def runtime_settings(workspace \\ nil) do
-    with {:ok, ap} <- resolve_approval_policy(),
-         {:ok, ts} <- resolve_thread_sandbox(),
-         {:ok, tsp} <- resolve_turn_sandbox_policy(workspace) do
+  @spec runtime_settings(map(), Path.t() | nil) :: {:ok, map()} | {:error, term()}
+  def runtime_settings(section \\ codex_section(), workspace \\ nil) do
+    with {:ok, ap} <- resolve_approval_policy(section),
+         {:ok, ts} <- resolve_thread_sandbox(section),
+         {:ok, tsp} <- resolve_turn_sandbox_policy(section, workspace) do
       {:ok,
        %{
          approval_policy: ap,
@@ -67,8 +67,10 @@ defmodule SymphonyElixir.Codex.Config do
 
   @impl SymphonyElixir.AgentConfig
   def validate! do
-    with {:ok, _} <- runtime_settings() do
-      if byte_size(String.trim(command())) > 0 do
+    section = codex_section()
+
+    with {:ok, _} <- runtime_settings(section, nil) do
+      if byte_size(String.trim(command(section))) > 0 do
         :ok
       else
         {:error, "Codex command missing — set codex.command in WORKFLOW.md"}
@@ -76,43 +78,43 @@ defmodule SymphonyElixir.Codex.Config do
     end
   end
 
-  defp resolve_approval_policy do
-    case section_value("approval_policy") do
+  defp resolve_approval_policy(section) do
+    case Map.get(section, "approval_policy") do
       nil ->
         {:ok, @default_approval_policy}
 
       value when is_binary(value) ->
         case String.trim(value) do
-          "" -> {:error, "Invalid codex.approval_policy in WORKFLOW.md: #{inspect(value)}"}
-          _trimmed -> {:ok, value}
+          "" -> {:error, "Invalid codex.approval_policy: #{inspect(value)}"}
+          trimmed -> {:ok, trimmed}
         end
 
       value when is_map(value) ->
         {:ok, value}
 
       value ->
-        {:error, "Invalid codex.approval_policy in WORKFLOW.md: #{inspect(value)}"}
+        {:error, "Invalid codex.approval_policy: #{inspect(value)}"}
     end
   end
 
-  defp resolve_thread_sandbox do
-    case section_value("thread_sandbox") do
+  defp resolve_thread_sandbox(section) do
+    case Map.get(section, "thread_sandbox") do
       nil ->
         {:ok, @default_thread_sandbox}
 
       value when is_binary(value) ->
         case String.trim(value) do
-          "" -> {:error, "Invalid codex.thread_sandbox in WORKFLOW.md: #{inspect(value)}"}
-          _trimmed -> {:ok, value}
+          "" -> {:error, "Invalid codex.thread_sandbox: #{inspect(value)}"}
+          trimmed -> {:ok, trimmed}
         end
 
       value ->
-        {:error, "Invalid codex.thread_sandbox in WORKFLOW.md: #{inspect(value)}"}
+        {:error, "Invalid codex.thread_sandbox: #{inspect(value)}"}
     end
   end
 
-  defp resolve_turn_sandbox_policy(workspace) do
-    case section_value("turn_sandbox_policy") do
+  defp resolve_turn_sandbox_policy(section, workspace) do
+    case Map.get(section, "turn_sandbox_policy") do
       nil ->
         {:ok, default_turn_sandbox_policy(workspace)}
 
@@ -120,7 +122,7 @@ defmodule SymphonyElixir.Codex.Config do
         {:ok, value}
 
       value ->
-        {:error, "Invalid codex.turn_sandbox_policy in WORKFLOW.md: #{inspect(value)}"}
+        {:error, "Invalid codex.turn_sandbox_policy: #{inspect(value)}"}
     end
   end
 
@@ -142,7 +144,13 @@ defmodule SymphonyElixir.Codex.Config do
     }
   end
 
-  defp section_value(key) do
-    Map.get(SymphonyElixir.Config.section("codex"), key)
+  # The process-global `codex:` section (legacy/global WORKFLOW). Per-project
+  # callers pass their own resolved section explicitly so per-project
+  # `codex.command`/`approval_policy`/sandbox are honored at dispatch.
+  defp codex_section do
+    case SymphonyElixir.Config.section("codex") do
+      %{} = section -> section
+      _ -> %{}
+    end
   end
 end

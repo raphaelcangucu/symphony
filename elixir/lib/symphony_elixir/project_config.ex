@@ -2,12 +2,12 @@ defmodule SymphonyElixir.ProjectConfig do
   @moduledoc """
   Resolves the effective configuration + prompt for a single project.
 
-  A project's DB-owned WORKFLOW front matter (`ProjectSetup.workflow_config`) is
-  validated through the same schema the global config uses. Omitted keys inherit
-  the **code-level defaults** from that schema (never a loaded global workflow).
-  The prompt comes solely from the project's `prompt_template`; a project without
-  a prompt resolves to `nil` and is treated as unresolved (`resolve_runnable/1`),
-  never falling back to a global prompt.
+  A project's DB-owned WORKFLOW front matter (parsed from
+  `ProjectSetup.workflow_markdown`) is validated through the same schema the
+  global config uses. Omitted keys inherit the **code-level defaults** from that
+  schema (never a loaded global workflow). The prompt comes solely from the
+  markdown body; a project without a prompt resolves to `nil` and is treated as
+  unresolved (`resolve_runnable/1`), never falling back to a global prompt.
   """
 
   alias SymphonyElixir.Config
@@ -111,16 +111,18 @@ defmodule SymphonyElixir.ProjectConfig do
   end
 
   @doc """
-  Strictly validates a project's own DB-owned `workflow_config` against the
-  schema. Returns `:ok` for an absent/empty config (it inherits global defaults)
-  or `{:error, issues}` when a stored value is malformed.
+  Strictly validates a project's own DB-owned `workflow_markdown` front matter
+  against the schema. Returns `:ok` for an absent/empty config (it inherits the
+  schema defaults) or `{:error, issues}` when a stored value is malformed.
   """
   @spec validate(Project.t()) :: :ok | {:error, [String.t()]}
   def validate(%Project{} = project) do
-    project
-    |> load_setup()
-    |> setup_front_matter()
-    |> Config.validate_workflow_config()
+    {front_matter, _prompt} =
+      project
+      |> load_setup()
+      |> setup_source()
+
+    Config.validate_workflow_config(front_matter)
   end
 
   # Only an explicit per-project `workspace.root` overrides the process-level
@@ -169,27 +171,16 @@ defmodule SymphonyElixir.ProjectConfig do
   defp load_setup(%Project{}), do: nil
 
   # Source of truth for per-project behavior: `workflow_markdown` (parsed into
-  # front matter + prompt body), falling back to the legacy
-  # `workflow_config`/`prompt_template` columns when markdown is absent.
-  defp setup_source(%ProjectSetup{workflow_markdown: md} = setup)
+  # front matter + prompt body).
+  defp setup_source(%ProjectSetup{workflow_markdown: md})
        when is_binary(md) and md != "" do
     case Workflow.parse_string(md) do
       {:ok, %{config: %{} = config, prompt: body}} -> {config, normalize_prompt(body)}
-      _ -> {setup_front_matter(setup), resolve_prompt(setup)}
+      _ -> {%{}, nil}
     end
   end
 
-  defp setup_source(setup), do: {setup_front_matter(setup), resolve_prompt(setup)}
-
-  defp setup_front_matter(%ProjectSetup{workflow_config: %{} = config}) when map_size(config) > 0,
-    do: config
-
-  defp setup_front_matter(_setup), do: %{}
-
-  defp resolve_prompt(%ProjectSetup{prompt_template: prompt}) when is_binary(prompt),
-    do: normalize_prompt(prompt)
-
-  defp resolve_prompt(_setup), do: nil
+  defp setup_source(_setup), do: {%{}, nil}
 
   defp normalize_prompt(prompt) when is_binary(prompt) do
     case String.trim(prompt) do
@@ -208,6 +199,14 @@ defmodule SymphonyElixir.ProjectConfig do
   end
 
   defp front_matter_section(_front_matter, _key), do: nil
+
+  @doc """
+  Returns whether this project's workflow enables issue preview dev servers.
+  """
+  @spec dev_server_enabled?(t()) :: boolean()
+  def dev_server_enabled?(%__MODULE__{dev_server: %{"enabled" => true}}), do: true
+  def dev_server_enabled?(%__MODULE__{dev_server: %{enabled: true}}), do: true
+  def dev_server_enabled?(_config), do: false
 
   defp dispatch_states(opts) do
     case get_in(opts, [:tracker, :dispatch_states]) do

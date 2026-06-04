@@ -95,10 +95,9 @@ describe("project setup service", () => {
         data: {
           data: {
             workflow_statuses: [{ name: "Todo", category: "active", position: 0, is_terminal: false }],
-            workflow_config: { active_states: ["Todo"], terminal_states: ["Done"] },
+            workflow_markdown: "---\ntracker:\n  active_states: [Todo]\n---\n\nUse frontend/",
             validation_commands: ["pnpm test"],
             after_create_hook: "git clone repo frontend",
-            prompt_template: "Use frontend/",
             scan_summary: { repository_count: 1 },
           },
         },

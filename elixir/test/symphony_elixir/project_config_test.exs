@@ -21,7 +21,6 @@ defmodule SymphonyElixir.ProjectConfigTest do
     )
 
     Workflow.set_workflow_file_path(workflow_file)
-    if Process.whereis(SymphonyElixir.WorkflowStore), do: SymphonyElixir.WorkflowStore.force_reload()
 
     on_exit(fn ->
       Workflow.clear_workflow_file_path()
@@ -38,8 +37,7 @@ defmodule SymphonyElixir.ProjectConfigTest do
       %ProjectSetup{}
       |> ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_config: workflow_config,
-        prompt_template: prompt,
+        workflow_markdown: Workflow.to_markdown(workflow_config, prompt || ""),
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })
@@ -81,7 +79,6 @@ defmodule SymphonyElixir.ProjectConfigTest do
       tracker_active_states: ["GlobalOnly"]
     )
 
-    if Process.whereis(SymphonyElixir.WorkflowStore), do: SymphonyElixir.WorkflowStore.force_reload()
 
     {:ok, project} = Context.ensure_project(%{name: "eps", slug: "eps", tracker_kind: "local"})
     project = Repo.preload(project, :setup)
@@ -231,21 +228,6 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.codex == %{}
   end
 
-  test "workflow_markdown takes precedence over legacy columns" do
-    project =
-      project_with_setup("pref", %{"tracker" => %{"active_states" => ["Legacy"]}}, "legacy prompt")
-
-    {:ok, _} =
-      Context.upsert_project_setup("pref", %{
-        "workflow_markdown" => "---\ntracker:\n  active_states: [Fresh]\n---\n\nfresh prompt"
-      })
-
-    config = ProjectConfig.resolve(Repo.get!(Project, project.id) |> Repo.preload(:setup))
-
-    assert config.active_states == ["Fresh"]
-    assert config.prompt_template == "fresh prompt"
-  end
-
   defp github_project_with_setup(slug, repo, workflow_config, after_create_hook \\ nil) do
     {:ok, project} =
       Context.ensure_project(%{
@@ -259,7 +241,7 @@ defmodule SymphonyElixir.ProjectConfigTest do
       %ProjectSetup{}
       |> ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_config: workflow_config,
+        workflow_markdown: Workflow.to_markdown(workflow_config, ""),
         after_create_hook: after_create_hook,
         validation_commands: %{"commands" => []},
         scan_summary: %{}

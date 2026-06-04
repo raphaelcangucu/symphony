@@ -18,6 +18,7 @@ import { getTrackerToken } from "@/config";
 import { AssistantPage } from "@/pages/AssistantPage";
 import { BoardPage } from "@/pages/BoardPage";
 import { ListPage } from "@/pages/ListPage";
+import { BackupPage } from "@/pages/BackupPage";
 import { ObservabilityPage } from "@/pages/ObservabilityPage";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
@@ -82,6 +83,7 @@ export function App() {
             <Route path="templates" element={<TemplateListPage />} />
             <Route path="templates/:slug" element={<TemplateEditPage />} />
             <Route path="observability" element={<ObservabilityPage />} />
+            <Route path="backups" element={<BackupPage />} />
             <Route path="assistant" element={<AssistantPage />} />
             <Route path="assistant/:threadId" element={<AssistantPage />} />
           </Route>

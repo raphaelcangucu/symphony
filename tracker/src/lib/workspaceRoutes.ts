@@ -72,9 +72,14 @@ export function projectEditPath(projectSlug: string): string {
   return `${PROJECTS_PATH}/${requireSlug(projectSlug)}/edit`;
 }
 
-export const PROJECT_SETTINGS_TABS = [
-  "general",
-  "tracker",
+export const PROJECT_SETTINGS_TABS = ["general", "tracker", "workflow"] as const;
+
+export type ProjectSettingsTab = (typeof PROJECT_SETTINGS_TABS)[number];
+
+export const DEFAULT_PROJECT_SETTINGS_TAB: ProjectSettingsTab = "general";
+
+/** Old form tabs that now live in the workflow markdown editor. */
+const LEGACY_WORKFLOW_SETTINGS_TABS = new Set([
   "states",
   "agent",
   "hooks",
@@ -82,14 +87,16 @@ export const PROJECT_SETTINGS_TABS = [
   "editor",
   "dev",
   "github",
-] as const;
-
-export type ProjectSettingsTab = (typeof PROJECT_SETTINGS_TABS)[number];
-
-export const DEFAULT_PROJECT_SETTINGS_TAB: ProjectSettingsTab = "general";
+]);
 
 export function isProjectSettingsTab(value: string | undefined | null): value is ProjectSettingsTab {
   return typeof value === "string" && (PROJECT_SETTINGS_TABS as readonly string[]).includes(value);
+}
+
+export function resolveProjectSettingsTab(value: string | undefined | null): ProjectSettingsTab {
+  if (isProjectSettingsTab(value)) return value;
+  if (typeof value === "string" && LEGACY_WORKFLOW_SETTINGS_TABS.has(value)) return "workflow";
+  return DEFAULT_PROJECT_SETTINGS_TAB;
 }
 
 export function projectSettingsPath(projectSlug: string, tab?: ProjectSettingsTab): string {

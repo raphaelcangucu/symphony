@@ -26,8 +26,7 @@ defmodule SymphonyElixir.CoreTest do
       %SymphonyElixir.LocalTracker.ProjectSetup{}
       |> SymphonyElixir.LocalTracker.ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_config: workflow_config,
-        prompt_template: prompt,
+        workflow_markdown: SymphonyElixir.Workflow.to_markdown(workflow_config, prompt || ""),
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })
@@ -177,7 +176,7 @@ defmodule SymphonyElixir.CoreTest do
     assert LinearConfig.assignee() == env_assignee
   end
 
-  test "workflow file path defaults to WORKFLOW.md in the current working directory when app env is unset" do
+  test "workflow file path is nil when app env is unset" do
     original_workflow_path = Workflow.workflow_file_path()
 
     on_exit(fn ->
@@ -186,7 +185,7 @@ defmodule SymphonyElixir.CoreTest do
 
     Workflow.clear_workflow_file_path()
 
-    assert Workflow.workflow_file_path() == Path.join(File.cwd!(), "WORKFLOW.md")
+    assert Workflow.workflow_file_path() == nil
   end
 
   test "workflow file path resolves from app env when set" do
@@ -415,6 +414,65 @@ defmodule SymphonyElixir.CoreTest do
     assert Map.has_key?(updated_state.running, issue_id)
     assert MapSet.member?(updated_state.claimed, issue_id)
     assert updated_entry.issue.state == "In Progress"
+  end
+
+  test "reconcile stops running issue when it is deleted from the tracker" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-deleted-reconcile-#{System.unique_integer([:positive])}"
+      )
+
+    issue_id = "2636"
+    issue_identifier = "27"
+    workspace = Path.join(test_root, issue_identifier)
+
+    try do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: test_root,
+        tracker_active_states: ["Todo", "In Progress", "In Review"],
+        tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate"]
+      )
+
+      File.mkdir_p!(test_root)
+      File.mkdir_p!(workspace)
+
+      agent_pid =
+        spawn(fn ->
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      state = %Orchestrator.State{
+        running: %{
+          issue_id => %{
+            pid: agent_pid,
+            ref: nil,
+            identifier: issue_identifier,
+            issue: %Issue{
+              id: issue_id,
+              identifier: issue_identifier,
+              state: "In Progress",
+              project_slug: "distributionmachine"
+            },
+            started_at: DateTime.utc_now()
+          }
+        },
+        claimed: MapSet.new([issue_id]),
+        agent_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
+        retry_attempts: %{}
+      }
+
+      updated_state = Orchestrator.reconcile_issue_states_for_test([], state)
+
+      refute Map.has_key?(updated_state.running, issue_id)
+      refute MapSet.member?(updated_state.claimed, issue_id)
+      refute Process.alive?(agent_pid)
+      refute File.exists?(workspace)
+    after
+      File.rm_rf(test_root)
+    end
   end
 
   test "reconcile stops running issue when it is reassigned away from this worker" do
@@ -1316,20 +1374,14 @@ defmodule SymphonyElixir.CoreTest do
                  line
                  |> String.trim_leading("JSON:")
                  |> Jason.decode!()
-                 |> then(fn payload ->
-                   expected_approval_policy = %{
-                     "reject" => %{
-                       "sandbox_approval" => true,
-                       "rules" => true,
-                       "mcp_elicitations" => true
-                     }
-                   }
+                |> then(fn payload ->
+                  expected_approval_policy = "untrusted"
 
-                   payload["method"] == "thread/start" &&
-                     get_in(payload, ["params", "approvalPolicy"]) == expected_approval_policy &&
-                     get_in(payload, ["params", "sandbox"]) == "workspace-write" &&
-                     get_in(payload, ["params", "cwd"]) == Path.expand(workspace)
-                 end)
+                  payload["method"] == "thread/start" &&
+                    get_in(payload, ["params", "approvalPolicy"]) == expected_approval_policy &&
+                    get_in(payload, ["params", "sandbox"]) == "workspace-write" &&
+                    get_in(payload, ["params", "cwd"]) == Path.expand(workspace)
+                end)
                else
                  false
                end
@@ -1349,20 +1401,14 @@ defmodule SymphonyElixir.CoreTest do
                  line
                  |> String.trim_leading("JSON:")
                  |> Jason.decode!()
-                 |> then(fn payload ->
-                   expected_approval_policy = %{
-                     "reject" => %{
-                       "sandbox_approval" => true,
-                       "rules" => true,
-                       "mcp_elicitations" => true
-                     }
-                   }
+                |> then(fn payload ->
+                  expected_approval_policy = "untrusted"
 
-                   payload["method"] == "turn/start" &&
-                     get_in(payload, ["params", "cwd"]) == Path.expand(workspace) &&
-                     get_in(payload, ["params", "approvalPolicy"]) == expected_approval_policy &&
-                     get_in(payload, ["params", "sandboxPolicy"]) == expected_turn_sandbox_policy
-                 end)
+                  payload["method"] == "turn/start" &&
+                    get_in(payload, ["params", "cwd"]) == Path.expand(workspace) &&
+                    get_in(payload, ["params", "approvalPolicy"]) == expected_approval_policy &&
+                    get_in(payload, ["params", "sandboxPolicy"]) == expected_turn_sandbox_policy
+                end)
                else
                  false
                end

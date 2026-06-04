@@ -54,6 +54,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     mark_state(project, %{status: "syncing"})
 
     with {:ok, push_summary} <- push_outbox(project, driver, max_attempts),
+         :ok <- seed_statuses(project),
          {:ok, pulled} <- pull_remote(project, driver, pr_driver) do
       mark_state(project, success_attrs(project))
       {:ok, Map.put(push_summary, :pulled, pulled)}

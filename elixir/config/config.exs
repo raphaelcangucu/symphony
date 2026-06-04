@@ -67,6 +67,41 @@ local_tracker_database =
 
 File.mkdir_p!(Path.dirname(local_tracker_database))
 
+# `SymphonyElixir.Repo.init/2` re-resolves the database path at boot (so a dev/prod
+# instance picks up a changed `SYMPHONY_LOCAL_TRACKER_DATABASE` without a recompile).
+# Under :test that runtime re-read would defeat the pinning above and reconnect the
+# Repo to the real `.env` database — which is catastrophic because the suite truncates
+# every table on setup. This flag tells `Repo.init/2` to trust the pinned config
+# value here (NOT re-read the env var) so tests can NEVER touch real data. It is a
+# plain Application env value (no `Mix` at runtime), so it is safe in releases.
+config :symphony_elixir, :local_tracker_database_pinned?, Mix.env() == :test
+
+default_backup_local_dir =
+  case Mix.env() do
+    :test -> Path.expand("../tmp/test-backups", __DIR__)
+    _ -> Path.expand("../.symphony/backups", __DIR__)
+  end
+
+backup_local_dir =
+  case {Mix.env(), System.get_env("SYMPHONY_BACKUP_DIR")} do
+    {:test, _override} -> default_backup_local_dir
+    {_env, value} when is_binary(value) and value != "" -> Path.expand(value)
+    {_env, _value} -> default_backup_local_dir
+  end
+
+backup_retention_days =
+  case Integer.parse(System.get_env("SYMPHONY_BACKUP_RETENTION_DAYS") || "30") do
+    {days, _} when days > 0 -> days
+    _ -> 30
+  end
+
+File.mkdir_p!(backup_local_dir)
+
+config :symphony_elixir,
+  root_dir: Path.expand("..", __DIR__),
+  backup_local_dir: backup_local_dir,
+  backup_retention_days: backup_retention_days
+
 config :symphony_elixir, SymphonyElixir.Repo,
   database: local_tracker_database,
   pool_size: String.to_integer(System.get_env("SYMPHONY_LOCAL_TRACKER_POOL_SIZE") || "5"),

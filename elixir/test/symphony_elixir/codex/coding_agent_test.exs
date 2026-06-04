@@ -280,11 +280,6 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       |> String.replace("codex:\n", "codex:\n  goals_enabled: true\n", global: false)
 
     File.write!(workflow_file, updated_workflow)
-
-    if Process.whereis(SymphonyElixir.WorkflowStore) do
-      SymphonyElixir.WorkflowStore.force_reload()
-    end
-
     :ok
   end
 

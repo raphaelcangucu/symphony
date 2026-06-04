@@ -75,12 +75,10 @@ export interface BackendGitHubOwnerDto {
 
 export interface BackendProjectSetupDto {
   id?: BackendId;
-  workflow_config?: Record<string, unknown> | null;
-  workflowConfig?: Record<string, unknown> | null;
+  workflow_markdown?: string | null;
+  workflowMarkdown?: string | null;
   after_create_hook?: string | null;
   afterCreateHook?: string | null;
-  prompt_template?: string | null;
-  promptTemplate?: string | null;
   validation_commands?: string[] | null;
   validationCommands?: string[] | null;
   scan_summary?: Record<string, unknown> | null;
@@ -106,14 +104,12 @@ export interface BackendRepositoryScanDto {
 export interface BackendWorkspaceSuggestionDto {
   workflow_statuses?: BackendWorkflowStatusDto[] | null;
   workflowStatuses?: BackendWorkflowStatusDto[] | null;
-  workflow_config?: Record<string, unknown> | null;
-  workflowConfig?: Record<string, unknown> | null;
+  workflow_markdown?: string | null;
+  workflowMarkdown?: string | null;
   validation_commands?: string[] | null;
   validationCommands?: string[] | null;
   after_create_hook?: string | null;
   afterCreateHook?: string | null;
-  prompt_template?: string | null;
-  promptTemplate?: string | null;
   scan_summary?: Record<string, unknown> | null;
   scanSummary?: Record<string, unknown> | null;
 }
@@ -360,10 +356,9 @@ export function normalizeRepositoryScan(dto: BackendRepositoryScanDto): Reposito
 export function normalizeWorkspaceSuggestion(dto: BackendWorkspaceSuggestionDto): WorkspaceSuggestion {
   return {
     workflowStatuses: (dto.workflowStatuses ?? dto.workflow_statuses ?? []).map(normalizeWorkflowStatus),
-    workflowConfig: dto.workflowConfig ?? dto.workflow_config ?? {},
+    workflowMarkdown: dto.workflowMarkdown ?? dto.workflow_markdown ?? "",
     validationCommands: dto.validationCommands ?? dto.validation_commands ?? [],
     afterCreateHook: dto.afterCreateHook ?? dto.after_create_hook ?? "",
-    promptTemplate: dto.promptTemplate ?? dto.prompt_template ?? "",
     scanSummary: dto.scanSummary ?? dto.scan_summary ?? {},
   };
 }
@@ -371,9 +366,8 @@ export function normalizeWorkspaceSuggestion(dto: BackendWorkspaceSuggestionDto)
 function normalizeProjectSetup(dto: BackendProjectSetupDto): ProjectSetup {
   return {
     id: maybeString(dto.id) ?? undefined,
-    workflowConfig: dto.workflowConfig ?? dto.workflow_config ?? {},
+    workflowMarkdown: dto.workflowMarkdown ?? dto.workflow_markdown ?? null,
     afterCreateHook: dto.afterCreateHook ?? dto.after_create_hook ?? null,
-    promptTemplate: dto.promptTemplate ?? dto.prompt_template ?? null,
     validationCommands: dto.validationCommands ?? dto.validation_commands ?? [],
     scanSummary: dto.scanSummary ?? dto.scan_summary ?? {},
   };

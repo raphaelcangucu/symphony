@@ -102,9 +102,7 @@ defmodule SymphonyElixir.DevServer.Reconciler do
   end
 
   defp run_tick_safely do
-    if Config.dev_server_enabled?() do
-      run_cycle()
-    end
+    run_cycle()
   rescue
     exception ->
       Logger.debug("Dev server reconciler tick skipped reason=#{inspect(exception)}")

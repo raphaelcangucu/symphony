@@ -25,7 +25,6 @@ defmodule SymphonyElixir.WorkspaceTest do
     )
 
     Workflow.set_workflow_file_path(workflow_file)
-    if Process.whereis(SymphonyElixir.WorkflowStore), do: SymphonyElixir.WorkflowStore.force_reload()
 
     on_exit(fn ->
       Workflow.clear_workflow_file_path()

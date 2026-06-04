@@ -3,9 +3,10 @@ defmodule SymphonyElixir.DevServer do
   Builds read-side dev-server views for issue previews.
   """
 
-  alias SymphonyElixir.Config
   alias SymphonyElixir.DevServer.Manager
   alias SymphonyElixir.LocalTracker.{Context, DevEnv}
+  alias SymphonyElixir.ProjectConfig
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Workspace
 
   @type view :: %{
@@ -16,10 +17,12 @@ defmodule SymphonyElixir.DevServer do
 
   @spec issue_targets(String.t(), String.t()) :: {:ok, view()} | {:error, :project_not_found}
   def issue_targets(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
-    with {:ok, _project} <- Context.get_project(project_slug) do
+    with {:ok, project} <- Context.get_project(project_slug) do
+      project = Repo.preload(project, :setup)
+      config = ProjectConfig.resolve(project)
       servers = Manager.list_for_issue(project_slug, identifier)
 
-      {:ok, availability_view(project_slug, identifier, servers)}
+      {:ok, availability_view(project_slug, identifier, config, servers)}
     end
   end
 
@@ -27,12 +30,12 @@ defmodule SymphonyElixir.DevServer do
     raise ArgumentError, "project_slug and identifier must be strings"
   end
 
-  defp availability_view(project_slug, identifier, servers) do
+  defp availability_view(project_slug, identifier, config, servers) do
     cond do
-      not Config.dev_server_enabled?() ->
+      not ProjectConfig.dev_server_enabled?(config) ->
         unavailable(:disabled, servers)
 
-      not issue_workspace_exists?(identifier) ->
+      not issue_workspace_exists?(project_slug, identifier) ->
         unavailable(:workspace_missing, servers)
 
       DevEnv.list_serve_steps(project_slug) == [] ->
@@ -47,10 +50,10 @@ defmodule SymphonyElixir.DevServer do
     %{available: false, reason: reason, servers: servers}
   end
 
-  defp issue_workspace_exists?(identifier) do
+  defp issue_workspace_exists?(project_slug, identifier) do
     identifier
     |> String.trim_leading("#")
-    |> Workspace.path_for_issue()
+    |> then(&Workspace.path_for_issue(%{identifier: &1, project_slug: project_slug}))
     |> File.dir?()
   end
 end

@@ -210,20 +210,18 @@ describe("project service", () => {
           id: 5,
           name: "Macro Markets",
           slug: "alpha",
-          setup: { prompt_template: "Hi", workflow_config: { tracker: { active_states: ["Todo"] } } },
+          setup: { workflow_markdown: "---\ntracker:\n  active_states: [Todo]\n---\n\nHi" },
         },
       },
     });
 
-    const project = await updateProjectSetup("alpha", {
-      promptTemplate: "Hi",
-      workflowConfig: { tracker: { active_states: ["Todo"] } },
-    });
+    const markdown = "---\ntracker:\n  active_states: [Todo]\n---\n\nHi";
+    const project = await updateProjectSetup("alpha", { workflowMarkdown: markdown });
 
     expect(put).toHaveBeenCalledWith("/api/tracker/v1/projects/alpha/setup", {
-      setup: { prompt_template: "Hi", workflow_config: { tracker: { active_states: ["Todo"] } } },
+      setup: { workflow_markdown: markdown },
     });
-    expect(project.setup?.promptTemplate).toBe("Hi");
+    expect(project.setup?.workflowMarkdown).toBe(markdown);
   });
 
   it("trims the slug before updating a project's setup", async () => {
@@ -241,7 +239,7 @@ describe("project service", () => {
   it("rejects blank slugs before updating a project's setup", async () => {
     const put = vi.spyOn(http, "put");
 
-    await expect(updateProjectSetup("   ", { promptTemplate: "Hi" })).rejects.toThrow("projectSlug is required");
+    await expect(updateProjectSetup("   ", { workflowMarkdown: "Hi" })).rejects.toThrow("projectSlug is required");
 
     expect(put).not.toHaveBeenCalled();
   });

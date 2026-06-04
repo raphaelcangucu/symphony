@@ -197,8 +197,7 @@ defmodule SymphonyElixir.PromptBuilderTest do
       %ProjectSetup{}
       |> ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_config: %{},
-        prompt_template: nil,
+        workflow_markdown: "",
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })
@@ -218,8 +217,7 @@ defmodule SymphonyElixir.PromptBuilderTest do
       %ProjectSetup{}
       |> ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_config: %{},
-        prompt_template: prompt,
+        workflow_markdown: SymphonyElixir.Workflow.to_markdown(%{}, prompt || ""),
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })

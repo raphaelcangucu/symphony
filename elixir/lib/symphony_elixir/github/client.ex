@@ -30,7 +30,7 @@ defmodule SymphonyElixir.GitHub.Client do
   query SymphonyGitHubPollItems($projectId: ID!, $first: Int!, $after: String) {
     node(id: $projectId) {
       ... on ProjectV2 {
-        items(first: $first, after: $after) {
+        items(first: $first, after: $after, orderBy: {field: POSITION, direction: ASC}) {
           nodes {
             id
             content {
@@ -218,7 +218,7 @@ defmodule SymphonyElixir.GitHub.Client do
   ) {
     node(id: $projectId) {
       ... on ProjectV2 {
-        items(first: $first, after: $after) {
+        items(first: $first, after: $after, orderBy: {field: POSITION, direction: ASC}) {
           nodes {
             id
             content {

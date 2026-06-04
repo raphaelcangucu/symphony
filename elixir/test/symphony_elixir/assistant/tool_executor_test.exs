@@ -6,7 +6,6 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
   alias SymphonyElixir.Assistant.{ProjectExploreWorkspace, ToolExecutor}
   alias SymphonyElixir.LocalTracker.{Context, Templates, WorkflowStatus}
   alias SymphonyElixir.Repo
-  alias SymphonyElixir.Workflow
 
   @token_env "SYMPHONY_TRACKER_TOKEN"
 
@@ -339,52 +338,27 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       assert yaml.data.yaml =~ "reference"
     end
 
-    test "get_workflow loads the running workflow file" do
-      tmp_dir = Path.join(System.tmp_dir!(), "symphony-read-tools-#{System.unique_integer([:positive])}")
-      File.mkdir_p!(tmp_dir)
-      workflow_file = Path.join(tmp_dir, "WORKFLOW.md")
+    test "get_workflow returns the project's stored workflow markdown" do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
-      SymphonyElixir.TestSupport.write_workflow_file!(workflow_file,
-        tracker_kind: "local",
-        workspace_root: tmp_dir,
-        prompt: "Running prompt"
-      )
-
-      Workflow.set_workflow_file_path(workflow_file)
-
-      on_exit(fn ->
-        Workflow.clear_workflow_file_path()
-        File.rm_rf(tmp_dir)
-      end)
+      markdown = "---\ntracker:\n  active_states: [Todo]\n---\n\nRunning prompt"
+      {:ok, _setup} = Context.upsert_project_setup("macro-markets", %{workflow_markdown: markdown})
 
       assert {:ok, result} = ToolExecutor.execute("macro-markets", "get_workflow", %{})
-      assert result.data.source == "running"
+      assert result.data.project_slug == "macro-markets"
+      assert result.data.markdown == markdown
       assert result.data.prompt == "Running prompt"
-      assert result.data.path == workflow_file
+      assert result.data.config["tracker"]["active_states"] == ["Todo"]
     end
 
-    test "get_workflow loads a named example sibling file" do
-      tmp_dir = Path.join(System.tmp_dir!(), "symphony-read-tools-example-#{System.unique_integer([:positive])}")
-      File.mkdir_p!(tmp_dir)
-      workflow_file = Path.join(tmp_dir, "WORKFLOW.md")
-      example_file = Path.join(tmp_dir, "WORKFLOW.macro-markets.md")
+    test "get_workflow returns an empty payload when the project has no workflow markdown" do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
-      SymphonyElixir.TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: tmp_dir)
-      File.write!(example_file, "---\ntracker: {}\n---\nMacro markets body\n")
-
-      Workflow.set_workflow_file_path(workflow_file)
-
-      on_exit(fn ->
-        Workflow.clear_workflow_file_path()
-        File.rm_rf(tmp_dir)
-      end)
-
-      assert {:ok, result} =
-               ToolExecutor.execute("macro-markets", "get_workflow", %{"source" => "example", "name" => "macro-markets"})
-
-      assert result.data.source == "example"
-      assert result.data.prompt == "Macro markets body"
-      assert result.data.path == example_file
+      assert {:ok, result} = ToolExecutor.execute("macro-markets", "get_workflow", %{})
+      assert result.data.project_slug == "macro-markets"
+      assert result.data.markdown == ""
+      assert result.data.prompt == ""
+      assert result.data.config == %{}
     end
 
     test "read_workspace_file reads from the project explore workspace" do

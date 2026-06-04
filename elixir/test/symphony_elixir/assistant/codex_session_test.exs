@@ -174,7 +174,10 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       {:ok, _project} = Context.ensure_project(%{name: "Distrib", slug: "distrib"})
 
       {:ok, _setup} =
-        Context.upsert_project_setup("distrib", %{workflow_config: %{"workspace" => %{"root" => custom_root}}})
+        Context.upsert_project_setup("distrib", %{
+          workflow_markdown:
+            SymphonyElixir.Workflow.to_markdown(%{"workspace" => %{"root" => custom_root}}, "")
+        })
 
       issue_ref = %{id: nil, identifier: "DIS-1", project_slug: "distrib"}
       expected_root = Workspace.workspace_root_for(issue_ref)

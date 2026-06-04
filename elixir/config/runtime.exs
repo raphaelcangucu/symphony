@@ -24,6 +24,8 @@ if config_env() != :test do
     end
   end
 
+  editor_settings = SymphonyElixir.BootInstanceConfig.editor_settings()
+
   config :symphony_elixir,
     poll_interval_ms: parse_int.("SYMPHONY_POLL_INTERVAL_MS", 5_000),
     max_concurrent_agents: parse_int.("SYMPHONY_MAX_CONCURRENT_AGENTS", 10),
@@ -33,13 +35,13 @@ if config_env() != :test do
     stall_timeout_ms: parse_int.("SYMPHONY_STALL_TIMEOUT_MS", 300_000),
     server_host: System.get_env("SYMPHONY_TRACKER_HOST") || "127.0.0.1",
     server_port: parse_int.("SYMPHONY_TRACKER_PORT", 4_000),
-    editor_enabled: System.get_env("SYMPHONY_EDITOR_ENABLED") == "true",
-    editor_binary: System.get_env("SYMPHONY_EDITOR_BINARY") || "code-server",
-    editor_host: System.get_env("SYMPHONY_EDITOR_HOST") || "127.0.0.1",
-    editor_port: parse_int.("SYMPHONY_EDITOR_PORT", 4_002),
-    editor_auth: System.get_env("SYMPHONY_EDITOR_AUTH") || "none",
-    editor_password: maybe.("SYMPHONY_EDITOR_PASSWORD"),
-    editor_base_url: maybe.("SYMPHONY_EDITOR_BASE_URL"),
+    editor_enabled: Keyword.fetch!(editor_settings, :editor_enabled),
+    editor_binary: Keyword.fetch!(editor_settings, :editor_binary),
+    editor_host: Keyword.fetch!(editor_settings, :editor_host),
+    editor_port: Keyword.fetch!(editor_settings, :editor_port),
+    editor_auth: Keyword.fetch!(editor_settings, :editor_auth),
+    editor_password: Keyword.get(editor_settings, :editor_password),
+    editor_base_url: Keyword.get(editor_settings, :editor_base_url),
     observability_enabled: System.get_env("SYMPHONY_OBSERVABILITY_ENABLED") != "false",
     observability_hub_url: maybe.("SYMPHONY_OBSERVABILITY_HUB_URL"),
     observability_label: maybe.("SYMPHONY_OBSERVABILITY_LABEL"),

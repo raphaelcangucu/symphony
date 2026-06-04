@@ -6,10 +6,9 @@ import { toast } from "sonner";
 import { ProjectConfigEditor } from "@/components/projects/ProjectConfigEditor";
 import { notifyTrackerProjectsChanged } from "@/lib/projectEvents";
 import {
-  DEFAULT_PROJECT_SETTINGS_TAB,
   PROJECTS_PATH,
-  isProjectSettingsTab,
   projectSettingsPath,
+  resolveProjectSettingsTab,
   workspaceBasePath,
 } from "@/lib/workspaceRoutes";
 import { getProject } from "@/services/projects";
@@ -19,13 +18,16 @@ export function ProjectSettingsPage() {
   const { projectSlug = "", tab } = useParams();
   const navigate = useNavigate();
   const slug = projectSlug.trim();
-  const activeTab = isProjectSettingsTab(tab) ? tab : DEFAULT_PROJECT_SETTINGS_TAB;
+  const activeTab = resolveProjectSettingsTab(tab);
   const [project, setProject] = useState<Project | null>(null);
 
   useEffect(() => {
     if (!slug) {
       navigate(PROJECTS_PATH, { replace: true });
       return;
+    }
+    if (tab && tab !== activeTab) {
+      navigate(projectSettingsPath(slug, activeTab), { replace: true });
     }
     let active = true;
     void getProject(slug)
@@ -38,7 +40,7 @@ export function ProjectSettingsPage() {
     return () => {
       active = false;
     };
-  }, [slug, navigate]);
+  }, [slug, navigate, tab, activeTab]);
 
   if (!project) return null;
 

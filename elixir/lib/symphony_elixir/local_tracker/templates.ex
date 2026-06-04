@@ -88,7 +88,7 @@ defmodule SymphonyElixir.LocalTracker.Templates do
         "workflow_statuses" => Enum.map(statuses, &status_to_attrs/1),
         "validation_commands" => validation_commands(setup),
         "after_create_hook" => parameterize(setup && setup.after_create_hook, project),
-        "prompt_template" => setup && setup.prompt_template,
+        "prompt_template" => setup_prompt_template(setup),
         "dev_env_markdown" => attr(overrides, :dev_env_markdown, nil),
         "metadata" => %{"source" => "saved_from_project", "source_project_slug" => project_slug},
         "repositories" => Enum.map(repositories, &repo_to_template_attrs(&1, project))
@@ -258,12 +258,25 @@ defmodule SymphonyElixir.LocalTracker.Templates do
   defp maybe_setup(template, vars, false) do
     %{
       "after_create_hook" => TemplateSubstitution.apply(template.after_create_hook, vars),
-      "prompt_template" => TemplateSubstitution.apply(template.prompt_template, vars),
+      "workflow_markdown" => TemplateSubstitution.apply(template.prompt_template, vars) || "",
       "validation_commands" => WorkspaceTemplate.validation_commands_list(template),
-      "workflow_config" => %{},
       "scan_summary" => %{}
     }
   end
+
+  # The project's prompt body now lives in the setup's `workflow_markdown`; pull it
+  # out so a saved template captures the prompt (templates store the prompt body in
+  # their own `prompt_template` field, with workflow statuses captured separately).
+  defp setup_prompt_template(nil), do: nil
+
+  defp setup_prompt_template(%{workflow_markdown: markdown}) when is_binary(markdown) do
+    case SymphonyElixir.Workflow.parse_string(markdown) do
+      {:ok, %{prompt: prompt}} when is_binary(prompt) and prompt != "" -> prompt
+      _ -> nil
+    end
+  end
+
+  defp setup_prompt_template(_setup), do: nil
 
   defp template_repositories(template, vars) do
     Enum.map(template.repositories, fn repo ->

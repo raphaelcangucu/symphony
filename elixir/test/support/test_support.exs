@@ -18,7 +18,6 @@ defmodule SymphonyElixir.TestSupport do
       alias SymphonyElixir.StatusDashboard
       alias SymphonyElixir.Tracker
       alias SymphonyElixir.Workflow
-      alias SymphonyElixir.WorkflowStore
       alias SymphonyElixir.Workspace
 
       # Backend config aliases for tests
@@ -39,7 +38,6 @@ defmodule SymphonyElixir.TestSupport do
         workflow_file = Path.join(workflow_root, "WORKFLOW.md")
         write_workflow_file!(workflow_file)
         Workflow.set_workflow_file_path(workflow_file)
-        if Process.whereis(SymphonyElixir.WorkflowStore), do: SymphonyElixir.WorkflowStore.force_reload()
         stop_default_http_server()
 
         on_exit(fn ->
@@ -82,14 +80,6 @@ defmodule SymphonyElixir.TestSupport do
     config = merged_workflow_config(overrides)
     File.write!(path, workflow_content_from(config))
     apply_instance_env!(config)
-
-    if Process.whereis(SymphonyElixir.WorkflowStore) do
-      try do
-        SymphonyElixir.WorkflowStore.force_reload()
-      catch
-        :exit, _reason -> :ok
-      end
-    end
 
     :ok
   end
@@ -145,6 +135,8 @@ defmodule SymphonyElixir.TestSupport do
   reset used by setups to avoid order-dependent pollution from the shared DB.
   """
   def truncate_tracker!(repo \\ SymphonyElixir.Repo) do
+    guard_not_real_database!(repo)
+
     {:ok, :ok} =
       repo.transaction(fn ->
         repo.query!("PRAGMA defer_foreign_keys = ON")
@@ -157,6 +149,36 @@ defmodule SymphonyElixir.TestSupport do
       end)
 
     :ok
+  end
+
+  # `truncate_tracker!/1` runs a destructive `DELETE FROM` across every table and
+  # is meant ONLY for the pinned test database. Refuse to run when the target is
+  # not the test DB: outside `MIX_ENV=test`, or when the repo is connected to the
+  # real database configured via `SYMPHONY_LOCAL_TRACKER_DATABASE` (the path
+  # sourced from `.env`). This prevents a stray dev-env invocation from wiping
+  # real project/issue data.
+  defp guard_not_real_database!(repo) do
+    configured = repo.config() |> Keyword.get(:database) |> to_string() |> Path.expand()
+
+    real_database =
+      case System.get_env("SYMPHONY_LOCAL_TRACKER_DATABASE") do
+        value when is_binary(value) and value != "" -> Path.expand(value)
+        _ -> nil
+      end
+
+    cond do
+      Mix.env() != :test ->
+        raise "Refusing to truncate_tracker!/1 outside :test " <>
+                "(env=#{Mix.env()}, database=#{configured}). This helper deletes every row " <>
+                "and must never run against the dev/prod database."
+
+      not is_nil(real_database) and configured == real_database ->
+        raise "Refusing to truncate_tracker!/1: target database #{configured} is the real " <>
+                "SYMPHONY_LOCAL_TRACKER_DATABASE (.env). This helper must only target the test DB."
+
+      true ->
+        :ok
+    end
   end
 
   def stop_default_http_server do
@@ -216,7 +238,7 @@ defmodule SymphonyElixir.TestSupport do
           max_concurrent_agents_by_state: %{},
           agent_completion_transitions: nil,
           command: "codex app-server",
-          codex_approval_policy: %{reject: %{sandbox_approval: true, rules: true, mcp_elicitations: true}},
+          codex_approval_policy: "untrusted",
           codex_thread_sandbox: "workspace-write",
           codex_turn_sandbox_policy: nil,
           agent_turn_timeout_ms: 3_600_000,

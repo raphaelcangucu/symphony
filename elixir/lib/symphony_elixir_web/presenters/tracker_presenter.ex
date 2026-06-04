@@ -52,9 +52,8 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   def project_setup(%ProjectSetup{} = setup) do
     %{
       id: setup.id,
-      workflow_config: setup.workflow_config,
+      workflow_markdown: setup.workflow_markdown,
       after_create_hook: setup.after_create_hook,
-      prompt_template: setup.prompt_template,
       validation_commands: Map.get(setup.validation_commands || %{}, "commands", []),
       scan_summary: setup.scan_summary
     }

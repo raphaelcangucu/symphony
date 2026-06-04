@@ -1,7 +1,6 @@
 import type { Project, TrackerKind } from "@/types/project";
 import type { ProjectSetup } from "@/types/project-setup";
 import type { WorkspaceRepository } from "@/types/repository";
-import type { WorkflowConfig } from "@/types/workflow-config";
 import type { WorkflowStatus } from "@/types/workflow-status";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -28,8 +27,7 @@ export interface UpdateProjectInput {
 }
 
 export interface UpdateProjectSetupInput {
-  workflowConfig?: WorkflowConfig;
-  promptTemplate?: string | null;
+  workflowMarkdown?: string | null;
   afterCreateHook?: string | null;
   validationCommands?: string[];
 }
@@ -78,9 +76,8 @@ export async function createWorkspaceProject(input: CreateWorkspaceProjectInput)
     })),
     repositories: input.repositories.map(repositoryPayload),
     setup: compactPayload({
-      workflow_config: input.setup.workflowConfig,
+      workflow_markdown: input.setup.workflowMarkdown,
       after_create_hook: input.setup.afterCreateHook,
-      prompt_template: input.setup.promptTemplate,
       validation_commands: input.setup.validationCommands,
       scan_summary: input.setup.scanSummary,
     }),
@@ -123,8 +120,7 @@ export async function updateProjectSetup(projectSlug: string, input: UpdateProje
   const slug = requireProjectSlug(projectSlug);
 
   const setup = compactPayload({
-    workflow_config: input.workflowConfig,
-    prompt_template: input.promptTemplate,
+    workflow_markdown: input.workflowMarkdown,
     after_create_hook: input.afterCreateHook,
     validation_commands: input.validationCommands,
   });

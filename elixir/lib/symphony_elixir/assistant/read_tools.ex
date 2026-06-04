@@ -62,17 +62,11 @@ defmodule SymphonyElixir.Assistant.ReadTools do
       ),
       tool_spec(
         "get_workflow",
-        "Fetch Symphony WORKFLOW.md content: the running process file or a named example sibling (e.g. macro-markets).",
+        "Fetch this project's workflow markdown (YAML front matter + prompt body) as stored in its settings.",
         %{
           "type" => "object",
           "additionalProperties" => false,
-          "properties" => %{
-            "source" => %{
-              "type" => ["string", "null"],
-              "description" => "running (default) or example."
-            },
-            "name" => string_schema("Example name when source is example, e.g. macro-markets (file WORKFLOW.<name>.md).")
-          }
+          "properties" => %{}
         }
       ),
       tool_spec(
@@ -156,12 +150,21 @@ defmodule SymphonyElixir.Assistant.ReadTools do
     end
   end
 
-  def execute(_project, "get_workflow", arguments, _opts) do
-    with {:ok, source} <- normalize_workflow_source(Map.get(arguments, "source")) do
-      case source do
-        :running -> load_running_workflow()
-        :example -> load_example_workflow(Map.get(arguments, "name"))
-      end
+  def execute(project, "get_workflow", _arguments, _opts) do
+    slug = project_slug(project)
+    markdown = project_workflow_markdown(slug)
+
+    case Workflow.parse_string(markdown) do
+      {:ok, loaded} ->
+        {:ok,
+         %{
+           tool: "get_workflow",
+           message: "Loaded workflow for #{slug}.",
+           data: workflow_payload(slug, markdown, loaded)
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -225,81 +228,22 @@ defmodule SymphonyElixir.Assistant.ReadTools do
     end
   end
 
-  defp load_running_workflow do
-    case Workflow.current() do
-      {:ok, loaded} ->
-        path = Workflow.workflow_file_path()
-
-        {:ok,
-         %{
-           tool: "get_workflow",
-           message: "Loaded running workflow.",
-           data: workflow_payload(:running, path, loaded)
-         }}
-
-      {:error, reason} ->
-        {:error, reason}
+  defp project_workflow_markdown(slug) do
+    case Context.get_project_setup(slug) do
+      %{workflow_markdown: markdown} when is_binary(markdown) -> markdown
+      _ -> ""
     end
   end
 
-  defp load_example_workflow(name) do
-    with {:ok, example_name} <- normalize_example_name(name),
-         path <- example_workflow_path(example_name),
-         {:ok, loaded} <- Workflow.load(path) do
-      {:ok,
-       %{
-         tool: "get_workflow",
-         message: "Loaded workflow example #{example_name}.",
-         data: workflow_payload(:example, path, loaded)
-       }}
-    else
-      {:error, {:missing_workflow_file, _path, _reason}} ->
-        {:error, :workflow_example_not_found}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp workflow_payload(source, path, %{config: config, prompt: prompt, prompt_template: prompt_template}) do
+  defp workflow_payload(slug, markdown, %{config: config, prompt: prompt, prompt_template: prompt_template}) do
     %{
-      source: to_string(source),
-      path: path,
+      project_slug: slug,
+      markdown: markdown,
       config: config,
       prompt: prompt,
       prompt_template: prompt_template
     }
   end
-
-  defp example_workflow_path(name) do
-    Workflow.workflow_file_path()
-    |> Path.dirname()
-    |> Path.join("WORKFLOW.#{name}.md")
-  end
-
-  defp normalize_workflow_source(nil), do: {:ok, :running}
-
-  defp normalize_workflow_source(source) when is_binary(source) do
-    case String.trim(source) |> String.downcase() do
-      "" -> {:ok, :running}
-      "running" -> {:ok, :running}
-      "example" -> {:ok, :example}
-      other -> {:error, {:invalid_workflow_source, other}}
-    end
-  end
-
-  defp normalize_workflow_source(source), do: {:error, {:invalid_workflow_source, source}}
-
-  defp normalize_example_name(nil), do: {:error, {:missing_required_field, :name}}
-
-  defp normalize_example_name(name) when is_binary(name) do
-    case name |> String.trim() |> String.trim_trailing(".md") do
-      "" -> {:error, {:missing_required_field, :name}}
-      trimmed -> {:ok, trimmed}
-    end
-  end
-
-  defp normalize_example_name(_), do: {:error, {:missing_required_field, :name}}
 
   defp normalize_format(nil), do: :json
 

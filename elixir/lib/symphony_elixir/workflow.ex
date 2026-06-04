@@ -1,29 +1,36 @@
 defmodule SymphonyElixir.Workflow do
   @moduledoc """
-  Loads workflow configuration and prompt from WORKFLOW.md.
+  Parses workflow markdown (YAML front matter + prompt body).
+
+  There is no longer a process-global `WORKFLOW.md`: per-project behavior is
+  stored as `workflow_markdown` text in the DB (resolved by
+  `SymphonyElixir.ProjectConfig`) and process-level settings come from env via
+  `SymphonyElixir.InstanceConfig`. The optional `:workflow_file_path` app env is
+  a TEST-only injection point for the legacy global front-matter defaults; it is
+  never set in production, so `current/0` returns an empty config there.
   """
 
-  alias SymphonyElixir.WorkflowStore
+  @empty_workflow %{config: %{}, prompt: "", prompt_template: ""}
 
-  @workflow_file_name "WORKFLOW.md"
-
-  @spec workflow_file_path() :: Path.t()
+  @spec workflow_file_path() :: Path.t() | nil
   def workflow_file_path do
-    Application.get_env(:symphony_elixir, :workflow_file_path) ||
-      Path.join(File.cwd!(), @workflow_file_name)
+    Application.get_env(:symphony_elixir, :workflow_file_path)
   end
 
-  @spec set_workflow_file_path(Path.t()) :: :ok
+  @spec set_workflow_file_path(Path.t() | nil) :: :ok
   def set_workflow_file_path(path) when is_binary(path) do
     Application.put_env(:symphony_elixir, :workflow_file_path, path)
-    maybe_reload_store()
     :ok
   end
+
+  # Restoring a previously-unset path (now `nil`) should clear the override rather
+  # than crash; this keeps `previous = workflow_file_path(); ...; set(previous)`
+  # restore patterns working now that the path can legitimately be `nil`.
+  def set_workflow_file_path(nil), do: clear_workflow_file_path()
 
   @spec clear_workflow_file_path() :: :ok
   def clear_workflow_file_path do
     Application.delete_env(:symphony_elixir, :workflow_file_path)
-    maybe_reload_store()
     :ok
   end
 
@@ -33,20 +40,23 @@ defmodule SymphonyElixir.Workflow do
           prompt_template: String.t()
         }
 
-  @spec current() :: {:ok, loaded_workflow()} | {:error, term()}
+  @spec current() :: {:ok, loaded_workflow()}
   def current do
-    case Process.whereis(WorkflowStore) do
-      pid when is_pid(pid) ->
-        WorkflowStore.current()
+    case workflow_file_path() do
+      path when is_binary(path) ->
+        case load(path) do
+          {:ok, loaded} -> {:ok, loaded}
+          {:error, _reason} -> {:ok, @empty_workflow}
+        end
 
       _ ->
-        load()
+        {:ok, @empty_workflow}
     end
   end
 
-  @spec load() :: {:ok, loaded_workflow()} | {:error, term()}
+  @spec load() :: {:ok, loaded_workflow()}
   def load do
-    load(workflow_file_path())
+    current()
   end
 
   @spec load(Path.t()) :: {:ok, loaded_workflow()} | {:error, term()}
@@ -139,13 +149,5 @@ defmodule SymphonyElixir.Workflow do
         {:error, reason} -> {:error, reason}
       end
     end
-  end
-
-  defp maybe_reload_store do
-    if Process.whereis(WorkflowStore) do
-      _ = WorkflowStore.force_reload()
-    end
-
-    :ok
   end
 end

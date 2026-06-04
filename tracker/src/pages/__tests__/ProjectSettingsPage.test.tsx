@@ -37,7 +37,7 @@ const project: Project = {
   description: null,
   tracker: { kind: "local", config: {} },
   workflowStatuses: [],
-  setup: { validationCommands: [], workflowConfig: {} },
+  setup: { validationCommands: [], workflowMarkdown: "---\ntracker:\n  active_states: [Todo]\n---\n\nHi" },
 };
 
 describe("ProjectSettingsPage", () => {
@@ -53,13 +53,25 @@ describe("ProjectSettingsPage", () => {
     expect(await screen.findByRole("tab", { name: /general/i })).toBeInTheDocument();
   });
 
-  it("selects the tab from the URL param", async () => {
+  it("selects the workflow tab from the URL param", async () => {
     vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
     vi.mocked(projects.getProject).mockResolvedValue(project);
 
-    renderAt("/projects/macro-markets/settings/editor");
+    renderAt("/projects/macro-markets/settings/workflow");
 
-    expect(await screen.findByRole("tab", { name: /^editor$/i, selected: true })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: /^workflow$/i, selected: true })).toBeInTheDocument();
+  });
+
+  it("redirects legacy states URL to workflow", async () => {
+    vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
+    vi.mocked(projects.getProject).mockResolvedValue(project);
+
+    renderAt("/projects/macro-markets/settings/states");
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/projects/macro-markets/settings/workflow"),
+    );
+    expect(await screen.findByRole("tab", { name: /^workflow$/i, selected: true })).toBeInTheDocument();
   });
 
   it("navigates to the tab's own URL when a tab is clicked", async () => {
@@ -68,11 +80,11 @@ describe("ProjectSettingsPage", () => {
 
     renderAt("/projects/macro-markets/settings");
 
-    await userEvent.click(await screen.findByRole("tab", { name: /^dev$/i }));
+    await userEvent.click(await screen.findByRole("tab", { name: /^workflow$/i }));
 
     await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/projects/macro-markets/settings/dev"),
+      expect(screen.getByTestId("location")).toHaveTextContent("/projects/macro-markets/settings/workflow"),
     );
-    expect(await screen.findByRole("tab", { name: /^dev$/i, selected: true })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: /^workflow$/i, selected: true })).toBeInTheDocument();
   });
 });

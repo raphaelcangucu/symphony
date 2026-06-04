@@ -6,18 +6,17 @@
 # cannot load those NIFs, which is why `make serve` boots through this script.
 #
 # Inputs (all optional — global-less orchestration boots with process settings only):
-#   * first CLI argument or $SYMPHONY_WORKFLOW : optional path to a WORKFLOW.md file
-#                                                (backward compat; not required)
-#   * $SYMPHONY_TRACKER_PORT                   : HTTP port override
-#   * $SYMPHONY_TRACKER_TOKEN                  : bearer token for the tracker API
+#   * $SYMPHONY_TRACKER_PORT  : HTTP port override
+#   * $SYMPHONY_TRACKER_TOKEN : bearer token for the tracker API
+#
+# Per-project behavior is DB-owned (`workflow_markdown`); process settings come
+# from `SYMPHONY_*` env. There is no global WORKFLOW.md.
 
 defmodule Symphony.DevServe do
   alias SymphonyElixir.DevServe
 
   def run do
-    workflow_path = resolve_workflow_path()
-    ensure_single_instance!(workflow_path)
-    maybe_set_workflow(workflow_path)
+    ensure_single_instance!()
     override_port!()
 
     # Migrate before starting the app: the Orchestrator queries the projects
@@ -26,48 +25,12 @@ defmodule Symphony.DevServe do
 
     case Application.ensure_all_started(:symphony_elixir) do
       {:ok, _started} ->
-        maybe_discover_projects()
-        announce_ready(workflow_path)
+        announce_ready()
         Process.sleep(:infinity)
 
       {:error, reason} ->
         fail("Failed to start Symphony: #{inspect(reason, pretty: true)}")
     end
-  end
-
-  # Optional: create missing projects from WORKFLOW.<slug>.md files in the scan
-  # directory. Never overwrites DB-owned config. Runs post-start (the
-  # orchestrator re-lists projects each poll, so freshly discovered projects are
-  # picked up on the next cycle).
-  defp maybe_discover_projects do
-    case DevServe.discovery_dir(System.get_env()) do
-      {:ok, dir} ->
-        summary = SymphonyElixir.WorkflowDiscovery.discover(dir)
-
-        case summary.discovered do
-          [] -> :ok
-          slugs -> IO.puts("Discovered projects from WORKFLOW.<slug>.md: #{Enum.join(slugs, ", ")}")
-        end
-
-      :disabled ->
-        :ok
-    end
-  end
-
-  # Returns the optional workflow path (or nil). Boot no longer requires a
-  # workflow file; per-project config is DB-owned.
-  defp resolve_workflow_path do
-    case DevServe.resolve_workflow_source(System.argv(), System.get_env()) do
-      {:ok, path} -> path
-      :none -> nil
-      {:missing, path} -> fail("Workflow file not found: #{path}")
-    end
-  end
-
-  defp maybe_set_workflow(nil), do: :ok
-
-  defp maybe_set_workflow(path) when is_binary(path) do
-    :ok = SymphonyElixir.Workflow.set_workflow_file_path(path)
   end
 
   defp override_port! do
@@ -78,23 +41,16 @@ defmodule Symphony.DevServe do
     end
   end
 
-  defp ensure_single_instance!(workflow_path) do
-    case SymphonyElixir.DevServeGuard.acquire(
-           workflow_path: workflow_path,
-           node_name: to_string(node())
-         ) do
+  defp ensure_single_instance! do
+    case SymphonyElixir.DevServeGuard.acquire(node_name: to_string(node())) do
       :ok ->
         :ok
 
-      {:error, {:already_running, %{"pid" => pid} = info}} ->
-        running_workflow = Map.get(info, "workflow_path", "(unknown)")
-
+      {:error, {:already_running, %{"pid" => pid}}} ->
         fail("""
-        Another Symphony tracker serve is already running (pid #{pid}, workflow: #{running_workflow}).
+        Another Symphony tracker serve is already running (pid #{pid}).
 
-        Running two serves with different WORKFLOW files maps the same issue to divergent
-        workspaces, which makes authored documents disappear from one view. Stop the other
-        instance first:
+        Stop the other instance first:
 
             make stop
 
@@ -120,11 +76,11 @@ defmodule Symphony.DevServe do
     end
   end
 
-  defp announce_ready(workflow_path) do
+  defp announce_ready do
     port = SymphonyElixir.HttpServer.bound_port()
     suffix = if is_integer(port), do: "http://localhost:#{port}/tracker", else: "(HTTP server not bound)"
     IO.puts("\nSymphony tracker is running → #{suffix}")
-    IO.puts("Workflow: #{workflow_path || "(none — per-project config from DB)"}")
+    IO.puts("Per-project config: DB-owned (no global WORKFLOW.md).")
     IO.puts("Press Ctrl+C twice to stop.\n")
   end
 

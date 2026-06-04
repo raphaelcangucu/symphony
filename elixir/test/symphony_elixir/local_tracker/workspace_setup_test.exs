@@ -74,12 +74,13 @@ defmodule SymphonyElixir.LocalTracker.WorkspaceSetupTest do
              "Duplicate"
            ]
 
-    assert suggestion.workflow_config.active_states == ["Todo", "In Progress", "Rework", "Merging"]
+    assert {:ok, parsed} = SymphonyElixir.Workflow.parse_string(suggestion.workflow_markdown)
+    assert parsed.config["tracker"]["active_states"] == ["Todo", "In Progress", "Rework", "Merging"]
     assert suggestion.validation_commands == ["pnpm test", "mix test"]
     assert suggestion.after_create_hook =~ "git clone --branch homolog https://github.com/clouapp/front.git frontend"
     assert suggestion.after_create_hook =~ "git clone --branch main https://github.com/clouapp/api.git backend"
-    assert suggestion.prompt_template =~ "frontend: clouapp/front"
-    assert suggestion.prompt_template =~ "backend: clouapp/api"
+    assert parsed.prompt_template =~ "frontend: clouapp/front"
+    assert parsed.prompt_template =~ "backend: clouapp/api"
   end
 
   test "github discovery lists repositories for an owner with pagination" do

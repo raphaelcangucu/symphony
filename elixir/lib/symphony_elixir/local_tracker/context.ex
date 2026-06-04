@@ -654,9 +654,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp setup_attrs(%Project{} = project, attrs) do
     %{
       project_id: project.id,
-      workflow_config: attr(attrs, :workflow_config, %{}),
+      workflow_markdown: attr(attrs, :workflow_markdown),
       after_create_hook: attr(attrs, :after_create_hook),
-      prompt_template: attr(attrs, :prompt_template),
       validation_commands: validation_commands_attrs(attr(attrs, :validation_commands, [])),
       scan_summary: attr(attrs, :scan_summary, %{})
     }
@@ -664,8 +663,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   @setup_update_fields [
     :workflow_markdown,
-    :workflow_config,
-    :prompt_template,
     :after_create_hook,
     :validation_commands,
     :scan_summary

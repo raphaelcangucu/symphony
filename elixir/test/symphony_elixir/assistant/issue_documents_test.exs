@@ -9,6 +9,11 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
 
   setup do
     migrate_repo()
+    # Truncate the whole tracker (not just threads): these tests resolve the
+    # workspace tree for bare identifiers like "MAC-1", which must NOT match a
+    # project. Leftover projects from earlier tests would otherwise inject a
+    # project path segment and break the deterministic workspace layout.
+    SymphonyElixir.TestSupport.truncate_tracker!(Repo)
     clean_threads()
 
     root = Path.join(System.tmp_dir!(), "idocs-#{System.unique_integer([:positive])}")

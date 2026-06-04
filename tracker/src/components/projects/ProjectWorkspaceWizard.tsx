@@ -236,10 +236,9 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
         workflowStatuses: suggestion.workflowStatuses,
         repositories: repositoriesForSubmission,
         setup: {
-          workflowConfig: suggestion.workflowConfig,
+          workflowMarkdown: suggestion.workflowMarkdown,
           validationCommands: suggestion.validationCommands,
           afterCreateHook: suggestion.afterCreateHook,
-          promptTemplate: suggestion.promptTemplate,
           scanSummary: suggestion.scanSummary,
         },
       });

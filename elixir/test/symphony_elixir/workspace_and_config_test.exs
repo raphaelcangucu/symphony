@@ -713,13 +713,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     assert Config.max_concurrent_agents() == 10
     assert CodexConfig.command() == "codex app-server"
 
-    assert CodexConfig.approval_policy() == %{
-             "reject" => %{
-               "sandbox_approval" => true,
-               "rules" => true,
-               "mcp_elicitations" => true
-             }
-           }
+    assert CodexConfig.approval_policy() == "untrusted"
 
     assert CodexConfig.thread_sandbox() == "workspace-write"
 
@@ -773,13 +767,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
     write_workflow_file!(Workflow.workflow_file_path(), codex_approval_policy: "")
 
-    assert CodexConfig.approval_policy() == %{
-             "reject" => %{
-               "sandbox_approval" => true,
-               "rules" => true,
-               "mcp_elicitations" => true
-             }
-           }
+    assert CodexConfig.approval_policy() == "untrusted"
 
     assert {:error, "Invalid codex.approval_policy" <> _} = Config.validate!()
 

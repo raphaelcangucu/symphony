@@ -1,6 +1,6 @@
 .PHONY: help all setup deps ensure-deps build fmt fmt-check lint test coverage ci dialyzer repo-ci \
 	check-tools install-code-server configure-code-server db-create db-migrate migrate migration new-migration rollback \
-	serve update stop tracker-setup tracker-deps tracker-build tracker-lint tracker-test tracker-ci \
+	backup backup-list backup-stats backup-cleanup serve update stop tracker-setup tracker-deps tracker-build tracker-lint tracker-test tracker-ci \
 	tracker-api tracker-api-escript tracker-dev
 
 # Prefer mise when available so targets work whether or not the shell has mise
@@ -23,6 +23,7 @@ TRACKER_PORT ?= 4000
 help:
 	@echo "Quality:  setup, deps, build, fmt, fmt-check, lint, test, coverage, dialyzer, ci, all"
 	@echo "Database: migrate (create+migrate), migration (alias), new-migration name=<desc>, rollback, db-create"
+	@echo "Backup:   backup (create SQLite snapshot), backup-list, backup-stats, backup-cleanup"
 	@echo "Run:      serve (boot daemon), update (restart web by default; ARGS=--orchestrator/--code-server/--all), stop, check-tools"
 	@echo "Editor:   install-code-server, configure-code-server (browser VS Code for task workspaces)"
 	@echo "Tracker:  tracker-setup, tracker-deps, tracker-build, tracker-lint, tracker-test, tracker-ci, tracker-dev, repo-ci"
@@ -119,6 +120,20 @@ rollback:
 
 # Back-compat alias.
 db-migrate: migrate
+
+# --- SQLite backups (tracker DB) -------------------------------------------
+
+backup:
+	@set -a; [ -f .env ] && . ./.env; set +a; $(MIX) symphony.backup create $(ARGS)
+
+backup-list:
+	@set -a; [ -f .env ] && . ./.env; set +a; $(MIX) symphony.backup list $(ARGS)
+
+backup-stats:
+	@set -a; [ -f .env ] && . ./.env; set +a; $(MIX) symphony.backup stats
+
+backup-cleanup:
+	@set -a; [ -f .env ] && . ./.env; set +a; $(MIX) symphony.backup cleanup
 
 # --- Run -------------------------------------------------------------------
 

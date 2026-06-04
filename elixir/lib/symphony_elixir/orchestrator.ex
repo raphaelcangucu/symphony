@@ -184,6 +184,18 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp warn_on_invalid_config do
+    # Multi-project orchestration validates each project's config independently
+    # (at save via parse_workflow_markdown and at resolve). There is no global
+    # WORKFLOW.md to validate here, so only the legacy single-tracker mode runs
+    # the global validation.
+    if Config.tracker_sync_enabled?() do
+      :ok
+    else
+      warn_on_invalid_global_config()
+    end
+  end
+
+  defp warn_on_invalid_global_config do
     case Config.validate!() do
       :ok ->
         :ok
@@ -292,9 +304,41 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp reconcile_running_issue_states(issues, state) do
-    Enum.reduce(issues, state, fn issue, state_acc ->
-      sets = project_state_sets(issue)
-      reconcile_issue_state(issue, state_acc, active_set(sets), terminal_set(sets))
+    returned_ids = MapSet.new(issues, & &1.id)
+
+    missing_ids =
+      state.running
+      |> Map.keys()
+      |> Enum.reject(&MapSet.member?(returned_ids, &1))
+
+    state =
+      Enum.reduce(issues, state, fn issue, state_acc ->
+        sets = project_state_sets(issue)
+        reconcile_issue_state(issue, state_acc, active_set(sets), terminal_set(sets))
+      end)
+
+    terminate_missing_running_issues(state, missing_ids)
+  end
+
+  defp terminate_missing_running_issues(%State{} = state, []), do: state
+
+  defp terminate_missing_running_issues(%State{} = state, missing_ids) do
+    Enum.reduce(missing_ids, state, fn issue_id, state_acc ->
+      case Map.get(state_acc.running, issue_id) do
+        nil ->
+          state_acc
+
+        %{identifier: identifier} = _running_entry ->
+          Logger.info(
+            "Issue no longer visible, stopping active agent issue_id=#{issue_id} issue_identifier=#{identifier || issue_id}"
+          )
+
+          terminate_running_issue(state_acc, issue_id, true)
+
+        _running_entry ->
+          Logger.info("Issue no longer visible, stopping active agent issue_id=#{issue_id}")
+          terminate_running_issue(state_acc, issue_id, true)
+      end
     end)
   end
 

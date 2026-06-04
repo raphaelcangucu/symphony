@@ -22,17 +22,21 @@ defmodule SymphonyElixir.LocalTracker.ContextSetupTest do
 
     {:ok, setup} =
       Context.upsert_project_setup("alpha", %{
-        workflow_config: %{"tracker" => %{"active_states" => ["Todo"]}},
-        prompt_template: "P1",
+        workflow_markdown: "---\ntracker:\n  active_states: [Todo]\n---\n\nP1",
         after_create_hook: "echo hi",
         validation_commands: ["npm test"]
       })
 
-    assert setup.prompt_template == "P1"
+    assert setup.workflow_markdown =~ "P1"
+    assert setup.after_create_hook == "echo hi"
 
-    {:ok, updated} = Context.upsert_project_setup("alpha", %{prompt_template: "P2"})
-    assert updated.prompt_template == "P2"
-    assert updated.workflow_config == %{"tracker" => %{"active_states" => ["Todo"]}}
+    {:ok, updated} =
+      Context.upsert_project_setup("alpha", %{
+        workflow_markdown: "---\ntracker:\n  active_states: [Todo]\n---\n\nP2"
+      })
+
+    assert updated.workflow_markdown =~ "P2"
+    assert updated.workflow_markdown =~ "active_states: [Todo]"
   end
 
   test "returns error for unknown project" do

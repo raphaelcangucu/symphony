@@ -328,17 +328,21 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     port_range = Keyword.fetch!(opts, :port_range)
     max_concurrent = Keyword.fetch!(opts, :max_concurrent)
 
-    {:ok, _setup} =
-      Context.upsert_project_setup(project.slug, %{
-        "workflow_config" => %{
+    workflow_markdown =
+      SymphonyElixir.Workflow.to_markdown(
+        %{
           "dev_server" => %{
             "enabled" => true,
             "port_range" => port_range,
             "max_concurrent" => max_concurrent,
             "idle_timeout_ms" => 60_000
           }
-        }
-      })
+        },
+        ""
+      )
+
+    {:ok, _setup} =
+      Context.upsert_project_setup(project.slug, %{"workflow_markdown" => workflow_markdown})
 
     :ok
   end

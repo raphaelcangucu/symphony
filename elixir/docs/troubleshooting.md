@@ -261,11 +261,15 @@ team has none. Check the server log for a `tracker_*` error.
 
 The tracker `IssueDrawer` shows an **Open in VS Code** button (and a `.` keyboard
 shortcut) that opens the task's workspace in browser-based VS Code. It depends on the
-optional `editor:` block in `WORKFLOW.md`.
+process-wide editor settings (`SYMPHONY_EDITOR_*` env vars, or the `editor:` block in
+`WORKFLOW.md` / `$SYMPHONY_WORKFLOW` when those env vars are unset).
 
 ### "Open in VS Code" button is missing
 
-The editor is disabled. Set `editor.enabled: true` in `WORKFLOW.md` and restart Symphony.
+The editor is disabled at the process level. Either set `SYMPHONY_EDITOR_ENABLED=true`
+in `elixir/.env`, or keep `editor.enabled: true` in `WORKFLOW.md` (or the file named
+by `SYMPHONY_WORKFLOW`), then restart Symphony (`make stop && make serve`, or
+`make update ARGS="--all"` after changing `.env`).
 
 ### Button is disabled showing "Editor is starting…"
 
