@@ -1,4 +1,4 @@
-import { Archive, FolderKanban, Pencil, Plus, RotateCcw, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Archive, ExternalLink, FolderKanban, Pencil, Plus, RotateCcw, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { notifyTrackerProjectsChanged } from "@/lib/projectEvents";
+import { githubProjectBoardUrl, projectTrackerLinkLabel, resolveProjectTrackerUrl } from "@/lib/projectTrackerUrl";
 import { projectEditPath, projectsDevEnvPath, projectsFiltersPath, projectsNewPath } from "@/lib/workspaceRoutes";
+import { discoverGitHubProjects } from "@/services/remoteTrackers";
 import { archiveProject, deleteProject, listProjects, restoreProject } from "@/services/projects";
 import type { Project } from "@/types/project";
 
@@ -36,6 +38,7 @@ export function ProjectListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [githubBoardUrls, setGithubBoardUrls] = useState<Record<string, string>>({});
 
   const statusFilter = parseStatusFilter(searchParams.get("status"));
   const keyword = searchParams.get("q") ?? "";
@@ -84,6 +87,31 @@ export function ProjectListPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const needsGithubLookup = projects.some(
+      (project) => project.tracker.kind === "github" && typeof project.tracker.config.project_id === "string",
+    );
+    if (!needsGithubLookup) {
+      setGithubBoardUrls({});
+      return undefined;
+    }
+
+    let active = true;
+
+    void discoverGitHubProjects()
+      .then((boards) => {
+        if (!active) return;
+        setGithubBoardUrls(Object.fromEntries(boards.map((board) => [board.id, githubProjectBoardUrl(board)])));
+      })
+      .catch(() => {
+        if (active) setGithubBoardUrls({});
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [projects]);
 
   const ongoingCount = projects.filter((project) => !project.archivedAt).length;
   const archivedCount = projects.length - ongoingCount;
@@ -205,6 +233,7 @@ export function ProjectListPage() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filteredProjects.map((project) => {
               const isArchived = Boolean(project.archivedAt);
+              const trackerUrl = resolveProjectTrackerUrl(project, githubBoardUrls);
 
               return (
                 <Card key={project.slug} className="h-full transition hover:border-primary/30 hover:shadow-md">
@@ -222,6 +251,21 @@ export function ProjectListPage() {
                     <CardContent className="text-sm text-muted-foreground">{project.issueCount ?? 0} issues</CardContent>
                   </Link>
                   <CardContent className="flex justify-end gap-1 border-t pt-3">
+                    {trackerUrl ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground"
+                        aria-label={projectTrackerLinkLabel(project.tracker.kind)}
+                        title={projectTrackerLinkLabel(project.tracker.kind)}
+                        asChild
+                      >
+                        <a href={trackerUrl} target="_blank" rel="noreferrer noopener" onClick={(event) => event.stopPropagation()}>
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
                       variant="ghost"

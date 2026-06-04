@@ -127,6 +127,8 @@ export interface BackendProjectDto {
   setup?: BackendProjectSetupDto | null;
   tracker_kind?: string | null;
   tracker_config?: Record<string, unknown> | null;
+  tracker_url?: string | null;
+  trackerUrl?: string | null;
   inserted_at?: string | null;
   created_at?: string | null;
   createdAt?: string | null;
@@ -302,6 +304,7 @@ export function normalizeProject(dto: BackendProjectDto): Project {
       kind: (dto.tracker_kind as TrackerKind) ?? "local",
       config: dto.tracker_config ?? {},
     },
+    trackerUrl: dto.trackerUrl ?? dto.tracker_url ?? null,
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? undefined,
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? undefined,
     archivedAt: dto.archivedAt ?? dto.archived_at ?? null,

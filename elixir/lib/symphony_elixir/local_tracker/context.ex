@@ -7,6 +7,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   alias SymphonyElixir.AgentRouting
   alias SymphonyElixir.Config
+  alias SymphonyElixir.Tracker.ExternalUrl
 
   alias SymphonyElixir.LocalTracker.{
     ActivityEvent,
@@ -586,9 +587,25 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   defp copy_tracker_config(map, tracker) do
+    kind =
+      case fetch_attr(tracker, :kind) do
+        {:ok, value} -> value
+        :error -> Map.get(map, :tracker_kind)
+      end
+
     case fetch_attr(tracker, :config) do
-      {:ok, config} when is_map(config) -> Map.put(map, :tracker_config, config)
-      _absent -> map
+      {:ok, config} when is_map(config) ->
+        config =
+          if kind == "github" do
+            ExternalUrl.enrich_github_config(config)
+          else
+            config
+          end
+
+        Map.put(map, :tracker_config, config)
+
+      _absent ->
+        map
     end
   end
 
@@ -604,13 +621,22 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   defp project_attrs(attrs) do
     tracker = attr(attrs, :tracker, %{})
+    tracker_kind = attr(tracker, :kind, "local")
+    tracker_config = attr(tracker, :config, %{})
+
+    tracker_config =
+      if tracker_kind == "github" do
+        ExternalUrl.enrich_github_config(tracker_config)
+      else
+        tracker_config
+      end
 
     %{
       name: attr(attrs, :name),
       slug: attr(attrs, :slug),
       description: attr(attrs, :description),
-      tracker_kind: attr(tracker, :kind, "local"),
-      tracker_config: attr(tracker, :config, %{})
+      tracker_kind: tracker_kind,
+      tracker_config: tracker_config
     }
   end
 

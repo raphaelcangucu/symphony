@@ -12,6 +12,7 @@ import { GitHubProjectPicker } from "@/components/projects/GitHubProjectPicker";
 import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
 import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
 import { defaultWorkspacePath, inferRole, sanitizeWorkspaceSegment } from "@/lib/workspaceRepositories";
+import { githubProjectBoardUrl } from "@/lib/projectTrackerUrl";
 import { projectSettingsPath } from "@/lib/workspaceRoutes";
 import { createWorkspaceProject } from "@/services/projects";
 import { listGitHubOwners, listGitHubRepositories, scanRepositories, suggestWorkspaceSetup } from "@/services/projectSetup";
@@ -403,6 +404,8 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
                     repo: project.repoNameWithOwner ?? "",
                     project_id: project.id,
                     project_number: project.number,
+                    project_url: githubProjectBoardUrl(project),
+                    owner_kind: project.owner.kind,
                     status_field: "Symphony State",
                   })
                 }

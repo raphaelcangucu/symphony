@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
 import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
 import { Input } from "@/components/ui/input";
+import { githubProjectBoardUrl } from "@/lib/projectTrackerUrl";
 import { discoverGitHubProjects, type GitHubProjectSummary } from "@/services/remoteTrackers";
 import type { TrackerKind } from "@/types/project";
 
@@ -95,6 +96,8 @@ function GitHubTrackerFields({ config, onConfigChange }: TrackerFieldsProps) {
                     project_id: board.id,
                     project_number: board.number,
                     repo: board.repoNameWithOwner ?? repo,
+                    project_url: githubProjectBoardUrl(board),
+                    owner_kind: board.owner.kind,
                   })
                 }
                 aria-pressed={board.id === projectId}
@@ -155,7 +158,7 @@ function ConnectedBoardSummary({ projectId, projectNumber, repo, board, loading 
   }
 
   const number = board?.number ?? projectNumber;
-  const url = board ? boardUrl(board) : null;
+  const url = board ? githubProjectBoardUrl(board) : null;
 
   return (
     <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
@@ -181,11 +184,6 @@ function ConnectedBoardSummary({ projectId, projectNumber, repo, board, loading 
       ) : null}
     </div>
   );
-}
-
-function boardUrl(board: GitHubProjectSummary): string {
-  const scope = board.owner.kind === "organization" ? "orgs" : "users";
-  return `https://github.com/${scope}/${board.owner.login}/projects/${board.number}`;
 }
 
 function LinearTrackerFields({ config, onConfigChange }: TrackerFieldsProps) {

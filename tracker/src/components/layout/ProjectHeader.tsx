@@ -13,6 +13,7 @@ import type { TrackerKind } from "@/types/project";
 const TRACKER_LABELS: Record<Exclude<TrackerKind, "local">, string> = {
   github: "GitHub Project",
   linear: "Linear",
+  jira: "Jira",
 };
 
 interface ProjectHeaderProps {

@@ -373,6 +373,32 @@ describe("ProjectListPage", () => {
     expect(screen.getByRole("button", { name: "Delete Archived Project permanently" })).toBeTruthy();
   });
 
+  it("shows an external tracker link for remote projects", async () => {
+    const githubProject: Project = {
+      ...activeProject,
+      name: "GitHub Board",
+      slug: "github-board",
+      tracker: {
+        kind: "github",
+        config: {
+          repo: "clouapp/front",
+          project_number: 2,
+          project_url: "https://github.com/orgs/clouapp/projects/2",
+        },
+      },
+      trackerUrl: "https://github.com/orgs/clouapp/projects/2",
+    };
+
+    vi.mocked(listProjects).mockResolvedValueOnce([githubProject]);
+
+    renderProjectsIndex();
+
+    await screen.findByText("GitHub Board");
+    const link = screen.getByRole("link", { name: "Open GitHub project" });
+    expect(link).toHaveAttribute("href", "https://github.com/orgs/clouapp/projects/2");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("navigates from project card links but not from lifecycle actions", async () => {
     vi.mocked(listProjects).mockResolvedValue([activeProject]);
     vi.mocked(archiveProject).mockRejectedValue(new Error("Archive failed"));

@@ -13,6 +13,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   }
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.Tracker.ExternalUrl
   alias SymphonyElixir.Tracker.IssueDTO
 
   @spec project(Project.t(), [WorkflowStatus.t()] | nil, [Repository.t()] | nil, ProjectSetup.t() | nil) :: map()
@@ -24,6 +25,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       description: project.description,
       tracker_kind: project.tracker_kind,
       tracker_config: project.tracker_config,
+      tracker_url: ExternalUrl.for(project),
       statuses: statuses && Enum.map(statuses, &status/1),
       repositories: repositories && Enum.map(repositories, &repository/1),
       setup: setup && project_setup(setup),

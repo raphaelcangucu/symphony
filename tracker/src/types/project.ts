@@ -2,7 +2,7 @@ import type { WorkflowStatus } from "./workflow-status";
 import type { ProjectSetup } from "./project-setup";
 import type { WorkspaceRepository } from "./repository";
 
-export type TrackerKind = "local" | "github" | "linear";
+export type TrackerKind = "local" | "github" | "linear" | "jira";
 
 export interface ProjectTrackerConfig {
   kind: TrackerKind;
@@ -19,6 +19,7 @@ export interface Project {
   repositories?: WorkspaceRepository[];
   setup?: ProjectSetup | null;
   tracker: ProjectTrackerConfig;
+  trackerUrl?: string | null;
   createdAt?: string;
   updatedAt?: string;
   archivedAt?: string | null;

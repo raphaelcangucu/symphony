@@ -20,6 +20,20 @@ defmodule SymphonyElixir.GitHub.Discovery do
   }
   """
 
+  @project_board_query """
+  query SymphonyGitHubProjectBoard($projectId: ID!) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        id
+        number
+        title
+        url
+        owner { __typename ... on User { login } ... on Organization { login } }
+      }
+    }
+  }
+  """
+
   @spec list_projects(keyword()) :: {:ok, [map()]} | {:error, term()}
   def list_projects(opts \\ []) do
     client = Keyword.get(opts, :client_module, client_module())
@@ -46,11 +60,51 @@ defmodule SymphonyElixir.GitHub.Discovery do
     |> Enum.map(&project_dto/1)
   end
 
+  @spec board_url(map()) :: String.t() | nil
+  def board_url(%{number: number, owner: %{login: login, kind: kind}})
+      when is_integer(number) and is_binary(login) and login != "" do
+    scope = if kind == "organization", do: "orgs", else: "users"
+    "https://github.com/#{scope}/#{login}/projects/#{number}"
+  end
+
+  def board_url(_), do: nil
+
+  @spec url_for_project_id(String.t(), keyword()) :: String.t() | nil
+  def url_for_project_id(project_id, opts \\ []) when is_binary(project_id) do
+    case fetch_project(project_id, opts) do
+      {:ok, project} -> board_url(project) || project_url(project)
+      _ -> nil
+    end
+  end
+
+  @spec fetch_project(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def fetch_project(project_id, opts \\ []) when is_binary(project_id) do
+    client = Keyword.get(opts, :client_module, client_module())
+
+    case client.graphql(@project_board_query, %{"projectId" => project_id}, []) do
+      {:ok, %{"data" => %{"node" => node}}} when is_map(node) ->
+        {:ok, project_dto(node)}
+
+      {:ok, %{"data" => %{"node" => nil}}} ->
+        {:error, :project_not_found}
+
+      {:ok, response} ->
+        {:error, {:unexpected_response, response}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp project_url(%{url: url}) when is_binary(url) and url != "", do: url
+  defp project_url(_), do: nil
+
   defp project_dto(node) do
     %{
       id: node["id"],
       number: node["number"],
       title: node["title"],
+      url: node["url"],
       owner: %{
         login: get_in(node, ["owner", "login"]),
         kind: owner_kind(get_in(node, ["owner", "__typename"]))

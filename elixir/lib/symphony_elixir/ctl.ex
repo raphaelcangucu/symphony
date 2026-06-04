@@ -26,6 +26,7 @@ defmodule SymphonyElixir.Ctl do
     SymphonyElixir.Assistant.DiscoveryTools,
     SymphonyElixir.Assistant.ProjectBoardTools,
     SymphonyElixir.Assistant.PullRequestLookup,
+    SymphonyElixir.Assistant.ReadTools,
     SymphonyElixir.Assistant.ToolExecutor,
     SymphonyElixir.Assistant.ToolSchema
   ]
