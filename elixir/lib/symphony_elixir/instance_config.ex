@@ -12,7 +12,9 @@ defmodule SymphonyElixir.InstanceConfig do
   chats and as a base for per-project `codex:` overrides.
   """
 
-  @default_poll_interval_ms 5_000
+  @default_poll_interval_ms 60_000
+  @default_tracker_sync_min_pull_ms 60_000
+  @default_tracker_pr_sync_ttl_ms 300_000
   @default_max_concurrent_agents 10
   @default_max_turns 20
   @default_max_retry_backoff_ms 300_000
@@ -40,6 +42,25 @@ defmodule SymphonyElixir.InstanceConfig do
 
   @spec poll_interval_ms() :: pos_integer()
   def poll_interval_ms, do: get(:poll_interval_ms, @default_poll_interval_ms)
+
+  @doc """
+  Minimum spacing (ms) between successive remote pulls for a single project in the
+  background tracker sync. A pull requested within this window is coalesced into a
+  push-only sync, so a fast orchestrator poll cannot multiply GitHub reads.
+  Defaults to #{@default_tracker_sync_min_pull_ms}.
+  """
+  @spec tracker_sync_min_pull_ms() :: non_neg_integer()
+  def tracker_sync_min_pull_ms,
+    do: get(:tracker_sync_min_pull_ms, @default_tracker_sync_min_pull_ms)
+
+  @doc """
+  TTL (ms) for re-enriching an issue's pull requests during a background sync. An
+  issue whose PRs were synced within this window is skipped on the next pull.
+  Defaults to #{@default_tracker_pr_sync_ttl_ms}.
+  """
+  @spec tracker_pr_sync_ttl_ms() :: non_neg_integer()
+  def tracker_pr_sync_ttl_ms,
+    do: get(:tracker_pr_sync_ttl_ms, @default_tracker_pr_sync_ttl_ms)
 
   @spec max_concurrent_agents() :: pos_integer()
   def max_concurrent_agents, do: get(:max_concurrent_agents, @default_max_concurrent_agents)

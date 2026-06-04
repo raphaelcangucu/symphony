@@ -6,7 +6,12 @@ defmodule SymphonyElixir.AgentRunner do
   require Logger
   alias SymphonyElixir.{CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
+  alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
+
+  # The open-PR check runs every turn for "In Progress" issues; cache it per
+  # repo+issue so a long-running issue does not re-query GitHub each turn.
+  @open_pr_cache_ttl_ms 120_000
 
   @type run_outcome :: :completed | {:incomplete, :max_turns}
 
@@ -339,7 +344,12 @@ defmodule SymphonyElixir.AgentRunner do
   defp project_tracker_kind(_project_config), do: Config.tracker_kind()
 
   defp github_issue_has_open_pull_request?(identifier) do
-    case GitHubClient.issue_has_open_pull_request?(identifier) do
+    key = {:issue_open_pr, SymphonyElixir.GitHub.Config.repo(), identifier}
+
+    result =
+      ReadCache.fetch(key, fn -> GitHubClient.issue_has_open_pull_request?(identifier) end, @open_pr_cache_ttl_ms)
+
+    case result do
       {:ok, true} -> true
       _ -> false
     end

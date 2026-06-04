@@ -20,20 +20,10 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   def list_issues(%Project{} = project, _filters) do
     %{project_id: project_id, status_field: status_field} = config(project)
 
-    case client().graphql(
-           Query.list_items_query(),
-           %{
-             "projectId" => project_id,
-             "first" => @page_size,
-             "after" => nil
-           },
-           []
-         ) do
-      {:ok, response} ->
+    case fetch_all_items(project_id, nil, []) do
+      {:ok, nodes} ->
         issues =
-          response
-          |> get_in(["data", "node", "items", "nodes"])
-          |> List.wrap()
+          nodes
           |> Enum.map(&Query.normalize_item(&1, status_field, project.slug))
           |> Enum.reject(&is_nil/1)
 
@@ -41,6 +31,29 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
       error ->
         {:error, map_error(error)}
+    end
+  end
+
+  # Walks every page of the project's items (the board can exceed one `@page_size`
+  # page). A single page is the common case and costs one request, so this does
+  # not add calls to the hot path; it only follows the cursor when there is more.
+  defp fetch_all_items(project_id, after_cursor, acc) do
+    variables = %{"projectId" => project_id, "first" => @page_size, "after" => after_cursor}
+
+    case client().graphql(Query.list_items_query(), variables, []) do
+      {:ok, response} ->
+        nodes = response |> get_in(["data", "node", "items", "nodes"]) |> List.wrap()
+
+        case get_in(response, ["data", "node", "items", "pageInfo"]) do
+          %{"hasNextPage" => true, "endCursor" => cursor} when is_binary(cursor) and cursor != "" ->
+            fetch_all_items(project_id, cursor, acc ++ nodes)
+
+          _ ->
+            {:ok, acc ++ nodes}
+        end
+
+      error ->
+        error
     end
   end
 

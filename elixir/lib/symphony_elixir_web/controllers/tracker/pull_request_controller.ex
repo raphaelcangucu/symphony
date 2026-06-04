@@ -17,7 +17,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.GitHub.{Api, PullRequests, PullRequestUrl}
+  alias SymphonyElixir.GitHub.{Api, PullRequests, PullRequestUrl, ReadCache}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Tracker.Sync.LocalStore
   alias SymphonyElixir.Tracker.Sync.PullRequests, as: SyncPullRequests
@@ -43,6 +43,8 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
              repo: parsed.repo,
              number: parsed.number
            }) do
+      invalidate_pr_caches(project, identifier, url)
+
       json(conn, %{
         data: %{url: pr.url, number: pr.number, repo: pr.repo, state: pr.state, origin: pr.origin}
       })
@@ -58,6 +60,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   def unlink(conn, %{"project_slug" => project_slug, "identifier" => identifier, "url" => url}) do
     with {:ok, project} <- Context.get_project(project_slug),
          :ok <- LocalStore.unlink_pull_request(project.id, identifier, url) do
+      invalidate_pr_caches(project, identifier, url)
       json(conn, %{data: %{unlinked: true}})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -87,7 +90,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   end
 
   defp discover_live(project, repo, identifier) do
-    case PullRequests.for_issue(repo, identifier) do
+    case cached_for_issue(repo, identifier) do
       {:ok, prs} ->
         persist_discovered(project, identifier, prs)
         Enum.map(prs, fn pr -> Map.put_new(pr, :origin, "auto") end)
@@ -161,7 +164,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   # fields when the PR is unreachable (no App access / both transports limited).
   defp enrich_with_live_checks(%{repo: repo, number: number} = pr)
        when is_binary(repo) and is_integer(number) do
-    case Api.pull_request_detail(repo, number) do
+    case cached_pr_detail(repo, number) do
       {:ok, live_pr} when is_map(live_pr) ->
         Map.merge(pr, %{
           title: live_pr[:title] || pr.title,
@@ -179,6 +182,37 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   end
 
   defp enrich_with_live_checks(pr), do: pr
+
+  # The board poll and the PR drawer both hit these endpoints; cache the live
+  # GitHub reads behind the shared `ReadCache` (60s TTL) so a refresh or a second
+  # viewer does not duplicate the same GraphQL/REST call within the window.
+  defp cached_for_issue(repo, identifier) do
+    ReadCache.fetch({:issue_pull_requests, repo, identifier}, fn ->
+      PullRequests.for_issue(repo, identifier)
+    end)
+  end
+
+  defp cached_pr_detail(repo, number) do
+    ReadCache.fetch({:pull_request_detail, repo, number}, fn ->
+      Api.pull_request_detail(repo, number)
+    end)
+  end
+
+  # A manual link/unlink changes which PRs an issue surfaces, so drop the cached
+  # live reads to reflect the change on the next load instead of after the TTL.
+  defp invalidate_pr_caches(project, identifier, url) do
+    case PullRequests.resolve_repo(project) do
+      {:ok, repo} -> ReadCache.invalidate({:issue_pull_requests, repo, identifier})
+      _ -> :ok
+    end
+
+    case PullRequestUrl.parse(url) do
+      {:ok, %{repo: repo, number: number}} -> ReadCache.invalidate({:pull_request_detail, repo, number})
+      _ -> :ok
+    end
+
+    :ok
+  end
 
   defp error(conn, status, message) do
     conn

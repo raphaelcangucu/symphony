@@ -48,11 +48,13 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
     %{project: %Project{id: 1, slug: "mm", tracker_config: %{}}}
   end
 
-  test "pull returns normalized issues with their comments", %{project: project} do
+  test "pull returns light normalized issues without per-issue comments", %{project: project} do
     assert {:ok, [issue]} = SyncDriver.pull(project, [])
     assert issue.remote_id == "I_1"
     assert issue.state == "Todo"
-    assert Enum.map(issue.comments, & &1.remote_id) == ["IC_1"]
+    # The background pull is light: comments are enriched separately (active states
+    # only), so a routine pull never spends a comments call per issue.
+    assert issue.comments == []
     assert Enum.map(issue.labels, & &1.name) == ["bug"]
   end
 

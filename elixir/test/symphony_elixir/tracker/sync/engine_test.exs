@@ -92,6 +92,48 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     def add_comment(_project, _identifier, _body, _opts), do: {:error, :not_supported_on_remote}
   end
 
+  defmodule MixedStateDriver do
+    @behaviour SymphonyElixir.Tracker.Sync.Driver
+
+    @impl true
+    def pull(_project, _opts), do: {:ok, [issue("1", "Todo"), issue("2", "Done")]}
+
+    @impl true
+    def push(_project, _entry), do: {:ok, "REMOTE"}
+
+    @impl true
+    def pull_pull_requests(_project, _issue), do: {:ok, []}
+
+    defp issue(id, state) do
+      %{
+        remote_id: "I_#{id}",
+        remote_number: String.to_integer(id),
+        identifier: id,
+        title: "Issue #{id}",
+        description: "body",
+        state: state,
+        priority: nil,
+        assignee_id: nil,
+        branch_name: nil,
+        remote_url: "u",
+        creator: "octo",
+        position: 0,
+        remote_updated_at: DateTime.utc_now(),
+        labels: [],
+        comments: []
+      }
+    end
+  end
+
+  defmodule RecordingPrDriver do
+    def pull_pull_requests(_project, issue) do
+      send(self(), {:pr_pull, issue.identifier})
+      {:ok, [%{remote_id: "PR_1", number: 7, url: "u", title: "t", state: "open"}]}
+    end
+  end
+
+  @enrich_table :symphony_tracker_enrich_ttl
+
   setup do
     migrate_repo()
     clean_repo()
@@ -236,6 +278,84 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     on_exit(fn -> restore_env(:tracker, prev_tracker) end)
 
     assert {:error, :sync_disabled} = Engine.sync_issue(project, "1")
+  end
+
+  describe "coalescing and enrichment gates" do
+    setup do
+      prev_min = Application.get_env(:symphony_elixir, :tracker_sync_min_pull_ms)
+      prev_ttl = Application.get_env(:symphony_elixir, :tracker_pr_sync_ttl_ms)
+      reset_enrich_markers()
+
+      on_exit(fn ->
+        restore_env(:tracker_sync_min_pull_ms, prev_min)
+        restore_env(:tracker_pr_sync_ttl_ms, prev_ttl)
+      end)
+
+      :ok
+    end
+
+    test "a second sync within the min pull interval is coalesced to push-only", %{project: project} do
+      Application.put_env(:symphony_elixir, :tracker_sync_min_pull_ms, 60_000)
+
+      assert {:ok, first} = Engine.sync_project(project, driver: FakeDriver, pr_driver: FakeDriver)
+      assert first.pulled == 1
+      refute first.skipped_pull
+      assert_received {:fake_pull, :called}
+
+      assert {:ok, second} = Engine.sync_project(project, driver: FakeDriver, pr_driver: FakeDriver)
+      assert second.skipped_pull
+      assert second.pulled == 0
+      refute_received {:fake_pull, :called}
+    end
+
+    test "force bypasses the min pull interval", %{project: project} do
+      Application.put_env(:symphony_elixir, :tracker_sync_min_pull_ms, 60_000)
+
+      assert {:ok, _first} = Engine.sync_project(project, driver: FakeDriver, pr_driver: FakeDriver)
+      assert_received {:fake_pull, :called}
+
+      assert {:ok, forced} =
+               Engine.sync_project(project, driver: FakeDriver, pr_driver: FakeDriver, force: true)
+
+      refute forced.skipped_pull
+      assert forced.pulled == 1
+      assert_received {:fake_pull, :called}
+    end
+
+    test "only active-state issues are enriched with pull requests", %{project: project} do
+      assert {:ok, summary} =
+               Engine.sync_project(project, driver: MixedStateDriver, pr_driver: RecordingPrDriver)
+
+      assert summary.pulled == 2
+      assert summary.enriched == 1
+
+      assert_received {:pr_pull, "1"}
+      refute_received {:pr_pull, "2"}
+
+      prs = Repo.all(SymphonyElixir.Tracker.Sync.PullRequestRecord)
+      assert Enum.map(prs, & &1.remote_id) == ["PR_1"]
+    end
+
+    test "enrichment is skipped for an issue re-enriched within the TTL", %{project: project} do
+      Application.put_env(:symphony_elixir, :tracker_pr_sync_ttl_ms, 60_000)
+
+      assert {:ok, first} =
+               Engine.sync_project(project, driver: FakeDriver, pr_driver: RecordingPrDriver, force: true)
+
+      assert first.enriched == 1
+      assert_received {:pr_pull, "1"}
+
+      assert {:ok, second} =
+               Engine.sync_project(project, driver: FakeDriver, pr_driver: RecordingPrDriver, force: true)
+
+      assert second.enriched == 0
+      refute_received {:pr_pull, "1"}
+    end
+  end
+
+  defp reset_enrich_markers do
+    if :ets.whereis(@enrich_table) != :undefined, do: :ets.delete_all_objects(@enrich_table)
+    :ok
   end
 
   defp restore_env(key, nil), do: Application.delete_env(:symphony_elixir, key)

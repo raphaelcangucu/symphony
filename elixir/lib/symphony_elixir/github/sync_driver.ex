@@ -15,13 +15,7 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
   @impl true
   def pull(%Project{} = project, _opts) do
     with {:ok, dtos} <- adapter().list_issues(project, []) do
-      issues =
-        Enum.map(dtos, fn dto ->
-          comments = fetch_comments(project, dto.identifier)
-          Normalize.issue(dto, comments: comments)
-        end)
-
-      {:ok, issues}
+      {:ok, Enum.map(dtos, &Normalize.issue(&1, comments: []))}
     end
   end
 
@@ -103,13 +97,6 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
   defp normalize_state(state) when state in ["open", "closed", "merged"], do: state
   defp normalize_state("draft"), do: "open"
   defp normalize_state(_state), do: "closed"
-
-  defp fetch_comments(project, identifier) do
-    case adapter().list_comments(project, identifier) do
-      {:ok, comments} -> comments
-      {:error, _reason} -> []
-    end
-  end
 
   defp adapter, do: Application.get_env(:symphony_elixir, :github_sync_adapter, SymphonyElixir.GitHub.IssueAdapter)
 

@@ -24,7 +24,13 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   @default_max_attempts 5
 
-  @type summary :: %{pushed: non_neg_integer(), failed: non_neg_integer(), pulled: non_neg_integer()}
+  @type summary :: %{
+          required(:pushed) => non_neg_integer(),
+          required(:failed) => non_neg_integer(),
+          required(:pulled) => non_neg_integer(),
+          optional(:skipped_pull) => boolean(),
+          optional(:enriched) => non_neg_integer()
+        }
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
@@ -44,26 +50,64 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     :ok
   end
 
-  @doc "Synchronously sync one project. Returns a `summary`."
+  @doc """
+  Synchronously sync one project. Returns a `summary`.
+
+  Queued outbox writes are always pushed, but the remote pull is coalesced: a
+  project pulled more recently than `InstanceConfig.tracker_sync_min_pull_ms/0`
+  is skipped (`skipped_pull: true`) unless `force: true` is passed. This keeps a
+  fast orchestrator poll from multiplying GitHub reads.
+  """
   @spec sync_project(map(), keyword()) :: {:ok, summary()} | {:error, term()}
   def sync_project(project, opts \\ []) do
     driver = Keyword.fetch!(opts, :driver)
-    pr_driver = Keyword.get(opts, :pr_driver, SymphonyElixir.GitHub.SyncDriver)
     max_attempts = Keyword.get(opts, :max_attempts, @default_max_attempts)
 
     mark_state(project, %{status: "syncing"})
 
-    with {:ok, push_summary} <- push_outbox(project, driver, max_attempts),
-         :ok <- seed_statuses(project),
-         {:ok, pulled} <- pull_remote(project, driver, pr_driver) do
-      mark_state(project, success_attrs(project))
-      {:ok, Map.put(push_summary, :pulled, pulled)}
+    with {:ok, push_summary} <- push_outbox(project, driver, max_attempts) do
+      if pull_due?(project, Keyword.get(opts, :force, false)) do
+        finish_with_pull(project, driver, opts, push_summary)
+      else
+        mark_state(project, push_only_attrs())
+        {:ok, Map.merge(push_summary, %{pulled: 0, skipped_pull: true})}
+      end
     else
       {:error, reason} = error ->
         mark_state(project, %{status: "error", last_error: inspect(reason)})
         error
     end
   end
+
+  defp finish_with_pull(project, driver, opts, push_summary) do
+    pr_driver = Keyword.get(opts, :pr_driver, SymphonyElixir.GitHub.SyncDriver)
+
+    with :ok <- seed_statuses(project),
+         {:ok, %{pulled: pulled, enriched: enriched}} <- pull_remote(project, driver, pr_driver) do
+      mark_state(project, success_attrs(project))
+      {:ok, Map.merge(push_summary, %{pulled: pulled, enriched: enriched, skipped_pull: false})}
+    else
+      {:error, reason} = error ->
+        mark_state(project, %{status: "error", last_error: inspect(reason)})
+        error
+    end
+  end
+
+  # Forced syncs always pull. Otherwise pull only when the project has never been
+  # pulled or the last pull is older than the configured minimum interval.
+  defp pull_due?(_project, true), do: true
+
+  defp pull_due?(project, false) do
+    case Repo.get_by(StateRecord, project_id: project.id) do
+      %StateRecord{last_pull_at: %DateTime{} = last_pull_at} ->
+        DateTime.diff(now(), last_pull_at, :millisecond) >= min_pull_interval_ms()
+
+      _ ->
+        true
+    end
+  end
+
+  defp min_pull_interval_ms, do: SymphonyElixir.InstanceConfig.tracker_sync_min_pull_ms()
 
   @doc """
   Force-sync a single issue straight from the remote, bypassing the background
@@ -238,7 +282,10 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   end
 
   @impl true
-  def init(opts), do: {:ok, %{driver_for: Keyword.get(opts, :driver_for, &default_driver_for/1)}}
+  def init(opts) do
+    ensure_enrich_table()
+    {:ok, %{driver_for: Keyword.get(opts, :driver_for, &default_driver_for/1)}}
+  end
 
   @impl true
   def handle_cast({:sync_all, opts}, state) do
@@ -263,7 +310,11 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   @doc "Emits a structured, single-line sync summary for observability."
   @spec log_summary(map(), summary()) :: :ok
   def log_summary(project, summary) do
-    Logger.info("tracker_sync project=#{project.slug} pushed=#{summary.pushed} failed=#{summary.failed} pulled=#{summary.pulled}")
+    Logger.info(
+      "tracker_sync project=#{project.slug} pushed=#{summary.pushed} failed=#{summary.failed} " <>
+        "pulled=#{summary.pulled} enriched=#{Map.get(summary, :enriched, 0)} " <>
+        "skipped_pull=#{Map.get(summary, :skipped_pull, false)}"
+    )
   end
 
   # -- push --------------------------------------------------------------------
@@ -310,23 +361,73 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   # -- pull --------------------------------------------------------------------
 
+  # The background pull is "light": the driver returns issue metadata only (no
+  # per-issue comments). Comments and pull requests are enriched from the remote
+  # only for issues in an active state, and at most once per
+  # `InstanceConfig.tracker_pr_sync_ttl_ms/0`, so a routine pull does not spend a
+  # GitHub call per issue on boards that are mostly idle.
   defp pull_remote(project, driver, pr_driver) do
     case driver.pull(project, []) do
       {:ok, issues} ->
-        Enum.each(issues, &upsert_with_prs(project, &1, pr_driver))
-        {:ok, length(issues)}
+        active = active_state_set(project)
+        enriched = Enum.reduce(issues, 0, fn remote, acc -> acc + upsert_one(project, remote, pr_driver, active) end)
+        {:ok, %{pulled: length(issues), enriched: enriched}}
 
       {:error, _reason} = error ->
         error
     end
   end
 
-  defp upsert_with_prs(project, remote, pr_driver) do
-    case LocalStore.upsert_remote_issue(project, remote) do
-      {:ok, issue} -> sync_pull_requests(project, issue, pr_driver)
-      {:error, _reason} -> :ok
+  # Returns 1 when the issue was enriched (comments + PRs), 0 otherwise.
+  defp upsert_one(project, remote, pr_driver, active) do
+    if enrich?(project, remote, active) do
+      enrich_issue(project, remote, pr_driver)
+    else
+      LocalStore.upsert_remote_issue(project, remote)
+      0
     end
   end
+
+  defp enrich_issue(project, remote, pr_driver) do
+    identifier = remote[:identifier]
+    comments = enrich_comments(project, identifier)
+
+    case LocalStore.upsert_remote_issue(project, Map.put(remote, :comments, comments)) do
+      {:ok, issue} ->
+        sync_pull_requests(project, issue, pr_driver)
+        mark_enriched(project, identifier)
+        1
+
+      {:error, _reason} ->
+        0
+    end
+  end
+
+  defp enrich?(project, remote, active) do
+    active_state?(remote[:state], active) and enrich_ttl_due?(project, remote[:identifier])
+  end
+
+  defp active_state?(state, active) when is_binary(state), do: MapSet.member?(active, normalize_state(state))
+  defp active_state?(_state, _active), do: false
+
+  defp active_state_set(project) do
+    project
+    |> SymphonyElixir.ProjectConfig.resolve()
+    |> Map.get(:active_states)
+    |> List.wrap()
+    |> Enum.map(&normalize_state/1)
+    |> MapSet.new()
+  end
+
+  defp enrich_comments(project, identifier) do
+    case IssueAdapter.remote_for(project.tracker_kind) do
+      nil -> []
+      adapter -> remote_comments(adapter, project, identifier)
+    end
+  end
+
+  defp normalize_state(state) when is_binary(state), do: state |> String.trim() |> String.downcase()
+  defp normalize_state(_state), do: ""
 
   defp sync_pull_requests(project, issue, pr_driver) do
     case pr_driver.pull_pull_requests(project, issue) do
@@ -354,6 +455,10 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     end
   end
 
+  # A coalesced (push-only) sync leaves `last_pull_at` untouched so the pull gate
+  # still measures against the last real remote pull.
+  defp push_only_attrs, do: %{status: "idle", last_push_at: now(), last_error: nil}
+
   defp sync_enabled_projects do
     if SymphonyElixir.Config.tracker_sync_enabled?() do
       Context.list_projects() |> Enum.filter(&sync_enabled?/1)
@@ -372,6 +477,63 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
       _ -> nil
     end
   end
+
+  # -- enrich TTL --------------------------------------------------------------
+  #
+  # Per-issue "last enriched at" markers live in a process-global ETS table owned
+  # by the engine. They are intentionally not persisted: a fresh boot simply
+  # re-enriches active issues once. When the table is absent (e.g. `sync_project/2`
+  # called directly in a test without the engine running) every issue is treated
+  # as due, preserving the pre-gate behavior.
+  @enrich_table :symphony_tracker_enrich_ttl
+
+  defp ensure_enrich_table do
+    if :ets.whereis(@enrich_table) == :undefined do
+      :ets.new(@enrich_table, [:named_table, :public, :set])
+    end
+
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp enrich_ttl_due?(project, identifier) do
+    ttl = pr_sync_ttl_ms()
+
+    cond do
+      ttl <= 0 -> true
+      :ets.whereis(@enrich_table) == :undefined -> true
+      true -> enrich_marker_expired?({project.id, identifier}, ttl)
+    end
+  end
+
+  defp enrich_marker_expired?(key, ttl) do
+    case safe_enrich_lookup(key) do
+      last when is_integer(last) -> System.monotonic_time(:millisecond) - last >= ttl
+      _ -> true
+    end
+  end
+
+  defp safe_enrich_lookup(key) do
+    case :ets.lookup(@enrich_table, key) do
+      [{^key, last}] -> last
+      _ -> nil
+    end
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp mark_enriched(project, identifier) do
+    if :ets.whereis(@enrich_table) != :undefined do
+      :ets.insert(@enrich_table, {{project.id, identifier}, System.monotonic_time(:millisecond)})
+    end
+
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp pr_sync_ttl_ms, do: SymphonyElixir.InstanceConfig.tracker_pr_sync_ttl_ms()
 
   defp now, do: DateTime.utc_now()
 

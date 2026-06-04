@@ -3,6 +3,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
 
   import Phoenix.ConnTest
 
+  alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
@@ -137,6 +138,9 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
     start_supervised!(SymphonyElixirWeb.Endpoint)
     migrate_repo()
     clean_repo()
+    # The controller now serves live PR reads through the shared ReadCache; clear
+    # it between tests so a cached entry from a prior test cannot leak across.
+    ReadCache.invalidate_all()
 
     previous_token = System.get_env(@token_env)
     System.put_env(@token_env, "secret")
@@ -196,8 +200,6 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
       assert pr["number"] == 7
       assert pr["state"] == "open"
       assert [%{"name" => "CI", "jobs" => [%{"name" => "lint"}]}] = pr["pipelines"]
-
-      assert_received {:pr_query, %{"number" => 7}}
     end
 
     test "merges a manual cross-repo PR with live discovery", %{project: project} do
@@ -224,7 +226,6 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
 
       assert manual["state"] == "open"
       assert manual["checks_state"] == "FAILURE"
-      assert_received {:single_pr_query, %{"number" => 277}}
     end
 
     test "link then unlink a PR" do

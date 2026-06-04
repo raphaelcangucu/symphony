@@ -229,6 +229,46 @@ delete the cache and restart so bootstrap can resolve `viewer { login }`.
 3. Wait one poll cycle (default 60s) for admission and state initialization.
 4. Check the orchestrator log for `Admission failed for issue ...` warnings.
 
+## GitHub Rate Limits & Polling Cadence
+
+If GitHub returns repeated `403`/`429` rate-limit errors, Symphony is reading from
+GitHub more often than the token's quota allows. Reads come from a few places, and
+most are served from the local SQLite mirror — the background sync engine is the
+main spender of GitHub quota.
+
+### Who calls GitHub
+
+| Source | When | Cost |
+|--------|------|------|
+| Background sync (`Tracker.Sync.Engine` → `GitHub.SyncDriver`) | Every poll, per sync-enabled project | One light `list_issues` (paginated) per pull, plus comments + PRs only for issues in an **active state** |
+| Orchestrator poll loop | Every `SYMPHONY_POLL_INTERVAL_MS` | Reads candidate issues from the **local mirror** (no GitHub call) and requests a (coalesced) sync |
+| PR drawer / board (`PullRequestController`) | On demand from the UI | Live PR + checks reads, cached for 60s in the shared `ReadCache` |
+| Agent open-PR check (`AgentRunner`) | Each turn for `In Progress` GitHub issues | One open-PR lookup, cached per repo+issue for ~2 minutes |
+| On-demand "Sync from remote" (`Engine.sync_issue/3`) | When a user clicks it | Full enrich (issue + comments + PRs) for that single issue |
+
+### Tuning knobs
+
+These are process-level (instance-wide) settings; set them in `elixir/.env`
+(sourced by `make serve`) and restart Symphony.
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `SYMPHONY_POLL_INTERVAL_MS` | `60000` | Orchestrator poll cadence. Lower it for faster dispatch of newly-assigned issues; it does not by itself add GitHub reads (dispatch reads the local mirror). |
+| `SYMPHONY_TRACKER_SYNC_MIN_PULL_MS` | `60000` | Minimum spacing between remote pulls for a single project. A pull requested sooner is coalesced to a push-only sync (queued writes still flush). |
+| `SYMPHONY_TRACKER_PR_SYNC_TTL_MS` | `300000` | An issue's pull requests/comments are re-enriched from GitHub at most once per this window during background sync. |
+
+To pick up dispatches quickly without hammering GitHub, keep a short poll interval
+and a longer pull/enrich interval, e.g.:
+
+```bash
+SYMPHONY_POLL_INTERVAL_MS=5000
+SYMPHONY_TRACKER_SYNC_MIN_PULL_MS=60000
+SYMPHONY_TRACKER_PR_SYNC_TTL_MS=300000
+```
+
+Watch the structured `tracker_sync ...` log lines to confirm the cadence: a coalesced
+sync logs `skipped_pull=true`, and a pull reports how many issues it `enriched`.
+
 ## Creating Issues From the Tracker UI
 
 The tracker "Create issue" modal creates issues for **local, GitHub, and Linear**

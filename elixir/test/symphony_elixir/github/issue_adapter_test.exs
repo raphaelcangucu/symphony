@@ -46,6 +46,50 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     end
   end
 
+  defmodule PaginatedClientStub do
+    def graphql(_query, %{"after" => nil}, _opts), do: page("PVTI_1", "I_1", 7, true, "CURSOR_1")
+    def graphql(_query, %{"after" => "CURSOR_1"}, _opts), do: page("PVTI_2", "I_2", 8, false, nil)
+
+    defp page(item_id, issue_id, number, has_next, cursor) do
+      {:ok,
+       %{
+         "data" => %{
+           "node" => %{
+             "items" => %{
+               "nodes" => [
+                 %{
+                   "id" => item_id,
+                   "content" => %{
+                     "__typename" => "Issue",
+                     "id" => issue_id,
+                     "number" => number,
+                     "title" => "Issue #{number}",
+                     "body" => nil,
+                     "url" => "https://x/#{number}",
+                     "assignees" => %{"nodes" => []},
+                     "labels" => %{"nodes" => []},
+                     "createdAt" => "2026-05-28T00:00:00Z",
+                     "updatedAt" => "2026-05-28T00:00:00Z"
+                   },
+                   "fieldValues" => %{
+                     "nodes" => [
+                       %{
+                         "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                         "name" => "Todo",
+                         "field" => %{"name" => "Symphony State"}
+                       }
+                     ]
+                   }
+                 }
+               ],
+               "pageInfo" => %{"hasNextPage" => has_next, "endCursor" => cursor}
+             }
+           }
+         }
+       }}
+    end
+  end
+
   defmodule UnauthorizedClientStub do
     def graphql(_query, _vars, _opts), do: {:error, {:github_api_status, 401}}
   end
@@ -77,6 +121,13 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
   test "list_issues returns DTOs from the board" do
     assert {:ok, [%IssueDTO{identifier: "7", title: "Remote", status: %{name: "Todo"}}]} =
              IssueAdapter.list_issues(project(), [])
+  end
+
+  test "list_issues follows pageInfo cursors across pages" do
+    Application.put_env(:symphony_elixir, :github_client_module, PaginatedClientStub)
+
+    assert {:ok, issues} = IssueAdapter.list_issues(project(), [])
+    assert Enum.map(issues, & &1.identifier) == ["7", "8"]
   end
 
   test "maps 401 to :remote_unauthorized" do

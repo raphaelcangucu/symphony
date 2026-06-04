@@ -113,6 +113,13 @@ config :symphony_elixir, SymphonyElixir.Repo,
 # instead of binding a port (which would collide with a running dev server).
 if Mix.env() == :test do
   config :symphony_elixir, server_port: nil
+
+  # Keep the background-sync coalescing/enrich gates inert under :test so the sync
+  # suites pull (and enrich active issues) on every `sync_project/2` call, as they
+  # did before these gates existed. Tests that exercise the gates opt into a
+  # non-zero interval via `Application.put_env/3`.
+  config :symphony_elixir, :tracker_sync_min_pull_ms, 0
+  config :symphony_elixir, :tracker_pr_sync_ttl_ms, 0
 end
 
 config :symphony_elixir, SymphonyElixirWeb.Endpoint,

@@ -214,7 +214,9 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp maybe_dispatch(%State{} = state) do
-    SymphonyElixir.Tracker.Sync.Engine.request_sync(force: true)
+    # Non-forced so the engine's per-project pull gate (tracker_sync_min_pull_ms)
+    # coalesces remote pulls; the poll still flushes queued outbox writes.
+    SymphonyElixir.Tracker.Sync.Engine.request_sync()
     state = reconcile_running_issues(state)
 
     with :ok <- global_config_gate(),
