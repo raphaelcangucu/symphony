@@ -98,18 +98,18 @@ defmodule SymphonyElixir.LocalTracker.TemplatesTest do
   end
 
   test "update_template returns error for unknown slug" do
-    assert {:error, :template_not_found} = Templates.update_template("missing", %{"name" => "Nope"})
+    assert {:error, {:template_not_found, "missing"}} = Templates.update_template("missing", %{"name" => "Nope"})
   end
 
   test "delete_template removes the template" do
     {:ok, _template} = Templates.create_template(%{"name" => "Doomed", "slug" => "doomed"})
 
     assert {:ok, _deleted} = Templates.delete_template("doomed")
-    assert {:error, :template_not_found} = Templates.get_template("doomed")
+    assert {:error, {:template_not_found, "doomed"}} = Templates.get_template("doomed")
   end
 
   test "delete_template returns error for unknown slug" do
-    assert {:error, :template_not_found} = Templates.delete_template("missing")
+    assert {:error, {:template_not_found, "missing"}} = Templates.delete_template("missing")
   end
 
   test "create_template rolls back when a repository is invalid" do
@@ -121,7 +121,7 @@ defmodule SymphonyElixir.LocalTracker.TemplatesTest do
              })
 
     assert changeset.errors[:clone_url]
-    assert {:error, :template_not_found} = Templates.get_template("bad")
+    assert {:error, {:template_not_found, "bad"}} = Templates.get_template("bad")
   end
 
   test "update_template rolls back when a replacement repository is invalid" do
@@ -222,6 +222,13 @@ defmodule SymphonyElixir.LocalTracker.TemplatesTest do
 
   test "list_clone_jobs returns empty list for unknown project" do
     assert Templates.list_clone_jobs("nope") == []
+  end
+
+  test "resolve_slug maps legacy shorthand slugs" do
+    {:ok, _template} = Templates.create_template(%{"name" => "Full-stack", "slug" => "multi-repo-fullstack"})
+    assert {:ok, "multi-repo-fullstack"} = Templates.resolve_slug("multi-repo")
+    assert {:ok, template} = Templates.get_template("multi-repo")
+    assert template.slug == "multi-repo-fullstack"
   end
 
   test "import_builtins seeds templates idempotently" do

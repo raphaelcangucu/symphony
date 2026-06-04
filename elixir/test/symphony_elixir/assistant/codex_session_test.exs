@@ -139,6 +139,33 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     assert is_function(Keyword.get(opts, :tool_executor), 2)
   end
 
+  test "send_message_to_thread/4 threads instance codex config for freeform chats" do
+    previous = Application.get_env(:symphony_elixir, :codex_approval_policy)
+
+    on_exit(fn ->
+      if previous == nil do
+        Application.delete_env(:symphony_elixir, :codex_approval_policy)
+      else
+        Application.put_env(:symphony_elixir, :codex_approval_policy, previous)
+      end
+    end)
+
+    Application.put_env(:symphony_elixir, :codex_approval_policy, "never")
+
+    {:ok, thread} = SymphonyElixir.Assistant.History.create_freeform_thread(%{title: "F", workspace_path: tmp_dir()})
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(self(), {:freeform_opts, opts})
+      {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct-1", turn_id: "t-1"}}
+    end
+
+    assert {:ok, _result} =
+             SymphonyElixir.Assistant.CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
+
+    assert_receive {:freeform_opts, opts}
+    assert Keyword.get(opts, :codex_config)["approval_policy"] == "never"
+  end
+
   describe "send_message_to_issue_thread/4" do
     setup do
       {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
@@ -373,7 +400,8 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
       assert Keyword.get(opts, :codex_config) == %{
                "approval_policy" => "never",
-               "command" => "codex app-server"
+               "command" => "codex app-server",
+               "thread_sandbox" => "workspace-write"
              }
     end
 

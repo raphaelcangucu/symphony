@@ -62,6 +62,33 @@ defmodule SymphonyElixir.Assistant.ProjectBoardToolsTest do
     get_project = Enum.find(ProjectBoardTools.tool_specs(), &(&1["name"] == "get_project"))
     assert "project_slug" in get_project["inputSchema"]["required"]
     assert Map.has_key?(get_project["inputSchema"]["properties"], "project_slug")
+
+    list_repos = Enum.find(ProjectBoardTools.tool_specs(), &(&1["name"] == "list_project_repositories"))
+    assert "project_slug" in list_repos["inputSchema"]["required"]
+  end
+
+  test "update_project_repositories is exposed through the freeform board tools" do
+    {:ok, _project} =
+      Context.create_workspace_project(%{
+        "name" => "Board Repos",
+        "slug" => "board-repos",
+        "tracker" => %{"kind" => "local"},
+        "workflow_statuses" => [%{"name" => "Todo", "category" => "todo", "position" => 1, "is_terminal" => false}],
+        "repositories" => [],
+        "setup" => %{}
+      })
+
+    response =
+      ToolExecutor.freeform_codex_tool_executor().("update_project_repositories", %{
+        "project_slug" => "board-repos",
+        "repositories" => [
+          %{"github_full_name" => "acme/web", "workspace_path" => "board-repos/web", "role" => "frontend"}
+        ]
+      })
+
+    assert response["success"] == true
+    assert response["toolResult"]["tool"] == "update_project_repositories"
+    assert hd(response["toolResult"]["data"]["repositories"])["github_full_name"] == "acme/web"
   end
 
   test "freeform end-to-end: list projects, list issues, move issue (macro-markets scenario)" do

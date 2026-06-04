@@ -8,7 +8,7 @@ defmodule SymphonyElixir.Assistant.ReadTools do
   alias SymphonyElixir.Workspace
   alias SymphonyElixirWeb.{TemplatePresenter, TrackerPresenter}
 
-  @tools ~w(get_issue get_project get_template get_workflow read_workspace_file)
+  @tools ~w(get_issue get_project list_project_repositories get_template list_templates get_workflow read_workspace_file)
   @max_read_bytes 65_536
   @default_list_limit 20
   @max_list_limit 100
@@ -45,8 +45,17 @@ defmodule SymphonyElixir.Assistant.ReadTools do
         }
       ),
       tool_spec(
+        "list_project_repositories",
+        "List repositories linked to this project in Symphony (persisted metadata). Compare with get_workflow when workflow front matter declares more repos than settings show.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "properties" => %{}
+        }
+      ),
+      tool_spec(
         "get_template",
-        "Fetch one workspace template by slug.",
+        "Fetch one workspace template by slug. Call list_templates first when unsure of slugs (e.g. multi-repo-fullstack, not multi-repo).",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -61,8 +70,17 @@ defmodule SymphonyElixir.Assistant.ReadTools do
         }
       ),
       tool_spec(
+        "list_templates",
+        "List workspace templates stored in Symphony (slug, name, description). Use before get_template.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "properties" => %{}
+        }
+      ),
+      tool_spec(
         "get_workflow",
-        "Fetch this project's workflow markdown (YAML front matter + prompt body) as stored in its settings.",
+        "Fetch this project's workflow markdown (YAML front matter + prompt body) from project settings. This is the source of truth — not a WORKFLOW.md file in the workspace.",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -71,7 +89,7 @@ defmodule SymphonyElixir.Assistant.ReadTools do
       ),
       tool_spec(
         "read_workspace_file",
-        "Read a text file under the project explore workspace or an issue workspace (path relative to workspace root).",
+        "Read a text file under the project explore workspace or an issue workspace (path relative to workspace root). For workflow markdown use get_workflow instead of WORKFLOW.md.",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -123,6 +141,31 @@ defmodule SymphonyElixir.Assistant.ReadTools do
     end
   end
 
+  def execute(project, "list_project_repositories", _arguments, _opts) do
+    slug = project_slug(project)
+    repositories = Context.list_repositories(slug) |> Enum.map(&TrackerPresenter.repository/1)
+
+    {:ok,
+     %{
+       tool: "list_project_repositories",
+       message: "Found #{length(repositories)} linked repositor#{if length(repositories) == 1, do: "y", else: "ies"} for #{slug}.",
+       data: %{project_slug: slug, repositories: repositories}
+     }}
+  end
+
+  def execute(_project, "list_templates", _arguments, _opts) do
+    templates =
+      Templates.list_templates()
+      |> Enum.map(&TemplatePresenter.template/1)
+
+    {:ok,
+     %{
+       tool: "list_templates",
+       message: "Found #{length(templates)} workspace template(s).",
+       data: %{templates: templates}
+     }}
+  end
+
   def execute(_project, "get_template", arguments, _opts) do
     with {:ok, slug} <- normalize_required_string(Map.get(arguments, "slug"), :slug),
          format <- normalize_format(Map.get(arguments, "format")) do
@@ -169,8 +212,19 @@ defmodule SymphonyElixir.Assistant.ReadTools do
   end
 
   def execute(project, "read_workspace_file", arguments, opts) do
-    with {:ok, relative} <- normalize_required_string(Map.get(arguments, "path"), :path),
-         {:ok, base} <- workspace_base(project, arguments, opts),
+    with {:ok, relative} <- normalize_required_string(Map.get(arguments, "path"), :path) do
+      if workflow_file_path?(relative) do
+        read_workflow_as_file(project, relative, arguments)
+      else
+        read_workspace_file_contents(project, relative, arguments, opts)
+      end
+    end
+  end
+
+  def execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
+
+  defp read_workspace_file_contents(project, relative, arguments, opts) do
+    with {:ok, base} <- workspace_base(project, arguments, opts),
          {:ok, absolute} <- safe_path_under(base, relative),
          {:ok, content} <- read_file_limited(absolute),
          {:ok, slice} <- slice_lines(content, Map.get(arguments, "start_line"), Map.get(arguments, "end_line")) do
@@ -191,7 +245,34 @@ defmodule SymphonyElixir.Assistant.ReadTools do
     end
   end
 
-  def execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
+  defp read_workflow_as_file(project, relative, arguments) do
+    slug = project_slug(project)
+    markdown = project_workflow_markdown(slug)
+
+    with {:ok, slice} <- slice_lines(markdown, Map.get(arguments, "start_line"), Map.get(arguments, "end_line")) do
+      {:ok,
+       %{
+         tool: "read_workspace_file",
+         message: "Read #{relative} from project settings (workflow is not stored as a workspace file).",
+         data: %{
+           path: relative,
+           source: "project_settings",
+           project_slug: slug,
+           content: slice.content,
+           truncated: slice.truncated,
+           total_lines: slice.total_lines,
+           start_line: slice.start_line,
+           end_line: slice.end_line
+         }
+       }}
+    end
+  end
+
+  defp workflow_file_path?(path) when is_binary(path) do
+    normalized = path |> String.trim() |> String.replace("\\", "/") |> Path.basename()
+
+    String.match?(normalized, ~r/^WORKFLOW(\..+)?\.md$/i)
+  end
 
   @spec apply_list_limits([map()], map()) :: [map()]
   def apply_list_limits(issues, arguments) when is_list(issues) do

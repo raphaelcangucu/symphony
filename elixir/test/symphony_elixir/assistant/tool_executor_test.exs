@@ -278,6 +278,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "add_comment"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_pull_requests"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_preview"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_project_repositories"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "update_project_repositories"))
 
     executor = ToolExecutor.codex_tool_executor("macro-markets")
     response = executor.("list_issues", %{})
@@ -327,6 +329,27 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       assert result.data.slug == "macro-markets"
       assert is_list(result.data.statuses)
       refute Map.has_key?(result.data, :issues)
+    end
+
+    test "list_project_repositories returns persisted repository metadata" do
+      {:ok, _project} =
+        Context.create_workspace_project(%{
+          "name" => "Gamba",
+          "slug" => "gamba",
+          "tracker" => %{"kind" => "local"},
+          "workflow_statuses" => [%{"name" => "Todo", "category" => "todo", "position" => 1, "is_terminal" => false}],
+          "repositories" => [
+            %{"github_full_name" => "GambaLabs/frontend", "workspace_path" => "gamba/frontend", "role" => "frontend"},
+            %{"github_full_name" => "GambaLabs/api", "workspace_path" => "gamba/api", "role" => "backend"}
+          ],
+          "setup" => %{}
+        })
+
+      assert {:ok, result} = ToolExecutor.execute("gamba", "list_project_repositories", %{})
+      assert result.tool == "list_project_repositories"
+      assert result.data.project_slug == "gamba"
+      full_names = result.data.repositories |> Enum.map(& &1.github_full_name) |> Enum.sort()
+      assert full_names == ["GambaLabs/api", "GambaLabs/frontend"]
     end
 
     test "get_template returns json by default and yaml when requested" do
@@ -386,6 +409,84 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
 
       assert {:error, :path_escape} =
                ToolExecutor.execute("macro-markets", "read_workspace_file", %{"path" => "../outside.txt"})
+    end
+
+    test "read_workspace_file serves workflow markdown from project settings for WORKFLOW.md" do
+      markdown = "---\ntracker:\n  active_states: [Todo]\n---\n\nPrompt body"
+      {:ok, _setup} = Context.upsert_project_setup("macro-markets", %{workflow_markdown: markdown})
+
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "read_workspace_file", %{
+                 "path" => "WORKFLOW.md",
+                 "start_line" => 1,
+                 "end_line" => 3
+               })
+
+      assert result.data.source == "project_settings"
+      assert result.data.content =~ "active_states"
+      assert result.message =~ "project settings"
+    end
+
+    test "list_templates returns stored templates" do
+      assert {:ok, result} = ToolExecutor.execute("macro-markets", "list_templates", %{})
+      assert result.tool == "list_templates"
+      assert Enum.any?(result.data.templates, &(&1.slug == "reference"))
+    end
+
+    test "get_template resolves legacy multi-repo slug alias" do
+      {:ok, _template} =
+        Templates.create_template(%{
+          "name" => "Full-stack",
+          "slug" => "multi-repo-fullstack",
+          "description" => "Example"
+        })
+
+      assert {:ok, result} = ToolExecutor.execute("macro-markets", "get_template", %{"slug" => "multi-repo"})
+      assert result.data.slug == "multi-repo-fullstack"
+    end
+
+    test "update_project_repositories replaces the linked set and returns the project DTO" do
+      {:ok, _project} =
+        Context.create_workspace_project(%{
+          "name" => "Gamba",
+          "slug" => "gamba-repos",
+          "tracker" => %{"kind" => "local"},
+          "workflow_statuses" => [%{"name" => "Todo", "category" => "todo", "position" => 1, "is_terminal" => false}],
+          "repositories" => [
+            %{"github_full_name" => "GambaLabs/frontend", "workspace_path" => "gamba/frontend", "role" => "frontend"}
+          ],
+          "setup" => %{}
+        })
+
+      assert {:ok, result} =
+               ToolExecutor.execute("gamba-repos", "update_project_repositories", %{
+                 "repositories" => [
+                   %{
+                     "github_full_name" => "GambaLabs/frontend",
+                     "workspace_path" => "gamba/frontend",
+                     "role" => "frontend"
+                   },
+                   %{"github_full_name" => "GambaLabs/api", "workspace_path" => "gamba/api", "role" => "backend"},
+                   %{"github_full_name" => "GambaLabs/worker", "workspace_path" => "gamba/worker", "role" => "worker"}
+                 ]
+               })
+
+      assert result.tool == "update_project_repositories"
+      full_names = result.data.repositories |> Enum.map(& &1.github_full_name) |> Enum.sort()
+      assert full_names == ["GambaLabs/api", "GambaLabs/frontend", "GambaLabs/worker"]
+      assert length(Context.list_repositories("gamba-repos")) == 3
+    end
+
+    test "update_project_repositories rejects a non-list body" do
+      assert {:error, {:invalid_repositories, _}} =
+               ToolExecutor.execute("macro-markets", "update_project_repositories", %{"repositories" => "nope"})
+    end
+
+    test "update_project_repositories rejects invalid repository rows" do
+      assert {:error, {:invalid_changeset, _}} =
+               ToolExecutor.execute("macro-markets", "update_project_repositories", %{
+                 "repositories" => [%{"workspace_path" => "gamba/frontend", "role" => "frontend"}]
+               })
     end
 
     test "list_issues applies a default limit" do

@@ -5,7 +5,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   alias SymphonyElixir.Codex.{CodingAgent, DynamicTool}
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
-  alias SymphonyElixir.{ProjectConfig, Repo, Skills, Workspace}
+  alias SymphonyElixir.{InstanceConfig, ProjectConfig, Repo, Skills, Workspace}
 
   @history_limit 20
 
@@ -166,10 +166,11 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
     Behave like a real conversational coding assistant inside the tracker.
     Answer naturally in the user's language. Use tracker tools only when the user asks for tracker data or a concrete tracker action.
-    Prefer get_issue, get_project, get_template, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
+    Prefer get_issue, get_project, list_project_repositories, get_template, list_templates, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
+    Project workflow markdown lives in the database (use get_workflow). Do not expect WORKFLOW.md in the workspace; read_workspace_file redirects that path to project settings.
     For GitHub Projects use list_github_projects, provision_github_project, or create_github_tracker_project — or github_graphql — with Symphony's server GITHUB_TOKEN. Do not run gh/curl in the shell for tracker setup.
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
-    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_pull_requests, manage_preview (start/stop/restart/status), update_project_workflow, dispatch_codex, get_agent_executions, get_project, get_workflow, read_workspace_file.
+    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_pull_requests, manage_preview (start/stop/restart/status), update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_project, list_project_repositories, get_workflow, read_workspace_file.
     If the user asks for coding work, create or update tracker context and dispatch Codex through the tracker workflow instead of editing files directly from this chat.
     If a request is ambiguous, ask one concise clarifying question before taking action.
 
@@ -227,6 +228,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
       opts
       |> Keyword.put_new(:dynamic_tools, ToolExecutor.freeform_tool_specs())
       |> Keyword.put_new(:tool_executor, ToolExecutor.freeform_codex_tool_executor())
+      |> maybe_put_instance_codex_config()
 
     runner.(workspace, prompt, freeform_issue(), runner_opts)
     |> normalize_runner_result()
@@ -291,19 +293,18 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     |> normalize_runner_result()
   end
 
-  # Thread the project's own `codex:` section into the assistant Codex session so
-  # its `command`/`approval_policy`/sandbox are honored, mirroring AgentRunner.
-  # In production there is no process-global WORKFLOW.md, so without this the
-  # assistant falls back to the default `untrusted` approval policy and surfaces
-  # spurious command-execution approvals instead of the project's configured one.
+  # Freeform chats have no project; they use instance-level codex settings
+  # (SYMPHONY_CODEX_* env). Per-project overrides come from workflow_markdown in the DB.
   defp maybe_put_project_codex_config(opts, project_slug) when is_binary(project_slug) do
-    case resolve_project_codex_config(project_slug) do
-      %{} = codex when map_size(codex) > 0 -> Keyword.put_new(opts, :codex_config, codex)
-      _ -> opts
-    end
+    project_codex = resolve_project_codex_config(project_slug) || %{}
+    Keyword.put_new(opts, :codex_config, InstanceConfig.merge_codex_section(project_codex))
   end
 
-  defp maybe_put_project_codex_config(opts, _project_slug), do: opts
+  defp maybe_put_project_codex_config(opts, _project_slug), do: maybe_put_instance_codex_config(opts)
+
+  defp maybe_put_instance_codex_config(opts) do
+    Keyword.put_new(opts, :codex_config, InstanceConfig.codex_section())
+  end
 
   defp resolve_project_codex_config(project_slug) do
     case Context.get_project(project_slug) do
@@ -362,10 +363,10 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
     Board / issues (require project_slug): list_issues, create_issue, get_issue, update_issue, move_issue, add_comment,
     list_pull_requests, manage_preview (action: status|start|stop|restart), dispatch_codex, get_agent_executions,
-    get_project, get_workflow, read_workspace_file, update_project_workflow.
+    get_project, list_project_repositories, get_workflow, read_workspace_file, update_project_workflow, update_project_repositories.
 
-    Templates: get_template. GraphQL escape hatches: github_graphql, linear_graphql.
-    Use these structured tools instead of shell commands (gh, curl) for tracker setup and board actions.
+    Templates: list_templates, get_template (use exact slugs from list_templates, e.g. multi-repo-fullstack). GraphQL escape hatches: github_graphql, linear_graphql.
+    Use these structured tools instead of shell commands (gh, curl, ps) for tracker setup, discovery, and board actions.
 
     Recent conversation:
     #{format_history(history)}

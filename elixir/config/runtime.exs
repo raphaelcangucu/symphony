@@ -48,6 +48,8 @@ if config_env() != :test do
     codex_command:
       System.get_env("SYMPHONY_CODEX_COMMAND") ||
         "codex --config shell_environment_policy.inherit=all app-server",
+    codex_approval_policy: System.get_env("SYMPHONY_CODEX_APPROVAL_POLICY") || "never",
+    codex_thread_sandbox: System.get_env("SYMPHONY_CODEX_THREAD_SANDBOX") || "workspace-write",
     claude_command: System.get_env("SYMPHONY_CLAUDE_COMMAND") || "symphony-claude",
     default_agent_kind: System.get_env("SYMPHONY_DEFAULT_AGENT_KIND") || "codex"
 end

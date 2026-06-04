@@ -24,6 +24,9 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :status_not_found), do: not_found(conn, "status_not_found", "Status not found")
   def render(conn, :blocker_not_found), do: not_found(conn, "blocker_not_found", "Blocker not found")
   def render(conn, :template_not_found), do: not_found(conn, "template_not_found", "Template not found")
+
+  def render(conn, {:template_not_found, _slug}),
+    do: not_found(conn, "template_not_found", "Template not found")
   def render(conn, :thread_not_found), do: not_found(conn, "thread_not_found", "Assistant thread not found")
 
   def render(conn, :missing_github_token) do

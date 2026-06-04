@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Assistant.ToolSchemaTest do
 
   alias SymphonyElixir.Assistant.{ProjectBoardTools, ToolExecutor, ToolSchema}
 
-  @tools_without_required ~w(get_project get_agent_executions get_workflow list_issues)
+  @tools_without_required ~w(get_project list_project_repositories get_agent_executions get_workflow list_issues)
 
   describe "with_project_slug/1 regression (badkey on missing required)" do
     test "old map-update pattern raises badkey when schema omits required" do

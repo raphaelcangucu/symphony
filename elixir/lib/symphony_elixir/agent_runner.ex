@@ -4,7 +4,7 @@ defmodule SymphonyElixir.AgentRunner do
   """
 
   require Logger
-  alias SymphonyElixir.{CodingAgent, Config, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
+  alias SymphonyElixir.{CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.LocalTracker.Context
 
@@ -316,14 +316,15 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp open_pr_should_stop_turns?(_issue, _project_config), do: false
 
-  # Thread the project's own `codex:` section to the Codex agent so its
-  # `command`/`approval_policy`/sandbox are honored at dispatch (the agent reads
-  # the process-global section otherwise, which no longer carries per-project
-  # behavior).
-  defp maybe_put_codex_config(opts, %ProjectConfig{codex: %{} = codex}),
-    do: Keyword.put(opts, :codex_config, codex)
+  # Thread the project's `codex:` section (from DB workflow_markdown) over instance
+  # defaults so dispatch honors per-project command/approval/sandbox settings.
+  defp maybe_put_codex_config(opts, %ProjectConfig{codex: project_codex}) when is_map(project_codex) do
+    Keyword.put(opts, :codex_config, InstanceConfig.merge_codex_section(project_codex))
+  end
 
-  defp maybe_put_codex_config(opts, _project_config), do: opts
+  defp maybe_put_codex_config(opts, _project_config) do
+    Keyword.put(opts, :codex_config, InstanceConfig.codex_section())
+  end
 
   defp project_max_turns(%ProjectConfig{max_turns: n}) when is_integer(n) and n > 0, do: n
   defp project_max_turns(_project_config), do: Config.agent_max_turns()

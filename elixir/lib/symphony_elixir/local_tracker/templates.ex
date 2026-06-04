@@ -18,7 +18,13 @@ defmodule SymphonyElixir.LocalTracker.Templates do
 
   alias SymphonyElixir.Repo
 
-  @type error :: :template_not_found | :project_not_found | Ecto.Changeset.t()
+  @type error :: {:template_not_found, String.t()} | :project_not_found | Ecto.Changeset.t()
+
+  # Legacy / shorthand slugs the assistant may still use after renames.
+  @slug_aliases %{
+    "multi-repo" => "multi-repo-fullstack",
+    "single-repo" => "single-repo-elixir"
+  }
 
   @spec list_templates() :: [WorkspaceTemplate.t()]
   def list_templates do
@@ -28,11 +34,37 @@ defmodule SymphonyElixir.LocalTracker.Templates do
     |> Repo.all()
   end
 
-  @spec get_template(String.t()) :: {:ok, WorkspaceTemplate.t()} | {:error, :template_not_found}
+  @spec resolve_slug(String.t()) :: {:ok, String.t()} | {:error, {:template_not_found, String.t()}}
+  def resolve_slug(slug) when is_binary(slug) do
+    trimmed = String.trim(slug)
+
+    candidates =
+      [trimmed, Map.get(@slug_aliases, String.downcase(trimmed))]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    case Enum.find_value(candidates, fn candidate ->
+           case Repo.get_by(WorkspaceTemplate, slug: candidate) do
+             nil -> nil
+             _template -> candidate
+           end
+         end) do
+      nil -> {:error, {:template_not_found, trimmed}}
+      resolved -> {:ok, resolved}
+    end
+  end
+
+  @spec get_template(String.t()) :: {:ok, WorkspaceTemplate.t()} | {:error, {:template_not_found, String.t()}}
   def get_template(slug) when is_binary(slug) do
-    case Repo.get_by(WorkspaceTemplate, slug: slug) do
-      nil -> {:error, :template_not_found}
-      template -> {:ok, Repo.preload(template, :repositories)}
+    case resolve_slug(slug) do
+      {:ok, resolved} ->
+        case Repo.get_by(WorkspaceTemplate, slug: resolved) do
+          nil -> {:error, {:template_not_found, String.trim(slug)}}
+          template -> {:ok, Repo.preload(template, :repositories)}
+        end
+
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -66,7 +98,7 @@ defmodule SymphonyElixir.LocalTracker.Templates do
     end
   end
 
-  @spec delete_template(String.t()) :: {:ok, WorkspaceTemplate.t()} | {:error, :template_not_found}
+  @spec delete_template(String.t()) :: {:ok, WorkspaceTemplate.t()} | {:error, {:template_not_found, String.t()}}
   def delete_template(slug) do
     with {:ok, template} <- get_template(slug) do
       Repo.delete(template)
@@ -105,7 +137,7 @@ defmodule SymphonyElixir.LocalTracker.Templates do
     end
   end
 
-  @spec export_yaml(String.t()) :: {:ok, binary()} | {:error, :template_not_found}
+  @spec export_yaml(String.t()) :: {:ok, binary()} | {:error, {:template_not_found, String.t()}}
   def export_yaml(slug) do
     with {:ok, template} <- get_template(slug) do
       {:ok, TemplateYaml.encode(template)}
@@ -157,7 +189,7 @@ defmodule SymphonyElixir.LocalTracker.Templates do
       with {:ok, yaml} <- File.read(path),
            {:ok, attrs} <- TemplateYaml.decode(yaml),
            slug when is_binary(slug) <- Map.get(attrs, "slug"),
-           {:error, :template_not_found} <- get_template(slug) do
+           {:error, {:template_not_found, _slug}} <- get_template(slug) do
         create_template(attrs)
       end
     end)

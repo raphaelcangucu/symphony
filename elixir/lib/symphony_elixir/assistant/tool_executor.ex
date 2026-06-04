@@ -22,6 +22,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     list_pull_requests
     manage_preview
     update_project_workflow
+    update_project_repositories
     get_agent_executions
     dispatch_codex
   )
@@ -150,6 +151,18 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           }
         }
       ),
+      tool_spec(
+        "update_project_repositories",
+        "Replace the repositories linked to this project in Symphony (same as Project Settings). Does not delete workspace files; only updates persisted metadata.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["repositories"],
+          "properties" => %{
+            "repositories" => repository_list_schema()
+          }
+        }
+      ),
       tool_spec("get_agent_executions", "List active or retrying coding-agent executions for this project.", %{
         "type" => "object",
         "additionalProperties" => false,
@@ -205,7 +218,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   # Project-agnostic tools available in freeform chat (no existing project context):
   # GitHub project provisioning, raw GraphQL, and workflow/template lookups.
-  @freeform_project_agnostic_read_tools ~w(get_template)
+  @freeform_project_agnostic_read_tools ~w(get_template list_templates)
 
   @spec freeform_tool_specs() :: [map()]
   def freeform_tool_specs do
@@ -516,6 +529,24 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
+  defp do_execute(project, "update_project_repositories", arguments, _opts) do
+    slug = project_slug(project)
+
+    with {:ok, repositories} <- normalize_repository_list(Map.get(arguments, "repositories")),
+         {:ok, _} <- replace_project_repositories(slug, repositories) do
+      statuses = Context.list_statuses(slug)
+      repositories = Context.list_repositories(slug)
+      setup = Context.get_project_setup(slug)
+
+      {:ok,
+       %{
+         tool: "update_project_repositories",
+         message: "Updated #{length(repositories)} linked repositor#{if length(repositories) == 1, do: "y", else: "ies"} for #{slug}.",
+         data: TrackerPresenter.project(project, statuses, repositories, setup)
+       }}
+    end
+  end
+
   defp do_execute(project, "get_agent_executions", _arguments, opts) do
     with {:ok, issues} <- IssueAdapter.dispatch(project, :list_issues, [[]]) do
       issue_ids = issues |> Enum.map(&to_string(&1.id)) |> MapSet.new()
@@ -660,6 +691,45 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp string_schema(description), do: %{"type" => ["string", "null"], "description" => description}
 
+  defp repository_list_schema do
+    %{
+      "type" => "array",
+      "description" =>
+        "Full replacement list. Each entry needs github_full_name, workspace_path, and role. Optional: clone_url, default_branch, selected_branch, local_path, scan_summary.",
+      "items" => %{
+        "type" => "object",
+        "additionalProperties" => true,
+        "required" => ["github_full_name", "workspace_path", "role"],
+        "properties" => %{
+          "github_full_name" => %{"type" => "string", "description" => "GitHub repo, e.g. GambaLabs/frontend."},
+          "clone_url" => string_schema("Optional git clone URL."),
+          "default_branch" => string_schema("Optional default branch from GitHub."),
+          "selected_branch" => string_schema("Optional branch Symphony checks out."),
+          "local_path" => string_schema("Optional absolute path on the host for discovery scans."),
+          "workspace_path" => %{
+            "type" => "string",
+            "description" => "Relative path under the project workspace root (unique per project)."
+          },
+          "role" => %{"type" => "string", "description" => "Repo role label, e.g. frontend or backend."},
+          "scan_summary" => %{"type" => "object", "description" => "Optional discovery metadata."}
+        }
+      }
+    }
+  end
+
+  defp normalize_repository_list(repositories) when is_list(repositories), do: {:ok, repositories}
+
+  defp normalize_repository_list(_repositories),
+    do: {:error, {:invalid_repositories, "repositories must be a list"}}
+
+  defp replace_project_repositories(slug, repositories) do
+    case Context.replace_repositories(slug, repositories) do
+      {:ok, inserted} -> {:ok, inserted}
+      {:error, %Ecto.Changeset{} = changeset} -> {:error, {:invalid_changeset, changeset}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp codex_success_response(result) do
     payload = stringify_keys(%{tool: result.tool, message: result.message, data: result.data})
 
@@ -668,6 +738,20 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       "contentItems" => [%{"type" => "inputText", "text" => encode_payload(payload)}],
       "toolResult" => payload
     }
+  end
+
+  defp codex_failure_response({:template_not_found, slug}) do
+    slugs =
+      SymphonyElixir.LocalTracker.Templates.list_templates()
+      |> Enum.map_join(", ", & &1.slug)
+
+    codex_failure_response(
+      "Template #{inspect(slug)} not found. Available templates: #{slugs}. Call list_templates for details."
+    )
+  end
+
+  defp codex_failure_response(:template_not_found) do
+    codex_failure_response({:template_not_found, "unknown"})
   end
 
   defp codex_failure_response({:unsupported_tool, tool}) do

@@ -12,11 +12,13 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     move_issue
     add_comment
     get_project
+    list_project_repositories
     get_workflow
     read_workspace_file
     list_pull_requests
     manage_preview
     update_project_workflow
+    update_project_repositories
     dispatch_codex
     get_agent_executions
   )

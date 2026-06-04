@@ -396,10 +396,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   defp global_codex_section do
-    case Config.section("codex") do
-      %{} = section -> section
-      _ -> %{}
-    end
+    SymphonyElixir.InstanceConfig.codex_section()
   end
 
   defp do_start_session(port, workspace, session_policies, opts) do

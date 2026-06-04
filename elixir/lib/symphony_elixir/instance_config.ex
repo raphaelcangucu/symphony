@@ -7,7 +7,9 @@ defmodule SymphonyElixir.InstanceConfig do
   per-OS-process and cannot be per-project: the orchestrator poll loop, the global
   agent concurrency cap, the HTTP server bind, observability, the managed editor,
   and the default agent backend command/kind. Per-project behavior lives in each
-  project's `workflow_markdown` (see `SymphonyElixir.ProjectConfig`).
+  project's DB-owned `workflow_markdown` (see `SymphonyElixir.ProjectConfig`).
+  Instance codex defaults (`approval_policy: never`) apply to freeform assistant
+  chats and as a base for per-project `codex:` overrides.
   """
 
   @default_poll_interval_ms 5_000
@@ -31,6 +33,8 @@ defmodule SymphonyElixir.InstanceConfig do
   @default_observability_heartbeat_interval_ms 5_000
   @default_observability_min_report_interval_ms 250
   @default_codex_command "codex --config shell_environment_policy.inherit=all app-server"
+  @default_codex_approval_policy "never"
+  @default_codex_thread_sandbox "workspace-write"
   @default_claude_command "symphony-claude"
   @default_agent_kind "codex"
 
@@ -146,6 +150,26 @@ defmodule SymphonyElixir.InstanceConfig do
 
   @spec codex_command() :: String.t()
   def codex_command, do: get(:codex_command, @default_codex_command)
+
+  @spec codex_approval_policy() :: String.t()
+  def codex_approval_policy, do: get(:codex_approval_policy, @default_codex_approval_policy)
+
+  @spec codex_thread_sandbox() :: String.t()
+  def codex_thread_sandbox, do: get(:codex_thread_sandbox, @default_codex_thread_sandbox)
+
+  @spec codex_section() :: map()
+  def codex_section do
+    %{
+      "command" => codex_command(),
+      "approval_policy" => codex_approval_policy(),
+      "thread_sandbox" => codex_thread_sandbox()
+    }
+  end
+
+  @spec merge_codex_section(map()) :: map()
+  def merge_codex_section(%{} = project_section) do
+    Map.merge(codex_section(), project_section)
+  end
 
   @spec claude_command() :: String.t()
   def claude_command, do: get(:claude_command, @default_claude_command)
