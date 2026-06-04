@@ -194,11 +194,13 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   defp normalize_string_list(_value), do: []
 
+  # Both coding-agent backends are always selectable per task; the process-level
+  # default (env-driven) is highlighted. The per-project default still applies
+  # when a task leaves the agent unset (resolved at dispatch time).
   defp agent_options do
     default = Config.default_agent_kind()
 
-    Config.configured_agent_kinds()
-    |> Enum.filter(&Map.has_key?(@agent_labels, &1))
+    ["codex", "claude"]
     |> Enum.map(fn kind ->
       %{value: kind, label: Map.fetch!(@agent_labels, kind), default: kind == default}
     end)
