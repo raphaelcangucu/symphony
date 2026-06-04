@@ -400,6 +400,51 @@ defmodule SymphonyElixir.Config do
 
   def validate_workflow_config(_front_matter), do: {:error, ["workflow_config must be a mapping"]}
 
+  # Sections that must NOT appear in a per-project `workflow_markdown`: connection
+  # identity (form/DB-owned) and process-level settings (env/runtime-owned).
+  @forbidden_per_project_sections ~w(github linear local server observability polling editor)
+
+  @doc """
+  Parses per-project WORKFLOW markdown (YAML front matter + prompt body).
+
+  Validates that only per-project behavior keys are present (rejecting connection
+  and process-level sections), strictly type-checks the known sections, and
+  returns the normalized (atom-keyed) front matter plus the prompt body.
+  """
+  @spec parse_workflow_markdown(String.t()) ::
+          {:ok, %{front_matter: keyword(), body: String.t()}} | {:error, String.t()}
+  def parse_workflow_markdown(markdown) when is_binary(markdown) do
+    with {:ok, %{config: raw, prompt: body}} <- SymphonyElixir.Workflow.parse_string(markdown),
+         :ok <- reject_forbidden_sections(raw),
+         :ok <- validate_workflow_config(raw),
+         {:ok, front_matter} <- safe_validate_front_matter(raw) do
+      {:ok, %{front_matter: front_matter, body: body}}
+    else
+      {:error, issues} when is_list(issues) -> {:error, Enum.join(issues, "; ")}
+      {:error, reason} -> {:error, inspect(reason)}
+    end
+  end
+
+  defp reject_forbidden_sections(raw) when is_map(raw) do
+    normalized = normalize_keys(raw)
+    present = Enum.filter(@forbidden_per_project_sections, &Map.has_key?(normalized, &1))
+
+    if present == [] do
+      :ok
+    else
+      {:error,
+       ["not allowed in per-project workflow: #{Enum.join(present, ", ")} (set these as process/connection config)"]}
+    end
+  end
+
+  defp reject_forbidden_sections(_raw), do: {:error, ["front matter must be a mapping"]}
+
+  defp safe_validate_front_matter(raw) do
+    {:ok, validate_front_matter(raw)}
+  rescue
+    error -> {:error, [Exception.message(error)]}
+  end
+
   @doc """
   Resolves the agent kind from a project's own front-matter map.
 

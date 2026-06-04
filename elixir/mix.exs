@@ -142,6 +142,7 @@ defmodule SymphonyElixir.MixProject do
       {:websockex, "~> 0.4.3"},
       {:jason, "~> 1.4"},
       {:yaml_elixir, "~> 2.12"},
+      {:ymlr, "~> 5.0"},
       {:solid, "~> 1.2"},
       {:nimble_options, "~> 1.1"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

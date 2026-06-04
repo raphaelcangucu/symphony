@@ -13,6 +13,7 @@ defmodule SymphonyElixir.ProjectConfig do
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.{Project, ProjectSetup}
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workflow
 
   @enforce_keys [:project_id, :project_slug, :tracker_kind]
   defstruct [
@@ -29,7 +30,17 @@ defmodule SymphonyElixir.ProjectConfig do
     :workspace_root,
     :after_create_hook,
     :agent_kind,
-    :prompt_template
+    :prompt_template,
+    :codex,
+    :claude,
+    :max_turns,
+    :turn_timeout_ms,
+    :read_timeout_ms,
+    :stall_timeout_ms,
+    :completion_transitions,
+    :max_concurrent_agents_by_state,
+    :dev_server,
+    :hooks
   ]
 
   @type t :: %__MODULE__{}
@@ -37,7 +48,7 @@ defmodule SymphonyElixir.ProjectConfig do
   @spec resolve(Project.t()) :: t()
   def resolve(%Project{} = project) do
     setup = load_setup(project)
-    project_front_matter = setup_front_matter(setup)
+    {project_front_matter, prompt_body} = setup_source(setup)
     opts = Config.validate_front_matter(project_front_matter)
 
     %__MODULE__{
@@ -54,7 +65,17 @@ defmodule SymphonyElixir.ProjectConfig do
       workspace_root: project_workspace_root(project_front_matter),
       after_create_hook: resolve_after_create_hook(setup, project_front_matter),
       agent_kind: Config.agent_kind_from_config(project_front_matter),
-      prompt_template: resolve_prompt(setup)
+      prompt_template: prompt_body,
+      codex: front_matter_section(project_front_matter, "codex"),
+      claude: front_matter_section(project_front_matter, "claude"),
+      max_turns: get_in(opts, [:agent, :max_turns]),
+      turn_timeout_ms: get_in(opts, [:agent, :turn_timeout_ms]),
+      read_timeout_ms: get_in(opts, [:agent, :read_timeout_ms]),
+      stall_timeout_ms: get_in(opts, [:agent, :stall_timeout_ms]),
+      completion_transitions: get_in(opts, [:agent, :completion_transitions]),
+      max_concurrent_agents_by_state: get_in(opts, [:agent, :max_concurrent_agents_by_state]),
+      dev_server: front_matter_section(project_front_matter, "dev_server"),
+      hooks: front_matter_section(project_front_matter, "hooks")
     }
   end
 
@@ -140,19 +161,46 @@ defmodule SymphonyElixir.ProjectConfig do
 
   defp load_setup(%Project{}), do: nil
 
+  # Source of truth for per-project behavior: `workflow_markdown` (parsed into
+  # front matter + prompt body), falling back to the legacy
+  # `workflow_config`/`prompt_template` columns when markdown is absent.
+  defp setup_source(%ProjectSetup{workflow_markdown: md} = setup)
+       when is_binary(md) and md != "" do
+    case Workflow.parse_string(md) do
+      {:ok, %{config: %{} = config, prompt: body}} -> {config, normalize_prompt(body)}
+      _ -> {setup_front_matter(setup), resolve_prompt(setup)}
+    end
+  end
+
+  defp setup_source(setup), do: {setup_front_matter(setup), resolve_prompt(setup)}
+
   defp setup_front_matter(%ProjectSetup{workflow_config: %{} = config}) when map_size(config) > 0,
     do: config
 
   defp setup_front_matter(_setup), do: %{}
 
-  defp resolve_prompt(%ProjectSetup{prompt_template: prompt}) when is_binary(prompt) do
+  defp resolve_prompt(%ProjectSetup{prompt_template: prompt}) when is_binary(prompt),
+    do: normalize_prompt(prompt)
+
+  defp resolve_prompt(_setup), do: nil
+
+  defp normalize_prompt(prompt) when is_binary(prompt) do
     case String.trim(prompt) do
       "" -> nil
       _ -> prompt
     end
   end
 
-  defp resolve_prompt(_setup), do: nil
+  defp normalize_prompt(_prompt), do: nil
+
+  defp front_matter_section(%{} = front_matter, key) do
+    case Map.get(front_matter, key) do
+      %{} = section -> section
+      _ -> nil
+    end
+  end
+
+  defp front_matter_section(_front_matter, _key), do: nil
 
   defp dispatch_states(opts) do
     case get_in(opts, [:tracker, :dispatch_states]) do

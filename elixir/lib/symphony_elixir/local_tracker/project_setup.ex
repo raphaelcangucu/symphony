@@ -9,6 +9,7 @@ defmodule SymphonyElixir.LocalTracker.ProjectSetup do
   @type t :: %__MODULE__{}
 
   schema "local_tracker_project_setups" do
+    field(:workflow_markdown, :string)
     field(:workflow_config, :map, default: %{})
     field(:after_create_hook, :string)
     field(:prompt_template, :string)
@@ -25,13 +26,14 @@ defmodule SymphonyElixir.LocalTracker.ProjectSetup do
     setup
     |> cast(attrs, [
       :project_id,
+      :workflow_markdown,
       :workflow_config,
       :after_create_hook,
       :prompt_template,
       :validation_commands,
       :scan_summary
     ])
-    |> validate_required([:project_id, :workflow_config, :validation_commands, :scan_summary])
+    |> validate_required([:project_id, :validation_commands, :scan_summary])
     |> unique_constraint(:project_id)
   end
 end

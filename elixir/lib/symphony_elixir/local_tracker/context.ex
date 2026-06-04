@@ -663,6 +663,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   @setup_update_fields [
+    :workflow_markdown,
     :workflow_config,
     :prompt_template,
     :after_create_hook,

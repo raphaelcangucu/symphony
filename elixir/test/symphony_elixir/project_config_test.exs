@@ -199,6 +199,48 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.after_create_hook == "echo column-wins"
   end
 
+  test "resolves states, prompt, agent_kind and agent limits from workflow_markdown" do
+    {:ok, project} = Context.ensure_project(%{name: "md", slug: "md", tracker_kind: "local"})
+
+    md = """
+    ---
+    tracker:
+      active_states: [Todo, In Progress]
+      terminal_states: [Done]
+    agent:
+      max_turns: 7
+    codex: {}
+    ---
+
+    Do {{ issue.identifier }}
+    """
+
+    {:ok, _} = Context.upsert_project_setup("md", %{"workflow_markdown" => md})
+    config = ProjectConfig.resolve(Repo.get!(Project, project.id) |> Repo.preload(:setup))
+
+    assert config.active_states == ["Todo", "In Progress"]
+    assert config.terminal_states == ["Done"]
+    assert config.prompt_template =~ "Do {{ issue.identifier }}"
+    assert config.max_turns == 7
+    assert config.agent_kind == "codex"
+    assert config.codex == %{}
+  end
+
+  test "workflow_markdown takes precedence over legacy columns" do
+    project =
+      project_with_setup("pref", %{"tracker" => %{"active_states" => ["Legacy"]}}, "legacy prompt")
+
+    {:ok, _} =
+      Context.upsert_project_setup("pref", %{
+        "workflow_markdown" => "---\ntracker:\n  active_states: [Fresh]\n---\n\nfresh prompt"
+      })
+
+    config = ProjectConfig.resolve(Repo.get!(Project, project.id) |> Repo.preload(:setup))
+
+    assert config.active_states == ["Fresh"]
+    assert config.prompt_template == "fresh prompt"
+  end
+
   defp github_project_with_setup(slug, repo, workflow_config, after_create_hook \\ nil) do
     {:ok, project} =
       Context.ensure_project(%{

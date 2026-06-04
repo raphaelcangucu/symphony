@@ -7,6 +7,32 @@ defmodule SymphonyElixir.ConfigTest do
     end
   end
 
+  describe "parse_workflow_markdown/1" do
+    test "validates behavior keys and returns front matter + body" do
+      md = "---\ntracker:\n  active_states: [Todo]\nagent:\n  max_turns: 5\n---\n\nbody"
+
+      assert {:ok, %{front_matter: fm, body: "body"}} =
+               SymphonyElixir.Config.parse_workflow_markdown(md)
+
+      assert get_in(fm, [:agent, :max_turns]) == 5
+      assert get_in(fm, [:tracker, :active_states]) == ["Todo"]
+    end
+
+    test "rejects connection and process sections" do
+      for section <- ~w(github linear local server observability polling editor) do
+        md = "---\n#{section}: {}\n---\nb"
+        assert {:error, msg} = SymphonyElixir.Config.parse_workflow_markdown(md)
+        assert msg =~ section
+      end
+    end
+
+    test "reports strict type errors" do
+      md = "---\nagent:\n  max_turns: not-an-int\n---\nb"
+      assert {:error, msg} = SymphonyElixir.Config.parse_workflow_markdown(md)
+      assert msg =~ "max_turns"
+    end
+  end
+
   describe "validate_front_matter/1" do
     test "validates an arbitrary front-matter map and applies schema defaults" do
       opts =

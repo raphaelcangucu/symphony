@@ -60,6 +60,34 @@ defmodule SymphonyElixir.Workflow do
     end
   end
 
+  @doc """
+  Parse WORKFLOW markdown text (YAML front matter + prompt body) from a string,
+  without touching the filesystem. Used by per-project `workflow_markdown`.
+  """
+  @spec parse_string(String.t()) :: {:ok, loaded_workflow()} | {:error, term()}
+  def parse_string(content) when is_binary(content), do: parse(content)
+
+  @doc """
+  Serialize a front-matter map + prompt body into WORKFLOW markdown text. Inverse
+  of `parse_string/1` for the structured front matter (round-trips behavior keys;
+  comments and key ordering are not preserved).
+  """
+  @spec to_markdown(map(), String.t()) :: String.t()
+  def to_markdown(front_matter, body) when is_map(front_matter) and is_binary(body) do
+    if map_size(front_matter) == 0 do
+      body
+    else
+      yaml = front_matter |> stringify_keys() |> Ymlr.document!() |> String.trim_trailing()
+      yaml <> "\n---\n\n" <> body
+    end
+  end
+
+  defp stringify_keys(%{} = map),
+    do: Map.new(map, fn {k, v} -> {to_string(k), stringify_keys(v)} end)
+
+  defp stringify_keys(list) when is_list(list), do: Enum.map(list, &stringify_keys/1)
+  defp stringify_keys(other), do: other
+
   defp parse(content) do
     {front_matter_lines, prompt_lines} = split_front_matter(content)
 
