@@ -68,16 +68,23 @@ defmodule SymphonyElixir.ProjectConfig do
       prompt_template: prompt_body,
       codex: front_matter_section(project_front_matter, "codex"),
       claude: front_matter_section(project_front_matter, "claude"),
-      max_turns: get_in(opts, [:agent, :max_turns]),
-      turn_timeout_ms: get_in(opts, [:agent, :turn_timeout_ms]),
-      read_timeout_ms: get_in(opts, [:agent, :read_timeout_ms]),
-      stall_timeout_ms: get_in(opts, [:agent, :stall_timeout_ms]),
-      completion_transitions: get_in(opts, [:agent, :completion_transitions]),
-      max_concurrent_agents_by_state: get_in(opts, [:agent, :max_concurrent_agents_by_state]),
+      max_turns: agent_override(project_front_matter, "max_turns"),
+      turn_timeout_ms: agent_override(project_front_matter, "turn_timeout_ms"),
+      read_timeout_ms: agent_override(project_front_matter, "read_timeout_ms"),
+      stall_timeout_ms: agent_override(project_front_matter, "stall_timeout_ms"),
+      completion_transitions: agent_override(project_front_matter, "completion_transitions"),
+      max_concurrent_agents_by_state:
+        agent_override(project_front_matter, "max_concurrent_agents_by_state"),
       dev_server: front_matter_section(project_front_matter, "dev_server"),
       hooks: front_matter_section(project_front_matter, "hooks")
     }
   end
+
+  # Per-project agent overrides are read raw (not schema-defaulted) so an unset
+  # value stays `nil` and the caller falls back to the process-level default,
+  # instead of silently masking it with the schema's filler default.
+  defp agent_override(%{} = front_matter, key), do: get_in(front_matter, ["agent", key])
+  defp agent_override(_front_matter, _key), do: nil
 
   @doc """
   Resolves a project and classifies whether it can actually run.

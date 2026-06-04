@@ -12,7 +12,10 @@ defmodule SymphonyElixir.AgentRunner do
 
   @spec run(map(), pid() | nil, keyword()) :: :ok | no_return()
   def run(issue, codex_update_recipient \\ nil, opts \\ []) do
-    opts = issue_goal_opts(issue, opts)
+    opts =
+      issue
+      |> issue_goal_opts(opts)
+      |> Keyword.put_new_lazy(:project_config, fn -> resolve_project_config(issue) end)
 
     Logger.info("Starting agent run for #{issue_context(issue)}")
 
@@ -86,6 +89,16 @@ defmodule SymphonyElixir.AgentRunner do
 
   def issue_agent_kind(_issue), do: Config.default_agent_kind()
 
+  @spec resolve_project_config(Issue.t()) :: ProjectConfig.t() | nil
+  defp resolve_project_config(%Issue{project_slug: slug}) when is_binary(slug) do
+    case Context.get_project(slug) do
+      {:ok, project} -> project |> Repo.preload(:setup) |> ProjectConfig.resolve()
+      _ -> nil
+    end
+  end
+
+  defp resolve_project_config(_issue), do: nil
+
   defp issue_goal_opts(issue, opts) do
     if Keyword.has_key?(opts, :goal) do
       opts
@@ -116,7 +129,7 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp run_codex_turns(workspace, issue, codex_update_recipient, opts) do
-    max_turns = Keyword.get(opts, :max_turns, Config.agent_max_turns())
+    max_turns = Keyword.get(opts, :max_turns, project_max_turns(Keyword.get(opts, :project_config)))
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
     agent_kind = issue_agent_kind(issue)
@@ -165,7 +178,7 @@ defmodule SymphonyElixir.AgentRunner do
            ) do
       Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
 
-      case continue_with_issue?(issue, issue_state_fetcher) do
+      case continue_with_issue?(issue, issue_state_fetcher, Keyword.get(opts, :project_config)) do
         {:continue, refreshed_issue} ->
           continue_or_stop_outer_turn_loop(
             app_session,
@@ -243,19 +256,20 @@ defmodule SymphonyElixir.AgentRunner do
     """
   end
 
-  defp continue_with_issue?(%Issue{id: issue_id} = issue, issue_state_fetcher) when is_binary(issue_id) do
+  defp continue_with_issue?(%Issue{id: issue_id} = issue, issue_state_fetcher, project_config)
+       when is_binary(issue_id) do
     case issue_state_fetcher.([issue_id]) do
       {:ok, [%Issue{} = refreshed_issue | _]} ->
         cond do
-          wait_state?(refreshed_issue.state) ->
+          wait_state?(refreshed_issue.state, project_config) ->
             {:done, refreshed_issue}
 
-          open_pr_should_stop_turns?(refreshed_issue) ->
+          open_pr_should_stop_turns?(refreshed_issue, project_config) ->
             Logger.info("Stopping agent turns for #{issue_context(refreshed_issue)}: open pull request while still in In Progress")
 
             {:done, refreshed_issue}
 
-          active_issue_state?(refreshed_issue.state) ->
+          active_issue_state?(refreshed_issue.state, project_config) ->
             {:continue, refreshed_issue}
 
           true ->
@@ -270,7 +284,7 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
-  defp continue_with_issue?(issue, _issue_state_fetcher), do: {:done, issue}
+  defp continue_with_issue?(issue, _issue_state_fetcher, _project_config), do: {:done, issue}
 
   defp goal_mode?(opts) do
     case Keyword.get(opts, :goal) do
@@ -279,23 +293,36 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
-  defp wait_state?(state_name) when is_binary(state_name) do
+  defp wait_state?(state_name, project_config) when is_binary(state_name) do
     normalized_state = normalize_issue_state(state_name)
 
-    Config.wait_states()
+    project_config
+    |> wait_states_for()
     |> Enum.any?(fn wait_state -> normalize_issue_state(wait_state) == normalized_state end)
   end
 
-  defp wait_state?(_state_name), do: false
+  defp wait_state?(_state_name, _project_config), do: false
 
-  defp open_pr_should_stop_turns?(%Issue{state: state, identifier: identifier})
+  defp open_pr_should_stop_turns?(%Issue{state: state, identifier: identifier}, project_config)
        when is_binary(state) and is_binary(identifier) do
-    Config.tracker_kind() == "github" and
+    project_tracker_kind(project_config) == "github" and
       normalize_issue_state(state) == "in progress" and
       github_issue_has_open_pull_request?(identifier)
   end
 
-  defp open_pr_should_stop_turns?(_issue), do: false
+  defp open_pr_should_stop_turns?(_issue, _project_config), do: false
+
+  defp project_max_turns(%ProjectConfig{max_turns: n}) when is_integer(n) and n > 0, do: n
+  defp project_max_turns(_project_config), do: Config.agent_max_turns()
+
+  defp active_states_for(%ProjectConfig{active_states: states}) when is_list(states), do: states
+  defp active_states_for(_project_config), do: Config.active_states()
+
+  defp wait_states_for(%ProjectConfig{wait_states: states}) when is_list(states), do: states
+  defp wait_states_for(_project_config), do: Config.wait_states()
+
+  defp project_tracker_kind(%ProjectConfig{tracker_kind: kind}) when is_binary(kind), do: kind
+  defp project_tracker_kind(_project_config), do: Config.tracker_kind()
 
   defp github_issue_has_open_pull_request?(identifier) do
     case GitHubClient.issue_has_open_pull_request?(identifier) do
@@ -304,14 +331,15 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
-  defp active_issue_state?(state_name) when is_binary(state_name) do
+  defp active_issue_state?(state_name, project_config) when is_binary(state_name) do
     normalized_state = normalize_issue_state(state_name)
 
-    Config.active_states()
+    project_config
+    |> active_states_for()
     |> Enum.any?(fn active_state -> normalize_issue_state(active_state) == normalized_state end)
   end
 
-  defp active_issue_state?(_state_name), do: false
+  defp active_issue_state?(_state_name, _project_config), do: false
 
   defp normalize_issue_state(state_name) when is_binary(state_name) do
     state_name

@@ -207,8 +207,11 @@ defmodule SymphonyElixir.ProjectConfigTest do
     tracker:
       active_states: [Todo, In Progress]
       terminal_states: [Done]
+      wait_states: [Human Review]
     agent:
       max_turns: 7
+      completion_transitions:
+        In Progress: Human Review
     codex: {}
     ---
 
@@ -220,8 +223,10 @@ defmodule SymphonyElixir.ProjectConfigTest do
 
     assert config.active_states == ["Todo", "In Progress"]
     assert config.terminal_states == ["Done"]
+    assert config.wait_states == ["Human Review"]
     assert config.prompt_template =~ "Do {{ issue.identifier }}"
     assert config.max_turns == 7
+    assert config.completion_transitions == %{"In Progress" => "Human Review"}
     assert config.agent_kind == "codex"
     assert config.codex == %{}
   end

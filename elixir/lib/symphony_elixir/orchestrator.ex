@@ -756,30 +756,60 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp apply_completion_transition(%State{} = state, issue_id) do
-    transitions = Config.completion_transitions()
+    case Tracker.fetch_issue_states_by_ids([issue_id]) do
+      {:ok, [%Issue{} = issue | _]} ->
+        apply_completion_transition_for_issue(state, issue_id, issue)
 
-    with true <- map_size(transitions) > 0,
-         {:ok, [%Issue{} = issue | _]} <- Tracker.fetch_issue_states_by_ids([issue_id]),
-         destination when is_binary(destination) <- Map.get(transitions, issue.state) do
-      case Tracker.update_issue_state(issue.id, destination) do
-        :ok ->
-          Logger.info("Moved issue after normal agent completion: #{issue_context(issue)} #{issue.state} -> #{destination}")
+      {:ok, _other} ->
+        :not_visible
 
-          {:transitioned, release_issue_claim(complete_issue(state, issue_id), issue_id)}
-
-        {:error, reason} ->
-          Logger.warning("Failed to move issue after normal completion: #{issue_context(issue)} #{issue.state} -> #{destination}: #{inspect(reason)}")
-
-          {:error, reason}
-      end
-    else
-      false -> :not_configured
-      nil -> :not_configured
-      {:ok, []} -> :not_visible
-      {:ok, _other} -> :not_visible
-      {:error, reason} -> {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
+
+  defp apply_completion_transition_for_issue(%State{} = state, issue_id, %Issue{} = issue) do
+    transitions = completion_transitions_for(issue)
+
+    case Map.get(transitions, issue.state) do
+      destination when is_binary(destination) ->
+        case Tracker.update_issue_state(issue.id, destination) do
+          :ok ->
+            Logger.info("Moved issue after normal agent completion: #{issue_context(issue)} #{issue.state} -> #{destination}")
+
+            {:transitioned, release_issue_claim(complete_issue(state, issue_id), issue_id)}
+
+          {:error, reason} ->
+            Logger.warning("Failed to move issue after normal completion: #{issue_context(issue)} #{issue.state} -> #{destination}: #{inspect(reason)}")
+
+            {:error, reason}
+        end
+
+      _no_transition ->
+        :not_configured
+    end
+  end
+
+  # Per-project completion transitions take precedence; fall back to the
+  # process-level config only when the project declares none.
+  defp completion_transitions_for(%Issue{project_slug: slug}) when is_binary(slug) do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        case project |> Repo.preload(:setup) |> ProjectConfig.resolve() do
+          %ProjectConfig{completion_transitions: %{} = transitions}
+          when map_size(transitions) > 0 ->
+            transitions
+
+          _ ->
+            Config.completion_transitions()
+        end
+
+      _ ->
+        Config.completion_transitions()
+    end
+  end
+
+  defp completion_transitions_for(_issue), do: Config.completion_transitions()
 
   # When the agent run ended incomplete (e.g. it exhausted max_turns with the issue
   # still active rather than finishing the work), the issue is still promoted per
