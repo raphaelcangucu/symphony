@@ -4,7 +4,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   alias SymphonyElixir.Assistant.{History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolCallPresenter, ToolExecutor}
   alias SymphonyElixir.Codex.{CodingAgent, DynamicTool}
   alias SymphonyElixir.Config
-  alias SymphonyElixir.{Skills, Workspace}
+  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.{ProjectConfig, Repo, Skills, Workspace}
 
   @history_limit 20
 
@@ -198,6 +199,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
       |> Keyword.put(:project_slug, project_slug)
       |> Keyword.put_new(:dynamic_tools, ToolExecutor.combined_tool_specs())
       |> Keyword.put_new(:tool_executor, ToolExecutor.combined_codex_tool_executor(project_slug))
+      |> maybe_put_project_codex_config(project_slug)
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
     |> normalize_runner_result()
@@ -211,6 +213,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
       |> Keyword.put(:project_slug, project_slug)
       |> Keyword.put_new(:dynamic_tools, ToolExecutor.combined_tool_specs())
       |> Keyword.put_new(:tool_executor, ToolExecutor.combined_codex_tool_executor(project_slug))
+      |> maybe_put_project_codex_config(project_slug)
 
     runner.(workspace, prompt, project_explore_issue(project_slug), runner_opts)
     |> normalize_runner_result()
@@ -281,9 +284,31 @@ defmodule SymphonyElixir.Assistant.CodexSession do
       |> Keyword.put_new(:workspace_root, Workspace.workspace_root_for(issue_workspace_ref(project_slug, identifier)))
       |> Keyword.put(:dynamic_tools, ToolExecutor.issue_bound_tool_specs(identifier) ++ DynamicTool.tool_specs())
       |> Keyword.put(:tool_executor, ToolExecutor.issue_bound_combined_codex_tool_executor(project_slug, identifier))
+      |> maybe_put_project_codex_config(project_slug)
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
     |> normalize_runner_result()
+  end
+
+  # Thread the project's own `codex:` section into the assistant Codex session so
+  # its `command`/`approval_policy`/sandbox are honored, mirroring AgentRunner.
+  # In production there is no process-global WORKFLOW.md, so without this the
+  # assistant falls back to the default `untrusted` approval policy and surfaces
+  # spurious command-execution approvals instead of the project's configured one.
+  defp maybe_put_project_codex_config(opts, project_slug) when is_binary(project_slug) do
+    case resolve_project_codex_config(project_slug) do
+      %{} = codex when map_size(codex) > 0 -> Keyword.put_new(opts, :codex_config, codex)
+      _ -> opts
+    end
+  end
+
+  defp maybe_put_project_codex_config(opts, _project_slug), do: opts
+
+  defp resolve_project_codex_config(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} -> project |> Repo.preload(:setup) |> ProjectConfig.resolve() |> Map.get(:codex)
+      _ -> nil
+    end
   end
 
   defp freeform_issue, do: %{id: "assistant:freeform", identifier: "freeform", title: "Freeform assistant chat"}

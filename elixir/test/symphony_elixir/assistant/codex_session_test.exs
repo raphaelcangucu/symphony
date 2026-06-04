@@ -175,8 +175,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
       {:ok, _setup} =
         Context.upsert_project_setup("distrib", %{
-          workflow_markdown:
-            SymphonyElixir.Workflow.to_markdown(%{"workspace" => %{"root" => custom_root}}, "")
+          workflow_markdown: SymphonyElixir.Workflow.to_markdown(%{"workspace" => %{"root" => custom_root}}, "")
         })
 
       issue_ref = %{id: nil, identifier: "DIS-1", project_slug: "distrib"}
@@ -341,6 +340,34 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
       assert %{"success" => true, "toolResult" => %{"tool" => "update_issue", "message" => "Updated issue MAC-1."}} =
                tool_executor.("update_issue", %{"title" => "Uses injected identifier"})
+    end
+
+    test "threads the project's codex config so its approval policy is honored", %{thread: thread} do
+      {:ok, _setup} =
+        Context.upsert_project_setup("macro", %{
+          workflow_markdown:
+            SymphonyElixir.Workflow.to_markdown(
+              %{"codex" => %{"approval_policy" => "never", "command" => "codex app-server"}},
+              "prompt body"
+            )
+        })
+
+      test_pid = self()
+
+      runner = fn _workspace, _prompt, _issue, opts ->
+        send(test_pid, {:runner_opts, opts})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+
+      assert_receive {:runner_opts, opts}
+
+      assert Keyword.get(opts, :codex_config) == %{
+               "approval_policy" => "never",
+               "command" => "codex app-server"
+             }
     end
 
     test "complex mode injects superpowers methodology into the prompt", %{thread: thread} do
