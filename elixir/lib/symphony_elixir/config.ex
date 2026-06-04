@@ -4,6 +4,7 @@ defmodule SymphonyElixir.Config do
   """
 
   alias NimbleOptions
+  alias SymphonyElixir.InstanceConfig
   alias SymphonyElixir.Workflow
 
   @default_active_states ["Todo", "In Progress"]
@@ -36,7 +37,6 @@ defmodule SymphonyElixir.Config do
   @default_public_tunnel_enabled false
   @default_public_tunnel_base_domain "tracker.cods.dev"
   @default_assistant_draft_status "Triage"
-  @default_agent_kind "codex"
   @default_github_read_interval_ms 150
   @default_github_mutation_interval_ms 1_000
   @default_github_max_retries 4
@@ -564,19 +564,11 @@ defmodule SymphonyElixir.Config do
   `:default_agent_kind` application setting and finally the `codex` code default.
   """
   @spec default_agent_kind() :: String.t()
-  def default_agent_kind do
-    kinds = configured_agent_kinds()
-
-    cond do
-      "codex" in kinds -> "codex"
-      kinds != [] -> List.first(kinds)
-      true -> Application.get_env(:symphony_elixir, :default_agent_kind, @default_agent_kind)
-    end
-  end
+  def default_agent_kind, do: InstanceConfig.default_agent_kind()
 
   @spec poll_interval_ms() :: pos_integer()
   def poll_interval_ms do
-    get_in(validated_workflow_options(), [:polling, :interval_ms])
+    InstanceConfig.poll_interval_ms()
   end
 
   @doc """
@@ -638,63 +630,37 @@ defmodule SymphonyElixir.Config do
   end
 
   @spec hook_timeout_ms() :: pos_integer()
-  def hook_timeout_ms do
-    get_in(validated_workflow_options(), [:hooks, :timeout_ms])
-  end
+  def hook_timeout_ms, do: InstanceConfig.hook_timeout_ms()
 
   @spec max_concurrent_agents() :: pos_integer()
-  def max_concurrent_agents do
-    get_in(validated_workflow_options(), [:agent, :max_concurrent_agents])
-  end
+  def max_concurrent_agents, do: InstanceConfig.max_concurrent_agents()
 
   @spec max_retry_backoff_ms() :: pos_integer()
-  def max_retry_backoff_ms do
-    get_in(validated_workflow_options(), [:agent, :max_retry_backoff_ms])
-  end
+  def max_retry_backoff_ms, do: InstanceConfig.max_retry_backoff_ms()
 
   @spec agent_max_turns() :: pos_integer()
-  def agent_max_turns do
-    get_in(validated_workflow_options(), [:agent, :max_turns])
-  end
+  def agent_max_turns, do: InstanceConfig.default_max_turns()
 
   @doc """
-  State transitions applied after a normal agent run completes.
-
-  Maps a source workflow state to the destination state the issue should move to
-  once the agent process exits normally (for example `In Progress` -> `Human Review`).
-  Defaults to an empty map, which preserves the existing active-state continuation
-  behavior.
+  Process-level fallback completion transitions. Per-project transitions are
+  resolved from each project's `workflow_markdown` via `ProjectConfig`; this is
+  only used when a project declares none. Defaults to an empty map.
   """
   @spec completion_transitions() :: %{String.t() => String.t()}
-  def completion_transitions do
-    get_in(validated_workflow_options(), [:agent, :completion_transitions])
-  end
+  def completion_transitions, do: InstanceConfig.completion_transitions()
 
   @spec max_concurrent_agents_for_state(term()) :: pos_integer()
-  def max_concurrent_agents_for_state(state_name) when is_binary(state_name) do
-    state_limits = get_in(validated_workflow_options(), [:agent, :max_concurrent_agents_by_state])
-    global_limit = max_concurrent_agents()
-    Map.get(state_limits, normalize_issue_state(state_name), global_limit)
-  end
-
-  def max_concurrent_agents_for_state(_state_name), do: max_concurrent_agents()
+  def max_concurrent_agents_for_state(state_name),
+    do: InstanceConfig.max_concurrent_agents_for_state(state_name)
 
   @spec agent_turn_timeout_ms() :: pos_integer()
-  def agent_turn_timeout_ms do
-    get_in(validated_workflow_options(), [:agent, :turn_timeout_ms])
-  end
+  def agent_turn_timeout_ms, do: InstanceConfig.turn_timeout_ms()
 
   @spec agent_read_timeout_ms() :: pos_integer()
-  def agent_read_timeout_ms do
-    get_in(validated_workflow_options(), [:agent, :read_timeout_ms])
-  end
+  def agent_read_timeout_ms, do: InstanceConfig.read_timeout_ms()
 
   @spec agent_stall_timeout_ms() :: non_neg_integer()
-  def agent_stall_timeout_ms do
-    validated_workflow_options()
-    |> get_in([:agent, :stall_timeout_ms])
-    |> max(0)
-  end
+  def agent_stall_timeout_ms, do: InstanceConfig.stall_timeout_ms()
 
   @spec workflow_prompt() :: String.t()
   def workflow_prompt do
@@ -708,99 +674,58 @@ defmodule SymphonyElixir.Config do
   end
 
   @spec observability_enabled?() :: boolean()
-  def observability_enabled? do
-    get_in(validated_workflow_options(), [:observability, :dashboard_enabled])
-  end
+  def observability_enabled?, do: InstanceConfig.observability_enabled?()
 
   @spec observability_refresh_ms() :: pos_integer()
-  def observability_refresh_ms do
-    get_in(validated_workflow_options(), [:observability, :refresh_ms])
-  end
+  def observability_refresh_ms, do: InstanceConfig.observability_refresh_ms()
 
   @spec observability_render_interval_ms() :: pos_integer()
-  def observability_render_interval_ms do
-    get_in(validated_workflow_options(), [:observability, :render_interval_ms])
-  end
+  def observability_render_interval_ms, do: InstanceConfig.observability_render_interval_ms()
 
   @spec observability_hub_url() :: String.t() | nil
-  def observability_hub_url do
-    get_in(validated_workflow_options(), [:observability, :hub_url])
-  end
+  def observability_hub_url, do: InstanceConfig.observability_hub_url()
 
   @spec observability_heartbeat_interval_ms() :: pos_integer()
-  def observability_heartbeat_interval_ms do
-    get_in(validated_workflow_options(), [:observability, :heartbeat_interval_ms])
-  end
+  def observability_heartbeat_interval_ms, do: InstanceConfig.observability_heartbeat_interval_ms()
 
   @spec observability_min_report_interval_ms() :: pos_integer()
-  def observability_min_report_interval_ms do
-    get_in(validated_workflow_options(), [:observability, :min_report_interval_ms])
-  end
+  def observability_min_report_interval_ms,
+    do: InstanceConfig.observability_min_report_interval_ms()
 
   @spec observability_label() :: String.t() | nil
-  def observability_label do
-    get_in(validated_workflow_options(), [:observability, :label])
-  end
+  def observability_label, do: InstanceConfig.observability_label()
 
   @spec observability_runtime_id() :: String.t()
   def observability_runtime_id do
-    get_in(validated_workflow_options(), [:observability, :runtime_id]) ||
-      SymphonyElixir.Workflow.workflow_file_path()
+    InstanceConfig.observability_runtime_id() || "symphony"
   end
 
   @spec server_port() :: non_neg_integer() | nil
-  def server_port do
-    case Application.get_env(:symphony_elixir, :server_port_override) do
-      port when is_integer(port) and port >= 0 ->
-        port
-
-      _ ->
-        get_in(validated_workflow_options(), [:server, :port])
-    end
-  end
+  def server_port, do: InstanceConfig.server_port()
 
   @spec server_host() :: String.t()
-  def server_host do
-    get_in(validated_workflow_options(), [:server, :host])
-  end
+  def server_host, do: InstanceConfig.server_host()
 
   @spec editor_enabled?() :: boolean()
-  def editor_enabled? do
-    get_in(validated_workflow_options(), [:editor, :enabled])
-  end
+  def editor_enabled?, do: InstanceConfig.editor_enabled?()
 
   @spec editor_binary() :: String.t()
-  def editor_binary do
-    get_in(validated_workflow_options(), [:editor, :binary])
-  end
+  def editor_binary, do: InstanceConfig.editor_binary()
 
   @spec editor_host() :: String.t()
-  def editor_host do
-    get_in(validated_workflow_options(), [:editor, :host])
-  end
+  def editor_host, do: InstanceConfig.editor_host()
 
   @spec editor_port() :: pos_integer()
-  def editor_port do
-    get_in(validated_workflow_options(), [:editor, :port])
-  end
+  def editor_port, do: InstanceConfig.editor_port()
 
   @spec editor_auth() :: String.t()
-  def editor_auth do
-    get_in(validated_workflow_options(), [:editor, :auth])
-  end
+  def editor_auth, do: InstanceConfig.editor_auth()
 
   @spec editor_password() :: String.t() | nil
-  def editor_password do
-    get_in(validated_workflow_options(), [:editor, :password])
-  end
+  def editor_password, do: InstanceConfig.editor_password()
 
   @spec editor_base_url() :: String.t()
-  def editor_base_url do
-    case get_in(validated_workflow_options(), [:editor, :base_url]) do
-      url when is_binary(url) and url != "" -> String.trim_trailing(url, "/")
-      _ -> "http://#{browser_host(editor_host())}:#{editor_port()}"
-    end
-  end
+  def editor_base_url, do: InstanceConfig.editor_base_url()
 
   @spec dev_server_enabled?() :: boolean()
   def dev_server_enabled? do
@@ -850,9 +775,6 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:public_tunnel, :namespace])
   end
 
-  defp browser_host("0.0.0.0"), do: "127.0.0.1"
-  defp browser_host("::"), do: "[::1]"
-  defp browser_host(host), do: host
 
   @spec validate!() :: :ok | {:error, String.t()}
   def validate! do

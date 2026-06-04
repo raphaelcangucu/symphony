@@ -5,7 +5,6 @@ defmodule SymphonyElixir.Codex.Config do
 
   @behaviour SymphonyElixir.AgentConfig
 
-  @default_command "codex app-server"
   @default_approval_policy %{
     "reject" => %{
       "sandbox_approval" => true,
@@ -19,7 +18,7 @@ defmodule SymphonyElixir.Codex.Config do
   def command do
     case section_value("command") do
       value when is_binary(value) and value != "" -> String.trim(value)
-      _ -> @default_command
+      _ -> SymphonyElixir.InstanceConfig.codex_command()
     end
   end
 

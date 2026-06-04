@@ -5,13 +5,11 @@ defmodule SymphonyElixir.Claude.Config do
 
   @behaviour SymphonyElixir.AgentConfig
 
-  @default_command "symphony-claude"
-
   @spec command() :: String.t()
   def command do
     case section_value("command") do
       value when is_binary(value) and value != "" -> String.trim(value)
-      _ -> @default_command
+      _ -> SymphonyElixir.InstanceConfig.claude_command()
     end
   end
 
