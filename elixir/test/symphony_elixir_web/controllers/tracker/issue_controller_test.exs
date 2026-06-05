@@ -406,6 +406,18 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
       refute Enum.any?(agents, &(&1["default"] == true))
       assert effective_agent in ["codex", "claude"]
     end
+
+    test "form_options effective_agent reflects project's explicit agent.kind" do
+      {:ok, _} =
+        Context.upsert_project_setup("remote", %{
+          "workflow_markdown" => "---\nagent:\n  kind: claude\n---\nBody."
+        })
+
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/remote/issues/form_options")
+
+      assert %{"data" => %{"effective_agent" => effective_agent}} = json_response(conn, 200)
+      assert effective_agent == "claude"
+    end
   end
 
   describe "remote create dispatch" do

@@ -17,9 +17,12 @@ defmodule SymphonyElixir.AgentRunner do
 
   @spec run(map(), pid() | nil, keyword()) :: :ok | no_return()
   def run(issue, codex_update_recipient \\ nil, opts \\ []) do
+    agent_kind = issue_agent_kind(issue)
+
     opts =
-      issue
-      |> issue_goal_opts(opts)
+      opts
+      |> issue_goal_opts(issue, agent_kind)
+      |> Keyword.put(:agent_kind, agent_kind)
       |> Keyword.put_new_lazy(:project_config, fn -> resolve_project_config(issue) end)
 
     Logger.info("Starting agent run for #{issue_context(issue)}")
@@ -70,9 +73,7 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp report_outcome(_recipient, _issue, _outcome), do: :ok
 
-  defp codex_message_handler(recipient, issue) do
-    agent_kind = issue_agent_kind(issue)
-
+  defp codex_message_handler(recipient, issue, agent_kind) do
     fn message ->
       normalized = CodingAgent.normalize_event(message, agent_kind)
       send_codex_update(recipient, issue, normalized)
@@ -112,11 +113,11 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp resolve_project_config(_issue), do: nil
 
-  defp issue_goal_opts(issue, opts) do
+  defp issue_goal_opts(opts, issue, agent_kind) do
     if Keyword.has_key?(opts, :goal) do
       opts
     else
-      maybe_put_issue_goal(opts, issue_agent_kind(issue), Map.get(issue, :agent_goal))
+      maybe_put_issue_goal(opts, agent_kind, Map.get(issue, :agent_goal))
     end
   end
 
@@ -138,14 +139,14 @@ defmodule SymphonyElixir.AgentRunner do
   defp send_codex_update(_recipient, _issue, _message), do: :ok
 
   defp agent_turn_opts(opts, agent_kind, codex_update_recipient, issue) do
-    Keyword.merge(opts, agent_kind: agent_kind, on_message: codex_message_handler(codex_update_recipient, issue))
+    Keyword.merge(opts, agent_kind: agent_kind, on_message: codex_message_handler(codex_update_recipient, issue, agent_kind))
   end
 
   defp run_codex_turns(workspace, issue, codex_update_recipient, opts) do
     max_turns = Keyword.get(opts, :max_turns, project_max_turns(Keyword.get(opts, :project_config)))
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
-    agent_kind = issue_agent_kind(issue)
+    agent_kind = Keyword.fetch!(opts, :agent_kind)
     workspace_root = Workspace.workspace_root_for(issue)
 
     session_opts =

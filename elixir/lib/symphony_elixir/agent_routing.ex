@@ -1,11 +1,13 @@
 defmodule SymphonyElixir.AgentRouting do
   @moduledoc """
-  Resolves coding-agent backend from GitHub issue labels.
+  Label-level agent signals for Symphony issues.
 
-  Labels:
-  - `symphony:codex` → Codex
-  - `symphony:claude` → Claude
-  - `symphony` → workflow default agent (Codex when both or only Codex are configured)
+  - `label_agent_kind/1`: explicit per-task agent from `symphony:codex` /
+    `symphony:claude` labels; plain `symphony` carries NO preference (nil).
+  - `routable?/1`: admission check — any `symphony*` label admits the issue.
+
+  Effective-agent resolution (task > project > user default) lives in
+  `SymphonyElixir.AgentPreference`.
   """
 
   @symphony_label "symphony"

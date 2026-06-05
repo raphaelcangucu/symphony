@@ -4,6 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
+  alias SymphonyElixir.{AgentPreference, ProjectConfig, Repo}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.IssueAdapter
@@ -206,11 +207,11 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   defp effective_agent(project) do
     project_kind =
       project
-      |> SymphonyElixir.Repo.preload(:setup)
-      |> SymphonyElixir.ProjectConfig.resolve()
+      |> Repo.preload(:setup)
+      |> ProjectConfig.resolve()
       |> Map.get(:agent_kind)
 
-    SymphonyElixir.AgentPreference.resolve([], project_kind)
+    AgentPreference.resolve([], project_kind)
   end
 
   defp present_label(label) when is_map(label) do
