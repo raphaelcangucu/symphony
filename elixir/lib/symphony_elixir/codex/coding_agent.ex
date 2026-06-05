@@ -298,6 +298,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     stop_port(port)
   end
 
+  def stop_session(_session), do: :ok
+
   defp validate_workspace_cwd(workspace, opts) when is_binary(workspace) and is_list(opts) do
     workspace_path = Path.expand(workspace)
     workspace_root = opts |> resolve_workspace_root() |> Path.expand()

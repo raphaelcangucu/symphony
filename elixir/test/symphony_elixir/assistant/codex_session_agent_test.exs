@@ -53,4 +53,21 @@ defmodule SymphonyElixir.Assistant.CodexSessionAgentTest do
     {:ok, _} = CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
     assert_received {:agent, "claude"}
   end
+
+  test "claude resume uses the persisted backend id on the next turn (fresh thread read)" do
+    {:ok, thread} = History.create_freeform_thread(%{workspace_path: "/tmp/agent-test"})
+    test_pid = self()
+
+    runner = fn _w, _p, _i, opts ->
+      send(test_pid, {:thread_id_opt, Keyword.get(opts, :agent_thread_id)})
+      {:ok, %{assistant_message: "ok", tool_calls: [], cli_session_id: "cl-1", turn_id: "t"}}
+    end
+
+    {:ok, _} = CodexSession.send_message_to_thread(thread, "turn 1", %{"agent" => "claude"}, runner: runner)
+    assert_received {:thread_id_opt, nil}
+
+    # Same STALE struct (simulates the channel's frozen assign) — the session layer must reload.
+    {:ok, _} = CodexSession.send_message_to_thread(thread, "turn 2", %{"agent" => "claude"}, runner: runner)
+    assert_received {:thread_id_opt, "cl-1"}
+  end
 end

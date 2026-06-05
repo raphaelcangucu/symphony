@@ -50,6 +50,9 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           {:ok, turn_result()} | {:error, term()}
   def send_message_to_thread(%{scope: "freeform", id: thread_id} = thread, message, context, opts \\ [])
       when is_binary(message) and is_map(context) and is_list(opts) do
+    # Reload so that agent_thread_ids written by a prior turn (e.g. the claude cli_session_id)
+    # are visible even when the caller holds a frozen struct from an earlier socket assign.
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
     agent_kind = resolve_thread_agent(thread, context)
 
     opts =
@@ -91,6 +94,9 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         opts \\ []
       )
       when is_binary(message) and is_map(context) and is_list(opts) do
+    # Reload so that agent_thread_ids written by a prior turn are visible even
+    # when the caller holds a frozen struct from an earlier socket assign.
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
     agent_kind = resolve_thread_agent(thread, context)
 
     opts =
@@ -129,6 +135,9 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         opts \\ []
       )
       when is_binary(message) and is_map(context) and is_list(opts) do
+    # Reload so that agent_thread_ids written by a prior turn are visible even
+    # when the caller holds a frozen struct from an earlier socket assign.
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
     agent_kind = resolve_thread_agent(thread, context)
 
     opts =
@@ -509,7 +518,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         end
       after
         Agent.stop(collector)
-        RootCodingAgent.stop_session(session)
+        RootCodingAgent.stop_session(session, Keyword.get(opts, :agent_kind))
       end
     end
   end
@@ -544,6 +553,36 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           item_id: Map.get(message, :item_id),
           questions: Map.get(message, :questions) || []
         })
+
+      # Claude adapter emits tool activity as :notification events with method "item/created".
+      # Route tool_call items through the same upsert/callback path as :tool_call_started,
+      # and tool_result items through the :tool_call_completed path, so chips reach the relay.
+      Map.get(message, :event) == :notification and method == "item/created" ->
+        item = get_in(payload, ["params", "item"]) || get_in(payload, [:params, :item]) || %{}
+        item_type = Map.get(item, "type") || Map.get(item, :type)
+
+        cond do
+          item_type == "tool_call" ->
+            id = Map.get(item, "tool_use_id") || Map.get(item, :tool_use_id)
+            raw_name = Map.get(item, "name") || Map.get(item, :name) || "unknown"
+            name = String.replace_prefix(raw_name, "mcp__symphony__", "")
+            input = Map.get(item, "input") || Map.get(item, :input) || %{}
+            tool_call = %{name: name, status: "running", arguments: input, output: nil, result: %{}, id: id}
+            Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call(state.tool_calls, tool_call)} end)
+            maybe_call(opts, :on_tool_call_started, tool_call)
+
+          item_type == "tool_result" ->
+            id = Map.get(item, "tool_use_id") || Map.get(item, :tool_use_id)
+            content = Map.get(item, "content") || Map.get(item, :content) || ""
+            is_error = Map.get(item, "is_error") || Map.get(item, :is_error) || false
+            status = if is_error, do: "error", else: "complete"
+            tool_call = %{name: nil, status: status, arguments: nil, output: content, result: %{}, id: id}
+            Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, id, tool_call)} end)
+            maybe_call(opts, :on_tool_call_completed, tool_call)
+
+          true ->
+            :ok
+        end
 
       true ->
         :ok
@@ -599,6 +638,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     [tool_call | Enum.reject(tool_calls, &(Map.get(&1, :name) == Map.get(tool_call, :name)))]
     |> Enum.reverse()
   end
+
+  # Upsert by tool_use_id for claude notification-based tool results, merging into the
+  # existing started entry (preserving :name and :arguments from the started event).
+  defp upsert_tool_call_by_id(tool_calls, id, update) when is_binary(id) do
+    {matched, rest} = Enum.split_with(tool_calls, &(Map.get(&1, :id) == id))
+    merged = Map.merge(List.first(matched) || %{}, Map.reject(update, fn {_k, v} -> is_nil(v) end))
+    Enum.reverse([merged | Enum.reverse(rest)])
+  end
+
+  defp upsert_tool_call_by_id(tool_calls, _id, update), do: upsert_tool_call(tool_calls, update)
 
   defp maybe_call(opts, key, payload) do
     case Keyword.get(opts, key) do

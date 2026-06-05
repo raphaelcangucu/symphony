@@ -25,6 +25,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         thread_id: thread.id,
         mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
+        # Issue task labels are NOT consulted here (would need a tracker fetch at join);
+        # dispatch resolves them — composer badge may differ for label-pinned issues.
         effective_agent: thread_effective_agent(thread)
       }
 
