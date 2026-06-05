@@ -20,8 +20,8 @@ defmodule SymphonyElixir.AgentAvailability do
 
       :miss ->
         value = %{
-          codex: probe_command(InstanceConfig.codex_command(), cache: false),
-          claude: probe_command(InstanceConfig.claude_command(), cache: false)
+          codex: probe_command(InstanceConfig.codex_command()),
+          claude: probe_command(InstanceConfig.claude_command())
         }
 
         :persistent_term.put(@cache_key, {value, now_ms()})
@@ -29,8 +29,8 @@ defmodule SymphonyElixir.AgentAvailability do
     end
   end
 
-  @spec probe_command(String.t(), keyword()) :: result()
-  def probe_command(command, _opts \\ []) when is_binary(command) do
+  @spec probe_command(String.t()) :: result()
+  def probe_command(command) when is_binary(command) do
     binary = command |> String.split(" ", trim: true) |> List.first() || command
 
     case System.find_executable(binary) do

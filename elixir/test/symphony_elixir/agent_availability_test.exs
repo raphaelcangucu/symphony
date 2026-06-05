@@ -10,14 +10,14 @@ defmodule SymphonyElixir.AgentAvailabilityTest do
 
   test "probe reports available=true with a version for a real binary" do
     # `sh` exists on every CI/dev host; "--version"-less binaries still count as available.
-    result = AgentAvailability.probe_command("sh", cache: false)
+    result = AgentAvailability.probe_command("sh")
 
     assert result.available == true
     assert result.command == "sh"
   end
 
   test "probe reports available=false for a missing binary" do
-    result = AgentAvailability.probe_command("definitely-not-a-real-binary-xyz", cache: false)
+    result = AgentAvailability.probe_command("definitely-not-a-real-binary-xyz")
 
     assert result == %{available: false, version: nil, command: "definitely-not-a-real-binary-xyz"}
   end

@@ -24,8 +24,11 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
         |> Conn.put_status(:not_found)
         |> json(%{error: %{code: "not_found", message: "unknown settings group"}})
 
+      {:error, _name, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+
       {:error, name, reason} ->
-        TrackerErrors.validation(conn, "invalid setting #{name}: #{reason}")
+        TrackerErrors.validation(conn, "invalid setting #{name}: #{format_reason(reason)}")
     end
   end
 
@@ -34,6 +37,9 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
     json(conn, %{data: AgentAvailability.probe()})
   end
 
+  # Keys are applied independently (each an immediate upsert); on failure the
+  # loop halts and earlier keys REMAIN persisted (no rollback). Deliberate
+  # while groups are effectively single-key — revisit if multi-key groups grow.
   defp put_all(group, attrs) do
     Enum.reduce_while(attrs, :ok, fn {name, value}, :ok ->
       case Settings.put(group, name, value) do
@@ -43,4 +49,7 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
       end
     end)
   end
+
+  defp format_reason(reason) when is_atom(reason), do: to_string(reason)
+  defp format_reason(reason), do: inspect(reason)
 end
