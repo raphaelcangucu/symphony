@@ -32,9 +32,23 @@ defmodule SymphonyElixir.AgentPreferenceTest do
       assert AgentPreference.resolve([], "gemini", "gemini") == "codex"
     end
 
+    test "claude label wins when both agent labels are present" do
+      assert AgentPreference.resolve(["symphony:codex", "symphony:claude"], nil, nil) == "claude"
+    end
+
     test "resolve/2 reads the user default from Settings" do
       {:ok, _} = Settings.put("agents", "default_agent_kind", "claude")
       assert AgentPreference.resolve([], nil) == "claude"
+    end
+  end
+
+  describe "normalize/1" do
+    test "passes valid kinds and nils everything else" do
+      assert AgentPreference.normalize("codex") == "codex"
+      assert AgentPreference.normalize("claude") == "claude"
+      assert AgentPreference.normalize(:claude) == nil
+      assert AgentPreference.normalize("gemini") == nil
+      assert AgentPreference.normalize(nil) == nil
     end
   end
 
@@ -52,6 +66,11 @@ defmodule SymphonyElixir.AgentPreferenceTest do
       assert AgentRouting.routable?(["symphony"])
       assert AgentRouting.routable?(["symphony:claude"])
       refute AgentRouting.routable?(["bug"])
+    end
+
+    test "empty list and mixed case" do
+      refute AgentRouting.routable?([])
+      assert AgentRouting.routable?(["SYMPHONY"])
     end
   end
 end

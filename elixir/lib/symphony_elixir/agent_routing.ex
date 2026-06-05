@@ -31,6 +31,9 @@ defmodule SymphonyElixir.AgentRouting do
 
   def symphony_label?(_), do: false
 
+  # TODO(Task 5): callers (github/client.ex, issue_mapper.ex) migrate to
+  # AgentPreference + label_agent_kind/1; remove resolve_agent_kind/3 and
+  # routable?/3 afterwards. Keep the two cond blocks in sync until then.
   @spec resolve_agent_kind([String.t()], [String.t()], String.t()) :: String.t() | nil
   def resolve_agent_kind(label_names, configured_kinds, default_kind)
       when is_list(label_names) and is_list(configured_kinds) and is_binary(default_kind) do
