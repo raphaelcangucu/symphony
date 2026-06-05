@@ -7,7 +7,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixir.Assistant.{CodexSession, History, Payload, SideQuery, ToolExecutor}
   alias SymphonyElixir.Config
   alias SymphonyElixirWeb.TrackerAuth
-  alias SymphonyElixir.{AgentPreference, Settings, Workspace}
+  alias SymphonyElixir.{AgentPreference, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
 
   @issue_modes ~w(triage simple complex)
   @issue_authoring_tools ~w(create_draft_issue create_issue)
@@ -88,10 +88,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       case History.list_messages(project_slug) do
         {:ok, messages} ->
           socket = assign(socket, :project_slug, project_slug)
-          # No thread record for project-scoped joins — report the operator default directly.
+          # No thread record for project-scoped joins — resolve via project tier then operator default.
           payload = %{
             messages: Enum.map(messages, &History.message_payload/1),
-            effective_agent: Settings.Agents.default_agent_kind()
+            effective_agent: project_agent_kind(project_slug) || Settings.Agents.default_agent_kind()
           }
 
           send(self(), {:assistant_history_loaded, payload})
@@ -530,9 +530,28 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   # Returns the effective agent kind for a thread's join payload so the UI can
   # display and default to the correct agent without waiting for the first turn.
+  # Resolution order: thread agent_kind → project agent_kind → operator default.
   defp thread_effective_agent(thread) do
     AgentPreference.normalize(Map.get(thread, :agent_kind)) ||
+      project_agent_kind(Map.get(thread, :project_slug)) ||
       Settings.Agents.default_agent_kind()
+  end
+
+  defp project_agent_kind(nil), do: nil
+  defp project_agent_kind(""), do: nil
+
+  defp project_agent_kind(project_slug) when is_binary(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        project
+        |> Repo.preload(:setup)
+        |> ProjectConfig.resolve()
+        |> Map.get(:agent_kind)
+        |> AgentPreference.normalize()
+
+      _ ->
+        nil
+    end
   end
 
   defp normalize_context(context) when is_map(context), do: context

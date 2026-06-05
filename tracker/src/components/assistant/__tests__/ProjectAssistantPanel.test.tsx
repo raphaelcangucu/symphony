@@ -38,24 +38,29 @@ vi.mock("@assistant-ui/react", () => ({
 
 vi.mock("@/services/assistant", async () => {
   const actual = await vi.importActual<typeof import("@/services/assistant")>("@/services/assistant");
+  const mockCodexCatalog = {
+    agent: "codex" as const,
+    agentLabel: "Codex CLI",
+    command: "codex app-server",
+    defaultModel: "gpt-5.3-codex",
+    models: [
+      {
+        id: "gpt-5.3-codex",
+        model: "gpt-5.3-codex",
+        label: "GPT-5.3 Codex",
+        isDefault: true,
+        defaultEffort: "low",
+        efforts: [{ id: "low", label: "Low" }],
+      },
+    ],
+  };
   return {
     ...actual,
-    fetchAssistantCodexCatalog: vi.fn(async () => ({
-      agent: "codex" as const,
-      agentLabel: "Codex CLI",
-      command: "codex app-server",
-      defaultModel: "gpt-5.3-codex",
-      models: [
-        {
-          id: "gpt-5.3-codex",
-          model: "gpt-5.3-codex",
-          label: "GPT-5.3 Codex",
-          isDefault: true,
-          defaultEffort: "low",
-          efforts: [{ id: "low", label: "Low" }],
-        },
-      ],
+    fetchAssistantCatalogBundle: vi.fn(async () => ({
+      agents: [mockCodexCatalog],
+      defaultAgent: "codex" as const,
     })),
+    fetchAssistantCodexCatalog: vi.fn(async () => mockCodexCatalog),
   };
 });
 

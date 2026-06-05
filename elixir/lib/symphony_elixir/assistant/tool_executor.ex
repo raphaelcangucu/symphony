@@ -182,7 +182,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "goal" => string_schema("Optional long-running goal (Codex only) to persist for the orchestrator.")
         }
       }),
-      tool_spec("dispatch_codex", "Alias for dispatch_coding_agent — dispatches Codex coding work through the existing issue workflow.", %{
+      tool_spec("dispatch_codex", "Alias for dispatch_coding_agent (resolves agent via task > project > user preference).", %{
         "type" => "object",
         "additionalProperties" => false,
         "required" => ["identifier", "instructions"],

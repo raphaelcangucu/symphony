@@ -66,6 +66,18 @@ defmodule SymphonyElixir.Assistant.ToolExecutorDispatchTest do
     assert result.message =~ "Codex"
   end
 
+  test "claude dispatch nils the goal", %{issue: issue} do
+    {:ok, result} =
+      ToolExecutor.execute("pref", "dispatch_coding_agent", %{
+        "identifier" => issue.identifier,
+        "instructions" => "do it",
+        "agent" => "claude",
+        "goal" => "long goal"
+      })
+
+    assert result.data.agent_goal == nil
+  end
+
   defp label_names(issue) do
     issue |> Map.get(:labels) |> Enum.map(& &1.name)
   end

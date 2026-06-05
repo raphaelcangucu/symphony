@@ -1,3 +1,5 @@
+import type { AgentKind } from "@/types/issue";
+
 export type AssistantEffort = string;
 
 export interface AssistantEffortOption {
@@ -17,12 +19,24 @@ export interface AssistantModelOption {
   inputModalities?: string[];
 }
 
-export interface AssistantCodexCatalog {
-  agent: "codex";
+/**
+ * Catalog for a single agent (codex or claude). Previously only codex existed;
+ * the `agent` field is now typed as AgentKind to support multiple agents.
+ */
+export interface AssistantAgentCatalog {
+  agent: AgentKind;
   agentLabel: string;
   command: string;
   defaultModel: string | null;
   models: AssistantModelOption[];
+}
+
+/** @deprecated Use AssistantAgentCatalog */
+export type AssistantCodexCatalog = AssistantAgentCatalog;
+
+export interface AssistantCatalogBundle {
+  agents: AssistantAgentCatalog[];
+  defaultAgent: AgentKind;
 }
 
 export interface AssistantComposerSettings {
@@ -30,8 +44,14 @@ export interface AssistantComposerSettings {
   effort: AssistantEffort;
 }
 
-const STORAGE_KEY = "symphony.assistant.composer";
-const CATALOG_STORAGE_KEY = "symphony.assistant.codexCatalog";
+export interface AssistantComposerState {
+  agent: AgentKind;
+  byAgent: Partial<Record<AgentKind, AssistantComposerSettings>>;
+}
+
+// v2 storage keys — old keys are ignored; composer falls to defaults on upgrade
+const COMPOSER_STATE_KEY = "symphony.assistant.composer.v2";
+const CATALOGS_STORAGE_KEY = "symphony.assistant.catalogs";
 
 const FALLBACK_EFFORTS: AssistantEffortOption[] = [
   { id: "low", label: "Low" },
@@ -40,7 +60,7 @@ const FALLBACK_EFFORTS: AssistantEffortOption[] = [
   { id: "xhigh", label: "Extra high" },
 ];
 
-export function fallbackCodexCatalog(command = "codex app-server"): AssistantCodexCatalog {
+export function fallbackCodexCatalog(command = "codex app-server"): AssistantAgentCatalog {
   const defaultModel = "gpt-5.5";
 
   return {
@@ -49,22 +69,47 @@ export function fallbackCodexCatalog(command = "codex app-server"): AssistantCod
     command,
     defaultModel,
     models: [
-      fallbackModel("gpt-5.5", "GPT-5.5", true),
-      fallbackModel("gpt-5.4", "GPT-5.4", false),
-      fallbackModel("gpt-5.3-codex", "GPT-5.3 Codex", false),
+      fallbackModel("gpt-5.5", "GPT-5.5", true, "medium", FALLBACK_EFFORTS),
+      fallbackModel("gpt-5.4", "GPT-5.4", false, "medium", FALLBACK_EFFORTS),
+      fallbackModel("gpt-5.3-codex", "GPT-5.3 Codex", false, "medium", FALLBACK_EFFORTS),
     ],
   };
 }
 
-export function loadCachedCodexCatalog(): AssistantCodexCatalog | null {
+export function fallbackClaudeCatalog(command = "claude"): AssistantAgentCatalog {
+  return {
+    agent: "claude",
+    agentLabel: "Claude Code",
+    command,
+    defaultModel: "claude-opus-4-6",
+    models: [
+      fallbackModel("claude-opus-4-6", "Claude Opus 4.6", true, "", []),
+      fallbackModel("claude-sonnet-4-6", "Claude Sonnet 4.6", false, "", []),
+      fallbackModel("claude-haiku-4-5", "Claude Haiku 4.5", false, "", []),
+    ],
+  };
+}
+
+export function fallbackCatalogBundle(): AssistantCatalogBundle {
+  return {
+    agents: [fallbackCodexCatalog(), fallbackClaudeCatalog()],
+    defaultAgent: "codex",
+  };
+}
+
+export function catalogFor(bundle: AssistantCatalogBundle, agent: AgentKind): AssistantAgentCatalog {
+  return bundle.agents.find((c) => c.agent === agent) ?? bundle.agents[0];
+}
+
+export function loadCachedCatalogBundle(): AssistantCatalogBundle | null {
   if (typeof window === "undefined") return null;
 
   try {
-    const raw = window.localStorage.getItem(CATALOG_STORAGE_KEY);
+    const raw = window.localStorage.getItem(CATALOGS_STORAGE_KEY);
     if (!raw) return null;
 
-    const parsed = JSON.parse(raw) as AssistantCodexCatalog;
-    if (!parsed.models?.length) return null;
+    const parsed = JSON.parse(raw) as AssistantCatalogBundle;
+    if (!Array.isArray(parsed.agents) || parsed.agents.length === 0) return null;
 
     return parsed;
   } catch {
@@ -72,24 +117,62 @@ export function loadCachedCodexCatalog(): AssistantCodexCatalog | null {
   }
 }
 
-export function saveCachedCodexCatalog(catalog: AssistantCodexCatalog): void {
+export function saveCachedCatalogBundle(bundle: AssistantCatalogBundle): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(catalog));
+  window.localStorage.setItem(CATALOGS_STORAGE_KEY, JSON.stringify(bundle));
 }
 
-function fallbackModel(model: string, label: string, isDefault: boolean): AssistantModelOption {
-  return {
-    id: model,
-    model,
-    label,
-    isDefault,
-    defaultEffort: "medium",
-    efforts: FALLBACK_EFFORTS,
-    inputModalities: ["text", "image"],
-  };
+/**
+ * @deprecated Use loadCachedCatalogBundle
+ */
+export function loadCachedCodexCatalog(): AssistantAgentCatalog | null {
+  const bundle = loadCachedCatalogBundle();
+  if (!bundle) return null;
+  return bundle.agents.find((c) => c.agent === "codex") ?? null;
 }
 
-export function defaultComposerSettings(catalog: AssistantCodexCatalog): AssistantComposerSettings {
+/**
+ * @deprecated Use saveCachedCatalogBundle
+ */
+export function saveCachedCodexCatalog(catalog: AssistantAgentCatalog): void {
+  const bundle = loadCachedCatalogBundle() ?? fallbackCatalogBundle();
+  const agents = bundle.agents.filter((c) => c.agent !== catalog.agent);
+  saveCachedCatalogBundle({ ...bundle, agents: [...agents, catalog] });
+}
+
+export function loadComposerState(bundle: AssistantCatalogBundle): AssistantComposerState {
+  const defaultState: AssistantComposerState = { agent: bundle.defaultAgent, byAgent: {} };
+
+  if (typeof window === "undefined") return defaultState;
+
+  try {
+    const raw = window.localStorage.getItem(COMPOSER_STATE_KEY);
+    if (!raw) return defaultState;
+
+    const parsed = JSON.parse(raw) as Partial<AssistantComposerState>;
+    const agent: AgentKind = (parsed.agent === "codex" || parsed.agent === "claude")
+      ? parsed.agent
+      : bundle.defaultAgent;
+
+    return {
+      agent,
+      byAgent: (parsed.byAgent && typeof parsed.byAgent === "object") ? parsed.byAgent : {},
+    };
+  } catch {
+    return defaultState;
+  }
+}
+
+export function saveComposerState(state: AssistantComposerState): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(COMPOSER_STATE_KEY, JSON.stringify(state));
+}
+
+// ---------------------------------------------------------------------------
+// Per-catalog helpers — unchanged signatures; callers pass a single catalog
+// ---------------------------------------------------------------------------
+
+export function defaultComposerSettings(catalog: AssistantAgentCatalog): AssistantComposerSettings {
   const modelOption = pickDefaultModel(catalog);
   return {
     model: modelOption.model,
@@ -97,40 +180,62 @@ export function defaultComposerSettings(catalog: AssistantCodexCatalog): Assista
   };
 }
 
-export function loadAssistantComposerSettings(catalog: AssistantCodexCatalog): AssistantComposerSettings {
+/**
+ * @deprecated Use loadComposerState(bundle) + per-agent byAgent lookup.
+ */
+export function loadAssistantComposerSettings(catalog: AssistantAgentCatalog): AssistantComposerSettings {
   const fallback = defaultComposerSettings(catalog);
 
   if (typeof window === "undefined") return fallback;
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(COMPOSER_STATE_KEY);
     if (!raw) return fallback;
 
-    const parsed = JSON.parse(raw) as Partial<AssistantComposerSettings>;
-    const modelOption = findModelOption(catalog, parsed.model) ?? pickDefaultModel(catalog);
-    const effort = normalizeEffort(modelOption, parsed.effort);
+    // v2 format: try reading byAgent for this catalog's agent first
+    const parsed = JSON.parse(raw) as Partial<AssistantComposerState>;
+    if (parsed.byAgent && catalog.agent in parsed.byAgent) {
+      const agentSettings = parsed.byAgent[catalog.agent as AgentKind];
+      if (agentSettings) {
+        const modelOption = findModelOption(catalog, agentSettings.model) ?? pickDefaultModel(catalog);
+        const effort = normalizeEffort(modelOption, agentSettings.effort);
+        return { model: modelOption.model, effort };
+      }
+    }
 
-    return { model: modelOption.model, effort };
+    return fallback;
   } catch {
     return fallback;
   }
 }
 
+/**
+ * @deprecated Use saveComposerState.
+ */
 export function saveAssistantComposerSettings(settings: AssistantComposerSettings): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+
+  try {
+    const raw = window.localStorage.getItem(COMPOSER_STATE_KEY);
+    const parsed: Partial<AssistantComposerState> = raw ? (JSON.parse(raw) as Partial<AssistantComposerState>) : {};
+    const agent = parsed.agent ?? "codex";
+    const byAgent = parsed.byAgent ?? {};
+    saveComposerState({ agent: agent as AgentKind, byAgent: { ...byAgent, [agent]: settings } });
+  } catch {
+    // ignore
+  }
 }
 
-export function modelLabel(catalog: AssistantCodexCatalog, modelId: string): string {
+export function modelLabel(catalog: AssistantAgentCatalog, modelId: string): string {
   return findModelOption(catalog, modelId)?.label ?? modelId;
 }
 
-export function effortLabel(catalog: AssistantCodexCatalog, modelId: string, effort: AssistantEffort): string {
+export function effortLabel(catalog: AssistantAgentCatalog, modelId: string, effort: AssistantEffort): string {
   const model = findModelOption(catalog, modelId);
   return model?.efforts.find((option) => option.id === effort)?.label ?? effort;
 }
 
-export function effortsForModel(catalog: AssistantCodexCatalog, modelId: string): AssistantEffortOption[] {
+export function effortsForModel(catalog: AssistantAgentCatalog, modelId: string): AssistantEffortOption[] {
   return findModelOption(catalog, modelId)?.efforts ?? [];
 }
 
@@ -139,7 +244,25 @@ export function normalizeEffort(model: AssistantModelOption, effort?: string | n
   return model.defaultEffort;
 }
 
-function pickDefaultModel(catalog: AssistantCodexCatalog): AssistantModelOption {
+function fallbackModel(
+  model: string,
+  label: string,
+  isDefault: boolean,
+  defaultEffort: string,
+  efforts: AssistantEffortOption[],
+): AssistantModelOption {
+  return {
+    id: model,
+    model,
+    label,
+    isDefault,
+    defaultEffort,
+    efforts,
+    inputModalities: ["text", "image"],
+  };
+}
+
+function pickDefaultModel(catalog: AssistantAgentCatalog): AssistantModelOption {
   if (catalog.defaultModel) {
     const match = findModelOption(catalog, catalog.defaultModel);
     if (match) return match;
@@ -148,7 +271,7 @@ function pickDefaultModel(catalog: AssistantCodexCatalog): AssistantModelOption 
   return catalog.models.find((model) => model.isDefault) ?? catalog.models[0];
 }
 
-function findModelOption(catalog: AssistantCodexCatalog, modelId?: string | null): AssistantModelOption | undefined {
+function findModelOption(catalog: AssistantAgentCatalog, modelId?: string | null): AssistantModelOption | undefined {
   if (!modelId) return undefined;
   return catalog.models.find((model) => model.model === modelId || model.id === modelId);
 }

@@ -3,6 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantComposer } from "@/components/assistant/AssistantComposer";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
+import { fallbackCatalogBundle } from "@/lib/assistantSettings";
+
+const mockBundle = fallbackCatalogBundle();
+// Override codex catalog with the mock for predictable model/effort names
+mockBundle.agents = [
+  { ...mockAssistantCodexCatalog },
+  ...mockBundle.agents.filter((a) => a.agent !== "codex"),
+];
 
 const speechMock = vi.hoisted(() => ({
   start: vi.fn(),
@@ -47,7 +55,7 @@ describe("AssistantComposer", () => {
     const onSubmit = vi.fn();
 
     render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={onSubmit} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
     );
 
     expect(screen.getByText("Codex CLI")).toBeTruthy();
@@ -70,7 +78,7 @@ describe("AssistantComposer", () => {
   it("submits a default kind of 'message' with the typed text", () => {
     const onSubmit = vi.fn();
     render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={onSubmit} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -83,7 +91,7 @@ describe("AssistantComposer", () => {
   it("submits kind 'infer' when the message starts with /infer", () => {
     const onSubmit = vi.fn();
     render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={onSubmit} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -97,7 +105,7 @@ describe("AssistantComposer", () => {
 
   it("shows the slash-command palette when the input starts with a slash", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={vi.fn()} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
     );
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "/" } });
@@ -108,7 +116,7 @@ describe("AssistantComposer", () => {
 
   it("completes the slash command on Tab from the palette", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={vi.fn()} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -124,7 +132,7 @@ describe("AssistantComposer", () => {
     render(
       <AssistantComposer
         projectSlug="macro-markets"
-        catalog={mockAssistantCodexCatalog}
+        bundle={mockBundle}
         hasQueued
         onForceQueued={onForceQueued}
         onSubmit={onSubmit}
@@ -144,7 +152,7 @@ describe("AssistantComposer", () => {
     render(
       <AssistantComposer
         projectSlug="macro-markets"
-        catalog={mockAssistantCodexCatalog}
+        bundle={mockBundle}
         hasQueued
         onForceQueued={onForceQueued}
         onSubmit={onSubmit}
@@ -161,7 +169,7 @@ describe("AssistantComposer", () => {
 
   it("keeps the textarea enabled while the assistant is running", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} disabled onSubmit={vi.fn()} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} disabled onSubmit={vi.fn()} />,
     );
 
     expect(screen.getByPlaceholderText("Write a message...")).not.toBeDisabled();
@@ -171,7 +179,7 @@ describe("AssistantComposer", () => {
     const onSubmit = vi.fn();
 
     render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={onSubmit} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -183,7 +191,7 @@ describe("AssistantComposer", () => {
 
   it("does not stop voice dictation on unrelated re-render", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={vi.fn()} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
     );
 
     fireEvent.change(screen.getByPlaceholderText("Write a message..."), {
@@ -197,7 +205,7 @@ describe("AssistantComposer", () => {
     const onSubmit = vi.fn();
 
     render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={onSubmit} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Record audio" }));
@@ -219,7 +227,7 @@ describe("AssistantComposer", () => {
     speechMock.listening = true;
 
     const { container } = render(
-      <AssistantComposer projectSlug="macro-markets" catalog={mockAssistantCodexCatalog} onSubmit={vi.fn()} />,
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
     );
 
     const stopButton = screen.getByRole("button", { name: "Stop recording" });

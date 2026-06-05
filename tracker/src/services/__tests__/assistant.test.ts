@@ -103,19 +103,24 @@ describe("assistant service", () => {
     const get = vi.spyOn(http, "get").mockResolvedValueOnce({
       data: {
         data: {
-          agent: "codex",
-          agent_label: "Codex CLI",
-          command: "codex app-server",
-          default_model: "gpt-5.3-codex",
-          models: [
+          agents: [
             {
-              model: "gpt-5.3-codex",
-              label: "GPT-5.3 Codex",
-              is_default: true,
-              default_effort: "low",
-              efforts: [{ id: "low", label: "Low" }],
+              agent: "codex",
+              agent_label: "Codex CLI",
+              command: "codex app-server",
+              default_model: "gpt-5.3-codex",
+              models: [
+                {
+                  model: "gpt-5.3-codex",
+                  label: "GPT-5.3 Codex",
+                  is_default: true,
+                  default_effort: "low",
+                  efforts: [{ id: "low", label: "Low" }],
+                },
+              ],
             },
           ],
+          default_agent: "codex",
         },
       },
     });
