@@ -187,6 +187,37 @@ defmodule SymphonyElixir.Assistant.History do
     |> Repo.update()
   end
 
+  @doc """
+  Returns the backend thread id stored for `kind` (e.g. "codex", "claude").
+  """
+  @spec agent_thread_id(Thread.t(), String.t()) :: String.t() | nil
+  def agent_thread_id(%Thread{agent_thread_ids: ids}, kind) when is_map(ids), do: Map.get(ids, kind)
+  def agent_thread_id(_thread, _kind), do: nil
+
+  @doc """
+  Persists the backend thread id for `kind` on the thread's `agent_thread_ids` map.
+  When `kind` is "codex", also mirrors the id to `codex_thread_id` for backwards
+  compatibility (one-release overlap).
+  """
+  @spec put_agent_thread_id(Thread.t(), String.t(), String.t()) ::
+          {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def put_agent_thread_id(%Thread{} = thread, kind, backend_id)
+      when is_binary(kind) and is_binary(backend_id) do
+    ids = Map.put(thread.agent_thread_ids || %{}, kind, backend_id)
+    attrs = %{agent_thread_ids: ids}
+    attrs = if kind == "codex", do: Map.put(attrs, :codex_thread_id, backend_id), else: attrs
+    update_thread(thread, attrs)
+  end
+
+  @doc """
+  Persists the agent choice for this thread as `agent_kind`.
+  """
+  @spec set_thread_agent(Thread.t(), String.t()) ::
+          {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def set_thread_agent(%Thread{} = thread, kind) when kind in ["codex", "claude"] do
+    update_thread(thread, %{agent_kind: kind})
+  end
+
   @spec archive_thread(integer()) :: {:ok, Thread.t()} | {:error, :not_found | Ecto.Changeset.t()}
   def archive_thread(id) when is_integer(id) do
     case get_thread(id) do
