@@ -76,4 +76,52 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
     assert args =~ "--mcp-config /tmp/m.json --strict-mcp-config"
     assert args =~ "--permission-mode bypassPermissions"
   end
+
+  test "build_args rejects malicious session ids and falls back to --session-id" do
+    # Malicious cli_session_id must not be embedded; fall back to --session-id
+    args =
+      CliRunner.build_args(%{
+        session_uuid: "safe-uuid-123",
+        cli_session_id: "sess; rm -rf x",
+        model: nil,
+        mcp_config_path: nil,
+        permission_mode: "bypassPermissions"
+      })
+
+    refute args =~ "rm -rf"
+    refute args =~ "--resume"
+    assert args =~ "--session-id safe-uuid-123"
+  end
+
+  test "multi-partial deltas, usage updates and rate limits" do
+    {result, events} = run("multi")
+
+    # Final turn result
+    assert {:ok, %{cli_session_id: "sess-multi", status: :completed}} = result
+
+    # Partial deltas emitted in order
+    progress_events =
+      Enum.filter(events, &(&1["method"] == "item/progress"))
+
+    deltas = Enum.map(progress_events, &get_in(&1, ["params", "delta", "text"]))
+    assert deltas == ["Hel", "lo wor"]
+
+    # One usage/update event with correct totals
+    usage_events = Enum.filter(events, &(&1["method"] == "usage/update"))
+    assert length(usage_events) == 1
+    assert [%{"params" => %{"usage" => usage}}] = usage_events
+    assert usage == %{input_tokens: 7, output_tokens: 3, total_tokens: 10}
+
+    # Rate limit event present
+    assert Enum.any?(events, &(&1["method"] == "rate_limit"))
+
+    # Final item/created with full text
+    created_texts =
+      Enum.flat_map(events, fn
+        %{"method" => "item/created", "params" => %{"item" => %{"type" => "text", "text" => t}}} -> [t]
+        _ -> []
+      end)
+
+    assert "Hello world" in created_texts
+  end
 end

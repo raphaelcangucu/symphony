@@ -16,12 +16,18 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
   bash spawn the child directly: `bash -lc "FAKE... cmd args < prompt_file"`.
 
   ### Timeout / process-kill strategy
-  On timeout we:
-  1. Obtain bash's OS PID via `:erlang.port_info(port, :os_pid)`.
-  2. Kill children via `pkill -9 -P <pid>` (kill direct children of bash).
-  3. Kill the bash process itself via `kill -9 <pid>`.
-  4. Close the port safely.
-  This reliably terminates the `sleep 60` child spawned by the hang fixture.
+  On Linux (setsid available) we spawn via `setsid bash -lc ...` so bash becomes
+  a new process-group leader (pgid == bash's pid). On timeout we send
+  `kill -9 -<pgid>` which kills the entire group — bash, its direct children,
+  and any grandchildren the real Claude CLI spawns.
+
+  On macOS / systems without setsid we fall back to the legacy two-step:
+  1. `pkill -9 -P <pid>` — kill direct children of bash.
+  2. `kill -9 <pid>`     — kill bash itself.
+  This legacy path does NOT kill grandchildren spawned with a new process group,
+  but it is the best we can do without setsid.
+
+  In both paths the port is closed after the kill signals are sent.
   """
 
   require Logger
@@ -58,6 +64,8 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
       timeout_ms: timeout_ms
     } = args
 
+    workspace = Path.expand(workspace)
+
     # Write prompt to a temp file (ports can't half-close stdin)
     symphony_dir = Path.join(workspace, ".symphony")
     File.mkdir_p!(symphony_dir)
@@ -66,9 +74,20 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
 
     cli_args = build_args(args)
     escaped_prompt_path = shell_escape(prompt_path)
-    shell_cmd = "#{command} #{cli_args} < #{escaped_prompt_path}"
+    shell_line = "#{command} #{cli_args} < #{escaped_prompt_path}"
 
-    executable = System.find_executable("bash")
+    # Use setsid when available (Linux) so bash becomes a new process-group
+    # leader (pgid == bash pid). This lets kill_port send kill -9 -<pgid> to
+    # eliminate grandchildren too. On macOS / systems without setsid we fall
+    # back to spawning bash directly and use the legacy pkill-P + kill-9 path.
+    {executable, port_args} =
+      case System.find_executable("setsid") do
+        nil ->
+          {System.find_executable("bash"), [~c"-lc", String.to_charlist(shell_line)]}
+
+        setsid_path ->
+          {setsid_path, [~c"bash", ~c"-lc", String.to_charlist(shell_line)]}
+      end
 
     port =
       Port.open(
@@ -77,7 +96,7 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
           :binary,
           :exit_status,
           :stderr_to_stdout,
-          args: [~c"-lc", String.to_charlist(shell_cmd)],
+          args: port_args,
           cd: String.to_charlist(workspace),
           line: @port_line_bytes
         ]
@@ -99,6 +118,9 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
     end
   end
 
+  # Only printable alphanumeric + safe punctuation — no spaces, semicolons, etc.
+  @safe_id_regex ~r/\A[A-Za-z0-9._-]+\z/
+
   @spec build_args(map()) :: String.t()
   def build_args(%{
         session_uuid: session_uuid,
@@ -115,14 +137,31 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
     mcp_flag =
       if mcp_config_path, do: " --mcp-config #{mcp_config_path} --strict-mcp-config", else: ""
 
+    # Sanitize both ids before interpolating into the shell command.
+    safe_cli_session_id = validate_session_id(cli_session_id, "cli_session_id")
+    safe_session_uuid = validate_session_id(session_uuid, "session_uuid")
+
     session_flag =
-      if cli_session_id do
-        " --resume #{cli_session_id}"
+      if safe_cli_session_id do
+        " --resume #{safe_cli_session_id}"
       else
-        " --session-id #{session_uuid}"
+        " --session-id #{safe_session_uuid}"
       end
 
     base <> model_flag <> mcp_flag <> session_flag
+  end
+
+  # Returns the id unchanged when it matches the safe pattern; logs a warning
+  # and returns nil when it does not (callers treat nil as "start fresh").
+  defp validate_session_id(nil, _label), do: nil
+
+  defp validate_session_id(id, label) when is_binary(id) do
+    if Regex.match?(@safe_id_regex, id) do
+      id
+    else
+      Logger.warning("CliRunner: unsafe #{label} rejected (contains disallowed chars): #{inspect(id)}")
+      nil
+    end
   end
 
   # ────────────────────────────────────────────────────────────
@@ -409,17 +448,29 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
   # ────────────────────────────────────────────────────────────
 
   # Kill the process tree spawned by the port, then close the port.
-  # Used on timeout — the `exec`-less approach means bash is the parent;
-  # pkill -P kills its children (e.g. sleep 60) before we kill bash itself.
+  # Used on timeout.
+  #
+  # setsid path (Linux, setsid available at spawn time): bash is the
+  # process-group leader (pgid == bash's pid). Sending kill -9 -<pgid>
+  # atomically kills bash, its direct children, and all grandchildren that
+  # share the group — i.e. helpers spawned by the real Claude CLI.
+  #
+  # Legacy fallback (macOS / no setsid): bash was NOT placed in a new group,
+  # so we do the two-step: pkill -P kills direct children, then kill -9 kills
+  # bash itself. Grandchildren that escaped to a different group survive.
   defp kill_port(port) when is_port(port) do
-    # Try to get the OS PID of the bash process
     case :erlang.port_info(port, :os_pid) do
       {:os_pid, os_pid} ->
         pid_str = to_string(os_pid)
-        # Kill children of bash first
-        System.cmd("pkill", ["-9", "-P", pid_str], stderr_to_stdout: true)
-        # Then kill bash itself
-        System.cmd("kill", ["-9", pid_str], stderr_to_stdout: true)
+
+        if System.find_executable("setsid") do
+          # setsid was used at spawn time → pgid == os_pid → kill whole group
+          System.cmd("kill", ["-9", "-#{pid_str}"], stderr_to_stdout: true)
+        else
+          # Legacy path: kill direct children first, then bash itself
+          System.cmd("pkill", ["-9", "-P", pid_str], stderr_to_stdout: true)
+          System.cmd("kill", ["-9", pid_str], stderr_to_stdout: true)
+        end
 
       _ ->
         :ok

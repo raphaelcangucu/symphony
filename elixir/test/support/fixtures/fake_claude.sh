@@ -18,4 +18,13 @@ case "${FAKE_CLAUDE_MODE:-happy}" in
   hang)
     sleep 60
     ;;
+  multi)
+    echo '{"type":"system","subtype":"init","session_id":"sess-multi"}'
+    echo '{"type":"assistant","is_partial":true,"message":{"id":"m1","content":[{"type":"text","text":"Hel"}]}}'
+    echo '{"type":"assistant","is_partial":true,"message":{"id":"m1","content":[{"type":"text","text":"Hello wor"}]}}'
+    echo '{"type":"stream_event","stream_event":{"type":"message_delta","usage":{"input_tokens":7,"output_tokens":3}}}'
+    echo '{"type":"rate_limit_event","rate_limit_info":{"status":"ok","utilization":12}}'
+    echo '{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"Hello world"}]}}'
+    echo '{"type":"result","subtype":"success","session_id":"sess-multi","usage":{"input_tokens":7,"output_tokens":3}}'
+    ;;
 esac
