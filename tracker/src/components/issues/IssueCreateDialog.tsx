@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { AGENT_ICONS, AgentChip } from "@/components/shared/AgentChip";
+import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
 import { cn } from "@/lib/utils";
 import { createIssue, getIssueFormOptions } from "@/services/issues";
 import type {
@@ -135,8 +135,6 @@ export function IssueCreateDialog({
       .then((result) => {
         if (cancelled) return;
         setOptions(result);
-        const defaultAgent = result.agents.find((option) => option.default);
-        if (defaultAgent) setAgent(defaultAgent.value);
       })
       .catch(() => {
         if (cancelled) return;
@@ -257,7 +255,11 @@ export function IssueCreateDialog({
             <div className="space-y-1 text-sm">
               <span className="text-xs font-medium text-muted-foreground">Agent</span>
               <div className="flex flex-wrap gap-1.5">
-                <AgentChip label="None" active={agent === ""} onClick={() => setAgent("")} />
+                <AgentChip
+                  label={`Inherit (${AGENT_LABELS[options?.effectiveAgent ?? "codex"]})`}
+                  active={agent === ""}
+                  onClick={() => setAgent("")}
+                />
                 {agentOptions.map((item) => {
                   const Icon = AGENT_ICONS[item.value];
                   return (

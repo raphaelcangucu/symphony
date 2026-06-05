@@ -22,9 +22,10 @@ interface AgentTabsProps {
   projectSlug: string;
   execution?: AgentExecution;
   view: WorkspaceView;
+  onIssueUpdated?: (updated: Issue) => void;
 }
 
-export function AgentTabs({ issue, projectSlug, execution, view }: AgentTabsProps) {
+export function AgentTabs({ issue, projectSlug, execution, view, onIssueUpdated }: AgentTabsProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const section = agentSectionFromSearchParams(new URLSearchParams(location.search));
@@ -89,6 +90,7 @@ export function AgentTabs({ issue, projectSlug, execution, view }: AgentTabsProp
           execution={execution}
           projectSlug={projectSlug}
           steerSeedMessage={steerSeedMessage}
+          onIssueUpdated={onIssueUpdated}
         />
       </TabsContent>
     </Tabs>

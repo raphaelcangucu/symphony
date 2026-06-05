@@ -1,18 +1,23 @@
+import { toast } from "sonner";
+
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { ExecutionSteerComposer } from "@/components/issues/issue-detail/ExecutionSteerComposer";
 import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
+import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
 import { Separator } from "@/components/ui/separator";
 import { useSessionLogChannel } from "@/hooks/useSessionLogChannel";
 import { formatDateTime } from "@/lib/utils";
+import { updateIssueAgent } from "@/services/issues";
 import type { AgentExecution } from "@/types/agent-execution";
-import type { Issue } from "@/types/issue";
+import type { AgentKind, Issue } from "@/types/issue";
 
 interface AgentTabProps {
   issue: Issue;
   execution?: AgentExecution;
   projectSlug: string;
   steerSeedMessage?: string | null;
+  onIssueUpdated?: (updated: Issue) => void;
 }
 
 function formatRuntime(seconds: number | null): string {
@@ -29,7 +34,7 @@ function formatTokens(value: number): string {
   return value.toLocaleString();
 }
 
-export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = null }: AgentTabProps) {
+export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = null, onIssueUpdated }: AgentTabProps) {
   const sessionLogEnabled =
     execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting";
   const sessionLog = useSessionLogChannel({
@@ -38,6 +43,15 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
     enabled: sessionLogEnabled,
   });
   const canSteer = execution?.status === "live" || execution?.status === "waiting";
+
+  async function changeAgent(agent: AgentKind | null) {
+    try {
+      const updated = await updateIssueAgent(projectSlug, issue.identifier, agent);
+      onIssueUpdated?.(updated);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to update agent");
+    }
+  }
 
   return (
     <div className="space-y-4 text-sm">
@@ -148,6 +162,34 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
           <AssigneeAvatar login={issue.assignee} />
           <span>{issue.assignee || "No agent assigned"}</span>
         </div>
+      </section>
+
+      <section>
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agent</div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <AgentChip
+            label="Inherit"
+            active={!issue.agentKind}
+            disabled={Boolean(execution)}
+            onClick={() => void changeAgent(null)}
+          />
+          {(["codex", "claude"] as AgentKind[]).map((kind) => {
+            const Icon = AGENT_ICONS[kind];
+            return (
+              <AgentChip
+                key={kind}
+                label={AGENT_LABELS[kind]}
+                icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
+                active={issue.agentKind === kind}
+                disabled={Boolean(execution)}
+                onClick={() => void changeAgent(kind)}
+              />
+            );
+          })}
+        </div>
+        {execution ? (
+          <p className="mt-1 text-xs text-muted-foreground">Stop the active run to change the agent.</p>
+        ) : null}
       </section>
     </div>
   );

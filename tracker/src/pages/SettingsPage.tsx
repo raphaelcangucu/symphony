@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { AGENT_ICONS, AgentChip } from "@/components/shared/AgentChip";
+import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   type AgentAvailability,
@@ -11,7 +11,6 @@ import {
 } from "@/services/settings";
 import type { AgentKind } from "@/types/issue";
 
-const AGENT_LABELS: Record<AgentKind, string> = { codex: "Codex", claude: "Claude Code" };
 
 export function SettingsPage() {
   const [defaultAgent, setDefaultAgent] = useState<AgentKind | null>(null);

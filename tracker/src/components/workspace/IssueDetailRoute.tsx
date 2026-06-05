@@ -101,6 +101,12 @@ export function IssueDetailRoute() {
       onArchive={handleArchive}
       onDelete={handleDelete}
       onForceSync={trackerKind === "local" ? undefined : handleForceSync}
+      onIssueUpdated={(updated) => {
+        setIssues((current) =>
+          current.map((candidate) => (candidate.identifier === updated.identifier ? updated : candidate)),
+        );
+        if (fetchedIssue?.identifier === updated.identifier) setFetchedIssue(updated);
+      }}
     />
   );
 }

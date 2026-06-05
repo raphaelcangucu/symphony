@@ -1,4 +1,4 @@
-import type { CreateIssueInput, Issue, IssueFormOptions, MoveIssueInput } from "@/types/issue";
+import type { AgentKind, CreateIssueInput, Issue, IssueFormOptions, MoveIssueInput } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
 import {
@@ -107,6 +107,20 @@ export async function restoreIssue(projectSlug: string, identifier: string): Pro
   if (!identifier.trim()) throw new Error("identifier is required");
   const response = await http.post(
     trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/restore`),
+  );
+  return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}
+
+export async function updateIssueAgent(
+  projectSlug: string,
+  identifier: string,
+  agent: AgentKind | null,
+): Promise<Issue> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  if (!identifier.trim()) throw new Error("identifier is required");
+  const response = await http.put(
+    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`),
+    { agent },
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }

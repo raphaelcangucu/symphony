@@ -46,9 +46,10 @@ const formOptions: IssueFormOptions = {
   assignees: [],
   statuses: ["Todo", "In Progress"],
   agents: [
-    { value: "codex", label: "Codex", default: true },
+    { value: "codex", label: "Codex", default: false },
     { value: "claude", label: "Claude", default: false },
   ],
+  effectiveAgent: "codex",
 };
 
 describe("IssueCreateDialog Codex goal mode", () => {
@@ -65,6 +66,9 @@ describe("IssueCreateDialog Codex goal mode", () => {
 
     await user.type(screen.getByPlaceholderText("Issue title"), "Social login");
     await user.type(screen.getByPlaceholderText("Description"), "Add OAuth and session handling.");
+
+    // Dialog now defaults to "inherit"; select Codex explicitly to reveal goal mode
+    await user.click(await screen.findByRole("button", { name: "Codex" }));
 
     const goalMode = await screen.findByRole("checkbox", { name: /goal mode/i });
     expect(goalMode).toBeInTheDocument();
@@ -114,6 +118,8 @@ describe("IssueCreateDialog Codex goal mode", () => {
 
     render(<IssueCreateDialog projectSlug="macro-markets" open onOpenChange={vi.fn()} />);
 
+    // Select Codex explicitly first
+    await user.click(await screen.findByRole("button", { name: "Codex" }));
     await screen.findByRole("checkbox", { name: /goal mode/i });
     await user.type(screen.getByPlaceholderText("Issue title"), "Regular Codex task");
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -131,6 +137,8 @@ describe("IssueCreateDialog Codex goal mode", () => {
     render(<IssueCreateDialog projectSlug="macro-markets" open onOpenChange={vi.fn()} />);
 
     await user.type(screen.getByPlaceholderText("Issue title"), "Social login");
+    // Select Codex explicitly first to reveal goal mode checkbox
+    await user.click(await screen.findByRole("button", { name: "Codex" }));
     await user.click(await screen.findByRole("checkbox", { name: /goal mode/i }));
 
     const goal = await screen.findByRole("textbox", { name: /codex goal/i });

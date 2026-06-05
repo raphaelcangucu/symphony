@@ -24,6 +24,8 @@ export const AGENT_ICONS: Record<AgentKind, (props: SVGProps<SVGSVGElement>) => 
   claude: ClaudeIcon,
 };
 
+export const AGENT_LABELS: Record<AgentKind, string> = { codex: "Codex", claude: "Claude Code" };
+
 export interface AgentChipProps {
   label: string;
   active: boolean;

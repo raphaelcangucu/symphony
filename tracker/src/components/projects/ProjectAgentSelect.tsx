@@ -1,7 +1,5 @@
-import { AGENT_ICONS, AgentChip } from "@/components/shared/AgentChip";
+import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
 import type { AgentKind } from "@/types/issue";
-
-const LABELS: Record<AgentKind, string> = { codex: "Codex", claude: "Claude Code" };
 
 export function ProjectAgentSelect({
   value,
@@ -19,17 +17,17 @@ export function ProjectAgentSelect({
       <span className="text-xs font-medium text-muted-foreground">Coding agent</span>
       <div className="flex flex-wrap gap-1.5">
         <AgentChip
-          label={`Inherit (${LABELS[effectiveDefault]})`}
+          label={`Inherit (${AGENT_LABELS[effectiveDefault]})`}
           active={value === null}
           disabled={disabled}
           onClick={() => onChange(null)}
         />
-        {(Object.keys(LABELS) as AgentKind[]).map((kind) => {
+        {(Object.keys(AGENT_LABELS) as AgentKind[]).map((kind) => {
           const Icon = AGENT_ICONS[kind];
           return (
             <AgentChip
               key={kind}
-              label={LABELS[kind]}
+              label={AGENT_LABELS[kind]}
               icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
               active={value === kind}
               disabled={disabled}

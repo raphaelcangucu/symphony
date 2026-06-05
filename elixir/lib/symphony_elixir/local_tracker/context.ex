@@ -306,7 +306,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       issue
       |> IssueRecord.changeset(changes)
       |> Repo.update()
-      |> sync_agent_routing_label_result(project.id, attr(attrs, :agent))
+      |> sync_agent_routing_label_result(project.id, fetch_agent_attr(attrs))
       |> preload_issue_result()
       |> tap_issue_event("issue_updated", %{status: status.name})
     end
@@ -1187,7 +1187,43 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp preload_issue_result({:ok, %IssueRecord{} = issue}), do: {:ok, Repo.preload(issue, @issue_preloads)}
   defp preload_issue_result(result), do: result
 
-  defp sync_agent_routing_label_result({:ok, %IssueRecord{} = issue}, project_id, agent) do
+  # fetch_agent_attr/1 returns {:present, value} when the "agent" key is explicitly
+  # present in attrs (including when value is nil), or :absent when the key is missing.
+  # This lets sync_agent_routing_label_result distinguish "clear labels" from "no-op".
+  defp fetch_agent_attr(attrs) do
+    case Map.fetch(attrs, "agent") do
+      {:ok, value} ->
+        {:present, value}
+
+      :error ->
+        case Map.fetch(attrs, :agent) do
+          {:ok, value} -> {:present, value}
+          :error -> :absent
+        end
+    end
+  end
+
+  # Explicit agent value — replace the routing label.
+  defp sync_agent_routing_label_result({:ok, %IssueRecord{} = issue}, project_id, {:present, agent}) do
+    case normalize_agent_kind(agent) do
+      nil ->
+        # agent is not a valid agent kind (nil, unknown string) — clear routing labels
+        with :ok <- delete_agent_routing_labels(issue.id), do: {:ok, issue}
+
+      agent_kind ->
+        replace_agent_routing_label(issue, project_id, agent_kind)
+    end
+  end
+
+  # Key absent — do not touch routing labels.
+  defp sync_agent_routing_label_result({:ok, %IssueRecord{} = issue}, _project_id, :absent) do
+    {:ok, issue}
+  end
+
+  # Legacy callers (create/move paths) pass a raw agent string or nil directly.
+  # Treat nil as "no-op" (not "clear") for backward compatibility.
+  defp sync_agent_routing_label_result({:ok, %IssueRecord{} = issue}, project_id, agent)
+       when is_binary(agent) or is_nil(agent) do
     case normalize_agent_kind(agent) do
       nil -> {:ok, issue}
       agent_kind -> replace_agent_routing_label(issue, project_id, agent_kind)
