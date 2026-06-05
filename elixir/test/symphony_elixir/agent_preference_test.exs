@@ -9,6 +9,7 @@ defmodule SymphonyElixir.AgentPreferenceTest do
 
   setup do
     Repo.delete_all(Setting)
+    on_exit(fn -> Repo.delete_all(Setting) end)
     :ok
   end
 

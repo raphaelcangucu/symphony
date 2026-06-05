@@ -10,6 +10,7 @@ defmodule SymphonyElixir.AgentRunnerAgentKindTest do
 
   setup do
     Repo.delete_all(Setting)
+    on_exit(fn -> Repo.delete_all(Setting) end)
 
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

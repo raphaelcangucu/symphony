@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Settings.Setting
   alias SymphonyElixir.TestSupport
   alias SymphonyElixir.Workflow
   alias SymphonyElixir.Workspace
@@ -17,6 +18,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     start_supervised!(SymphonyElixirWeb.Endpoint)
     migrate_repo()
     clean_repo()
+    Repo.delete_all(Setting)
 
     previous_token = System.get_env(@token_env)
     previous_runner = Application.get_env(:symphony_elixir, :assistant_runner)

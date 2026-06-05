@@ -11,6 +11,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorDispatchTest do
     migrate_repo()
     clean_repo()
     Repo.delete_all(Setting)
+    on_exit(fn -> Repo.delete_all(Setting) end)
     {:ok, _project} = Context.ensure_project(%{name: "Pref", slug: "pref"})
     {:ok, issue} = Context.create_issue("pref", %{"title" => "Dispatchable", "status" => "Todo"})
     {:ok, issue: issue}
