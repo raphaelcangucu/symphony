@@ -366,7 +366,7 @@ function normalizeAssistantModel(dto: BackendAssistantModelDto): AssistantModelO
     description: dto.description ?? undefined,
     isDefault: dto.isDefault ?? dto.is_default ?? false,
     defaultEffort,
-    efforts: efforts.length > 0 ? efforts : [{ id: defaultEffort, label: defaultEffort }],
+    efforts: efforts.length > 0 ? efforts : defaultEffort ? [{ id: defaultEffort, label: defaultEffort }] : [],
     inputModalities: dto.inputModalities ?? dto.input_modalities ?? undefined,
   };
 }
