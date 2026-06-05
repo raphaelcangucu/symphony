@@ -81,6 +81,30 @@ defmodule SymphonyElixir.LocalTracker.IssueMapperTest do
            ]
   end
 
+  test "unlabeled issue maps agent_kind nil (inherit)" do
+    inserted_at = ~U[2026-05-27 00:00:00Z]
+    updated_at = ~U[2026-05-27 00:01:00Z]
+
+    record = %IssueRecord{
+      id: 123,
+      identifier: "MAC-1",
+      title: "Build local tracker",
+      description: "Local tracker work",
+      priority: 1,
+      branch_name: "mac-1-local-tracker",
+      url: "http://localhost:4000/tracker/projects/macro-markets/issues/MAC-1",
+      assignee_id: "worker-1",
+      inserted_at: inserted_at,
+      updated_at: updated_at,
+      status: %WorkflowStatus{name: "Todo"},
+      labels: [],
+      comments: [],
+      source_relations: []
+    }
+
+    assert IssueMapper.to_issue(record).agent_kind == nil
+  end
+
   test "maps the owning project slug onto the issue when project is preloaded" do
     record = %IssueRecord{
       id: 1,
