@@ -61,5 +61,5 @@ mix pr_body.check --file /path/to/pr_body.md
 If behavior/config changes, update docs in the same PR:
 
 - `../README.md` for project concept and goals.
-- `README.md` for Elixir implementation and run instructions.
-- `README.md` workflow_markdown examples and `.env.example` for config contract changes.
+- `README.md` for Elixir implementation, run instructions, and `workflow_markdown` examples.
+- `.env.example` for process-level config contract changes.
