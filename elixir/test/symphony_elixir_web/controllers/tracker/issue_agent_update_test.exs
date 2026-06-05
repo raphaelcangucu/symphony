@@ -62,6 +62,16 @@ defmodule SymphonyElixirWeb.Tracker.IssueAgentUpdateTest do
     assert "symphony:claude" in label_names(updated)
   end
 
+  test "invalid agent value is rejected with 422 and labels are untouched", %{issue: issue} do
+    put(authed_conn(), "/api/tracker/v1/projects/pref/issues/#{issue.identifier}", %{"agent" => "claude"})
+
+    conn = put(authed_conn(), "/api/tracker/v1/projects/pref/issues/#{issue.identifier}", %{"agent" => "gemini"})
+    assert json_response(conn, 422)
+
+    {:ok, updated} = Context.get_issue("pref", issue.identifier)
+    assert "symphony:claude" in label_names(updated)
+  end
+
   defp label_names(issue) do
     issue |> Map.get(:labels) |> Enum.map(& &1.name)
   end

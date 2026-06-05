@@ -77,11 +77,15 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   def update(conn, %{"project_slug" => project_slug, "id" => identifier} = params) do
     attrs = Map.drop(params, ["project_slug", "id"])
 
-    with {:ok, project} <- Context.get_project(project_slug),
-         {:ok, issue} <- IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
-      json(conn, %{data: TrackerPresenter.issue(issue)})
+    if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", nil] do
+      TrackerErrors.validation(conn, "agent must be codex, claude, or null")
     else
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+      with {:ok, project} <- Context.get_project(project_slug),
+           {:ok, issue} <- IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
+        json(conn, %{data: TrackerPresenter.issue(issue)})
+      else
+        {:error, reason} -> TrackerErrors.render(conn, reason)
+      end
     end
   end
 

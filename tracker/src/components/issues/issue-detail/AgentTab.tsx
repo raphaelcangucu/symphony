@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
@@ -35,6 +36,7 @@ function formatTokens(value: number): string {
 }
 
 export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = null, onIssueUpdated }: AgentTabProps) {
+  const [agentPending, setAgentPending] = useState(false);
   const sessionLogEnabled =
     execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting";
   const sessionLog = useSessionLogChannel({
@@ -45,11 +47,14 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
   const canSteer = execution?.status === "live" || execution?.status === "waiting";
 
   async function changeAgent(agent: AgentKind | null) {
+    setAgentPending(true);
     try {
       const updated = await updateIssueAgent(projectSlug, issue.identifier, agent);
       onIssueUpdated?.(updated);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Failed to update agent");
+    } finally {
+      setAgentPending(false);
     }
   }
 
@@ -170,7 +175,7 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
           <AgentChip
             label="Inherit"
             active={!issue.agentKind}
-            disabled={Boolean(execution)}
+            disabled={Boolean(execution) || agentPending}
             onClick={() => void changeAgent(null)}
           />
           {(["codex", "claude"] as AgentKind[]).map((kind) => {
@@ -181,7 +186,7 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
                 label={AGENT_LABELS[kind]}
                 icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
                 active={issue.agentKind === kind}
-                disabled={Boolean(execution)}
+                disabled={Boolean(execution) || agentPending}
                 onClick={() => void changeAgent(kind)}
               />
             );
