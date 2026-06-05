@@ -1,14 +1,15 @@
 import type { Blocker, BlockerState, BlockerSummary } from "@/types/blocker";
 import type { Comment } from "@/types/comment";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import type {
-  AgentKind,
-  AgentOption,
-  Issue,
-  IssueAssigneeOption,
-  IssueFormOptions,
-  IssueLabelOption,
-  IssuePriority,
+import {
+  AGENT_KINDS,
+  type AgentKind,
+  type AgentOption,
+  type Issue,
+  type IssueAssigneeOption,
+  type IssueFormOptions,
+  type IssueLabelOption,
+  type IssuePriority,
 } from "@/types/issue";
 import type { Project, TrackerKind } from "@/types/project";
 import type { ProjectSetup, WorkspaceSuggestion } from "@/types/project-setup";
@@ -285,7 +286,7 @@ function normalizeAssigneeOption(dto: BackendAssigneeOptionDto): IssueAssigneeOp
 }
 
 function normalizeAgentOption(dto: BackendAgentOptionDto): AgentOption[] {
-  if (dto.value !== "codex" && dto.value !== "claude") return [];
+  if (!(AGENT_KINDS as readonly string[]).includes(dto.value)) return [];
   const value = dto.value as AgentKind;
   return [{ value, label: dto.label?.trim() || value, default: dto.default ?? false }];
 }

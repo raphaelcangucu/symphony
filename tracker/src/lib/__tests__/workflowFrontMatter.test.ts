@@ -64,4 +64,19 @@ describe("writeAgentKind", () => {
     expect(md.startsWith("---\nagent:\n  kind: claude\n---\n")).toBe(true);
     expect(md).toContain("Just a prompt.");
   });
+
+  it("preserves CRLF line endings end-to-end", () => {
+    const crlf = BASE.replace(/\n/g, "\r\n");
+    const md = writeAgentKind(crlf, "claude");
+    expect(md.includes("\r\n")).toBe(true);
+    expect(/(?<!\r)\n/.test(md)).toBe(false); // no bare LFs
+    expect(readAgentKind(md)).toBe("claude");
+  });
+
+  it("preserves an inline comment when updating kind", () => {
+    const md = writeAgentKind(BASE, "claude").replace("kind: claude", 'kind: "claude"  # pinned');
+    const updated = writeAgentKind(md, "codex");
+    expect(updated).toContain("kind: codex # pinned");
+    expect(readAgentKind(updated)).toBe("codex");
+  });
 });

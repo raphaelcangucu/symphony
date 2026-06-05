@@ -64,7 +64,8 @@ export interface Issue {
   updatedAt: string;
 }
 
-export type AgentKind = "codex" | "claude";
+export const AGENT_KINDS = ["codex", "claude"] as const;
+export type AgentKind = (typeof AGENT_KINDS)[number];
 
 export interface IssueLabelOption {
   id: string | null;
