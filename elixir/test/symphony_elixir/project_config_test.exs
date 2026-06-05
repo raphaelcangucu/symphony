@@ -116,13 +116,13 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.agent_kind == "claude"
   end
 
-  test "falls back to the global default agent_kind when the project declares none" do
+  test "returns nil (inherit) for agent_kind when the project declares none" do
     {:ok, project} = Context.ensure_project(%{name: "delta", slug: "delta", tracker_kind: "local"})
     project = SymphonyElixir.Repo.preload(project, :setup)
 
     config = ProjectConfig.resolve(project)
 
-    assert config.agent_kind == SymphonyElixir.Config.default_agent_kind()
+    assert config.agent_kind == nil
   end
 
   test "dev_server_auto_start_on/1 returns [] when auto_start_on is omitted" do

@@ -85,7 +85,9 @@ defmodule SymphonyElixir.AgentRunner do
   def issue_agent_kind(%Issue{project_slug: slug}) when is_binary(slug) do
     case Context.get_project(slug) do
       {:ok, project} ->
-        project |> Repo.preload(:setup) |> ProjectConfig.resolve() |> Map.get(:agent_kind)
+        # TODO(Task 5): replace this fallback with AgentPreference.resolve/2 chain
+        project |> Repo.preload(:setup) |> ProjectConfig.resolve() |> Map.get(:agent_kind) ||
+          Config.default_agent_kind()
 
       {:error, _reason} ->
         Config.default_agent_kind()
