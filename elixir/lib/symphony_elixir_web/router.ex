@@ -36,6 +36,9 @@ defmodule SymphonyElixirWeb.Router do
     pipe_through(:tracker_api)
 
     get("/viewer", ViewerController, :show)
+    get("/settings", SettingsController, :index)
+    get("/settings/agents/availability", SettingsController, :availability)
+    put("/settings/:group", SettingsController, :update)
     get("/observability", ObservabilityController, :index)
     post("/observability/report", ObservabilityController, :report)
     get("/backups", BackupController, :index)
