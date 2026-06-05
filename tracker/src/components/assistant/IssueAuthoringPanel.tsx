@@ -14,6 +14,7 @@ import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
+import type { AgentKind } from "@/types/issue";
 import type { AssistantDocumentChangedPayload, AssistantIssueCreatedPayload } from "@/services/phoenix/assistantChannel";
 
 interface IssueAuthoringPanelProps {
@@ -22,6 +23,7 @@ interface IssueAuthoringPanelProps {
   identifier?: string;
   view: WorkspaceView;
   compact?: boolean;
+  effectiveAgent?: AgentKind;
   onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
   onIssueCreated?: (issue: AssistantIssueCreatedPayload) => void;
 }
@@ -32,10 +34,12 @@ export function IssueAuthoringPanel({
   identifier,
   view,
   compact = false,
+  effectiveAgent: effectiveAgentProp,
   onDraftIssueCreated,
   onIssueCreated,
 }: IssueAuthoringPanelProps) {
   const normalizedIdentifier = useMemo(() => normalizeIssueIdentifier(identifier) || null, [identifier]);
+  const [effectiveAgent, setEffectiveAgent] = useState<AgentKind>(effectiveAgentProp ?? "codex");
   const [refreshKey, setRefreshKey] = useState(0);
   const [issueMode, setIssueMode] = useState<IssueAssistantMode>("triage");
   const [issueModeRequestId, setIssueModeRequestId] = useState(0);
@@ -112,12 +116,17 @@ export function IssueAuthoringPanel({
     setGoalModeStatus(null);
   }, []);
 
+  const handleEffectiveAgentResolved = useCallback((agent: AgentKind) => {
+    setEffectiveAgent(agent);
+  }, []);
+
   const handleDispatch = useCallback(() => {
+    const label = effectiveAgent === "claude" ? "Claude" : "Codex";
     setDispatching(true);
     setDispatchError(null);
-    setDispatchStatus("Dispatching to Codex...");
+    setDispatchStatus(`Dispatching to ${label}...`);
     setDispatchRequestId((current) => current + 1);
-  }, []);
+  }, [effectiveAgent]);
 
   const handleDispatchSucceeded = useCallback((message: string) => {
     setDispatching(false);
@@ -158,6 +167,7 @@ export function IssueAuthoringPanel({
         onIssueGoalModeError={handleGoalModeError}
         onDispatchSucceeded={handleDispatchSucceeded}
         onDispatchError={handleDispatchError}
+        onEffectiveAgentResolved={handleEffectiveAgentResolved}
         composerSeedMessage={composerSeedMessage}
       />
     </div>
@@ -256,31 +266,35 @@ export function IssueAuthoringPanel({
             ) : issueModeStatus ? (
               <p className="text-xs text-muted-foreground">{issueModeStatus}</p>
             ) : null}
-            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2.5">
-              <span className="min-w-0">
-                <span className="block text-xs font-medium text-foreground">Codex goal mode (long-running)</span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-                  When on, dispatched Codex runs follow the spec/plan as a long-running goal.
-                </span>
-              </span>
-              <span className="relative inline-flex shrink-0 items-center">
-                <input
-                  type="checkbox"
-                  checked={goalMode}
-                  aria-label="Codex goal mode"
-                  onChange={(event) => toggleGoalMode(event.target.checked)}
-                  className="peer sr-only"
-                />
-                <span className="h-5 w-9 rounded-full bg-input transition-colors duration-200 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2" />
-                <span className="absolute left-0.5 h-4 w-4 rounded-full bg-background shadow-sm transition-transform duration-200 peer-checked:translate-x-4" />
-              </span>
-            </label>
-            {goalModeError ? (
-              <p role="alert" className="text-xs text-destructive">
-                {goalModeError}
-              </p>
-            ) : goalModeStatus ? (
-              <p className="text-xs text-muted-foreground">{goalModeStatus}</p>
+            {effectiveAgent !== "claude" ? (
+              <>
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2.5">
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium text-foreground">Codex goal mode (long-running)</span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                      When on, dispatched Codex runs follow the spec/plan as a long-running goal.
+                    </span>
+                  </span>
+                  <span className="relative inline-flex shrink-0 items-center">
+                    <input
+                      type="checkbox"
+                      checked={goalMode}
+                      aria-label="Codex goal mode"
+                      onChange={(event) => toggleGoalMode(event.target.checked)}
+                      className="peer sr-only"
+                    />
+                    <span className="h-5 w-9 rounded-full bg-input transition-colors duration-200 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2" />
+                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-background shadow-sm transition-transform duration-200 peer-checked:translate-x-4" />
+                  </span>
+                </label>
+                {goalModeError ? (
+                  <p role="alert" className="text-xs text-destructive">
+                    {goalModeError}
+                  </p>
+                ) : goalModeStatus ? (
+                  <p className="text-xs text-muted-foreground">{goalModeStatus}</p>
+                ) : null}
+              </>
             ) : null}
             <div>
               <Button
@@ -290,11 +304,18 @@ export function IssueAuthoringPanel({
                 onClick={handleDispatch}
               >
                 <Rocket className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                {dispatching ? "Dispatching..." : goalMode ? "Dispatch to Codex (goal)" : "Dispatch to Codex"}
+                {dispatching
+                  ? "Dispatching..."
+                  : effectiveAgent === "claude"
+                    ? "Dispatch to Claude"
+                    : goalMode
+                      ? "Dispatch to Codex (goal)"
+                      : "Dispatch to Codex"}
               </Button>
               <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                Moves this issue to In Progress and hands it to the Codex orchestrator
-                {goalMode ? " as a long-running goal" : ""}.
+                {effectiveAgent === "claude"
+                  ? "Moves this issue to In Progress and hands it to the Claude coding agent."
+                  : `Moves this issue to In Progress and hands it to the Codex orchestrator${goalMode ? " as a long-running goal" : ""}.`}
               </p>
               {dispatchError ? (
                 <p role="alert" className="mt-1 text-xs text-destructive">

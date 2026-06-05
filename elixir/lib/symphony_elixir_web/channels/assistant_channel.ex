@@ -142,13 +142,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("set_goal_mode", _payload, socket),
     do: {:reply, {:error, %{reason: "goal_mode is required"}}, socket}
 
-  def handle_in("dispatch_codex", payload, socket) do
+  def handle_in("dispatch_coding_agent", payload, socket), do: do_dispatch(payload, socket)
+
+  def handle_in("dispatch_codex", payload, socket), do: do_dispatch(payload, socket)
+
+  defp do_dispatch(payload, socket) do
     case issue_thread(socket) do
       {:ok, %{issue_identifier: identifier, project_slug: project_slug} = thread} ->
         goal_mode = dispatch_goal_mode(payload, thread)
-        arguments = dispatch_arguments(identifier, goal_mode)
+        agent = agent_from_payload(payload)
+        arguments = dispatch_arguments(identifier, goal_mode, agent)
 
-        case ToolExecutor.execute(project_slug, "dispatch_codex", arguments) do
+        case ToolExecutor.execute(project_slug, "dispatch_coding_agent", arguments) do
           {:ok, result} ->
             {:reply, {:ok, %{message: result.message, issue: result.data, goal_mode: goal_mode}}, socket}
 
@@ -664,11 +669,25 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
-  defp dispatch_arguments(identifier, goal_mode) do
+  defp agent_from_payload(payload) when is_map(payload) do
+    case Map.get(payload, "agent") do
+      agent when is_binary(agent) -> agent
+      _ -> nil
+    end
+  end
+
+  defp dispatch_arguments(identifier, goal_mode, agent \\ nil) do
     base = %{"identifier" => identifier, "instructions" => dispatch_instructions(identifier)}
 
-    if goal_mode do
-      Map.put(base, "goal", dispatch_goal(identifier))
+    base =
+      if goal_mode do
+        Map.put(base, "goal", dispatch_goal(identifier))
+      else
+        base
+      end
+
+    if is_binary(agent) do
+      Map.put(base, "agent", agent)
     else
       base
     end

@@ -42,6 +42,7 @@ import {
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import type { AgentKind } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +75,7 @@ interface ProjectAssistantPanelProps {
   onIssueGoalModeError?: (message: string) => void;
   onDispatchSucceeded?: (message: string) => void;
   onDispatchError?: (message: string) => void;
+  onEffectiveAgentResolved?: (agent: AgentKind) => void;
   onOpenDocumentPath?: (path: string) => void;
   composerSeedMessage?: string | null;
 }
@@ -112,6 +114,7 @@ export function ProjectAssistantPanel({
   onIssueGoalModeError,
   onDispatchSucceeded,
   onDispatchError,
+  onEffectiveAgentResolved,
   onOpenDocumentPath,
   composerSeedMessage = null,
 }: ProjectAssistantPanelProps) {
@@ -281,6 +284,9 @@ export function ProjectAssistantPanel({
         lastConfirmedGoalModeRef.current = hydratedGoalMode;
         if (hydratedGoalMode) onIssueGoalModeChanged?.(true);
       }
+
+      const agent = effectiveAgentFromResponse(response);
+      if (agent) onEffectiveAgentResolved?.(agent);
     });
     joinPush.receive("error", (reason) => {
       setConnectionError(errorMessage(reason));
@@ -293,7 +299,7 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, isExploreMode, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onIssueCreated, onIssueGoalModeChanged, onIssueModeChanged, projectSlug, threadId]);
+  }, [active, isExploreMode, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onEffectiveAgentResolved, onIssueCreated, onIssueGoalModeChanged, onIssueModeChanged, projectSlug, threadId]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;
@@ -1013,6 +1019,13 @@ function goalModeFromResponse(response: unknown): boolean | null {
   if (!response || typeof response !== "object") return null;
   const value = (response as Record<string, unknown>).goal_mode;
   return typeof value === "boolean" ? value : null;
+}
+
+function effectiveAgentFromResponse(response: unknown): AgentKind | null {
+  if (!response || typeof response !== "object") return null;
+  const value = (response as Record<string, unknown>).effective_agent;
+  if (value === "claude" || value === "codex") return value;
+  return null;
 }
 
 function messageFromResponse(response: unknown): string | null {

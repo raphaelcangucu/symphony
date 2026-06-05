@@ -4,12 +4,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   """
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.AgentPreference
   alias SymphonyElixir.Assistant.{DiscoveryTools, GitHubTools, ProjectBoardTools, PullRequestLookup, ReadTools}
   alias SymphonyElixir.{Config, DevServer}
   alias SymphonyElixir.DevServer.Manager
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.LocalTracker.Context
-  alias SymphonyElixir.Tracker.IssueAdapter
+  alias SymphonyElixir.ProjectConfig
+  alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
   alias SymphonyElixirWeb.TrackerPresenter
 
   @tracker_tools ~w(
@@ -24,6 +26,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     update_project_workflow
     update_project_repositories
     get_agent_executions
+    dispatch_coding_agent
     dispatch_codex
   )
   @read_tools ReadTools.tools()
@@ -33,8 +36,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   @supported_tools @tracker_tools ++ @read_tools ++ @github_tools
   # Routine assistant chat replies should not be mirrored as issue comments; use
   # `add_comment` only when the user asks to record a comment on the issue.
-  @issue_bound_mutable_tools ~w(update_issue move_issue dispatch_codex)
-  @issue_bound_supported_tools ~w(list_issues get_issue read_workspace_file update_issue move_issue get_agent_executions dispatch_codex)
+  @issue_bound_mutable_tools ~w(update_issue move_issue dispatch_coding_agent dispatch_codex)
+  @issue_bound_supported_tools ~w(list_issues get_issue read_workspace_file update_issue move_issue get_agent_executions dispatch_coding_agent dispatch_codex)
   @in_progress_state "In Progress"
 
   @type result :: %{
@@ -168,7 +171,18 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "additionalProperties" => false,
         "properties" => %{}
       }),
-      tool_spec("dispatch_codex", "Request Codex coding work through the existing issue workflow.", %{
+      tool_spec("dispatch_coding_agent", "Request coding-agent work (Codex or Claude) through the existing issue workflow.", %{
+        "type" => "object",
+        "additionalProperties" => false,
+        "required" => ["identifier", "instructions"],
+        "properties" => %{
+          "identifier" => string_schema("Issue identifier to dispatch, for example MAC-1."),
+          "instructions" => string_schema("Concrete coding instructions for the agent."),
+          "agent" => string_schema("Optional agent override: codex or claude. Omit to follow task > project > user preference."),
+          "goal" => string_schema("Optional long-running goal (Codex only) to persist for the orchestrator.")
+        }
+      }),
+      tool_spec("dispatch_codex", "Alias for dispatch_coding_agent — dispatches Codex coding work through the existing issue workflow.", %{
         "type" => "object",
         "additionalProperties" => false,
         "required" => ["identifier", "instructions"],
@@ -567,18 +581,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp do_execute(project, "dispatch_codex", arguments, _opts) do
+  defp do_execute(project, "dispatch_codex", arguments, opts),
+    do: do_execute(project, "dispatch_coding_agent", arguments, opts)
+
+  defp do_execute(project, "dispatch_coding_agent", arguments, _opts) do
     with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
          {:ok, instructions} <- normalize_required_string(Map.get(arguments, "instructions"), :instructions),
          :ok <- ensure_status_available(project, @in_progress_state),
+         {:ok, agent} <- resolve_dispatch_agent(project, identifier, Map.get(arguments, "agent")),
          {:ok, _comment} <- IssueAdapter.dispatch(project, :add_comment, [identifier, codex_comment(instructions), %{"author" => "assistant"}]),
-         {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, dispatch_codex_attrs(arguments)]) do
+         {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, dispatch_agent_attrs(agent, arguments)]) do
       presented = TrackerPresenter.issue(issue)
 
       {:ok,
        %{
-         tool: "dispatch_codex",
-         message: "Requested Codex work on #{presented.identifier}",
+         tool: "dispatch_coding_agent",
+         message: "Requested #{agent_display(agent)} work on #{presented.identifier}",
          data: presented
        }}
     end
@@ -944,11 +962,33 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     "## Codex work requested from tracker assistant\n\n" <> instructions
   end
 
-  defp dispatch_codex_attrs(arguments) do
+  defp resolve_dispatch_agent(project, identifier, explicit) do
+    case AgentPreference.normalize(explicit) do
+      nil ->
+        project_kind = project |> ProjectConfig.resolve() |> Map.get(:agent_kind)
+        task_labels = issue_label_names(project, identifier)
+        {:ok, AgentPreference.resolve(task_labels, project_kind)}
+
+      kind ->
+        {:ok, kind}
+    end
+  end
+
+  defp issue_label_names(project, identifier) do
+    case IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      {:ok, %IssueDTO{labels: labels}} -> labels
+      _ -> []
+    end
+  end
+
+  defp agent_display("claude"), do: "Claude"
+  defp agent_display(_), do: "Codex"
+
+  defp dispatch_agent_attrs(agent, arguments) do
     %{
       "status" => @in_progress_state,
-      "agent" => "codex",
-      "agent_goal" => normalize_optional_string(Map.get(arguments, "goal"))
+      "agent" => agent,
+      "agent_goal" => if(agent == "codex", do: normalize_optional_string(Map.get(arguments, "goal")), else: nil)
     }
   end
 
