@@ -51,4 +51,22 @@ describe("SettingsPage", () => {
       expect(settingsService.updateAgentSettings).toHaveBeenCalledWith({ default_agent_kind: "claude" }),
     );
   });
+
+  it("reverts optimistic selection when save fails", async () => {
+    vi.mocked(settingsService.updateAgentSettings).mockRejectedValue(new Error("network error"));
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Codex/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Claude/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Codex/ }).getAttribute("aria-pressed")).toBe("true"),
+    );
+    expect(screen.getByRole("button", { name: /Claude/ }).getAttribute("aria-pressed")).toBe("false");
+  });
 });

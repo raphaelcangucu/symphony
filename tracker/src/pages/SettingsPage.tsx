@@ -17,15 +17,25 @@ export function SettingsPage() {
   const [defaultAgent, setDefaultAgent] = useState<AgentKind | null>(null);
   const [availability, setAvailability] = useState<AgentAvailability | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void fetchSettings().then((settings) => {
-      if (!cancelled) setDefaultAgent(settings.agents.default_agent_kind);
-    });
-    void fetchAgentAvailability().then((result) => {
-      if (!cancelled) setAvailability(result);
-    });
+    void fetchSettings()
+      .then((settings) => {
+        if (!cancelled) setDefaultAgent(settings.agents.default_agent_kind);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      });
+    void fetchAgentAvailability()
+      .then((result) => {
+        if (!cancelled) setAvailability(result);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailabilityError(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -62,23 +72,32 @@ export function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(AGENT_LABELS) as AgentKind[]).map((kind) => {
-              const Icon = AGENT_ICONS[kind];
-              return (
-                <AgentChip
-                  key={kind}
-                  label={AGENT_LABELS[kind]}
-                  icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
-                  active={defaultAgent === kind}
-                  disabled={saving || defaultAgent === null}
-                  onClick={() => void selectAgent(kind)}
-                />
-              );
-            })}
-          </div>
+          {loadError ? (
+            <p className="text-xs text-muted-foreground">Failed to load settings — refresh to retry.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {defaultAgent === null && (
+                <p className="text-xs text-muted-foreground">Loading…</p>
+              )}
+              {(Object.keys(AGENT_LABELS) as AgentKind[]).map((kind) => {
+                const Icon = AGENT_ICONS[kind];
+                return (
+                  <AgentChip
+                    key={kind}
+                    label={AGENT_LABELS[kind]}
+                    icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
+                    active={defaultAgent === kind}
+                    disabled={saving || defaultAgent === null}
+                    onClick={() => void selectAgent(kind)}
+                  />
+                );
+              })}
+            </div>
+          )}
 
-          {availability ? (
+          {availabilityError ? (
+            <p className="text-xs text-muted-foreground">Could not check agent availability.</p>
+          ) : availability ? (
             <ul className="space-y-1 text-xs text-muted-foreground">
               {(Object.keys(AGENT_LABELS) as AgentKind[]).map((kind) => {
                 const entry = availability[kind];
