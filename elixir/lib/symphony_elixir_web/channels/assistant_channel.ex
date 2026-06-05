@@ -7,7 +7,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixir.Assistant.{CodexSession, History, Payload, SideQuery, ToolExecutor}
   alias SymphonyElixir.Config
   alias SymphonyElixirWeb.TrackerAuth
-  alias SymphonyElixir.Workspace
+  alias SymphonyElixir.{AgentPreference, Settings, Workspace}
 
   @issue_modes ~w(triage simple complex)
   @issue_authoring_tools ~w(create_draft_issue create_issue)
@@ -24,7 +24,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
         mode: History.thread_mode(thread),
-        goal_mode: History.thread_goal_mode(thread)
+        goal_mode: History.thread_goal_mode(thread),
+        effective_agent: thread_effective_agent(thread)
       }
 
       socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
@@ -45,7 +46,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
         mode: History.thread_mode(thread),
-        goal_mode: History.thread_goal_mode(thread)
+        goal_mode: History.thread_goal_mode(thread),
+        effective_agent: thread_effective_agent(thread)
       }
 
       socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
@@ -65,7 +67,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         mode: History.thread_mode(thread),
-        goal_mode: History.thread_goal_mode(thread)
+        goal_mode: History.thread_goal_mode(thread),
+        effective_agent: thread_effective_agent(thread)
       }
 
       socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
@@ -83,7 +86,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       case History.list_messages(project_slug) do
         {:ok, messages} ->
           socket = assign(socket, :project_slug, project_slug)
-          payload = %{messages: Enum.map(messages, &History.message_payload/1)}
+          # No thread record for project-scoped joins — report the operator default directly.
+          payload = %{
+            messages: Enum.map(messages, &History.message_payload/1),
+            effective_agent: Settings.Agents.default_agent_kind()
+          }
+
           send(self(), {:assistant_history_loaded, payload})
           {:ok, payload, socket}
 
@@ -380,6 +388,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> Map.put("attachments", Payload.attachment_summary(attachments))
           |> Map.put("model", Map.get(context, "model") || Map.get(context, :model))
           |> Map.put("effort", Map.get(context, "effort") || Map.get(context, :effort))
+          |> Map.put("agent", Map.get(context, "agent") || Map.get(context, :agent))
 
         opts =
           []
@@ -510,6 +519,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       runner when is_function(runner, 4) -> Keyword.put(opts, :runner, runner)
       _ -> opts
     end
+  end
+
+  # Returns the effective agent kind for a thread's join payload so the UI can
+  # display and default to the correct agent without waiting for the first turn.
+  defp thread_effective_agent(thread) do
+    AgentPreference.normalize(Map.get(thread, :agent_kind)) ||
+      Settings.Agents.default_agent_kind()
   end
 
   defp normalize_context(context) when is_map(context), do: context

@@ -31,4 +31,8 @@ defmodule SymphonyElixir.Assistant.HistoryAgentFieldsTest do
     {:ok, thread} = History.set_thread_agent(thread, "claude")
     assert thread.agent_kind == "claude"
   end
+
+  test "agent_thread_id is nil-safe for threads predating the map" do
+    assert History.agent_thread_id(%SymphonyElixir.Assistant.Thread{agent_thread_ids: nil}, "codex") == nil
+  end
 end
