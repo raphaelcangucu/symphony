@@ -129,6 +129,7 @@ defmodule SymphonyElixirWeb.PreviewProxyBodyTest do
     end
   end
 
-  defp reload_workflow_store! do    :ok
+  defp reload_workflow_store! do
+    :ok
   end
 end

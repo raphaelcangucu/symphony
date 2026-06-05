@@ -694,8 +694,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   defp repository_list_schema do
     %{
       "type" => "array",
-      "description" =>
-        "Full replacement list. Each entry needs github_full_name, workspace_path, and role. Optional: clone_url, default_branch, selected_branch, local_path, scan_summary.",
+      "description" => "Full replacement list. Each entry needs github_full_name, workspace_path, and role. Optional: clone_url, default_branch, selected_branch, local_path, scan_summary.",
       "items" => %{
         "type" => "object",
         "additionalProperties" => true,
@@ -745,9 +744,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       SymphonyElixir.LocalTracker.Templates.list_templates()
       |> Enum.map_join(", ", & &1.slug)
 
-    codex_failure_response(
-      "Template #{inspect(slug)} not found. Available templates: #{slugs}. Call list_templates for details."
-    )
+    codex_failure_response("Template #{inspect(slug)} not found. Available templates: #{slugs}. Call list_templates for details.")
   end
 
   defp codex_failure_response(:template_not_found) do
@@ -775,9 +772,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp codex_failure_response(:missing_jira_credentials) do
-    codex_failure_response(
-      "Jira credentials are not configured on the Symphony server (jira: section in WORKFLOW.md or JIRA_* env vars)."
-    )
+    codex_failure_response("Jira credentials are not configured on the Symphony server (jira: section in WORKFLOW.md or JIRA_* env vars).")
   end
 
   defp codex_failure_response(:disabled) do

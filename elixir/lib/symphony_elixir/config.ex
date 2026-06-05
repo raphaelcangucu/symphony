@@ -486,8 +486,7 @@ defmodule SymphonyElixir.Config do
     if present == [] do
       :ok
     else
-      {:error,
-       ["not allowed in per-project workflow: #{Enum.join(present, ", ")} (set these as process/connection config)"]}
+      {:error, ["not allowed in per-project workflow: #{Enum.join(present, ", ")} (set these as process/connection config)"]}
     end
   end
 
@@ -828,7 +827,6 @@ defmodule SymphonyElixir.Config do
   def public_tunnel_namespace do
     get_in(validated_workflow_options(), [:public_tunnel, :namespace])
   end
-
 
   @spec validate!() :: :ok | {:error, String.t()}
   def validate! do

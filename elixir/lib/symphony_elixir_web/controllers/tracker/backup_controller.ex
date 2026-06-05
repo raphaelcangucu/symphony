@@ -199,10 +199,13 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
     end
   end
 
-  defp parse_id_result(id), do: parse_id(id) |> then(fn
-    {:ok, n} -> {:ok, n}
-    :error -> :error
-  end)
+  defp parse_id_result(id),
+    do:
+      parse_id(id)
+      |> then(fn
+        {:ok, n} -> {:ok, n}
+        :error -> :error
+      end)
 
   defp not_found(conn, id) do
     conn
@@ -219,8 +222,7 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
     do: "Backup file is too small to restore (#{bytes} bytes): #{path}"
 
   defp format_error({:backup_has_no_projects, current: current, backup: backup}),
-    do:
-      "Refusing restore: current database has #{current} project(s) but backup has #{backup}. Pass force=true to override."
+    do: "Refusing restore: current database has #{current} project(s) but backup has #{backup}. Pass force=true to override."
 
   defp format_error({:missing_file, path}), do: "Backup file not found: #{path}"
   defp format_error(reason), do: inspect(reason)

@@ -79,7 +79,6 @@ defmodule SymphonyElixir.ProjectConfigTest do
       tracker_active_states: ["GlobalOnly"]
     )
 
-
     {:ok, project} = Context.ensure_project(%{name: "eps", slug: "eps", tracker_kind: "local"})
     project = Repo.preload(project, :setup)
 
