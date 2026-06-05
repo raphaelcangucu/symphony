@@ -196,10 +196,12 @@ defmodule SymphonyElixir.AgentRunner do
            ) do
       Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
 
+      advanced_session = maybe_advance_session(app_session, turn_session)
+
       case continue_with_issue?(issue, issue_state_fetcher, Keyword.get(opts, :project_config)) do
         {:continue, refreshed_issue} ->
           continue_or_stop_outer_turn_loop(
-            app_session,
+            advanced_session,
             workspace,
             refreshed_issue,
             codex_update_recipient,
@@ -383,4 +385,10 @@ defmodule SymphonyElixir.AgentRunner do
   defp issue_context(%Issue{id: issue_id, identifier: identifier}) do
     "issue_id=#{issue_id} issue_identifier=#{identifier}"
   end
+
+  defp maybe_advance_session(session, %{cli_session_id: cli_session_id}) when is_binary(cli_session_id) do
+    Map.put(session, :cli_session_id, cli_session_id)
+  end
+
+  defp maybe_advance_session(session, _result), do: session
 end

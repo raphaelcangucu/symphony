@@ -86,7 +86,7 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
           {System.find_executable("bash"), [~c"-lc", String.to_charlist(shell_line)]}
 
         setsid_path ->
-          {setsid_path, [~c"bash", ~c"-lc", String.to_charlist(shell_line)]}
+          {setsid_path, [~c"--wait", ~c"bash", ~c"-lc", String.to_charlist(shell_line)]}
       end
 
     port =
