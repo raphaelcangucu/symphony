@@ -52,6 +52,25 @@ defmodule SymphonyElixir.AgentRouting do
     resolve_agent_kind(label_names, configured_kinds, default_kind) != nil
   end
 
+  @doc "Explicit per-task agent from labels (`symphony:codex|claude`); plain `symphony` is no preference."
+  @spec label_agent_kind([String.t()]) :: String.t() | nil
+  def label_agent_kind(label_names) when is_list(label_names) do
+    normalized = label_names |> Enum.map(&normalize_label/1) |> Enum.reject(&(&1 == ""))
+
+    cond do
+      @label_claude in normalized -> "claude"
+      @label_codex in normalized -> "codex"
+      true -> nil
+    end
+  end
+
+  @doc "Admission check by labels alone — agent availability no longer gates admission."
+  @spec routable?([String.t()]) :: boolean()
+  def routable?(label_names) when is_list(label_names) do
+    normalized = label_names |> Enum.map(&normalize_label/1)
+    Enum.any?(admission_labels(), &(&1 in normalized))
+  end
+
   defp normalize_label(name) when is_binary(name), do: String.downcase(String.trim(name))
   defp normalize_label(_), do: ""
 end
