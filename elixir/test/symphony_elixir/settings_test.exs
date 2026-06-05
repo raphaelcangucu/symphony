@@ -43,6 +43,11 @@ defmodule SymphonyElixir.SettingsTest do
     assert Settings.get("agents", "default_agent_kind") == "codex"
   end
 
+  test "a stale stored value that no longer casts falls back to the default" do
+    Repo.insert!(%Setting{group: "agents", name: "default_agent_kind", payload: %{"value" => "gemini"}})
+    assert Settings.get("agents", "default_agent_kind") == "codex"
+  end
+
   test "Settings.Agents.default_agent_kind/0 convenience reads the chain" do
     assert Settings.Agents.default_agent_kind() == "codex"
     {:ok, _} = Settings.put("agents", "default_agent_kind", "claude")
