@@ -79,4 +79,21 @@ defmodule SymphonyElixir.Claude.AppServer.ToolGatewayTest do
     assert {:ok, body} = File.read(path)
     assert %{"mcpServers" => %{"symphony" => %{"type" => "http", "url" => "http://127.0.0.1:1234/mcp/tok"}}} = Jason.decode!(body)
   end
+
+  test "table survives the registering process exiting" do
+    executor = fn _n, _a -> %{"success" => true, "contentItems" => [%{"type" => "inputText", "text" => "ok"}]} end
+
+    task = Task.async(fn -> ToolGateway.register_session(@specs, executor) end)
+    {:ok, _token1, _url1} = Task.await(task)
+    # task (the registering process) has now exited
+
+    {:ok, token2, url2} = ToolGateway.register_session(@specs, executor)
+    on_exit(fn -> ToolGateway.unregister_session(token2) end)
+
+    {:ok, response} =
+      Req.post(url2, json: %{"jsonrpc" => "2.0", "id" => 1, "method" => "tools/call", "params" => %{"name" => "echo_tool", "arguments" => %{}}}, retry: false)
+
+    assert response.status == 200
+    assert %{"result" => %{"isError" => false}} = response.body
+  end
 end
