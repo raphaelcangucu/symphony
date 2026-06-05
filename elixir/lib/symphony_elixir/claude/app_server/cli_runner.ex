@@ -44,7 +44,8 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
           required(:model) => String.t() | nil,
           required(:mcp_config_path) => Path.t() | nil,
           required(:permission_mode) => String.t(),
-          required(:timeout_ms) => pos_integer()
+          required(:timeout_ms) => pos_integer(),
+          optional(:on_spawn) => (non_neg_integer() -> any())
         }
 
   @type turn_result :: %{
@@ -101,6 +102,18 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
           line: @port_line_bytes
         ]
       )
+
+    # Notify the caller of the OS pid so it can perform group kills on interrupt.
+    case Map.get(args, :on_spawn) do
+      nil ->
+        :ok
+
+      on_spawn ->
+        case :erlang.port_info(port, :os_pid) do
+          {:os_pid, os_pid} -> on_spawn.(os_pid)
+          _ -> :ok
+        end
+    end
 
     initial_state = %{
       cli_session_id: args.cli_session_id,

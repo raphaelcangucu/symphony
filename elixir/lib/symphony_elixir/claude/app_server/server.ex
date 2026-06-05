@@ -71,12 +71,15 @@ defmodule SymphonyElixir.Claude.AppServer.Server do
       state
       |> update_in([:threads, thread_id], fn thread ->
         if thread do
+          if thread.runner_ref, do: Process.demonitor(thread.runner_ref, [:flush])
+
           cli_session_id = Map.get(result, :cli_session_id) || thread.cli_session_id
 
           thread
           |> Map.put(:cli_session_id, cli_session_id)
           |> Map.put(:active_turn, nil)
           |> Map.put(:runner_pid, nil)
+          |> Map.put(:runner_ref, nil)
         else
           thread
         end
@@ -90,9 +93,12 @@ defmodule SymphonyElixir.Claude.AppServer.Server do
       state
       |> update_in([:threads, thread_id], fn thread ->
         if thread do
+          if thread.runner_ref, do: Process.demonitor(thread.runner_ref, [:flush])
+
           thread
           |> Map.put(:active_turn, nil)
           |> Map.put(:runner_pid, nil)
+          |> Map.put(:runner_ref, nil)
         else
           thread
         end
@@ -100,6 +106,60 @@ defmodule SymphonyElixir.Claude.AppServer.Server do
 
     {:noreply, new_state}
   end
+
+  def handle_cast({:runner_os_pid, thread_id, os_pid}, state) do
+    new_state =
+      update_in(state, [:threads, thread_id], fn thread ->
+        if thread, do: Map.put(thread, :runner_os_pid, os_pid), else: thread
+      end)
+
+    {:noreply, new_state}
+  end
+
+  # ── handle_info ──────────────────────────────────────────────────────────────
+
+  @impl GenServer
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    # Find the thread whose runner just crashed unexpectedly.
+    thread_entry =
+      Enum.find(state.threads, fn {_id, t} ->
+        t.runner_ref == ref
+      end)
+
+    case thread_entry do
+      {thread_id, thread} when not is_nil(thread.active_turn) ->
+        turn_id = thread.active_turn
+
+        # Emit a synthetic turn/failed so the client is not left waiting.
+        try do
+          state.sender.(%{
+            "jsonrpc" => "2.0",
+            "method" => "turn/failed",
+            "params" => %{
+              "thread_id" => thread_id,
+              "turn_id" => turn_id,
+              "error" => "turn runner crashed: #{inspect(reason)}"
+            }
+          })
+        rescue
+          _ -> :ok
+        end
+
+        updated_thread =
+          thread
+          |> Map.put(:active_turn, nil)
+          |> Map.put(:runner_pid, nil)
+          |> Map.put(:runner_ref, nil)
+          |> Map.put(:runner_os_pid, nil)
+
+        {:noreply, put_in(state, [:threads, thread_id], updated_thread)}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
+  def handle_info(_msg, state), do: {:noreply, state}
 
   # ── handle_call ──────────────────────────────────────────────────────────────
 
@@ -227,7 +287,9 @@ defmodule SymphonyElixir.Claude.AppServer.Server do
       mcp_config_path: mcp_config_path,
       steer_queue: [],
       active_turn: nil,
-      runner_pid: nil
+      runner_pid: nil,
+      runner_ref: nil,
+      runner_os_pid: nil
     }
 
     new_state = put_in(state, [:threads, thread_id], thread)
@@ -291,19 +353,20 @@ defmodule SymphonyElixir.Claude.AppServer.Server do
           model: Map.get(params, "model"),
           mcp_config_path: thread.mcp_config_path,
           permission_mode: thread.permission_mode,
-          timeout_ms: SymphonyElixir.Config.agent_turn_timeout_ms()
+          timeout_ms: SymphonyElixir.Config.agent_turn_timeout_ms(),
+          on_spawn: fn os_pid -> GenServer.cast(server, {:runner_os_pid, thread_id, os_pid}) end
         }
 
-        {:ok, pid} =
-          Task.start(fn ->
-            run_turn_task(server, thread_id, turn_args, on_event)
-          end)
+        pid = spawn(fn -> run_turn_task(server, thread_id, turn_args, on_event) end)
+        ref = Process.monitor(pid)
 
         updated_thread =
           thread
           |> Map.put(:active_turn, turn_id)
           |> Map.put(:steer_queue, [])
           |> Map.put(:runner_pid, pid)
+          |> Map.put(:runner_ref, ref)
+          |> Map.put(:runner_os_pid, nil)
 
         put_in(state, [:threads, thread_id], updated_thread)
     end
@@ -335,15 +398,32 @@ defmodule SymphonyElixir.Claude.AppServer.Server do
     thread_id = Map.get(params, "threadId", "")
 
     case Map.get(state.threads, thread_id) do
-      %{active_turn: active, runner_pid: runner_pid} = thread when not is_nil(active) ->
+      %{active_turn: active, runner_pid: runner_pid, runner_ref: runner_ref, runner_os_pid: runner_os_pid} =
+          thread
+      when not is_nil(active) ->
+        # Best-effort group kill first (tears down grandchildren via setsid group).
+        if runner_os_pid do
+          try do
+            System.cmd("kill", ["-9", "-#{runner_os_pid}"], stderr_to_stdout: true)
+          rescue
+            _ -> :ok
+          end
+        end
+
         if runner_pid && Process.alive?(runner_pid) do
           Process.exit(runner_pid, :kill)
         end
+
+        if runner_ref, do: Process.demonitor(runner_ref, [:flush])
 
         updated_thread =
           thread
           |> Map.put(:active_turn, nil)
           |> Map.put(:runner_pid, nil)
+          |> Map.put(:runner_ref, nil)
+          |> Map.put(:runner_os_pid, nil)
+          # Interrupt abandons queued steers — they belonged to the abandoned direction.
+          |> Map.put(:steer_queue, [])
 
         new_state = put_in(state, [:threads, thread_id], updated_thread)
 
