@@ -146,26 +146,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_in("dispatch_codex", payload, socket), do: do_dispatch(payload, socket)
 
-  defp do_dispatch(payload, socket) do
-    case issue_thread(socket) do
-      {:ok, %{issue_identifier: identifier, project_slug: project_slug} = thread} ->
-        goal_mode = dispatch_goal_mode(payload, thread)
-        agent = agent_from_payload(payload)
-        arguments = dispatch_arguments(identifier, goal_mode, agent)
-
-        case ToolExecutor.execute(project_slug, "dispatch_coding_agent", arguments) do
-          {:ok, result} ->
-            {:reply, {:ok, %{message: result.message, issue: result.data, goal_mode: goal_mode}}, socket}
-
-          {:error, reason} ->
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-        end
-
-      {:error, reason} ->
-        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-    end
-  end
-
   def handle_in("steer_turn", %{"message" => message}, socket) when is_binary(message) do
     trimmed = String.trim(message)
 
@@ -232,6 +212,26 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_in("btw", _payload, socket), do: {:reply, {:error, %{reason: "message is required"}}, socket}
+
+  defp do_dispatch(payload, socket) do
+    case issue_thread(socket) do
+      {:ok, %{issue_identifier: identifier, project_slug: project_slug} = thread} ->
+        goal_mode = dispatch_goal_mode(payload, thread)
+        agent = agent_from_payload(payload)
+        arguments = dispatch_arguments(identifier, goal_mode, agent)
+
+        case ToolExecutor.execute(project_slug, "dispatch_coding_agent", arguments) do
+          {:ok, result} ->
+            {:reply, {:ok, %{message: result.message, issue: result.data, goal_mode: goal_mode}}, socket}
+
+          {:error, reason} ->
+            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
 
   @impl true
   def handle_info({:assistant_history_loaded, payload}, socket) do

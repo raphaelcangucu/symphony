@@ -800,6 +800,9 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   # Resolves the effective agent kind for a turn with the priority chain:
   # context (per-message) > thread's stored kind > operator settings default > "codex".
+  # Project tier is intentionally absent here: the channel join sends an
+  # effective_agent that includes it, and the composer echoes it back as
+  # context.agent — so the project preference arrives via the context head.
   defp resolve_thread_agent(thread, context) do
     AgentPreference.normalize(Map.get(context, "agent") || Map.get(context, :agent)) ||
       AgentPreference.normalize(Map.get(thread, :agent_kind)) ||
