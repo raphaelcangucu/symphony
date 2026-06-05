@@ -1,27 +1,33 @@
 import { ExternalLink, GitBranch } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { getStatusMeta } from "@/components/board/status-meta";
-import { labelDotClass } from "@/components/board/label-colors";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
+import { InlineEditableMarkdown } from "@/components/issues/inline/InlineEditableMarkdown";
+import { InlineLabelEditor } from "@/components/issues/inline/InlineLabelEditor";
 import { PriorityIndicator, priorityLabel } from "@/components/issues/PriorityIndicator";
 import { PullRequestLink } from "@/components/issues/pull-request/PullRequestLink";
-import { Markdown } from "@/components/ui/markdown";
 import { Separator } from "@/components/ui/separator";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
+import { userVisibleLabels } from "@/lib/symphonyLabels";
 import { cn, formatDateTime } from "@/lib/utils";
+import { getIssueFormOptions } from "@/services/issues";
 import type { Comment } from "@/types/comment";
-import type { Issue, IssueDevServer, IssueDevServersResponse } from "@/types/issue";
+import type { Issue, IssueDevServer, IssueDevServersResponse, IssueLabelOption } from "@/types/issue";
 import type { PullRequest } from "@/types/pull-request";
 
 import { CommentCard, WorkpadBadge } from "./CommentCard";
 
 interface SummaryTabProps {
   issue: Issue;
+  projectSlug: string;
   pullRequests?: PullRequest[];
   workpad?: Comment | null;
+  saving?: boolean;
   onOpenPullRequest?: () => void;
   onOpenComments?: () => void;
+  onSaveDescription?: (description: string) => Promise<boolean>;
+  onSaveLabels?: (labelIds: string[]) => Promise<boolean>;
 }
 
 function issueLinkLabel(url: string): string {
@@ -32,11 +38,17 @@ function issueLinkLabel(url: string): string {
 
 export function SummaryTab({
   issue,
+  projectSlug,
   pullRequests = [],
   workpad = null,
+  saving = false,
   onOpenPullRequest,
   onOpenComments,
+  onSaveDescription,
+  onSaveLabels,
 }: SummaryTabProps) {
+  const [labelOptions, setLabelOptions] = useState<IssueLabelOption[]>([]);
+  const [labelOptionsLoading, setLabelOptionsLoading] = useState(false);
   const meta = getStatusMeta(issue.status);
   const StatusIcon = meta.Icon;
   const { data: previewData } = useIssueDevServers(issue.projectSlug, issue.identifier);
@@ -45,6 +57,28 @@ export function SummaryTab({
   const previewStatus = previewUrl ? null : previewStatusLabel(previewData, primaryPreviewServer);
   const hasPreviewSummary = Boolean(previewUrl || previewStatus);
   const hasLinks = Boolean(issue.url) || issue.branchName !== null || pullRequests.length > 0 || hasPreviewSummary;
+  const editable = Boolean(onSaveDescription || onSaveLabels);
+
+  useEffect(() => {
+    if (!editable || !projectSlug.trim()) return undefined;
+
+    let cancelled = false;
+    setLabelOptionsLoading(true);
+    void getIssueFormOptions(projectSlug)
+      .then((options) => {
+        if (!cancelled) setLabelOptions(options.labels);
+      })
+      .catch(() => {
+        if (!cancelled) setLabelOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLabelOptionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editable, projectSlug]);
 
   return (
     <div className="grid gap-x-8 gap-y-6 text-sm lg:grid-cols-[minmax(0,1fr)_236px]">
@@ -97,8 +131,14 @@ export function SummaryTab({
           <h3 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Description
           </h3>
-          {issue.description?.trim() ? (
-            <Markdown>{issue.description}</Markdown>
+          {onSaveDescription ? (
+            <InlineEditableMarkdown
+              value={issue.description ?? ""}
+              saving={saving}
+              onSave={onSaveDescription}
+            />
+          ) : issue.description?.trim() ? (
+            <p className="whitespace-pre-wrap text-sm">{issue.description}</p>
           ) : (
             <p className="text-sm text-muted-foreground">No description yet.</p>
           )}
@@ -151,18 +191,28 @@ export function SummaryTab({
         </div>
         <Separator />
         <Field label="Labels">
-          <div className="flex flex-wrap gap-1.5">
-            {issue.labels.length === 0 ? <span className="text-xs text-muted-foreground">No labels</span> : null}
-            {issue.labels.map((label) => (
-              <span
-                key={label}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-0.5 text-xs font-medium text-foreground"
-              >
-                <span className={cn("h-2 w-2 rounded-full", labelDotClass(label))} />
-                {label}
-              </span>
-            ))}
-          </div>
+          {onSaveLabels ? (
+            <InlineLabelEditor
+              labels={issue.labels}
+              options={labelOptions}
+              optionsLoading={labelOptionsLoading}
+              saving={saving}
+              onSave={onSaveLabels}
+            />
+          ) : userVisibleLabels(issue.labels).length === 0 ? (
+            <span className="text-xs text-muted-foreground">No labels</span>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {userVisibleLabels(issue.labels).map((label) => (
+                <span
+                  key={label}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-0.5 text-xs font-medium text-foreground"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
         </Field>
       </aside>
     </div>

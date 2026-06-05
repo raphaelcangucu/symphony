@@ -11,7 +11,8 @@ This directory contains the Elixir agent orchestration service that polls Linear
 
 ## Codebase-Specific Conventions
 
-- Runtime config is loaded from `WORKFLOW.md` front matter via `SymphonyElixir.Workflow` and `SymphonyElixir.Config`.
+- Process settings come from `SYMPHONY_*` env (`SymphonyElixir.InstanceConfig`); per-project
+  workflow is DB-owned `workflow_markdown` (`SymphonyElixir.ProjectConfig`).
 - Keep the implementation aligned with [`../SPEC.md`](../SPEC.md) where practical.
   - The implementation may be a superset of the spec.
   - The implementation must not conflict with the spec.
@@ -61,4 +62,4 @@ If behavior/config changes, update docs in the same PR:
 
 - `../README.md` for project concept and goals.
 - `README.md` for Elixir implementation and run instructions.
-- `WORKFLOW.md` for workflow/config contract changes.
+- `README.md` workflow_markdown examples and `.env.example` for config contract changes.

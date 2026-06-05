@@ -107,3 +107,9 @@ export interface MoveIssueInput {
   status: WorkflowStatusName;
   position: number;
 }
+
+export interface UpdateIssueInput {
+  title?: string;
+  description?: string | null;
+  labelIds?: string[];
+}

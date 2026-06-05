@@ -62,7 +62,8 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
              "data" => %{
                "available" => false,
                "reason" => "disabled",
-               "servers" => []
+               "servers" => [],
+               "tunnel" => %{"enabled" => false, "running" => false}
              }
            }
   end
@@ -99,7 +100,8 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
                "data" => %{
                  "available" => false,
                  "reason" => "disabled",
-                 "servers" => []
+                 "servers" => [],
+                 "tunnel" => %{"enabled" => false, "running" => false}
                }
              }
     end

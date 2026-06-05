@@ -131,6 +131,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   defp to_dirty_field(key) when key in [:description, "description"], do: :description
   defp to_dirty_field(key) when key in [:priority, "priority"], do: :priority
   defp to_dirty_field(key) when key in [:assignee_id, "assignee_id", :assignee, "assignee"], do: :assignee_id
+  defp to_dirty_field(key) when key in [:label_ids, "label_ids", :labels, "labels"], do: :labels
   defp to_dirty_field(_key), do: nil
 
   defp stringify(map), do: Map.new(map, fn {k, v} -> {to_string(k), v} end)

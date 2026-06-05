@@ -597,6 +597,25 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
              Context.add_issue_label("missing", "MAC-1", "symphony:incomplete")
   end
 
+  test "update_issue replaces user labels while preserving system labels" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Label edit", status: "Todo"})
+
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "symphony:codex")
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "old-label")
+
+    assert {:ok, updated} =
+             Context.update_issue("macro-markets", "MAC-1", %{
+               "label_ids" => ["bug", "frontend"]
+             })
+
+    label_names = Enum.map(updated.labels, & &1.name)
+    assert "bug" in label_names
+    assert "frontend" in label_names
+    assert "symphony:codex" in label_names
+    refute "old-label" in label_names
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

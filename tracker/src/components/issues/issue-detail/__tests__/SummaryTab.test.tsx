@@ -64,7 +64,7 @@ function renderSummary(data: IssueDevServersResponse, overrides: Partial<UseIssu
     ...overrides,
   });
 
-  render(<SummaryTab issue={issue()} />);
+  render(<SummaryTab issue={issue()} projectSlug="macro-markets" />);
 }
 
 function issue(): Issue {

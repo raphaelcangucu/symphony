@@ -74,7 +74,10 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   @spec update(Conn.t(), map()) :: Conn.t()
   def update(conn, %{"project_slug" => project_slug, "id" => identifier} = params) do
-    attrs = Map.drop(params, ["project_slug", "id"])
+    attrs =
+      params
+      |> Map.drop(["project_slug", "id"])
+      |> normalize_update_attrs()
 
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, issue} <- IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
@@ -160,6 +163,17 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   end
 
   defp resolve_me(value) when is_binary(value), do: {:ok, value}
+
+  defp normalize_update_attrs(params) do
+    label_ids = normalize_string_list(Map.get(params, "label_ids") || Map.get(params, "labels"))
+
+    params
+    |> Map.take(["title", "description", "status", "priority"])
+    |> maybe_put_label_ids(label_ids)
+  end
+
+  defp maybe_put_label_ids(attrs, []), do: attrs
+  defp maybe_put_label_ids(attrs, label_ids), do: Map.put(attrs, "label_ids", label_ids)
 
   defp normalize_create_attrs(params) do
     label_ids = normalize_string_list(Map.get(params, "label_ids") || Map.get(params, "labels"))

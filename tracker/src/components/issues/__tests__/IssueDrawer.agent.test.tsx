@@ -34,10 +34,21 @@ vi.mock("@/hooks/useIssueComments", () => ({
 
 vi.mock("@/hooks/useIssueEditor", () => ({
   useIssueEditor: () => ({
-    available: false,
+    browser: { available: false, url: null, reason: "workspace_missing" },
+    cursorDesktop: { available: false, url: null, reason: "workspace_missing" },
     loading: false,
-    reason: "workspace_missing",
-    url: null,
+  }),
+}));
+
+vi.mock("@/hooks/useIssueDevServers", () => ({
+  useIssueDevServers: () => ({
+    data: null,
+    error: null,
+    loading: false,
+    refresh: vi.fn(),
+    restart: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
   }),
 }));
 

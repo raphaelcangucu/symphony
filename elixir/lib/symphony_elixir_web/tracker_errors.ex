@@ -76,6 +76,12 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :sync_disabled),
     do: error(conn, 409, "tracker_sync_disabled", "Local-first sync is disabled on this server.")
 
+  def render(conn, :public_tunnel_disabled),
+    do: error(conn, 409, "public_tunnel_disabled", "The public preview tunnel is disabled for this workspace.")
+
+  def render(conn, :public_tunnel_start_failed),
+    do: error(conn, 502, "public_tunnel_start_failed", "Failed to start the Cloudflare tunnel. Check the server logs.")
+
   def render(conn, :no_remote_adapter),
     do: error(conn, 422, "tracker_no_remote_adapter", "This project has no remote tracker to sync from.")
 

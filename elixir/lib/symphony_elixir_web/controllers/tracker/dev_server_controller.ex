@@ -4,6 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
+  alias SymphonyElixir.Cloudflare.Tunnel
   alias SymphonyElixir.DevServer
   alias SymphonyElixir.DevServer.Manager
   alias SymphonyElixir.LocalTracker.Context
@@ -58,8 +59,17 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
 
   defp render_targets(conn, project_slug, identifier, action_error_reason \\ nil) do
     case DevServer.issue_targets(project_slug, identifier) do
-      {:ok, view} -> json(conn, %{data: DevServerPresenter.view(apply_action_error(view, action_error_reason))})
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+      {:ok, view} ->
+        data =
+          view
+          |> apply_action_error(action_error_reason)
+          |> DevServerPresenter.view()
+          |> Map.put(:tunnel, Tunnel.summary())
+
+        json(conn, %{data: data})
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
     end
   end
 

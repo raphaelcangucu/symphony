@@ -26,8 +26,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InlineEditableText } from "@/components/issues/inline/InlineEditableText";
 import { useIssueComments } from "@/hooks/useIssueComments";
 import { useIssueEditor } from "@/hooks/useIssueEditor";
+import { useIssueUpdater } from "@/hooks/useIssueUpdater";
 import type { EditorReason } from "@/services/editor";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
@@ -71,6 +73,7 @@ interface IssueDrawerProps {
   onArchive?: (issue: Issue) => void | Promise<void>;
   onDelete?: (issue: Issue) => void | Promise<void>;
   onForceSync?: (issue: Issue) => void | Promise<void>;
+  onIssueUpdated?: (issue: Issue) => void;
 }
 
 export function IssueDrawer({
@@ -85,6 +88,7 @@ export function IssueDrawer({
   onArchive,
   onDelete,
   onForceSync,
+  onIssueUpdated,
 }: IssueDrawerProps) {
   const meta = issue ? getStatusMeta(issue.status) : null;
   const StatusIcon = meta?.Icon;
@@ -107,6 +111,12 @@ export function IssueDrawer({
     projectSlug,
     identifier: issue?.identifier ?? null,
     enabled: open && Boolean(issue),
+  });
+
+  const issueUpdater = useIssueUpdater({
+    projectSlug,
+    issue,
+    onUpdated: onIssueUpdated,
   });
 
   const openBrowserEditor = useCallback(() => {
@@ -272,8 +282,20 @@ export function IssueDrawer({
                   ) : null}
                 </div>
               </div>
-              <SheetTitle className="mt-3 text-[1.35rem] font-semibold leading-snug tracking-tight text-foreground">
-                {issue.title}
+              <SheetTitle className="mt-3 text-[1.35rem] font-semibold leading-snug tracking-tight text-foreground" asChild>
+                <InlineEditableText
+                  value={issue.title}
+                  aria-label="Issue title"
+                  placeholder="Untitled issue"
+                  saving={issueUpdater.saving}
+                  displayClassName="px-1 py-0.5 text-[1.35rem] font-semibold leading-snug tracking-tight"
+                  inputClassName="text-[1.35rem] font-semibold leading-snug tracking-tight"
+                  onSave={async (title) => {
+                    if (!issue) return false;
+                    const updated = await issueUpdater.save({ title });
+                    return updated !== null;
+                  }}
+                />
               </SheetTitle>
               <SheetDescription asChild>
                 <div className="mb-4 mt-3 flex flex-wrap items-center gap-2 text-xs">
@@ -327,10 +349,20 @@ export function IssueDrawer({
                 <TabsContent value="summary">
                   <SummaryTab
                     issue={issue}
+                    projectSlug={projectSlug}
                     pullRequests={pr.pullRequests}
                     workpad={commentsState.workpad}
+                    saving={issueUpdater.saving}
                     onOpenPullRequest={() => onTabChange?.("pr")}
                     onOpenComments={() => onTabChange?.("comments")}
+                    onSaveDescription={async (description) => {
+                      const updated = await issueUpdater.save({ description });
+                      return updated !== null;
+                    }}
+                    onSaveLabels={async (labelIds) => {
+                      const updated = await issueUpdater.save({ labelIds });
+                      return updated !== null;
+                    }}
                   />
                 </TabsContent>
                 <TabsContent value="pr">

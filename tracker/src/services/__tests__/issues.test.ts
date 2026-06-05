@@ -8,6 +8,7 @@ import {
   getIssueFormOptions,
   listIssues,
   restoreIssue,
+  updateIssue,
 } from "@/services/issues";
 
 describe("issues service filters", () => {
@@ -127,6 +128,29 @@ describe("createIssue payload", () => {
       description: null,
       status: "Todo",
     });
+  });
+});
+
+describe("updateIssue payload", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const updatedDto = { id: 1, identifier: "517", title: "New title", status: "Todo" };
+
+  it("patches mutable fields in snake_case", async () => {
+    const patch = vi.spyOn(http, "patch").mockResolvedValueOnce({ data: { data: updatedDto } });
+
+    const result = await updateIssue("macro-markets", "517", {
+      title: "New title",
+      description: "Updated body",
+      labelIds: ["bug", "frontend"],
+    });
+
+    expect(patch).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues/517", {
+      title: "New title",
+      description: "Updated body",
+      label_ids: ["bug", "frontend"],
+    });
+    expect(result.identifier).toBe("517");
   });
 });
 
