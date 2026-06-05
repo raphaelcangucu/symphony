@@ -520,14 +520,8 @@ defmodule SymphonyElixir.Config do
 
   defp explicit_agent_kind(normalized) do
     case Map.get(normalized, "agent") do
-      %{} = section ->
-        section
-        |> Map.new(fn {key, value} -> {to_string(key), value} end)
-        |> Map.get("kind")
-        |> SymphonyElixir.AgentPreference.normalize()
-
-      _ ->
-        nil
+      %{} = section -> SymphonyElixir.AgentPreference.normalize(Map.get(section, "kind"))
+      _ -> nil
     end
   end
 

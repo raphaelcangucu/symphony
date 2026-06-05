@@ -620,7 +620,7 @@ defmodule SymphonyElixir.GitHub.Client do
       labels: filter_visible_labels(raw_labels),
       comments: IssueDiscussion.parse_issue_comments(content),
       agent_kind: agent_kind,
-      assigned_to_worker: not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
+      assigned_to_worker: AgentRouting.routable?(raw_labels) and assigned_to_worker?(assignee_login, assignee_filter),
       created_at: parse_datetime(content["createdAt"]),
       updated_at: parse_datetime(content["updatedAt"])
     }
@@ -764,7 +764,7 @@ defmodule SymphonyElixir.GitHub.Client do
         labels: filter_visible_labels(raw_labels),
         comments: IssueDiscussion.parse_issue_comments(node),
         agent_kind: agent_kind,
-        assigned_to_worker: not is_nil(agent_kind) and assigned_to_worker?(assignee_login, assignee_filter),
+        assigned_to_worker: AgentRouting.routable?(raw_labels) and assigned_to_worker?(assignee_login, assignee_filter),
         created_at: parse_datetime(node["createdAt"]),
         updated_at: parse_datetime(node["updatedAt"])
       }
@@ -826,11 +826,7 @@ defmodule SymphonyElixir.GitHub.Client do
   end
 
   defp resolve_issue_agent_kind(label_names) when is_list(label_names) do
-    AgentRouting.resolve_agent_kind(
-      label_names,
-      Config.configured_agent_kinds(),
-      Config.default_agent_kind()
-    )
+    AgentRouting.label_agent_kind(label_names)
   end
 
   defp assigned_to_worker?(_assignee_login, nil), do: true

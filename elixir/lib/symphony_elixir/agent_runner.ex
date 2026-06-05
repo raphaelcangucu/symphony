@@ -4,7 +4,7 @@ defmodule SymphonyElixir.AgentRunner do
   """
 
   require Logger
-  alias SymphonyElixir.{CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
+  alias SymphonyElixir.{AgentPreference, CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
@@ -80,21 +80,27 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   @spec issue_agent_kind(SymphonyElixir.Issue.t()) :: String.t()
-  def issue_agent_kind(%Issue{agent_kind: kind}) when is_binary(kind) and kind != "", do: kind
+  def issue_agent_kind(%Issue{} = issue) do
+    task_kind = AgentPreference.normalize(issue.agent_kind)
+    AgentPreference.resolve(task_labels(task_kind), project_agent_kind(issue))
+  end
 
-  def issue_agent_kind(%Issue{project_slug: slug}) when is_binary(slug) do
+  def issue_agent_kind(_issue), do: AgentPreference.resolve([], nil)
+
+  defp task_labels(nil), do: []
+  defp task_labels(kind), do: ["symphony:" <> kind]
+
+  defp project_agent_kind(%Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
     case Context.get_project(slug) do
       {:ok, project} ->
-        # TODO(Task 5): replace this fallback with AgentPreference.resolve/2 chain
-        project |> Repo.preload(:setup) |> ProjectConfig.resolve() |> Map.get(:agent_kind) ||
-          Config.default_agent_kind()
+        project |> Repo.preload(:setup) |> ProjectConfig.resolve() |> Map.get(:agent_kind)
 
       {:error, _reason} ->
-        Config.default_agent_kind()
+        nil
     end
   end
 
-  def issue_agent_kind(_issue), do: Config.default_agent_kind()
+  defp project_agent_kind(_issue), do: nil
 
   @spec resolve_project_config(Issue.t()) :: ProjectConfig.t() | nil
   defp resolve_project_config(%Issue{project_slug: slug}) when is_binary(slug) do

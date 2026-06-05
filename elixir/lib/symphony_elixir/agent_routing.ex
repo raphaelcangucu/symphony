@@ -31,30 +31,6 @@ defmodule SymphonyElixir.AgentRouting do
 
   def symphony_label?(_), do: false
 
-  # TODO(Task 5): callers (github/client.ex, issue_mapper.ex) migrate to
-  # AgentPreference + label_agent_kind/1; remove resolve_agent_kind/3 and
-  # routable?/3 afterwards. Keep the two cond blocks in sync until then.
-  @spec resolve_agent_kind([String.t()], [String.t()], String.t()) :: String.t() | nil
-  def resolve_agent_kind(label_names, configured_kinds, default_kind)
-      when is_list(label_names) and is_list(configured_kinds) and is_binary(default_kind) do
-    normalized = label_names |> Enum.map(&normalize_label/1) |> Enum.reject(&(&1 == ""))
-
-    kind =
-      cond do
-        @label_claude in normalized -> "claude"
-        @label_codex in normalized -> "codex"
-        @symphony_label in normalized -> default_kind
-        true -> nil
-      end
-
-    if kind in configured_kinds, do: kind, else: nil
-  end
-
-  @spec routable?([String.t()], [String.t()], String.t()) :: boolean()
-  def routable?(label_names, configured_kinds, default_kind) do
-    resolve_agent_kind(label_names, configured_kinds, default_kind) != nil
-  end
-
   @doc "Explicit per-task agent from labels (`symphony:codex|claude`); plain `symphony` is no preference."
   @spec label_agent_kind([String.t()]) :: String.t() | nil
   def label_agent_kind(label_names) when is_list(label_names) do

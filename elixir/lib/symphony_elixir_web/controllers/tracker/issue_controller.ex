@@ -4,7 +4,6 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.IssueAdapter
@@ -36,7 +35,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
           labels: Enum.map(labels, &present_label/1),
           assignees: Enum.map(users, &present_user/1),
           statuses: Enum.map(statuses, &TrackerPresenter.status/1),
-          agents: agent_options()
+          agents: agent_options(),
+          effective_agent: effective_agent(project)
         }
       })
     else
@@ -194,16 +194,23 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   defp normalize_string_list(_value), do: []
 
-  # Both coding-agent backends are always selectable per task; the process-level
-  # default (env-driven) is highlighted. The per-project default still applies
-  # when a task leaves the agent unset (resolved at dispatch time).
+  # Both coding-agent backends are always selectable per task; no option is
+  # highlighted as "default" since the effective agent is exposed separately via
+  # effective_agent/1 (resolved at the project level at form-load time).
   defp agent_options do
-    default = Config.default_agent_kind()
-
-    ["codex", "claude"]
-    |> Enum.map(fn kind ->
-      %{value: kind, label: Map.fetch!(@agent_labels, kind), default: kind == default}
+    Enum.map(["codex", "claude"], fn kind ->
+      %{value: kind, label: Map.fetch!(@agent_labels, kind), default: false}
     end)
+  end
+
+  defp effective_agent(project) do
+    project_kind =
+      project
+      |> SymphonyElixir.Repo.preload(:setup)
+      |> SymphonyElixir.ProjectConfig.resolve()
+      |> Map.get(:agent_kind)
+
+    SymphonyElixir.AgentPreference.resolve([], project_kind)
   end
 
   defp present_label(label) when is_map(label) do

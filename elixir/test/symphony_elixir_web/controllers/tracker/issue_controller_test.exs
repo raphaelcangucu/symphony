@@ -386,7 +386,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
       assert json_response(conn, 501)["error"]["code"] == "tracker_not_supported"
     end
 
-    test "form_options returns labels, assignees, statuses, and agents" do
+    test "form_options returns labels, assignees, statuses, agents, and effective_agent" do
       conn = get(authorized_conn(), "/api/tracker/v1/projects/remote/issues/form_options")
 
       assert %{
@@ -394,7 +394,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
                  "labels" => labels,
                  "assignees" => assignees,
                  "statuses" => statuses,
-                 "agents" => agents
+                 "agents" => agents,
+                 "effective_agent" => effective_agent
                }
              } = json_response(conn, 200)
 
@@ -402,6 +403,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
       assert [%{"login" => "alice", "id" => "U1"}] = assignees
       assert Enum.any?(statuses, &(&1["name"] == "Todo"))
       assert is_list(agents)
+      refute Enum.any?(agents, &(&1["default"] == true))
+      assert effective_agent in ["codex", "claude"]
     end
   end
 
