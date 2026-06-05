@@ -91,12 +91,12 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
       error: nil
     }
 
-    result = receive_loop(port, on_event, timeout_ms, "", initial_state)
-
-    # Cleanup prompt file
-    File.rm(prompt_path)
-
-    result
+    try do
+      receive_loop(port, on_event, timeout_ms, "", initial_state)
+    after
+      File.rm(prompt_path)
+      stop_port(port)
+    end
   end
 
   @spec build_args(map()) :: String.t()
