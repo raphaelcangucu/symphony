@@ -13,6 +13,8 @@ defmodule SymphonyElixir.MixProject do
           threshold: 100
         ],
         ignore_modules: [
+          SymphonyElixir.AgentAvailability,
+          SymphonyElixir.Claude.AppServer.StdioMain,
           SymphonyElixir.Claude.Config,
           SymphonyElixir.Codex.Config,
           SymphonyElixir.Config,
@@ -50,6 +52,7 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixir.CodingAgent,
           SymphonyElixir.Claude.CodingAgent,
           SymphonyElixir.Claude.EventHumanizer,
+          SymphonyElixir.Claude.ModelCatalog,
           SymphonyElixir.Codex.CodingAgent,
           SymphonyElixir.Codex.DynamicTool,
           SymphonyElixir.Codex.EventHumanizer,

@@ -61,8 +61,10 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
      | `symphony:claude` | Claude |
      | `symphony` | WORKFLOW default (Codex when `codex:` is configured) |
 
-     The WORKFLOW must include a `codex:` and/or `claude:` section for the
-     targeted agent. New labeled issues are added on the next poll.
+     Issues labeled `symphony:codex`/`symphony:claude` route to that agent;
+     unlabeled `symphony` issues follow the project's `agent.kind` (workflow
+     front matter), else the operator default from **Settings** (tracker
+     sidebar). New labeled issues are added on the next poll.
 
      Optional `github.assignee` further restricts routing (GitHub login or `"me"`).
      Omit `assignee` to route by label only.
@@ -118,12 +120,10 @@ brew tap sapsaldog/symphony
 brew install symphony
 ```
 
-When using the Claude coding agent backend, also install `symphony-claude` — a JSON-RPC 2.0 app
-server that bridges Symphony and Claude Code:
-
-```bash
-brew install symphony-claude
-```
+The Claude backend is built in — Symphony drives your locally installed `claude` CLI directly
+(run `claude` once to log in). The packaged `bin/symphony-claude` escript exposes the same
+app-server protocol over stdio for external orchestrators (a dynamicTools-capable drop-in for
+the retired bridge).
 
 ## Run
 
@@ -209,7 +209,7 @@ agent:
   max_concurrent_agents: 5
   max_turns: 20
 claude:
-  command: symphony-claude
+  command: claude
 ---
 
 You are working on issue {{ issue.identifier }}.
@@ -290,6 +290,34 @@ codex:
 - If `WORKFLOW.md` is missing or has invalid YAML, startup and scheduling are halted until fixed.
 - `server.port` or CLI `--port` enables the optional Phoenix LiveView dashboard and JSON API at
   `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, and `/api/v1/refresh`.
+
+### Agent preference
+
+Symphony resolves which coding agent runs an issue through a four-level chain, from most
+specific to least:
+
+1. **Task label** — an issue labeled `symphony:codex` or `symphony:claude` overrides everything.
+2. **Project `agent.kind`** — the WORKFLOW front matter `agent.kind: codex|claude` sets the
+   project default.
+3. **User default** — the operator default configured in **Settings** (tracker sidebar →
+   Settings → Coding agent), shown with availability indicators (green dot = CLI found,
+   grey = not found).
+4. **Fallback** — Codex if nothing else is set.
+
+Where to configure each level:
+
+- **Settings page** (tracker sidebar → Settings → Coding agent): set the instance-wide default
+  agent and see whether `codex` and `claude` CLIs are available on the server's `PATH`.
+- **Project picker** (Project settings → Workflow tab): set `agent.kind` for a single project
+  without editing the WORKFLOW file directly.
+- **Per-issue chips**: the issue create dialog and the issue's Agent tab let you add or remove
+  `symphony:codex` / `symphony:claude` labels to pin a specific agent to that issue.
+- **Assistant composer**: the agent menu in the composer lets you choose which agent runs the
+  next `dispatch_coding_agent` call (also exposed as `dispatch_codex` for back-compat).
+
+The Claude model catalog is static (opus / sonnet / haiku) and controlled by `claude.model` in
+the WORKFLOW front matter. Effort levels (`codex.approval_policy`, sandbox policy) are
+Codex-only and have no equivalent in the Claude backend.
 
 ### Local Tracker Development
 

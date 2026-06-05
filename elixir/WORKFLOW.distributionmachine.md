@@ -73,7 +73,7 @@ codex:
   turn_sandbox_policy:
     type: workspaceWrite
 claude:
-  command: symphony-claude
+  command: claude
 ---
 
 You are working on GitHub issue `{{ issue.identifier }}` in the **Distribution Machine** board (`clouapp/distributionmachine`).
