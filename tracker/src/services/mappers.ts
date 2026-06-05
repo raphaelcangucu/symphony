@@ -300,7 +300,7 @@ function normalizeAssigneeOption(dto: BackendAssigneeOptionDto): IssueAssigneeOp
 }
 
 function normalizeAgentOption(dto: BackendAgentOptionDto): AgentOption[] {
-  if (!(AGENT_KINDS as readonly string[]).includes(dto.value)) return [];
+  if (!(typeof dto.value === "string" && (AGENT_KINDS as readonly string[]).includes(dto.value))) return [];
   const value = dto.value as AgentKind;
   return [{ value, label: dto.label?.trim() || value, default: dto.default ?? false }];
 }

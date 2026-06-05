@@ -138,7 +138,7 @@ export function IssueCreateDialog({
       })
       .catch(() => {
         if (cancelled) return;
-        setOptions({ labels: [], assignees: [], statuses: [], agents: [] });
+        setOptions({ labels: [], assignees: [], statuses: [], agents: [], effectiveAgent: "codex" });
       })
       .finally(() => {
         if (!cancelled) setOptionsLoading(false);
