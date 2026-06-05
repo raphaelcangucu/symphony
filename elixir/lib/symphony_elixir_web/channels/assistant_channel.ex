@@ -676,7 +676,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
-  defp dispatch_arguments(identifier, goal_mode, agent \\ nil) do
+  defp dispatch_arguments(identifier, goal_mode, agent) do
     base = %{"identifier" => identifier, "instructions" => dispatch_instructions(identifier)}
 
     base =

@@ -444,7 +444,7 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() => expect(onIssueGoalModeChanged).toHaveBeenCalledWith(true));
   });
 
-  it("pushes dispatch_codex with the current goal mode when dispatch is requested", async () => {
+  it("pushes dispatch_coding_agent with the current goal mode when dispatch is requested", async () => {
     const onDispatchSucceeded = vi.fn();
     const { rerender } = render(
       <ProjectAssistantPanel
@@ -459,7 +459,7 @@ describe("ProjectAssistantPanel", () => {
     );
 
     await waitFor(() => expect(join).toHaveBeenCalled());
-    expect(push).not.toHaveBeenCalledWith("dispatch_codex", expect.anything());
+    expect(push).not.toHaveBeenCalledWith("dispatch_coding_agent", expect.anything());
 
     rerender(
       <ProjectAssistantPanel
@@ -473,9 +473,9 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("dispatch_codex", { goal_mode: true }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("dispatch_coding_agent", { goal_mode: true }));
 
-    const dispatchCallIndex = push.mock.calls.findIndex(([event]) => event === "dispatch_codex");
+    const dispatchCallIndex = push.mock.calls.findIndex(([event]) => event === "dispatch_coding_agent");
     pushReceives[dispatchCallIndex]?.ok?.({ message: "Requested Codex work on MAC-1" });
     expect(onDispatchSucceeded).toHaveBeenCalledWith("Requested Codex work on MAC-1");
   });

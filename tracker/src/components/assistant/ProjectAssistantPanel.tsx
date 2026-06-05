@@ -36,6 +36,7 @@ import {
   assistantThreadTopic,
   assistantTopic,
   bindAssistantEvents,
+  dispatchCodingAgent,
   submitUserInput,
   type AssistantDocumentChangedPayload,
   type AssistantIssueCreatedPayload,
@@ -367,7 +368,8 @@ export function ProjectAssistantPanel({
     if (!channel) return;
 
     lastDispatchRequestRef.current = dispatchRequestId;
-    const pushResult = channel.push("dispatch_codex", { goal_mode: issueGoalMode === true });
+    // Agent intentionally omitted — the server resolves task > project > user at dispatch.
+    const pushResult = dispatchCodingAgent(channel, { goalMode: issueGoalMode === true });
     pushResult.receive("ok", (response) => {
       onDispatchSucceeded?.(messageFromResponse(response) ?? "Dispatched to Codex.");
     });
