@@ -452,6 +452,23 @@ defmodule SymphonyElixir.AgentRunnerTest do
     end
   end
 
+  test "claude execution sessions carry Symphony dynamic tools" do
+    issue = %SymphonyElixir.Issue{id: "1", identifier: "X-1"}
+
+    opts = AgentRunner.claude_session_opts([workspace_root: "/tmp"], "claude", issue)
+
+    specs = Keyword.fetch!(opts, :dynamic_tools)
+    assert Enum.any?(specs, &(&1["name"] == "set_issue_status"))
+
+    executor = Keyword.fetch!(opts, :tool_executor)
+    assert is_function(executor, 2)
+  end
+
+  test "claude_session_opts is a no-op for non-claude agents" do
+    issue = %SymphonyElixir.Issue{id: "1", identifier: "X-1"}
+    assert AgentRunner.claude_session_opts([], "codex", issue) == []
+  end
+
   defp enable_goals! do
     workflow_file = Workflow.workflow_file_path()
 

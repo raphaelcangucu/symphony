@@ -5,6 +5,7 @@ defmodule SymphonyElixir.AgentRunner do
 
   require Logger
   alias SymphonyElixir.{AgentPreference, CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
+  alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
@@ -152,6 +153,7 @@ defmodule SymphonyElixir.AgentRunner do
     session_opts =
       [workspace_root: workspace_root]
       |> maybe_put_codex_config(Keyword.get(opts, :project_config))
+      |> maybe_put_claude_tools(agent_kind, issue)
 
     with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, session_opts) do
       try do
@@ -341,6 +343,27 @@ defmodule SymphonyElixir.AgentRunner do
   defp maybe_put_codex_config(opts, _project_config) do
     Keyword.put(opts, :codex_config, InstanceConfig.codex_section())
   end
+
+  # Codex defaults its dynamic tools internally (see Codex.CodingAgent.start_session/2 →
+  # thread/start → dynamicTools: DynamicTool.coding_agent_tool_specs()).  The native
+  # Claude adapter takes them via session opts, so we inject them here to preserve
+  # spec §3.4 parity (set_issue_status / github_graphql / linear_graphql available in
+  # execution runs regardless of which adapter is active).
+  @doc false
+  @spec claude_session_opts(keyword(), String.t(), map()) :: keyword()
+  def claude_session_opts(session_opts, agent_kind, issue) do
+    maybe_put_claude_tools(session_opts, agent_kind, issue)
+  end
+
+  defp maybe_put_claude_tools(session_opts, "claude", issue) do
+    session_opts
+    |> Keyword.put(:dynamic_tools, DynamicTool.coding_agent_tool_specs())
+    |> Keyword.put(:tool_executor, fn tool, arguments ->
+      DynamicTool.execute(tool, arguments, issue: issue)
+    end)
+  end
+
+  defp maybe_put_claude_tools(session_opts, _agent_kind, _issue), do: session_opts
 
   defp project_max_turns(%ProjectConfig{max_turns: n}) when is_integer(n) and n > 0, do: n
   defp project_max_turns(_project_config), do: Config.agent_max_turns()
