@@ -105,6 +105,70 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   def restart_for_issue(_project_slug, _identifier), do: {:error, :invalid_arguments}
 
+  @spec stop_instance_for_server(String.t(), String.t(), pos_integer()) :: :ok | {:error, :not_found}
+  def stop_instance_for_server(project_slug, identifier, server_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 do
+    identifier = canonical_identifier(identifier)
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, slug} <- server_slug_for_id(project, identifier, server_id) do
+      do_stop_instance_for_server(project.slug, identifier, slug)
+      :ok
+    end
+  end
+
+  def stop_instance_for_server(_project_slug, _identifier, _server_id), do: {:error, :not_found}
+
+  @spec start_instance_for_server(String.t(), String.t(), pos_integer()) ::
+          {:ok, [pid()]} | {:error, start_error() | :not_found}
+  def start_instance_for_server(project_slug, identifier, server_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 do
+    identifier = canonical_identifier(identifier)
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _slug} <- server_slug_for_id(project, identifier, server_id) do
+      runtime_options = project_runtime_options(project)
+
+      if runtime_options.dev_server_enabled? do
+        normalize_lock_result(
+          :global.trans({__MODULE__, {:start_instance_for_server, server_id}}, fn ->
+            do_start_instance_for_server(project, identifier, server_id, runtime_options)
+          end)
+        )
+      else
+        {:error, :disabled}
+      end
+    end
+  end
+
+  def start_instance_for_server(_project_slug, _identifier, _server_id), do: {:error, :not_found}
+
+  @spec restart_instance_for_server(String.t(), String.t(), pos_integer()) ::
+          {:ok, [pid()]} | {:error, start_error() | :not_found}
+  def restart_instance_for_server(project_slug, identifier, server_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 do
+    identifier = canonical_identifier(identifier)
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, slug} <- server_slug_for_id(project, identifier, server_id) do
+      runtime_options = project_runtime_options(project)
+
+      if runtime_options.dev_server_enabled? do
+        normalize_lock_result(
+          :global.trans({__MODULE__, {:restart_instance_for_server, server_id}}, fn ->
+            with :ok <- do_stop_instance_for_server(project.slug, identifier, slug) do
+              do_start_instance_for_server(project, identifier, server_id, runtime_options)
+            end
+          end)
+        )
+      else
+        {:error, :disabled}
+      end
+    end
+  end
+
+  def restart_instance_for_server(_project_slug, _identifier, _server_id), do: {:error, :not_found}
+
   @spec list_for_issue(String.t(), String.t()) :: [dev_server_map()]
   def list_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
     identifier = canonical_identifier(identifier)
@@ -144,6 +208,74 @@ defmodule SymphonyElixir.DevServer.Manager do
       setup_issue_session(project.slug, identifier, workspace_path)
       start_instances(project, identifier, workspace_path, reserved_steps, runtime_options)
     end
+  end
+
+  defp do_start_instance_for_server(project, identifier, server_id, runtime_options) do
+    with {:ok, slug} <- server_slug_for_id(project, identifier, server_id) do
+      case running_instance_pid(project.slug, identifier, slug) do
+        {:ok, pid} ->
+          {:ok, [pid]}
+
+        {:error, :not_running} ->
+          with {:ok, workspace_path} <- issue_workspace_path(identifier),
+               {:ok, step} <- serve_step_for_slug(project.slug, identifier, slug),
+               {:ok, reserved_steps} <-
+                 reserve_ports(project.slug, identifier, [step], runtime_options.dev_server_port_range),
+               [{step, port, key}] <- reserved_steps do
+            setup_issue_session(project.slug, identifier, workspace_path)
+
+            case start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
+              {:ok, {pid, _key}} -> {:ok, [pid]}
+              {:error, reason} -> {:error, reason}
+            end
+          end
+      end
+    end
+  end
+
+  defp do_stop_instance_for_server(project_slug, identifier, slug)
+       when is_binary(project_slug) and is_binary(identifier) and is_binary(slug) do
+    key = instance_key(project_slug, identifier, slug)
+
+    case Registry.lookup(@registry, key) do
+      [{pid, _}] -> stop_instance(pid)
+      [] -> :ok
+    end
+
+    release_reservations([key])
+    :ok
+  end
+
+  defp server_slug_for_id(project, identifier, server_id) do
+    case DevServerRecord.get_for_issue(project.id, identifier, server_id) do
+      %DevServerRecord{slug: slug} when is_binary(slug) -> {:ok, slug}
+      nil -> {:error, :not_found}
+    end
+  end
+
+  defp serve_step_for_slug(project_slug, identifier, slug) do
+    project_slug
+    |> DevEnv.list_serve_steps()
+    |> unique_serve_steps(project_slug, identifier)
+    |> Enum.find(fn step -> Map.fetch!(step_to_map(step), :slug) == slug end)
+    |> case do
+      nil -> {:error, :no_serve_step}
+      step -> {:ok, step}
+    end
+  end
+
+  defp running_instance_pid(project_slug, identifier, slug) do
+    case Registry.lookup(@registry, instance_key(project_slug, identifier, slug)) do
+      [{pid, _}] when is_pid(pid) ->
+        if Process.alive?(pid), do: {:ok, pid}, else: {:error, :not_running}
+
+      [] ->
+        {:error, :not_running}
+    end
+  end
+
+  defp instance_key(project_slug, identifier, slug) do
+    {project_slug, canonical_identifier(identifier), slug}
   end
 
   defp issue_workspace_path(identifier) do

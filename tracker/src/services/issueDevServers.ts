@@ -37,12 +37,53 @@ export async function restartIssueDevServers(
   return postIssueDevServerAction(projectSlug, issueIdentifier, "restart");
 }
 
+export async function startIssueDevServer(
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
+): Promise<IssueDevServersResponse> {
+  return postIssueDevServerInstanceAction(projectSlug, issueIdentifier, serverId, "start");
+}
+
+export async function stopIssueDevServer(
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
+): Promise<IssueDevServersResponse> {
+  return postIssueDevServerInstanceAction(projectSlug, issueIdentifier, serverId, "stop");
+}
+
+export async function restartIssueDevServer(
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
+): Promise<IssueDevServersResponse> {
+  return postIssueDevServerInstanceAction(projectSlug, issueIdentifier, serverId, "restart");
+}
+
 async function postIssueDevServerAction(
   projectSlug: string,
   issueIdentifier: string,
   action: IssueDevServerAction,
 ): Promise<IssueDevServersResponse> {
   const response = await http.post(`${issueDevServersPath(projectSlug, issueIdentifier)}/${action}`);
+
+  return unwrapData<IssueDevServersResponse>(response);
+}
+
+async function postIssueDevServerInstanceAction(
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
+  action: IssueDevServerAction,
+): Promise<IssueDevServersResponse> {
+  if (!Number.isInteger(serverId) || serverId <= 0) {
+    throw new Error("serverId must be a positive integer");
+  }
+
+  const response = await http.post(
+    `${issueDevServersPath(projectSlug, issueIdentifier)}/${encodeURIComponent(String(serverId))}/${action}`,
+  );
 
   return unwrapData<IssueDevServersResponse>(response);
 }

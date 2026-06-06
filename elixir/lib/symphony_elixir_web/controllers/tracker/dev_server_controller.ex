@@ -48,6 +48,49 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     end)
   end
 
+  @spec start_server(Conn.t(), map()) :: Conn.t()
+  def start_server(conn, %{"project_slug" => project_slug, "identifier" => identifier, "server_id" => server_id}) do
+    with_valid_issue(conn, project_slug, identifier, fn ->
+      with {:ok, id} <- parse_server_id(server_id) do
+        project_slug
+        |> Manager.start_instance_for_server(identifier, id)
+        |> instance_action_result(conn, project_slug, identifier, "start_failed")
+      else
+        {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
+        {:error, :not_found} -> TrackerErrors.render(conn, :dev_server_not_found)
+      end
+    end)
+  end
+
+  @spec stop_server(Conn.t(), map()) :: Conn.t()
+  def stop_server(conn, %{"project_slug" => project_slug, "identifier" => identifier, "server_id" => server_id}) do
+    with_valid_issue(conn, project_slug, identifier, fn ->
+      with {:ok, id} <- parse_server_id(server_id) do
+        case Manager.stop_instance_for_server(project_slug, identifier, id) do
+          :ok -> render_targets(conn, project_slug, identifier)
+          {:error, :not_found} -> TrackerErrors.render(conn, :dev_server_not_found)
+          {:error, _reason} -> render_targets(conn, project_slug, identifier)
+        end
+      else
+        {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
+      end
+    end)
+  end
+
+  @spec restart_server(Conn.t(), map()) :: Conn.t()
+  def restart_server(conn, %{"project_slug" => project_slug, "identifier" => identifier, "server_id" => server_id}) do
+    with_valid_issue(conn, project_slug, identifier, fn ->
+      with {:ok, id} <- parse_server_id(server_id) do
+        project_slug
+        |> Manager.restart_instance_for_server(identifier, id)
+        |> instance_action_result(conn, project_slug, identifier, "restart_failed")
+      else
+        {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
+        {:error, :not_found} -> TrackerErrors.render(conn, :dev_server_not_found)
+      end
+    end)
+  end
+
   defp with_valid_issue(conn, project_slug, identifier, render) when is_function(render, 0) do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, _issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
@@ -91,4 +134,27 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     |> Map.put(:available, false)
     |> Map.put(:reason, action_error_reason)
   end
+
+  defp instance_action_result({:ok, _pids}, conn, project_slug, identifier, _fallback_reason) do
+    render_targets(conn, project_slug, identifier)
+  end
+
+  defp instance_action_result({:error, :not_found}, conn, _project_slug, _identifier, _fallback_reason) do
+    TrackerErrors.render(conn, :dev_server_not_found)
+  end
+
+  defp instance_action_result({:error, reason}, conn, project_slug, identifier, fallback_reason) do
+    reason
+    |> then(&action_error_reason({:error, &1}, fallback_reason))
+    |> then(&render_targets(conn, project_slug, identifier, &1))
+  end
+
+  defp parse_server_id(server_id) when is_binary(server_id) do
+    case Integer.parse(String.trim(server_id)) do
+      {id, ""} when id > 0 -> {:ok, id}
+      _ -> {:error, :invalid_server_id}
+    end
+  end
+
+  defp parse_server_id(_server_id), do: {:error, :invalid_server_id}
 end

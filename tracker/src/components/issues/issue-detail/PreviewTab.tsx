@@ -41,9 +41,12 @@ const RETRYABLE_UNAVAILABLE_REASONS = new Set<IssueDevServerReason>([
   "crashed",
 ]);
 
+const ACTIVE_PROVISIONING_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
+
 export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: PreviewTabProps) {
   const navigate = useNavigate();
-  const { data, error, loading, restart, start, stop, startTunnel } = useIssueDevServers(projectSlug, issueIdentifier);
+  const { data, error, loading, restart, restartServer, start, startServer, stop, stopServer, startTunnel } =
+    useIssueDevServers(projectSlug, issueIdentifier);
   const [startingTunnel, setStartingTunnel] = useState(false);
 
   const handleStartTunnel = useCallback(async () => {
@@ -121,7 +124,11 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
 
   const unavailableMessage = data.available ? null : availabilityMessage(data.reason);
   const provisioningMessage =
-    data.available && !primaryUrl && primaryServer != null ? provisioningStatusMessage(primaryServer) : null;
+    data.available &&
+    primaryServer != null &&
+    ACTIVE_PROVISIONING_STATUSES.has(primaryServer.status)
+      ? provisioningStatusMessage(primaryServer)
+      : null;
   const controlsDisabled = loading || !canRunManualActions(data.available, data.reason);
   const failureReason = data.reason && isPreviewFailureReason(data.reason);
   const tunnelEnabled = data.tunnel?.enabled ?? false;
@@ -239,11 +246,15 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                 {data.servers.map((server) => (
                   <ServerRow
                     key={server.id}
+                    controlsDisabled={controlsDisabled}
                     onAskAssistant={
                       isPreviewFailureServerStatus(server.status)
                         ? () => askAssistantToFix(data, server)
                         : undefined
                     }
+                    onRestart={(serverId) => void restartServer(serverId)}
+                    onStart={(serverId) => void startServer(serverId)}
+                    onStop={(serverId) => void stopServer(serverId)}
                     server={server}
                     tunnelRunning={tunnelRunning}
                   />
@@ -281,6 +292,44 @@ function PreviewControls({
       <Button type="button" size="sm" variant="outline" onClick={() => void onRestart()} disabled={disabled}>
         <RotateCcw className="h-3.5 w-3.5" />
         Restart Preview
+      </Button>
+    </div>
+  );
+}
+
+function ServerControls({
+  disabled,
+  onRestart,
+  onStart,
+  onStop,
+  slug,
+}: {
+  disabled: boolean;
+  onRestart: () => void;
+  onStart: () => void;
+  onStop: () => void;
+  slug: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" size="sm" onClick={onStart} disabled={disabled} aria-label={`Start ${slug} preview`}>
+        <Play className="h-3.5 w-3.5" />
+        Start
+      </Button>
+      <Button type="button" size="sm" variant="outline" onClick={onStop} disabled={disabled} aria-label={`Stop ${slug} preview`}>
+        <Square className="h-3.5 w-3.5" />
+        Stop
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={onRestart}
+        disabled={disabled}
+        aria-label={`Restart ${slug} preview`}
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+        Restart
       </Button>
     </div>
   );
@@ -337,11 +386,19 @@ function AskAssistantButton({ onClick }: { onClick: () => void }) {
 
 function ServerRow({
   server,
+  controlsDisabled,
   onAskAssistant,
+  onRestart,
+  onStart,
+  onStop,
   tunnelRunning,
 }: {
   server: IssueDevServer;
+  controlsDisabled: boolean;
   onAskAssistant?: () => void;
+  onRestart: (serverId: number) => void;
+  onStart: (serverId: number) => void;
+  onStop: (serverId: number) => void;
   tunnelRunning: boolean;
 }) {
   const previewUrl = readyPreviewUrl(server);
@@ -381,6 +438,13 @@ function ServerRow({
           {server.session_name ? <p className="font-mono text-xs text-muted-foreground">{server.session_name}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <ServerControls
+            disabled={controlsDisabled}
+            onRestart={() => onRestart(server.id)}
+            onStart={() => onStart(server.id)}
+            onStop={() => onStop(server.id)}
+            slug={server.slug}
+          />
           {onAskAssistant ? <AskAssistantButton onClick={onAskAssistant} /> : null}
           {openUrl ? (
             <Button asChild size="sm" variant="outline">
@@ -550,18 +614,6 @@ function availabilityMessage(reason: IssueDevServerReason): { title: string; bod
   }
 }
 
-function provisioningStatusMessage(primaryServer: IssueDevServer | null): string {
-  if (!primaryServer) {
-    return "No preview is running yet. Use Start Preview when you want to provision the dev server.";
-  }
-
-  if (primaryServer.status === "crashed") {
-    return "The dev server crashed before publishing a URL. Restart the preview to try again.";
-  }
-
-  if (primaryServer.status === "stopped") {
-    return "The dev server is stopped and has not published a URL yet. Start Preview to request a new run.";
-  }
-
+function provisioningStatusMessage(primaryServer: IssueDevServer): string {
   return `The ${primaryServer.slug} dev server is ${primaryServer.status} and has not published a URL yet.`;
 }

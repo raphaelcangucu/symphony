@@ -284,6 +284,34 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.live_ports() == []
   end
 
+  test "stop_instance_for_server returns not_found for an unknown server id", %{project: project} do
+    assert Manager.stop_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
+  end
+
+  test "start_instance_for_server returns not_found for an unknown server id", %{project: project} do
+    assert Manager.start_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
+  end
+
+  test "restart_instance_for_server returns not_found for an unknown server id", %{project: project} do
+    assert Manager.restart_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
+  end
+
+  test "stop_instance_for_server stops a persisted server by id", %{project: project} do
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1", "front", %{
+        working_dir: "front",
+        port: 4101,
+        url: "http://127.0.0.1:4101/",
+        status: "ready",
+        primary: true,
+        session_name: "sym-dev-front"
+      })
+
+    ensure_manager_started!()
+
+    assert :ok = Manager.stop_instance_for_server(project.slug, "#1", record.id)
+  end
+
   test "normalizes aborted global lock results" do
     assert Manager.normalize_lock_result(:aborted) == {:error, :lock_unavailable}
     assert Manager.normalize_lock_result({:ok, []}) == {:ok, []}

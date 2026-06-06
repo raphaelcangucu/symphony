@@ -26,8 +26,11 @@ vi.mock("react-router-dom", async () => {
 const hookActions = {
   refresh: vi.fn(),
   restart: vi.fn(),
+  restartServer: vi.fn(),
   start: vi.fn(),
+  startServer: vi.fn(),
   stop: vi.fn(),
+  stopServer: vi.fn(),
   startTunnel: vi.fn(),
 };
 
@@ -120,6 +123,13 @@ describe("PreviewTab", () => {
     expect(screen.getByText(/^starting$/i)).toBeInTheDocument();
   });
 
+  it("does not show a provisioning callout for stopped dev servers", () => {
+    renderPreview(response([server({ status: "stopped", url: null, port: null })]));
+
+    expect(screen.queryByText(/preview is being provisioned/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/start preview to request a new run/i)).not.toBeInTheDocument();
+  });
+
   it.each(["stopped", "crashed"] as const)("does not present a persisted %s URL as the ready preview", (status) => {
     renderPreview(response([server({ status, url: "http://127.0.0.1:5173" })]));
 
@@ -178,6 +188,24 @@ describe("PreviewTab", () => {
     await user.click(screen.getByRole("button", { name: /^start preview$/i }));
 
     expect(hookActions.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls per-server controls for each dev server row", async () => {
+    const user = userEvent.setup();
+    renderPreview(
+      response([
+        server({ id: 10, slug: "api", status: "ready", url: "http://127.0.0.1:4000", primary: false }),
+        server({ id: 20, slug: "web", status: "ready", url: "http://127.0.0.1:5173", primary: true }),
+      ]),
+    );
+
+    await user.click(screen.getByRole("button", { name: /^start api preview$/i }));
+    await user.click(screen.getByRole("button", { name: /^stop web preview$/i }));
+    await user.click(screen.getByRole("button", { name: /^restart api preview$/i }));
+
+    expect(hookActions.startServer).toHaveBeenCalledWith(10);
+    expect(hookActions.stopServer).toHaveBeenCalledWith(20);
+    expect(hookActions.restartServer).toHaveBeenCalledWith(10);
   });
 
   it("warns and shows only localhost URLs when the tunnel is enabled but not running", () => {

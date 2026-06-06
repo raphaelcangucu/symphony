@@ -63,8 +63,11 @@ describe("SummaryTab (editable)", () => {
       loading: false,
       refresh: vi.fn(),
       restart: vi.fn(),
+      restartServer: vi.fn(),
       start: vi.fn(),
+      startServer: vi.fn(),
       stop: vi.fn(),
+      stopServer: vi.fn(),
       startTunnel: vi.fn(),
     });
   });

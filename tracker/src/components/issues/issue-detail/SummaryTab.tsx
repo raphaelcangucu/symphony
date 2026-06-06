@@ -295,12 +295,8 @@ function previewStatusLabel(
   data: IssueDevServersResponse | null,
   primaryServer: IssueDevServer | null,
 ): string | null {
-  if (!data) {
+  if (!data || !primaryServer || shouldHideUnavailablePreview(data)) {
     return null;
-  }
-
-  if (shouldHideUnavailablePreview(data) || !primaryServer) {
-    return data.available ? "Preview provisioning..." : null;
   }
 
   switch (primaryServer.status) {
@@ -309,12 +305,10 @@ function previewStatusLabel(
       return "Preview provisioning...";
     case "starting":
       return "Preview starting...";
-    case "ready":
-      return "Preview waiting for URL...";
     case "crashed":
       return "Preview crashed";
-    case "stopped":
-      return "Preview stopped";
+    default:
+      return null;
   }
 }
 

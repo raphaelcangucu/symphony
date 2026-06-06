@@ -7,7 +7,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   alias SymphonyElixir.GitHub.IssueAdapter.Query
   alias SymphonyElixir.GitHub.IssueComments
   alias SymphonyElixir.GitHub.RepoSpec
-  alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Tracker.IssueDTO
 
   @page_size 50
@@ -118,9 +118,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   @impl true
   def update_issue(%Project{} = project, identifier, attrs) when is_map(attrs) do
-    %{repo: repo} = config(project)
-
-    with {:ok, {owner, name}} <- RepoSpec.split(repo),
+    with {:ok, repo} <- resolve_issue_repo(project, identifier),
+         {:ok, {owner, name}} <- RepoSpec.split(repo),
          {:ok, number} <- parse_issue_number(identifier),
          {:ok, issue} <- fetch_issue_details(owner, name, number),
          {:ok, meta} <- fetch_repo_metadata(owner, name),
@@ -219,30 +218,26 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   @impl true
   def list_comments(%Project{} = project, identifier) do
-    case config(project) do
-      %{repo: repo} when is_binary(repo) and repo != "" ->
-        case IssueComments.for_issue(repo, identifier) do
-          {:ok, comments} -> {:ok, comments}
-          {:error, {:invalid_issue_identifier, _}} -> {:ok, []}
-          error -> {:error, map_error(error)}
-        end
-
-      _ ->
-        {:error, :not_supported_on_remote}
+    with {:ok, repo} <- resolve_issue_repo(project, identifier) do
+      case IssueComments.for_issue(repo, identifier) do
+        {:ok, comments} -> {:ok, comments}
+        {:error, {:invalid_issue_identifier, _}} -> {:ok, []}
+        error -> {:error, map_error(error)}
+      end
+    else
+      {:error, reason} -> {:error, map_error(reason)}
     end
   end
 
   @impl true
   def add_comment(%Project{} = project, identifier, body, _attrs) do
-    case config(project) do
-      %{repo: repo} when is_binary(repo) and repo != "" ->
-        case IssueComments.create(repo, identifier, body) do
-          {:ok, comment} -> {:ok, comment}
-          error -> {:error, map_error(error)}
-        end
-
-      _ ->
-        {:error, :not_supported_on_remote}
+    with {:ok, repo} <- resolve_issue_repo(project, identifier) do
+      case IssueComments.create(repo, identifier, body) do
+        {:ok, comment} -> {:ok, comment}
+        error -> {:error, map_error(error)}
+      end
+    else
+      {:error, reason} -> {:error, map_error(reason)}
     end
   end
 
@@ -306,7 +301,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp apply_agent_routing_label(%Project{} = project, identifier, agent) do
     label_name = "symphony:" <> agent
 
-    with {:ok, {owner, name}} <- RepoSpec.split(config(project).repo),
+    with {:ok, repo} <- resolve_issue_repo(project, identifier),
+         {:ok, {owner, name}} <- RepoSpec.split(repo),
          {:ok, number} <- parse_issue_number(identifier),
          {:ok, issue_node_id} <- fetch_issue_node_id(owner, name, number),
          {:ok, meta} <- fetch_repo_metadata(owner, name),
@@ -416,7 +412,10 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
             {:ok, identifier}
 
           true ->
-            resolve_move_item_id_from_issue_number(project, project_id, identifier)
+            case resolve_move_item_id_from_remote_id(project, project_id, identifier, attrs) do
+              {:ok, item_id} -> {:ok, item_id}
+              :skip -> resolve_move_item_id_from_issue_number(project, project_id, identifier)
+            end
         end
     end
   end
@@ -424,16 +423,115 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp project_item_id?(id) when is_binary(id), do: String.starts_with?(id, "PVTI_")
   defp project_item_id?(_), do: false
 
-  defp resolve_move_item_id_from_issue_number(%Project{} = project, project_id, identifier) do
-    %{repo: repo} = config(project)
+  defp resolve_move_item_id_from_remote_id(%Project{} = project, project_id, identifier, attrs) do
+    case issue_remote_id(project, identifier, attrs) do
+      id when is_binary(id) and id != "" ->
+        case fetch_project_item_id(id, project_id) do
+          {:ok, _} = ok -> ok
+          _ -> :skip
+        end
 
-    with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, number} <- parse_issue_number(identifier),
-         {:ok, issue_node_id} <- fetch_issue_node_id(owner, name, number),
-         {:ok, item_id} <- fetch_project_item_id(issue_node_id, project_id) do
-      {:ok, item_id}
+      _ ->
+        :skip
     end
   end
+
+  defp resolve_move_item_id_from_issue_number(%Project{} = project, project_id, identifier) do
+    with {:ok, number} <- parse_issue_number(identifier),
+         {:ok, issue_node_id} <- resolve_issue_node_id(project, identifier, number) do
+      fetch_project_item_id(issue_node_id, project_id)
+    end
+  end
+
+  defp resolve_issue_repo(%Project{} = project, identifier) do
+    with {:ok, number} <- parse_issue_number(identifier) do
+      find_issue_repo(project, identifier, number)
+    end
+  end
+
+  defp resolve_issue_node_id(%Project{} = project, identifier, number) do
+    candidate_repos(project, identifier)
+    |> Enum.reduce_while({:error, :issue_not_found}, fn repo, _acc ->
+      with {:ok, {owner, name}} <- RepoSpec.split(repo),
+           {:ok, node_id} <- fetch_issue_node_id(owner, name, number) do
+        {:halt, {:ok, node_id}}
+      else
+        _ -> {:cont, {:error, :issue_not_found}}
+      end
+    end)
+  end
+
+  defp find_issue_repo(%Project{} = project, identifier, number) do
+    candidate_repos(project, identifier)
+    |> Enum.reduce_while({:error, :issue_not_found}, fn repo, _acc ->
+      with {:ok, {owner, name}} <- RepoSpec.split(repo),
+           {:ok, _} <- fetch_issue_details(owner, name, number) do
+        {:halt, {:ok, repo}}
+      else
+        _ -> {:cont, {:error, :issue_not_found}}
+      end
+    end)
+  end
+
+  defp candidate_repos(%Project{} = project, identifier) do
+    url_repo =
+      case Context.get_issue(project.slug, identifier) do
+        {:ok, issue} -> repo_from_issue_url(issue.remote_url || issue.url)
+        _ -> :error
+      end
+
+    configured =
+      project.slug
+      |> Context.list_repositories()
+      |> Enum.map(& &1.github_full_name)
+
+    tracker = config(project).repo
+
+    []
+    |> prepend_if_ok(url_repo)
+    |> Kernel.++(configured)
+    |> Kernel.++(List.wrap(tracker))
+    |> Enum.uniq()
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+  end
+
+  defp prepend_if_ok(acc, {:ok, repo}), do: [repo | acc]
+  defp prepend_if_ok(acc, _), do: acc
+
+  defp repo_from_issue_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{host: host, path: path} when host in ["github.com", "www.github.com"] ->
+        case String.split(String.trim_leading(path || "", "/"), "/") do
+          [owner, repo, "issues", _number | _] when owner != "" and repo != "" ->
+            {:ok, "#{owner}/#{repo}"}
+
+          _ ->
+            :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp repo_from_issue_url(_), do: :error
+
+  defp issue_remote_id(%Project{} = project, identifier, attrs) do
+    remote_id_from_attrs(attrs) || local_issue_remote_id(project, identifier)
+  end
+
+  defp remote_id_from_attrs(attrs) do
+    Map.get(attrs, "remote_id") || Map.get(attrs, :remote_id)
+  end
+
+  defp local_issue_remote_id(%Project{slug: slug}, identifier) when is_binary(slug) do
+    case Context.get_issue(slug, identifier) do
+      {:ok, %{remote_id: id}} when is_binary(id) and id != "" -> id
+      _ -> nil
+    end
+  end
+
+  defp local_issue_remote_id(_, _), do: nil
 
   defp fetch_issue_node_id(owner, name, number) do
     case fetch_issue_details(owner, name, number) do

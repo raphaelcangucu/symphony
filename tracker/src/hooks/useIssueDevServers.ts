@@ -3,16 +3,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
 import {
   fetchIssueDevServers,
+  restartIssueDevServer,
   restartIssueDevServers,
+  startIssueDevServer,
   startIssueDevServers,
   startPublicTunnel,
+  stopIssueDevServer,
   stopIssueDevServers,
 } from "@/services/issueDevServers";
 import type { IssueDevServersResponse, IssueDevServerStatus } from "@/types/issue";
 
 const POLL_INTERVAL_MS = 2_000;
 const TRANSIENT_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
-const FINAL_PREVIEW_STATUSES = new Set<IssueDevServerStatus>(["ready", "crashed"]);
 
 export interface UseIssueDevServersResult {
   data: IssueDevServersResponse | null;
@@ -22,12 +24,21 @@ export interface UseIssueDevServersResult {
   start: () => Promise<void>;
   stop: () => Promise<void>;
   restart: () => Promise<void>;
+  startServer: (serverId: number) => Promise<void>;
+  stopServer: (serverId: number) => Promise<void>;
+  restartServer: (serverId: number) => Promise<void>;
   startTunnel: () => Promise<void>;
 }
 
 type IssueDevServerAction = (
   projectSlug: string,
   issueIdentifier: string,
+) => Promise<IssueDevServersResponse>;
+
+type IssueDevServerInstanceAction = (
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
 ) => Promise<IssueDevServersResponse>;
 
 export function useIssueDevServers(
@@ -135,6 +146,53 @@ export function useIssueDevServers(
     [hasIdentifiers, issueIdentifier, projectSlug],
   );
 
+  const runInstanceAction = useCallback(
+    async (action: IssueDevServerInstanceAction, serverId: number, failureMessage: string) => {
+      if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
+        setError("Project and issue identifiers are required.");
+        return;
+      }
+
+      if (actionInFlightRef.current) {
+        return;
+      }
+
+      actionInFlightRef.current = true;
+      const actionGeneration = actionGenerationRef.current;
+      const requestId = ++requestIdRef.current;
+      inFlightRef.current = true;
+      setLoading(true);
+
+      try {
+        const response = await action(projectSlug, issueIdentifier, serverId);
+
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+
+        setData(response);
+        setError(null);
+        hasLoadedRef.current = true;
+      } catch {
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+
+        setError(failureMessage);
+      } finally {
+        if (actionGeneration === actionGenerationRef.current) {
+          actionInFlightRef.current = false;
+        }
+
+        if (requestId === requestIdRef.current) {
+          inFlightRef.current = false;
+          setLoading(false);
+        }
+      }
+    },
+    [hasIdentifiers, issueIdentifier, projectSlug],
+  );
+
   const start = useCallback(
     () => runAction(startIssueDevServers, "Could not start issue dev servers."),
     [runAction],
@@ -146,6 +204,21 @@ export function useIssueDevServers(
   const restart = useCallback(
     () => runAction(restartIssueDevServers, "Could not restart issue dev servers."),
     [runAction],
+  );
+  const startServer = useCallback(
+    (serverId: number) =>
+      runInstanceAction(startIssueDevServer, serverId, "Could not start the dev server."),
+    [runInstanceAction],
+  );
+  const stopServer = useCallback(
+    (serverId: number) =>
+      runInstanceAction(stopIssueDevServer, serverId, "Could not stop the dev server."),
+    [runInstanceAction],
+  );
+  const restartServer = useCallback(
+    (serverId: number) =>
+      runInstanceAction(restartIssueDevServer, serverId, "Could not restart the dev server."),
+    [runInstanceAction],
   );
 
   const startTunnel = useCallback(async () => {
@@ -201,7 +274,7 @@ export function useIssueDevServers(
     void refresh();
   }, [focused, hasIdentifiers, refresh]);
 
-  return { data, loading, error, refresh, start, stop, restart, startTunnel };
+  return { data, loading, error, refresh, start, stop, restart, startServer, stopServer, restartServer, startTunnel };
 }
 
 function hasRequiredIdentifier(value: string | null | undefined): value is string {
@@ -213,15 +286,5 @@ function shouldPoll(data: IssueDevServersResponse | null): boolean {
     return false;
   }
 
-  if (data.servers.some((server) => TRANSIENT_STATUSES.has(server.status))) {
-    return true;
-  }
-
-  const hasFinalPreviewState = data.servers.some(
-    (server) =>
-      FINAL_PREVIEW_STATUSES.has(server.status) ||
-      (server.status === "stopped" && Boolean(server.session_name || server.url)),
-  );
-
-  return data.available && !hasFinalPreviewState;
+  return data.servers.some((server) => TRANSIENT_STATUSES.has(server.status));
 }

@@ -13,8 +13,11 @@ vi.mock("@/hooks/useIssueDevServers", () => ({
 const hookActions = {
   refresh: vi.fn(),
   restart: vi.fn(),
+  restartServer: vi.fn(),
   start: vi.fn(),
+  startServer: vi.fn(),
   stop: vi.fn(),
+  stopServer: vi.fn(),
   startTunnel: vi.fn(),
 };
 
