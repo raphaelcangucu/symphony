@@ -510,7 +510,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
             {:ok,
              result
-             |> Map.put(:assistant_message, fallback_assistant_message(collected.assistant_message))
+             |> Map.put(:assistant_message, fallback_assistant_message(collected.assistant_message, agent_kind))
              |> Map.put(:tool_calls, collected.tool_calls)}
 
           {:error, reason} ->
@@ -554,6 +554,17 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           questions: Map.get(message, :questions) || []
         })
 
+      # The Claude adapter streams partial assistant text as item/progress deltas.
+      # Forward them for live token streaming in the UI. The persisted message is
+      # assembled from the final item/created text item below, so we don't accumulate
+      # the delta into the collector here (that would double the text).
+      Map.get(message, :event) == :notification and method == "item/progress" ->
+        delta = get_in(payload, ["params", "delta", "text"]) || get_in(payload, [:params, :delta, :text])
+
+        if is_binary(delta) and delta != "" do
+          maybe_call(opts, :on_assistant_delta, delta)
+        end
+
       # Claude adapter emits tool activity as :notification events with method "item/created".
       # Route tool_call items through the same upsert/callback path as :tool_call_started,
       # and tool_result items through the :tool_call_completed path, so chips reach the relay.
@@ -579,6 +590,18 @@ defmodule SymphonyElixir.Assistant.CodexSession do
             tool_call = %{name: nil, status: status, arguments: nil, output: content, result: %{}, id: id}
             Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, id, tool_call)} end)
             maybe_call(opts, :on_tool_call_completed, tool_call)
+
+          # The Claude adapter delivers finalized assistant text as an item/created
+          # "text" item (the authoritative full text of a message block). Accumulate it
+          # so the reply reaches the persisted assistant message. Live token streaming
+          # is handled separately via "item/progress" deltas, so we do NOT also append
+          # those here (that would double the text).
+          item_type == "text" ->
+            text = Map.get(item, "text") || Map.get(item, :text) || ""
+
+            if is_binary(text) and text != "" do
+              Agent.update(collector, fn state -> %{state | assistant_message: state.assistant_message <> text} end)
+            end
 
           true ->
             :ok
@@ -738,12 +761,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
-  defp fallback_assistant_message(message) do
+  defp fallback_assistant_message(message, agent_kind \\ nil) do
     case String.trim(message) do
-      "" -> "Codex completed the turn without returning assistant text."
+      "" -> "#{agent_label(agent_kind)} completed the turn without returning assistant text."
       trimmed -> trimmed
     end
   end
+
+  defp agent_label("claude"), do: "Claude"
+  defp agent_label("codex"), do: "Codex"
+  defp agent_label(_), do: "The agent"
 
   defp normalize_runner_result({:ok, result}) when is_map(result) do
     assistant_message = Map.get(result, :assistant_message) || Map.get(result, "assistant_message")

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fake `claude --print --output-format stream-json` for tests.
-# Modes via FAKE_CLAUDE_MODE: happy (default) | error | hang
+# Modes via FAKE_CLAUDE_MODE: happy (default) | error | hang | multi | silent
 prompt="$(cat)"
 case "${FAKE_CLAUDE_MODE:-happy}" in
   happy)
@@ -26,5 +26,10 @@ case "${FAKE_CLAUDE_MODE:-happy}" in
     echo '{"type":"rate_limit_event","rate_limit_info":{"status":"ok","utilization":12}}'
     echo '{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"Hello world"}]}}'
     echo '{"type":"result","subtype":"success","session_id":"sess-multi","usage":{"input_tokens":7,"output_tokens":3}}'
+    ;;
+  silent)
+    # Turn completes successfully but emits no assistant text (exercises the empty-reply fallback).
+    echo '{"type":"system","subtype":"init","session_id":"sess-silent"}'
+    echo '{"type":"result","subtype":"success","session_id":"sess-silent","usage":{"input_tokens":1,"output_tokens":0},"total_cost_usd":0.0}'
     ;;
 esac
