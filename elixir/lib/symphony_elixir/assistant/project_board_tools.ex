@@ -57,8 +57,7 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
   defp create_tracker_project_spec do
     %{
       "name" => "create_tracker_project",
-      "description" =>
-        "Create a local-only Symphony tracker project (no GitHub/Linear/Jira link). Use after list_tracker_projects when setting up a new board.",
+      "description" => "Create a local-only Symphony tracker project (no GitHub/Linear/Jira link). Use after list_tracker_projects when setting up a new board.",
       "inputSchema" => %{
         "type" => "object",
         "additionalProperties" => false,

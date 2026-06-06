@@ -299,9 +299,7 @@ defmodule SymphonyElixir.DevServer.Reconciler do
                   :ok
 
                 {:error, reason} ->
-                  Logger.debug(
-                    "Dev server auto-start skipped project=#{project_slug} issue=#{identifier} reason=#{inspect(reason)}"
-                  )
+                  Logger.debug("Dev server auto-start skipped project=#{project_slug} issue=#{identifier} reason=#{inspect(reason)}")
               end
             end
 

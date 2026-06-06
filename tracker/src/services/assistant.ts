@@ -1,13 +1,18 @@
 import axios from "axios";
 
 import {
+  fallbackCatalogBundle,
+  fallbackClaudeCatalog,
   fallbackCodexCatalog,
-  loadCachedCodexCatalog,
-  saveCachedCodexCatalog,
+  loadCachedCatalogBundle,
+  saveCachedCatalogBundle,
+  type AssistantAgentCatalog,
+  type AssistantCatalogBundle,
   type AssistantCodexCatalog,
   type AssistantEffortOption,
   type AssistantModelOption,
 } from "@/lib/assistantSettings";
+import type { AgentKind } from "@/types/issue";
 import type { Comment } from "@/types/comment";
 import type { Issue } from "@/types/issue";
 
@@ -189,6 +194,12 @@ interface BackendAssistantCodexCatalogDto {
   models?: BackendAssistantModelDto[] | null;
 }
 
+interface BackendAssistantCatalogBundleDto {
+  agents?: BackendAssistantCodexCatalogDto[] | null;
+  default_agent?: string | null;
+  defaultAgent?: string | null;
+}
+
 interface BackendUploadedAttachmentDto {
   id?: string | null;
   type?: string | null;
@@ -237,15 +248,16 @@ export async function uploadAssistantAttachment(
   };
 }
 
-export async function fetchAssistantCodexCatalog(projectSlug: string): Promise<AssistantCodexCatalog> {
+export async function fetchAssistantCatalogBundle(projectSlug: string): Promise<AssistantCatalogBundle> {
   const slug = projectSlug.trim();
   if (!slug) throw new Error("projectSlug is required");
 
   try {
     const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/config`));
-    const catalog = normalizeAssistantCodexCatalog(unwrapData<BackendAssistantCodexCatalogDto>(response));
-    saveCachedCodexCatalog(catalog);
-    return catalog;
+    const raw = unwrapData<BackendAssistantCatalogBundleDto>(response);
+    const bundle = normalizeAssistantCatalogBundle(raw);
+    saveCachedCatalogBundle(bundle);
+    return bundle;
   } catch (cause) {
     if (axios.isAxiosError(cause) && cause.response?.status === 404) {
       throw new Error(
@@ -254,26 +266,40 @@ export async function fetchAssistantCodexCatalog(projectSlug: string): Promise<A
     }
 
     if (axios.isAxiosError(cause) && cause.response?.status === 503) {
-      const cachedCatalog = loadCachedCodexCatalog();
-      if (cachedCatalog) return cachedCatalog;
+      const cached = loadCachedCatalogBundle();
+      if (cached) return cached;
 
-      const catalog = fallbackCodexCatalog();
-      catalog.command =
-        (axios.isAxiosError(cause) &&
-          typeof cause.response?.data === "object" &&
-          cause.response?.data !== null &&
-          "error" in cause.response.data &&
-          typeof (cause.response.data as { error?: { message?: string } }).error?.message === "string" &&
-          (cause.response.data as { error?: { message?: string } }).error?.message) ||
-        catalog.command;
-      return catalog;
+      const bundle = fallbackCatalogBundle();
+      // Propagate error command hint from the 503 body when available
+      const errorMsg =
+        axios.isAxiosError(cause) &&
+        typeof cause.response?.data === "object" &&
+        cause.response?.data !== null &&
+        "error" in cause.response.data &&
+        typeof (cause.response.data as { error?: { message?: string } }).error?.message === "string"
+          ? (cause.response.data as { error?: { message?: string } }).error?.message
+          : null;
+      if (errorMsg) {
+        const codex = bundle.agents.find((a) => a.agent === "codex");
+        if (codex) codex.command = errorMsg;
+      }
+      return bundle;
     }
 
-    const cachedCatalog = loadCachedCodexCatalog();
-    if (cachedCatalog) return cachedCatalog;
+    const cached = loadCachedCatalogBundle();
+    if (cached) return cached;
 
-    throw new Error(extractApiErrorMessage(cause, "Failed to load Codex CLI models."));
+    throw new Error(extractApiErrorMessage(cause, "Failed to load assistant models."));
   }
+}
+
+/**
+ * @deprecated Use fetchAssistantCatalogBundle. Returns only the codex catalog
+ * for callers that haven't been updated yet.
+ */
+export async function fetchAssistantCodexCatalog(projectSlug: string): Promise<AssistantCodexCatalog> {
+  const bundle = await fetchAssistantCatalogBundle(projectSlug);
+  return bundle.agents.find((c) => c.agent === "codex") ?? bundle.agents[0];
 }
 
 export function normalizeAssistantCodexCatalog(dto: BackendAssistantCodexCatalogDto): AssistantCodexCatalog {
@@ -292,6 +318,42 @@ export function normalizeAssistantCodexCatalog(dto: BackendAssistantCodexCatalog
   };
 }
 
+export function normalizeAssistantCatalogBundle(dto: BackendAssistantCatalogBundleDto): AssistantCatalogBundle {
+  const rawAgents = Array.isArray(dto.agents) ? dto.agents : [];
+
+  const agents: AssistantAgentCatalog[] = rawAgents
+    .map((agentDto): AssistantAgentCatalog | null => {
+      const agentKind = agentDto.agent;
+      if (agentKind !== "codex" && agentKind !== "claude") return null;
+
+      const models = (agentDto.models ?? []).map(normalizeAssistantModel).filter((m) => m.model.length > 0);
+      if (models.length === 0) {
+        return agentKind === "claude" ? fallbackClaudeCatalog() : fallbackCodexCatalog();
+      }
+
+      return {
+        agent: agentKind as AgentKind,
+        agentLabel: agentDto.agentLabel ?? agentDto.agent_label ?? (agentKind === "claude" ? "Claude Code" : "Codex CLI"),
+        command: agentDto.command ?? (agentKind === "claude" ? "claude" : "codex app-server"),
+        defaultModel: agentDto.defaultModel ?? agentDto.default_model ?? null,
+        models,
+      };
+    })
+    .filter((a): a is AssistantAgentCatalog => a !== null);
+
+  if (agents.length === 0) {
+    return fallbackCatalogBundle();
+  }
+
+  const rawDefault = dto.defaultAgent ?? dto.default_agent;
+  const defaultAgent: AgentKind =
+    rawDefault === "codex" || rawDefault === "claude"
+      ? rawDefault
+      : (agents[0].agent as AgentKind);
+
+  return { agents, defaultAgent };
+}
+
 function normalizeAssistantModel(dto: BackendAssistantModelDto): AssistantModelOption {
   const model = dto.model ?? dto.id ?? "";
   const efforts = (dto.efforts ?? []).map(normalizeAssistantEffort).filter((effort) => effort.id.length > 0);
@@ -304,7 +366,7 @@ function normalizeAssistantModel(dto: BackendAssistantModelDto): AssistantModelO
     description: dto.description ?? undefined,
     isDefault: dto.isDefault ?? dto.is_default ?? false,
     defaultEffort,
-    efforts: efforts.length > 0 ? efforts : [{ id: defaultEffort, label: defaultEffort }],
+    efforts: efforts.length > 0 ? efforts : defaultEffort ? [{ id: defaultEffort, label: defaultEffort }] : [],
     inputModalities: dto.inputModalities ?? dto.input_modalities ?? undefined,
   };
 }

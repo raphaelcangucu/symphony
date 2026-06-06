@@ -21,6 +21,7 @@ const formOptions: IssueFormOptions = {
   assignees: [{ id: "U1", login: "alice", name: "Alice", avatarUrl: null }],
   statuses: ["Todo", "In Progress", "Done"],
   agents: [],
+  effectiveAgent: "codex",
 };
 
 function issue(overrides: Partial<Issue> = {}): Issue {

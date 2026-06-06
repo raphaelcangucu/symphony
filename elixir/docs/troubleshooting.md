@@ -143,18 +143,28 @@ or the issue data contains invalid bytes.
 
 ### Claude Backend
 
-`symphony-claude` must be installed:
+The Claude backend is built into Symphony. Install the Claude Code CLI and log in once:
 
 ```bash
-brew install symphony-claude
+# macOS / Linux — see https://docs.anthropic.com/claude-code for the current install method
+npm install -g @anthropic-ai/claude-code  # or Homebrew tap, or binary release
+claude   # run once to authenticate; follow the browser prompt
 ```
+
+The **Settings** page (tracker sidebar → Settings → Coding agent) shows a green availability
+indicator when Symphony finds `claude` on its `PATH`. If the indicator is grey, verify that the
+`claude` binary is accessible to the Symphony server process (e.g. add it to the PATH exported
+before `make serve`).
 
 WORKFLOW.md configuration:
 
 ```yaml
 claude:
-  command: symphony-claude
+  command: claude
 ```
+
+`bin/symphony-claude` (produced by `make build`) exposes the same app-server protocol over stdio
+for external orchestrators — a dynamicTools-capable drop-in for the retired bridge.
 
 ### Codex Backend
 
@@ -516,7 +526,7 @@ symphony --logs-root /path/to/logs WORKFLOW.md
 Check the error messages in the logs. Common causes:
 - Incorrect variable names in the prompt template (see "Undefined Variable Error" above)
 - WORKFLOW.md encoding issues (see "JSON Encoding Error" above)
-- `symphony-claude` or `codex` command not found in PATH
+- `claude` or `codex` command not found in PATH (check availability on the Settings page)
 
 ### Can't access the observability dashboard
 

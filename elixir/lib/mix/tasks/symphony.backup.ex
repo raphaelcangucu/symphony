@@ -22,9 +22,7 @@ defmodule Mix.Tasks.Symphony.Backup do
 
     case Backup.create(trigger: trigger) do
       {:ok, backup} ->
-        Mix.shell().info(
-          "✓  Backup id=#{backup.id} size=#{Backup.human_bytes(backup.size_bytes)}\n   path: #{backup.local_path}"
-        )
+        Mix.shell().info("✓  Backup id=#{backup.id} size=#{Backup.human_bytes(backup.size_bytes)}\n   path: #{backup.local_path}")
 
       {:error, reason} ->
         Mix.raise("✗  Backup failed: #{inspect(reason)}")

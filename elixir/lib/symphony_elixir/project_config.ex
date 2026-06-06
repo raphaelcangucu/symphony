@@ -73,8 +73,7 @@ defmodule SymphonyElixir.ProjectConfig do
       read_timeout_ms: agent_override(project_front_matter, "read_timeout_ms"),
       stall_timeout_ms: agent_override(project_front_matter, "stall_timeout_ms"),
       completion_transitions: agent_override(project_front_matter, "completion_transitions"),
-      max_concurrent_agents_by_state:
-        agent_override(project_front_matter, "max_concurrent_agents_by_state"),
+      max_concurrent_agents_by_state: agent_override(project_front_matter, "max_concurrent_agents_by_state"),
       dev_server: front_matter_section(project_front_matter, "dev_server"),
       hooks: front_matter_section(project_front_matter, "hooks")
     }

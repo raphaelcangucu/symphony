@@ -37,7 +37,7 @@ defmodule SymphonyElixir.InstanceConfig do
   @default_codex_command "codex --config shell_environment_policy.inherit=all app-server"
   @default_codex_approval_policy "never"
   @default_codex_thread_sandbox "workspace-write"
-  @default_claude_command "symphony-claude"
+  @default_claude_command "claude"
   @default_agent_kind "codex"
 
   @spec poll_interval_ms() :: pos_integer()

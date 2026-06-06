@@ -331,9 +331,7 @@ defmodule SymphonyElixir.Orchestrator do
           state_acc
 
         %{identifier: identifier} = _running_entry ->
-          Logger.info(
-            "Issue no longer visible, stopping active agent issue_id=#{issue_id} issue_identifier=#{identifier || issue_id}"
-          )
+          Logger.info("Issue no longer visible, stopping active agent issue_id=#{issue_id} issue_identifier=#{identifier || issue_id}")
 
           terminate_running_issue(state_acc, issue_id, true)
 

@@ -99,23 +99,72 @@ describe("assistant service", () => {
     expect(catalog.models[0]?.label).toBe("GPT-5.3 Codex");
   });
 
+  it("does not synthesize a blank effort sentinel when efforts is empty and default_effort is empty (Claude server path)", () => {
+    const catalog = normalizeAssistantCodexCatalog({
+      agent: "codex",
+      agent_label: "Claude Code",
+      command: "claude",
+      default_model: "claude-opus-4-5",
+      models: [
+        {
+          id: "claude-opus-4-5",
+          model: "claude-opus-4-5",
+          label: "Claude Opus 4.5",
+          is_default: true,
+          default_effort: "",
+          efforts: [],
+        },
+      ],
+    });
+
+    expect(catalog.models[0]?.efforts).toEqual([]);
+    expect(catalog.models[0]?.defaultEffort).toBe("");
+  });
+
+  it("synthesizes sentinel effort when efforts is empty but default_effort is non-empty (Codex fallback path)", () => {
+    const catalog = normalizeAssistantCodexCatalog({
+      agent: "codex",
+      agent_label: "Codex CLI",
+      command: "codex app-server",
+      default_model: "gpt-5.3-codex",
+      models: [
+        {
+          id: "gpt-5.3-codex",
+          model: "gpt-5.3-codex",
+          label: "GPT-5.3 Codex",
+          is_default: true,
+          default_effort: "medium",
+          efforts: [],
+        },
+      ],
+    });
+
+    expect(catalog.models[0]?.efforts).toEqual([{ id: "medium", label: "medium" }]);
+    expect(catalog.models[0]?.defaultEffort).toBe("medium");
+  });
+
   it("loads assistant config from the tracker API", async () => {
     const get = vi.spyOn(http, "get").mockResolvedValueOnce({
       data: {
         data: {
-          agent: "codex",
-          agent_label: "Codex CLI",
-          command: "codex app-server",
-          default_model: "gpt-5.3-codex",
-          models: [
+          agents: [
             {
-              model: "gpt-5.3-codex",
-              label: "GPT-5.3 Codex",
-              is_default: true,
-              default_effort: "low",
-              efforts: [{ id: "low", label: "Low" }],
+              agent: "codex",
+              agent_label: "Codex CLI",
+              command: "codex app-server",
+              default_model: "gpt-5.3-codex",
+              models: [
+                {
+                  model: "gpt-5.3-codex",
+                  label: "GPT-5.3 Codex",
+                  is_default: true,
+                  default_effort: "low",
+                  efforts: [{ id: "low", label: "Low" }],
+                },
+              ],
             },
           ],
+          default_agent: "codex",
         },
       },
     });

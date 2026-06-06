@@ -20,6 +20,7 @@ import { BoardPage } from "@/pages/BoardPage";
 import { ListPage } from "@/pages/ListPage";
 import { BackupPage } from "@/pages/BackupPage";
 import { ObservabilityPage } from "@/pages/ObservabilityPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { TemplateEditPage } from "@/pages/TemplateEditPage";
@@ -84,6 +85,7 @@ export function App() {
             <Route path="templates/:slug" element={<TemplateEditPage />} />
             <Route path="observability" element={<ObservabilityPage />} />
             <Route path="backups" element={<BackupPage />} />
+            <Route path="settings" element={<SettingsPage />} />
             <Route path="assistant" element={<AssistantPage />} />
             <Route path="assistant/:threadId" element={<AssistantPage />} />
           </Route>

@@ -486,8 +486,7 @@ defmodule SymphonyElixir.Config do
     if present == [] do
       :ok
     else
-      {:error,
-       ["not allowed in per-project workflow: #{Enum.join(present, ", ")} (set these as process/connection config)"]}
+      {:error, ["not allowed in per-project workflow: #{Enum.join(present, ", ")} (set these as process/connection config)"]}
     end
   end
 
@@ -502,23 +501,29 @@ defmodule SymphonyElixir.Config do
   @doc """
   Resolves the agent kind from a project's own front-matter map.
 
-  The agent backend is determined by which agent section (`codex:`/`claude:`)
-  the project declares — `codex` wins when both are present. When the project
-  declares neither, the global default agent kind is used.
+  Precedence: explicit `agent.kind` > exactly-one-section inference
+  (`codex:`/`claude:`) > nil (= inherit; resolved later by
+  `SymphonyElixir.AgentPreference`).
   """
-  @spec agent_kind_from_config(map()) :: String.t()
+  @spec agent_kind_from_config(map() | term()) :: String.t() | nil
   def agent_kind_from_config(front_matter) when is_map(front_matter) do
     normalized = normalize_keys(front_matter)
-    kinds = Enum.filter(@agent_sections, &Map.has_key?(normalized, &1))
 
-    cond do
-      "codex" in kinds -> "codex"
-      kinds != [] -> List.first(kinds)
-      true -> default_agent_kind()
-    end
+    explicit_agent_kind(normalized) ||
+      case Enum.filter(@agent_sections, &Map.has_key?(normalized, &1)) do
+        [single] -> single
+        _ -> nil
+      end
   end
 
-  def agent_kind_from_config(_front_matter), do: default_agent_kind()
+  def agent_kind_from_config(_front_matter), do: nil
+
+  defp explicit_agent_kind(normalized) do
+    case Map.get(normalized, "agent") do
+      %{} = section -> SymphonyElixir.AgentPreference.normalize(Map.get(section, "kind"))
+      _ -> nil
+    end
+  end
 
   @spec assistant_draft_status() :: String.t()
   def assistant_draft_status do
@@ -828,7 +833,6 @@ defmodule SymphonyElixir.Config do
   def public_tunnel_namespace do
     get_in(validated_workflow_options(), [:public_tunnel, :namespace])
   end
-
 
   @spec validate!() :: :ok | {:error, String.t()}
   def validate! do

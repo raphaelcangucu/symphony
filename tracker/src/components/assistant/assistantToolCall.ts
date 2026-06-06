@@ -6,6 +6,7 @@ const ACTION_TOOLS = new Set<string>([
   "create_draft_issue",
   "update_issue",
   "move_issue",
+  "dispatch_coding_agent",
   "dispatch_codex",
   "add_comment",
 ]);

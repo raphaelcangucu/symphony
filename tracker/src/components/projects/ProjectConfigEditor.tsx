@@ -1,8 +1,9 @@
 import { FileText, GitBranch, ScrollText, type LucideIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadDefaultMenu } from "@/components/projects/LoadDefaultMenu";
+import { ProjectAgentSelect } from "@/components/projects/ProjectAgentSelect";
 import { RepositoriesSection } from "@/components/projects/config/RepositoriesSection";
 import { TrackerSourceFields } from "@/components/projects/TrackerSourceFields";
 import { WorkflowMarkdownEditor } from "@/components/projects/WorkflowMarkdownEditor";
@@ -12,8 +13,11 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { initialWorkflowMarkdown } from "@/lib/workflowMarkdown";
+import { readAgentKind, writeAgentKind } from "@/lib/workflowFrontMatter";
 import { DEFAULT_PROJECT_SETTINGS_TAB, type ProjectSettingsTab } from "@/lib/workspaceRoutes";
+import { fetchSettings } from "@/services/settings";
 import { updateProject, updateProjectRepositories, updateProjectSetup } from "@/services/projects";
+import type { AgentKind } from "@/types/issue";
 import type { Project, TrackerKind } from "@/types/project";
 import type { WorkspaceRepository } from "@/types/repository";
 
@@ -90,6 +94,18 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
   const initialRepositoriesKey = useMemo(() => JSON.stringify(project.repositories ?? []), [project]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [userDefaultAgent, setUserDefaultAgent] = useState<AgentKind>("codex");
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSettings()
+      .then((s) => {
+        if (!cancelled) setUserDefaultAgent(s.agents.default_agent_kind);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSave() {
     const trimmedName = name.trim();
@@ -220,7 +236,12 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
               />
             </div>
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="space-y-4 pt-6">
+                <ProjectAgentSelect
+                  value={readAgentKind(workflowMarkdown)}
+                  effectiveDefault={userDefaultAgent}
+                  onChange={(kind) => setWorkflowMarkdown((current) => writeAgentKind(current, kind))}
+                />
                 <WorkflowMarkdownEditor value={workflowMarkdown} onChange={setWorkflowMarkdown} />
               </CardContent>
             </Card>

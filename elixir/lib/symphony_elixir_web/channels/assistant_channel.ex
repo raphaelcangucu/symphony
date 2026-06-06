@@ -7,7 +7,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixir.Assistant.{CodexSession, History, Payload, SideQuery, ToolExecutor}
   alias SymphonyElixir.Config
   alias SymphonyElixirWeb.TrackerAuth
-  alias SymphonyElixir.Workspace
+  alias SymphonyElixir.{AgentPreference, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
 
   @issue_modes ~w(triage simple complex)
   @issue_authoring_tools ~w(create_draft_issue create_issue)
@@ -24,7 +24,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
         mode: History.thread_mode(thread),
-        goal_mode: History.thread_goal_mode(thread)
+        goal_mode: History.thread_goal_mode(thread),
+        # Issue task labels are NOT consulted here (would need a tracker fetch at join);
+        # dispatch resolves them — composer badge may differ for label-pinned issues.
+        effective_agent: thread_effective_agent(thread)
       }
 
       socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
@@ -45,7 +48,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
         mode: History.thread_mode(thread),
-        goal_mode: History.thread_goal_mode(thread)
+        goal_mode: History.thread_goal_mode(thread),
+        effective_agent: thread_effective_agent(thread)
       }
 
       socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
@@ -65,7 +69,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         mode: History.thread_mode(thread),
-        goal_mode: History.thread_goal_mode(thread)
+        goal_mode: History.thread_goal_mode(thread),
+        effective_agent: thread_effective_agent(thread)
       }
 
       socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
@@ -83,7 +88,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       case History.list_messages(project_slug) do
         {:ok, messages} ->
           socket = assign(socket, :project_slug, project_slug)
-          payload = %{messages: Enum.map(messages, &History.message_payload/1)}
+          # No thread record for project-scoped joins — resolve via project tier then operator default.
+          payload = %{
+            messages: Enum.map(messages, &History.message_payload/1),
+            effective_agent: project_agent_kind(project_slug) || Settings.Agents.default_agent_kind()
+          }
+
           send(self(), {:assistant_history_loaded, payload})
           {:ok, payload, socket}
 
@@ -132,24 +142,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("set_goal_mode", _payload, socket),
     do: {:reply, {:error, %{reason: "goal_mode is required"}}, socket}
 
-  def handle_in("dispatch_codex", payload, socket) do
-    case issue_thread(socket) do
-      {:ok, %{issue_identifier: identifier, project_slug: project_slug} = thread} ->
-        goal_mode = dispatch_goal_mode(payload, thread)
-        arguments = dispatch_arguments(identifier, goal_mode)
+  def handle_in("dispatch_coding_agent", payload, socket), do: do_dispatch(payload, socket)
 
-        case ToolExecutor.execute(project_slug, "dispatch_codex", arguments) do
-          {:ok, result} ->
-            {:reply, {:ok, %{message: result.message, issue: result.data, goal_mode: goal_mode}}, socket}
-
-          {:error, reason} ->
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-        end
-
-      {:error, reason} ->
-        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-    end
-  end
+  def handle_in("dispatch_codex", payload, socket), do: do_dispatch(payload, socket)
 
   def handle_in("steer_turn", %{"message" => message}, socket) when is_binary(message) do
     trimmed = String.trim(message)
@@ -217,6 +212,26 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_in("btw", _payload, socket), do: {:reply, {:error, %{reason: "message is required"}}, socket}
+
+  defp do_dispatch(payload, socket) do
+    case issue_thread(socket) do
+      {:ok, %{issue_identifier: identifier, project_slug: project_slug} = thread} ->
+        goal_mode = dispatch_goal_mode(payload, thread)
+        agent = agent_from_payload(payload)
+        arguments = dispatch_arguments(identifier, goal_mode, agent)
+
+        case ToolExecutor.execute(project_slug, "dispatch_coding_agent", arguments) do
+          {:ok, result} ->
+            {:reply, {:ok, %{message: result.message, issue: result.data, goal_mode: goal_mode}}, socket}
+
+          {:error, reason} ->
+            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
 
   @impl true
   def handle_info({:assistant_history_loaded, payload}, socket) do
@@ -380,6 +395,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> Map.put("attachments", Payload.attachment_summary(attachments))
           |> Map.put("model", Map.get(context, "model") || Map.get(context, :model))
           |> Map.put("effort", Map.get(context, "effort") || Map.get(context, :effort))
+          |> Map.put("agent", Map.get(context, "agent") || Map.get(context, :agent))
 
         opts =
           []
@@ -509,6 +525,32 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     case Application.get_env(:symphony_elixir, :assistant_runner) do
       runner when is_function(runner, 4) -> Keyword.put(opts, :runner, runner)
       _ -> opts
+    end
+  end
+
+  # Returns the effective agent kind for a thread's join payload so the UI can
+  # display and default to the correct agent without waiting for the first turn.
+  # Resolution order: thread agent_kind → project agent_kind → operator default.
+  defp thread_effective_agent(thread) do
+    AgentPreference.normalize(Map.get(thread, :agent_kind)) ||
+      project_agent_kind(Map.get(thread, :project_slug)) ||
+      Settings.Agents.default_agent_kind()
+  end
+
+  defp project_agent_kind(nil), do: nil
+  defp project_agent_kind(""), do: nil
+
+  defp project_agent_kind(project_slug) when is_binary(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        project
+        |> Repo.preload(:setup)
+        |> ProjectConfig.resolve()
+        |> Map.get(:agent_kind)
+        |> AgentPreference.normalize()
+
+      _ ->
+        nil
     end
   end
 
@@ -646,11 +688,25 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
-  defp dispatch_arguments(identifier, goal_mode) do
+  defp agent_from_payload(payload) when is_map(payload) do
+    case Map.get(payload, "agent") do
+      agent when is_binary(agent) -> agent
+      _ -> nil
+    end
+  end
+
+  defp dispatch_arguments(identifier, goal_mode, agent) do
     base = %{"identifier" => identifier, "instructions" => dispatch_instructions(identifier)}
 
-    if goal_mode do
-      Map.put(base, "goal", dispatch_goal(identifier))
+    base =
+      if goal_mode do
+        Map.put(base, "goal", dispatch_goal(identifier))
+      else
+        base
+      end
+
+    if is_binary(agent) do
+      Map.put(base, "agent", agent)
     else
       base
     end

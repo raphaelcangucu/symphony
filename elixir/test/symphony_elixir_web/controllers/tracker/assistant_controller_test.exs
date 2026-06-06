@@ -43,7 +43,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantControllerTest do
     :ok
   end
 
-  test "returns Codex CLI catalog for assistant config" do
+  test "returns multi-agent catalog bundle for assistant config" do
     conn =
       build_conn()
       |> put_req_header("authorization", "Bearer secret")
@@ -51,16 +51,27 @@ defmodule SymphonyElixirWeb.Tracker.AssistantControllerTest do
 
     assert %{
              "data" => %{
-               "agent" => "codex",
-               "agent_label" => "Codex CLI",
-               "command" => "codex --model gpt-5.3-codex app-server",
-               "default_model" => "gpt-5.3-codex",
-               "models" => [model]
+               "agents" => agents,
+               "default_agent" => default_agent
              }
            } = json_response(conn, 200)
 
+    assert is_list(agents)
+    assert is_binary(default_agent)
+
+    codex = Enum.find(agents, &(&1["agent"] == "codex"))
+    assert codex["agent_label"] == "Codex CLI"
+    assert codex["command"] == "codex --model gpt-5.3-codex app-server"
+    assert codex["default_model"] == "gpt-5.3-codex"
+    assert [model] = codex["models"]
     assert model["model"] == "gpt-5.3-codex"
     assert model["label"] == "GPT-5.3 Codex"
+
+    claude = Enum.find(agents, &(&1["agent"] == "claude"))
+    assert claude["agent_label"] == "Claude Code"
+    assert is_binary(claude["command"])
+    assert claude["default_model"] == "claude-opus-4-6"
+    assert length(claude["models"]) == 3
   end
 
   defp migrate_repo do

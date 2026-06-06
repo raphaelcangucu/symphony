@@ -103,14 +103,13 @@ defmodule SymphonyElixir.ConfigTest do
       assert SymphonyElixir.Config.agent_kind_from_config(%{"claude" => %{}}) == "claude"
     end
 
-    test "prefers codex when both agent sections are present" do
+    test "returns nil (inherit) when both agent sections are present without explicit kind" do
       assert SymphonyElixir.Config.agent_kind_from_config(%{"codex" => %{}, "claude" => %{}}) ==
-               "codex"
+               nil
     end
 
-    test "falls back to the global default when no agent section is present" do
-      assert SymphonyElixir.Config.agent_kind_from_config(%{}) ==
-               SymphonyElixir.Config.default_agent_kind()
+    test "returns nil (inherit) when no agent section is present" do
+      assert SymphonyElixir.Config.agent_kind_from_config(%{}) == nil
     end
   end
 

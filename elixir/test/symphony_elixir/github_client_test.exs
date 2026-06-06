@@ -1932,7 +1932,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
             item_id: "PVTI_3",
             issue_node_id: "I_3",
             number: 3,
-            title: "Claude only workflow",
+            title: "Claude label",
             repo: "owner/repo",
             state_name: "Todo",
             labels: [%{"name" => "symphony:claude"}]
@@ -1955,19 +1955,27 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       claude_tagged = Enum.find(issues, &(&1.identifier == "3"))
       none = Enum.find(issues, &(&1.identifier == "4"))
 
+      # symphony:codex → explicit codex, admitted
       assert codex_tagged.assigned_to_worker
       assert codex_tagged.agent_kind == "codex"
+
+      # plain symphony → no per-task agent preference (nil), but still admitted
       assert base.assigned_to_worker
-      assert base.agent_kind == "codex"
-      refute claude_tagged.assigned_to_worker
+      assert base.agent_kind == nil
+
+      # symphony:claude → explicit claude, admitted regardless of global WORKFLOW agent section
+      assert claude_tagged.assigned_to_worker
+      assert claude_tagged.agent_kind == "claude"
+
+      # no symphony label → not admitted
       refute none.assigned_to_worker
     end
 
-    test "routes symphony:claude when claude section is configured", %{base_dir: base_dir} do
+    test "routes symphony:claude regardless of configured agent section", %{base_dir: base_dir} do
       write_workflow_file!(Workflow.workflow_file_path(),
         tracker_kind: "github",
         tracker_repo: "owner/repo",
-        agent_kind: "claude"
+        agent_kind: "codex"
       )
 
       request_fun =

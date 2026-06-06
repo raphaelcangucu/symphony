@@ -30,27 +30,14 @@ defmodule SymphonyElixir.AgentRunnerTest do
     assert SymphonyElixir.AgentRunner.issue_agent_kind(issue) == "claude"
   end
 
-  test "uses the project's resolved agent kind when issue.agent_kind is blank" do
-    {:ok, project} =
-      SymphonyElixir.LocalTracker.Context.ensure_project(%{name: "alpha", slug: "alpha", tracker_kind: "local"})
-
-    {:ok, _setup} =
-      %SymphonyElixir.LocalTracker.ProjectSetup{}
-      |> SymphonyElixir.LocalTracker.ProjectSetup.changeset(%{
-        project_id: project.id,
-        workflow_markdown: "",
-        validation_commands: %{"commands" => []},
-        scan_summary: %{}
-      })
-      |> SymphonyElixir.Repo.insert()
-
-    issue = %SymphonyElixir.Issue{identifier: "A-1", project_slug: "alpha", agent_kind: nil}
-    assert SymphonyElixir.AgentRunner.issue_agent_kind(issue) == SymphonyElixir.Config.default_agent_kind()
+  test "explicit issue.agent_kind wins regardless of project config" do
+    issue = %SymphonyElixir.Issue{identifier: "A-1", project_slug: "mac", agent_kind: "claude"}
+    assert SymphonyElixir.AgentRunner.issue_agent_kind(issue) == "claude"
   end
 
-  test "falls back to the global default when there is no slug" do
+  test "falls back to codex when there is no slug and no user default" do
     issue = %SymphonyElixir.Issue{identifier: "G-1", project_slug: nil, agent_kind: nil}
-    assert SymphonyElixir.AgentRunner.issue_agent_kind(issue) == SymphonyElixir.Config.default_agent_kind()
+    assert SymphonyElixir.AgentRunner.issue_agent_kind(issue) == "codex"
   end
 
   test "passes workspace artifacts into the first agent turn prompt" do
@@ -463,6 +450,23 @@ defmodule SymphonyElixir.AgentRunnerTest do
     after
       File.rm_rf(test_root)
     end
+  end
+
+  test "claude execution sessions carry Symphony dynamic tools" do
+    issue = %SymphonyElixir.Issue{id: "1", identifier: "X-1"}
+
+    opts = AgentRunner.claude_session_opts([workspace_root: "/tmp"], "claude", issue)
+
+    specs = Keyword.fetch!(opts, :dynamic_tools)
+    assert Enum.any?(specs, &(&1["name"] == "set_issue_status"))
+
+    executor = Keyword.fetch!(opts, :tool_executor)
+    assert is_function(executor, 2)
+  end
+
+  test "claude_session_opts is a no-op for non-claude agents" do
+    issue = %SymphonyElixir.Issue{id: "1", identifier: "X-1"}
+    assert AgentRunner.claude_session_opts([], "codex", issue) == []
   end
 
   defp enable_goals! do

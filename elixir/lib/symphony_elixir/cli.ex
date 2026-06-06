@@ -30,6 +30,10 @@ defmodule SymphonyElixir.CLI do
         }
 
   @spec main([String.t()]) :: no_return()
+  def main(["claude-app-server" | rest]) do
+    SymphonyElixir.Claude.AppServer.StdioMain.run(rest)
+  end
+
   def main(args) do
     case evaluate(args) do
       :ok ->

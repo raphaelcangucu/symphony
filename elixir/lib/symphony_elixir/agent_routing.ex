@@ -1,11 +1,13 @@
 defmodule SymphonyElixir.AgentRouting do
   @moduledoc """
-  Resolves coding-agent backend from GitHub issue labels.
+  Label-level agent signals for Symphony issues.
 
-  Labels:
-  - `symphony:codex` → Codex
-  - `symphony:claude` → Claude
-  - `symphony` → workflow default agent (Codex when both or only Codex are configured)
+  - `label_agent_kind/1`: explicit per-task agent from `symphony:codex` /
+    `symphony:claude` labels; plain `symphony` carries NO preference (nil).
+  - `routable?/1`: admission check — any `symphony*` label admits the issue.
+
+  Effective-agent resolution (task > project > user default) lives in
+  `SymphonyElixir.AgentPreference`.
   """
 
   @symphony_label "symphony"
@@ -31,25 +33,23 @@ defmodule SymphonyElixir.AgentRouting do
 
   def symphony_label?(_), do: false
 
-  @spec resolve_agent_kind([String.t()], [String.t()], String.t()) :: String.t() | nil
-  def resolve_agent_kind(label_names, configured_kinds, default_kind)
-      when is_list(label_names) and is_list(configured_kinds) and is_binary(default_kind) do
+  @doc "Explicit per-task agent from labels (`symphony:codex|claude`); plain `symphony` is no preference."
+  @spec label_agent_kind([String.t()]) :: String.t() | nil
+  def label_agent_kind(label_names) when is_list(label_names) do
     normalized = label_names |> Enum.map(&normalize_label/1) |> Enum.reject(&(&1 == ""))
 
-    kind =
-      cond do
-        @label_claude in normalized -> "claude"
-        @label_codex in normalized -> "codex"
-        @symphony_label in normalized -> default_kind
-        true -> nil
-      end
-
-    if kind in configured_kinds, do: kind, else: nil
+    cond do
+      @label_claude in normalized -> "claude"
+      @label_codex in normalized -> "codex"
+      true -> nil
+    end
   end
 
-  @spec routable?([String.t()], [String.t()], String.t()) :: boolean()
-  def routable?(label_names, configured_kinds, default_kind) do
-    resolve_agent_kind(label_names, configured_kinds, default_kind) != nil
+  @doc "Admission check by labels alone — agent availability no longer gates admission."
+  @spec routable?([String.t()]) :: boolean()
+  def routable?(label_names) when is_list(label_names) do
+    normalized = label_names |> Enum.map(&normalize_label/1)
+    Enum.any?(admission_labels(), &(&1 in normalized))
   end
 
   defp normalize_label(name) when is_binary(name), do: String.downcase(String.trim(name))

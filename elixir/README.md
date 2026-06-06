@@ -48,7 +48,7 @@ you enable the matching feature.
 | Git | **yes** | cloning, workspaces |
 | [Codex CLI](https://github.com/openai/codex) | **yes** (default agent) | `codex app-server` on `PATH` |
 | Node.js 20+ | frontend dev only | `make tracker-build` — skip if using committed `priv/static/tracker` |
-| [symphony-claude](https://github.com/sapsaldog/symphony) | if using Claude | `brew install symphony-claude` |
+| [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | if using Claude | local `claude` on `PATH` (run `claude` once to log in); the Claude backend is built in |
 | [code-server](https://github.com/coder/code-server) | if using browser editor | `SYMPHONY_EDITOR_ENABLED=true` → `make install-code-server` |
 | [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) | if using public tunnel | `public_tunnel.enabled: true` + `make tunnel` |
 
@@ -242,12 +242,16 @@ in-flight agent turns. See [Running the dev daemon](#running-the-dev-daemon-rest
 ```bash
 brew tap sapsaldog/symphony
 brew install symphony
-brew install symphony-claude   # only when using Claude
 
 export SYMPHONY_TRACKER_TOKEN=...
 export GITHUB_TOKEN=...
 symphony --port 4000
 ```
+
+The Claude backend is built in — Symphony drives your locally installed `claude` CLI directly
+(run `claude` once to log in). The packaged `bin/symphony-claude` escript exposes the same
+app-server protocol over stdio for external orchestrators (a dynamicTools-capable drop-in for
+the retired external bridge), so no separate `symphony-claude` install is needed.
 
 The packaged escript (`bin/symphony`) cannot load the SQLite NIF — **`make serve` from source is
 required** for the full local tracker. Homebrew builds may differ; prefer `make serve` for development.
@@ -353,7 +357,7 @@ agent:
   max_concurrent_agents: 5
   max_turns: 20
 claude:
-  command: symphony-claude
+  command: claude
 ---
 
 You are working on issue {{ issue.identifier }}.
@@ -488,6 +492,34 @@ projects mirror issues into SQLite and serve reads from the local store:
 
 Tune `SYMPHONY_POLL_INTERVAL_MS`, `SYMPHONY_TRACKER_SYNC_MIN_PULL_MS`, and
 `SYMPHONY_TRACKER_PR_SYNC_TTL_MS` in `elixir/.env` to reduce GitHub API pressure.
+
+### Agent preference
+
+Symphony resolves which coding agent runs an issue through a four-level chain, from most
+specific to least:
+
+1. **Task label** — an issue labeled `symphony:codex` or `symphony:claude` overrides everything.
+2. **Project `agent.kind`** — the WORKFLOW front matter `agent.kind: codex|claude` sets the
+   project default.
+3. **User default** — the operator default configured in **Settings** (tracker sidebar →
+   Settings → Coding agent), shown with availability indicators (green dot = CLI found,
+   grey = not found).
+4. **Fallback** — Codex if nothing else is set.
+
+Where to configure each level:
+
+- **Settings page** (tracker sidebar → Settings → Coding agent): set the instance-wide default
+  agent and see whether `codex` and `claude` CLIs are available on the server's `PATH`.
+- **Project picker** (Project settings → Workflow tab): set `agent.kind` for a single project
+  without editing the WORKFLOW file directly.
+- **Per-issue chips**: the issue create dialog and the issue's Agent tab let you add or remove
+  `symphony:codex` / `symphony:claude` labels to pin a specific agent to that issue.
+- **Assistant composer**: the agent menu in the composer lets you choose which agent runs the
+  next `dispatch_coding_agent` call (also exposed as `dispatch_codex` for back-compat).
+
+The Claude model catalog is static (opus / sonnet / haiku) and controlled by `claude.model` in
+the WORKFLOW front matter. Effort levels (`codex.approval_policy`, sandbox policy) are
+Codex-only and have no equivalent in the Claude backend.
 
 ### Local Tracker Development
 

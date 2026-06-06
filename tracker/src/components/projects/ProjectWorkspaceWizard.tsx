@@ -10,13 +10,17 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GitHubProjectPicker } from "@/components/projects/GitHubProjectPicker";
 import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
+import { ProjectAgentSelect } from "@/components/projects/ProjectAgentSelect";
 import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
 import { defaultWorkspacePath, inferRole, sanitizeWorkspaceSegment } from "@/lib/workspaceRepositories";
 import { githubProjectBoardUrl } from "@/lib/projectTrackerUrl";
+import { writeAgentKind } from "@/lib/workflowFrontMatter";
 import { projectSettingsPath } from "@/lib/workspaceRoutes";
 import { createWorkspaceProject } from "@/services/projects";
 import { listGitHubOwners, listGitHubRepositories, scanRepositories, suggestWorkspaceSetup } from "@/services/projectSetup";
+import { fetchSettings } from "@/services/settings";
 import { instantiateTemplate, listTemplates } from "@/services/templates";
+import type { AgentKind } from "@/types/issue";
 import type { WorkspaceSuggestion } from "@/types/project-setup";
 import type { GitHubOwner, RepositoryScan, WorkspaceRepository } from "@/types/repository";
 import type { Project, TrackerKind } from "@/types/project";
@@ -56,6 +60,19 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
   const [loadingRepositories, setLoadingRepositories] = useState(false);
   const [buildingSuggestion, setBuildingSuggestion] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [userDefaultAgent, setUserDefaultAgent] = useState<AgentKind>("codex");
+  const [projectAgent, setProjectAgent] = useState<AgentKind | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSettings()
+      .then((s) => {
+        if (!cancelled) setUserDefaultAgent(s.agents.default_agent_kind);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open || owners.length > 0 || loadingOwners || ownersAutoLoadAttempted) return;
@@ -237,7 +254,9 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
         workflowStatuses: suggestion.workflowStatuses,
         repositories: repositoriesForSubmission,
         setup: {
-          workflowMarkdown: suggestion.workflowMarkdown,
+          workflowMarkdown: projectAgent
+            ? writeAgentKind(suggestion.workflowMarkdown ?? "", projectAgent)
+            : suggestion.workflowMarkdown,
           validationCommands: suggestion.validationCommands,
           afterCreateHook: suggestion.afterCreateHook,
           scanSummary: suggestion.scanSummary,
@@ -303,6 +322,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
     setEditingScanPaths({});
     setScans([]);
     setSuggestion(null);
+    setProjectAgent(null);
   }
 
   return (
@@ -566,10 +586,17 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
           </div>
 
           {suggestion ? (
-            <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
-              <p className="font-medium">Suggested setup</p>
-              <p>{suggestion.validationCommands.join(", ")}</p>
-              <pre className="max-h-32 overflow-auto rounded bg-background p-2 text-xs">{suggestion.afterCreateHook}</pre>
+            <div className="space-y-3">
+              <ProjectAgentSelect
+                value={projectAgent}
+                effectiveDefault={userDefaultAgent}
+                onChange={setProjectAgent}
+              />
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+                <p className="font-medium">Suggested setup</p>
+                <p>{suggestion.validationCommands.join(", ")}</p>
+                <pre className="max-h-32 overflow-auto rounded bg-background p-2 text-xs">{suggestion.afterCreateHook}</pre>
+              </div>
             </div>
           ) : null}
           </>

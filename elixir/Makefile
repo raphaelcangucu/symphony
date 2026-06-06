@@ -43,6 +43,8 @@ ensure-deps:
 
 build:
 	$(MIX) build
+	@printf '#!/usr/bin/env bash\nexec "$$(dirname "$$0")/symphony" claude-app-server "$$@"\n' > bin/symphony-claude
+	@chmod +x bin/symphony-claude
 
 fmt:
 	$(MIX) format

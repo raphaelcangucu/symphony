@@ -28,7 +28,7 @@ defmodule SymphonyElixir.Assistant.ToolSchema do
       schema
       |> Map.get("required", [])
       |> List.wrap()
-      |> then(&(["project_slug" | &1]))
+      |> then(&["project_slug" | &1])
       |> Enum.uniq()
 
     input_schema =
