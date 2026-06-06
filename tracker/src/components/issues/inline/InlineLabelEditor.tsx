@@ -2,6 +2,7 @@ import { Check, Plus, Tag, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { labelDotClass } from "@/components/board/label-colors";
+import { resolveLabelColor, resolveLabelDisplay } from "@/lib/labelDisplay";
 import { cn } from "@/lib/utils";
 import { userVisibleLabels } from "@/lib/symphonyLabels";
 import type { IssueLabelOption } from "@/types/issue";
@@ -123,15 +124,24 @@ export function InlineLabelEditor({
               Add labels
             </span>
           ) : (
-            visibleLabels.map((label) => (
-              <span
-                key={label}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-xs font-medium text-foreground"
-              >
-                <span className={cn("h-2 w-2 rounded-full", labelDotClass(label))} />
-                {label}
-              </span>
-            ))
+            visibleLabels.map((label) => {
+              const displayName = resolveLabelDisplay(label, options);
+              const hex = normalizeHexColor(resolveLabelColor(label, options));
+              return (
+                <span
+                  key={label}
+                  title={displayName}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-xs font-medium text-foreground"
+                >
+                  {hex ? (
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: hex }} aria-hidden="true" />
+                  ) : (
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", labelDotClass(displayName))} />
+                  )}
+                  <span className="truncate">{displayName}</span>
+                </span>
+              );
+            })
           )}
           {!disabled ? (
             <span className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-border/70 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">

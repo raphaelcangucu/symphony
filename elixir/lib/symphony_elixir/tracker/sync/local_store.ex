@@ -416,6 +416,41 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     end
   end
 
+  @doc """
+  Records the remote id on a locally drafted issue after its outbox `create` push
+  succeeds, so a later remote pull recognises it (by `remote_id`) and updates it
+  in place instead of inserting a duplicate row. Without this link the draft keeps
+  a `nil` `remote_id`, the pull's `(project_id, remote_id)` lookup misses, and a
+  second mirror row appears on the board.
+
+  No-op when the id is unknown, the issue row is gone, or it already carries a
+  remote id (idempotent re-push). Only `remote_id`/`last_synced_at` are touched so
+  pending local edits (`dirty_fields`/`sync_status`) survive for the pull's LWW
+  merge.
+  """
+  @spec link_issue_remote_id(term(), term()) :: :ok
+  def link_issue_remote_id(nil, _remote_id), do: :ok
+  def link_issue_remote_id(_issue_id, remote_id) when not is_binary(remote_id) or remote_id == "", do: :ok
+
+  def link_issue_remote_id(issue_id, remote_id) do
+    case Repo.get(IssueRecord, issue_id) do
+      nil ->
+        :ok
+
+      %IssueRecord{remote_id: existing} when is_binary(existing) and existing != "" ->
+        :ok
+
+      %IssueRecord{} = issue ->
+        issue
+        |> IssueRecord.changeset(%{remote_id: remote_id, last_synced_at: DateTime.utc_now()})
+        |> Repo.update()
+        |> case do
+          {:ok, _updated} -> :ok
+          {:error, _changeset} -> :ok
+        end
+    end
+  end
+
   defp upsert_comments!(issue, comments) when is_list(comments) do
     Enum.each(comments, fn comment ->
       remote_id = comment[:remote_id] || comment[:id]

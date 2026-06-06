@@ -8,6 +8,7 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
   alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project, WorkflowStatus}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueDTO
+  alias SymphonyElixir.Tracker.LabelResolver
   alias SymphonyElixir.Tracker.Sync.UserRecord
 
   @impl true
@@ -127,7 +128,7 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
       priority: issue.priority,
       position: issue.position,
       status: status_to_map(issue.status),
-      labels: labels_to_names(issue.labels),
+      labels: labels_to_names(issue.labels, issue.project),
       assignee: issue.assignee_id,
       creator: issue.creator,
       agent_goal: issue.agent_goal,
@@ -144,7 +145,16 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
 
   defp status_to_map(_), do: nil
 
-  defp labels_to_names(labels) when is_list(labels) do
+  defp labels_to_names(labels, %Project{} = project) when is_list(labels) do
+    labels
+    |> Enum.map(fn
+      %{name: name} when is_binary(name) -> LabelResolver.display_name(project, name)
+      _label -> nil
+    end)
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+  end
+
+  defp labels_to_names(labels, _project) when is_list(labels) do
     labels
     |> Enum.map(fn
       %{name: name} when is_binary(name) -> name
@@ -153,7 +163,7 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
     |> Enum.reject(&is_nil/1)
   end
 
-  defp labels_to_names(_labels), do: []
+  defp labels_to_names(_labels, _project), do: []
 
   defp project_slug(%IssueRecord{project: %Project{slug: slug}}), do: slug
   defp project_slug(_), do: nil

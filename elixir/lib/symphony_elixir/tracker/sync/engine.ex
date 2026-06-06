@@ -357,16 +357,26 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   defp record_pushed(acc, entry, remote_id) do
     Outbox.mark_done(entry, remote_id)
-    link_pushed_comment(entry, remote_id)
+    link_pushed_remote_id(entry, remote_id)
     %{acc | pushed: acc.pushed + 1}
   end
 
-  defp link_pushed_comment(%{entity_type: "comment", operation: "create", payload: payload}, remote_id)
+  # After a successful push, stamp the returned remote id onto the matching local
+  # row so a later pull reconciles it by `remote_id` instead of inserting a
+  # duplicate:
+  #   - comment "create": link the locally authored comment.
+  #   - issue "create": link the locally drafted issue, which was mirrored with a
+  #     `nil` `remote_id`. Skipping this is what lets the pull duplicate the card.
+  defp link_pushed_remote_id(%{entity_type: "comment", operation: "create", payload: payload}, remote_id)
        when is_map(payload) do
     LocalStore.link_comment_remote_id(payload["comment_id"], remote_id)
   end
 
-  defp link_pushed_comment(_entry, _remote_id), do: :ok
+  defp link_pushed_remote_id(%{entity_type: "issue", operation: "create", issue_id: issue_id}, remote_id) do
+    LocalStore.link_issue_remote_id(issue_id, remote_id)
+  end
+
+  defp link_pushed_remote_id(_entry, _remote_id), do: :ok
 
   defp record_failed(acc, entry, reason, max_attempts) do
     {:ok, updated} = Outbox.mark_failed(entry, inspect(reason), max_attempts)

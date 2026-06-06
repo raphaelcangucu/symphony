@@ -25,6 +25,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   }
 
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Tracker.LabelResolver
   alias SymphonyElixir.Tracker.Sync.UserRecord
 
   @issue_preloads [:project, :status, :labels]
@@ -295,9 +296,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
           {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
   def update_issue(project_slug, identifier, attrs)
       when is_binary(project_slug) and is_binary(identifier) and is_map(attrs) do
-    label_names = label_names_from_attrs(attrs)
-
     with {:ok, project} <- fetch_project(project_slug),
+         label_names = resolve_label_names(project, label_names_from_attrs(attrs)),
          {:ok, issue} <- fetch_project_issue(project.id, identifier),
          {:ok, status} <- fetch_move_status(project.id, attrs, issue.status_id) do
       changes =
@@ -1357,6 +1357,12 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   defp normalize_label_name_list(_value), do: []
+
+  defp resolve_label_names(_project, nil), do: nil
+
+  defp resolve_label_names(%Project{} = project, names) when is_list(names) do
+    LabelResolver.resolve_names(project, names)
+  end
 
   defp maybe_replace_user_labels(issue, _project_id, nil), do: {:ok, issue}
 

@@ -6,7 +6,7 @@ import { InlineLabelEditor } from "../InlineLabelEditor";
 import type { IssueLabelOption } from "@/types/issue";
 
 const options: IssueLabelOption[] = [
-  { id: "L1", name: "bug", color: "ff0000" },
+  { id: "LA_kwDOJHngx88AAAACmEYycw", name: "bug", color: "ff0000" },
   { id: "L2", name: "frontend", color: null },
 ];
 
@@ -26,6 +26,18 @@ describe("InlineLabelEditor", () => {
     expect(screen.getByRole("button", { name: /add labels/i })).toBeInTheDocument();
   });
 
+  it("shows the label name instead of the remote id", () => {
+    render(
+      <InlineLabelEditor
+        labels={["LA_kwDOJHngx88AAAACmEYycw"]}
+        options={options}
+        onSave={async () => true}
+      />,
+    );
+    expect(screen.getByText("bug")).toBeInTheDocument();
+    expect(screen.queryByText("LA_kwDOJHngx88AAAACmEYycw")).not.toBeInTheDocument();
+  });
+
   it("hides symphony:* system labels", () => {
     render(
       <InlineLabelEditor labels={["bug", "symphony:codex"]} options={options} onSave={async () => true} />,
@@ -43,8 +55,7 @@ describe("InlineLabelEditor", () => {
     await user.click(await screen.findByRole("button", { name: /^frontend$/i }));
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
-    // The editor emits each option's value: the existing "bug" label stays as-is,
-    // while the toggled "frontend" option contributes its id ("L2").
+    // Existing labels keep their stored value; toggled catalog options use the option id.
     expect(onSave).toHaveBeenCalledWith(["bug", "L2"]);
   });
 });

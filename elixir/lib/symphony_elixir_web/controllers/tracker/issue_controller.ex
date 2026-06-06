@@ -7,7 +7,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   alias SymphonyElixir.{AgentPreference, ProjectConfig, Repo}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
-  alias SymphonyElixir.Tracker.IssueAdapter
+  alias SymphonyElixir.Tracker.{IssueAdapter, LabelResolver}
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
 
@@ -48,17 +48,17 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"project_slug" => project_slug} = params) do
-    attrs =
-      params
-      |> normalize_create_attrs()
-      |> maybe_inject_creator()
-
     with {:ok, project} <- Context.get_project(project_slug),
+         attrs =
+           params
+           |> normalize_create_attrs(project)
+           |> maybe_inject_creator(),
          {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]) do
       conn
       |> put_status(:created)
       |> json(%{data: TrackerPresenter.issue(issue)})
     else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
@@ -75,20 +75,23 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   @spec update(Conn.t(), map()) :: Conn.t()
   def update(conn, %{"project_slug" => project_slug, "id" => identifier} = params) do
-    attrs =
-      params
-      |> Map.drop(["project_slug", "id"])
-      |> normalize_update_attrs()
+    with {:ok, project} <- Context.get_project(project_slug) do
+      attrs =
+        params
+        |> Map.drop(["project_slug", "id"])
+        |> normalize_update_attrs(project)
 
-    if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", nil] do
-      TrackerErrors.validation(conn, "agent must be codex, claude, or null")
-    else
-      with {:ok, project} <- Context.get_project(project_slug),
-           {:ok, issue} <- IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
-        json(conn, %{data: TrackerPresenter.issue(issue)})
+      if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", nil] do
+        TrackerErrors.validation(conn, "agent must be codex, claude, or null")
       else
-        {:error, reason} -> TrackerErrors.render(conn, reason)
+        case IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
+          {:ok, issue} -> json(conn, %{data: TrackerPresenter.issue(issue)})
+          {:error, reason} -> TrackerErrors.render(conn, reason)
+        end
       end
+    else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
@@ -169,8 +172,12 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   defp resolve_me(value) when is_binary(value), do: {:ok, value}
 
-  defp normalize_update_attrs(params) do
-    label_ids = normalize_string_list(Map.get(params, "label_ids") || Map.get(params, "labels"))
+  defp normalize_update_attrs(params, %{} = project) do
+    label_ids =
+      params
+      |> Map.get("label_ids", Map.get(params, "labels"))
+      |> normalize_string_list()
+      |> then(&LabelResolver.resolve_names(project, &1))
 
     params
     |> Map.take(["title", "description", "status"])
@@ -213,8 +220,13 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   defp maybe_put_label_ids(attrs, []), do: attrs
   defp maybe_put_label_ids(attrs, label_ids), do: Map.put(attrs, "label_ids", label_ids)
 
-  defp normalize_create_attrs(params) do
-    label_ids = normalize_string_list(Map.get(params, "label_ids") || Map.get(params, "labels"))
+  defp normalize_create_attrs(params, %{} = project) do
+    label_ids =
+      params
+      |> Map.get("label_ids", Map.get(params, "labels"))
+      |> normalize_string_list()
+      |> then(&LabelResolver.resolve_names(project, &1))
+
     assignee_ids = normalize_string_list(Map.get(params, "assignee_ids") || Map.get(params, "assignees"))
 
     params

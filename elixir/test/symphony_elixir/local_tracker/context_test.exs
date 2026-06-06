@@ -625,6 +625,29 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert updated.priority == 2
   end
 
+  test "update_issue resolves remote label ids to stored names" do
+    {:ok, project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    %SymphonyElixir.LocalTracker.Label{}
+    |> SymphonyElixir.LocalTracker.Label.changeset(%{
+      project_id: project.id,
+      name: "bug",
+      remote_id: "LA_kwDOJHngx88AAAACmEYycw"
+    })
+    |> Repo.insert!()
+
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Label id", status: "Todo"})
+
+    assert {:ok, updated} =
+             Context.update_issue("macro-markets", "MAC-1", %{
+               "label_ids" => ["LA_kwDOJHngx88AAAACmEYycw"]
+             })
+
+    label_names = Enum.map(updated.labels, & &1.name)
+    assert "bug" in label_names
+    refute "LA_kwDOJHngx88AAAACmEYycw" in label_names
+  end
+
   test "update_issue replaces user labels while preserving system labels" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Label edit", status: "Todo"})

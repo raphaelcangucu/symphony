@@ -132,6 +132,50 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     end
   end
 
+  # Models the create-then-pull race: the issue-create push returns the remote
+  # node id the freshly created remote issue will carry, and the subsequent pull
+  # mirrors that same issue (matching `remote_id`). Used to prove the local draft
+  # is linked on push so the pull reconciles it in place instead of duplicating.
+  defmodule CreateLinkDriver do
+    @behaviour SymphonyElixir.Tracker.Sync.Driver
+
+    @remote_id "I_CREATED"
+    @remote_number 1851
+
+    def remote_id, do: @remote_id
+
+    @impl true
+    def push(_project, %OutboxEntry{entity_type: "issue", operation: "create"}), do: {:ok, @remote_id}
+    def push(_project, %OutboxEntry{} = entry), do: {:ok, "REMOTE_#{entry.id}"}
+
+    @impl true
+    def pull(_project, _opts) do
+      {:ok,
+       [
+         %{
+           remote_id: @remote_id,
+           remote_number: @remote_number,
+           identifier: to_string(@remote_number),
+           title: "Draft title",
+           description: "body",
+           state: "Todo",
+           priority: nil,
+           assignee_id: nil,
+           branch_name: nil,
+           remote_url: "https://example.test/issues/#{@remote_number}",
+           creator: "octo",
+           position: 0,
+           remote_updated_at: DateTime.utc_now(),
+           labels: [],
+           comments: []
+         }
+       ]}
+    end
+
+    @impl true
+    def pull_pull_requests(_project, _issue), do: {:ok, []}
+  end
+
   @enrich_table :symphony_tracker_enrich_ttl
 
   setup do
@@ -231,6 +275,34 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     refute is_nil(reloaded.remote_id)
     assert String.starts_with?(reloaded.remote_id, "REMOTE_")
     assert reloaded.sync_status == "synced"
+  end
+
+  test "a pushed issue-create links the remote id onto the local draft so the pull does not duplicate it",
+       %{project: project} do
+    {:ok, draft} = Context.create_issue(project.slug, %{title: "Draft title", description: "body"})
+    assert is_nil(draft.remote_id)
+
+    {:ok, _} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: draft.id,
+        entity_type: "issue",
+        operation: "create",
+        payload: %{"title" => "Draft title", "description" => "body"},
+        dedup_key: "issue:create:#{project.id}:#{draft.identifier}"
+      })
+
+    assert {:ok, summary} = Engine.sync_project(project, driver: CreateLinkDriver)
+    assert summary.pushed == 1
+
+    # The pull mirrors the just-created remote issue. Because the draft was linked
+    # to its remote id on push, the pull reconciles onto it instead of inserting a
+    # second row, so the board shows a single card.
+    assert Repo.aggregate(IssueRecord, :count) == 1
+
+    reloaded = Repo.get(IssueRecord, draft.id)
+    assert reloaded.remote_id == CreateLinkDriver.remote_id()
+    assert reloaded.remote_number == 1851
   end
 
   test "sync_issue force-pulls one issue with classified comments and its PRs" do

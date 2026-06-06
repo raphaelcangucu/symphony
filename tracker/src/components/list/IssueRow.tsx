@@ -23,7 +23,7 @@ export function IssueRow({ issue, onSelect }: IssueRowProps) {
         <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
           {issue.blockedBy.length > 0 ? <AlertTriangle className="h-3 w-3 text-amber-600" /> : null}
           {issue.labels.slice(0, 3).map((label) => (
-            <Badge key={label} variant="muted" className="px-1.5 py-0 text-[10px]">
+            <Badge key={label} variant="muted" className="max-w-[9rem] truncate px-1.5 py-0 text-[10px]" title={label}>
               {label}
             </Badge>
           ))}
