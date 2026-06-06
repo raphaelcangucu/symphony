@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fake `claude --print --output-format stream-json` for tests.
-# Modes via FAKE_CLAUDE_MODE: happy (default) | error | hang | multi | silent
+# Modes via FAKE_CLAUDE_MODE: happy (default) | error | hang | multi | silent | resume-aware
 prompt="$(cat)"
 case "${FAKE_CLAUDE_MODE:-happy}" in
   happy)
@@ -31,5 +31,17 @@ case "${FAKE_CLAUDE_MODE:-happy}" in
     # Turn completes successfully but emits no assistant text (exercises the empty-reply fallback).
     echo '{"type":"system","subtype":"init","session_id":"sess-silent"}'
     echo '{"type":"result","subtype":"success","session_id":"sess-silent","usage":{"input_tokens":1,"output_tokens":0},"total_cost_usd":0.0}'
+    ;;
+  resume-aware)
+    # Mimic the real claude CLI: a `--resume <id>` to a non-existent session prints
+    # "No conversation found with session ID: <id>" and exits 1. A fresh turn (no --resume)
+    # succeeds. Used to test the backend's resume-not-found fallback.
+    if printf '%s\n' "$@" | grep -q -- '--resume'; then
+      echo 'No conversation found with session ID: deadbeef-0000-4000-8000-000000000000'
+      exit 1
+    fi
+    echo '{"type":"system","subtype":"init","session_id":"sess-fresh"}'
+    echo '{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"fresh session reply"}]}}'
+    echo '{"type":"result","subtype":"success","session_id":"sess-fresh","usage":{"input_tokens":1,"output_tokens":1}}'
     ;;
 esac

@@ -87,4 +87,31 @@ defmodule SymphonyElixir.Assistant.CodexSessionClaudeRelayTest do
     assert result.assistant_message == "Claude completed the turn without returning assistant text."
     refute result.assistant_message =~ "Codex"
   end
+
+  test "a stale claude session id falls back to a fresh session instead of failing the turn", %{workspace_root: workspace_root} do
+    {:ok, thread} = History.create_freeform_thread(%{workspace_path: Path.join(workspace_root, "thread")})
+    # A backend id persisted by an earlier turn that claude's session store no longer knows
+    # (e.g. wiped sessions or ids recorded while the backend was misconfigured).
+    {:ok, thread} = History.put_agent_thread_id(thread, "claude", "sess-stale")
+
+    {:ok, result} =
+      CodexSession.send_message_to_thread(
+        thread,
+        "oi",
+        %{"agent" => "claude"},
+        claude_command: "FAKE_CLAUDE_MODE=resume-aware #{@fake}",
+        workspace_root: workspace_root,
+        dynamic_tools: []
+      )
+
+    assert result.assistant_message == "fresh session reply"
+
+    # The stale id is replaced so the next turn resumes cleanly. (In production the
+    # fresh turn registers `--session-id <session_uuid>` and claude echoes it back,
+    # so the persisted id is that uuid; the exact value is generated per session.)
+    {:ok, reloaded} = History.get_thread(thread.id)
+    new_id = History.agent_thread_id(reloaded, "claude")
+    assert is_binary(new_id)
+    refute new_id == "sess-stale"
+  end
 end

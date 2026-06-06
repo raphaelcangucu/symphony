@@ -120,7 +120,8 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
       usage: nil,
       cost_usd: nil,
       partial_text: %{},
-      error: nil
+      error: nil,
+      resume_invalid: false
     }
 
     try do
@@ -213,41 +214,56 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
 
       {:error, _reason} ->
         log_non_json_stream_line(line, "cli stream")
-        receive_loop(port, on_event, timeout_ms, "", state)
+        receive_loop(port, on_event, timeout_ms, "", maybe_flag_invalid_resume(line, state))
     end
+  end
+
+  # The claude CLI reports a `--resume` to a session it no longer knows as a plain
+  # (non-JSON) "No conversation found with session ID: <id>" line and then aborts.
+  # Flag it so handle_exit can surface a distinct error the adapter can recover from.
+  defp maybe_flag_invalid_resume(line, state) do
+    if String.contains?(line, "No conversation found with session ID"), do: %{state | resume_invalid: true}, else: state
   end
 
   defp handle_exit(_port, on_event, status, state) do
     has_error = not is_nil(state.error)
     clean_exit = status in [0, 130]
 
-    if has_error or not clean_exit do
-      message = state.error || "claude exited with code #{status}"
+    cond do
+      state.resume_invalid and (has_error or not clean_exit) ->
+        # The resume target no longer exists in claude's local session store. Return a
+        # distinct error (no turn/failed event) so the adapter can transparently retry
+        # the turn as a fresh session instead of hard-failing the thread forever.
+        {:error, {:resume_session_not_found, state.cli_session_id}}
 
-      on_event.(%{
-        "method" => "turn/failed",
-        "params" => %{"error" => message}
-      })
+      has_error or not clean_exit ->
+        message = state.error || "claude exited with code #{status}"
 
-      {:error, {:turn_failed, message}}
-    else
-      usage = usage_with_total(state.usage)
+        on_event.(%{
+          "method" => "turn/failed",
+          "params" => %{"error" => message}
+        })
 
-      on_event.(%{
-        "method" => "turn/completed",
-        "params" => %{
-          "usage" => usage,
-          "cost_usd" => state.cost_usd
-        }
-      })
+        {:error, {:turn_failed, message}}
 
-      {:ok,
-       %{
-         cli_session_id: state.cli_session_id,
-         status: :completed,
-         usage: usage,
-         cost_usd: state.cost_usd
-       }}
+      true ->
+        usage = usage_with_total(state.usage)
+
+        on_event.(%{
+          "method" => "turn/completed",
+          "params" => %{
+            "usage" => usage,
+            "cost_usd" => state.cost_usd
+          }
+        })
+
+        {:ok,
+         %{
+           cli_session_id: state.cli_session_id,
+           status: :completed,
+           usage: usage,
+           cost_usd: state.cost_usd
+         }}
     end
   end
 

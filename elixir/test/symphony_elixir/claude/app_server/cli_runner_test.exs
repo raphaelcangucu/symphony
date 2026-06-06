@@ -124,4 +124,22 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
 
     assert "Hello world" in created_texts
   end
+
+  test "a --resume to a missing session is surfaced as resume_session_not_found" do
+    {result, _events} = run("resume-aware", cli_session_id: "sess-stale")
+    assert {:error, {:resume_session_not_found, "sess-stale"}} = result
+  end
+
+  test "resume-aware without a prior session starts fresh and succeeds" do
+    {result, events} = run("resume-aware")
+    assert {:ok, %{cli_session_id: "sess-fresh", status: :completed}} = result
+
+    created_texts =
+      Enum.flat_map(events, fn
+        %{"method" => "item/created", "params" => %{"item" => %{"type" => "text", "text" => t}}} -> [t]
+        _ -> []
+      end)
+
+    assert "fresh session reply" in created_texts
+  end
 end

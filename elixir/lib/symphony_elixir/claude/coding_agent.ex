@@ -71,6 +71,16 @@ defmodule SymphonyElixir.Claude.CodingAgent do
            cost_usd: result.cost_usd
          }}
 
+      {:error, {:resume_session_not_found, stale_id}} when session.cli_session_id != nil ->
+        # The persisted backend session no longer exists in claude's local store
+        # (wiped session storage, or an id recorded while the backend was
+        # misconfigured). Restart the turn as a fresh session instead of
+        # hard-failing the thread forever; the fresh cli_session_id is persisted
+        # upstream, so the thread self-heals for subsequent turns.
+        Logger.warning("Claude resume session #{inspect(stale_id)} not found for #{issue_context(issue)}; retrying with a fresh session")
+
+        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+
       {:error, reason} ->
         Logger.warning("Claude turn failed for #{issue_context(issue)}: #{inspect(reason)}")
         emit_message(on_message, :turn_ended_with_error, %{session_id: session_id, reason: reason}, %{})
