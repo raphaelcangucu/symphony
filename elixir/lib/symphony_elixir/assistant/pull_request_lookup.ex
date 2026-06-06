@@ -11,12 +11,12 @@ defmodule SymphonyElixir.Assistant.PullRequestLookup do
     identifier = normalize_identifier(identifier)
 
     case PullRequests.resolve_repo(project) do
-      {:ok, repo} ->
+      {:ok, _repo} ->
         {:ok,
          %{
            supported: true,
            available: PullRequests.available?(),
-           pull_requests: list_github(project, repo, identifier, opts)
+           pull_requests: list_github(project, identifier, opts)
          }}
 
       {:error, _reason} ->
@@ -29,14 +29,17 @@ defmodule SymphonyElixir.Assistant.PullRequestLookup do
     end
   end
 
-  defp list_github(project, repo, identifier, opts) do
+  defp list_github(project, identifier, opts) do
     pull_requests =
-      case PullRequests.for_issue(repo, identifier, opts) do
+      case PullRequests.for_project_issue(project, identifier, opts) do
         {:ok, prs} ->
           persist_discovered(project, identifier, prs)
           Enum.map(prs, &summarize_live/1)
 
         {:error, {:invalid_issue_identifier, _}} ->
+          []
+
+        {:error, :issue_not_found} ->
           []
 
         {:error, _reason} ->

@@ -16,7 +16,8 @@ defmodule SymphonyElixir.GitHub.PullRequests do
      keyword does not register because they target a non-default base branch.
   """
 
-  alias SymphonyElixir.GitHub.{BranchStatus, Client, Config, RepoSpec}
+  alias SymphonyElixir.GitHub.{BranchStatus, Client, Config, IssueRepo, RepoSpec}
+  alias SymphonyElixir.LocalTracker.{Context, Project}
 
   require Logger
 
@@ -142,10 +143,42 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       with {:ok, {owner, name}} <- RepoSpec.split(repo),
            {:ok, number} <- parse_issue_number(identifier),
            {:ok, prs} <- fetch_for_issue(owner, name, number, opts) do
-        {:ok, annotate_branch_status(prs, repo, opts)}
+        prs =
+          if Keyword.get(opts, :annotate, true) do
+            annotate_branch_status(prs, repo, opts)
+          else
+            prs
+          end
+
+        {:ok, prs}
       end
     else
       {:error, :invalid_arguments}
+    end
+  end
+
+  @doc """
+  Fetches related pull requests for a tracker issue in a multi-repo project.
+
+  Resolves the repository that owns the issue (see `GitHub.IssueRepo`), runs the
+  standard issue-scoped strategies there, then searches configured workspace
+  repositories for open PRs whose head branch matches the issue's linked branch
+  or common agent naming patterns (e.g. `codex/3984-*`).
+  """
+  @spec for_project_issue(Project.t(), String.t(), keyword()) ::
+          {:ok, [pull_request()]} | {:error, term()}
+  def for_project_issue(%Project{} = project, identifier, opts \\ []) when is_binary(identifier) do
+    with {:ok, issue_repo} <- IssueRepo.resolve(project, identifier, opts),
+         {:ok, number} <- parse_issue_number(identifier),
+         {:ok, issue_prs} <- for_issue(issue_repo, identifier, Keyword.put(opts, :annotate, false)),
+         branch_prs <- search_branch_linked_prs(project, identifier, number, opts) do
+      merged =
+        (issue_prs ++ branch_prs)
+        |> dedupe_by_url()
+        |> sort_prs()
+        |> annotate_branch_status_per_repo(opts)
+
+      {:ok, merged}
     end
   end
 
@@ -256,6 +289,80 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   defp cross_referenced_pr_node(%{"source" => %{"__typename" => "PullRequest"} = pr}), do: pr
   defp cross_referenced_pr_node(_event), do: nil
 
+  defp search_branch_linked_prs(%Project{} = project, identifier, issue_number, opts) do
+    branch_name = local_branch_name(project, identifier)
+    prefixes = branch_search_prefixes(issue_number, branch_name)
+
+    project
+    |> configured_repos()
+    |> Enum.flat_map(fn repo ->
+      prefixes
+      |> Enum.flat_map(&search_prs_by_head_prefix(repo, &1, opts))
+      |> Enum.flat_map(&fetch_search_hit/1)
+    end)
+    |> dedupe_by_url()
+  end
+
+  defp configured_repos(%Project{} = project) do
+    IssueRepo.candidate_repos(project, "")
+  end
+
+  defp local_branch_name(%Project{slug: slug}, identifier) do
+    case Context.get_issue(slug, identifier) do
+      {:ok, %{branch_name: branch}} when is_binary(branch) and branch != "" -> branch
+      _ -> nil
+    end
+  end
+
+  defp branch_search_prefixes(issue_number, branch_name) do
+    agent_prefix = "codex/#{issue_number}"
+
+    []
+    |> prepend_string(branch_name)
+    |> prepend_string(agent_prefix)
+    |> Enum.uniq()
+  end
+
+  defp prepend_string(list, value) when is_binary(value) and value != "", do: [value | list]
+  defp prepend_string(list, _), do: list
+
+  defp search_prs_by_head_prefix(repo, prefix, opts) do
+    with {:ok, {owner, name}} <- RepoSpec.split(repo),
+         {:ok, %{body: %{"items" => items}}} <- search_issues("#{owner}/#{name}", prefix, opts),
+         true <- is_list(items) do
+      items
+      |> Enum.filter(&is_map/1)
+      |> Enum.filter(&(Map.get(&1, "pull_request") != nil))
+      |> Enum.map(fn item ->
+        number = Map.get(item, "number")
+        if is_integer(number) and number > 0, do: {repo, number}, else: nil
+      end)
+      |> Enum.reject(&is_nil/1)
+    else
+      _ -> []
+    end
+  end
+
+  defp search_issues(repo, head_prefix, opts) do
+    query = "repo:#{repo} type:pr head:#{head_prefix}"
+    path = "/search/issues?" <> URI.encode_query(%{"q" => query, "per_page" => "5"})
+    client = client_module(opts)
+    rest_opts = Keyword.take(opts, [:request_fun])
+
+    if function_exported?(client, :rest_get, 2) do
+      client.rest_get(path, rest_opts)
+    else
+      {:error, :rest_unavailable}
+    end
+  end
+
+  defp fetch_search_hit({repo, number}) do
+    case for_pull_request(repo, number, annotate: false) do
+      {:ok, pr} when is_map(pr) -> [pr]
+      _ -> []
+    end
+  end
+
   defp fetch_by_branch(nil, _owner, _name, _opts), do: {:ok, []}
 
   defp fetch_by_branch(branch, owner, name, opts) when is_binary(branch) do
@@ -323,11 +430,21 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   """
   @spec annotate_branch_status([pull_request()], String.t(), keyword()) :: [pull_request()]
   def annotate_branch_status(prs, repo, opts \\ []) when is_list(prs) and is_binary(repo) do
+    annotate_branch_status_per_repo(prs, Keyword.put(opts, :default_repo, repo))
+  end
+
+  defp annotate_branch_status_per_repo(prs, opts) when is_list(prs) do
     client = client_module(opts)
+    default_repo = Keyword.get(opts, :default_repo)
 
     if function_exported?(client, :rest_get, 2) do
       branch_opts = build_branch_opts(client, opts)
-      Enum.map(prs, fn pr -> Map.put(pr, :base_behind_by, behind_for(pr, repo, branch_opts)) end)
+
+      Enum.map(prs, fn pr ->
+        repo = Map.get(pr, :repo) || default_repo
+        behind = if is_binary(repo), do: behind_for(pr, repo, branch_opts), else: nil
+        Map.put(pr, :base_behind_by, behind)
+      end)
     else
       prs
     end

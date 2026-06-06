@@ -162,7 +162,11 @@ export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
   };
 }
 
-export async function listPullRequests(projectSlug: string, identifier: string): Promise<PullRequestResult> {
+export async function listPullRequests(
+  projectSlug: string,
+  identifier: string,
+  options?: { refresh?: boolean },
+): Promise<PullRequestResult> {
   if (!projectSlug.trim()) throw new Error("projectSlug is required");
   const issueIdentifier = normalizeIssueIdentifier(identifier);
   if (!issueIdentifier) throw new Error("identifier is required");
@@ -171,6 +175,7 @@ export async function listPullRequests(projectSlug: string, identifier: string):
     trackerPath(
       `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests`,
     ),
+    options?.refresh ? { params: { refresh: "1" } } : undefined,
   );
 
   const body = response.data ?? {};

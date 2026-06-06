@@ -48,9 +48,9 @@ export function useIssuePullRequests({
     if (!identifier || !projectSlug) return;
     if (inFlightRef.current) return;
     inFlightRef.current = true;
-    if (!hasLoadedRef.current) setLoading(true);
+    setLoading(true);
     try {
-      const result = await listPullRequests(projectSlug, identifier);
+      const result = await listPullRequests(projectSlug, identifier, { refresh: true });
       setPullRequests(result.data);
       setSupported(result.supported);
       setAvailable(result.available);

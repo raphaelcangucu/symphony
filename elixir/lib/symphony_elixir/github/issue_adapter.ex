@@ -6,6 +6,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   alias SymphonyElixir.GitHub.Client
   alias SymphonyElixir.GitHub.IssueAdapter.Query
   alias SymphonyElixir.GitHub.IssueComments
+  alias SymphonyElixir.GitHub.IssueRepo
   alias SymphonyElixir.GitHub.RepoSpec
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Tracker.IssueDTO
@@ -444,13 +445,11 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   end
 
   defp resolve_issue_repo(%Project{} = project, identifier) do
-    with {:ok, number} <- parse_issue_number(identifier) do
-      find_issue_repo(project, identifier, number)
-    end
+    IssueRepo.resolve(project, identifier)
   end
 
   defp resolve_issue_node_id(%Project{} = project, identifier, number) do
-    candidate_repos(project, identifier)
+    IssueRepo.candidate_repos(project, identifier)
     |> Enum.reduce_while({:error, :issue_not_found}, fn repo, _acc ->
       with {:ok, {owner, name}} <- RepoSpec.split(repo),
            {:ok, node_id} <- fetch_issue_node_id(owner, name, number) do
@@ -460,61 +459,6 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
       end
     end)
   end
-
-  defp find_issue_repo(%Project{} = project, identifier, number) do
-    candidate_repos(project, identifier)
-    |> Enum.reduce_while({:error, :issue_not_found}, fn repo, _acc ->
-      with {:ok, {owner, name}} <- RepoSpec.split(repo),
-           {:ok, _} <- fetch_issue_details(owner, name, number) do
-        {:halt, {:ok, repo}}
-      else
-        _ -> {:cont, {:error, :issue_not_found}}
-      end
-    end)
-  end
-
-  defp candidate_repos(%Project{} = project, identifier) do
-    url_repo =
-      case Context.get_issue(project.slug, identifier) do
-        {:ok, issue} -> repo_from_issue_url(issue.remote_url || issue.url)
-        _ -> :error
-      end
-
-    configured =
-      project.slug
-      |> Context.list_repositories()
-      |> Enum.map(& &1.github_full_name)
-
-    tracker = config(project).repo
-
-    []
-    |> prepend_if_ok(url_repo)
-    |> Kernel.++(configured)
-    |> Kernel.++(List.wrap(tracker))
-    |> Enum.uniq()
-    |> Enum.reject(&(is_nil(&1) or &1 == ""))
-  end
-
-  defp prepend_if_ok(acc, {:ok, repo}), do: [repo | acc]
-  defp prepend_if_ok(acc, _), do: acc
-
-  defp repo_from_issue_url(url) when is_binary(url) do
-    case URI.parse(url) do
-      %URI{host: host, path: path} when host in ["github.com", "www.github.com"] ->
-        case String.split(String.trim_leading(path || "", "/"), "/") do
-          [owner, repo, "issues", _number | _] when owner != "" and repo != "" ->
-            {:ok, "#{owner}/#{repo}"}
-
-          _ ->
-            :error
-        end
-
-      _ ->
-        :error
-    end
-  end
-
-  defp repo_from_issue_url(_), do: :error
 
   defp issue_remote_id(%Project{} = project, identifier, attrs) do
     remote_id_from_attrs(attrs) || local_issue_remote_id(project, identifier)

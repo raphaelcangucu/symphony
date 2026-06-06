@@ -26,9 +26,9 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   require Logger
 
   @spec index(Conn.t(), map()) :: Conn.t()
-  def index(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+  def index(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
     case Context.get_project(project_slug) do
-      {:ok, project} -> respond(conn, project, identifier)
+      {:ok, project} -> respond(conn, project, identifier, refresh_requested?(params))
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
@@ -69,19 +69,19 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
 
   def unlink(conn, _params), do: error(conn, 422, "A pull request URL is required.")
 
-  defp respond(conn, project, identifier) do
+  defp respond(conn, project, identifier, refresh?) do
     case PullRequests.resolve_repo(project) do
-      {:ok, repo} ->
-        respond_github(conn, project, repo, identifier)
+      {:ok, _repo} ->
+        respond_github(conn, project, identifier, refresh?)
 
       {:error, _reason} ->
         json(conn, %{data: persisted(project.slug, identifier), supported: false, available: false})
     end
   end
 
-  defp respond_github(conn, project, repo, identifier) do
+  defp respond_github(conn, project, identifier, refresh?) do
     if PullRequests.available?() do
-      live = discover_live(project, repo, identifier)
+      live = discover_live(project, identifier, refresh?)
       data = merge(live, persisted(project.slug, identifier))
       json(conn, %{data: data, supported: true, available: true})
     else
@@ -89,8 +89,10 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
     end
   end
 
-  defp discover_live(project, repo, identifier) do
-    case cached_for_issue(repo, identifier) do
+  defp discover_live(project, identifier, refresh?) do
+    if refresh?, do: invalidate_issue_pr_cache(project.slug, identifier)
+
+    case cached_for_issue(project, identifier) do
       {:ok, prs} ->
         persist_discovered(project, identifier, prs)
         Enum.map(prs, fn pr -> Map.put_new(pr, :origin, "auto") end)
@@ -98,6 +100,9 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
       # Local-first identifiers (e.g. "DIS-1") are not GitHub issue numbers, so live
       # issue-scoped discovery does not apply. Persisted/manually-linked PRs still merge.
       {:error, {:invalid_issue_identifier, _}} ->
+        []
+
+      {:error, :issue_not_found} ->
         []
 
       {:error, reason} ->
@@ -186,9 +191,9 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   # The board poll and the PR drawer both hit these endpoints; cache the live
   # GitHub reads behind the shared `ReadCache` (60s TTL) so a refresh or a second
   # viewer does not duplicate the same GraphQL/REST call within the window.
-  defp cached_for_issue(repo, identifier) do
-    ReadCache.fetch({:issue_pull_requests, repo, identifier}, fn ->
-      PullRequests.for_issue(repo, identifier)
+  defp cached_for_issue(project, identifier) do
+    ReadCache.fetch({:issue_pull_requests, project.slug, identifier}, fn ->
+      PullRequests.for_project_issue(project, identifier)
     end)
   end
 
@@ -201,10 +206,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   # A manual link/unlink changes which PRs an issue surfaces, so drop the cached
   # live reads to reflect the change on the next load instead of after the TTL.
   defp invalidate_pr_caches(project, identifier, url) do
-    case PullRequests.resolve_repo(project) do
-      {:ok, repo} -> ReadCache.invalidate({:issue_pull_requests, repo, identifier})
-      _ -> :ok
-    end
+    invalidate_issue_pr_cache(project.slug, identifier)
 
     case PullRequestUrl.parse(url) do
       {:ok, %{repo: repo, number: number}} -> ReadCache.invalidate({:pull_request_detail, repo, number})
@@ -212,6 +214,17 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
     end
 
     :ok
+  end
+
+  defp invalidate_issue_pr_cache(project_slug, identifier) do
+    ReadCache.invalidate({:issue_pull_requests, project_slug, identifier})
+  end
+
+  defp refresh_requested?(params) do
+    case Map.get(params, "refresh") do
+      value when value in [true, "true", "1", 1] -> true
+      _ -> false
+    end
   end
 
   defp error(conn, status, message) do

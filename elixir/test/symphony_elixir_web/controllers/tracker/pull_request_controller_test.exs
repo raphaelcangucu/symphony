@@ -16,6 +16,16 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
 
     def graphql(query, variables, _opts) do
       cond do
+        query =~ "SymphonyUiIssueNodeId" ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{"id" => "I_#{variables["number"]}", "title" => "Issue", "body" => "", "labels" => %{"nodes" => []}}
+               }
+             }
+           }}
+
         query =~ "SymphonyTrackerIssuePullRequests" ->
           send(self(), {:pr_query, variables})
 

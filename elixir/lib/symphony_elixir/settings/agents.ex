@@ -21,5 +21,7 @@ defmodule SymphonyElixir.Settings.Agents do
   def agent_kinds, do: @agent_kinds
 
   @spec default_agent_kind() :: String.t()
-  def default_agent_kind, do: SymphonyElixir.Settings.get(group(), "default_agent_kind")
+  def default_agent_kind do
+    SymphonyElixir.Settings.get(group(), "default_agent_kind") || InstanceConfig.default_agent_kind()
+  end
 end

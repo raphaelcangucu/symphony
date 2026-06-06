@@ -79,6 +79,10 @@ defmodule SymphonyElixir.Settings do
       %Setting{payload: %{"value" => value}} -> {:ok, value}
       _ -> :missing
     end
+  rescue
+    # Graceful degradation when migrations have not run yet (e.g. long-lived serve
+    # processes started before a settings-table migration shipped).
+    _ -> :missing
   end
 
   defp fetch_group(group), do: Map.fetch(@groups, group) |> ok_or_error()
