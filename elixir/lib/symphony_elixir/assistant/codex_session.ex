@@ -761,7 +761,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
-  defp fallback_assistant_message(message, agent_kind \\ nil) do
+  defp fallback_assistant_message(message, agent_kind) do
     case String.trim(message) do
       "" -> "#{agent_label(agent_kind)} completed the turn without returning assistant text."
       trimmed -> trimmed
