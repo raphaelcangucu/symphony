@@ -1,4 +1,11 @@
-import type { AgentKind, CreateIssueInput, Issue, IssueFormOptions, MoveIssueInput } from "@/types/issue";
+import type {
+  AgentKind,
+  CreateIssueInput,
+  Issue,
+  IssueFormOptions,
+  MoveIssueInput,
+  UpdateIssueInput,
+} from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
 import {
@@ -71,6 +78,30 @@ function serializeCreateInput(input: CreateIssueInput): Record<string, unknown> 
   if (input.agent) payload.agent = input.agent;
   if (input.agent === "codex" && input.goal?.trim()) payload.goal = input.goal.trim();
 
+  return payload;
+}
+
+export async function updateIssue(
+  projectSlug: string,
+  identifier: string,
+  input: UpdateIssueInput,
+): Promise<Issue> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  if (!identifier.trim()) throw new Error("identifier is required");
+  const response = await http.patch(
+    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`),
+    serializeUpdateInput(input),
+  );
+  return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}
+
+function serializeUpdateInput(input: UpdateIssueInput): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  if (input.title !== undefined) payload.title = input.title;
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.labelIds !== undefined) payload.label_ids = input.labelIds;
+  if (input.priority !== undefined) payload.priority = input.priority;
+  if (input.assigneeIds !== undefined) payload.assignee_ids = input.assigneeIds;
   return payload;
 }
 

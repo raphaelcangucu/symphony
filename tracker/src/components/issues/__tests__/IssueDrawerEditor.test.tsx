@@ -1,19 +1,65 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
-import * as useIssueEditorHook from "@/hooks/useIssueEditor";
-import * as editorService from "@/services/editor";
+import type { UseIssueEditorResult } from "@/hooks/useIssueEditor";
 import type { Issue } from "@/types/issue";
 
-vi.mock("@/services/pullRequests", () => ({
-  listPullRequests: vi.fn().mockResolvedValue({ data: [], supported: false, available: false }),
+const useIssueEditorMock = vi.hoisted(() => vi.fn<() => UseIssueEditorResult>());
+
+vi.mock("@/hooks/useIssueEditor", () => ({
+  useIssueEditor: () => useIssueEditorMock(),
 }));
 
-vi.mock("@/services/comments", () => ({
-  listComments: vi.fn().mockResolvedValue([]),
-  createComment: vi.fn(),
+vi.mock("@/hooks/useIssuePullRequests", () => ({
+  useIssuePullRequests: () => ({
+    available: false,
+    error: null,
+    loading: false,
+    pullRequests: [],
+    refetch: vi.fn(),
+    supported: false,
+  }),
+}));
+
+vi.mock("@/hooks/useIssueComments", () => ({
+  useIssueComments: () => ({
+    addComment: vi.fn(),
+    comments: [],
+    error: null,
+    loading: false,
+    refetch: vi.fn(),
+    workpad: null,
+  }),
+}));
+
+vi.mock("@/hooks/useIssueDevServers", () => ({
+  useIssueDevServers: () => ({
+    data: null,
+    error: null,
+    loading: false,
+    refresh: vi.fn(),
+    restart: vi.fn(),
+    restartServer: vi.fn(),
+    start: vi.fn(),
+    startServer: vi.fn(),
+    stop: vi.fn(),
+    stopServer: vi.fn(),
+    startTunnel: vi.fn(),
+  }),
+}));
+
+vi.mock("@/components/issues/issue-detail/SummaryTab", () => ({
+  SummaryTab: () => <div>Summary</div>,
+}));
+
+vi.mock("@/components/issues/issue-detail/PullRequestTab", () => ({
+  PullRequestTab: () => <div>Pull requests</div>,
+}));
+
+vi.mock("@/components/issues/issue-detail/CommentsTab", () => ({
+  CommentsTab: () => <div>Comments</div>,
 }));
 
 vi.mock("@/components/issues/issue-detail/PreviewTab", () => ({
@@ -28,6 +74,24 @@ vi.mock("@/components/issues/issue-detail/TerminalTab", () => ({
   TerminalTab: () => <div>Terminal output</div>,
 }));
 
+vi.mock("@/components/issues/issue-detail/ActivityTab", () => ({
+  ActivityTab: () => <div>Activity</div>,
+}));
+
+vi.mock("@/components/issues/issue-detail/BlockersTab", () => ({
+  BlockersTab: () => <div>Blockers</div>,
+}));
+
+vi.mock("@/components/issues/issue-detail/AgentTabs", () => ({
+  AgentTabs: () => <div>Agent</div>,
+}));
+
+const unavailableEditor = {
+  browser: { available: false, url: null, reason: "workspace_missing" as const },
+  cursorDesktop: { available: false, url: null, reason: "workspace_missing" as const },
+  loading: false,
+};
+
 const issue = {
   id: "1",
   identifier: "MAC-1",
@@ -41,24 +105,19 @@ const issue = {
 } as unknown as Issue;
 
 describe("IssueDrawer editor button", () => {
-  const unavailableTargets = {
-    browser: { available: false, url: null, reason: "workspace_missing" as const },
-    cursorDesktop: { available: false, url: null, reason: "workspace_missing" as const },
-  };
-
   beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.spyOn(editorService, "fetchEditorTargets").mockResolvedValue(unavailableTargets);
+    useIssueEditorMock.mockReturnValue(unavailableEditor);
   });
 
   it("opens the workspace in a new tab when available", async () => {
-    vi.spyOn(editorService, "fetchEditorTargets").mockResolvedValue({
+    useIssueEditorMock.mockReturnValue({
       browser: {
         available: true,
         url: "http://127.0.0.1:4002/?folder=%2Ftmp%2FMAC-1",
         reason: null,
       },
       cursorDesktop: { available: false, url: null, reason: "workspace_missing" },
+      loading: false,
     });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const user = userEvent.setup();
@@ -78,7 +137,7 @@ describe("IssueDrawer editor button", () => {
   });
 
   it("opens Cursor Desktop when installed and the workspace is ready", async () => {
-    vi.spyOn(useIssueEditorHook, "useIssueEditor").mockReturnValue({
+    useIssueEditorMock.mockReturnValue({
       browser: { available: false, url: null, reason: "disabled" },
       cursorDesktop: {
         available: true,
@@ -103,13 +162,14 @@ describe("IssueDrawer editor button", () => {
   });
 
   it("opens via the '.' keyboard shortcut", async () => {
-    vi.spyOn(editorService, "fetchEditorTargets").mockResolvedValue({
+    useIssueEditorMock.mockReturnValue({
       browser: {
         available: true,
         url: "http://127.0.0.1:4002/?folder=%2Ftmp%2FMAC-1",
         reason: null,
       },
       cursorDesktop: { available: false, url: null, reason: "workspace_missing" },
+      loading: false,
     });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
 
@@ -119,7 +179,11 @@ describe("IssueDrawer editor button", () => {
 
     fireEvent.keyDown(window, { key: "." });
 
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith(
+      "http://127.0.0.1:4002/?folder=%2Ftmp%2FMAC-1",
+      "_blank",
+      "noopener",
+    );
   });
 
   it("renders the preview tab for the selected issue", async () => {

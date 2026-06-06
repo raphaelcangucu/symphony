@@ -13,8 +13,12 @@ vi.mock("@/hooks/useIssueDevServers", () => ({
 const hookActions = {
   refresh: vi.fn(),
   restart: vi.fn(),
+  restartServer: vi.fn(),
   start: vi.fn(),
+  startServer: vi.fn(),
   stop: vi.fn(),
+  stopServer: vi.fn(),
+  startTunnel: vi.fn(),
 };
 
 describe("SummaryTab", () => {
@@ -64,7 +68,7 @@ function renderSummary(data: IssueDevServersResponse, overrides: Partial<UseIssu
     ...overrides,
   });
 
-  render(<SummaryTab issue={issue()} />);
+  render(<SummaryTab issue={issue()} projectSlug="macro-markets" />);
 }
 
 function issue(): Issue {

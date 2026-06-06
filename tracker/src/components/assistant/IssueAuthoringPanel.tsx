@@ -143,8 +143,7 @@ export function IssueAuthoringPanel({
   const assistantPanel = (
     <div
       className={cn(
-        "min-h-0 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.02]",
-        compact && "h-full flex-1",
+        "flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.02]",
       )}
     >
       <ProjectAssistantPanel
@@ -354,7 +353,7 @@ export function IssueAuthoringPanel({
         "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.82fr)] xl:grid-rows-1",
       )}
     >
-      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{assistantPanel}</div>
+      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">{assistantPanel}</div>
 
       <aside className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden" aria-label="Issue authoring documents">
         {documentsPanel}

@@ -1,5 +1,5 @@
 .PHONY: help all setup deps ensure-deps build fmt fmt-check lint test coverage ci dialyzer repo-ci \
-	check-tools install-code-server configure-code-server db-create db-migrate migrate migration new-migration rollback \
+	check-tools env-setup install-code-server configure-code-server db-create db-migrate migrate migration new-migration rollback \
 	backup backup-list backup-stats backup-cleanup serve update stop tracker-setup tracker-deps tracker-build tracker-lint tracker-test tracker-ci \
 	tracker-api tracker-api-escript tracker-dev
 
@@ -24,7 +24,7 @@ help:
 	@echo "Quality:  setup, deps, build, fmt, fmt-check, lint, test, coverage, dialyzer, ci, all"
 	@echo "Database: migrate (create+migrate), migration (alias), new-migration name=<desc>, rollback, db-create"
 	@echo "Backup:   backup (create SQLite snapshot), backup-list, backup-stats, backup-cleanup"
-	@echo "Run:      serve (boot daemon), update (restart web by default; ARGS=--orchestrator/--code-server/--all), stop, check-tools"
+	@echo "Run:      serve (boot daemon), update (restart web by default; ARGS=--orchestrator/--code-server/--all), stop, check-tools, env-setup"
 	@echo "Editor:   install-code-server, configure-code-server (browser VS Code for task workspaces)"
 	@echo "Tracker:  tracker-setup, tracker-deps, tracker-build, tracker-lint, tracker-test, tracker-ci, tracker-dev, repo-ci"
 	@echo "Packaged: tracker-api (alias of serve), tracker-api-escript (raw escript; no SQLite NIF)"
@@ -87,9 +87,15 @@ repo-ci:
 check-tools:
 	@if [ -n "$(strip $(MISE))" ]; then echo "✓ mise detected ($(MISE))"; else echo "… mise not found — using system mix/elixir"; fi
 	@$(MIX) --version >/dev/null 2>&1 && echo "✓ mix runnable" || { echo "✗ mix is not runnable; install Elixir/OTP (see README) or run via mise"; exit 1; }
-	@command -v code-server >/dev/null 2>&1 && echo "✓ code-server installed ($$(code-server --version 2>&1 | head -1))" || echo "… code-server not installed (optional — run make install-code-server)"
+	@command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1 && echo "✓ gh authenticated ($$(gh --version | head -1))" || echo "✗ gh missing or not authenticated (required — run: gh auth login)"
+	@command -v code-server >/dev/null 2>&1 && echo "✓ code-server installed ($$(code-server --version 2>&1 | head -1))" || echo "… code-server not installed (optional — needed when SYMPHONY_EDITOR_ENABLED=true; run make install-code-server)"
+	@command -v cloudflared >/dev/null 2>&1 && echo "✓ cloudflared installed ($$(cloudflared --version 2>&1 | head -1))" || echo "… cloudflared not installed (optional — needed for make tunnel / public preview tunnel)"
 
-# Installs code-server to ~/.local for the optional browser editor (editor: in WORKFLOW.md).
+# Create/update elixir/.env: fresh SYMPHONY_TRACKER_TOKEN + GITHUB_TOKEN from `gh auth token`.
+env-setup:
+	@bash scripts/setup-env.sh
+
+# Installs code-server to ~/.local for the optional browser editor (SYMPHONY_EDITOR_ENABLED=true).
 # Re-run with FORCE=1 to reinstall the latest release.
 install-code-server:
 	@bash scripts/install-code-server.sh
@@ -144,7 +150,7 @@ backup-cleanup:
 # one never disturbs the others. Ensures deps + migrations first. Per-project config
 # is DB-owned (global-less): no global WORKFLOW is required. Loads elixir/.env for
 # host/process settings and secrets (GITHUB_TOKEN, SYMPHONY_TRACKER_TOKEN, node
-# name/cookie, optional SYMPHONY_WORKFLOW). Logs: .symphony/serve.log
+# name/cookie). Logs: .symphony/serve.log
 serve: ensure-deps migrate
 	@set -e; \
 	if [ -f .env ]; then set -a; . ./.env; set +a; fi; \

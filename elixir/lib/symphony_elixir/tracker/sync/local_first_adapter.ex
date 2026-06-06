@@ -50,7 +50,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   def update_issue(%Project{} = project, identifier, attrs) do
     with {:ok, dto} <- IssueAdapter.update_issue(project, identifier, attrs) do
       LocalStore.mark_dirty(identifier, project.slug, dirty_fields(attrs))
-      enqueue(project, identifier, "issue", "update", attrs, "issue:update:#{project.id}:#{identifier}")
+      payload = attrs |> stringify() |> Map.put("identifier", identifier)
+      enqueue(project, identifier, "issue", "update", payload, "issue:update:#{project.id}:#{identifier}")
       {:ok, dto}
     end
   end
@@ -130,7 +131,10 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   defp to_dirty_field(key) when key in [:title, "title"], do: :title
   defp to_dirty_field(key) when key in [:description, "description"], do: :description
   defp to_dirty_field(key) when key in [:priority, "priority"], do: :priority
-  defp to_dirty_field(key) when key in [:assignee_id, "assignee_id", :assignee, "assignee"], do: :assignee_id
+  defp to_dirty_field(key)
+       when key in [:assignee_id, "assignee_id", :assignee, "assignee", :assignee_ids, "assignee_ids"],
+       do: :assignee_id
+  defp to_dirty_field(key) when key in [:label_ids, "label_ids", :labels, "labels"], do: :labels
   defp to_dirty_field(_key), do: nil
 
   defp stringify(map), do: Map.new(map, fn {k, v} -> {to_string(k), v} end)

@@ -49,6 +49,16 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.GitHub.RequestGateway,
       SymphonyElixir.Tracker.Sync.Engine,
       SymphonyElixir.PublicRouting
-    ]
+    ] ++ public_tunnel_children()
+  end
+
+  defp public_tunnel_children do
+    if public_tunnel_enabled?(), do: [SymphonyElixir.Cloudflare.Tunnel], else: []
+  end
+
+  defp public_tunnel_enabled? do
+    SymphonyElixir.Config.public_tunnel_enabled?()
+  rescue
+    _ -> false
   end
 end

@@ -23,6 +23,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :issue_not_found), do: not_found(conn, "issue_not_found", "Issue not found")
   def render(conn, :status_not_found), do: not_found(conn, "status_not_found", "Status not found")
   def render(conn, :blocker_not_found), do: not_found(conn, "blocker_not_found", "Blocker not found")
+  def render(conn, :dev_server_not_found), do: not_found(conn, "dev_server_not_found", "Dev server not found")
   def render(conn, :template_not_found), do: not_found(conn, "template_not_found", "Template not found")
 
   def render(conn, {:template_not_found, _slug}),
@@ -76,6 +77,12 @@ defmodule SymphonyElixirWeb.TrackerErrors do
 
   def render(conn, :sync_disabled),
     do: error(conn, 409, "tracker_sync_disabled", "Local-first sync is disabled on this server.")
+
+  def render(conn, :public_tunnel_disabled),
+    do: error(conn, 409, "public_tunnel_disabled", "The public preview tunnel is disabled for this workspace.")
+
+  def render(conn, :public_tunnel_start_failed),
+    do: error(conn, 502, "public_tunnel_start_failed", "Failed to start the Cloudflare tunnel. Check the server logs.")
 
   def render(conn, :no_remote_adapter),
     do: error(conn, 422, "tracker_no_remote_adapter", "This project has no remote tracker to sync from.")

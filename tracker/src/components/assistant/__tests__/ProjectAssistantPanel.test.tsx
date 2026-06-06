@@ -495,6 +495,14 @@ describe("ProjectAssistantPanel", () => {
     expect(socketChannel).toHaveBeenCalledWith("assistant:issue:macro-markets:MAC-1");
   });
 
+  it("renders a nested issue assistant page without viewport height", () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    const region = screen.getByRole("region", { name: "Project assistant" });
+    expect(region).toHaveClass("h-full");
+    expect(region).not.toHaveClass("h-[calc(100vh-4rem)]");
+  });
+
   it("keeps thread id topic priority over issue identifier", () => {
     render(
       <ProjectAssistantPanel

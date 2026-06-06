@@ -83,6 +83,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     pr_driver = Keyword.get(opts, :pr_driver, SymphonyElixir.GitHub.SyncDriver)
 
     with :ok <- seed_statuses(project),
+         :ok <- seed_users(project),
          {:ok, %{pulled: pulled, enriched: enriched}} <- pull_remote(project, driver, pr_driver) do
       mark_state(project, success_attrs(project))
       {:ok, Map.merge(push_summary, %{pulled: pulled, enriched: enriched, skipped_pull: false})}
@@ -193,6 +194,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   defp seed_light(project) do
     mark_state(project, %{status: "syncing"})
     seed_statuses(project)
+    seed_users(project)
 
     case remote_list_issues(project) do
       {:ok, dtos} ->
@@ -245,6 +247,17 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
       :ok
   end
 
+  defp seed_users(project) do
+    case remote_list_assignable_users(project) do
+      {:ok, users} -> LocalStore.upsert_users(project, users)
+      {:error, _reason} -> :ok
+    end
+  rescue
+    error ->
+      Logger.warning("Tracker seed users failed for #{project.slug}: #{inspect(error)}")
+      :ok
+  end
+
   defp remote_list_statuses(project) do
     case IssueAdapter.remote_for(project.tracker_kind) do
       nil -> {:error, :no_remote_adapter}
@@ -256,6 +269,13 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     case IssueAdapter.remote_for(project.tracker_kind) do
       nil -> {:error, :no_remote_adapter}
       adapter -> adapter.list_issues(project, [])
+    end
+  end
+
+  defp remote_list_assignable_users(project) do
+    case IssueAdapter.remote_for(project.tracker_kind) do
+      nil -> {:error, :no_remote_adapter}
+      adapter -> adapter.list_assignable_users(project)
     end
   end
 

@@ -28,8 +28,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   @spec form_options(Conn.t(), map()) :: Conn.t()
   def form_options(conn, %{"project_slug" => project_slug}) do
     with {:ok, project} <- Context.get_project(project_slug),
-         {:ok, labels} <- IssueAdapter.dispatch(project, :list_labels, []),
-         {:ok, users} <- IssueAdapter.dispatch(project, :list_assignable_users, []),
+         {:ok, labels} <- list_form_labels(project),
+         {:ok, users} <- list_form_assignees(project),
          {:ok, statuses} <- IssueAdapter.dispatch(project, :list_statuses, []) do
       json(conn, %{
         data: %{
@@ -75,7 +75,10 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   @spec update(Conn.t(), map()) :: Conn.t()
   def update(conn, %{"project_slug" => project_slug, "id" => identifier} = params) do
-    attrs = Map.drop(params, ["project_slug", "id"])
+    attrs =
+      params
+      |> Map.drop(["project_slug", "id"])
+      |> normalize_update_attrs()
 
     if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", nil] do
       TrackerErrors.validation(conn, "agent must be codex, claude, or null")
@@ -166,6 +169,50 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   defp resolve_me(value) when is_binary(value), do: {:ok, value}
 
+  defp normalize_update_attrs(params) do
+    label_ids = normalize_string_list(Map.get(params, "label_ids") || Map.get(params, "labels"))
+
+    params
+    |> Map.take(["title", "description", "status"])
+    |> maybe_put_priority(params)
+    |> maybe_put_assignee_ids(params)
+    |> maybe_put_label_ids(label_ids)
+    |> maybe_put_agent_update(params)
+  end
+
+  # Preserve the raw "agent" value (including nil and invalid strings) when the
+  # key is present so update/2 can validate it and Context can clear/replace the
+  # routing label. Absent key stays absent (no-op for routing labels).
+  defp maybe_put_agent_update(attrs, params) do
+    if Map.has_key?(params, "agent") do
+      Map.put(attrs, "agent", Map.get(params, "agent"))
+    else
+      attrs
+    end
+  end
+
+  defp maybe_put_priority(attrs, params) do
+    if Map.has_key?(params, "priority") do
+      Map.put(attrs, "priority", params["priority"])
+    else
+      attrs
+    end
+  end
+
+  defp maybe_put_assignee_ids(attrs, params) do
+    if Map.has_key?(params, "assignee_ids") or Map.has_key?(params, "assignees") do
+      assignee_ids =
+        normalize_string_list(Map.get(params, "assignee_ids") || Map.get(params, "assignees"))
+
+      Map.put(attrs, "assignee_ids", assignee_ids)
+    else
+      attrs
+    end
+  end
+
+  defp maybe_put_label_ids(attrs, []), do: attrs
+  defp maybe_put_label_ids(attrs, label_ids), do: Map.put(attrs, "label_ids", label_ids)
+
   defp normalize_create_attrs(params) do
     label_ids = normalize_string_list(Map.get(params, "label_ids") || Map.get(params, "labels"))
     assignee_ids = normalize_string_list(Map.get(params, "assignee_ids") || Map.get(params, "assignees"))
@@ -216,6 +263,40 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       |> Map.get(:agent_kind)
 
     AgentPreference.resolve([], project_kind)
+  end
+
+  defp list_form_labels(project) do
+    with {:ok, labels} <- remote_catalog(project, :list_labels),
+         true <- labels != [] do
+      {:ok, labels}
+    else
+      _ -> IssueAdapter.dispatch(project, :list_labels, [])
+    end
+  end
+
+  defp list_form_assignees(project) do
+    with {:ok, users} <- IssueAdapter.dispatch(project, :list_assignable_users, []),
+         true <- users != [] do
+      {:ok, users}
+    else
+      _ ->
+        with {:ok, users} <- remote_catalog(project, :list_assignable_users),
+             :ok <- SymphonyElixir.Tracker.Sync.LocalStore.upsert_users(project, users) do
+          {:ok, users}
+        else
+          _ -> {:ok, []}
+        end
+    end
+  end
+
+  defp remote_catalog(%{tracker_kind: kind} = project, fun) when fun in [:list_labels, :list_assignable_users] do
+    case IssueAdapter.remote_for(kind) do
+      nil ->
+        {:error, :local_tracker}
+
+      module ->
+        apply(module, fun, [project])
+    end
   end
 
   defp present_label(label) when is_map(label) do

@@ -10,6 +10,7 @@ vi.mock("@/services/issueDevServers", () => ({
   restartIssueDevServers: vi.fn(),
   startIssueDevServers: vi.fn(),
   stopIssueDevServers: vi.fn(),
+  startPublicTunnel: vi.fn(),
 }));
 
 const readyResponse: IssueDevServersResponse = {
@@ -198,23 +199,21 @@ describe("useIssueDevServers", () => {
     expect(fetchIssueDevServers).toHaveBeenCalledTimes(2);
   });
 
-  it("polls while available servers have no preview evidence yet", async () => {
+  it("does not poll while dev servers are stopped", async () => {
     vi.useFakeTimers();
-    fetchIssueDevServers.mockResolvedValueOnce(stoppedResponse).mockResolvedValueOnce(startingResponse);
+    fetchIssueDevServers.mockResolvedValue(stoppedResponse);
 
-    const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
+    renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
 
     await act(async () => {});
 
-    expect(result.current.data).toEqual(stoppedResponse);
     expect(fetchIssueDevServers).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
 
-    expect(result.current.data).toEqual(startingResponse);
-    expect(fetchIssueDevServers).toHaveBeenCalledTimes(2);
+    expect(fetchIssueDevServers).toHaveBeenCalledTimes(1);
   });
 
   it("sets error when fetching fails", async () => {

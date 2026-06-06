@@ -241,6 +241,168 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
              )
   end
 
+  defmodule MoveViaRemoteIdClientStub do
+    def graphql(query, vars, _opts) do
+      cond do
+        String.contains?(query, "SymphonyUiIssueNodeId") ->
+          flunk("should not resolve issue by configured repo when remote_id is provided")
+
+        String.contains?(query, "SymphonyUiResolveProjectItem") ->
+          assert vars["issueId"] == "I_BACKEND_3984"
+
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "projectItems" => %{
+                   "nodes" => [%{"id" => "PVTI_3984", "project" => %{"id" => "PVT_1"}}]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "fields(first") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "fields" => %{
+                   "nodes" => [
+                     %{
+                       "__typename" => "ProjectV2SingleSelectField",
+                       "id" => "FIELD_1",
+                       "name" => "Symphony State",
+                       "options" => [%{"id" => "OPT_IN_PROGRESS", "name" => "In Progress"}]
+                     }
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "updateProjectV2ItemFieldValue") ->
+          {:ok, %{"data" => %{"updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_3984"}}}}}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
+  test "move_issue resolves project item via remote_id without querying configured repo" do
+    Application.put_env(:symphony_elixir, :github_client_module, MoveViaRemoteIdClientStub)
+
+    assert {:ok, %{status: %{name: "In Progress"}}} =
+             IssueAdapter.move_issue(
+               %{project() | tracker_config: Map.put(project().tracker_config, "status_field", "Symphony State")},
+               "3984",
+               %{"status" => "In Progress", "remote_id" => "I_BACKEND_3984"}
+             )
+  end
+
+  defmodule MultiRepoMoveClientStub do
+    def graphql(query, vars, _opts) do
+      cond do
+        String.contains?(query, "SymphonyUiIssueNodeId") ->
+          case vars do
+            %{"owner" => "GambaLabs", "name" => "frontend", "number" => 3984} ->
+              {:ok, %{"data" => %{"repository" => %{"issue" => nil}}}}
+
+            %{"owner" => "GambaLabs", "name" => "backend", "number" => 3984} ->
+              {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_BACKEND_3984"}}}}}
+
+            other ->
+              flunk("unexpected issue lookup: #{inspect(other)}")
+          end
+
+        String.contains?(query, "SymphonyUiResolveProjectItem") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "projectItems" => %{
+                   "nodes" => [%{"id" => "PVTI_3984", "project" => %{"id" => "PVT_1"}}]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "fields(first") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "fields" => %{
+                   "nodes" => [
+                     %{
+                       "__typename" => "ProjectV2SingleSelectField",
+                       "id" => "FIELD_1",
+                       "name" => "Symphony State",
+                       "options" => [%{"id" => "OPT_IN_PROGRESS", "name" => "In Progress"}]
+                     }
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "updateProjectV2ItemFieldValue") ->
+          {:ok, %{"data" => %{"updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_3984"}}}}}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
+  test "move_issue tries configured repositories when issue is not in tracker_config repo" do
+    Application.put_env(:symphony_elixir, :github_client_module, MultiRepoMoveClientStub)
+
+    project =
+      %{
+        project()
+        | slug: "gamba",
+          tracker_config: %{
+            "repo" => "GambaLabs/frontend",
+            "project_id" => "PVT_1",
+            "status_field" => "Symphony State"
+          }
+      }
+
+    migrate_repo()
+    clean_repo()
+
+    {:ok, project_record} = SymphonyElixir.LocalTracker.Context.ensure_project(%{name: "Gamba", slug: "gamba"})
+
+    {:ok, _} =
+      SymphonyElixir.LocalTracker.Context.replace_repositories("gamba", [
+        %{"github_full_name" => "GambaLabs/frontend", "workspace_path" => "frontend", "role" => "primary"},
+        %{"github_full_name" => "GambaLabs/backend", "workspace_path" => "backend", "role" => "backend"}
+      ])
+
+    {:ok, _issue} =
+      SymphonyElixir.Tracker.Sync.LocalStore.upsert_remote_issue(project_record, %{
+        remote_id: "I_BACKEND_3984",
+        remote_number: 3984,
+        identifier: "3984",
+        title: "Welcome XP Wheel Adjustment",
+        description: nil,
+        state: "Todo",
+        priority: nil,
+        assignee_id: nil,
+        branch_name: nil,
+        remote_url: "https://github.com/GambaLabs/backend/issues/3984",
+        creator: nil,
+        position: 0,
+        remote_updated_at: DateTime.utc_now(),
+        labels: [],
+        comments: []
+      })
+
+    assert {:ok, %{status: %{name: "In Progress"}}} =
+             IssueAdapter.move_issue(project, "3984", %{"status" => "In Progress"})
+  end
+
   defmodule DispatchClientStub do
     def graphql(query, vars, _opts) do
       cond do
@@ -389,6 +551,114 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     assert message =~ "symphony:codex"
   end
 
+  defmodule UpdateClientStub do
+    def graphql(query, vars, _opts) do
+      cond do
+        String.contains?(query, "SymphonyUiIssueNodeId") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "id" => "I_10",
+                   "title" => "Old",
+                   "body" => "Old body",
+                   "labels" => %{
+                     "nodes" => [
+                       %{"id" => "AGC", "name" => "symphony:codex"},
+                       %{"id" => "OLD", "name" => "stale"}
+                     ]
+                   }
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiRepoMetadata") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "id" => "REPO_1",
+                 "labels" => %{
+                   "nodes" => [
+                     %{"id" => "L1", "name" => "bug", "color" => "ff0000"},
+                     %{"id" => "AGC", "name" => "symphony:codex", "color" => nil},
+                     %{"id" => "P2", "name" => "priority:2", "color" => nil}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiAssignableUsers") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "assignableUsers" => %{
+                   "nodes" => [%{"id" => "U1", "login" => "alice", "name" => "Alice", "avatarUrl" => nil}]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiUpdateIssue") ->
+          send(self(), {:update_input, vars["input"]})
+
+          {:ok,
+           %{
+             "data" => %{
+               "updateIssue" => %{
+                 "issue" => %{"id" => "I_10", "number" => 10, "title" => "Updated title", "body" => "Updated body"}
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiListItems") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "items" => %{
+                   "nodes" => [
+                     %{
+                       "id" => "PVTI_10",
+                       "content" => %{
+                         "__typename" => "Issue",
+                         "id" => "I_10",
+                         "number" => 10,
+                         "title" => "Remote",
+                         "body" => nil,
+                         "url" => "https://x/10",
+                         "assignees" => %{"nodes" => []},
+                         "labels" => %{"nodes" => [%{"name" => "bug"}]},
+                         "createdAt" => "2026-05-28T00:00:00Z",
+                         "updatedAt" => "2026-05-28T00:00:00Z"
+                       },
+                       "fieldValues" => %{
+                         "nodes" => [
+                           %{
+                             "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                             "name" => "Todo",
+                             "field" => %{"name" => "Status"}
+                           }
+                         ]
+                       }
+                     }
+                   ],
+                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                 }
+               }
+             }
+           }}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
   defmodule CreateClientStub do
     def graphql(query, vars, _opts) do
       cond do
@@ -497,6 +767,40 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     end
   end
 
+  describe "update_issue" do
+    setup do
+      Application.put_env(:symphony_elixir, :github_client_module, UpdateClientStub)
+      :ok
+    end
+
+    test "updates title, description, and labels while preserving symphony labels" do
+      attrs = %{
+        "title" => "Updated title",
+        "description" => "Updated body",
+        "label_ids" => ["bug"]
+      }
+
+      assert {:ok, %IssueDTO{identifier: "10", title: "Remote"}} =
+               IssueAdapter.update_issue(project(), "10", attrs)
+
+      assert_received {:update_input, %{"id" => "I_10", "title" => "Updated title", "body" => "Updated body"}}
+      assert_received {:update_input, %{"id" => "I_10", "labelIds" => label_ids}}
+      assert "L1" in label_ids
+      assert "AGC" in label_ids
+    end
+
+    test "updates assignee and priority" do
+      attrs = %{"assignee_ids" => ["alice"], "priority" => 2}
+
+      assert {:ok, %IssueDTO{identifier: "10"}} = IssueAdapter.update_issue(project(), "10", attrs)
+
+      assert_received {:update_input, %{"id" => "I_10", "assigneeIds" => ["U1"]}}
+      assert_received {:update_input, %{"id" => "I_10", "labelIds" => label_ids}}
+      assert "P2" in label_ids
+      assert "AGC" in label_ids
+    end
+  end
+
   describe "list_labels / list_assignable_users" do
     setup do
       Application.put_env(:symphony_elixir, :github_client_module, CreateClientStub)
@@ -511,5 +815,18 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     test "list_assignable_users returns assignable users" do
       assert {:ok, [%{login: "alice", id: "U1"}]} = IssueAdapter.list_assignable_users(project())
     end
+  end
+
+  defp migrate_repo do
+    alias SymphonyElixir.Repo
+
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
+  end
+
+  defp clean_repo do
+    alias SymphonyElixir.Repo
+
+    SymphonyElixir.TestSupport.truncate_tracker!(Repo)
   end
 end

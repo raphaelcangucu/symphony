@@ -12,7 +12,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, Label, Project, WorkflowStatus}
   alias SymphonyElixir.Repo
-  alias SymphonyElixir.Tracker.Sync.{Merge, PullRequestRecord}
+  alias SymphonyElixir.Tracker.Sync.{Merge, PullRequestRecord, UserRecord}
 
   # Fields subject to LWW merge on update (untouched-locally take remote).
   @syncable_fields ~w(title description priority assignee_id)a
@@ -62,6 +62,44 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     end)
 
     :ok
+  end
+
+  @doc """
+  Upserts assignable users from the remote tracker into `tracker_users` (idempotent
+  on `(project_id, login)`). Used during sync so form options and assignee
+  resolution work offline after the first pull.
+  """
+  @spec upsert_users(Project.t(), [map()]) :: :ok
+  def upsert_users(%Project{} = project, users) when is_list(users) do
+    users
+    |> Enum.each(fn user ->
+      login = user_attr(user, :login)
+
+      if is_binary(login) and login != "" do
+        upsert_user!(project.id, %{
+          project_id: project.id,
+          remote_id: user_attr(user, :id),
+          login: login,
+          name: user_attr(user, :name),
+          avatar_url: user_attr(user, :avatar_url)
+        })
+      end
+    end)
+
+    :ok
+  end
+
+  defp user_attr(user, key) when is_map(user) do
+    Map.get(user, key, Map.get(user, Atom.to_string(key)))
+  end
+
+  defp upsert_user!(project_id, %{login: login} = attrs) do
+    case Repo.get_by(UserRecord, project_id: project_id, login: login) do
+      nil -> %UserRecord{}
+      %UserRecord{} = existing -> existing
+    end
+    |> UserRecord.changeset(attrs)
+    |> Repo.insert_or_update!()
   end
 
   defp status_attr(status, key) when is_map(status) do

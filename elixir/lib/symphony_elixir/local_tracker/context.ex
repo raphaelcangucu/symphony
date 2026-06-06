@@ -25,6 +25,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   }
 
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Tracker.Sync.UserRecord
 
   @issue_preloads [:project, :status, :labels]
   @default_issue_status "Todo"
@@ -277,6 +278,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       agent = attr(attrs, :agent)
 
       attrs
+      |> normalize_assignee_attrs(project.id)
       |> issue_create_attrs()
       |> Map.merge(%{
         project_id: project.id,
@@ -293,22 +295,28 @@ defmodule SymphonyElixir.LocalTracker.Context do
           {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
   def update_issue(project_slug, identifier, attrs)
       when is_binary(project_slug) and is_binary(identifier) and is_map(attrs) do
+    label_names = label_names_from_attrs(attrs)
+
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, issue} <- fetch_project_issue(project.id, identifier),
          {:ok, status} <- fetch_move_status(project.id, attrs, issue.status_id) do
       changes =
         attrs
+        |> normalize_assignee_attrs(project.id)
         |> mutable_issue_attrs()
         |> Map.put(:status_id, status.id)
         |> maybe_put_started_at(issue, status)
         |> maybe_put_completed_at(status)
 
-      issue
-      |> IssueRecord.changeset(changes)
-      |> Repo.update()
-      |> sync_agent_routing_label_result(project.id, fetch_agent_attr(attrs))
-      |> preload_issue_result()
-      |> tap_issue_event("issue_updated", %{status: status.name})
+      with {:ok, updated} <-
+             issue
+             |> IssueRecord.changeset(changes)
+             |> Repo.update()
+             |> sync_agent_routing_label_result(project.id, fetch_agent_attr(attrs)),
+           {:ok, labeled} <- maybe_replace_user_labels(updated, project.id, label_names),
+           {:ok, issue} <- preload_issue_result({:ok, labeled}) do
+        tap_issue_event({:ok, issue}, "issue_updated", %{status: status.name})
+      end
     end
   end
 
@@ -1291,6 +1299,120 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp normalize_agent_kind(_agent), do: nil
 
   defp agent_label_name(agent_kind), do: "symphony:" <> agent_kind
+
+  defp normalize_assignee_attrs(attrs, project_id) do
+    if Map.has_key?(attrs, "assignee_ids") or Map.has_key?(attrs, :assignee_ids) do
+      ids = Map.get(attrs, "assignee_ids", Map.get(attrs, :assignee_ids, []))
+
+      login =
+        case ids do
+          [] -> nil
+          [first | _] -> resolve_assignee_login(project_id, first)
+        end
+
+      attrs
+      |> Map.put("assignee_id", login)
+      |> Map.delete("assignee_ids")
+      |> Map.delete(:assignee_ids)
+    else
+      attrs
+    end
+  end
+
+  defp resolve_assignee_login(project_id, value) when is_binary(value) do
+    trimmed = String.trim(value)
+    normalized = String.downcase(trimmed)
+
+    case Repo.one(
+           from(user in UserRecord,
+             where: user.project_id == ^project_id,
+             where: user.remote_id == ^trimmed or fragment("lower(?)", user.login) == ^normalized
+           )
+         ) do
+      %UserRecord{login: login} when is_binary(login) -> login
+      _ -> trimmed
+    end
+  end
+
+  defp resolve_assignee_login(_project_id, _value), do: nil
+
+  defp label_names_from_attrs(attrs) do
+    case normalize_label_name_list(Map.get(attrs, "label_ids") || Map.get(attrs, :label_ids)) do
+      [] ->
+        case normalize_label_name_list(Map.get(attrs, "labels") || Map.get(attrs, :labels)) do
+          [] -> nil
+          names -> names
+        end
+
+      names ->
+        names
+    end
+  end
+
+  defp normalize_label_name_list(value) when is_list(value) do
+    value
+    |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
+    |> Enum.map(&String.trim/1)
+    |> Enum.uniq()
+  end
+
+  defp normalize_label_name_list(_value), do: []
+
+  defp maybe_replace_user_labels(issue, _project_id, nil), do: {:ok, issue}
+
+  defp maybe_replace_user_labels(%IssueRecord{} = issue, project_id, label_names)
+       when is_integer(project_id) and is_list(label_names) do
+    with :ok <- delete_user_labels(issue.id),
+         :ok <- attach_user_labels(issue.id, project_id, label_names),
+         {:ok, reloaded} <- fetch_issue_by_id(issue.id) do
+      {:ok, reloaded}
+    end
+  end
+
+  defp fetch_issue_by_id(issue_id) do
+    case Repo.get(IssueRecord, issue_id) do
+      nil -> {:error, :issue_not_found}
+      %IssueRecord{} = issue -> {:ok, Repo.preload(issue, @issue_preloads)}
+    end
+  end
+
+  defp delete_user_labels(issue_id) do
+    label_ids_to_delete =
+      IssueLabel
+      |> join(:inner, [issue_label], label in Label, on: issue_label.label_id == label.id)
+      |> where([issue_label], issue_label.issue_id == ^issue_id)
+      |> select([issue_label, label], {issue_label.label_id, label.name})
+      |> Repo.all()
+      |> Enum.reject(fn {_id, name} -> system_label?(name) end)
+      |> Enum.map(fn {label_id, _name} -> label_id end)
+
+    if label_ids_to_delete != [] do
+      Repo.delete_all(
+        from(issue_label in IssueLabel,
+          where: issue_label.issue_id == ^issue_id and issue_label.label_id in ^label_ids_to_delete
+        )
+      )
+    end
+
+    :ok
+  end
+
+  defp attach_user_labels(issue_id, project_id, label_names) do
+    Enum.reduce_while(label_names, :ok, fn label_name, :ok ->
+      with {:ok, label} <- ensure_label(project_id, label_name),
+           {:ok, _issue_label} <- ensure_issue_label_idempotent(issue_id, label.id) do
+        {:cont, :ok}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp system_label?(name) when is_binary(name) do
+    String.match?(String.downcase(String.trim(name)), ~r/^symphony(?::.*)?$/)
+  end
+
+  defp system_label?(_name), do: false
 
   defp preload_relation_result({:ok, %IssueRelation{} = relation}) do
     {:ok, Repo.preload(relation, [:source_issue, :target_issue])}

@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   fetchIssueDevServers,
+  restartIssueDevServer,
   restartIssueDevServers,
+  startIssueDevServer,
   startIssueDevServers,
+  stopIssueDevServer,
   stopIssueDevServers,
 } from "@/services/issueDevServers";
 import { http } from "@/services/http";
@@ -69,6 +72,39 @@ describe("issue dev-server service", () => {
 
     expect(post).toHaveBeenCalledWith(
       "/api/tracker/v1/projects/macro-markets/issues/MAC-1/dev_servers/restart",
+    );
+    expect(result).toEqual(response);
+  });
+
+  it("starts a single issue dev server through the tracker API", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: response } });
+
+    const result = await startIssueDevServer("macro-markets", "MAC-1", 42);
+
+    expect(post).toHaveBeenCalledWith(
+      "/api/tracker/v1/projects/macro-markets/issues/MAC-1/dev_servers/42/start",
+    );
+    expect(result).toEqual(response);
+  });
+
+  it("stops a single issue dev server through the tracker API", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: response } });
+
+    const result = await stopIssueDevServer("macro-markets", "MAC-1", 42);
+
+    expect(post).toHaveBeenCalledWith(
+      "/api/tracker/v1/projects/macro-markets/issues/MAC-1/dev_servers/42/stop",
+    );
+    expect(result).toEqual(response);
+  });
+
+  it("restarts a single issue dev server through the tracker API", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: response } });
+
+    const result = await restartIssueDevServer("macro-markets", "MAC-1", 42);
+
+    expect(post).toHaveBeenCalledWith(
+      "/api/tracker/v1/projects/macro-markets/issues/MAC-1/dev_servers/42/restart",
     );
     expect(result).toEqual(response);
   });

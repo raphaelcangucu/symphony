@@ -1,7 +1,8 @@
 # Symphony Elixir
 
-This directory contains the current Elixir/OTP implementation of Symphony, based on
-[`SPEC.md`](../SPEC.md) at the repository root.
+This directory contains the current Elixir/OTP implementation of Symphony — a multi-project agent
+orchestrator with a React tracker UI, local-first remote sync, and optional public preview tunnels —
+based on [`SPEC.md`](../SPEC.md) at the repository root.
 
 > [!WARNING]
 > Symphony Elixir is prototype software intended for evaluation only and is presented as-is.
@@ -13,155 +14,302 @@ This directory contains the current Elixir/OTP implementation of Symphony, based
 
 ## How it works
 
-1. Polls the configured tracker (Linear or GitHub Issues) for candidate work
-2. Creates an isolated workspace per issue
-3. Launches the configured coding agent (Codex or Claude) inside the workspace
-4. Sends a workflow prompt to the agent
-5. Keeps the agent working on the issue until the work is done
+1. Keeps a **local-first mirror** of each remote tracker (GitHub, Linear, or JIRA) in SQLite;
+   the UI and orchestrator read from the local store while a background sync engine pushes
+   outbox writes and pulls remote changes on a coalesced schedule
+2. Polls active projects for candidate work (each project carries its own tracker config and prompt)
+3. Creates an isolated workspace per issue under `<workspace.root>/<project_slug>/<issue>`
+4. Launches the configured coding agent (Codex or Claude) inside the workspace
+5. Sends the project's workflow prompt to the agent
+6. Keeps the agent working on the issue until the work is done
 
-During Codex app-server sessions, Symphony also serves a client-side `linear_graphql` tool so that
-repo skills can make raw Linear GraphQL calls.
+During Codex app-server sessions, Symphony also serves client-side dynamic tools (`linear_graphql`,
+`github_graphql`) so repo skills can make raw GraphQL calls.
 
 If a claimed issue moves to a terminal state (`Done`, `Closed`, `Cancelled`, or `Duplicate`),
 Symphony stops the active agent for that issue and cleans up matching workspaces.
 
-## How to use it
+## Installation
 
-1. Make sure your codebase is set up to work well with agents: see
-   [Harness engineering](https://openai.com/index/harness-engineering/).
-2. Set up your tracker credentials:
-   - **Linear**: Get a personal token via Settings → Security & access → Personal API keys, and set
-     it as `LINEAR_API_KEY`.
-   - **GitHub**: Set `GITHUB_TOKEN` with an access token that has Issues read/write permissions.
-3. Copy this directory's `WORKFLOW.md` to your repo.
-4. Optionally copy the `commit`, `push`, `pull`, `land`, and `linear` skills to your repo.
-   - The `linear` skill expects Symphony's `linear_graphql` app-server tool for raw Linear GraphQL
-     operations such as comment editing or upload flows.
-5. Customize the copied `WORKFLOW.md` file for your project.
-   - **Linear**: To get your project's slug, right-click the project and copy its URL. The slug is
-     part of the URL. When creating a workflow based on this repo, note that it depends on
-     non-standard Linear issue statuses: "Rework", "Human Review", and "Merging". You can
-     customize them in Team Settings → Workflow in Linear.
-   - **GitHub**: Set `github.repo` to `owner/repo`. Symphony bootstraps a repo-level
-     GitHub Project v2 named `Symphony` (configurable via `github.project.title`) on
-     first run and tracks issue state through the GitHub Project `Status`
-     single-select field — the single source of truth — whose options come from
-     `tracker.field_states` when set, otherwise `tracker.active_states` plus
-     `tracker.terminal_states`. Use `field_states` to include board-only options such
-     as `Backlog` that are not polled. Local project metadata is cached in
-     `.symphony/github-project.json` (gitignored).
+Symphony does **not** use a global `WORKFLOW.md`. Process settings live in `elixir/.env`
+(`SYMPHONY_*` variables); each project's workflow (YAML front matter + agent prompt) is stored as
+`workflow_markdown` in the SQLite database and edited from the tracker UI.
 
-     Issues are admitted when they carry `symphony`, `symphony:codex`, or
-     `symphony:claude` (base label configurable via `github.admission_label`,
-     default `symphony`). Agent routing:
+### 1. Prerequisites
 
-     | Label | Agent |
-     |-------|--------|
-     | `symphony:codex` | Codex |
-     | `symphony:claude` | Claude |
-     | `symphony` | WORKFLOW default (Codex when `codex:` is configured) |
+**Core setup** (`make env-setup` + `make serve`) needs only the tools marked **required** below.
+`code-server` and `cloudflared` are **not** required to boot the tracker — install them only when
+you enable the matching feature.
 
-     Issues labeled `symphony:codex`/`symphony:claude` route to that agent;
-     unlabeled `symphony` issues follow the project's `agent.kind` (workflow
-     front matter), else the operator default from **Settings** (tracker
-     sidebar). New labeled issues are added on the next poll.
+| Tool | Required | Needed for |
+|------|----------|------------|
+| [mise](https://mise.jdx.dev/) | recommended | Pins Elixir `1.19` / OTP `28` from `.mise.toml` |
+| [GitHub CLI](https://cli.github.com/) (`gh`) | **yes** | `make env-setup` → `GITHUB_TOKEN` |
+| Git | **yes** | cloning, workspaces |
+| [Codex CLI](https://github.com/openai/codex) | **yes** (default agent) | `codex app-server` on `PATH` |
+| Node.js 20+ | frontend dev only | `make tracker-build` — skip if using committed `priv/static/tracker` |
+| [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | if using Claude | local `claude` on `PATH` (run `claude` once to log in); the Claude backend is built in |
+| [code-server](https://github.com/coder/code-server) | if using browser editor | `SYMPHONY_EDITOR_ENABLED=true` → `make install-code-server` |
+| [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) | if using public tunnel | `public_tunnel.enabled: true` + `make tunnel` |
 
-     Optional `github.assignee` further restricts routing (GitHub login or `"me"`).
-     Omit `assignee` to route by label only.
+Run `make check-tools` to see what is installed (required tools report ✗ when missing; optional
+tools report … when absent).
 
-     Blockers are parsed from `trackedInIssues` and from issue-body lines such as
-     `Blocked by #42` or `Depends on clouapp/front#12`. Linked PR branches populate
-     `issue.branch_name` when GitHub exposes `linkedBranches`.
+| Feature | Enable | Install |
+|---------|--------|---------|
+| Browser VS Code | `SYMPHONY_EDITOR_ENABLED=true` in `.env` | `make install-code-server` (optional: `make configure-code-server`) |
+| Public preview tunnel | `public_tunnel.enabled: true` in project `workflow_markdown` + Cloudflare `.env` keys | [Install `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), then `cloudflared tunnel create …` |
 
-     Codex sessions expose a `github_graphql` dynamic tool (same contract as
-     `linear_graphql`) for raw GitHub GraphQL from the agent.
+**Cursor Desktop** ("Open in Cursor" in the issue drawer) uses the local `cursor://` handler — no
+`code-server` install needed.
 
-     See `elixir/WORKFLOW.macromarkets.example.md` for a dogfood setup on
-     `clouapp/front` (project **Macro Markets**). Bootstrap the board with
-     `mix run --no-start scripts/bootstrap_macro_markets.exs`.
+Your target codebase should follow [harness engineering](https://openai.com/index/harness-engineering/)
+practices so agents can work autonomously.
 
-     Required `GITHUB_TOKEN` scopes: `repo` (read+write) and `project` (read+write).
-   - **Local tracker**: Add a top-level `local:` section to store issues in SQLite and set
-     `SYMPHONY_TRACKER_TOKEN` for the browser UI/API bearer token:
-
-     ```yaml
-     local:
-       database_path: .symphony/tracker.sqlite3
-       project_slug: macro-markets
-       api_token_env: SYMPHONY_TRACKER_TOKEN
-     tracker:
-       active_states:
-         - Todo
-         - In Progress
-         - Rework
-       terminal_states:
-         - Done
-         - Closed
-     ```
-
-     ```bash
-     export SYMPHONY_TRACKER_TOKEN="$(openssl rand -hex 24)"
-     ```
-6. Follow the instructions below to install the required runtime dependencies and start the service.
-
-## Prerequisites
-
-We recommend using [mise](https://mise.jdx.dev/) to manage Elixir/Erlang versions.
-
-```bash
-mise install
-mise exec -- elixir --version
-```
-
-### Homebrew
-
-```bash
-brew tap sapsaldog/symphony
-brew install symphony
-```
-
-The Claude backend is built in — Symphony drives your locally installed `claude` CLI directly
-(run `claude` once to log in). The packaged `bin/symphony-claude` escript exposes the same
-app-server protocol over stdio for external orchestrators (a dynamicTools-capable drop-in for
-the retired bridge).
-
-## Run
-
-### From Homebrew
-
-```bash
-symphony /path/to/WORKFLOW.md
-```
-
-### From source
+### 2. Clone and install dependencies
 
 ```bash
 git clone https://github.com/sapsaldog/symphony
 cd symphony/elixir
 mise trust
 mise install
-mise exec -- mix setup
-mise exec -- mix build
-mise exec -- ./bin/symphony ./WORKFLOW.md
+make setup          # Elixir deps, compile, DB setup
 ```
+
+### 3. Configure environment
+
+Requires `gh` authenticated (`gh auth login`). Symphony needs `repo` and `project` scopes — refresh
+if needed:
+
+```bash
+gh auth refresh -s repo,project,read:org
+```
+
+Bootstrap `.env` with a **new** tracker secret and your GitHub token from `gh`:
+
+```bash
+make env-setup
+```
+
+Equivalent one-liner:
+
+```bash
+bash scripts/setup-env.sh
+```
+
+The script copies `.env.example` → `.env` when missing, then sets:
+
+- `SYMPHONY_TRACKER_TOKEN` — `openssl rand -hex 24`
+- `GITHUB_TOKEN` — `gh auth token`
+
+Edit `elixir/.env` afterwards for optional trackers (Linear, JIRA) and tunables. See
+`.env.example` for the full list (editor, tunnel, sync cadence, Codex defaults).
+
+### 4. Build the tracker UI (first time or after frontend changes)
+
+```bash
+make tracker-build    # writes to priv/static/tracker
+```
+
+Skip this step if you only need the pre-built assets already in the repo.
+
+### 5. Start Symphony
+
+```bash
+make serve            # http://localhost:4000/tracker
+```
+
+Logs: `.symphony/serve.log`. Stop with `make stop`.
+
+### 6. Create your first project (tracker UI)
+
+1. Open `http://localhost:4000/tracker` and authenticate with `SYMPHONY_TRACKER_TOKEN`.
+2. Click **New project** and pick a slug.
+3. Open **Settings** → workflow editor: paste or write `workflow_markdown` (see
+   [workflow_markdown format](#workflow_markdown-format) below).
+4. Link the GitHub repo / Linear project / JIRA project key as needed.
+5. Create or label an issue — the orchestrator picks it up on the next poll.
+
+Optionally copy Symphony skills (`commit`, `push`, `pull`, `land`, `linear`, `github-projects`)
+into your target repo. The `linear` skill expects Symphony's `linear_graphql` app-server tool.
+
+## Tracker setup (per project)
+
+Configure each project from the tracker **Settings** tab (`workflow_markdown` front matter).
+
+### GitHub
+
+Set `github.repo` to `owner/repo`. Symphony bootstraps a repo-level GitHub Project v2 named
+`Symphony` (configurable via `github.project.title`) on first run and tracks issue state through
+the GitHub Project `Status` single-select field — the single source of truth — whose options come
+from `tracker.field_states` when set, otherwise `tracker.active_states` plus
+`tracker.terminal_states`. Use `field_states` to include board-only options such as `Backlog` that
+are not polled. Local project metadata is cached in `.symphony/github-project.json` (gitignored).
+
+Issues are admitted when they carry `symphony`, `symphony:codex`, or `symphony:claude` (base label
+configurable via `github.admission_label`, default `symphony`). Agent routing:
+
+| Label | Agent |
+|-------|--------|
+| `symphony:codex` | Codex |
+| `symphony:claude` | Claude |
+| `symphony` | project/process default (`codex` unless `claude:` is configured) |
+
+The project's `workflow_markdown` must include a `codex:` and/or `claude:` section for the targeted
+agent. New labeled issues are added on the next poll.
+
+Optional `github.assignee` further restricts routing (GitHub login or `"me"`). Omit `assignee` to
+route by label only.
+
+Blockers are parsed from `trackedInIssues` and from issue-body lines such as `Blocked by #42` or
+`Depends on clouapp/front#12`. Linked PR branches populate `issue.branch_name` when GitHub exposes
+`linkedBranches`.
+
+Codex sessions expose a `github_graphql` dynamic tool (same contract as `linear_graphql`) for raw
+GitHub GraphQL from the agent.
+
+See `elixir/WORKFLOW.macromarkets.example.md` for a dogfood setup on `clouapp/front` (project
+**Macro Markets**). Bootstrap the board with `mix run --no-start scripts/bootstrap_macro_markets.exs`.
+
+Required `GITHUB_TOKEN` scopes: `repo` (read+write) and `project` (read+write).
+
+GitHub-backed projects surface a **board URL** in the tracker (from the linked Project v2). When a
+linked PR has failing checks, use **Request fix** on the issue drawer to post log tails as a comment
+and move the issue to `Rework` for re-dispatch.
+
+### Linear
+
+To get your project's slug, right-click the project and copy its URL. The slug is part of the URL.
+This repo's dogfood setup depends on non-standard Linear issue statuses: "Rework", "Human Review",
+and "Merging". Customize them in Team Settings → Workflow in Linear.
+
+### JIRA Cloud
+
+Add a `jira:` section and configure workflow states in `tracker:`:
+
+```yaml
+jira:
+  base_url: $JIRA_BASE_URL
+  email: $JIRA_EMAIL
+  api_token: $JIRA_API_TOKEN
+  project_key: PROJ
+  assignee: $JIRA_ASSIGNEE   # optional; defaults to JIRA_EMAIL
+tracker:
+  active_states:
+    - To Do
+    - In Progress
+    - Rework
+  terminal_states:
+    - Done
+```
+
+Create an API token at [Atlassian account security](https://id.atlassian.com/manage-profile/security/api-tokens).
+
+### Local tracker (SQLite-only)
+
+Add a top-level `local:` section in the project's `workflow_markdown`:
+
+```yaml
+local:
+  database_path: .symphony/tracker.sqlite3
+  project_slug: macro-markets
+tracker:
+  active_states:
+    - Todo
+    - In Progress
+    - Rework
+  terminal_states:
+    - Done
+    - Closed
+```
+
+## Run
+
+Day-to-day operation after [Installation](#installation):
+
+```bash
+cd elixir
+make serve            # boot daemon → http://localhost:4000/tracker
+make stop             # shut down
+make update           # hot-restart web (default); see table below for other subtrees
+```
+
+Use `make update` to hot-restart subtrees (web, orchestrator, or code-server) without stopping
+in-flight agent turns. See [Running the dev daemon](#running-the-dev-daemon-restart-only-what-you-changed).
+
+### Homebrew (packaged binary)
+
+```bash
+brew tap sapsaldog/symphony
+brew install symphony
+
+export SYMPHONY_TRACKER_TOKEN=...
+export GITHUB_TOKEN=...
+symphony --port 4000
+```
+
+The Claude backend is built in — Symphony drives your locally installed `claude` CLI directly
+(run `claude` once to log in). The packaged `bin/symphony-claude` escript exposes the same
+app-server protocol over stdio for external orchestrators (a dynamicTools-capable drop-in for
+the retired external bridge), so no separate `symphony-claude` install is needed.
+
+The packaged escript (`bin/symphony`) cannot load the SQLite NIF — **`make serve` from source is
+required** for the full local tracker. Homebrew builds may differ; prefer `make serve` for development.
+
+### Packaged escript (debugging only)
+
+```bash
+mise exec -- mix build
+mise exec -- ./bin/symphony --i-understand-that-this-will-be-running-without-the-usual-guardrails --port 4000
+```
+
+No workflow file argument — config comes from `elixir/.env` and the DB, same as `make serve`.
 
 ## Configuration
 
-Pass a custom workflow file path to `./bin/symphony` when starting the service:
+Configuration is split into two layers:
 
-```bash
-./bin/symphony /path/to/custom/WORKFLOW.md
-```
+### Process-level settings (`SYMPHONY_*` env / `config/runtime.exs`)
 
-If no path is passed, Symphony defaults to `./WORKFLOW.md`.
+These apply to the whole BEAM process and are read from `elixir/.env` when using `make serve`:
 
-Optional flags:
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SYMPHONY_TRACKER_PORT` | `4000` | HTTP port for the tracker + API |
+| `SYMPHONY_TRACKER_TOKEN` | — | Bearer token for tracker API and websocket auth |
+| `SYMPHONY_POLL_INTERVAL_MS` | `60000` | Orchestrator poll loop interval |
+| `SYMPHONY_TRACKER_SYNC_MIN_PULL_MS` | `60000` | Min spacing between remote pulls per project |
+| `SYMPHONY_TRACKER_PR_SYNC_TTL_MS` | `300000` | TTL before re-enriching an issue's linked PRs |
+| `SYMPHONY_MAX_CONCURRENT_AGENTS` | `10` | Global agent concurrency cap |
+| `SYMPHONY_MAX_TURNS` | `20` | Default max turns per agent invocation |
+| `SYMPHONY_CODEX_COMMAND` | `codex … app-server` | Default Codex app-server command |
+| `SYMPHONY_CODEX_APPROVAL_POLICY` | `never` | Instance Codex approval policy |
+| `SYMPHONY_CODEX_THREAD_SANDBOX` | `workspace-write` | Instance Codex thread sandbox |
+| `SYMPHONY_CLAUDE_COMMAND` | `symphony-claude` | Default Claude app-server command |
+| `SYMPHONY_DEFAULT_AGENT_KIND` | `codex` | Fallback agent when a project omits `codex:`/`claude:` |
+| `SYMPHONY_EDITOR_*` | — | Browser editor (code-server) overrides |
+| `SYMPHONY_LOCAL_TRACKER_DATABASE` | `.symphony/tracker.sqlite3` | SQLite path |
+| `SYMPHONY_BACKUP_DIR` | `.symphony/backups` | Backup storage directory |
+| `SYMPHONY_BACKUP_RETENTION_DAYS` | `30` | Backup retention window |
+| `SYMPHONY_EDITOR_ENABLED` | `false` | Enable browser code-server |
+| `SYMPHONY_EDITOR_PORT` | `4002` | code-server listen port |
+| `SYMPHONY_EDITOR_HOST` | `127.0.0.1` | code-server bind address |
 
-- `--logs-root` tells Symphony to write logs under a different directory (default: `./log`)
-- `--port` also starts the Phoenix observability service (default: disabled)
+Packaged CLI flags: `--logs-root <path>`, `--port <port>` (no workflow file argument).
 
-The `WORKFLOW.md` file uses YAML front matter for configuration, plus a Markdown body used as the
-agent session prompt.
+### Per-project settings (`workflow_markdown` in the tracker DB)
+
+Each project's setup stores a single `workflow_markdown` document: YAML front matter plus a Markdown
+prompt body. At dispatch, `SymphonyElixir.ProjectConfig.resolve/1` validates the front matter against
+the schema; omitted keys inherit **schema defaults**. The prompt comes solely from the markdown body —
+projects without a prompt are skipped.
+
+Edit from the tracker UI (**Settings** → workflow editor) or via `PUT /api/tracker/v1/projects/:id/setup`.
+
+### workflow_markdown format
+
+Each project stores one markdown document: YAML front matter between `---` fences, then the agent
+prompt body. Example files live in `WORKFLOW.*.example.md` (e.g. `WORKFLOW.macromarkets.example.md`).
 
 Minimal example (Linear + Codex):
 
@@ -217,18 +365,53 @@ You are working on issue {{ issue.identifier }}.
 Title: {{ issue.title }} Body: {{ issue.description }}
 ```
 
+Minimal example (JIRA + Codex):
+
+```md
+---
+tracker:
+  kind: jira
+jira:
+  base_url: $JIRA_BASE_URL
+  email: $JIRA_EMAIL
+  api_token: $JIRA_API_TOKEN
+  project_key: PROJ
+tracker:
+  active_states:
+    - To Do
+    - In Progress
+  terminal_states:
+    - Done
+workspace:
+  root: ~/code/workspaces
+codex:
+  command: codex app-server
+---
+
+You are working on JIRA issue {{ issue.identifier }}.
+
+Title: {{ issue.title }} Body: {{ issue.description }}
+```
+
 Notes:
 
-- If a value is missing, defaults are used.
-- **Tracker backends**: `linear`, `github` (default), `memory` (testing). Detected automatically
-  from which YAML section (`linear:`, `github:`, `local:`, or `memory:`) is present in the front
-  matter.
-- **Coding agent backends**: `codex`, `claude` (default). Detected automatically from which YAML
-  section (`codex:` or `claude:`) is present in the front matter.
-- **Codex-specific policy settings** (only apply when using `codex:` backend):
-  - `codex.approval_policy` defaults to `{"reject":{"sandbox_approval":true,"rules":true,"mcp_elicitations":true}}`.
-    Supported values depend on the Codex app-server version. String values include `untrusted`,
-    `on-failure`, `on-request`, and `never`; object-form `reject` is also supported.
+- If a value is missing, schema defaults are used.
+- **Tracker backends**: `github` (default), `linear`, `jira`, `local` (SQLite-only), `memory`
+  (testing). Detected from which YAML section (`github:`, `linear:`, `jira:`, `local:`, or
+  `memory:`) is present in the front matter. Remote-backed projects (`github`, `linear`, `jira`)
+  use **local-first sync** by default (see below).
+- **Coding agent backends**: `codex`, `claude`. Detected from which YAML section (`codex:` or
+  `claude:`) is present. The process default is `SYMPHONY_DEFAULT_AGENT_KIND` (`codex`); a project's
+  own `codex:`/`claude:` section overrides it. Issue create/edit always offers both Codex and Claude
+  as per-task agent choices (GitHub label routing: `symphony:codex` / `symphony:claude`).
+- **Per-project agent overrides** in `agent:` front matter (`max_turns`, `turn_timeout_ms`,
+  `read_timeout_ms`, `stall_timeout_ms`, `completion_transitions`,
+  `max_concurrent_agents_by_state`) fall back to the matching `SYMPHONY_*` process default when unset.
+- **Codex-specific policy settings** (instance defaults via `SYMPHONY_CODEX_*`; per-project overrides
+  in `codex:` front matter):
+  - Instance `SYMPHONY_CODEX_APPROVAL_POLICY` defaults to `never`. Per-project `codex.approval_policy`
+    overrides it. Supported values depend on the Codex app-server version. String values include
+    `untrusted`, `on-failure`, `on-request`, and `never`; object-form `reject` is also supported.
   - `codex.thread_sandbox` defaults to `workspace-write`. Supported values: `read-only`,
     `workspace-write`, `danger-full-access`.
   - `codex.turn_sandbox_policy` defaults to a `workspaceWrite` policy rooted at the current issue
@@ -256,8 +439,8 @@ Notes:
 - **Claude backend** uses `bypassPermissions` mode and has no additional policy settings.
 - `agent.max_turns` caps how many back-to-back agent turns Symphony will run in a single agent
   invocation when a turn completes normally but the issue is still in an active state. Default: `20`.
-- If the Markdown body is blank, Symphony uses a default prompt template that includes the issue
-  identifier, title, and body.
+- Per-project `workflow_markdown` requires an explicit prompt body — projects with a blank body are
+  skipped by the orchestrator.
 - Use `hooks.after_create` to bootstrap a fresh workspace. For a Git-backed repo, you can run
   `git clone ... .` there, along with any other setup commands you need.
 - If a hook needs `mise exec` inside a freshly cloned workspace, trust the repo config and fetch
@@ -287,9 +470,28 @@ codex:
   command: "$CODEX_BIN --model gpt-5.3-codex app-server"
 ```
 
-- If `WORKFLOW.md` is missing or has invalid YAML, startup and scheduling are halted until fixed.
-- `server.port` or CLI `--port` enables the optional Phoenix LiveView dashboard and JSON API at
-  `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, and `/api/v1/refresh`.
+- Each project is validated independently at save time and at dispatch — a misconfigured project is
+  skipped with a warning; other projects keep running.
+- `SYMPHONY_TRACKER_PORT` or CLI `--port` enables the Phoenix tracker and JSON API at `/tracker`,
+  `/api/v1/*`, and `/api/tracker/v1/*`.
+
+### Local-first tracker sync
+
+By default (`config :symphony_elixir, :tracker, sync_enabled: true` outside `:test`), remote-backed
+projects mirror issues into SQLite and serve reads from the local store:
+
+- **Writes** (create, update, move, archive) persist locally, enqueue an outbox entry, and are pushed
+  to the remote by `SymphonyElixir.Tracker.Sync.Engine`.
+- **Reads** (board, issue detail, comments) hit the local mirror — the UI stays responsive even when
+  GitHub/Linear/JIRA is rate-limited.
+- **Pull coalescing**: the orchestrator poll triggers a background sync, but each project's remote
+  pull is skipped when it ran within `SYMPHONY_TRACKER_SYNC_MIN_PULL_MS` (default 60s). Outbox pushes
+  still flush on every poll.
+- **PR enrichment**: linked PRs and check runs are re-fetched at most once per
+  `SYMPHONY_TRACKER_PR_SYNC_TTL_MS` (default 5 min) per issue.
+
+Tune `SYMPHONY_POLL_INTERVAL_MS`, `SYMPHONY_TRACKER_SYNC_MIN_PULL_MS`, and
+`SYMPHONY_TRACKER_PR_SYNC_TTL_MS` in `elixir/.env` to reduce GitHub API pressure.
 
 ### Agent preference
 
@@ -321,15 +523,15 @@ Codex-only and have no equivalent in the Claude backend.
 
 ### Local Tracker Development
 
-The local tracker runs from the same Phoenix server as the dashboard/API and stores data in the
-SQLite path configured by `local.database_path`. The React app uses `SYMPHONY_TRACKER_TOKEN` as a
-bearer token for `/api/tracker/v1/*` and the tracker channel.
+The local tracker runs from the same Phoenix server as the API and stores data in the SQLite path
+configured by `SYMPHONY_LOCAL_TRACKER_DATABASE` (default `.symphony/tracker.sqlite3`). The React app
+uses `SYMPHONY_TRACKER_TOKEN` as a bearer token for `/api/tracker/v1/*` and the tracker channel.
 
 The simplest way to run the tracker locally is the resilient `make serve` target. It ensures
 dependencies and database migrations and boots the app through Mix — which is required because
 the packaged escript (`bin/symphony`) cannot load the native SQLite driver NIF. Per-project config
-is DB-owned, so no global `WORKFLOW.md` is required; set `SYMPHONY_TRACKER_TOKEN` in `elixir/.env`
-for the tracker UI/API bearer token:
+is DB-owned (`workflow_markdown`). See [Installation](#installation) for the full bootstrap flow.
+Quick start:
 
 ```bash
 cd elixir
@@ -372,6 +574,21 @@ make new-migration name=add_widgets   # generate a new migration file
 make rollback                         # roll back the last migration
 ```
 
+#### SQLite backups
+
+Symphony snapshots the tracker database to `.symphony/backups/database/` (configurable via
+`SYMPHONY_BACKUP_DIR`). Retention defaults to 30 days (`SYMPHONY_BACKUP_RETENTION_DAYS`).
+
+```bash
+make backup              # create a snapshot
+make backup-list         # list snapshots
+make backup-stats        # storage summary
+make backup-cleanup      # remove expired snapshots
+```
+
+Restore via Mix: `mix symphony.backup restore <id>`. The tracker API also exposes
+`/api/tracker/v1/backups` for create, list, download, restore, and delete.
+
 For frontend hot-reload development, run the API and Vite separately:
 
 ```bash
@@ -397,35 +614,25 @@ available.
 ### Multi-orchestrator projects
 
 When the local tracker holds more than one project, Symphony orchestrates **every non-archived
-project** in the database on boot — a single process and single SQLite writer, with each project
-resolving its own configuration and prompt. There is no longer a single global workflow that gates
-which project runs.
+project** on boot — a single BEAM process and single SQLite writer, with each project resolving its
+own `workflow_markdown`. There is no global workflow file that gates which projects run.
 
-- **The database is the source of truth** for per-project config and prompt. Each project's
-  `local_tracker_project_setups` row stores `workflow_config` (WORKFLOW-shaped front matter) and
-  `prompt_template` (the agent prompt). At dispatch, `SymphonyElixir.ProjectConfig.resolve/1` layers
-  a project's front matter over the global `WORKFLOW.md` defaults, so an omitted key inherits the
-  global value and a blank prompt falls back to the global prompt.
-- **Per-project behavior**: candidate polling uses each project's `tracker.active_states`, and the
-  prompt, agent kind, and workspace path are resolved from the project's setup. Issue workspaces are
-  nested under the project slug (`<workspace.root>/<project_slug>/<issue>`).
+- **The database is the source of truth.** Each project's setup row stores `workflow_markdown` — a
+  single document with YAML front matter and a Markdown prompt body.
+  `SymphonyElixir.ProjectConfig.resolve/1` validates the front matter; omitted keys inherit schema
+  defaults. Projects without a prompt are skipped with a warning.
+- **Per-project behavior**: candidate polling uses each project's `tracker.active_states`; the
+  prompt, agent kind (`codex:`/`claude:` overrides), and workspace path come from that project's
+  setup. Issue workspaces nest under the project slug (`<workspace.root>/<project_slug>/<issue>`).
+- **Project lifecycle**: archive a project to stop orchestration without deleting data; permanently
+  delete only after archiving. Issues can be archived/restored independently.
+- **Repository management**: the project **Settings** tab links GitHub repos, workspace templates,
+  and the workflow editor (Write/Preview markdown, **Load default** from templates).
 - **Observability** reports one runtime card per project, using a composite `runtime_id`
   (`<base>:<project_slug>`) with that project's filtered snapshot.
-- **Editing**: create/edit a project's prompt and config from the tracker UI. The project modal
-  includes a Write/Preview **markdown editor** for the prompt and a **Load default** action that
-  pulls from the workspace templates. Saving persists via `PUT /api/tracker/v1/projects/:id/setup`.
-- **Seeding from `WORKFLOW.<slug>.md` files** (one-time, idempotent): import existing per-project
-  workflow files into the database with
-
-  ```bash
-  mise exec -- mix symphony.workflows.backfill --dir .
-  ```
-
-  For each `WORKFLOW.<slug>.md` (excluding `*.example.*`), the task creates the project if missing
-  and imports its front matter + prompt into the project's setup. It **never overwrites** a project
-  whose setup is already DB-owned, so re-running is safe and UI edits always win. Environment/profile
-  workflows that are not real projects (for example `WORKFLOW.local-dev.md`) should be kept out of
-  the scanned directory to avoid creating spurious projects.
+- **Editing**: save via `PUT /api/tracker/v1/projects/:id/setup` or the tracker UI. To bootstrap a
+  new project, use **New project** in the sidebar or paste content from a `WORKFLOW.*.example.md`
+  template into the workflow editor.
 
 ## Web dashboard
 
@@ -461,12 +668,14 @@ live, cross-process view of running sessions.
 The sidebar shows a **Recents** group listing the most recent sessions across all projects,
 unifying two row kinds: persisted **assistant chat threads** and **Codex/issue runs** (an issue
 with an active run or a non-empty `branch_name`). Each row shows its project (or "Geral" when none)
-and a status dot; clicking navigates to the chat view or the issue's **Agent** tab.
+and a status dot; clicking navigates to the chat view or the issue's **Agent** tab. Threads can be
+**archived** to hide them from Recents without deleting history.
 
 The assistant also supports **freeform chats** that are not bound to any project, created and opened
 from the global **Assistant** area (`/assistant`, `/assistant/:threadId`). Freeform chat is
 conversational only in v1 (no tracker tools). The thread model carries a `scope`
 (`project`|`freeform`|`issue`) with `issue_identifier`/`title`, and `project_slug` is nullable.
+Assistant tool calls record IN/OUT arguments and output for debugging in the chat transcript.
 
 Issue authoring uses the same assistant surface as the primary **New issue** path. The assistant
 creates a draft issue in `assistant.draft_status`, redirects to
@@ -508,7 +717,7 @@ Manual smoke checklist:
 ## Issue preview servers
 
 Symphony can start long-running dev servers for an issue workspace and surface their URLs in the
-tracker. Enable the feature in `WORKFLOW.md` front matter:
+tracker. Enable the feature in a project's `workflow_markdown` front matter:
 
 ```yaml
 dev_server:
@@ -569,6 +778,9 @@ wait-state issues with linked PRs, and `human_review` applies to human-review wa
 
 ## Public preview tunnel
 
+> **Requires `cloudflared`** on the host (see [Prerequisites](#1-prerequisites)). Not needed for
+> local-only development.
+
 Symphony can expose the tracker **and** each ready dev-server preview publicly through a single
 Cloudflare named tunnel. A static wildcard ingress (`*.tracker.cods.dev → http://127.0.0.1:4000`)
 sends all traffic to the Phoenix hub, and `SymphonyElixirWeb.PublicHostPlug` routes each request by
@@ -609,7 +821,7 @@ its `Host` header before the router runs. It is **disabled by default**.
 
 ### Enable and run
 
-1. Set `public_tunnel.enabled: true` in `WORKFLOW.md`:
+1. Set `public_tunnel.enabled: true` in a project's `workflow_markdown`:
 
    ```yaml
    public_tunnel:
@@ -638,8 +850,9 @@ its `Host` header before the router runs. It is **disabled by default**.
 | `CLOUDFLARE_API_TOKEN` | API token used to create/ensure DNS records. |
 | `CLOUDFLARE_ZONE_ID` | Zone ID for `cods.dev`. |
 | `CLOUDFLARE_ZONE_NAME` | Zone name (e.g. `cods.dev`). |
+| `PUBLIC_TUNNEL_BASE_DOMAIN` | Base domain for preview hosts (e.g. `tracker.cods.dev`). |
 | `PUBLIC_NAMESPACE` | Optional namespace override (defaults to the GitHub login). |
-| `PUBLIC_TUNNEL_ROUTE_DNS` | Set truthy to let `make tunnel-dns` create/ensure the CNAMEs. |
+| `PUBLIC_TUNNEL_ROUTE_DNS` | Set `true` to let `make tunnel` run DNS setup before starting. |
 
 ### Security
 
@@ -649,30 +862,36 @@ another auth layer) before exposing anything that matters.
 
 ## Browser editor (code-server)
 
+> **Requires `code-server`** when the browser editor is enabled (`SYMPHONY_EDITOR_ENABLED=true`).
+> Install with `make install-code-server`. **Cursor Desktop** does not need `code-server`.
+
 Symphony can open a task's workspace directory in a browser-based VS Code
-([code-server](https://github.com/coder/code-server)). It is **disabled by default**.
+([code-server](https://github.com/coder/code-server)) or in **Cursor Desktop**. The browser editor
+is **disabled by default**.
 
-Enable it with an `editor:` block in `WORKFLOW.md`:
+Enable it in `elixir/.env`:
 
-```yaml
-editor:
-  enabled: false        # set to true to enable
-  binary: code-server   # binary name or absolute path
-  host: 127.0.0.1
-  port: 4002
-  auth: none            # "none" (localhost only) or "password"
-  # password: your-password                # only used when auth: password
-  # base_url: https://editor.example.com   # browser-facing URL override (remote/proxy)
+```bash
+SYMPHONY_EDITOR_ENABLED=true
+SYMPHONY_EDITOR_HOST=127.0.0.1
+SYMPHONY_EDITOR_PORT=4002
+# SYMPHONY_EDITOR_BINARY=code-server
+# SYMPHONY_EDITOR_AUTH=password
+# SYMPHONY_EDITOR_PASSWORD=your-password
+# SYMPHONY_EDITOR_BASE_URL=https://editor.example.com
 ```
 
-- `code-server` must be installed on the host (or set `editor.binary` to its absolute path).
+Install code-server with `make install-code-server`; optionally run `make configure-code-server` to
+install Codex + Claude Code extensions.
+
 - When enabled, Symphony supervises a single `code-server` process — spawned on startup
   and bound to `host:port`.
-- In the tracker `IssueDrawer`, an **Open in VS Code** button (and the `.` keyboard
-  shortcut) opens the task's workspace in a new browser tab (`base_url` defaults to
-  `http://<host>:<port>`). Workspaces without repo subdirectories use
-  `<base_url>/?folder=<workspace path>`; workspaces with multiple editor roots use a
-  generated `.symphony/editor.code-workspace` and `<base_url>/?workspace=<workspace file>`.
+- In the tracker `IssueDrawer`, **Open in VS Code** (and the `.` keyboard shortcut) opens the task's
+  workspace in a browser tab (`base_url` defaults to `http://<host>:<port>`). **Open in Cursor**
+  launches Cursor Desktop via a `cursor://` URL (WSL-aware when `WSL_DISTRO_NAME` is set). Workspaces
+  without repo subdirectories use `<base_url>/?folder=<workspace path>`; workspaces with multiple
+  editor roots use a generated `.symphony/editor.code-workspace` and
+  `<base_url>/?workspace=<workspace file>`.
 - When task hooks clone buildable repositories under `front/`, `repo/`, or `back/`,
   Symphony opens those roots directly. If the task workspace also has a `docs/`
   directory, it is included as an additional VS Code root so specs, plans, and handoff
@@ -690,8 +909,12 @@ editor:
 ## Project Layout
 
 - `lib/`: application code and Mix tasks
+- `lib/symphony_elixir/tracker/sync/`: local-first sync engine, outbox, and remote drivers
+- `lib/symphony_elixir/jira/`: JIRA Cloud tracker adapter
 - `test/`: ExUnit coverage for runtime behavior
-- `WORKFLOW.md`: in-repo workflow contract used by local runs
+- `WORKFLOW.*.example.md`: reference `workflow_markdown` templates (e.g. `WORKFLOW.macromarkets.example.md`)
+- `.env.example`: process-level env template for `make serve`
+- `../tracker/`: React tracker SPA (builds to `priv/static/tracker`)
 - `../.codex/`: repository-local Codex skills and setup helpers
 - `../.claude/`: repository-local Claude configuration
 

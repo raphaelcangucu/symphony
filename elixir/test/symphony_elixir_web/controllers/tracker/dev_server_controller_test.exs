@@ -62,7 +62,8 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
              "data" => %{
                "available" => false,
                "reason" => "disabled",
-               "servers" => []
+               "servers" => [],
+               "tunnel" => %{"enabled" => false, "running" => false}
              }
            }
   end
@@ -99,10 +100,41 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
                "data" => %{
                  "available" => false,
                  "reason" => "disabled",
-                 "servers" => []
+                 "servers" => [],
+                 "tunnel" => %{"enabled" => false, "running" => false}
                }
              }
     end
+  end
+
+  test "per-server start stop and restart return 404 for an unknown server", %{identifier: identifier} do
+    for action <- ["start", "stop", "restart"] do
+      conn =
+        post(
+          authorized_conn(),
+          "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers/999/#{action}"
+        )
+
+      assert json_response(conn, 404) == %{
+               "error" => %{"code" => "dev_server_not_found", "message" => "Dev server not found"}
+             }
+    end
+  end
+
+  test "per-server actions reject invalid server ids", %{identifier: identifier} do
+    conn =
+      post(
+        authorized_conn(),
+        "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers/not-a-number/start"
+      )
+
+    assert json_response(conn, 422) == %{
+             "error" => %{
+               "code" => "validation_failed",
+               "details" => %{},
+               "message" => "server_id must be a positive integer"
+             }
+           }
   end
 
   defp authorized_conn do

@@ -1,5 +1,5 @@
-import { AlertTriangle, Bot, ExternalLink, Loader2, Play, RotateCcw, Server, Square } from "lucide-react";
-import { useCallback } from "react";
+import { AlertTriangle, Bot, Cloud, ExternalLink, Loader2, Play, RotateCcw, Server, Square } from "lucide-react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
@@ -41,9 +41,22 @@ const RETRYABLE_UNAVAILABLE_REASONS = new Set<IssueDevServerReason>([
   "crashed",
 ]);
 
+const ACTIVE_PROVISIONING_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
+
 export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: PreviewTabProps) {
   const navigate = useNavigate();
-  const { data, error, loading, restart, start, stop } = useIssueDevServers(projectSlug, issueIdentifier);
+  const { data, error, loading, restart, restartServer, start, startServer, stop, stopServer, startTunnel } =
+    useIssueDevServers(projectSlug, issueIdentifier);
+  const [startingTunnel, setStartingTunnel] = useState(false);
+
+  const handleStartTunnel = useCallback(async () => {
+    setStartingTunnel(true);
+    try {
+      await startTunnel();
+    } finally {
+      setStartingTunnel(false);
+    }
+  }, [startTunnel]);
 
   const askAssistantToFix = useCallback(
     (snapshot: IssueDevServersResponse, server?: IssueDevServer | null) => {
@@ -70,7 +83,6 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
   const primaryUrl = readyPreviewUrl(primaryServer);
   const primaryPublicUrl = publicTunnelPreviewUrl(primaryServer);
   const primaryLocalUrl = localPreviewUrl(primaryServer);
-  const hasPublicTunnelPreviews = (data?.servers ?? []).some((server) => publicTunnelPreviewUrl(server) != null);
   const hasRequiredIdentifiers = projectSlug.trim().length > 0 && issueIdentifier.trim().length > 0;
 
   if (!hasRequiredIdentifiers) {
@@ -112,9 +124,16 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
 
   const unavailableMessage = data.available ? null : availabilityMessage(data.reason);
   const provisioningMessage =
-    data.available && !primaryUrl && primaryServer != null ? provisioningStatusMessage(primaryServer) : null;
+    data.available &&
+    primaryServer != null &&
+    ACTIVE_PROVISIONING_STATUSES.has(primaryServer.status)
+      ? provisioningStatusMessage(primaryServer)
+      : null;
   const controlsDisabled = loading || !canRunManualActions(data.available, data.reason);
   const failureReason = data.reason && isPreviewFailureReason(data.reason);
+  const tunnelEnabled = data.tunnel?.enabled ?? false;
+  const tunnelRunning = data.tunnel?.running ?? false;
+  const openPrimaryUrl = tunnelRunning ? primaryUrl : (primaryLocalUrl ?? primaryUrl);
 
   return (
     <div className="space-y-4 text-sm">
@@ -124,14 +143,12 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
         </StateCallout>
       ) : null}
 
-      {hasPublicTunnelPreviews ? (
-        <StateCallout tone="default" title="Public preview URLs">
-          These hosts are routed through the Cloudflare tunnel to your machine. Start it from{" "}
-          <span className="font-mono">elixir/</span> with <span className="font-mono">make tunnel</span> (or{" "}
-          <span className="font-mono">make tunnel-bg</span>) so teammates can open the links. Local links still work
-          on this machine without the tunnel.
-        </StateCallout>
-      ) : null}
+      <TunnelNotice
+        enabled={tunnelEnabled}
+        running={tunnelRunning}
+        starting={startingTunnel}
+        onStart={() => void handleStartTunnel()}
+      />
 
       <Card>
         <CardHeader className="gap-3">
@@ -161,7 +178,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
             </StateCallout>
           ) : null}
 
-          {primaryUrl ? (
+          {openPrimaryUrl ? (
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -169,9 +186,9 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                     Preview is ready{primaryServer ? ` from ${primaryServer.slug}` : ""}.
                   </p>
                   <p className="mt-1 break-all font-mono text-xs text-emerald-700 dark:text-emerald-300">
-                    {primaryUrl}
+                    {openPrimaryUrl}
                   </p>
-                  {primaryPublicUrl ? (
+                  {tunnelRunning && primaryPublicUrl ? (
                     <p className="mt-1 break-all font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">
                       Public (Cloudflare tunnel):{" "}
                       <a href={primaryPublicUrl} target="_blank" rel="noreferrer noopener" className="underline">
@@ -179,7 +196,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                       </a>
                     </p>
                   ) : null}
-                  {primaryLocalUrl ? (
+                  {tunnelRunning && primaryLocalUrl ? (
                     <p className="mt-1 break-all font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">
                       Local:{" "}
                       <a href={primaryLocalUrl} target="_blank" rel="noreferrer noopener" className="underline">
@@ -189,7 +206,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                   ) : null}
                 </div>
                 <Button asChild size="sm">
-                  <a href={primaryUrl} target="_blank" rel="noreferrer noopener">
+                  <a href={openPrimaryUrl} target="_blank" rel="noreferrer noopener">
                     <ExternalLink className="h-3.5 w-3.5" />
                     Open Preview
                   </a>
@@ -229,12 +246,17 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                 {data.servers.map((server) => (
                   <ServerRow
                     key={server.id}
+                    controlsDisabled={controlsDisabled}
                     onAskAssistant={
                       isPreviewFailureServerStatus(server.status)
                         ? () => askAssistantToFix(data, server)
                         : undefined
                     }
+                    onRestart={(serverId) => void restartServer(serverId)}
+                    onStart={(serverId) => void startServer(serverId)}
+                    onStop={(serverId) => void stopServer(serverId)}
                     server={server}
+                    tunnelRunning={tunnelRunning}
                   />
                 ))}
               </div>
@@ -275,6 +297,84 @@ function PreviewControls({
   );
 }
 
+function ServerControls({
+  disabled,
+  onRestart,
+  onStart,
+  onStop,
+  slug,
+}: {
+  disabled: boolean;
+  onRestart: () => void;
+  onStart: () => void;
+  onStop: () => void;
+  slug: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" size="sm" onClick={onStart} disabled={disabled} aria-label={`Start ${slug} preview`}>
+        <Play className="h-3.5 w-3.5" />
+        Start
+      </Button>
+      <Button type="button" size="sm" variant="outline" onClick={onStop} disabled={disabled} aria-label={`Stop ${slug} preview`}>
+        <Square className="h-3.5 w-3.5" />
+        Stop
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={onRestart}
+        disabled={disabled}
+        aria-label={`Restart ${slug} preview`}
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+        Restart
+      </Button>
+    </div>
+  );
+}
+
+function TunnelNotice({
+  enabled,
+  running,
+  starting,
+  onStart,
+}: {
+  enabled: boolean;
+  running: boolean;
+  starting: boolean;
+  onStart: () => void;
+}) {
+  if (!enabled) {
+    return null;
+  }
+
+  if (running) {
+    return (
+      <StateCallout tone="default" icon={<Cloud className="h-5 w-5" />} title="Public preview URLs">
+        The Cloudflare tunnel is running, so the public <span className="font-mono">*.tracker.cods.dev</span> links
+        below reach this machine and can be shared with teammates.
+      </StateCallout>
+    );
+  }
+
+  return (
+    <StateCallout tone="warning" title="Cloudflare tunnel is not running">
+      <div className="space-y-3">
+        <p>
+          Public preview links won&apos;t work until the tunnel is running. Only the localhost URLs are shown below.
+          Start the tunnel to expose the public <span className="font-mono">*.tracker.cods.dev</span> hosts.
+        </p>
+        <Button type="button" size="sm" onClick={onStart} disabled={starting}>
+          {starting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Cloud className="h-3.5 w-3.5" />}
+          {starting ? "Starting tunnel..." : "Start tunnel"}
+        </Button>
+      </div>
+    </StateCallout>
+  );
+}
+
 function AskAssistantButton({ onClick }: { onClick: () => void }) {
   return (
     <Button type="button" size="sm" variant="outline" onClick={onClick}>
@@ -284,10 +384,27 @@ function AskAssistantButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function ServerRow({ server, onAskAssistant }: { server: IssueDevServer; onAskAssistant?: () => void }) {
+function ServerRow({
+  server,
+  controlsDisabled,
+  onAskAssistant,
+  onRestart,
+  onStart,
+  onStop,
+  tunnelRunning,
+}: {
+  server: IssueDevServer;
+  controlsDisabled: boolean;
+  onAskAssistant?: () => void;
+  onRestart: (serverId: number) => void;
+  onStart: (serverId: number) => void;
+  onStop: (serverId: number) => void;
+  tunnelRunning: boolean;
+}) {
   const previewUrl = readyPreviewUrl(server);
   const publicUrl = publicTunnelPreviewUrl(server);
   const localUrl = localPreviewUrl(server);
+  const openUrl = tunnelRunning ? previewUrl : (localUrl ?? previewUrl);
 
   return (
     <div className="rounded-lg border p-3">
@@ -302,7 +419,7 @@ function ServerRow({ server, onAskAssistant }: { server: IssueDevServer; onAskAs
             {server.working_dir ? `Working directory: ${server.working_dir}` : "No working directory reported"}
             {server.port ? ` · Port ${server.port}` : ""}
           </p>
-          {publicUrl ? (
+          {tunnelRunning && publicUrl ? (
             <p className="break-all font-mono text-xs text-muted-foreground">
               Public (Cloudflare tunnel):{" "}
               <a href={publicUrl} target="_blank" rel="noreferrer noopener" className="underline">
@@ -310,7 +427,7 @@ function ServerRow({ server, onAskAssistant }: { server: IssueDevServer; onAskAs
               </a>
             </p>
           ) : null}
-          {localUrl ? (
+          {tunnelRunning && localUrl ? (
             <p className="break-all font-mono text-xs text-muted-foreground">
               Local:{" "}
               <a href={localUrl} target="_blank" rel="noreferrer noopener" className="underline">
@@ -321,10 +438,17 @@ function ServerRow({ server, onAskAssistant }: { server: IssueDevServer; onAskAs
           {server.session_name ? <p className="font-mono text-xs text-muted-foreground">{server.session_name}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <ServerControls
+            disabled={controlsDisabled}
+            onRestart={() => onRestart(server.id)}
+            onStart={() => onStart(server.id)}
+            onStop={() => onStop(server.id)}
+            slug={server.slug}
+          />
           {onAskAssistant ? <AskAssistantButton onClick={onAskAssistant} /> : null}
-          {previewUrl ? (
+          {openUrl ? (
             <Button asChild size="sm" variant="outline">
-              <a href={previewUrl} target="_blank" rel="noreferrer noopener">
+              <a href={openUrl} target="_blank" rel="noreferrer noopener">
                 <ExternalLink className="h-3.5 w-3.5" />
                 Open {server.slug} preview
               </a>
@@ -490,18 +614,6 @@ function availabilityMessage(reason: IssueDevServerReason): { title: string; bod
   }
 }
 
-function provisioningStatusMessage(primaryServer: IssueDevServer | null): string {
-  if (!primaryServer) {
-    return "No preview is running yet. Use Start Preview when you want to provision the dev server.";
-  }
-
-  if (primaryServer.status === "crashed") {
-    return "The dev server crashed before publishing a URL. Restart the preview to try again.";
-  }
-
-  if (primaryServer.status === "stopped") {
-    return "The dev server is stopped and has not published a URL yet. Start Preview to request a new run.";
-  }
-
+function provisioningStatusMessage(primaryServer: IssueDevServer): string {
   return `The ${primaryServer.slug} dev server is ${primaryServer.status} and has not published a URL yet.`;
 }

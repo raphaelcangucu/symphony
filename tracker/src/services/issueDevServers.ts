@@ -1,5 +1,5 @@
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import type { IssueDevServersResponse } from "@/types/issue";
+import type { IssueDevServerTunnel, IssueDevServersResponse } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
 
@@ -37,6 +37,30 @@ export async function restartIssueDevServers(
   return postIssueDevServerAction(projectSlug, issueIdentifier, "restart");
 }
 
+export async function startIssueDevServer(
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
+): Promise<IssueDevServersResponse> {
+  return postIssueDevServerInstanceAction(projectSlug, issueIdentifier, serverId, "start");
+}
+
+export async function stopIssueDevServer(
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
+): Promise<IssueDevServersResponse> {
+  return postIssueDevServerInstanceAction(projectSlug, issueIdentifier, serverId, "stop");
+}
+
+export async function restartIssueDevServer(
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
+): Promise<IssueDevServersResponse> {
+  return postIssueDevServerInstanceAction(projectSlug, issueIdentifier, serverId, "restart");
+}
+
 async function postIssueDevServerAction(
   projectSlug: string,
   issueIdentifier: string,
@@ -45,6 +69,29 @@ async function postIssueDevServerAction(
   const response = await http.post(`${issueDevServersPath(projectSlug, issueIdentifier)}/${action}`);
 
   return unwrapData<IssueDevServersResponse>(response);
+}
+
+async function postIssueDevServerInstanceAction(
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
+  action: IssueDevServerAction,
+): Promise<IssueDevServersResponse> {
+  if (!Number.isInteger(serverId) || serverId <= 0) {
+    throw new Error("serverId must be a positive integer");
+  }
+
+  const response = await http.post(
+    `${issueDevServersPath(projectSlug, issueIdentifier)}/${encodeURIComponent(String(serverId))}/${action}`,
+  );
+
+  return unwrapData<IssueDevServersResponse>(response);
+}
+
+export async function startPublicTunnel(): Promise<IssueDevServerTunnel> {
+  const response = await http.post(trackerPath("/tunnel/start"));
+
+  return unwrapData<IssueDevServerTunnel>(response);
 }
 
 function issueDevServersPath(projectSlug: string, issueIdentifier: string): string {

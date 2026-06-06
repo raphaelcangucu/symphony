@@ -7,7 +7,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   alias SymphonyElixir.GitHub.IssueAdapter.Query
   alias SymphonyElixir.GitHub.IssueComments
   alias SymphonyElixir.GitHub.RepoSpec
-  alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Tracker.IssueDTO
 
   @page_size 50
@@ -117,7 +117,19 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   end
 
   @impl true
-  def update_issue(%Project{} = _project, _identifier, _attrs), do: {:error, :not_supported_on_remote}
+  def update_issue(%Project{} = project, identifier, attrs) when is_map(attrs) do
+    with {:ok, repo} <- resolve_issue_repo(project, identifier),
+         {:ok, {owner, name}} <- RepoSpec.split(repo),
+         {:ok, number} <- parse_issue_number(identifier),
+         {:ok, issue} <- fetch_issue_details(owner, name, number),
+         {:ok, meta} <- fetch_repo_metadata(owner, name),
+         {:ok, _} <- maybe_update_issue_content(project, issue, attrs),
+         :ok <- maybe_sync_issue_labels(issue, meta.labels, attrs) do
+      get_issue(project, identifier)
+    else
+      {:error, reason} -> {:error, map_error(reason)}
+    end
+  end
 
   @impl true
   def move_issue(%Project{} = project, identifier, attrs) do
@@ -206,30 +218,26 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   @impl true
   def list_comments(%Project{} = project, identifier) do
-    case config(project) do
-      %{repo: repo} when is_binary(repo) and repo != "" ->
-        case IssueComments.for_issue(repo, identifier) do
-          {:ok, comments} -> {:ok, comments}
-          {:error, {:invalid_issue_identifier, _}} -> {:ok, []}
-          error -> {:error, map_error(error)}
-        end
-
-      _ ->
-        {:error, :not_supported_on_remote}
+    with {:ok, repo} <- resolve_issue_repo(project, identifier) do
+      case IssueComments.for_issue(repo, identifier) do
+        {:ok, comments} -> {:ok, comments}
+        {:error, {:invalid_issue_identifier, _}} -> {:ok, []}
+        error -> {:error, map_error(error)}
+      end
+    else
+      {:error, reason} -> {:error, map_error(reason)}
     end
   end
 
   @impl true
   def add_comment(%Project{} = project, identifier, body, _attrs) do
-    case config(project) do
-      %{repo: repo} when is_binary(repo) and repo != "" ->
-        case IssueComments.create(repo, identifier, body) do
-          {:ok, comment} -> {:ok, comment}
-          error -> {:error, map_error(error)}
-        end
-
-      _ ->
-        {:error, :not_supported_on_remote}
+    with {:ok, repo} <- resolve_issue_repo(project, identifier) do
+      case IssueComments.create(repo, identifier, body) do
+        {:ok, comment} -> {:ok, comment}
+        error -> {:error, map_error(error)}
+      end
+    else
+      {:error, reason} -> {:error, map_error(reason)}
     end
   end
 
@@ -293,7 +301,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp apply_agent_routing_label(%Project{} = project, identifier, agent) do
     label_name = "symphony:" <> agent
 
-    with {:ok, {owner, name}} <- RepoSpec.split(config(project).repo),
+    with {:ok, repo} <- resolve_issue_repo(project, identifier),
+         {:ok, {owner, name}} <- RepoSpec.split(repo),
          {:ok, number} <- parse_issue_number(identifier),
          {:ok, issue_node_id} <- fetch_issue_node_id(owner, name, number),
          {:ok, meta} <- fetch_repo_metadata(owner, name),
@@ -403,7 +412,10 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
             {:ok, identifier}
 
           true ->
-            resolve_move_item_id_from_issue_number(project, project_id, identifier)
+            case resolve_move_item_id_from_remote_id(project, project_id, identifier, attrs) do
+              {:ok, item_id} -> {:ok, item_id}
+              :skip -> resolve_move_item_id_from_issue_number(project, project_id, identifier)
+            end
         end
     end
   end
@@ -411,29 +423,316 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp project_item_id?(id) when is_binary(id), do: String.starts_with?(id, "PVTI_")
   defp project_item_id?(_), do: false
 
-  defp resolve_move_item_id_from_issue_number(%Project{} = project, project_id, identifier) do
-    %{repo: repo} = config(project)
+  defp resolve_move_item_id_from_remote_id(%Project{} = project, project_id, identifier, attrs) do
+    case issue_remote_id(project, identifier, attrs) do
+      id when is_binary(id) and id != "" ->
+        case fetch_project_item_id(id, project_id) do
+          {:ok, _} = ok -> ok
+          _ -> :skip
+        end
 
-    with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, number} <- parse_issue_number(identifier),
-         {:ok, issue_node_id} <- fetch_issue_node_id(owner, name, number),
-         {:ok, item_id} <- fetch_project_item_id(issue_node_id, project_id) do
-      {:ok, item_id}
+      _ ->
+        :skip
     end
   end
 
+  defp resolve_move_item_id_from_issue_number(%Project{} = project, project_id, identifier) do
+    with {:ok, number} <- parse_issue_number(identifier),
+         {:ok, issue_node_id} <- resolve_issue_node_id(project, identifier, number) do
+      fetch_project_item_id(issue_node_id, project_id)
+    end
+  end
+
+  defp resolve_issue_repo(%Project{} = project, identifier) do
+    with {:ok, number} <- parse_issue_number(identifier) do
+      find_issue_repo(project, identifier, number)
+    end
+  end
+
+  defp resolve_issue_node_id(%Project{} = project, identifier, number) do
+    candidate_repos(project, identifier)
+    |> Enum.reduce_while({:error, :issue_not_found}, fn repo, _acc ->
+      with {:ok, {owner, name}} <- RepoSpec.split(repo),
+           {:ok, node_id} <- fetch_issue_node_id(owner, name, number) do
+        {:halt, {:ok, node_id}}
+      else
+        _ -> {:cont, {:error, :issue_not_found}}
+      end
+    end)
+  end
+
+  defp find_issue_repo(%Project{} = project, identifier, number) do
+    candidate_repos(project, identifier)
+    |> Enum.reduce_while({:error, :issue_not_found}, fn repo, _acc ->
+      with {:ok, {owner, name}} <- RepoSpec.split(repo),
+           {:ok, _} <- fetch_issue_details(owner, name, number) do
+        {:halt, {:ok, repo}}
+      else
+        _ -> {:cont, {:error, :issue_not_found}}
+      end
+    end)
+  end
+
+  defp candidate_repos(%Project{} = project, identifier) do
+    url_repo =
+      case Context.get_issue(project.slug, identifier) do
+        {:ok, issue} -> repo_from_issue_url(issue.remote_url || issue.url)
+        _ -> :error
+      end
+
+    configured =
+      project.slug
+      |> Context.list_repositories()
+      |> Enum.map(& &1.github_full_name)
+
+    tracker = config(project).repo
+
+    []
+    |> prepend_if_ok(url_repo)
+    |> Kernel.++(configured)
+    |> Kernel.++(List.wrap(tracker))
+    |> Enum.uniq()
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+  end
+
+  defp prepend_if_ok(acc, {:ok, repo}), do: [repo | acc]
+  defp prepend_if_ok(acc, _), do: acc
+
+  defp repo_from_issue_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{host: host, path: path} when host in ["github.com", "www.github.com"] ->
+        case String.split(String.trim_leading(path || "", "/"), "/") do
+          [owner, repo, "issues", _number | _] when owner != "" and repo != "" ->
+            {:ok, "#{owner}/#{repo}"}
+
+          _ ->
+            :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp repo_from_issue_url(_), do: :error
+
+  defp issue_remote_id(%Project{} = project, identifier, attrs) do
+    remote_id_from_attrs(attrs) || local_issue_remote_id(project, identifier)
+  end
+
+  defp remote_id_from_attrs(attrs) do
+    Map.get(attrs, "remote_id") || Map.get(attrs, :remote_id)
+  end
+
+  defp local_issue_remote_id(%Project{slug: slug}, identifier) when is_binary(slug) do
+    case Context.get_issue(slug, identifier) do
+      {:ok, %{remote_id: id}} when is_binary(id) and id != "" -> id
+      _ -> nil
+    end
+  end
+
+  defp local_issue_remote_id(_, _), do: nil
+
   defp fetch_issue_node_id(owner, name, number) do
+    case fetch_issue_details(owner, name, number) do
+      {:ok, %{"id" => id}} when is_binary(id) -> {:ok, id}
+      error -> error
+    end
+  end
+
+  defp fetch_issue_details(owner, name, number) do
     variables = %{"owner" => owner, "name" => name, "number" => number}
 
     case client().graphql(Query.issue_node_id_query(), variables, []) do
-      {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => id}}}}} when is_binary(id) ->
-        {:ok, id}
+      {:ok, response} -> Query.issue_details(response)
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-      {:ok, _payload} ->
-        {:error, :issue_not_found}
+  defp maybe_update_issue_content(%Project{} = project, %{"id" => issue_id}, attrs) do
+    fields =
+      %{}
+      |> maybe_put_issue_field("title", title_attr(attrs))
+      |> maybe_put_issue_field("body", description_attr(attrs))
+      |> maybe_put_assignee_ids(project, attrs)
 
-      {:error, reason} ->
-        {:error, reason}
+    if fields == %{} do
+      {:ok, nil}
+    else
+      input = Map.put(fields, "id", issue_id)
+
+      case client().graphql(Query.update_issue_mutation(), %{"input" => input}, []) do
+        {:ok, response} -> Query.updated_issue(response)
+        {:error, _} = error -> error
+      end
+    end
+  end
+
+  defp maybe_put_issue_field(map, _key, nil), do: map
+  defp maybe_put_issue_field(map, key, value), do: Map.put(map, key, value)
+
+  defp maybe_put_assignee_ids(map, project, attrs) do
+    case assignee_ids_attr(attrs) do
+      :skip -> map
+      ids -> Map.put(map, "assigneeIds", resolve_github_assignee_ids(project, ids))
+    end
+  end
+
+  defp resolve_github_assignee_ids(_project, []), do: []
+
+  defp resolve_github_assignee_ids(%Project{} = project, requested) do
+    with {:ok, users} <- list_assignable_users(project) do
+      by_id = Map.new(users, fn user -> {user.id, user.id} end)
+      by_login = Map.new(users, fn user -> {String.downcase(user.login || ""), user.id} end)
+
+      requested
+      |> Enum.map(fn value ->
+        cond do
+          is_binary(value) and Map.has_key?(by_id, value) -> value
+          is_binary(value) -> Map.get(by_login, String.downcase(String.trim(value)))
+          true -> nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+    else
+      _ -> requested
+    end
+  end
+
+  defp maybe_sync_issue_labels(issue, repo_labels, attrs) do
+    label_change? = Map.has_key?(attrs, "label_ids") or Map.has_key?(attrs, "labels")
+    priority_change? = Map.has_key?(attrs, "priority") or Map.has_key?(attrs, :priority)
+
+    if not label_change? and not priority_change? do
+      :ok
+    else
+      issue_id = Map.fetch!(issue, "id")
+      current = current_label_nodes(issue)
+      system_ids = system_label_ids(current)
+      by_name = Map.new(repo_labels, fn label -> {String.downcase(label.name || ""), label.id} end)
+
+      user_ids =
+        case label_ids_attr(attrs) do
+          nil ->
+            current
+            |> Enum.reject(fn node ->
+              name = Map.get(node, "name")
+              system_label_name?(name) or priority_label_name?(name)
+            end)
+            |> Enum.map(& &1["id"])
+            |> Enum.reject(&is_nil/1)
+
+          requested ->
+            resolve_requested_label_ids(repo_labels, requested)
+        end
+
+      priority_ids =
+        if priority_change? do
+          priority_label_ids(by_name, Map.get(attrs, "priority") || Map.get(attrs, :priority))
+        else
+          current
+          |> Enum.filter(fn node -> priority_label_name?(Map.get(node, "name")) end)
+          |> Enum.map(& &1["id"])
+          |> Enum.reject(&is_nil/1)
+        end
+
+      label_ids = Enum.uniq(system_ids ++ user_ids ++ priority_ids)
+
+      case client().graphql(Query.update_issue_mutation(), %{"input" => %{"id" => issue_id, "labelIds" => label_ids}}, []) do
+        {:ok, _} -> :ok
+        {:error, _} = error -> error
+      end
+    end
+  end
+
+  defp current_label_nodes(%{"labels" => %{"nodes" => nodes}}) when is_list(nodes), do: nodes
+  defp current_label_nodes(_issue), do: []
+
+  defp system_label_ids(nodes) do
+    nodes
+    |> Enum.filter(fn node -> system_label_name?(Map.get(node, "name")) end)
+    |> Enum.map(& &1["id"])
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp system_label_name?(name) when is_binary(name) do
+    String.match?(String.downcase(String.trim(name)), ~r/^symphony(?::.*)?$/)
+  end
+
+  defp system_label_name?(_name), do: false
+
+  defp priority_label_name?(name) when is_binary(name) do
+    String.match?(String.downcase(String.trim(name)), ~r/^priority:\d$/)
+  end
+
+  defp priority_label_name?(_name), do: false
+
+  defp resolve_requested_label_ids(labels, requested) do
+    by_name = Map.new(labels, fn label -> {String.downcase(label.name || ""), label.id} end)
+    by_id = Map.new(labels, fn label -> {label.id, label.id} end)
+
+    requested
+    |> Enum.map(fn value ->
+      cond do
+        is_binary(value) and Map.has_key?(by_id, value) -> value
+        is_binary(value) -> Map.get(by_name, String.downcase(String.trim(value)))
+        true -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp title_attr(attrs) do
+    case attrs |> Map.get("title") |> trim_string() do
+      "" -> nil
+      value -> value
+    end
+  end
+
+  defp description_attr(attrs) do
+    if Map.has_key?(attrs, "description") or Map.has_key?(attrs, :description) do
+      case attrs |> Map.get("description") |> trim_string() do
+        "" -> ""
+        value -> value
+      end
+    else
+      nil
+    end
+  end
+
+  defp label_ids_attr(attrs) do
+    cond do
+      Map.has_key?(attrs, "label_ids") ->
+        values = string_list(Map.get(attrs, "label_ids")) |> Enum.uniq()
+        if values == [], do: [], else: values
+
+      Map.has_key?(attrs, "labels") ->
+        values = string_list(Map.get(attrs, "labels")) |> Enum.uniq()
+        if values == [], do: [], else: values
+
+      true ->
+        nil
+    end
+  end
+
+  defp assignee_ids_attr(attrs) do
+    cond do
+      Map.has_key?(attrs, "assignee_ids") ->
+        string_list(Map.get(attrs, "assignee_ids"))
+
+      Map.has_key?(attrs, :assignee_ids) ->
+        string_list(Map.get(attrs, :assignee_ids))
+
+      Map.has_key?(attrs, "assignee_id") ->
+        case Map.get(attrs, "assignee_id") do
+          value when is_binary(value) and value != "" -> [value]
+          _ -> []
+        end
+
+      true ->
+        :skip
     end
   end
 

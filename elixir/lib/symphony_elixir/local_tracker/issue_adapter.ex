@@ -3,8 +3,12 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
 
   @behaviour SymphonyElixir.Tracker.IssueAdapter
 
+  import Ecto.Query
+
   alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project, WorkflowStatus}
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueDTO
+  alias SymphonyElixir.Tracker.Sync.UserRecord
 
   @impl true
   def kind, do: :local
@@ -85,7 +89,23 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
   end
 
   @impl true
-  def list_assignable_users(%Project{} = _project), do: {:ok, []}
+  def list_assignable_users(%Project{id: project_id}) do
+    users =
+      UserRecord
+      |> where([user], user.project_id == ^project_id)
+      |> order_by([user], asc: user.login)
+      |> Repo.all()
+      |> Enum.map(fn user ->
+        %{
+          id: user.remote_id,
+          login: user.login,
+          name: user.name,
+          avatar_url: user.avatar_url
+        }
+      end)
+
+    {:ok, users}
+  end
 
   @impl true
   def list_comments(%Project{slug: slug}, identifier) do
