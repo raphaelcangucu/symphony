@@ -597,6 +597,34 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
              Context.add_issue_label("missing", "MAC-1", "symphony:incomplete")
   end
 
+  test "update_issue resolves assignee_ids via cached tracker users" do
+    {:ok, project} = Context.ensure_project(%{name: "Assignee Edit", slug: "assignee-edit"})
+    {:ok, _issue} = Context.create_issue("assignee-edit", %{title: "Assign me", status: "Todo"})
+
+    :ok =
+      SymphonyElixir.Tracker.Sync.LocalStore.upsert_users(project, [
+        %{id: "U1", login: "alice", name: "Alice"}
+      ])
+
+    assert {:ok, updated} =
+             Context.update_issue("assignee-edit", "ASS-1", %{"assignee_ids" => ["U1"]})
+
+    assert updated.assignee_id == "alice"
+
+    assert {:ok, cleared} = Context.update_issue("assignee-edit", "ASS-1", %{"assignee_ids" => []})
+    assert cleared.assignee_id == nil
+  end
+
+  test "update_issue accepts priority changes" do
+    {:ok, _project} = Context.ensure_project(%{name: "Priority Edit", slug: "priority-edit"})
+    {:ok, _issue} = Context.create_issue("priority-edit", %{title: "Priority", status: "Todo"})
+
+    assert {:ok, updated} =
+             Context.update_issue("priority-edit", "PRI-1", %{"priority" => 2})
+
+    assert updated.priority == 2
+  end
+
   test "update_issue replaces user labels while preserving system labels" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Label edit", status: "Todo"})

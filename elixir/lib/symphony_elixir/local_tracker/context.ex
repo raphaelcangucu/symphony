@@ -25,6 +25,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   }
 
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Tracker.Sync.UserRecord
 
   @issue_preloads [:project, :status, :labels]
   @default_issue_status "Todo"
@@ -277,6 +278,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       agent = attr(attrs, :agent)
 
       attrs
+      |> normalize_assignee_attrs(project.id)
       |> issue_create_attrs()
       |> Map.merge(%{
         project_id: project.id,
@@ -300,6 +302,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
          {:ok, status} <- fetch_move_status(project.id, attrs, issue.status_id) do
       changes =
         attrs
+        |> normalize_assignee_attrs(project.id)
         |> mutable_issue_attrs()
         |> Map.put(:status_id, status.id)
         |> maybe_put_started_at(issue, status)
@@ -1260,6 +1263,42 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp normalize_agent_kind(_agent), do: nil
 
   defp agent_label_name(agent_kind), do: "symphony:" <> agent_kind
+
+  defp normalize_assignee_attrs(attrs, project_id) do
+    if Map.has_key?(attrs, "assignee_ids") or Map.has_key?(attrs, :assignee_ids) do
+      ids = Map.get(attrs, "assignee_ids", Map.get(attrs, :assignee_ids, []))
+
+      login =
+        case ids do
+          [] -> nil
+          [first | _] -> resolve_assignee_login(project_id, first)
+        end
+
+      attrs
+      |> Map.put("assignee_id", login)
+      |> Map.delete("assignee_ids")
+      |> Map.delete(:assignee_ids)
+    else
+      attrs
+    end
+  end
+
+  defp resolve_assignee_login(project_id, value) when is_binary(value) do
+    trimmed = String.trim(value)
+    normalized = String.downcase(trimmed)
+
+    case Repo.one(
+           from(user in UserRecord,
+             where: user.project_id == ^project_id,
+             where: user.remote_id == ^trimmed or fragment("lower(?)", user.login) == ^normalized
+           )
+         ) do
+      %UserRecord{login: login} when is_binary(login) -> login
+      _ -> trimmed
+    end
+  end
+
+  defp resolve_assignee_login(_project_id, _value), do: nil
 
   defp label_names_from_attrs(attrs) do
     case normalize_label_name_list(Map.get(attrs, "label_ids") || Map.get(attrs, :label_ids)) do

@@ -15,6 +15,7 @@ const hookActions = {
   restart: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
+  startTunnel: vi.fn(),
 };
 
 describe("SummaryTab", () => {

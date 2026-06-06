@@ -5,6 +5,7 @@ import {
   fetchIssueDevServers,
   restartIssueDevServers,
   startIssueDevServers,
+  startPublicTunnel,
   stopIssueDevServers,
 } from "@/services/issueDevServers";
 import type { IssueDevServersResponse, IssueDevServerStatus } from "@/types/issue";
@@ -21,6 +22,7 @@ export interface UseIssueDevServersResult {
   start: () => Promise<void>;
   stop: () => Promise<void>;
   restart: () => Promise<void>;
+  startTunnel: () => Promise<void>;
 }
 
 type IssueDevServerAction = (
@@ -146,6 +148,18 @@ export function useIssueDevServers(
     [runAction],
   );
 
+  const startTunnel = useCallback(async () => {
+    try {
+      const tunnel = await startPublicTunnel();
+      setData((current) => (current ? { ...current, tunnel } : current));
+      setError(null);
+    } catch {
+      setError("Could not start the Cloudflare tunnel.");
+    } finally {
+      void refresh();
+    }
+  }, [refresh]);
+
   useEffect(() => {
     requestIdRef.current += 1;
     hasLoadedRef.current = false;
@@ -187,7 +201,7 @@ export function useIssueDevServers(
     void refresh();
   }, [focused, hasIdentifiers, refresh]);
 
-  return { data, loading, error, refresh, start, stop, restart };
+  return { data, loading, error, refresh, start, stop, restart, startTunnel };
 }
 
 function hasRequiredIdentifier(value: string | null | undefined): value is string {

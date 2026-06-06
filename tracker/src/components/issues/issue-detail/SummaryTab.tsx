@@ -3,8 +3,11 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import { getStatusMeta } from "@/components/board/status-meta";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
+import { InlineAssigneeEditor } from "@/components/issues/inline/InlineAssigneeEditor";
 import { InlineEditableMarkdown } from "@/components/issues/inline/InlineEditableMarkdown";
 import { InlineLabelEditor } from "@/components/issues/inline/InlineLabelEditor";
+import { InlinePriorityEditor } from "@/components/issues/inline/InlinePriorityEditor";
+import { InlineStatusEditor } from "@/components/issues/inline/InlineStatusEditor";
 import { PriorityIndicator, priorityLabel } from "@/components/issues/PriorityIndicator";
 import { PullRequestLink } from "@/components/issues/pull-request/PullRequestLink";
 import { Separator } from "@/components/ui/separator";
@@ -13,8 +16,16 @@ import { userVisibleLabels } from "@/lib/symphonyLabels";
 import { cn, formatDateTime } from "@/lib/utils";
 import { getIssueFormOptions } from "@/services/issues";
 import type { Comment } from "@/types/comment";
-import type { Issue, IssueDevServer, IssueDevServersResponse, IssueLabelOption } from "@/types/issue";
+import type {
+  Issue,
+  IssueAssigneeOption,
+  IssueDevServer,
+  IssueDevServersResponse,
+  IssueLabelOption,
+  IssuePriority,
+} from "@/types/issue";
 import type { PullRequest } from "@/types/pull-request";
+import type { WorkflowStatusName } from "@/types/workflow-status";
 
 import { CommentCard, WorkpadBadge } from "./CommentCard";
 
@@ -28,6 +39,9 @@ interface SummaryTabProps {
   onOpenComments?: () => void;
   onSaveDescription?: (description: string) => Promise<boolean>;
   onSaveLabels?: (labelIds: string[]) => Promise<boolean>;
+  onSaveStatus?: (status: WorkflowStatusName) => Promise<boolean>;
+  onSavePriority?: (priority: IssuePriority | null) => Promise<boolean>;
+  onSaveAssignee?: (assigneeIds: string[]) => Promise<boolean>;
 }
 
 function issueLinkLabel(url: string): string {
@@ -46,8 +60,13 @@ export function SummaryTab({
   onOpenComments,
   onSaveDescription,
   onSaveLabels,
+  onSaveStatus,
+  onSavePriority,
+  onSaveAssignee,
 }: SummaryTabProps) {
   const [labelOptions, setLabelOptions] = useState<IssueLabelOption[]>([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<IssueAssigneeOption[]>([]);
+  const [statusOptions, setStatusOptions] = useState<WorkflowStatusName[]>([]);
   const [labelOptionsLoading, setLabelOptionsLoading] = useState(false);
   const meta = getStatusMeta(issue.status);
   const StatusIcon = meta.Icon;
@@ -57,7 +76,9 @@ export function SummaryTab({
   const previewStatus = previewUrl ? null : previewStatusLabel(previewData, primaryPreviewServer);
   const hasPreviewSummary = Boolean(previewUrl || previewStatus);
   const hasLinks = Boolean(issue.url) || issue.branchName !== null || pullRequests.length > 0 || hasPreviewSummary;
-  const editable = Boolean(onSaveDescription || onSaveLabels);
+  const editable = Boolean(
+    onSaveDescription || onSaveLabels || onSaveStatus || onSavePriority || onSaveAssignee,
+  );
 
   useEffect(() => {
     if (!editable || !projectSlug.trim()) return undefined;
@@ -66,10 +87,17 @@ export function SummaryTab({
     setLabelOptionsLoading(true);
     void getIssueFormOptions(projectSlug)
       .then((options) => {
-        if (!cancelled) setLabelOptions(options.labels);
+        if (!cancelled) {
+          setLabelOptions(options.labels);
+          setAssigneeOptions(options.assignees);
+          setStatusOptions(options.statuses);
+        }
       })
       .catch(() => {
-        if (!cancelled) setLabelOptions([]);
+        if (!cancelled) {
+          setLabelOptions([]);
+          setAssigneeOptions([]);
+        }
       })
       .finally(() => {
         if (!cancelled) setLabelOptionsLoading(false);
@@ -168,22 +196,45 @@ export function SummaryTab({
       <aside className="space-y-5 lg:border-l lg:border-border/70 lg:pl-6">
         <div className="space-y-4">
           <Field label="Status">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-1 text-xs font-medium">
-              <StatusIcon className={cn("h-3.5 w-3.5", meta.iconClass)} />
-              {issue.status}
-            </span>
+            {onSaveStatus ? (
+              <InlineStatusEditor
+                status={issue.status}
+                options={statusOptions.length > 0 ? statusOptions : [issue.status]}
+                saving={saving}
+                onSave={onSaveStatus}
+              />
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-1 text-xs font-medium">
+                <StatusIcon className={cn("h-3.5 w-3.5", meta.iconClass)} />
+                {issue.status}
+              </span>
+            )}
           </Field>
           <Field label="Priority">
-            <span className="inline-flex items-center gap-1.5">
-              <PriorityIndicator priority={issue.priority} />
-              {priorityLabel(issue.priority)}
-            </span>
+            {onSavePriority ? (
+              <InlinePriorityEditor priority={issue.priority} saving={saving} onSave={onSavePriority} />
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <PriorityIndicator priority={issue.priority} />
+                {priorityLabel(issue.priority)}
+              </span>
+            )}
           </Field>
           <Field label="Assignee">
-            <span className="inline-flex items-center gap-1.5">
-              <AssigneeAvatar login={issue.assignee} />
-              {issue.assignee || "Unassigned"}
-            </span>
+            {onSaveAssignee ? (
+              <InlineAssigneeEditor
+                assignee={issue.assignee}
+                options={assigneeOptions}
+                optionsLoading={labelOptionsLoading}
+                saving={saving}
+                onSave={onSaveAssignee}
+              />
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <AssigneeAvatar login={issue.assignee} />
+                {issue.assignee || "Unassigned"}
+              </span>
+            )}
           </Field>
           <Field label="Updated">
             <span className="text-muted-foreground">{formatDateTime(issue.updatedAt)}</span>

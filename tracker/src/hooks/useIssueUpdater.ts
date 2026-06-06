@@ -1,8 +1,9 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
-import { updateIssue } from "@/services/issues";
+import { moveIssue, updateIssue } from "@/services/issues";
 import type { Issue, UpdateIssueInput } from "@/types/issue";
+import type { WorkflowStatusName } from "@/types/workflow-status";
 
 interface UseIssueUpdaterArgs {
   projectSlug: string;
@@ -31,5 +32,27 @@ export function useIssueUpdater({ projectSlug, issue, onUpdated }: UseIssueUpdat
     [issue, onUpdated, projectSlug],
   );
 
-  return { save, saving };
+  const moveStatus = useCallback(
+    async (status: WorkflowStatusName) => {
+      if (!issue || !projectSlug.trim() || !issue.identifier.trim()) return null;
+      if (status === issue.status) return issue;
+      setSaving(true);
+      try {
+        const updated = await moveIssue(projectSlug, issue.identifier, {
+          status,
+          position: issue.position,
+        });
+        onUpdated?.(updated);
+        return updated;
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : "Failed to update status");
+        return null;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [issue, onUpdated, projectSlug],
+  );
+
+  return { save, moveStatus, saving };
 }

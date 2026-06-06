@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useIssueDevServers, type UseIssueDevServersResult } from "@/hooks/useIssueDevServers";
-import type { IssueDevServer, IssueDevServersResponse } from "@/types/issue";
+import type { IssueDevServer, IssueDevServerTunnel, IssueDevServersResponse } from "@/types/issue";
 
 import { PreviewTab } from "../PreviewTab";
 
@@ -28,6 +28,7 @@ const hookActions = {
   restart: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
+  startTunnel: vi.fn(),
 };
 
 describe("PreviewTab", () => {
@@ -68,18 +69,21 @@ describe("PreviewTab", () => {
     );
   });
 
-  it("shows public tunnel and localhost URLs for a ready server", () => {
+  it("shows public tunnel and localhost URLs for a ready server when the tunnel is running", () => {
     renderPreview(
-      response([
-        server({
-          id: 1,
-          slug: "back",
-          status: "ready",
-          port: 4102,
-          url: "https://macro-markets-510-back.example.tracker.cods.dev/admin",
-          primary: true,
-        }),
-      ]),
+      response(
+        [
+          server({
+            id: 1,
+            slug: "back",
+            status: "ready",
+            port: 4102,
+            url: "https://macro-markets-510-back.example.tracker.cods.dev/admin",
+            primary: true,
+          }),
+        ],
+        { enabled: true, running: true },
+      ),
     );
 
     expect(screen.getByText(/public preview urls/i)).toBeInTheDocument();
@@ -175,6 +179,52 @@ describe("PreviewTab", () => {
 
     expect(hookActions.start).toHaveBeenCalledTimes(1);
   });
+
+  it("warns and shows only localhost URLs when the tunnel is enabled but not running", () => {
+    renderPreview(
+      response(
+        [
+          server({
+            id: 1,
+            slug: "back",
+            status: "ready",
+            port: 4102,
+            url: "https://macro-markets-510-back.example.tracker.cods.dev/admin",
+            primary: true,
+          }),
+        ],
+        { enabled: true, running: false },
+      ),
+    );
+
+    expect(screen.getByText(/cloudflare tunnel is not running/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /start tunnel/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "https://macro-markets-510-back.example.tracker.cods.dev/admin" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^open preview$/i })).toHaveAttribute(
+      "href",
+      "http://127.0.0.1:4102/admin",
+    );
+    expect(screen.getByRole("link", { name: /^open back preview$/i })).toHaveAttribute(
+      "href",
+      "http://127.0.0.1:4102/admin",
+    );
+  });
+
+  it("calls startTunnel when Start tunnel is clicked", async () => {
+    const user = userEvent.setup();
+    renderPreview(
+      response(
+        [server({ id: 1, slug: "back", status: "ready", port: 4102, url: "https://x.example.tracker.cods.dev/", primary: true })],
+        { enabled: true, running: false },
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: /start tunnel/i }));
+
+    expect(hookActions.startTunnel).toHaveBeenCalledTimes(1);
+  });
 });
 
 function renderPreview(data: IssueDevServersResponse, overrides: Partial<UseIssueDevServersResult> = {}) {
@@ -189,8 +239,8 @@ function renderPreview(data: IssueDevServersResponse, overrides: Partial<UseIssu
   render(<PreviewTab projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" />);
 }
 
-function response(servers: IssueDevServer[]): IssueDevServersResponse {
-  return { available: true, reason: null, servers };
+function response(servers: IssueDevServer[], tunnel?: IssueDevServerTunnel): IssueDevServersResponse {
+  return { available: true, reason: null, servers, ...(tunnel ? { tunnel } : {}) };
 }
 
 function server(overrides: Partial<IssueDevServer> = {}): IssueDevServer {

@@ -8,7 +8,17 @@ import { IssueDetailRoute } from "@/components/workspace/IssueDetailRoute";
 import { getIssue } from "@/services/issues";
 import type { Issue } from "@/types/issue";
 
-vi.mock("@/services/issues", () => ({ getIssue: vi.fn() }));
+vi.mock("@/services/issues", () => ({
+  getIssue: vi.fn(),
+  // SummaryTab loads form options and useIssueUpdater calls these when the
+  // editable drawer renders; provide inert mocks so the route tests stay focused
+  // on navigation rather than the editor internals.
+  getIssueFormOptions: vi
+    .fn()
+    .mockResolvedValue({ labels: [], assignees: [], statuses: [], agents: [] }),
+  moveIssue: vi.fn(),
+  updateIssue: vi.fn(),
+}));
 vi.mock("@/services/comments", () => ({ listComments: vi.fn().mockResolvedValue([]), createComment: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 

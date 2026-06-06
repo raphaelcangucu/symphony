@@ -42,6 +42,15 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
     end
   end
 
+  def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "update", payload: payload}) do
+    with {:ok, identifier} <- issue_identifier(project, payload) do
+      case adapter().update_issue(project, identifier, payload) do
+        {:ok, dto} -> {:ok, dto.id}
+        error -> error
+      end
+    end
+  end
+
   def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "archive", payload: payload}) do
     adapter().archive_issue(project, payload["identifier"])
   end
@@ -97,6 +106,28 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
   defp normalize_state(state) when state in ["open", "closed", "merged"], do: state
   defp normalize_state("draft"), do: "open"
   defp normalize_state(_state), do: "closed"
+
+  defp issue_identifier(_project, %{"identifier" => identifier}) when is_binary(identifier) and identifier != "",
+    do: {:ok, identifier}
+
+  defp issue_identifier(%Project{id: project_id}, payload) do
+    case Map.get(payload, "issue_id") do
+      id when is_integer(id) ->
+        resolve_identifier(project_id, id)
+
+      _ ->
+        {:error, {:unsupported_push, "issue", "update"}}
+    end
+  end
+
+  defp resolve_identifier(project_id, issue_id) do
+    alias SymphonyElixir.Repo
+
+    case Repo.get_by(IssueRecord, id: issue_id, project_id: project_id) do
+      %IssueRecord{identifier: identifier} -> {:ok, identifier}
+      _ -> {:error, :issue_not_found}
+    end
+  end
 
   defp adapter, do: Application.get_env(:symphony_elixir, :github_sync_adapter, SymphonyElixir.GitHub.IssueAdapter)
 

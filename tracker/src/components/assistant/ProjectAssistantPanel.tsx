@@ -141,6 +141,7 @@ export function ProjectAssistantPanel({
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
   const isPanelMode = isPageMode || isEmbeddedMode;
+  const isFullPageProjectAssistant = isPageMode && Boolean(projectSlug) && !issueIdentifier;
   const active = isPanelMode || open;
   const resolvedAssistantMode: ProjectAssistantMode =
     assistantMode ?? (projectSlug ? (issueIdentifier ? "project" : "project") : "freeform");
@@ -510,7 +511,7 @@ export function ProjectAssistantPanel({
   const visibleMessages = displayMessages(messages);
 
   useEffect(() => {
-    if (!isPageMode) return;
+    if (!isFullPageProjectAssistant) return;
     const dock = composerDockRef.current;
     if (!dock) return;
 
@@ -520,7 +521,7 @@ export function ProjectAssistantPanel({
     const observer = new ResizeObserver(updateHeight);
     observer.observe(dock);
     return () => observer.disconnect();
-  }, [isPageMode, catalog, catalogError]);
+  }, [isFullPageProjectAssistant, catalog, catalogError]);
 
   useEffect(() => {
     if (!isPanelMode) return;
@@ -613,7 +614,7 @@ export function ProjectAssistantPanel({
         projectSlug={projectSlug ?? ""}
         catalog={catalog ?? fallbackCodexCatalog()}
         disabled={isRunning}
-        floating={isPageMode && Boolean(projectSlug)}
+        floating={isFullPageProjectAssistant}
         hasQueued={queued.length > 0}
         seedMessage={composerSeedMessage}
         onForceQueued={forceSendOldestQueued}
@@ -627,7 +628,7 @@ export function ProjectAssistantPanel({
         <section
           className={cn(
             "relative flex flex-col",
-            isPageMode && (projectSlug ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
+            isPageMode && (isFullPageProjectAssistant ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
             isEmbeddedMode && "h-full min-h-0",
           )}
           aria-label="Project assistant"
@@ -656,13 +657,13 @@ export function ProjectAssistantPanel({
                 "flex w-full flex-col",
                 isPageMode ? "mx-auto max-w-4xl gap-6 px-4 pt-8" : "gap-4 px-4 py-4",
               )}
-              style={isPageMode && projectSlug ? { paddingBottom: composerHeight + 16 } : undefined}
+              style={isFullPageProjectAssistant ? { paddingBottom: composerHeight + 16 } : undefined}
             >
               {messageItems}
             </div>
           </div>
 
-          {isPageMode && projectSlug ? (
+          {isFullPageProjectAssistant ? (
             <div ref={composerDockRef} className="pointer-events-none absolute inset-x-0 bottom-0">
               <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
               <div className="pointer-events-auto bg-background">

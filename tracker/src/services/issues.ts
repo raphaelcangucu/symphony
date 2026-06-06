@@ -93,6 +93,8 @@ function serializeUpdateInput(input: UpdateIssueInput): Record<string, unknown> 
   if (input.title !== undefined) payload.title = input.title;
   if (input.description !== undefined) payload.description = input.description;
   if (input.labelIds !== undefined) payload.label_ids = input.labelIds;
+  if (input.priority !== undefined) payload.priority = input.priority;
+  if (input.assigneeIds !== undefined) payload.assignee_ids = input.assigneeIds;
   return payload;
 }
 

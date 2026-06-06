@@ -1,5 +1,5 @@
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import type { IssueDevServersResponse } from "@/types/issue";
+import type { IssueDevServerTunnel, IssueDevServersResponse } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
 
@@ -45,6 +45,12 @@ async function postIssueDevServerAction(
   const response = await http.post(`${issueDevServersPath(projectSlug, issueIdentifier)}/${action}`);
 
   return unwrapData<IssueDevServersResponse>(response);
+}
+
+export async function startPublicTunnel(): Promise<IssueDevServerTunnel> {
+  const response = await http.post(trackerPath("/tunnel/start"));
+
+  return unwrapData<IssueDevServerTunnel>(response);
 }
 
 function issueDevServersPath(projectSlug: string, issueIdentifier: string): string {

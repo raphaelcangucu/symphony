@@ -37,15 +37,31 @@ Symphony does **not** use a global `WORKFLOW.md`. Process settings live in `elix
 
 ### 1. Prerequisites
 
-| Tool | Required | Notes |
-|------|----------|-------|
+**Core setup** (`make env-setup` + `make serve`) needs only the tools marked **required** below.
+`code-server` and `cloudflared` are **not** required to boot the tracker — install them only when
+you enable the matching feature.
+
+| Tool | Required | Needed for |
+|------|----------|------------|
 | [mise](https://mise.jdx.dev/) | recommended | Pins Elixir `1.19` / OTP `28` from `.mise.toml` |
-| [GitHub CLI](https://cli.github.com/) (`gh`) | yes | Authenticated via `gh auth login`; supplies `GITHUB_TOKEN` |
-| Git | yes | |
-| [Codex CLI](https://github.com/openai/codex) | yes (default agent) | `codex app-server` must be on `PATH` |
-| Node.js 20+ | for frontend dev only | `make tracker-build` — skip if using the committed `priv/static/tracker` build |
-| [code-server](https://github.com/coder/code-server) | optional | `make install-code-server` for the browser editor |
-| [symphony-claude](https://github.com/sapsaldog/symphony) | optional | Homebrew: `brew install symphony-claude` when using Claude |
+| [GitHub CLI](https://cli.github.com/) (`gh`) | **yes** | `make env-setup` → `GITHUB_TOKEN` |
+| Git | **yes** | cloning, workspaces |
+| [Codex CLI](https://github.com/openai/codex) | **yes** (default agent) | `codex app-server` on `PATH` |
+| Node.js 20+ | frontend dev only | `make tracker-build` — skip if using committed `priv/static/tracker` |
+| [symphony-claude](https://github.com/sapsaldog/symphony) | if using Claude | `brew install symphony-claude` |
+| [code-server](https://github.com/coder/code-server) | if using browser editor | `SYMPHONY_EDITOR_ENABLED=true` → `make install-code-server` |
+| [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) | if using public tunnel | `public_tunnel.enabled: true` + `make tunnel` |
+
+Run `make check-tools` to see what is installed (required tools report ✗ when missing; optional
+tools report … when absent).
+
+| Feature | Enable | Install |
+|---------|--------|---------|
+| Browser VS Code | `SYMPHONY_EDITOR_ENABLED=true` in `.env` | `make install-code-server` (optional: `make configure-code-server`) |
+| Public preview tunnel | `public_tunnel.enabled: true` in project `workflow_markdown` + Cloudflare `.env` keys | [Install `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), then `cloudflared tunnel create …` |
+
+**Cursor Desktop** ("Open in Cursor" in the issue drawer) uses the local `cursor://` handler — no
+`code-server` install needed.
 
 Your target codebase should follow [harness engineering](https://openai.com/index/harness-engineering/)
 practices so agents can work autonomously.
@@ -730,6 +746,9 @@ wait-state issues with linked PRs, and `human_review` applies to human-review wa
 
 ## Public preview tunnel
 
+> **Requires `cloudflared`** on the host (see [Prerequisites](#1-prerequisites)). Not needed for
+> local-only development.
+
 Symphony can expose the tracker **and** each ready dev-server preview publicly through a single
 Cloudflare named tunnel. A static wildcard ingress (`*.tracker.cods.dev → http://127.0.0.1:4000`)
 sends all traffic to the Phoenix hub, and `SymphonyElixirWeb.PublicHostPlug` routes each request by
@@ -810,6 +829,9 @@ Only enable the tunnel for non-sensitive work, or place the hosts behind **Cloud
 another auth layer) before exposing anything that matters.
 
 ## Browser editor (code-server)
+
+> **Requires `code-server`** when the browser editor is enabled (`SYMPHONY_EDITOR_ENABLED=true`).
+> Install with `make install-code-server`. **Cursor Desktop** does not need `code-server`.
 
 Symphony can open a task's workspace directory in a browser-based VS Code
 ([code-server](https://github.com/coder/code-server)) or in **Cursor Desktop**. The browser editor

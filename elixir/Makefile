@@ -86,13 +86,14 @@ check-tools:
 	@if [ -n "$(strip $(MISE))" ]; then echo "✓ mise detected ($(MISE))"; else echo "… mise not found — using system mix/elixir"; fi
 	@$(MIX) --version >/dev/null 2>&1 && echo "✓ mix runnable" || { echo "✗ mix is not runnable; install Elixir/OTP (see README) or run via mise"; exit 1; }
 	@command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1 && echo "✓ gh authenticated ($$(gh --version | head -1))" || echo "✗ gh missing or not authenticated (required — run: gh auth login)"
-	@command -v code-server >/dev/null 2>&1 && echo "✓ code-server installed ($$(code-server --version 2>&1 | head -1))" || echo "… code-server not installed (optional — run make install-code-server)"
+	@command -v code-server >/dev/null 2>&1 && echo "✓ code-server installed ($$(code-server --version 2>&1 | head -1))" || echo "… code-server not installed (optional — needed when SYMPHONY_EDITOR_ENABLED=true; run make install-code-server)"
+	@command -v cloudflared >/dev/null 2>&1 && echo "✓ cloudflared installed ($$(cloudflared --version 2>&1 | head -1))" || echo "… cloudflared not installed (optional — needed for make tunnel / public preview tunnel)"
 
 # Create/update elixir/.env: fresh SYMPHONY_TRACKER_TOKEN + GITHUB_TOKEN from `gh auth token`.
 env-setup:
 	@bash scripts/setup-env.sh
 
-# Installs code-server to ~/.local for the optional browser editor (editor: in WORKFLOW.md).
+# Installs code-server to ~/.local for the optional browser editor (SYMPHONY_EDITOR_ENABLED=true).
 # Re-run with FORCE=1 to reinstall the latest release.
 install-code-server:
 	@bash scripts/install-code-server.sh

@@ -101,7 +101,20 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   @issue_node_id """
   query SymphonyUiIssueNodeId($owner: String!, $name: String!, $number: Int!) {
     repository(owner: $owner, name: $name) {
-      issue(number: $number) { id }
+      issue(number: $number) {
+        id
+        title
+        body
+        labels(first: 50) { nodes { id name } }
+      }
+    }
+  }
+  """
+
+  @update_issue """
+  mutation SymphonyUiUpdateIssue($input: UpdateIssueInput!) {
+    updateIssue(input: $input) {
+      issue { id number title body url updatedAt }
     }
   }
   """
@@ -203,6 +216,24 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
 
   @spec issue_node_id_query() :: String.t()
   def issue_node_id_query, do: @issue_node_id
+
+  @spec update_issue_mutation() :: String.t()
+  def update_issue_mutation, do: @update_issue
+
+  @spec updated_issue(map()) :: {:ok, map()} | {:error, :update_failed}
+  def updated_issue(%{"data" => %{"updateIssue" => %{"issue" => %{"id" => id} = issue}}})
+      when is_binary(id),
+      do: {:ok, issue}
+
+  def updated_issue(_), do: {:error, :update_failed}
+
+  @spec issue_details(map()) :: {:ok, map()} | {:error, :issue_not_found}
+  def issue_details(%{"data" => %{"repository" => %{"issue" => %{"id" => id} = issue}}})
+      when is_binary(id),
+      do: {:ok, issue}
+
+  def issue_details(%{"data" => %{"repository" => %{"issue" => nil}}}), do: {:error, :issue_not_found}
+  def issue_details(_), do: {:error, :issue_not_found}
 
   @spec add_labels_mutation() :: String.t()
   def add_labels_mutation, do: @add_labels

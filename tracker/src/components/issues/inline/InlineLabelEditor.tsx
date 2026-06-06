@@ -34,7 +34,11 @@ export function InlineLabelEditor({
   saving = false,
   onSave,
 }: InlineLabelEditorProps) {
-  const visibleLabels = userVisibleLabels(labels);
+  const visibleLabels = useMemo(() => userVisibleLabels(labels), [labels]);
+  // Stable value-key so the sync effect below only runs when the labels' content
+  // changes — depending on `visibleLabels` (a fresh array each render) would make
+  // the effect call setDraft on every render and loop infinitely.
+  const visibleLabelsKey = visibleLabels.join("\u0000");
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string[]>(visibleLabels);
   const [customLabel, setCustomLabel] = useState("");
@@ -42,7 +46,8 @@ export function InlineLabelEditor({
 
   useEffect(() => {
     if (!open) setDraft(visibleLabels);
-  }, [open, visibleLabels]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, visibleLabelsKey]);
 
   useEffect(() => {
     if (!open) return undefined;

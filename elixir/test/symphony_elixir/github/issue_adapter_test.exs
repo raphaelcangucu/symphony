@@ -389,6 +389,114 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     assert message =~ "symphony:codex"
   end
 
+  defmodule UpdateClientStub do
+    def graphql(query, vars, _opts) do
+      cond do
+        String.contains?(query, "SymphonyUiIssueNodeId") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "id" => "I_10",
+                   "title" => "Old",
+                   "body" => "Old body",
+                   "labels" => %{
+                     "nodes" => [
+                       %{"id" => "AGC", "name" => "symphony:codex"},
+                       %{"id" => "OLD", "name" => "stale"}
+                     ]
+                   }
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiRepoMetadata") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "id" => "REPO_1",
+                 "labels" => %{
+                   "nodes" => [
+                     %{"id" => "L1", "name" => "bug", "color" => "ff0000"},
+                     %{"id" => "AGC", "name" => "symphony:codex", "color" => nil},
+                     %{"id" => "P2", "name" => "priority:2", "color" => nil}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiAssignableUsers") ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "assignableUsers" => %{
+                   "nodes" => [%{"id" => "U1", "login" => "alice", "name" => "Alice", "avatarUrl" => nil}]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiUpdateIssue") ->
+          send(self(), {:update_input, vars["input"]})
+
+          {:ok,
+           %{
+             "data" => %{
+               "updateIssue" => %{
+                 "issue" => %{"id" => "I_10", "number" => 10, "title" => "Updated title", "body" => "Updated body"}
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiListItems") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "items" => %{
+                   "nodes" => [
+                     %{
+                       "id" => "PVTI_10",
+                       "content" => %{
+                         "__typename" => "Issue",
+                         "id" => "I_10",
+                         "number" => 10,
+                         "title" => "Remote",
+                         "body" => nil,
+                         "url" => "https://x/10",
+                         "assignees" => %{"nodes" => []},
+                         "labels" => %{"nodes" => [%{"name" => "bug"}]},
+                         "createdAt" => "2026-05-28T00:00:00Z",
+                         "updatedAt" => "2026-05-28T00:00:00Z"
+                       },
+                       "fieldValues" => %{
+                         "nodes" => [
+                           %{
+                             "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                             "name" => "Todo",
+                             "field" => %{"name" => "Status"}
+                           }
+                         ]
+                       }
+                     }
+                   ],
+                   "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                 }
+               }
+             }
+           }}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
   defmodule CreateClientStub do
     def graphql(query, vars, _opts) do
       cond do
@@ -494,6 +602,40 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     test "returns validation error when title is blank" do
       assert {:error, {:remote_validation, %{title: ["is required"]}}} =
                IssueAdapter.create_issue(project(), %{"title" => "  ", "status" => "Todo"})
+    end
+  end
+
+  describe "update_issue" do
+    setup do
+      Application.put_env(:symphony_elixir, :github_client_module, UpdateClientStub)
+      :ok
+    end
+
+    test "updates title, description, and labels while preserving symphony labels" do
+      attrs = %{
+        "title" => "Updated title",
+        "description" => "Updated body",
+        "label_ids" => ["bug"]
+      }
+
+      assert {:ok, %IssueDTO{identifier: "10", title: "Remote"}} =
+               IssueAdapter.update_issue(project(), "10", attrs)
+
+      assert_received {:update_input, %{"id" => "I_10", "title" => "Updated title", "body" => "Updated body"}}
+      assert_received {:update_input, %{"id" => "I_10", "labelIds" => label_ids}}
+      assert "L1" in label_ids
+      assert "AGC" in label_ids
+    end
+
+    test "updates assignee and priority" do
+      attrs = %{"assignee_ids" => ["alice"], "priority" => 2}
+
+      assert {:ok, %IssueDTO{identifier: "10"}} = IssueAdapter.update_issue(project(), "10", attrs)
+
+      assert_received {:update_input, %{"id" => "I_10", "assigneeIds" => ["U1"]}}
+      assert_received {:update_input, %{"id" => "I_10", "labelIds" => label_ids}}
+      assert "P2" in label_ids
+      assert "AGC" in label_ids
     end
   end
 

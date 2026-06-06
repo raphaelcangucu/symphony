@@ -10,6 +10,7 @@ vi.mock("@/services/issueDevServers", () => ({
   restartIssueDevServers: vi.fn(),
   startIssueDevServers: vi.fn(),
   stopIssueDevServers: vi.fn(),
+  startPublicTunnel: vi.fn(),
 }));
 
 const readyResponse: IssueDevServersResponse = {

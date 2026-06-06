@@ -33,10 +33,16 @@ export interface IssueDevServer {
   session_name: string | null;
 }
 
+export interface IssueDevServerTunnel {
+  enabled: boolean;
+  running: boolean;
+}
+
 export interface IssueDevServersResponse {
   available: boolean;
   reason: IssueDevServerReason;
   servers: IssueDevServer[];
+  tunnel?: IssueDevServerTunnel;
 }
 
 export interface IssueLabel {
@@ -112,4 +118,6 @@ export interface UpdateIssueInput {
   title?: string;
   description?: string | null;
   labelIds?: string[];
+  priority?: IssuePriority | null;
+  assigneeIds?: string[];
 }

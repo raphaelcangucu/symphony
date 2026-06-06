@@ -363,6 +363,18 @@ export function IssueDrawer({
                       const updated = await issueUpdater.save({ labelIds });
                       return updated !== null;
                     }}
+                    onSaveStatus={async (status) => {
+                      const updated = await issueUpdater.moveStatus(status);
+                      return updated !== null;
+                    }}
+                    onSavePriority={async (priority) => {
+                      const updated = await issueUpdater.save({ priority });
+                      return updated !== null;
+                    }}
+                    onSaveAssignee={async (assigneeIds) => {
+                      const updated = await issueUpdater.save({ assigneeIds });
+                      return updated !== null;
+                    }}
                   />
                 </TabsContent>
                 <TabsContent value="pr">

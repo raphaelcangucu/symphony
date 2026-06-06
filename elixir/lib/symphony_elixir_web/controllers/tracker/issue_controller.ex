@@ -28,8 +28,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   @spec form_options(Conn.t(), map()) :: Conn.t()
   def form_options(conn, %{"project_slug" => project_slug}) do
     with {:ok, project} <- Context.get_project(project_slug),
-         {:ok, labels} <- IssueAdapter.dispatch(project, :list_labels, []),
-         {:ok, users} <- IssueAdapter.dispatch(project, :list_assignable_users, []),
+         {:ok, labels} <- list_form_labels(project),
+         {:ok, users} <- list_form_assignees(project),
          {:ok, statuses} <- IssueAdapter.dispatch(project, :list_statuses, []) do
       json(conn, %{
         data: %{
@@ -168,8 +168,29 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     label_ids = normalize_string_list(Map.get(params, "label_ids") || Map.get(params, "labels"))
 
     params
-    |> Map.take(["title", "description", "status", "priority"])
+    |> Map.take(["title", "description", "status"])
+    |> maybe_put_priority(params)
+    |> maybe_put_assignee_ids(params)
     |> maybe_put_label_ids(label_ids)
+  end
+
+  defp maybe_put_priority(attrs, params) do
+    if Map.has_key?(params, "priority") do
+      Map.put(attrs, "priority", params["priority"])
+    else
+      attrs
+    end
+  end
+
+  defp maybe_put_assignee_ids(attrs, params) do
+    if Map.has_key?(params, "assignee_ids") or Map.has_key?(params, "assignees") do
+      assignee_ids =
+        normalize_string_list(Map.get(params, "assignee_ids") || Map.get(params, "assignees"))
+
+      Map.put(attrs, "assignee_ids", assignee_ids)
+    else
+      attrs
+    end
   end
 
   defp maybe_put_label_ids(attrs, []), do: attrs
@@ -218,6 +239,40 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     |> Enum.map(fn kind ->
       %{value: kind, label: Map.fetch!(@agent_labels, kind), default: kind == default}
     end)
+  end
+
+  defp list_form_labels(project) do
+    with {:ok, labels} <- remote_catalog(project, :list_labels),
+         true <- labels != [] do
+      {:ok, labels}
+    else
+      _ -> IssueAdapter.dispatch(project, :list_labels, [])
+    end
+  end
+
+  defp list_form_assignees(project) do
+    with {:ok, users} <- IssueAdapter.dispatch(project, :list_assignable_users, []),
+         true <- users != [] do
+      {:ok, users}
+    else
+      _ ->
+        with {:ok, users} <- remote_catalog(project, :list_assignable_users),
+             :ok <- SymphonyElixir.Tracker.Sync.LocalStore.upsert_users(project, users) do
+          {:ok, users}
+        else
+          _ -> {:ok, []}
+        end
+    end
+  end
+
+  defp remote_catalog(%{tracker_kind: kind} = project, fun) when fun in [:list_labels, :list_assignable_users] do
+    case IssueAdapter.remote_for(kind) do
+      nil ->
+        {:error, :local_tracker}
+
+      module ->
+        apply(module, fun, [project])
+    end
   end
 
   defp present_label(label) when is_map(label) do

@@ -40,6 +40,9 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
     def archive_issue(_project, id), do: {:ok, "PVTI_archived_" <> id}
     def restore_issue(_project, id), do: {:ok, "PVTI_restored_" <> id}
     def delete_issue(_project, id), do: {:ok, "PVTI_deleted_" <> id}
+
+    def update_issue(_project, identifier, attrs),
+      do: {:ok, IssueDTO.build(%{id: "I_" <> identifier, identifier: identifier, title: Map.get(attrs, "title", "updated"), status: %{name: "Todo"}})}
   end
 
   setup do
@@ -76,6 +79,16 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
   test "push of an issue restore calls restore_issue", %{project: project} do
     entry = %OutboxEntry{entity_type: "issue", operation: "restore", payload: %{"identifier" => "1"}}
     assert {:ok, "PVTI_restored_1"} = SyncDriver.push(project, entry)
+  end
+
+  test "push of an issue update calls update_issue", %{project: project} do
+    entry = %OutboxEntry{
+      entity_type: "issue",
+      operation: "update",
+      payload: %{"identifier" => "3984", "title" => "Updated title", "label_ids" => ["bug"]}
+    }
+
+    assert {:ok, "I_3984"} = SyncDriver.push(project, entry)
   end
 
   test "push of an issue delete calls delete_issue", %{project: project} do
