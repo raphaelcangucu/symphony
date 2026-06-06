@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { upsertIssue } from "@/components/board/board-utils";
 import { IssueCreateDialog } from "@/components/issues/IssueCreateDialog";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { workspaceBasePath } from "@/lib/workspaceRoutes";
@@ -31,7 +32,7 @@ export function NewIssueRoute() {
         if (!open) close();
       }}
       onCreated={(issue) => {
-        setIssues((current) => [...current, issue]);
+        setIssues((current) => upsertIssue(current, issue));
         close();
       }}
     />

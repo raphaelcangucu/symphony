@@ -1,6 +1,7 @@
 import { Settings } from "lucide-react";
 import { Navigate, Outlet, useNavigate, useParams } from "react-router-dom";
 
+import { upsertIssue } from "@/components/board/board-utils";
 import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
 import { ProjectAssistantMenu } from "@/components/layout/ProjectAssistantMenu";
@@ -53,7 +54,7 @@ function WorkspaceChrome() {
         onRefresh={() => void refetch()}
         refreshing={refreshing}
         pollingActive={pollingActive}
-        onIssueCreated={(issue) => setIssues((current) => [...current, issue])}
+        onIssueCreated={(issue) => setIssues((current) => upsertIssue(current, issue))}
       />
       <BoardPaletteShortcuts />
       <Outlet />

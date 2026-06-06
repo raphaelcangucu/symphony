@@ -7,6 +7,7 @@ import {
   findIssueStatus,
   flattenBoardState,
   moveIssueLocally,
+  upsertIssue,
 } from "@/components/board/board-utils";
 import type { IssueFilters } from "@/lib/issueFilters";
 import { applyIssueFilters } from "@/lib/issueFilters";
@@ -27,12 +28,6 @@ export interface UseIssueBoardResult {
   refetch: () => Promise<void>;
   moveIssueOptimistically: (identifier: string, status: WorkflowStatusName, position: number) => Promise<void>;
   setIssues: React.Dispatch<React.SetStateAction<Issue[]>>;
-}
-
-function upsertIssue(issues: Issue[], issue: Issue): Issue[] {
-  const index = issues.findIndex((item) => item.identifier === issue.identifier);
-  if (index === -1) return [...issues, issue];
-  return issues.map((item, itemIndex) => (itemIndex === index ? issue : item));
 }
 
 export function useIssueBoard(

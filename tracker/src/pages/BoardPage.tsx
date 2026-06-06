@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { BoardView } from "@/components/board/BoardView";
+import { upsertIssue } from "@/components/board/board-utils";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTrackerPolling } from "@/hooks/useTrackerPolling";
@@ -65,7 +66,7 @@ export function BoardPage() {
           statuses={statusNames}
           workflowStatuses={workflowStatuses}
           projectSlug={projectSlug}
-          onIssueCreated={(issue) => setIssues((current) => [...current, issue])}
+          onIssueCreated={(issue) => setIssues((current) => upsertIssue(current, issue))}
           onSelectIssue={openIssue}
           onMoveIssue={handleMoveIssue}
           collapsedStatuses={collapsed}

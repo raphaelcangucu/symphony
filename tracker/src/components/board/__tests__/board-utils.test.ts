@@ -6,6 +6,7 @@ import {
   buildBoardState,
   moveIssueLocally,
   parseDragIssueId,
+  upsertIssue,
 } from "../board-utils";
 
 function issue(overrides: Partial<Issue>): Issue {
@@ -92,5 +93,15 @@ describe("board-utils", () => {
     expect(parseDragIssueId("MAC-1")).toBe("MAC-1");
     expect(parseDragIssueId(null)).toBeNull();
     expect(parseDragIssueId("")).toBeNull();
+  });
+
+  it("appends new issues and replaces existing ones by identifier", () => {
+    const existing = [issue({ identifier: "MAC-1", title: "First" })];
+    const created = issue({ identifier: "MAC-2", title: "Second" });
+    const updated = issue({ identifier: "MAC-1", title: "First (edited)" });
+
+    expect(upsertIssue(existing, created).map((item) => item.identifier)).toEqual(["MAC-1", "MAC-2"]);
+    expect(upsertIssue(upsertIssue(existing, created), created)).toHaveLength(2);
+    expect(upsertIssue(existing, updated)).toEqual([updated]);
   });
 });

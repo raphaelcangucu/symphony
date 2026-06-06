@@ -98,3 +98,9 @@ export function moveIssueLocally(
 export function flattenBoardState(board: BoardState): Issue[] {
   return Object.keys(board).flatMap((status) => board[status]);
 }
+
+export function upsertIssue(issues: readonly Issue[], issue: Issue): Issue[] {
+  const index = issues.findIndex((item) => item.identifier === issue.identifier);
+  if (index === -1) return [...issues, issue];
+  return issues.map((item, itemIndex) => (itemIndex === index ? issue : item));
+}
