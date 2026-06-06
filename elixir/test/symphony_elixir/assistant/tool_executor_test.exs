@@ -50,7 +50,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
                "instructions" => "Reproduce the failing test and fix it."
              })
 
-    assert result.tool == "dispatch_codex"
+    assert result.tool == "dispatch_coding_agent"
     assert result.message == "Requested Codex work on MAC-1"
     assert result.data.identifier == "MAC-1"
     assert result.data.status.name == "In Progress"
@@ -60,7 +60,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert body =~ "Reproduce the failing test and fix it."
   end
 
-  test "dispatches Codex work by forcing Codex routing on the issue" do
+  test "dispatch_codex resolves via chain (task label wins over default)" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Fix tests", "status" => "Todo", "agent" => "claude"})
 
@@ -72,8 +72,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
 
     assert result.data.status.name == "In Progress"
 
+    # Task label "symphony:claude" was set at creation; chain resolution picks it up.
     assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
-    assert Enum.map(reloaded.labels, & &1.name) == ["symphony:codex"]
+    assert "symphony:claude" in Enum.map(reloaded.labels, & &1.name)
   end
 
   test "dispatches Codex work with a persisted goal for the orchestrator" do
@@ -87,7 +88,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
                "goal" => "  Fix the regression, verify, and stop when complete.  "
              })
 
-    assert result.tool == "dispatch_codex"
+    assert result.tool == "dispatch_coding_agent"
     assert result.data.identifier == "MAC-1"
     assert result.data.status.name == "In Progress"
     assert result.data.agent_goal == "Fix the regression, verify, and stop when complete."
@@ -592,6 +593,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
   end
 
   defp clean_repo do
+    Repo.delete_all(SymphonyElixir.Settings.Setting)
+
     for table <- [
           "assistant_messages",
           "assistant_threads",

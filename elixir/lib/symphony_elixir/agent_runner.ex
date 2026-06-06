@@ -4,7 +4,8 @@ defmodule SymphonyElixir.AgentRunner do
   """
 
   require Logger
-  alias SymphonyElixir.{CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
+  alias SymphonyElixir.{AgentPreference, CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
+  alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
@@ -17,9 +18,12 @@ defmodule SymphonyElixir.AgentRunner do
 
   @spec run(map(), pid() | nil, keyword()) :: :ok | no_return()
   def run(issue, codex_update_recipient \\ nil, opts \\ []) do
+    agent_kind = issue_agent_kind(issue)
+
     opts =
-      issue
-      |> issue_goal_opts(opts)
+      opts
+      |> issue_goal_opts(issue, agent_kind)
+      |> Keyword.put(:agent_kind, agent_kind)
       |> Keyword.put_new_lazy(:project_config, fn -> resolve_project_config(issue) end)
 
     Logger.info("Starting agent run for #{issue_context(issue)}")
@@ -70,9 +74,7 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp report_outcome(_recipient, _issue, _outcome), do: :ok
 
-  defp codex_message_handler(recipient, issue) do
-    agent_kind = issue_agent_kind(issue)
-
+  defp codex_message_handler(recipient, issue, agent_kind) do
     fn message ->
       normalized = CodingAgent.normalize_event(message, agent_kind)
       send_codex_update(recipient, issue, normalized)
@@ -80,19 +82,27 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   @spec issue_agent_kind(SymphonyElixir.Issue.t()) :: String.t()
-  def issue_agent_kind(%Issue{agent_kind: kind}) when is_binary(kind) and kind != "", do: kind
+  def issue_agent_kind(%Issue{} = issue) do
+    task_kind = AgentPreference.normalize(issue.agent_kind)
+    AgentPreference.resolve(task_labels(task_kind), project_agent_kind(issue))
+  end
 
-  def issue_agent_kind(%Issue{project_slug: slug}) when is_binary(slug) do
+  def issue_agent_kind(_issue), do: AgentPreference.resolve([], nil)
+
+  defp task_labels(nil), do: []
+  defp task_labels(kind), do: ["symphony:" <> kind]
+
+  defp project_agent_kind(%Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
     case Context.get_project(slug) do
       {:ok, project} ->
         project |> Repo.preload(:setup) |> ProjectConfig.resolve() |> Map.get(:agent_kind)
 
       {:error, _reason} ->
-        Config.default_agent_kind()
+        nil
     end
   end
 
-  def issue_agent_kind(_issue), do: Config.default_agent_kind()
+  defp project_agent_kind(_issue), do: nil
 
   @spec resolve_project_config(Issue.t()) :: ProjectConfig.t() | nil
   defp resolve_project_config(%Issue{project_slug: slug}) when is_binary(slug) do
@@ -104,11 +114,11 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp resolve_project_config(_issue), do: nil
 
-  defp issue_goal_opts(issue, opts) do
+  defp issue_goal_opts(opts, issue, agent_kind) do
     if Keyword.has_key?(opts, :goal) do
       opts
     else
-      maybe_put_issue_goal(opts, issue_agent_kind(issue), Map.get(issue, :agent_goal))
+      maybe_put_issue_goal(opts, agent_kind, Map.get(issue, :agent_goal))
     end
   end
 
@@ -130,19 +140,20 @@ defmodule SymphonyElixir.AgentRunner do
   defp send_codex_update(_recipient, _issue, _message), do: :ok
 
   defp agent_turn_opts(opts, agent_kind, codex_update_recipient, issue) do
-    Keyword.merge(opts, agent_kind: agent_kind, on_message: codex_message_handler(codex_update_recipient, issue))
+    Keyword.merge(opts, agent_kind: agent_kind, on_message: codex_message_handler(codex_update_recipient, issue, agent_kind))
   end
 
   defp run_codex_turns(workspace, issue, codex_update_recipient, opts) do
     max_turns = Keyword.get(opts, :max_turns, project_max_turns(Keyword.get(opts, :project_config)))
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
-    agent_kind = issue_agent_kind(issue)
+    agent_kind = Keyword.fetch!(opts, :agent_kind)
     workspace_root = Workspace.workspace_root_for(issue)
 
     session_opts =
       [workspace_root: workspace_root]
       |> maybe_put_codex_config(Keyword.get(opts, :project_config))
+      |> maybe_put_claude_tools(agent_kind, issue)
 
     with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, session_opts) do
       try do
@@ -187,10 +198,12 @@ defmodule SymphonyElixir.AgentRunner do
            ) do
       Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
 
+      advanced_session = maybe_advance_session(app_session, turn_session)
+
       case continue_with_issue?(issue, issue_state_fetcher, Keyword.get(opts, :project_config)) do
         {:continue, refreshed_issue} ->
           continue_or_stop_outer_turn_loop(
-            app_session,
+            advanced_session,
             workspace,
             refreshed_issue,
             codex_update_recipient,
@@ -331,6 +344,27 @@ defmodule SymphonyElixir.AgentRunner do
     Keyword.put(opts, :codex_config, InstanceConfig.codex_section())
   end
 
+  # Codex defaults its dynamic tools internally (see Codex.CodingAgent.start_session/2 →
+  # thread/start → dynamicTools: DynamicTool.coding_agent_tool_specs()).  The native
+  # Claude adapter takes them via session opts, so we inject them here to preserve
+  # spec §3.4 parity (set_issue_status / github_graphql / linear_graphql available in
+  # execution runs regardless of which adapter is active).
+  @doc false
+  @spec claude_session_opts(keyword(), String.t(), map()) :: keyword()
+  def claude_session_opts(session_opts, agent_kind, issue) do
+    maybe_put_claude_tools(session_opts, agent_kind, issue)
+  end
+
+  defp maybe_put_claude_tools(session_opts, "claude", issue) do
+    session_opts
+    |> Keyword.put(:dynamic_tools, DynamicTool.coding_agent_tool_specs())
+    |> Keyword.put(:tool_executor, fn tool, arguments ->
+      DynamicTool.execute(tool, arguments, issue: issue)
+    end)
+  end
+
+  defp maybe_put_claude_tools(session_opts, _agent_kind, _issue), do: session_opts
+
   defp project_max_turns(%ProjectConfig{max_turns: n}) when is_integer(n) and n > 0, do: n
   defp project_max_turns(_project_config), do: Config.agent_max_turns()
 
@@ -374,4 +408,10 @@ defmodule SymphonyElixir.AgentRunner do
   defp issue_context(%Issue{id: issue_id, identifier: identifier}) do
     "issue_id=#{issue_id} issue_identifier=#{identifier}"
   end
+
+  defp maybe_advance_session(session, %{cli_session_id: cli_session_id}) when is_binary(cli_session_id) do
+    Map.put(session, :cli_session_id, cli_session_id)
+  end
+
+  defp maybe_advance_session(session, _result), do: session
 end

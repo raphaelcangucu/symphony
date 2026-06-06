@@ -73,7 +73,7 @@ interface IssueDrawerProps {
   onArchive?: (issue: Issue) => void | Promise<void>;
   onDelete?: (issue: Issue) => void | Promise<void>;
   onForceSync?: (issue: Issue) => void | Promise<void>;
-  onIssueUpdated?: (issue: Issue) => void;
+  onIssueUpdated?: (updated: Issue) => void;
 }
 
 export function IssueDrawer({
@@ -399,7 +399,7 @@ export function IssueDrawer({
                 </TabsContent>
                 <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
                 <TabsContent value="agent" className="h-full min-h-0">
-                  <AgentTabs issue={issue} projectSlug={projectSlug} execution={execution} view={view} />
+                  <AgentTabs issue={issue} projectSlug={projectSlug} execution={execution} view={view} onIssueUpdated={onIssueUpdated} />
                 </TabsContent>
                 <TabsContent value="preview">
                   <PreviewTab

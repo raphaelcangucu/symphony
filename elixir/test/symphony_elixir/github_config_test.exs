@@ -201,5 +201,4 @@ defmodule SymphonyElixir.GitHub.ConfigTest do
       assert message =~ "Human Review"
     end
   end
-
 end

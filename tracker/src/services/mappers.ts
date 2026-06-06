@@ -1,14 +1,15 @@
 import type { Blocker, BlockerState, BlockerSummary } from "@/types/blocker";
 import type { Comment } from "@/types/comment";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import type {
-  AgentKind,
-  AgentOption,
-  Issue,
-  IssueAssigneeOption,
-  IssueFormOptions,
-  IssueLabelOption,
-  IssuePriority,
+import {
+  AGENT_KINDS,
+  type AgentKind,
+  type AgentOption,
+  type Issue,
+  type IssueAssigneeOption,
+  type IssueFormOptions,
+  type IssueLabelOption,
+  type IssuePriority,
 } from "@/types/issue";
 import type { Project, TrackerKind } from "@/types/project";
 import type { ProjectSetup, WorkspaceSuggestion } from "@/types/project-setup";
@@ -157,6 +158,8 @@ export interface BackendIssueDto {
   url?: string | null;
   branch_name?: string | null;
   branchName?: string | null;
+  agent_kind?: string | null;
+  agentKind?: string | null;
   inserted_at?: string | null;
   created_at?: string | null;
   createdAt?: string | null;
@@ -213,6 +216,10 @@ type BackendRealtimePayloadByEvent = {
 };
 
 export function normalizeIssue(dto: BackendIssueDto): Issue {
+  const rawAgentKind = dto.agentKind ?? dto.agent_kind ?? null;
+  const agentKind: AgentKind | null =
+    (AGENT_KINDS as readonly string[]).includes(rawAgentKind ?? "") ? (rawAgentKind as AgentKind) : null;
+
   return {
     id: String(dto.id),
     identifier: normalizeIssueIdentifier(dto.identifier),
@@ -228,6 +235,7 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     creator: dto.creator ?? null,
     url: dto.url ?? null,
     branchName: dto.branchName ?? dto.branch_name ?? null,
+    agentKind,
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };
@@ -258,14 +266,21 @@ export interface BackendIssueFormOptionsDto {
   assignees?: BackendAssigneeOptionDto[] | null;
   statuses?: BackendWorkflowStatusDto[] | null;
   agents?: BackendAgentOptionDto[] | null;
+  effective_agent?: string | null;
+  effectiveAgent?: string | null;
 }
 
 export function normalizeIssueFormOptions(dto: BackendIssueFormOptionsDto): IssueFormOptions {
+  const rawEffective = dto.effectiveAgent ?? dto.effective_agent ?? null;
+  const effectiveAgent: AgentKind =
+    (AGENT_KINDS as readonly string[]).includes(rawEffective ?? "") ? (rawEffective as AgentKind) : "codex";
+
   return {
     labels: (dto.labels ?? []).flatMap(normalizeLabelOption),
     assignees: (dto.assignees ?? []).map(normalizeAssigneeOption),
     statuses: (dto.statuses ?? []).map((status) => normalizeStatusName(status.name ?? null)),
     agents: (dto.agents ?? []).flatMap(normalizeAgentOption),
+    effectiveAgent,
   };
 }
 
@@ -285,7 +300,7 @@ function normalizeAssigneeOption(dto: BackendAssigneeOptionDto): IssueAssigneeOp
 }
 
 function normalizeAgentOption(dto: BackendAgentOptionDto): AgentOption[] {
-  if (dto.value !== "codex" && dto.value !== "claude") return [];
+  if (!(typeof dto.value === "string" && (AGENT_KINDS as readonly string[]).includes(dto.value))) return [];
   const value = dto.value as AgentKind;
   return [{ value, label: dto.label?.trim() || value, default: dto.default ?? false }];
 }

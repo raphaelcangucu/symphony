@@ -9,6 +9,7 @@ import {
   type BackendAssistantChatMessageDto,
   type UserQuestionsRequest,
 } from "@/services/assistant";
+import type { AgentKind } from "@/types/issue";
 
 export interface AssistantChannelHandlers {
   onHistoryLoaded: (messages: AssistantChatMessage[]) => void;
@@ -186,6 +187,17 @@ export function submitUserInput(
   answers: Record<string, string>,
 ): void {
   channel.push("submit_user_input", { request_id: requestId, answers });
+}
+
+export function dispatchCodingAgent(
+  channel: Channel,
+  options: { goalMode: boolean; agent?: AgentKind | null },
+): ReturnType<Channel["push"]> {
+  const payload: Record<string, unknown> = { goal_mode: options.goalMode };
+  if (options.agent != null) {
+    payload.agent = options.agent;
+  }
+  return channel.push("dispatch_coding_agent", payload);
 }
 
 function normalizeThreadId(value: number | string | null | undefined): number | null {

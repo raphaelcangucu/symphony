@@ -18,12 +18,13 @@ import { Markdown } from "@/components/ui/markdown";
 import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
+  catalogFor,
   defaultComposerSettings,
-  fallbackCodexCatalog,
-  type AssistantCodexCatalog,
+  fallbackCatalogBundle,
+  type AssistantCatalogBundle,
 } from "@/lib/assistantSettings";
 import {
-  fetchAssistantCodexCatalog,
+  fetchAssistantCatalogBundle,
   type AssistantChatMessage,
   type AssistantToolCall,
   type UserQuestion,
@@ -36,12 +37,14 @@ import {
   assistantThreadTopic,
   assistantTopic,
   bindAssistantEvents,
+  dispatchCodingAgent,
   submitUserInput,
   type AssistantDocumentChangedPayload,
   type AssistantIssueCreatedPayload,
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import type { AgentKind } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +77,7 @@ interface ProjectAssistantPanelProps {
   onIssueGoalModeError?: (message: string) => void;
   onDispatchSucceeded?: (message: string) => void;
   onDispatchError?: (message: string) => void;
+  onEffectiveAgentResolved?: (agent: AgentKind) => void;
   onOpenDocumentPath?: (path: string) => void;
   composerSeedMessage?: string | null;
 }
@@ -112,6 +116,7 @@ export function ProjectAssistantPanel({
   onIssueGoalModeError,
   onDispatchSucceeded,
   onDispatchError,
+  onEffectiveAgentResolved,
   onOpenDocumentPath,
   composerSeedMessage = null,
 }: ProjectAssistantPanelProps) {
@@ -125,11 +130,11 @@ export function ProjectAssistantPanel({
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<AssistantCodexCatalog | null>(null);
+  const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [channelReady, setChannelReady] = useState(false);
   const channelRef = useRef<Channel | null>(null);
-  const catalogRef = useRef<AssistantCodexCatalog | null>(null);
+  const bundleRef = useRef<AssistantCatalogBundle | null>(null);
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const lastConfirmedIssueModeRef = useRef<IssueAssistantMode | null>(null);
@@ -147,7 +152,7 @@ export function ProjectAssistantPanel({
     assistantMode ?? (projectSlug ? (issueIdentifier ? "project" : "project") : "freeform");
   const isExploreMode = resolvedAssistantMode === "explore";
 
-  catalogRef.current = catalog;
+  bundleRef.current = bundle;
 
   useEffect(() => {
     setRunningStartedAt((current) => {
@@ -160,25 +165,25 @@ export function ProjectAssistantPanel({
     if (!active) return;
 
     if (!projectSlug) {
-      setCatalog(fallbackCodexCatalog());
+      setBundle(fallbackCatalogBundle());
       setCatalogError(null);
       return;
     }
 
     let cancelled = false;
-    setCatalog(null);
+    setBundle(null);
     setCatalogError(null);
 
-    void fetchAssistantCodexCatalog(projectSlug)
-      .then((nextCatalog) => {
+    void fetchAssistantCatalogBundle(projectSlug)
+      .then((nextBundle) => {
         if (!cancelled) {
-          setCatalog(nextCatalog);
+          setBundle(nextBundle);
           setCatalogError(null);
         }
       })
       .catch((cause) => {
         if (!cancelled) {
-          setCatalogError(cause instanceof Error ? cause.message : "Failed to load Codex CLI models.");
+          setCatalogError(cause instanceof Error ? cause.message : "Failed to load assistant models.");
         }
       });
 
@@ -241,6 +246,8 @@ export function ProjectAssistantPanel({
       onAssistantIssueCreated: onIssueCreated,
       onSteerFailed: ({ message }) => {
         if (!message) return;
+        const activeBundle = bundleRef.current ?? fallbackCatalogBundle();
+        const activeCatalog = catalogFor(activeBundle, activeBundle.defaultAgent);
         setQueued((current) => [
           ...current,
           {
@@ -248,7 +255,8 @@ export function ProjectAssistantPanel({
             payload: {
               kind: "message",
               message,
-              settings: defaultComposerSettings(catalogRef.current ?? fallbackCodexCatalog()),
+              agent: activeBundle.defaultAgent,
+              settings: defaultComposerSettings(activeCatalog),
               attachments: [],
             },
           },
@@ -282,6 +290,9 @@ export function ProjectAssistantPanel({
         lastConfirmedGoalModeRef.current = hydratedGoalMode;
         if (hydratedGoalMode) onIssueGoalModeChanged?.(true);
       }
+
+      const agent = effectiveAgentFromResponse(response);
+      if (agent) onEffectiveAgentResolved?.(agent);
     });
     joinPush.receive("error", (reason) => {
       setConnectionError(errorMessage(reason));
@@ -294,7 +305,7 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, isExploreMode, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onIssueCreated, onIssueGoalModeChanged, onIssueModeChanged, projectSlug, threadId]);
+  }, [active, isExploreMode, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onEffectiveAgentResolved, onIssueCreated, onIssueGoalModeChanged, onIssueModeChanged, projectSlug, threadId]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;
@@ -362,7 +373,8 @@ export function ProjectAssistantPanel({
     if (!channel) return;
 
     lastDispatchRequestRef.current = dispatchRequestId;
-    const pushResult = channel.push("dispatch_codex", { goal_mode: issueGoalMode === true });
+    // Agent intentionally omitted — the server resolves task > project > user at dispatch.
+    const pushResult = dispatchCodingAgent(channel, { goalMode: issueGoalMode === true });
     pushResult.receive("ok", (response) => {
       onDispatchSucceeded?.(messageFromResponse(response) ?? "Dispatched to Codex.");
     });
@@ -390,7 +402,7 @@ export function ProjectAssistantPanel({
         message: trimmed || fallbackAttachmentMessage(submit.attachments),
         context: {
           view,
-          agent: "codex",
+          agent: submit.agent,
           model: submit.settings.model,
           effort: submit.settings.effort,
         },
@@ -495,12 +507,14 @@ export function ProjectAssistantPanel({
     async (message: AppendMessage) => {
       const firstPart = message.content[0];
       if (firstPart?.type !== "text") throw new Error("Only text assistant messages are supported");
-      const activeCatalog = catalogRef.current;
-      if (!activeCatalog) return;
+      const activeBundle = bundleRef.current;
+      if (!activeBundle) return;
 
+      const activeCatalog = catalogFor(activeBundle, activeBundle.defaultAgent);
       sendMessage({
         kind: "message",
         message: firstPart.text,
+        agent: activeBundle.defaultAgent,
         settings: defaultComposerSettings(activeCatalog),
         attachments: [],
       });
@@ -521,7 +535,7 @@ export function ProjectAssistantPanel({
     const observer = new ResizeObserver(updateHeight);
     observer.observe(dock);
     return () => observer.disconnect();
-  }, [isFullPageProjectAssistant, catalog, catalogError]);
+  }, [isFullPageProjectAssistant, bundle, catalogError]);
 
   useEffect(() => {
     if (!isPanelMode) return;
@@ -609,10 +623,10 @@ export function ProjectAssistantPanel({
   ) : null;
 
   const composerNode =
-    catalog || catalogError ? (
+    bundle || catalogError ? (
       <AssistantComposer
         projectSlug={projectSlug ?? ""}
-        catalog={catalog ?? fallbackCodexCatalog()}
+        bundle={bundle ?? fallbackCatalogBundle()}
         disabled={isRunning}
         floating={isFullPageProjectAssistant}
         hasQueued={queued.length > 0}
@@ -644,9 +658,9 @@ export function ProjectAssistantPanel({
                 {isExploreMode
                   ? `Ask questions about the codebase in \`${projectSlug}\` (default branches).`
                   : projectSlug
-                    ? `Codex CLI assistant for \`${projectSlug}\`.`
-                    : "Codex CLI assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
-                {catalog ? ` Models from \`${catalog.command}\`.` : null}
+                    ? `AI coding assistant for \`${projectSlug}\`.`
+                    : "AI coding assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
+                {bundle ? ` Models from \`${catalogFor(bundle, bundle.defaultAgent).command}\`.` : null}
               </p>
             )}
           </div>
@@ -672,7 +686,7 @@ export function ProjectAssistantPanel({
                   {questionsNode}
                   {composerNode ?? (
                     <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
-                      Loading Codex CLI models...
+                      Loading assistant models...
                     </div>
                   )}
                   {catalogError ? (
@@ -688,7 +702,7 @@ export function ProjectAssistantPanel({
                 {questionsNode}
                 {composerNode ?? (
                   <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
-                    Loading Codex CLI models...
+                    Loading assistant models...
                   </div>
                 )}
                 {catalogError ? (
@@ -701,7 +715,7 @@ export function ProjectAssistantPanel({
               {queuedChips}
               {questionsNode}
               {composerNode ?? (
-                <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading Codex CLI models...</div>
+                <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading assistant models...</div>
               )}
               {catalogError ? (
                 <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
@@ -730,8 +744,8 @@ export function ProjectAssistantPanel({
             <SheetTitle>{projectSlug ? "Project assistant" : "Freeform assistant"}</SheetTitle>
             <SheetDescription>
               {projectSlug
-                ? `Codex CLI assistant for \`${projectSlug}\`.`
-                : "Codex CLI assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
+                ? `AI coding assistant for \`${projectSlug}\`.`
+                : "AI coding assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
             </SheetDescription>
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col">
@@ -739,7 +753,7 @@ export function ProjectAssistantPanel({
             {queuedChips}
             {questionsNode}
             {composerNode ?? (
-              <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading Codex CLI models...</div>
+              <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading assistant models...</div>
             )}
             {catalogError ? (
               <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
@@ -1014,6 +1028,13 @@ function goalModeFromResponse(response: unknown): boolean | null {
   if (!response || typeof response !== "object") return null;
   const value = (response as Record<string, unknown>).goal_mode;
   return typeof value === "boolean" ? value : null;
+}
+
+function effectiveAgentFromResponse(response: unknown): AgentKind | null {
+  if (!response || typeof response !== "object") return null;
+  const value = (response as Record<string, unknown>).effective_agent;
+  if (value === "claude" || value === "codex") return value;
+  return null;
 }
 
 function messageFromResponse(response: unknown): string | null {

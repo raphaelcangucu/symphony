@@ -24,30 +24,36 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import {
+  catalogFor,
+  defaultComposerSettings,
   effortLabel,
   effortsForModel,
-  loadAssistantComposerSettings,
+  loadComposerState,
   modelLabel,
   normalizeEffort,
-  saveAssistantComposerSettings,
-  type AssistantCodexCatalog,
+  saveComposerState,
+  type AssistantAgentCatalog,
+  type AssistantCatalogBundle,
   type AssistantComposerSettings,
+  type AssistantComposerState,
   type AssistantEffort,
 } from "@/lib/assistantSettings";
 import { cn } from "@/lib/utils";
+import type { AgentKind } from "@/types/issue";
 
 export type AssistantComposerSubmitKind = "message" | "infer" | "btw";
 
 export interface AssistantComposerSubmit {
   kind: AssistantComposerSubmitKind;
   message: string;
+  agent: AgentKind;
   settings: AssistantComposerSettings;
   attachments: ReturnType<typeof serializeAttachments>;
 }
 
 interface AssistantComposerProps {
   projectSlug: string;
-  catalog: AssistantCodexCatalog;
+  bundle: AssistantCatalogBundle;
   disabled?: boolean;
   floating?: boolean;
   hasQueued?: boolean;
@@ -58,7 +64,7 @@ interface AssistantComposerProps {
 
 export function AssistantComposer({
   projectSlug,
-  catalog,
+  bundle,
   disabled = false,
   floating = false,
   hasQueued = false,
@@ -69,7 +75,7 @@ export function AssistantComposer({
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [settings, setSettings] = useState(() => loadAssistantComposerSettings(catalog));
+  const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(bundle));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recordingRef = useRef(false);
   const speech = useSpeechRecognition();
@@ -82,23 +88,37 @@ export function AssistantComposer({
   } = speech;
   const recording = speechListening;
 
-  const selectedModel =
-    catalog.models.find((model) => model.model === settings.model) ?? catalog.models[0];
+  // Derive per-agent catalog and settings
+  const catalog = catalogFor(bundle, composerState.agent);
+  const settings: AssistantComposerSettings =
+    composerState.byAgent[composerState.agent] ?? defaultComposerSettings(catalog);
+
   const effortOptions = effortsForModel(catalog, settings.model);
 
+  // Persist on every state change
   useEffect(() => {
-    saveAssistantComposerSettings(settings);
-  }, [settings]);
+    saveComposerState(composerState);
+  }, [composerState]);
 
+  // When bundle changes, re-validate current model against the catalog for active agent
   useEffect(() => {
-    setSettings((current) => {
-      const modelOption = catalog.models.find((model) => model.model === current.model) ?? catalog.models[0];
+    setComposerState((current) => {
+      const activeCatalog = catalogFor(bundle, current.agent);
+      const currentSettings = current.byAgent[current.agent] ?? defaultComposerSettings(activeCatalog);
+      const modelOption =
+        activeCatalog.models.find((m) => m.model === currentSettings.model) ?? activeCatalog.models[0];
       return {
-        model: modelOption.model,
-        effort: normalizeEffort(modelOption, current.effort),
+        ...current,
+        byAgent: {
+          ...current.byAgent,
+          [current.agent]: {
+            model: modelOption.model,
+            effort: normalizeEffort(modelOption, currentSettings.effort),
+          },
+        },
       };
     });
-  }, [catalog]);
+  }, [bundle]);
 
   useEffect(() => {
     if (!seedMessage?.trim()) return;
@@ -120,16 +140,57 @@ export function AssistantComposer({
   const paletteCommands = matchingSlashCommands(input);
   const showPalette = paletteCommands.length > 0 && input.trim().split(" ").length === 1;
 
+  function updateAgent(agent: AgentKind) {
+    setComposerState((current) => {
+      const nextCatalog = catalogFor(bundle, agent);
+      // If no saved settings for this agent, seed with defaults
+      const nextSettings = current.byAgent[agent] ?? defaultComposerSettings(nextCatalog);
+      return {
+        ...current,
+        agent,
+        byAgent: {
+          ...current.byAgent,
+          [agent]: nextSettings,
+        },
+      };
+    });
+  }
+
   function updateModel(model: string) {
-    const modelOption = catalog.models.find((entry) => entry.model === model) ?? catalog.models[0];
-    setSettings({
-      model: modelOption.model,
-      effort: normalizeEffort(modelOption, settings.effort),
+    setComposerState((current) => {
+      const activeCatalog = catalogFor(bundle, current.agent);
+      const modelOption = activeCatalog.models.find((entry) => entry.model === model) ?? activeCatalog.models[0];
+      const currentSettings = current.byAgent[current.agent] ?? defaultComposerSettings(activeCatalog);
+      return {
+        ...current,
+        byAgent: {
+          ...current.byAgent,
+          [current.agent]: {
+            model: modelOption.model,
+            effort: normalizeEffort(modelOption, currentSettings.effort),
+          },
+        },
+      };
     });
   }
 
   function updateEffort(effort: AssistantEffort) {
-    setSettings((current) => ({ ...current, effort: normalizeEffort(selectedModel, effort) }));
+    setComposerState((current) => {
+      const activeCatalog = catalogFor(bundle, current.agent);
+      const currentSettings = current.byAgent[current.agent] ?? defaultComposerSettings(activeCatalog);
+      const modelOption =
+        activeCatalog.models.find((m) => m.model === currentSettings.model) ?? activeCatalog.models[0];
+      return {
+        ...current,
+        byAgent: {
+          ...current.byAgent,
+          [current.agent]: {
+            ...currentSettings,
+            effort: normalizeEffort(modelOption, effort),
+          },
+        },
+      };
+    });
   }
 
   async function handleImagePick(event: React.ChangeEvent<HTMLInputElement>) {
@@ -168,6 +229,7 @@ export function AssistantComposer({
     onSubmit({
       kind: parsed.kind,
       message: parsed.kind === "message" ? input : parsed.argument,
+      agent: composerState.agent,
       settings,
       attachments: serializeAttachments(attachments),
     });
@@ -324,23 +386,28 @@ export function AssistantComposer({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-1">
-            <span className="rounded-md border bg-muted/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {catalog.agentLabel}
-            </span>
+            <AgentMenu
+              bundle={bundle}
+              agent={composerState.agent}
+              disabled={disabled}
+              onChange={updateAgent}
+            />
             <ModelMenu
               catalog={catalog}
               model={settings.model}
               disabled={disabled}
               onChange={updateModel}
             />
-            <EffortMenu
-              catalog={catalog}
-              model={settings.model}
-              effort={settings.effort}
-              options={effortOptions}
-              disabled={disabled}
-              onChange={updateEffort}
-            />
+            {effortOptions.length > 0 ? (
+              <EffortMenu
+                catalog={catalog}
+                model={settings.model}
+                effort={settings.effort}
+                options={effortOptions}
+                disabled={disabled}
+                onChange={updateEffort}
+              />
+            ) : null}
             <Button
               type="button"
               variant="ghost"
@@ -388,13 +455,48 @@ export function AssistantComposer({
   );
 }
 
+function AgentMenu({
+  bundle,
+  agent,
+  disabled,
+  onChange,
+}: {
+  bundle: AssistantCatalogBundle;
+  agent: AgentKind;
+  disabled?: boolean;
+  onChange: (agent: AgentKind) => void;
+}) {
+  const current = catalogFor(bundle, agent);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
+          {current.agentLabel}
+          <ChevronDown className="h-3 w-3 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Agent</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value={agent} onValueChange={(v) => onChange(v as AgentKind)}>
+          {bundle.agents.map((catalog) => (
+            <DropdownMenuRadioItem key={catalog.agent} value={catalog.agent}>
+              {catalog.agentLabel}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function ModelMenu({
   catalog,
   model,
   disabled,
   onChange,
 }: {
-  catalog: AssistantCodexCatalog;
+  catalog: AssistantAgentCatalog;
   model: string;
   disabled?: boolean;
   onChange: (model: string) => void;
@@ -430,7 +532,7 @@ function EffortMenu({
   disabled,
   onChange,
 }: {
-  catalog: AssistantCodexCatalog;
+  catalog: AssistantAgentCatalog;
   model: string;
   effort: AssistantEffort;
   options: ReturnType<typeof effortsForModel>;

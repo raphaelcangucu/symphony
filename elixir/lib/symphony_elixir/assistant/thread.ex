@@ -17,7 +17,9 @@ defmodule SymphonyElixir.Assistant.Thread do
     :codex_thread_id,
     :workspace_path,
     :status,
-    :metadata
+    :metadata,
+    :agent_kind,
+    :agent_thread_ids
   ]
 
   schema "assistant_threads" do
@@ -29,6 +31,8 @@ defmodule SymphonyElixir.Assistant.Thread do
     field(:workspace_path, :string)
     field(:status, :string, default: "active")
     field(:metadata, :map, default: %{})
+    field(:agent_kind, :string)
+    field(:agent_thread_ids, :map, default: %{})
 
     has_many(:messages, Message, foreign_key: :thread_id)
 

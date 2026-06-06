@@ -4,19 +4,14 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
   """
 
   alias Ecto.Association.NotLoaded
-  alias SymphonyElixir.{AgentRouting, Config, Issue}
+  alias SymphonyElixir.{AgentRouting, Issue}
   alias SymphonyElixir.LocalTracker.{Comment, IssueRecord, IssueRelation, Label, Project, WorkflowStatus}
 
   @spec to_issue(IssueRecord.t()) :: Issue.t()
   def to_issue(%IssueRecord{} = record) do
     label_names = label_names(record)
 
-    agent_kind =
-      AgentRouting.resolve_agent_kind(
-        label_names,
-        Config.configured_agent_kinds(),
-        Config.default_agent_kind()
-      )
+    agent_kind = AgentRouting.label_agent_kind(label_names)
 
     %Issue{
       id: to_string(record.id),

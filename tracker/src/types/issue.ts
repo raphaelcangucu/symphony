@@ -68,9 +68,11 @@ export interface Issue {
   branchName: string | null;
   createdAt: string;
   updatedAt: string;
+  agentKind?: AgentKind | null;
 }
 
-export type AgentKind = "codex" | "claude";
+export const AGENT_KINDS = ["codex", "claude"] as const;
+export type AgentKind = (typeof AGENT_KINDS)[number];
 
 export interface IssueLabelOption {
   id: string | null;
@@ -96,6 +98,7 @@ export interface IssueFormOptions {
   assignees: IssueAssigneeOption[];
   statuses: WorkflowStatusName[];
   agents: AgentOption[];
+  effectiveAgent: AgentKind;
 }
 
 export interface CreateIssueInput {

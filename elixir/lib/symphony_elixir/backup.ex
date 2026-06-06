@@ -171,6 +171,7 @@ defmodule SymphonyElixir.Backup do
 
   @spec human_bytes(non_neg_integer()) :: String.t()
   def human_bytes(bytes) when bytes < 1024, do: "#{bytes} B"
+
   def human_bytes(bytes) do
     kb = bytes / 1024
 
@@ -273,9 +274,7 @@ defmodule SymphonyElixir.Backup do
         0
 
       sqlite3 ->
-        case System.cmd(sqlite3, [path, "SELECT COUNT(*) FROM local_tracker_projects;"],
-               stderr_to_stdout: true
-             ) do
+        case System.cmd(sqlite3, [path, "SELECT COUNT(*) FROM local_tracker_projects;"], stderr_to_stdout: true) do
           {output, 0} ->
             case Integer.parse(String.trim(output)) do
               {count, _} -> count

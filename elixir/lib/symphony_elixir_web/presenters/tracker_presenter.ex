@@ -13,6 +13,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   }
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.AgentRouting
   alias SymphonyElixir.Tracker.ExternalUrl
   alias SymphonyElixir.Tracker.IssueDTO
 
@@ -102,6 +103,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       project_slug: dto.project_slug,
       status: dto.status,
       labels: dto.labels,
+      agent_kind: AgentRouting.label_agent_kind(dto.labels),
       blocked_by: dto.blocked_by,
       started_at: nil,
       completed_at: nil,

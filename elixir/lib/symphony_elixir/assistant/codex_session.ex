@@ -2,10 +2,11 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
 
   alias SymphonyElixir.Assistant.{History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolCallPresenter, ToolExecutor}
-  alias SymphonyElixir.Codex.{CodingAgent, DynamicTool}
+  alias SymphonyElixir.Codex.DynamicTool
+  alias SymphonyElixir.CodingAgent, as: RootCodingAgent
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
-  alias SymphonyElixir.{InstanceConfig, ProjectConfig, Repo, Skills, Workspace}
+  alias SymphonyElixir.{AgentPreference, InstanceConfig, ProjectConfig, Repo, Settings, Skills, Workspace}
 
   @history_limit 20
 
@@ -24,10 +25,12 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          {:ok, thread} <- History.ensure_thread(project_slug, %{workspace_path: workspace}),
          {:ok, history_before_turn} <- History.list_messages(project_slug),
          {:ok, user_message} <- History.append_message(thread, %{role: "user", content: trimmed_message, metadata: stringify_map(context)}),
+         agent_kind = resolve_thread_agent(thread, context),
+         opts = opts |> Keyword.put(:agent_kind, agent_kind) |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind)),
          prompt <- build_prompt(project_slug, trimmed_message, context, history_before_turn),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
-         {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
+         {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
       assistant_payload = History.message_payload(assistant_message)
 
@@ -47,6 +50,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           {:ok, turn_result()} | {:error, term()}
   def send_message_to_thread(%{scope: "freeform", id: thread_id} = thread, message, context, opts \\ [])
       when is_binary(message) and is_map(context) and is_list(opts) do
+    # Reload so that agent_thread_ids written by a prior turn (e.g. the claude cli_session_id)
+    # are visible even when the caller holds a frozen struct from an earlier socket assign.
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
+    agent_kind = resolve_thread_agent(thread, context)
+
+    opts =
+      opts
+      |> Keyword.put(:agent_kind, agent_kind)
+      |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+
     with {:ok, trimmed} <- normalize_message(message),
          workspace <- freeform_workspace(thread_id, opts),
          :ok <- File.mkdir_p(workspace),
@@ -57,7 +70,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          prompt <- build_freeform_prompt(trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_freeform_turn(workspace, prompt, opts),
-         {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
+         {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result),
          :ok <- maybe_notify_thread_documents(thread_id, docs_before, opts) do
       {:ok,
@@ -81,6 +94,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         opts \\ []
       )
       when is_binary(message) and is_map(context) and is_list(opts) do
+    # Reload so that agent_thread_ids written by a prior turn are visible even
+    # when the caller holds a frozen struct from an earlier socket assign.
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
+    agent_kind = resolve_thread_agent(thread, context)
+
+    opts =
+      opts
+      |> Keyword.put(:agent_kind, agent_kind)
+      |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+
     with {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_project_explore_workspace(project_slug, thread, opts),
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
@@ -89,7 +112,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          prompt <- build_project_explore_prompt(project_slug, trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_project_explore_turn(workspace, prompt, project_slug, opts),
-         {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
+         {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
       {:ok,
        %{
@@ -112,6 +135,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         opts \\ []
       )
       when is_binary(message) and is_map(context) and is_list(opts) do
+    # Reload so that agent_thread_ids written by a prior turn are visible even
+    # when the caller holds a frozen struct from an earlier socket assign.
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
+    agent_kind = resolve_thread_agent(thread, context)
+
+    opts =
+      opts
+      |> Keyword.put(:agent_kind, agent_kind)
+      |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+
     with {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_issue_workspace(thread),
          docs_before <- doc_fingerprint(identifier),
@@ -121,7 +154,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          prompt <- build_issue_prompt(thread, trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, identifier, opts),
-         {:ok, updated_thread} <- maybe_update_codex_thread(thread, runner_result),
+         {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result),
          :ok <- maybe_notify_documents(identifier, docs_before, opts) do
       {:ok,
@@ -447,7 +480,17 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp default_runner(workspace, prompt, issue, opts) do
-    with {:ok, session} <- CodingAgent.start_session(workspace, opts) do
+    agent_kind = Keyword.get(opts, :agent_kind)
+
+    with {:ok, session} <- RootCodingAgent.start_session(workspace, agent_kind, opts) do
+      # Resume a claude session if a prior backend thread id is known.
+      # For codex sessions the map gets an extra key that Codex.CodingAgent ignores harmlessly.
+      session =
+        case Keyword.get(opts, :agent_thread_id) do
+          id when is_binary(id) -> Map.put(session, :cli_session_id, id)
+          _ -> session
+        end
+
       {:ok, collector} = Agent.start_link(fn -> %{assistant_message: "", tool_calls: []} end)
 
       try do
@@ -461,13 +504,13 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           end
         end
 
-        case CodingAgent.run_turn(session, prompt, issue, Keyword.put(opts, :on_message, on_message)) do
+        case RootCodingAgent.run_turn(session, prompt, issue, Keyword.put(opts, :on_message, on_message)) do
           {:ok, result} ->
             collected = Agent.get(collector, & &1)
 
             {:ok,
              result
-             |> Map.put(:assistant_message, fallback_assistant_message(collected.assistant_message))
+             |> Map.put(:assistant_message, fallback_assistant_message(collected.assistant_message, agent_kind))
              |> Map.put(:tool_calls, collected.tool_calls)}
 
           {:error, reason} ->
@@ -475,7 +518,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         end
       after
         Agent.stop(collector)
-        CodingAgent.stop_session(session)
+        RootCodingAgent.stop_session(session, Keyword.get(opts, :agent_kind))
       end
     end
   end
@@ -511,6 +554,59 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           questions: Map.get(message, :questions) || []
         })
 
+      # The Claude adapter streams partial assistant text as item/progress deltas.
+      # Forward them for live token streaming in the UI. The persisted message is
+      # assembled from the final item/created text item below, so we don't accumulate
+      # the delta into the collector here (that would double the text).
+      Map.get(message, :event) == :notification and method == "item/progress" ->
+        delta = get_in(payload, ["params", "delta", "text"]) || get_in(payload, [:params, :delta, :text])
+
+        if is_binary(delta) and delta != "" do
+          maybe_call(opts, :on_assistant_delta, delta)
+        end
+
+      # Claude adapter emits tool activity as :notification events with method "item/created".
+      # Route tool_call items through the same upsert/callback path as :tool_call_started,
+      # and tool_result items through the :tool_call_completed path, so chips reach the relay.
+      Map.get(message, :event) == :notification and method == "item/created" ->
+        item = get_in(payload, ["params", "item"]) || get_in(payload, [:params, :item]) || %{}
+        item_type = Map.get(item, "type") || Map.get(item, :type)
+
+        cond do
+          item_type == "tool_call" ->
+            id = Map.get(item, "tool_use_id") || Map.get(item, :tool_use_id)
+            raw_name = Map.get(item, "name") || Map.get(item, :name) || "unknown"
+            name = String.replace_prefix(raw_name, "mcp__symphony__", "")
+            input = Map.get(item, "input") || Map.get(item, :input) || %{}
+            tool_call = %{name: name, status: "running", arguments: input, output: nil, result: %{}, id: id}
+            Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call(state.tool_calls, tool_call)} end)
+            maybe_call(opts, :on_tool_call_started, tool_call)
+
+          item_type == "tool_result" ->
+            id = Map.get(item, "tool_use_id") || Map.get(item, :tool_use_id)
+            content = Map.get(item, "content") || Map.get(item, :content) || ""
+            is_error = Map.get(item, "is_error") || Map.get(item, :is_error) || false
+            status = if is_error, do: "error", else: "complete"
+            tool_call = %{name: nil, status: status, arguments: nil, output: content, result: %{}, id: id}
+            Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, id, tool_call)} end)
+            maybe_call(opts, :on_tool_call_completed, tool_call)
+
+          # The Claude adapter delivers finalized assistant text as an item/created
+          # "text" item (the authoritative full text of a message block). Accumulate it
+          # so the reply reaches the persisted assistant message. Live token streaming
+          # is handled separately via "item/progress" deltas, so we do NOT also append
+          # those here (that would double the text).
+          item_type == "text" ->
+            text = Map.get(item, "text") || Map.get(item, :text) || ""
+
+            if is_binary(text) and text != "" do
+              Agent.update(collector, fn state -> %{state | assistant_message: state.assistant_message <> text} end)
+            end
+
+          true ->
+            :ok
+        end
+
       true ->
         :ok
     end
@@ -542,7 +638,10 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   defp tool_call_from_payload(payload, event, result) do
     params = Map.get(payload, "params") || Map.get(payload, :params) || %{}
-    name = Map.get(params, "name") || Map.get(params, "tool") || Map.get(params, :name) || Map.get(params, :tool) || "unknown"
+    raw_name = Map.get(params, "name") || Map.get(params, "tool") || Map.get(params, :name) || Map.get(params, :tool) || "unknown"
+    # Strip the MCP gateway prefix that the Claude adapter emits for tools registered
+    # via the ToolGateway. Codex names are unaffected (no-op for names without the prefix).
+    name = String.replace_prefix(raw_name, "mcp__symphony__", "")
 
     %{
       name: name,
@@ -562,6 +661,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     [tool_call | Enum.reject(tool_calls, &(Map.get(&1, :name) == Map.get(tool_call, :name)))]
     |> Enum.reverse()
   end
+
+  # Upsert by tool_use_id for claude notification-based tool results, merging into the
+  # existing started entry (preserving :name and :arguments from the started event).
+  defp upsert_tool_call_by_id(tool_calls, id, update) when is_binary(id) do
+    {matched, rest} = Enum.split_with(tool_calls, &(Map.get(&1, :id) == id))
+    merged = Map.merge(List.first(matched) || %{}, Map.reject(update, fn {_k, v} -> is_nil(v) end))
+    Enum.reverse([merged | Enum.reverse(rest)])
+  end
+
+  defp upsert_tool_call_by_id(tool_calls, _id, update), do: upsert_tool_call(tool_calls, update)
 
   defp maybe_call(opts, key, payload) do
     case Keyword.get(opts, key) do
@@ -652,12 +761,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
-  defp fallback_assistant_message(message) do
+  defp fallback_assistant_message(message, agent_kind) do
     case String.trim(message) do
-      "" -> "Codex completed the turn without returning assistant text."
+      "" -> "#{agent_label(agent_kind)} completed the turn without returning assistant text."
       trimmed -> trimmed
     end
   end
+
+  defp agent_label("claude"), do: "Claude"
+  defp agent_label("codex"), do: "Codex"
+  defp agent_label(_), do: "The agent"
 
   defp normalize_runner_result({:ok, result}) when is_map(result) do
     assistant_message = Map.get(result, :assistant_message) || Map.get(result, "assistant_message")
@@ -668,6 +781,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          assistant_message: assistant_message,
          tool_calls: Map.get(result, :tool_calls) || Map.get(result, "tool_calls") || [],
          codex_thread_id: Map.get(result, :codex_thread_id) || Map.get(result, "codex_thread_id") || Map.get(result, :thread_id),
+         cli_session_id: Map.get(result, :cli_session_id) || Map.get(result, "cli_session_id"),
          turn_id: Map.get(result, :turn_id) || Map.get(result, "turn_id")
        }}
     else
@@ -678,14 +792,48 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   defp normalize_runner_result({:error, reason}), do: {:error, reason}
   defp normalize_runner_result(_other), do: {:error, :invalid_runner_result}
 
-  defp maybe_update_codex_thread(thread, runner_result) do
-    case Map.get(runner_result, :codex_thread_id) do
-      codex_thread_id when is_binary(codex_thread_id) and codex_thread_id != "" ->
-        History.update_thread(thread, %{codex_thread_id: codex_thread_id})
+  # Replaces the legacy maybe_update_codex_thread/2.
+  # Persists the backend session/thread id for the resolved agent kind and updates
+  # the thread's agent_kind when something meaningful happened:
+  #   - backend returned a session/thread id → persist kind + id
+  #   - agent kind changed vs what the thread had stored → persist kind only
+  #   - nothing changed, no id returned → no write (preserves O(0) writes for
+  #     fast stub runners and avoids timing regressions in tests)
+  defp maybe_update_agent_thread(thread, runner_result, agent_kind) do
+    backend_id =
+      Map.get(runner_result, :codex_thread_id) || Map.get(runner_result, "codex_thread_id") ||
+        Map.get(runner_result, :cli_session_id) || Map.get(runner_result, :thread_id)
 
-      _ ->
+    stored_kind = Map.get(thread, :agent_kind)
+
+    cond do
+      is_binary(backend_id) ->
+        # Backend returned a session/thread id: persist both the agent kind and the id.
+        with {:ok, thread} <- History.set_thread_agent(thread, agent_kind) do
+          History.put_agent_thread_id(thread, agent_kind, backend_id)
+        end
+
+      stored_kind != agent_kind and is_binary(stored_kind) ->
+        # Agent kind was previously stored as something different: update it.
+        # (stored_kind == nil means the thread has never had an agent set — we skip
+        # writing the default to avoid unnecessary writes on every new thread's first turn.)
+        History.set_thread_agent(thread, agent_kind)
+
+      true ->
+        # Nothing to persist — no backend id and kind is unchanged or unset default.
         {:ok, thread}
     end
+  end
+
+  # Resolves the effective agent kind for a turn with the priority chain:
+  # context (per-message) > thread's stored kind > operator settings default > "codex".
+  # Project tier is intentionally absent here: the channel join sends an
+  # effective_agent that includes it, and the composer echoes it back as
+  # context.agent — so the project preference arrives via the context head.
+  defp resolve_thread_agent(thread, context) do
+    AgentPreference.normalize(Map.get(context, "agent") || Map.get(context, :agent)) ||
+      AgentPreference.normalize(Map.get(thread, :agent_kind)) ||
+      Settings.Agents.default_agent_kind()
   end
 
   defp persist_assistant_message(thread, runner_result) do

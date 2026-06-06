@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.Config
+  alias SymphonyElixir.{AgentPreference, ProjectConfig, Repo}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.IssueAdapter
@@ -36,7 +36,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
           labels: Enum.map(labels, &present_label/1),
           assignees: Enum.map(users, &present_user/1),
           statuses: Enum.map(statuses, &TrackerPresenter.status/1),
-          agents: agent_options()
+          agents: agent_options(),
+          effective_agent: effective_agent(project)
         }
       })
     else
@@ -79,11 +80,15 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       |> Map.drop(["project_slug", "id"])
       |> normalize_update_attrs()
 
-    with {:ok, project} <- Context.get_project(project_slug),
-         {:ok, issue} <- IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
-      json(conn, %{data: TrackerPresenter.issue(issue)})
+    if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", nil] do
+      TrackerErrors.validation(conn, "agent must be codex, claude, or null")
     else
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+      with {:ok, project} <- Context.get_project(project_slug),
+           {:ok, issue} <- IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
+        json(conn, %{data: TrackerPresenter.issue(issue)})
+      else
+        {:error, reason} -> TrackerErrors.render(conn, reason)
+      end
     end
   end
 
@@ -172,6 +177,18 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     |> maybe_put_priority(params)
     |> maybe_put_assignee_ids(params)
     |> maybe_put_label_ids(label_ids)
+    |> maybe_put_agent_update(params)
+  end
+
+  # Preserve the raw "agent" value (including nil and invalid strings) when the
+  # key is present so update/2 can validate it and Context can clear/replace the
+  # routing label. Absent key stays absent (no-op for routing labels).
+  defp maybe_put_agent_update(attrs, params) do
+    if Map.has_key?(params, "agent") do
+      Map.put(attrs, "agent", Map.get(params, "agent"))
+    else
+      attrs
+    end
   end
 
   defp maybe_put_priority(attrs, params) do
@@ -229,16 +246,23 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   defp normalize_string_list(_value), do: []
 
-  # Both coding-agent backends are always selectable per task; the process-level
-  # default (env-driven) is highlighted. The per-project default still applies
-  # when a task leaves the agent unset (resolved at dispatch time).
+  # Both coding-agent backends are always selectable per task; no option is
+  # highlighted as "default" since the effective agent is exposed separately via
+  # effective_agent/1 (resolved at the project level at form-load time).
   defp agent_options do
-    default = Config.default_agent_kind()
-
-    ["codex", "claude"]
-    |> Enum.map(fn kind ->
-      %{value: kind, label: Map.fetch!(@agent_labels, kind), default: kind == default}
+    Enum.map(["codex", "claude"], fn kind ->
+      %{value: kind, label: Map.fetch!(@agent_labels, kind), default: false}
     end)
+  end
+
+  defp effective_agent(project) do
+    project_kind =
+      project
+      |> Repo.preload(:setup)
+      |> ProjectConfig.resolve()
+      |> Map.get(:agent_kind)
+
+    AgentPreference.resolve([], project_kind)
   end
 
   defp list_form_labels(project) do
