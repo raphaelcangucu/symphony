@@ -64,7 +64,7 @@ defmodule SymphonyElixir.Claude.AppServer.ServerTest do
 
     request(server, 1, "initialize", %{})
     response = request(server, 2, "model/list", %{})
-    assert %{"result" => %{"models" => [%{"id" => "claude-opus-4-6"} | _]}} = response
+    assert %{"result" => %{"models" => [%{"id" => "claude-opus-4-8"} | _]}} = response
   end
 
   test "turn busy guard and steer queueing" do

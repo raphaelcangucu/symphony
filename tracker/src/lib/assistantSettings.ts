@@ -60,6 +60,18 @@ const FALLBACK_EFFORTS: AssistantEffortOption[] = [
   { id: "xhigh", label: "Extra high" },
 ];
 
+const EFFORT_LABELS: Record<string, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+};
+
+function efforts(...ids: string[]): AssistantEffortOption[] {
+  return ids.map((id) => ({ id, label: EFFORT_LABELS[id] ?? id }));
+}
+
 export function fallbackCodexCatalog(command = "codex app-server"): AssistantAgentCatalog {
   const defaultModel = "gpt-5.5";
 
@@ -77,14 +89,22 @@ export function fallbackCodexCatalog(command = "codex app-server"): AssistantAge
 }
 
 export function fallbackClaudeCatalog(command = "claude"): AssistantAgentCatalog {
+  // Mirrors SymphonyElixir.Claude.ModelCatalog: xhigh is Opus 4.7+, max is
+  // Opus-tier only, Haiku has no effort control, and high is the CLI default.
+  const opusEfforts = efforts("low", "medium", "high", "xhigh", "max");
+  const opusLegacyEfforts = efforts("low", "medium", "high", "max");
+  const sonnetEfforts = efforts("low", "medium", "high");
+
   return {
     agent: "claude",
     agentLabel: "Claude Code",
     command,
-    defaultModel: "claude-opus-4-6",
+    defaultModel: "claude-opus-4-8",
     models: [
-      fallbackModel("claude-opus-4-6", "Claude Opus 4.6", true, "", []),
-      fallbackModel("claude-sonnet-4-6", "Claude Sonnet 4.6", false, "", []),
+      fallbackModel("claude-opus-4-8", "Claude Opus 4.8", true, "xhigh", opusEfforts),
+      fallbackModel("claude-opus-4-7", "Claude Opus 4.7", false, "xhigh", opusEfforts),
+      fallbackModel("claude-opus-4-6", "Claude Opus 4.6", false, "high", opusLegacyEfforts),
+      fallbackModel("claude-sonnet-4-6", "Claude Sonnet 4.6", false, "high", sonnetEfforts),
       fallbackModel("claude-haiku-4-5", "Claude Haiku 4.5", false, "", []),
     ],
   };

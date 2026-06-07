@@ -351,6 +351,7 @@ defmodule SymphonyElixir.Claude.AppServer.Server do
           session_uuid: thread.id,
           cli_session_id: thread.cli_session_id,
           model: Map.get(params, "model"),
+          effort: Map.get(params, "effort"),
           mcp_config_path: thread.mcp_config_path,
           permission_mode: thread.permission_mode,
           timeout_ms: SymphonyElixir.Config.agent_turn_timeout_ms(),
