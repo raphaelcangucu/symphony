@@ -70,8 +70,12 @@ defmodule SymphonyElixirWeb.Tracker.AssistantControllerTest do
     claude = Enum.find(agents, &(&1["agent"] == "claude"))
     assert claude["agent_label"] == "Claude Code"
     assert is_binary(claude["command"])
-    assert claude["default_model"] == "claude-opus-4-6"
-    assert length(claude["models"]) == 3
+    assert claude["default_model"] == "claude-opus-4-8"
+    assert length(claude["models"]) == 5
+
+    default_claude_model = Enum.find(claude["models"], & &1["is_default"])
+    assert default_claude_model["model"] == "claude-opus-4-8"
+    assert Enum.any?(default_claude_model["efforts"], &(&1["id"] == "xhigh"))
   end
 
   defp migrate_repo do

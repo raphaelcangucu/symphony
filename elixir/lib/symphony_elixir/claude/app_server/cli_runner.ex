@@ -42,6 +42,7 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
           required(:session_uuid) => String.t(),
           required(:cli_session_id) => String.t() | nil,
           required(:model) => String.t() | nil,
+          optional(:effort) => String.t() | nil,
           required(:mcp_config_path) => Path.t() | nil,
           required(:permission_mode) => String.t(),
           required(:timeout_ms) => pos_integer(),
@@ -136,17 +137,21 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
   @safe_id_regex ~r/\A[A-Za-z0-9._-]+\z/
 
   @spec build_args(map()) :: String.t()
-  def build_args(%{
-        session_uuid: session_uuid,
-        cli_session_id: cli_session_id,
-        model: model,
-        mcp_config_path: mcp_config_path,
-        permission_mode: permission_mode
-      }) do
+  def build_args(
+        %{
+          session_uuid: session_uuid,
+          cli_session_id: cli_session_id,
+          model: model,
+          mcp_config_path: mcp_config_path,
+          permission_mode: permission_mode
+        } = args
+      ) do
     base = "--print --output-format stream-json --verbose --include-partial-messages --permission-mode #{permission_mode}"
 
     model_flag =
       if model, do: " --model #{model}", else: ""
+
+    effort_flag = effort_flag(Map.get(args, :effort))
 
     mcp_flag =
       if mcp_config_path, do: " --mcp-config #{mcp_config_path} --strict-mcp-config", else: ""
@@ -162,8 +167,16 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
         " --session-id #{safe_session_uuid}"
       end
 
-    base <> model_flag <> mcp_flag <> session_flag
+    base <> model_flag <> effort_flag <> mcp_flag <> session_flag
   end
+
+  # Reasoning effort is a closed set in the Claude CLI. Whitelist it before
+  # interpolating into the shell command — unknown values (the CLI ignores
+  # them anyway) and any injection attempt are dropped at the exec boundary.
+  @valid_efforts ~w(low medium high xhigh max)
+
+  defp effort_flag(effort) when effort in @valid_efforts, do: " --effort #{effort}"
+  defp effort_flag(_effort), do: ""
 
   # Returns the id unchanged when it matches the safe pattern; logs a warning
   # and returns nil when it does not (callers treat nil as "start fresh").

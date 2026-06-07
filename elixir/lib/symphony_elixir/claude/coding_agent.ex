@@ -21,6 +21,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
           command: String.t(),
           cli_session_id: String.t() | nil,
           model: String.t() | nil,
+          effort: String.t() | nil,
           gateway_token: String.t() | nil,
           mcp_config_path: Path.t() | nil,
           metadata: map()
@@ -37,6 +38,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
          command: resolve_command(opts),
          cli_session_id: nil,
          model: Keyword.get(opts, :model),
+         effort: Keyword.get(opts, :effort),
          gateway_token: Map.get(gateway, :token),
          mcp_config_path: Map.get(gateway, :path),
          metadata: %{}
@@ -115,6 +117,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
       session_uuid: session.session_uuid,
       cli_session_id: session.cli_session_id,
       model: Keyword.get(opts, :model, session.model),
+      effort: Keyword.get(opts, :effort, session.effort),
       mcp_config_path: session.mcp_config_path,
       permission_mode: @permission_mode,
       timeout_ms: Config.agent_turn_timeout_ms()

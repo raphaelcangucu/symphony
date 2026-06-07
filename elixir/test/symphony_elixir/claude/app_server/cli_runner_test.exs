@@ -77,6 +77,47 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
     assert args =~ "--permission-mode bypassPermissions"
   end
 
+  test "argv: --effort is included for a valid effort and omitted otherwise" do
+    with_effort =
+      CliRunner.build_args(%{
+        session_uuid: "u-1",
+        cli_session_id: nil,
+        model: "claude-opus-4-8",
+        effort: "xhigh",
+        mcp_config_path: nil,
+        permission_mode: "bypassPermissions"
+      })
+
+    assert with_effort =~ "--effort xhigh"
+
+    without_effort =
+      CliRunner.build_args(%{
+        session_uuid: "u-1",
+        cli_session_id: nil,
+        model: "claude-opus-4-8",
+        effort: nil,
+        mcp_config_path: nil,
+        permission_mode: "bypassPermissions"
+      })
+
+    refute without_effort =~ "--effort"
+  end
+
+  test "build_args drops unknown/malicious effort values" do
+    args =
+      CliRunner.build_args(%{
+        session_uuid: "u-1",
+        cli_session_id: nil,
+        model: "claude-opus-4-8",
+        effort: "high; rm -rf x",
+        mcp_config_path: nil,
+        permission_mode: "bypassPermissions"
+      })
+
+    refute args =~ "--effort"
+    refute args =~ "rm -rf"
+  end
+
   test "build_args rejects malicious session ids and falls back to --session-id" do
     # Malicious cli_session_id must not be embedded; fall back to --session-id
     args =
