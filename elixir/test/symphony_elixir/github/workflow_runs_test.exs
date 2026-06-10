@@ -47,4 +47,11 @@ defmodule SymphonyElixir.GitHub.WorkflowRunsTest do
     assert {:error, {:rerun_failed, 403, _}} =
              WorkflowRuns.rerun_failed_jobs("o/r", 99, request_fun: request_fun)
   end
+
+  test "rerun_failed_jobs/3 normalizes github_api_status errors" do
+    request_fun = fn _path, _body, _opts -> {:error, {:github_api_status, 403}} end
+
+    assert {:error, {:rerun_failed, 403, nil}} =
+             WorkflowRuns.rerun_failed_jobs("o/r", 99, request_fun: request_fun)
+  end
 end

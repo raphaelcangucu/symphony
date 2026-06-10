@@ -26,12 +26,12 @@ defmodule SymphonyElixir.GitHub.WorkflowRuns do
     case request_fun.("/repos/#{repo}/actions/runs/#{run_id}/rerun-failed-jobs", %{}, opts) do
       {:ok, %{status: 201}} -> :ok
       {:ok, %{status: status, body: body}} -> {:error, {:rerun_failed, status, body}}
+      {:error, {:github_api_status, status}} -> {:error, {:rerun_failed, status, nil}}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp default_request(path, body, opts),
-    do: Client.rest_post(path, body, Keyword.take(opts, []))
+  defp default_request(path, body, _opts), do: Client.rest_post(path, body, [])
 
   defp pipeline_failing?(pipeline) do
     pipeline
