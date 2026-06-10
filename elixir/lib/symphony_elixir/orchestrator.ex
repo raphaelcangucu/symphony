@@ -933,12 +933,12 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  # Each evidence record is a distinct run, so a new comment per record keeps
-  # the per-attempt history (unlike the single in-place workpad comment).
+  # One evidence comment per issue, edited in place with the latest run (same
+  # pattern as the workpad); the per-attempt history lives in the Evidence tab.
   defp post_evidence_comment(%Issue{id: issue_id} = issue, record) do
     body = evidence_comment_body(record, issue, symphony_base_url())
 
-    case Tracker.create_comment(issue_id, body) do
+    case Tracker.upsert_evidence(issue_id, body) do
       :ok -> :ok
       {:error, error} -> Logger.warning("Failed to post evidence comment issue_id=#{issue_id}: #{inspect(error)}")
     end

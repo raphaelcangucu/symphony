@@ -83,6 +83,9 @@ defmodule SymphonyElixir.Linear.Tracker do
   @spec upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
   def upsert_workpad(issue_id, body), do: create_comment(issue_id, body)
 
+  @spec upsert_evidence(String.t(), String.t()) :: :ok | {:error, term()}
+  def upsert_evidence(issue_id, body), do: create_comment(issue_id, body)
+
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
   def update_issue_state(issue_id, state_name)
       when is_binary(issue_id) and is_binary(state_name) do

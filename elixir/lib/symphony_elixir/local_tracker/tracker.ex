@@ -147,19 +147,29 @@ defmodule SymphonyElixir.LocalTracker.Tracker do
   @doc "Edits the issue's workpad comment in place, or creates it when absent."
   @spec upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
   def upsert_workpad(issue_id, body) when is_binary(issue_id) and is_binary(body) do
+    upsert_comment_of_kind(issue_id, "workpad", body)
+  end
+
+  @doc "Edits the issue's evidence comment in place, or creates it when absent."
+  @spec upsert_evidence(String.t(), String.t()) :: :ok | {:error, term()}
+  def upsert_evidence(issue_id, body) when is_binary(issue_id) and is_binary(body) do
+    upsert_comment_of_kind(issue_id, "evidence", body)
+  end
+
+  defp upsert_comment_of_kind(issue_id, kind, body) do
     slug = Config.local_project_slug()
 
     with {:ok, identifier} <- resolve_issue_identifier(issue_id) do
-      case Context.latest_workpad(slug, identifier) do
-        {:ok, workpad} -> replace_workpad_body(workpad, body)
+      case Context.latest_comment_of_kind(slug, identifier, kind) do
+        {:ok, existing} -> replace_comment_body(existing, body)
         {:error, :not_found} -> create_comment(issue_id, body)
         {:error, reason} -> {:error, reason}
       end
     end
   end
 
-  defp replace_workpad_body(workpad, body) do
-    case Context.update_comment(workpad.id, body) do
+  defp replace_comment_body(comment, body) do
+    case Context.update_comment(comment.id, body) do
       {:ok, _comment} -> :ok
       {:error, reason} -> {:error, reason}
     end

@@ -12,6 +12,7 @@ defmodule SymphonyElixir.Tracker do
   @callback fetch_issue_states_by_ids([String.t()]) :: {:ok, [term()]} | {:error, term()}
   @callback create_comment(String.t(), String.t()) :: :ok | {:error, term()}
   @callback upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
+  @callback upsert_evidence(String.t(), String.t()) :: :ok | {:error, term()}
   @callback update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
 
   @spec project_identity() :: String.t() | nil
@@ -64,6 +65,18 @@ defmodule SymphonyElixir.Tracker do
   @spec upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
   def upsert_workpad(issue_id, body) do
     adapter().upsert_workpad(issue_id, body)
+  end
+
+  @doc """
+  Creates the issue's `## Codex Evidence` comment, or edits the existing one in
+  place. One evidence comment per issue (latest run wins; per-run history lives
+  in the Evidence tab); edits flow to the remote tracker as `comment:update`
+  outbox operations. Adapters without upsert support fall back to plain comment
+  creation.
+  """
+  @spec upsert_evidence(String.t(), String.t()) :: :ok | {:error, term()}
+  def upsert_evidence(issue_id, body) do
+    adapter().upsert_evidence(issue_id, body)
   end
 
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}

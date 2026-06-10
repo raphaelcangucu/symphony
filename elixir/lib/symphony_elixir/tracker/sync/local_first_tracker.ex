@@ -116,11 +116,20 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
 
   @impl true
   def upsert_workpad(issue_id, body) when is_binary(issue_id) and is_binary(body) do
+    upsert_comment_of_kind(issue_id, "workpad", body)
+  end
+
+  @impl true
+  def upsert_evidence(issue_id, body) when is_binary(issue_id) and is_binary(body) do
+    upsert_comment_of_kind(issue_id, "evidence", body)
+  end
+
+  defp upsert_comment_of_kind(issue_id, kind, body) do
     with {:ok, project} <- resolve_project_for_issue(issue_id),
          {:ok, identifier} <- resolve_identifier(project, issue_id) do
-      case Context.latest_workpad(project.slug, identifier) do
-        {:ok, workpad} ->
-          update_workpad(project, identifier, workpad, body)
+      case Context.latest_comment_of_kind(project.slug, identifier, kind) do
+        {:ok, existing} ->
+          update_comment_in_place(project, identifier, existing, body)
 
         {:error, :not_found} ->
           create_comment(issue_id, body)
@@ -134,8 +143,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     end
   end
 
-  defp update_workpad(project, identifier, workpad, body) do
-    with {:ok, updated} <- Context.update_comment(workpad.id, body),
+  defp update_comment_in_place(project, identifier, existing, body) do
+    with {:ok, updated} <- Context.update_comment(existing.id, body),
          {:ok, updated} <- LocalStore.mark_comment_sync_status(updated.id, "pending") do
       payload = %{
         "identifier" => identifier,

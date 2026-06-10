@@ -14,4 +14,16 @@ defmodule SymphonyElixir.Tracker.WorkpadTest do
     assert Workpad.workpad?("## Codex Workpad")
     refute Workpad.workpad?("hello")
   end
+
+  test "classifies evidence bodies" do
+    assert Workpad.classify("## Codex Evidence\n\nRun...") == "evidence"
+    assert Workpad.classify("  # codex evidence") == "evidence"
+    refute Workpad.classify("## Codex Evidence") == "workpad"
+  end
+
+  test "evidence?/1 mirrors classify" do
+    assert Workpad.evidence?("## Codex Evidence")
+    refute Workpad.evidence?("## Codex Workpad")
+    refute Workpad.evidence?(nil)
+  end
 end

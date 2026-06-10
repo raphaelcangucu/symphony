@@ -450,10 +450,18 @@ defmodule SymphonyElixir.LocalTracker.Context do
   Returns the newest workpad comment for an issue, or `{:error, :not_found}`.
   """
   @spec latest_workpad(String.t(), String.t()) :: {:ok, Comment.t()} | {:error, :not_found | missing_error()}
-  def latest_workpad(project_slug, identifier) do
+  def latest_workpad(project_slug, identifier), do: latest_comment_of_kind(project_slug, identifier, "workpad")
+
+  @doc """
+  Returns the newest comment of the given kind (`"workpad"`, `"evidence"`)
+  for an issue, or `{:error, :not_found}`.
+  """
+  @spec latest_comment_of_kind(String.t(), String.t(), String.t()) ::
+          {:ok, Comment.t()} | {:error, :not_found | missing_error()}
+  def latest_comment_of_kind(project_slug, identifier, kind) do
     with {:ok, comments} <- list_comments(project_slug, identifier) do
       comments
-      |> Enum.filter(&(&1.kind == "workpad"))
+      |> Enum.filter(&(&1.kind == kind))
       |> List.last()
       |> case do
         nil -> {:error, :not_found}

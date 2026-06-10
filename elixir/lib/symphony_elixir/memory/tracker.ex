@@ -64,6 +64,9 @@ defmodule SymphonyElixir.Memory.Tracker do
   @spec upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
   def upsert_workpad(issue_id, body), do: create_comment(issue_id, body)
 
+  @spec upsert_evidence(String.t(), String.t()) :: :ok | {:error, term()}
+  def upsert_evidence(issue_id, body), do: create_comment(issue_id, body)
+
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
   def update_issue_state(issue_id, state_name) do
     send_event({:memory_tracker_state_update, issue_id, state_name})
