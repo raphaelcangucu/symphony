@@ -237,6 +237,69 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
+  @doc false
+  @spec apply_plan_gate((-> :ok | {:error, term()}), (String.t() -> :ok | {:error, term()})) :: :ok
+  def apply_plan_gate(workpad_checker, run_turn) do
+    case workpad_checker.() do
+      :ok ->
+        :ok
+
+      {:error, _reason} ->
+        _result = run_turn.(plan_gate_prompt())
+
+        case workpad_checker.() do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning("Plan gate still unsatisfied after corrective turn: #{inspect(reason)}; continuing run")
+            :ok
+        end
+    end
+  end
+
+  # The PLAN gate runs once, right after the first turn: the workpad must exist
+  # before implementation continues. Softer than the publish gate — a still-missing
+  # workpad logs a warning but never strands the run.
+  defp run_plan_gate(session, issue, opts, agent_kind, codex_update_recipient) do
+    workpad_checker = Keyword.get(opts, :workpad_checker, default_workpad_checker(issue))
+
+    run_corrective_turn = fn prompt ->
+      case CodingAgent.run_turn(session, prompt, issue, agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)) do
+        {:ok, _turn_session} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    end
+
+    apply_plan_gate(workpad_checker, run_corrective_turn)
+  end
+
+  # Legacy live trackers have no project_slug; the gate no-ops there. Only a
+  # genuinely missing workpad (`:not_found`) is a violation — an unresolvable
+  # local project/issue means the gate has nothing to assert against.
+  defp default_workpad_checker(%{project_slug: project_slug, identifier: identifier})
+       when is_binary(project_slug) and is_binary(identifier) do
+    fn ->
+      case Context.latest_workpad(project_slug, identifier) do
+        {:error, :not_found} -> {:error, :not_found}
+        _present_or_unresolvable -> :ok
+      end
+    end
+  end
+
+  defp default_workpad_checker(_issue), do: fn -> :ok end
+
+  defp plan_gate_prompt do
+    """
+    ## Plan gate failed (Symphony)
+
+    No `## Codex Workpad` comment exists for this issue yet. Before any further
+    implementation, read and follow the `workpad` skill: create the workpad
+    comment with the plan, acceptance criteria, and a Validation section. Do
+    nothing else in this turn.
+    """
+  end
+
   defp corrective_publish_prompt(violations, workspace) do
     """
     ## Publish gate failed (Symphony)
@@ -280,6 +343,10 @@ defmodule SymphonyElixir.AgentRunner do
       Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
 
       advanced_session = maybe_advance_session(app_session, turn_session)
+
+      if turn_number == 1 do
+        run_plan_gate(advanced_session, issue, opts, agent_kind, codex_update_recipient)
+      end
 
       case continue_with_issue?(issue, issue_state_fetcher, Keyword.get(opts, :project_config)) do
         {:continue, refreshed_issue} ->
