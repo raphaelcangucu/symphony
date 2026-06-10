@@ -97,6 +97,30 @@ defmodule SymphonyElixir.PullRequestFixTest do
     def rest_get(_p, _o), do: {:ok, %{status: 200, body: ""}}
   end
 
+  describe "failing_entries/3" do
+    test "collects failing jobs with log excerpts" do
+      pr = %{
+        number: 7,
+        title: "t",
+        url: "u",
+        pipelines: [
+          %{
+            name: "CI",
+            url: nil,
+            jobs: [
+              %{name: "test", status: "COMPLETED", conclusion: "FAILURE", url: nil, job_id: 1}
+            ]
+          }
+        ]
+      }
+
+      entries =
+        PullRequestFix.failing_entries("o/r", [pr], check_logs: fn _repo, _id -> {:ok, "boom"} end)
+
+      assert [%{job: %{name: "test"}, excerpt: "boom"}] = entries
+    end
+  end
+
   describe "build_comment/1" do
     test "renders PR section, failing job and excerpt" do
       entries = [
@@ -130,6 +154,24 @@ defmodule SymphonyElixir.PullRequestFixTest do
       ]
 
       assert PullRequestFix.build_comment(entries) =~ "log unavailable"
+    end
+
+    test "accepts a custom header" do
+      entries = [
+        %{
+          pr: %{number: 7, title: "t", url: "u"},
+          job: %{name: "test", conclusion: "FAILURE", url: nil},
+          excerpt: "boom"
+        }
+      ]
+
+      comment =
+        PullRequestFix.build_comment(entries,
+          header: "## CI failure — automated fix requested (attempt 1/2)\n\n"
+        )
+
+      assert String.starts_with?(comment, "## CI failure — automated fix requested (attempt 1/2)")
+      assert comment =~ "boom"
     end
   end
 
