@@ -1051,20 +1051,6 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:required, boolean_value(Map.get(section, "required")))
   end
 
-  # Map of repo-subdir => command string; non-string entries are dropped.
-  defp string_map_value(value) when is_map(value) do
-    value
-    |> Enum.flat_map(fn {key, command} ->
-      case {scalar_string_value(key), scalar_string_value(command)} do
-        {repo, cmd} when is_binary(repo) and is_binary(cmd) -> [{repo, cmd}]
-        _invalid -> []
-      end
-    end)
-    |> Map.new()
-  end
-
-  defp string_map_value(_value), do: :omit
-
   defp section_map(config, key) do
     case Map.get(config, key) do
       section when is_map(section) -> section
