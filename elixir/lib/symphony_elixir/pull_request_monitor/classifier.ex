@@ -113,36 +113,40 @@ defmodule SymphonyElixir.PullRequestMonitor.Classifier do
     workspace = scratch_workspace()
     issue = %{id: "pr-monitor", identifier: "pr-monitor", title: "PR monitor classification"}
 
-    with :ok <- File.mkdir_p(workspace),
-         {:ok, session} <-
-           CodingAgent.start_session(workspace, nil,
-             dynamic_tools: [],
-             tool_executor: fn _tool, _arguments -> {:error, :no_tools_for_pr_monitor} end
-           ) do
-      {:ok, collector} = Agent.start_link(fn -> "" end)
-
+    with :ok <- File.mkdir_p(workspace) do
       try do
-        on_message = fn message ->
-          append_collected_delta(collector, message)
-        end
+        with {:ok, session} <-
+               CodingAgent.start_session(workspace, nil,
+                 dynamic_tools: [],
+                 tool_executor: fn _tool, _arguments -> {:error, :no_tools_for_pr_monitor} end
+               ) do
+          {:ok, collector} = Agent.start_link(fn -> "" end)
 
-        case CodingAgent.run_turn(
-               session,
-               prompt,
-               issue,
-               opts
-               |> Keyword.put(:turn_timeout_ms, 120_000)
-               |> Keyword.put(:on_message, on_message)
-             ) do
-          {:ok, _result} ->
-            {:ok, fallback_message(Agent.get(collector, & &1))}
+          try do
+            on_message = fn message ->
+              append_collected_delta(collector, message)
+            end
 
-          {:error, reason} ->
-            {:error, reason}
+            run_turn_opts =
+              opts
+              |> Keyword.take([:agent_kind, :model, :effort, :attachments, :codex_config, :goal, :max_goal_turns])
+              |> Keyword.put(:turn_timeout_ms, 120_000)
+              |> Keyword.put(:on_message, on_message)
+
+            case CodingAgent.run_turn(session, prompt, issue, run_turn_opts) do
+              {:ok, _result} ->
+                {:ok, Agent.get(collector, & &1)}
+
+              {:error, reason} ->
+                {:error, reason}
+            end
+          after
+            Agent.stop(collector)
+            CodingAgent.stop_session(session, nil)
+          end
         end
       after
-        Agent.stop(collector)
-        CodingAgent.stop_session(session, nil)
+        _ = File.rm_rf(workspace)
       end
     end
   end
@@ -156,9 +160,6 @@ defmodule SymphonyElixir.PullRequestMonitor.Classifier do
       cond do
         method == "item/agentMessage/delta" ->
           get_in(payload, ["params", "delta"]) || get_in(payload, [:params, :delta])
-
-        method == "item/progress" ->
-          get_in(payload, ["params", "delta", "text"]) || get_in(payload, [:params, :delta, :text])
 
         method == "item/created" ->
           item = get_in(payload, ["params", "item"]) || get_in(payload, [:params, :item]) || %{}
@@ -181,13 +182,10 @@ defmodule SymphonyElixir.PullRequestMonitor.Classifier do
 
   defp append_collected_delta(_collector, _message), do: :ok
 
-  @spec fallback_message(String.t()) :: String.t()
-  defp fallback_message(""), do: ""
-  defp fallback_message(text), do: text
-
   @spec scratch_workspace() :: Path.t()
   defp scratch_workspace do
-    Path.join([Config.workspace_root(), "_pr_monitor", "classifier"])
+    unique_id = System.unique_integer([:positive]) |> Integer.to_string()
+    Path.join([Config.workspace_root(), "_pr_monitor", "classifier-" <> unique_id])
   end
 
   @spec issue_section(map()) :: String.t()
