@@ -68,9 +68,7 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceControllerTest do
 
   test "artifact route serves the file bytes with content type", ctx do
     {:ok, record} =
-      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => []},
-        evidence_root: ctx.evidence_root
-      )
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => []}, evidence_root: ctx.evidence_root)
 
     conn =
       get(
@@ -85,9 +83,7 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceControllerTest do
 
   test "artifact route rejects traversal and unknown paths", ctx do
     {:ok, record} =
-      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => []},
-        evidence_root: ctx.evidence_root
-      )
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => []}, evidence_root: ctx.evidence_root)
 
     traversal =
       get(

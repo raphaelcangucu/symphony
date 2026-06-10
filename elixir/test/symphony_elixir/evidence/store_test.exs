@@ -56,27 +56,21 @@ defmodule SymphonyElixir.Evidence.StoreTest do
     }
 
     assert {:ok, record} =
-             Store.persist(ctx.project.slug, "GAM-9", ctx.workspace, manifest,
-               evidence_root: ctx.evidence_root
-             )
+             Store.persist(ctx.project.slug, "GAM-9", ctx.workspace, manifest, evidence_root: ctx.evidence_root)
 
     assert record.status == "failed"
   end
 
   test "unknown project is an error", ctx do
     assert {:error, _reason} =
-             Store.persist("nope", "GAM-9", ctx.workspace, %{"runs" => []},
-               evidence_root: ctx.evidence_root
-             )
+             Store.persist("nope", "GAM-9", ctx.workspace, %{"runs" => []}, evidence_root: ctx.evidence_root)
   end
 
   test "resolve_artifact rejects path traversal", ctx do
     manifest = %{"issue" => "GAM-9", "runs" => []}
 
     {:ok, record} =
-      Store.persist(ctx.project.slug, "GAM-9", ctx.workspace, manifest,
-        evidence_root: ctx.evidence_root
-      )
+      Store.persist(ctx.project.slug, "GAM-9", ctx.workspace, manifest, evidence_root: ctx.evidence_root)
 
     assert {:ok, path} = Store.resolve_artifact(record, "artifacts/s.png")
     assert File.read!(path) == "img"

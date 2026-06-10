@@ -37,8 +37,7 @@ defmodule SymphonyElixir.Evidence.Manifest do
 
   @spec read(Path.t()) ::
           {:ok, t()}
-          | {:error,
-             :manifest_missing | {:manifest_invalid, term()} | {:artifacts_missing, [String.t()]}}
+          | {:error, :manifest_missing | {:manifest_invalid, term()} | {:artifacts_missing, [String.t()]}}
   def read(workspace) do
     path = Path.join(dir(workspace), "manifest.json")
 

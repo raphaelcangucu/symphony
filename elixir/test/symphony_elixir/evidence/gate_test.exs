@@ -71,9 +71,7 @@ defmodule SymphonyElixir.Evidence.GateTest do
     assert {:violations, [%{kind: :e2e_missing}]} = Gate.evaluate("/ws", @config, d)
 
     d2 =
-      deps(
-        read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e(screenshots: [])])} end
-      )
+      deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e(screenshots: [])])} end)
 
     assert {:violations, [%{kind: :visual_capture_missing}]} = Gate.evaluate("/ws", @config, d2)
   end

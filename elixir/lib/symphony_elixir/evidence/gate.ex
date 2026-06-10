@@ -74,9 +74,7 @@ defmodule SymphonyElixir.Evidence.Gate do
         &(&1.kind == "unit" and &1.repo == repo and &1.status == "passed")
       )
     end)
-    |> Enum.map(
-      &%{kind: :unit_not_green, repo: &1, detail: "no passing unit run for changed repo #{&1}"}
-    )
+    |> Enum.map(&%{kind: :unit_not_green, repo: &1, detail: "no passing unit run for changed repo #{&1}"})
   end
 
   defp e2e_violations(_manifest, false), do: []
