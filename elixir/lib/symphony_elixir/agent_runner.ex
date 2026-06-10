@@ -20,6 +20,7 @@ defmodule SymphonyElixir.AgentRunner do
   }
 
   alias SymphonyElixir.Codex.DynamicTool
+  alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
@@ -32,7 +33,9 @@ defmodule SymphonyElixir.AgentRunner do
   # falls back to the mechanical finalizer.
   @max_corrective_turns 2
 
-  @type run_outcome :: :completed | {:incomplete, :max_turns | {:publish_gate, [map()]}}
+  @type run_outcome ::
+          :completed
+          | {:incomplete, :max_turns | {:publish_gate, [map()]} | {:validate_gate, [map()]}}
 
   @spec run(map(), pid() | nil, keyword()) :: :ok | no_return()
   def run(issue, codex_update_recipient \\ nil, opts \\ []) do
@@ -193,6 +196,11 @@ defmodule SymphonyElixir.AgentRunner do
             RunContract.evaluate_publish(RunContract.repo_states(ws), RunContract.gh_pr_checker())
           end)
 
+        validate_evaluator =
+          Keyword.get(opts, :validate_gate_evaluator, fn ws ->
+            Evidence.Gate.evaluate(ws, evidence_config(Keyword.get(opts, :project_config)))
+          end)
+
         turn_opts = agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)
 
         run_corrective_turn = fn prompt ->
@@ -202,7 +210,9 @@ defmodule SymphonyElixir.AgentRunner do
           end
         end
 
-        apply_publish_gate(result, workspace, evaluator, run_corrective_turn, @max_corrective_turns)
+        result
+        |> apply_validate_gate(workspace, validate_evaluator, run_corrective_turn, @max_corrective_turns)
+        |> apply_publish_gate(workspace, evaluator, run_corrective_turn, @max_corrective_turns)
       after
         CodingAgent.stop_session(session, agent_kind)
       end
@@ -218,6 +228,10 @@ defmodule SymphonyElixir.AgentRunner do
           non_neg_integer()
         ) :: term()
   def apply_publish_gate({:error, _reason} = error, _workspace, _evaluator, _run_turn, _budget), do: error
+
+  # A failed validate gate already stops the run; do not mask it with publish findings.
+  def apply_publish_gate({:incomplete, {:validate_gate, _violations}} = result, _workspace, _evaluator, _run_turn, _budget),
+    do: result
 
   def apply_publish_gate(result, workspace, evaluator, run_turn, budget) do
     case evaluator.(workspace) do
@@ -235,6 +249,56 @@ defmodule SymphonyElixir.AgentRunner do
       {:violations, violations} ->
         {:incomplete, {:publish_gate, violations}}
     end
+  end
+
+  @doc false
+  @spec apply_validate_gate(
+          term(),
+          Path.t(),
+          (Path.t() -> :satisfied | {:violations, list()}),
+          (String.t() -> :ok | {:error, term()}),
+          non_neg_integer()
+        ) :: term()
+  def apply_validate_gate({:error, _reason} = error, _workspace, _evaluator, _run_turn, _budget), do: error
+
+  def apply_validate_gate(result, workspace, evaluator, run_turn, budget) do
+    case evaluator.(workspace) do
+      :satisfied ->
+        result
+
+      {:violations, violations} when budget > 0 ->
+        Logger.info("Validate gate violated; running corrective turn (remaining budget=#{budget}) violations=#{inspect(violations)}")
+
+        case run_turn.(corrective_validate_prompt(violations)) do
+          :ok -> apply_validate_gate(result, workspace, evaluator, run_turn, budget - 1)
+          {:error, _reason} -> {:incomplete, {:validate_gate, violations}}
+        end
+
+      {:violations, violations} ->
+        {:incomplete, {:validate_gate, violations}}
+    end
+  end
+
+  defp evidence_config(%ProjectConfig{evidence: %{} = evidence}), do: evidence
+  defp evidence_config(_project_config), do: %{required: false, ui_paths: []}
+
+  defp corrective_validate_prompt(violations) do
+    """
+    ## Validate gate failed (Symphony)
+
+    Evidence requirements are not satisfied:
+
+    #{Enum.map_join(violations, "\n", &validate_violation_line/1)}
+
+    Read and follow the `evidence` skill now: run the project's unit tests (and
+    e2e with screenshot/video capture if UI files changed), then write
+    `.symphony/evidence/manifest.json` referencing the real artifacts. Do
+    nothing else in this turn.
+    """
+  end
+
+  defp validate_violation_line(%{kind: kind, repo: repo, detail: detail}) do
+    "- #{kind}#{if repo, do: " (#{repo})", else: ""}: #{detail}"
   end
 
   @doc false

@@ -57,4 +57,48 @@ defmodule SymphonyElixir.OrchestratorRunContractTest do
     issue = %SymphonyElixir.Issue{id: "uuid", identifier: "GAM-9", state: "In Progress"}
     assert {:blocked, ^violations, {"frontend", :push_failed}} = Orchestrator.run_publish_contract(issue, "/tmp/ws", deps)
   end
+
+  test "evidence_comment_body renders run table, screenshots and ui-change note" do
+    record = %SymphonyElixir.Evidence.Record{
+      run_id: "20260610-1",
+      status: "passed",
+      ui_change: true,
+      manifest: %{
+        "runs" => [
+          %{
+            "kind" => "unit",
+            "repo" => "frontend",
+            "command" => "npm test",
+            "status" => "passed",
+            "summary" => %{"total" => 3, "passed" => 3, "failed" => 0}
+          },
+          %{
+            "kind" => "e2e",
+            "repo" => "frontend",
+            "command" => "npx playwright test",
+            "status" => "passed",
+            "screenshots" => ["artifacts/screens/home.png"]
+          }
+        ]
+      }
+    }
+
+    issue = %SymphonyElixir.Issue{
+      id: "uuid",
+      identifier: "GAM-9",
+      state: "In Progress",
+      project_slug: "gam"
+    }
+
+    body = Orchestrator.evidence_comment_body(record, issue, "http://localhost:4000")
+
+    assert body =~ "## Codex Evidence"
+    assert body =~ "Run `20260610-1`"
+    assert body =~ "UI change: e2e + visual capture required"
+    assert body =~ "| unit | frontend | `npm test` | passed | 3/3 passed, 0 failed |"
+    assert body =~ "| e2e | frontend | `npx playwright test` | passed | - |"
+
+    assert body =~
+             "![home.png](http://localhost:4000/api/tracker/v1/projects/gam/issues/GAM-9/evidence/20260610-1/artifacts/artifacts/screens/home.png)"
+  end
 end

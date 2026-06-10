@@ -19,6 +19,7 @@ defmodule SymphonyElixir.Orchestrator do
     Workspace
   }
 
+  alias SymphonyElixir.Evidence
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.RunContract.Finalizer
   alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
@@ -806,6 +807,7 @@ defmodule SymphonyElixir.Orchestrator do
     case run_publish_contract(issue, workspace, deps) do
       {:ok, prs} ->
         record_run_pull_requests(issue, prs)
+        persist_evidence(running_entry, issue, workspace)
         maybe_annotate_incomplete(running_entry, issue_id)
         apply_transition_after_contract(state, running_entry, issue_id)
 
@@ -892,6 +894,102 @@ defmodule SymphonyElixir.Orchestrator do
     end
 
     add_label(running_entry, @blocked_run_label)
+  end
+
+  # Persists the run's evidence (when the agent produced a valid manifest) and
+  # posts a `## Codex Evidence` comment on the issue. Best-effort: evidence
+  # absence never blocks the completion flow here (the VALIDATE gate already ran
+  # in the agent runner when the project requires evidence).
+  defp persist_evidence(running_entry, %Issue{project_slug: slug, identifier: identifier} = issue, workspace)
+       when is_binary(slug) and slug != "" and is_binary(identifier) do
+    case Evidence.Manifest.read(workspace) do
+      {:ok, _manifest} ->
+        manifest_map =
+          workspace
+          |> Evidence.Manifest.dir()
+          |> Path.join("manifest.json")
+          |> File.read!()
+          |> Jason.decode!()
+
+        store_and_comment(running_entry, issue, workspace, manifest_map)
+
+      {:error, _no_manifest} ->
+        :ok
+    end
+  end
+
+  defp persist_evidence(_running_entry, _issue, _workspace), do: :ok
+
+  defp store_and_comment(running_entry, issue, workspace, manifest_map) do
+    opts = [session_id: Map.get(running_entry, :session_id)]
+
+    case Evidence.Store.persist(issue.project_slug, issue.identifier, workspace, manifest_map, opts) do
+      {:ok, record} ->
+        post_evidence_comment(issue, record)
+
+      {:error, error} ->
+        Logger.warning("Failed to persist evidence issue=#{issue.identifier}: #{inspect(error)}")
+        :ok
+    end
+  end
+
+  # Each evidence record is a distinct run, so a new comment per record keeps
+  # the per-attempt history (unlike the single in-place workpad comment).
+  defp post_evidence_comment(%Issue{id: issue_id} = issue, record) do
+    body = evidence_comment_body(record, issue, symphony_base_url())
+
+    case Tracker.create_comment(issue_id, body) do
+      :ok -> :ok
+      {:error, error} -> Logger.warning("Failed to post evidence comment issue_id=#{issue_id}: #{inspect(error)}")
+    end
+  end
+
+  @doc false
+  @spec evidence_comment_body(Evidence.Record.t(), Issue.t(), String.t()) :: String.t()
+  def evidence_comment_body(record, issue, base_url) do
+    runs = record.manifest["runs"] || []
+
+    rows =
+      Enum.map_join(runs, "\n", fn run ->
+        "| #{run["kind"]} | #{run["repo"]} | `#{run["command"]}` | #{run["status"]} | #{summary_cell(run["summary"])} |"
+      end)
+
+    screenshots =
+      runs
+      |> Enum.flat_map(&List.wrap(&1["screenshots"]))
+      |> Enum.take(4)
+      |> Enum.map_join("\n", fn rel ->
+        "![#{Path.basename(rel)}](#{evidence_artifact_url(record, issue, rel, base_url)})"
+      end)
+
+    ui_note = if record.ui_change, do: " (UI change: e2e + visual capture required)", else: ""
+
+    """
+    ## Codex Evidence
+
+    Run `#{record.run_id}` — overall **#{record.status}**#{ui_note}.
+
+    | Kind | Repo | Command | Status | Summary |
+    |---|---|---|---|---|
+    #{rows}
+
+    #{screenshots}
+
+    Full artifacts (videos, reports, traces): Evidence tab in Symphony.
+    """
+  end
+
+  defp summary_cell(%{"total" => total, "passed" => passed, "failed" => failed}),
+    do: "#{passed}/#{total} passed, #{failed} failed"
+
+  defp summary_cell(_summary), do: "-"
+
+  defp evidence_artifact_url(record, issue, rel, base_url) do
+    "#{base_url}/api/tracker/v1/projects/#{issue.project_slug}/issues/#{issue.identifier}/evidence/#{record.run_id}/artifacts/#{rel}"
+  end
+
+  defp symphony_base_url do
+    "http://#{Config.server_host()}:#{Config.server_port()}"
   end
 
   # Existing transition flow, extracted from the pre-contract apply_normal_completion body.
@@ -1043,6 +1141,9 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp incomplete_reason_text({:publish_gate, _violations}),
     do: "ended with the publish gate unsatisfied (deliverables missing)"
+
+  defp incomplete_reason_text({:validate_gate, _violations}),
+    do: "ended with the validate gate unsatisfied (test/e2e evidence missing or failing)"
 
   defp incomplete_reason_text(other), do: "reason=#{inspect(other)}"
 
