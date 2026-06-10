@@ -470,23 +470,22 @@ defmodule SymphonyElixir.GitHub.PullRequests do
 
   defp behind_for(_pr, _repo, _branch_opts), do: nil
 
-  defp extract_rollup(node) do
+  defp extract_commit_node(node) do
     node
     |> get_in_safe(["commits", "nodes"])
     |> List.wrap()
     |> List.first()
-    |> case do
+  end
+
+  defp extract_rollup(node) do
+    case extract_commit_node(node) do
       %{"commit" => %{"statusCheckRollup" => rollup}} when is_map(rollup) -> rollup
       _ -> %{}
     end
   end
 
   defp extract_head_sha(node) do
-    node
-    |> get_in_safe(["commits", "nodes"])
-    |> List.wrap()
-    |> List.first()
-    |> case do
+    case extract_commit_node(node) do
       %{"commit" => %{"oid" => oid}} when is_binary(oid) and oid != "" -> oid
       _ -> nil
     end

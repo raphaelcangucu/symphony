@@ -223,7 +223,7 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
       node = %{
         "number" => 7,
         "commits" => %{
-          "nodes" => [%{"commit" => %{"oid" => "abc123", "statusCheckRollup" => nil}}]
+          "nodes" => [%{"commit" => %{"oid" => "abc123"}}]
         }
       }
 
@@ -232,6 +232,17 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
 
     test "head_sha is nil when commits are absent" do
       assert %{head_sha: nil} = PullRequests.parse_pr_node(%{"number" => 7})
+    end
+
+    test "head_sha is nil for empty nodes or blank oid" do
+      assert %{head_sha: nil} =
+               PullRequests.parse_pr_node(%{"number" => 7, "commits" => %{"nodes" => []}})
+
+      assert %{head_sha: nil} =
+               PullRequests.parse_pr_node(%{
+                 "number" => 7,
+                 "commits" => %{"nodes" => [%{"commit" => %{"oid" => ""}}]}
+               })
     end
   end
 
