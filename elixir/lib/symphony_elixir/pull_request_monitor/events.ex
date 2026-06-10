@@ -26,10 +26,7 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
 
   @spec detect(map(), MonitorState.t() | nil) :: event()
   def detect(pr, row) when is_map(pr) do
-    cond do
-      merged_event?(pr, row) -> :merged
-      true -> detect_ci_or_review(pr, row)
-    end
+    if merged_event?(pr, row), do: :merged, else: detect_ci_or_review(pr, row)
   end
 
   @spec checks_fingerprint(map()) :: String.t() | nil
@@ -100,7 +97,18 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
   end
 
   defp newer?(marker, nil), do: is_binary(marker)
-  defp newer?(marker, last), do: is_binary(marker) and marker > last
+
+  defp newer?(marker, last) when is_binary(marker) and is_binary(last) do
+    case {DateTime.from_iso8601(marker), DateTime.from_iso8601(last)} do
+      {{:ok, marker_dt, _}, {:ok, last_dt, _}} ->
+        DateTime.compare(marker_dt, last_dt) == :gt
+
+      _ ->
+        marker > last
+    end
+  end
+
+  defp newer?(_, _), do: false
 
   defp rollup_failing?(pr) do
     rollup = pr |> Map.get(:checks_state) |> to_string() |> String.upcase()

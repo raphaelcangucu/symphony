@@ -96,6 +96,25 @@ defmodule SymphonyElixir.PullRequestMonitor.EventsTest do
     assert Events.detect(pr(%{conversation: convo}), seen) == :none
   end
 
+  test "ci_failure fires when checks_state is nil but jobs have failed" do
+    failing = pr(%{checks_state: nil, pipelines: failing_pipeline()})
+    assert {:ci_failure, _fp} = Events.detect(failing, nil)
+  end
+
+  test "closed unmerged PR yields :none for CI failures" do
+    failing = pr(%{state: "closed", checks_state: "FAILURE", pipelines: failing_pipeline()})
+    assert Events.detect(failing, nil) == :none
+  end
+
+  test "failing_jobs/1 returns only failing jobs and checks_fingerprint/1 is nil without failures" do
+    assert Events.failing_jobs(pr(%{})) == []
+    assert Events.checks_fingerprint(pr(%{})) == nil
+
+    failing = pr(%{pipelines: failing_pipeline()})
+    assert [%{name: "test"}] = Events.failing_jobs(failing)
+    assert is_binary(Events.checks_fingerprint(failing))
+  end
+
   test "merged wins over pending review findings" do
     convo = [
       %{
