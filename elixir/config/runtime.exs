@@ -26,6 +26,8 @@ if config_env() != :test do
 
   editor_settings = SymphonyElixir.BootInstanceConfig.editor_settings()
 
+  # Integer.parse (not parse_int) so invalid values yield nil and fall back to
+  # poll_interval_ms at runtime instead of crashing boot.
   pr_monitor_interval_ms =
     case System.get_env("SYMPHONY_PR_MONITOR_INTERVAL_MS") do
       value when is_binary(value) and value != "" ->

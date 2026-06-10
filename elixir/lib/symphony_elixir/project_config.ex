@@ -239,10 +239,19 @@ defmodule SymphonyElixir.ProjectConfig do
 
   def dev_server_auto_start_on(_config), do: []
 
+  @doc """
+  Returns whether this project's workflow enables the PR follow-up monitor.
+  """
   @spec pr_monitor_enabled?(t()) :: boolean()
   def pr_monitor_enabled?(%__MODULE__{pr_monitor: %{"enabled" => true}}), do: true
   def pr_monitor_enabled?(%__MODULE__{}), do: false
 
+  @doc """
+  Returns the maximum automatic rework attempts before the monitor stops.
+
+  Reads the raw `pr_monitor.max_auto_rework` front matter only. When the key is
+  omitted or invalid, returns `2`.
+  """
   @spec pr_monitor_max_auto_rework(t()) :: pos_integer()
   def pr_monitor_max_auto_rework(%__MODULE__{pr_monitor: %{"max_auto_rework" => max}})
       when is_integer(max) and max > 0,
@@ -250,6 +259,12 @@ defmodule SymphonyElixir.ProjectConfig do
 
   def pr_monitor_max_auto_rework(%__MODULE__{}), do: 2
 
+  @doc """
+  Returns whether merged PRs should transition the issue to Done.
+
+  Reads the raw `pr_monitor.done_on_merge` front matter only. When the key is
+  omitted, returns `true`.
+  """
   @spec pr_monitor_done_on_merge?(t()) :: boolean()
   def pr_monitor_done_on_merge?(%__MODULE__{pr_monitor: %{"done_on_merge" => false}}), do: false
   def pr_monitor_done_on_merge?(%__MODULE__{}), do: true
