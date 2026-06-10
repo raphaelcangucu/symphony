@@ -405,6 +405,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       raw_state: string_or_nil(Map.get(node, "state")),
       is_draft: Map.get(node, "isDraft") == true,
       merged: Map.get(node, "merged") == true,
+      head_sha: extract_head_sha(node),
       head_ref: string_or_nil(Map.get(node, "headRefName")),
       base_ref: string_or_nil(Map.get(node, "baseRefName")),
       author: extract_author(node),
@@ -477,6 +478,17 @@ defmodule SymphonyElixir.GitHub.PullRequests do
     |> case do
       %{"commit" => %{"statusCheckRollup" => rollup}} when is_map(rollup) -> rollup
       _ -> %{}
+    end
+  end
+
+  defp extract_head_sha(node) do
+    node
+    |> get_in_safe(["commits", "nodes"])
+    |> List.wrap()
+    |> List.first()
+    |> case do
+      %{"commit" => %{"oid" => oid}} when is_binary(oid) and oid != "" -> oid
+      _ -> nil
     end
   end
 
