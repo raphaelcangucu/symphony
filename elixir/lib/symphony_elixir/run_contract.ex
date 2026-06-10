@@ -40,6 +40,123 @@ defmodule SymphonyElixir.RunContract do
     Enum.any?(repo_states, &(&1.dirty? or &1.ahead_count > 0))
   end
 
+  @spec evaluate_publish([RepoState.t()], pr_checker()) :: :satisfied | {:violations, [violation()]}
+  def evaluate_publish(repo_states, pr_checker) when is_function(pr_checker, 1) do
+    case Enum.flat_map(repo_states, &repo_violations(&1, pr_checker)) do
+      [] -> :satisfied
+      violations -> {:violations, violations}
+    end
+  end
+
+  @spec pull_requests([RepoState.t()], pr_checker()) :: [map()]
+  def pull_requests(repo_states, pr_checker) when is_function(pr_checker, 1) do
+    repo_states
+    |> Enum.filter(&(&1.ahead_count > 0 and &1.upstream?))
+    |> Enum.flat_map(fn repo ->
+      case pr_checker.(repo) do
+        {:ok, pr} -> [Map.put(pr, :repo, repo.name)]
+        _other -> []
+      end
+    end)
+  end
+
+  @spec summary_text([RepoState.t()]) :: String.t()
+  def summary_text([]), do: "No git repositories found in the workspace."
+
+  def summary_text(repo_states) do
+    Enum.map_join(repo_states, "\n", fn repo ->
+      "- #{repo.name}: branch=#{repo.branch || "?"} commits_ahead=#{repo.ahead_count}" <>
+        " uncommitted=#{yes_no(repo.dirty?)} pushed=#{yes_no(repo.upstream?)}"
+    end)
+  end
+
+  @doc """
+  Default PR checker backed by the `gh` CLI, querying by head branch in the
+  repo's own directory so it works for any GitHub repo regardless of the
+  project's tracker kind. Closed PRs do not satisfy the gate; merged ones do.
+  """
+  @spec gh_pr_checker(keyword()) :: pr_checker()
+  def gh_pr_checker(opts \\ []) do
+    runner = Keyword.get(opts, :runner, &System.cmd/3)
+
+    fn %RepoState{} = repo ->
+      args = [
+        "pr",
+        "list",
+        "--head",
+        repo.branch || "",
+        "--state",
+        "all",
+        "--json",
+        "url,state,number,title",
+        "--limit",
+        "1"
+      ]
+
+      case runner.("gh", args, cd: repo.path, stderr_to_stdout: true) do
+        {output, 0} -> decode_pr_list(output)
+        {output, status} -> {:error, {status, String.trim(output)}}
+      end
+    end
+  end
+
+  defp repo_violations(%RepoState{dirty?: true} = repo, _pr_checker) do
+    [%{repo: repo.name, kind: :uncommitted_changes, detail: "working tree has uncommitted changes"}]
+  end
+
+  defp repo_violations(%RepoState{ahead_count: 0}, _pr_checker), do: []
+
+  defp repo_violations(%RepoState{upstream?: false} = repo, _pr_checker) do
+    [
+      %{
+        repo: repo.name,
+        kind: :unpublished_branch,
+        detail: "branch #{repo.branch} has #{repo.ahead_count} commit(s) without an upstream"
+      }
+    ]
+  end
+
+  defp repo_violations(%RepoState{} = repo, pr_checker) do
+    case pr_checker.(repo) do
+      {:ok, %{url: url}} when is_binary(url) ->
+        []
+
+      :none ->
+        [
+          %{
+            repo: repo.name,
+            kind: :missing_pull_request,
+            detail: "branch #{repo.branch} is pushed but has no pull request"
+          }
+        ]
+
+      {:error, reason} ->
+        [
+          %{
+            repo: repo.name,
+            kind: :pr_check_failed,
+            detail: "could not verify pull request: #{inspect(reason)}"
+          }
+        ]
+    end
+  end
+
+  defp decode_pr_list(output) do
+    case Jason.decode(String.trim(output)) do
+      {:ok, [%{"url" => url, "state" => state} = pr | _rest]} when state != "CLOSED" ->
+        {:ok, %{url: url, state: state, number: pr["number"], title: pr["title"]}}
+
+      {:ok, _closed_or_empty} ->
+        :none
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp yes_no(true), do: "yes"
+  defp yes_no(false), do: "no"
+
   defp repo_dirs(workspace) do
     cond do
       File.dir?(Path.join(workspace, ".git")) ->
