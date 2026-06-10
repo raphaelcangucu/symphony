@@ -38,7 +38,7 @@ defmodule SymphonyElixir.PullRequestFix do
     |> Enum.map(fn entry -> Map.put(entry, :excerpt, excerpt(check_logs, repo, entry.job)) end)
   end
 
-  @spec build_comment([map()], keyword()) :: String.t()
+  @spec build_comment([map()], header: String.t()) :: String.t()
   def build_comment(entries, opts \\ []) when is_list(entries) do
     prs = entries |> Enum.map(& &1.pr) |> Enum.uniq_by(& &1.number)
 
@@ -48,7 +48,7 @@ defmodule SymphonyElixir.PullRequestFix do
         pr_section(pr, pr_entries)
       end)
 
-    Keyword.get(opts, :header, header()) <> Enum.join(sections, "\n")
+    comment_header(opts) <> Enum.join(sections, "\n")
   end
 
   defp ensure_present([]), do: {:error, :no_failing_checks}
@@ -88,6 +88,13 @@ defmodule SymphonyElixir.PullRequestFix do
   end
 
   defp excerpt(_check_logs, _repo, _job), do: nil
+
+  defp comment_header(opts) do
+    case Keyword.get(opts, :header) do
+      header when is_binary(header) -> header
+      _ -> header()
+    end
+  end
 
   defp header do
     "## CI failure — automated fix requested\n\n" <>

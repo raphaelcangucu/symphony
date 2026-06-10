@@ -119,9 +119,31 @@ defmodule SymphonyElixir.PullRequestFixTest do
 
       assert [%{job: %{name: "test"}, excerpt: "boom"}] = entries
     end
+
+    test "yields nil excerpt when log fetch fails" do
+      pr = %{
+        number: 7,
+        title: "t",
+        url: "u",
+        pipelines: [
+          %{
+            name: "CI",
+            url: nil,
+            jobs: [
+              %{name: "test", status: "COMPLETED", conclusion: "FAILURE", url: nil, job_id: 1}
+            ]
+          }
+        ]
+      }
+
+      entries =
+        PullRequestFix.failing_entries("o/r", [pr], check_logs: fn _repo, _id -> {:error, :boom} end)
+
+      assert [%{excerpt: nil}] = entries
+    end
   end
 
-  describe "build_comment/1" do
+  describe "build_comment/2" do
     test "renders PR section, failing job and excerpt" do
       entries = [
         %{
