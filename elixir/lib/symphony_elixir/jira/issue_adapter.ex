@@ -6,6 +6,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   alias SymphonyElixir.Jira.{Adf, Client, Config, Priority}
   alias SymphonyElixir.Jira.IssueAdapter.Query
   alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.Tracker.Workpad
 
   @default_issue_type "Task"
   @search_path "/rest/api/3/search/jql"
@@ -229,7 +230,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
     %{
       remote_id: comment["id"],
       body: body,
-      kind: SymphonyElixir.Tracker.Workpad.classify(body),
+      kind: Workpad.classify(body),
       author: get_in(comment, ["author", "displayName"]),
       remote_updated_at: comment["updated"]
     }

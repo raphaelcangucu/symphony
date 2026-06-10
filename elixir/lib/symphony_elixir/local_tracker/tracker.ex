@@ -144,6 +144,27 @@ defmodule SymphonyElixir.LocalTracker.Tracker do
     end
   end
 
+  @doc "Edits the issue's workpad comment in place, or creates it when absent."
+  @spec upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
+  def upsert_workpad(issue_id, body) when is_binary(issue_id) and is_binary(body) do
+    slug = Config.local_project_slug()
+
+    with {:ok, identifier} <- resolve_issue_identifier(issue_id) do
+      case Context.latest_workpad(slug, identifier) do
+        {:ok, workpad} -> replace_workpad_body(workpad, body)
+        {:error, :not_found} -> create_comment(issue_id, body)
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  defp replace_workpad_body(workpad, body) do
+    case Context.update_comment(workpad.id, body) do
+      {:ok, _comment} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
   def update_issue_state(issue_id, state_name)
       when is_binary(issue_id) and is_binary(state_name) do

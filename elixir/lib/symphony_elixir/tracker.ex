@@ -14,8 +14,6 @@ defmodule SymphonyElixir.Tracker do
   @callback upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
   @callback update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
 
-  @optional_callbacks upsert_workpad: 2
-
   @spec project_identity() :: String.t() | nil
   def project_identity, do: adapter().project_identity()
 
@@ -65,13 +63,7 @@ defmodule SymphonyElixir.Tracker do
   """
   @spec upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
   def upsert_workpad(issue_id, body) do
-    adapter = adapter()
-
-    if function_exported?(adapter, :upsert_workpad, 2) do
-      adapter.upsert_workpad(issue_id, body)
-    else
-      adapter.create_comment(issue_id, body)
-    end
+    adapter().upsert_workpad(issue_id, body)
   end
 
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}

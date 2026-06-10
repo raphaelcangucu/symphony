@@ -27,6 +27,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.LabelResolver
   alias SymphonyElixir.Tracker.Sync.UserRecord
+  alias SymphonyElixir.Tracker.Workpad
 
   @issue_preloads [:project, :status, :labels]
   @default_issue_status "Todo"
@@ -404,7 +405,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       |> Map.merge(%{
         issue_id: issue.id,
         body: body,
-        kind: attr(attrs, :kind, SymphonyElixir.Tracker.Workpad.classify(body)),
+        kind: attr(attrs, :kind, Workpad.classify(body)),
         author: attr(attrs, :author, "local")
       })
       |> then(&Comment.changeset(%Comment{}, &1))
@@ -440,7 +441,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
       %Comment{} = comment ->
         comment
-        |> Ecto.Changeset.change(%{body: body, kind: SymphonyElixir.Tracker.Workpad.classify(body)})
+        |> Ecto.Changeset.change(%{body: body, kind: Workpad.classify(body)})
         |> Repo.update()
     end
   end

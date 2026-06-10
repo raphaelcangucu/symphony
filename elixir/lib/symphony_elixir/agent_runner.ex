@@ -264,8 +264,10 @@ defmodule SymphonyElixir.AgentRunner do
   defp run_plan_gate(session, issue, opts, agent_kind, codex_update_recipient) do
     workpad_checker = Keyword.get(opts, :workpad_checker, default_workpad_checker(issue))
 
+    turn_opts = agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)
+
     run_corrective_turn = fn prompt ->
-      case CodingAgent.run_turn(session, prompt, issue, agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)) do
+      case CodingAgent.run_turn(session, prompt, issue, turn_opts) do
         {:ok, _turn_session} -> :ok
         {:error, reason} -> {:error, reason}
       end

@@ -249,13 +249,15 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   @spec update_comment(Project.t(), String.t(), String.t(), String.t()) ::
           {:ok, map()} | {:error, term()}
   def update_comment(%Project{} = project, identifier, remote_id, body) do
-    with {:ok, repo} <- resolve_issue_repo(project, identifier) do
-      case IssueComments.update(repo, remote_id, body) do
-        {:ok, comment} -> {:ok, comment}
-        error -> {:error, map_error(error)}
-      end
-    else
-      {:error, reason} -> {:error, map_error(reason)}
+    case resolve_issue_repo(project, identifier) do
+      {:ok, repo} ->
+        case IssueComments.update(repo, remote_id, body) do
+          {:ok, comment} -> {:ok, comment}
+          error -> {:error, map_error(error)}
+        end
+
+      {:error, reason} ->
+        {:error, map_error(reason)}
     end
   end
 

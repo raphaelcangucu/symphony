@@ -686,6 +686,18 @@ itself. If even that fails, the issue receives the `symphony:blocked` label plus
 a workpad note and is NOT transitioned. Verified or created PRs are linked to
 the issue deterministically (origin `agent`).
 
+#### 7.2.2 Plan gate (reliable workpad)
+
+After the agent's first turn, the orchestrator verifies that a `## Codex
+Workpad` comment exists for the issue (plan + acceptance criteria + validation,
+per the `workpad` skill). A missing workpad triggers one corrective turn; a
+still-missing workpad logs a warning and the run continues (softer than the
+publish gate). The workpad is a single comment edited in place:
+`Tracker.upsert_workpad/2` updates the local comment and enqueues a coalesced
+`comment:update` outbox operation, which the GitHub/Linear/Jira sync drivers
+push as in-place comment edits. Locally authored comments carry a sync status
+(`pending` → `synced`/`error`) surfaced in the issue detail UI.
+
 ### 7.3 Transition Triggers
 
 - `Poll Tick`

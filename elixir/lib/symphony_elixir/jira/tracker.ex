@@ -46,6 +46,10 @@ defmodule SymphonyElixir.Jira.Tracker do
     end
   end
 
+  @doc "Live trackers have no local workpad store; upsert degrades to a new comment."
+  @spec upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
+  def upsert_workpad(issue_key, body), do: create_comment(issue_key, body)
+
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
   def update_issue_state(issue_key, state_name)
       when is_binary(issue_key) and is_binary(state_name) do

@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Tracker.Sync.EngineCommentSyncTest do
 
   alias SymphonyElixir.LocalTracker.{Comment, Context}
   alias SymphonyElixir.Repo
-  alias SymphonyElixir.Tracker.Sync.{Engine, Outbox, OutboxEntry}
+  alias SymphonyElixir.Tracker.Sync.{Engine, LocalStore, Outbox, OutboxEntry}
 
   defmodule OkDriver do
     @behaviour SymphonyElixir.Tracker.Sync.Driver
@@ -41,7 +41,7 @@ defmodule SymphonyElixir.Tracker.Sync.EngineCommentSyncTest do
 
   test "successful comment:create push links remote id and marks comment synced", %{project: project, issue: issue} do
     {:ok, comment} = Context.add_comment(project.slug, issue.identifier, "## Codex Workpad\nv1", %{})
-    {:ok, _} = SymphonyElixir.Tracker.Sync.LocalStore.mark_comment_sync_status(comment.id, "pending")
+    {:ok, _} = LocalStore.mark_comment_sync_status(comment.id, "pending")
 
     Outbox.enqueue(%{
       project_id: project.id,
@@ -61,7 +61,7 @@ defmodule SymphonyElixir.Tracker.Sync.EngineCommentSyncTest do
 
   test "comment:update push marks comment synced", %{project: project, issue: issue} do
     {:ok, comment} = Context.add_comment(project.slug, issue.identifier, "## Codex Workpad\nv1", %{})
-    {:ok, _} = SymphonyElixir.Tracker.Sync.LocalStore.mark_comment_sync_status(comment.id, "pending")
+    {:ok, _} = LocalStore.mark_comment_sync_status(comment.id, "pending")
 
     Outbox.enqueue(%{
       project_id: project.id,
@@ -83,7 +83,7 @@ defmodule SymphonyElixir.Tracker.Sync.EngineCommentSyncTest do
 
   test "exhausted failures mark comment sync_status error", %{project: project, issue: issue} do
     {:ok, comment} = Context.add_comment(project.slug, issue.identifier, "x", %{})
-    {:ok, _} = SymphonyElixir.Tracker.Sync.LocalStore.mark_comment_sync_status(comment.id, "pending")
+    {:ok, _} = LocalStore.mark_comment_sync_status(comment.id, "pending")
 
     Outbox.enqueue(%{
       project_id: project.id,

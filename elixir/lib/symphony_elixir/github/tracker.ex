@@ -70,6 +70,10 @@ defmodule SymphonyElixir.GitHub.Tracker do
     client_module().create_comment(issue_id, body)
   end
 
+  @doc "Live trackers have no local workpad store; upsert degrades to a new comment."
+  @spec upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
+  def upsert_workpad(issue_id, body), do: create_comment(issue_id, body)
+
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
   def update_issue_state(issue_id, state_name)
       when is_binary(issue_id) and is_binary(state_name) do

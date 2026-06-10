@@ -504,6 +504,28 @@ mechanically. If even that fails, the issue receives the `symphony:blocked`
 label plus a workpad note and is NOT transitioned. Verified/created PRs are
 linked to the issue deterministically (origin `agent`).
 
+### Plan gate and reliable workpad
+
+Right after the agent's first turn, the orchestrator verifies that the issue has
+a `## Codex Workpad` comment (the single human-readable source of truth: plan,
+acceptance criteria, validation, outcome — see the `workpad` skill). A missing
+workpad triggers one corrective turn; if it is still missing the run continues
+with a logged warning (the plan gate never strands implementation work).
+
+Workpads are first-class in sync:
+
+- Locally authored comments are classified by body (`Tracker.Workpad`) and start
+  with `sync_status: "pending"`; pushing through the outbox flips them to
+  `"synced"` (or `"error"` after exhausted attempts), surfaced as a badge in the
+  issue detail UI.
+- `Tracker.upsert_workpad/2` edits the existing workpad in place instead of
+  stacking comments, enqueueing a coalesced `comment:update` outbox operation.
+  Symphony-generated notes (incomplete runs, publish-gate blocks) use this path.
+- All three remote drivers push comment updates in place: GitHub
+  (`updateIssueComment` GraphQL / REST `PATCH`), Linear
+  (`commentCreate`/`commentUpdate` GraphQL), and Jira (REST `PUT`). An update
+  whose create was never pushed degrades to a create.
+
 ### Agent preference
 
 Symphony resolves which coding agent runs an issue through a four-level chain, from most

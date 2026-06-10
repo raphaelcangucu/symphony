@@ -9,6 +9,7 @@ defmodule SymphonyElixir.GitHub.IssueComments do
   """
 
   alias SymphonyElixir.GitHub.Api
+  alias SymphonyElixir.Tracker.Workpad
 
   @type comment :: %{atom() => term()}
 
@@ -76,7 +77,7 @@ defmodule SymphonyElixir.GitHub.IssueComments do
 
   def parse_node(_node), do: nil
 
-  defp classify(body), do: SymphonyElixir.Tracker.Workpad.classify(body)
+  defp classify(body), do: Workpad.classify(body)
 
   defp extract_author(node) do
     case Map.get(node, "author") do
