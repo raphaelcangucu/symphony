@@ -115,6 +115,41 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   end
 
   @impl true
+  def upsert_workpad(issue_id, body) when is_binary(issue_id) and is_binary(body) do
+    with {:ok, project} <- resolve_project_for_issue(issue_id),
+         {:ok, identifier} <- resolve_identifier(project, issue_id) do
+      case Context.latest_workpad(project.slug, identifier) do
+        {:ok, workpad} ->
+          update_workpad(project, identifier, workpad, body)
+
+        {:error, :not_found} ->
+          create_comment(issue_id, body)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      :skip -> {:error, :project_not_resolved}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp update_workpad(project, identifier, workpad, body) do
+    with {:ok, updated} <- Context.update_comment(workpad.id, body),
+         {:ok, updated} <- LocalStore.mark_comment_sync_status(updated.id, "pending") do
+      payload = %{
+        "identifier" => identifier,
+        "body" => body,
+        "comment_id" => updated.id,
+        "remote_id" => updated.remote_id
+      }
+
+      enqueue(project, identifier, "comment", "update", payload, "comment:update:#{project.id}:#{updated.id}")
+      :ok
+    end
+  end
+
+  @impl true
   def update_issue_state(issue_id, state_name) when is_binary(issue_id) and is_binary(state_name) do
     with {:ok, project} <- resolve_project_for_issue(issue_id),
          {:ok, identifier} <- resolve_identifier(project, issue_id),

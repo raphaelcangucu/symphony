@@ -886,7 +886,7 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp annotate_blocked(running_entry, issue_id, violations) do
-    case Tracker.create_comment(issue_id, blocked_comment_body(violations)) do
+    case Tracker.upsert_workpad(issue_id, blocked_comment_body(violations)) do
       :ok -> :ok
       {:error, error} -> Logger.warning("Failed to post blocked comment issue_id=#{issue_id}: #{inspect(error)}")
     end
@@ -1015,7 +1015,7 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp post_incomplete_workpad_comment(issue_id, reason) do
-    case Tracker.create_comment(issue_id, incomplete_workpad_comment_body(reason)) do
+    case Tracker.upsert_workpad(issue_id, incomplete_workpad_comment_body(reason)) do
       :ok ->
         :ok
 

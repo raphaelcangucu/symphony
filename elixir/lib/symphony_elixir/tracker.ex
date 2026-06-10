@@ -11,7 +11,10 @@ defmodule SymphonyElixir.Tracker do
   @callback fetch_issues_by_states([String.t()]) :: {:ok, [term()]} | {:error, term()}
   @callback fetch_issue_states_by_ids([String.t()]) :: {:ok, [term()]} | {:error, term()}
   @callback create_comment(String.t(), String.t()) :: :ok | {:error, term()}
+  @callback upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
   @callback update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
+
+  @optional_callbacks upsert_workpad: 2
 
   @spec project_identity() :: String.t() | nil
   def project_identity, do: adapter().project_identity()
@@ -52,6 +55,23 @@ defmodule SymphonyElixir.Tracker do
   @spec create_comment(String.t(), String.t()) :: :ok | {:error, term()}
   def create_comment(issue_id, body) do
     adapter().create_comment(issue_id, body)
+  end
+
+  @doc """
+  Creates the issue's `## Codex Workpad` comment, or edits the existing one in
+  place. One workpad per issue; edits flow to the remote tracker as
+  `comment:update` outbox operations. Adapters without upsert support fall back
+  to plain comment creation.
+  """
+  @spec upsert_workpad(String.t(), String.t()) :: :ok | {:error, term()}
+  def upsert_workpad(issue_id, body) do
+    adapter = adapter()
+
+    if function_exported?(adapter, :upsert_workpad, 2) do
+      adapter.upsert_workpad(issue_id, body)
+    else
+      adapter.create_comment(issue_id, body)
+    end
   end
 
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
