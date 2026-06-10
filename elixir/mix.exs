@@ -111,6 +111,7 @@ defmodule SymphonyElixir.MixProject do
         ]
       ],
       test_ignore_filters: [
+        "test/support/git_fixtures.exs",
         "test/support/snapshot_support.exs",
         "test/support/test_support.exs"
       ],

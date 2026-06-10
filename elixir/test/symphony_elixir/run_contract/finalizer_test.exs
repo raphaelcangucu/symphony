@@ -1,34 +1,13 @@
 defmodule SymphonyElixir.RunContract.FinalizerTest do
   use ExUnit.Case, async: true
 
+  import SymphonyElixir.GitFixtures
+
   alias SymphonyElixir.Issue
   alias SymphonyElixir.RunContract
   alias SymphonyElixir.RunContract.Finalizer
 
   @moduletag :tmp_dir
-
-  defp sh!(dir, cmd) do
-    {out, 0} = System.cmd("sh", ["-lc", cmd], cd: dir, stderr_to_stdout: true)
-    out
-  end
-
-  defp make_repo!(tmp_dir, workspace, name) do
-    origin = Path.join(tmp_dir, "#{name}-origin.git")
-    repo = Path.join(workspace, name)
-    File.mkdir_p!(origin)
-    File.mkdir_p!(repo)
-    sh!(origin, "git init --bare -b main .")
-
-    sh!(repo, """
-    git init -b main . &&
-    git config user.email t@t && git config user.name t &&
-    echo hello > README.md && git add -A && git commit -m init &&
-    git remote add origin "#{origin}" && git push -u origin main &&
-    git remote set-head origin main
-    """)
-
-    repo
-  end
 
   defp issue, do: %Issue{id: "uuid-1", identifier: "GAM-9", title: "Do the thing", state: "In Progress"}
 

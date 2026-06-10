@@ -1,36 +1,12 @@
 defmodule SymphonyElixir.RunContractTest do
   use ExUnit.Case, async: true
 
+  import SymphonyElixir.GitFixtures
+
   alias SymphonyElixir.RunContract
   alias SymphonyElixir.RunContract.RepoState
 
   @moduletag :tmp_dir
-
-  # --- git fixture helpers -------------------------------------------------
-
-  defp sh!(dir, cmd) do
-    {out, 0} = System.cmd("sh", ["-lc", cmd], cd: dir, stderr_to_stdout: true)
-    out
-  end
-
-  # Creates origin (bare) + a clone at workspace/<name> with one commit on `main`.
-  defp make_repo!(tmp_dir, workspace, name) do
-    origin = Path.join(tmp_dir, "#{name}-origin.git")
-    repo = Path.join(workspace, name)
-    File.mkdir_p!(origin)
-    File.mkdir_p!(repo)
-    sh!(origin, "git init --bare -b main .")
-
-    sh!(repo, """
-    git init -b main . &&
-    git config user.email t@t && git config user.name t &&
-    echo hello > README.md && git add -A && git commit -m init &&
-    git remote add origin "#{origin}" && git push -u origin main &&
-    git remote set-head origin main
-    """)
-
-    repo
-  end
 
   defp workspace!(tmp_dir) do
     ws = Path.join(tmp_dir, "GAM-9")
