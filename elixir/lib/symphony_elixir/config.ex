@@ -640,6 +640,11 @@ defmodule SymphonyElixir.Config do
     InstanceConfig.poll_interval_ms()
   end
 
+  @spec pr_monitor_interval_ms() :: pos_integer()
+  def pr_monitor_interval_ms do
+    InstanceConfig.pr_monitor_interval_ms()
+  end
+
   @doc """
   Minimum spacing (ms) between successive GitHub read requests through the
   `GitHub.RequestGateway`. Defaults to #{@default_github_read_interval_ms}.

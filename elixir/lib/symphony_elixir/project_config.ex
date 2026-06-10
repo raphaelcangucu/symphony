@@ -40,6 +40,7 @@ defmodule SymphonyElixir.ProjectConfig do
     :completion_transitions,
     :max_concurrent_agents_by_state,
     :dev_server,
+    :pr_monitor,
     :hooks,
     :evidence
   ]
@@ -76,6 +77,7 @@ defmodule SymphonyElixir.ProjectConfig do
       completion_transitions: agent_override(project_front_matter, "completion_transitions"),
       max_concurrent_agents_by_state: agent_override(project_front_matter, "max_concurrent_agents_by_state"),
       dev_server: front_matter_section(project_front_matter, "dev_server"),
+      pr_monitor: front_matter_section(project_front_matter, "pr_monitor"),
       hooks: front_matter_section(project_front_matter, "hooks"),
       evidence: get_in(opts, [:evidence]) || %{}
     }
@@ -236,6 +238,21 @@ defmodule SymphonyElixir.ProjectConfig do
   end
 
   def dev_server_auto_start_on(_config), do: []
+
+  @spec pr_monitor_enabled?(t()) :: boolean()
+  def pr_monitor_enabled?(%__MODULE__{pr_monitor: %{"enabled" => true}}), do: true
+  def pr_monitor_enabled?(%__MODULE__{}), do: false
+
+  @spec pr_monitor_max_auto_rework(t()) :: pos_integer()
+  def pr_monitor_max_auto_rework(%__MODULE__{pr_monitor: %{"max_auto_rework" => max}})
+      when is_integer(max) and max > 0,
+      do: max
+
+  def pr_monitor_max_auto_rework(%__MODULE__{}), do: 2
+
+  @spec pr_monitor_done_on_merge?(t()) :: boolean()
+  def pr_monitor_done_on_merge?(%__MODULE__{pr_monitor: %{"done_on_merge" => false}}), do: false
+  def pr_monitor_done_on_merge?(%__MODULE__{}), do: true
 
   defp dispatch_states(opts) do
     case get_in(opts, [:tracker, :dispatch_states]) do
