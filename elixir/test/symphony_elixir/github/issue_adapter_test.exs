@@ -584,7 +584,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
                    "nodes" => [
                      %{"id" => "L1", "name" => "bug", "color" => "ff0000"},
                      %{"id" => "AGC", "name" => "symphony:codex", "color" => nil},
-                    %{"id" => "AGCL", "name" => "symphony:claude", "color" => nil},
+                     %{"id" => "AGCL", "name" => "symphony:claude", "color" => nil},
                      %{"id" => "P2", "name" => "priority:2", "color" => nil}
                    ]
                  }

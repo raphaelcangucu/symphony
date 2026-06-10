@@ -7,10 +7,22 @@ defmodule SymphonyElixir.Orchestrator do
   require Logger
   import Bitwise, only: [<<<: 2]
 
-  alias SymphonyElixir.{AgentRunner, Config, Issue, ProjectConfig, Repo, RunContract, StatusDashboard, Tracker, Workspace}
+  alias SymphonyElixir.{
+    AgentRunner,
+    Config,
+    Issue,
+    ProjectConfig,
+    Repo,
+    RunContract,
+    StatusDashboard,
+    Tracker,
+    Workspace
+  }
+
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.RunContract.Finalizer
   alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
+  alias SymphonyElixir.Tracker.Sync.LocalStore
 
   @incomplete_run_label "symphony:incomplete"
   @blocked_run_label "symphony:blocked"
@@ -857,12 +869,7 @@ defmodule SymphonyElixir.Orchestrator do
        when is_binary(slug) and slug != "" and is_list(prs) and prs != [] do
     case Context.get_project(slug) do
       {:ok, project} ->
-        Enum.each(prs, fn pr ->
-          case SymphonyElixir.Tracker.Sync.LocalStore.upsert_run_pull_request(project.id, identifier, pr) do
-            {:ok, _record} -> :ok
-            {:error, error} -> Logger.warning("Failed to persist run PR link issue=#{identifier} url=#{pr[:url]}: #{inspect(error)}")
-          end
-        end)
+        Enum.each(prs, &persist_run_pull_request(project.id, identifier, &1))
 
       {:error, error} ->
         Logger.warning("Cannot persist run PR links issue=#{identifier}: project lookup failed #{inspect(error)}")
@@ -870,6 +877,13 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp record_run_pull_requests(_issue, _prs), do: :ok
+
+  defp persist_run_pull_request(project_id, identifier, pr) do
+    case LocalStore.upsert_run_pull_request(project_id, identifier, pr) do
+      {:ok, _record} -> :ok
+      {:error, error} -> Logger.warning("Failed to persist run PR link issue=#{identifier} url=#{pr[:url]}: #{inspect(error)}")
+    end
+  end
 
   defp annotate_blocked(running_entry, issue_id, violations) do
     case Tracker.create_comment(issue_id, blocked_comment_body(violations)) do

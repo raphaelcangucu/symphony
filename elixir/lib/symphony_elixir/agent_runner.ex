@@ -4,7 +4,21 @@ defmodule SymphonyElixir.AgentRunner do
   """
 
   require Logger
-  alias SymphonyElixir.{AgentPreference, CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, RunContract, Tracker, Workspace}
+
+  alias SymphonyElixir.{
+    AgentPreference,
+    CodingAgent,
+    Config,
+    InstanceConfig,
+    Issue,
+    ProjectConfig,
+    PromptBuilder,
+    Repo,
+    RunContract,
+    Tracker,
+    Workspace
+  }
+
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.GitHub.ReadCache
@@ -179,8 +193,10 @@ defmodule SymphonyElixir.AgentRunner do
             RunContract.evaluate_publish(RunContract.repo_states(ws), RunContract.gh_pr_checker())
           end)
 
+        turn_opts = agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)
+
         run_corrective_turn = fn prompt ->
-          case CodingAgent.run_turn(session, prompt, issue, agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)) do
+          case CodingAgent.run_turn(session, prompt, issue, turn_opts) do
             {:ok, _turn_session} -> :ok
             {:error, reason} -> {:error, reason}
           end
