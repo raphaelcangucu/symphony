@@ -93,6 +93,35 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
       assert %{auto_rework_count: 1, last_action: "moved_to_rework"} = MonitorState.get("proj", issue.identifier, "u7")
     end
 
+    test "review findings can move to Rework and persist marker", %{project: project, issue: issue} do
+      marker = "2026-06-10T12:00:00Z"
+      calls = start_supervised!({Agent, fn -> [] end})
+
+      dispatch = fn _p, fun, args ->
+        Agent.update(calls, &[{fun, args} | &1])
+        {:ok, %{}}
+      end
+
+      o =
+        opts(
+          pull_request_reader: fn _p, _i, _o -> {:ok, [review_findings_pr(marker)]} end,
+          classifier: fn :review_findings, _ctx, _o ->
+            {:ok, %{"verdict" => "fixable_by_agent", "summary" => "s"}}
+          end,
+          issue_dispatch: dispatch
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+
+      assert [{:add_comment, _}, {:move_issue, [identifier, %{"status" => "Rework"}]}] =
+               Agent.get(calls, &Enum.reverse/1)
+
+      assert identifier == issue.identifier
+
+      assert %{last_review_marker: ^marker, auto_rework_count: 1, last_action: "moved_to_rework"} =
+               MonitorState.get("proj", issue.identifier, "u7")
+    end
+
     test "rework limit keeps issue and records limit_reached", %{project: project, issue: issue} do
       {:ok, _} = MonitorState.upsert("proj", issue.identifier, "u7", %{auto_rework_count: 2})
       calls = start_supervised!({Agent, fn -> [] end})
@@ -163,6 +192,29 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
       assert :ok = PullRequestMonitor.process_issue(project, issue, o)
       assert Agent.get(calls, & &1) == []
     end
+
+    test "dispatch failure rolls back consumed fingerprint and allows reclassification", %{
+      project: project,
+      issue: issue
+    } do
+      count = start_supervised!({Agent, fn -> 0 end})
+
+      o =
+        opts(
+          pull_request_reader: fn _p, _i, _o -> {:ok, [failing_pr()]} end,
+          classifier: fn :ci_failure, _ctx, _o ->
+            Agent.update(count, &(&1 + 1))
+            {:ok, %{"verdict" => "pr_caused", "summary" => "s"}}
+          end,
+          issue_dispatch: fn _p, :add_comment, _args -> {:error, :boom} end
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+      assert %{last_checks_fingerprint: nil} = MonitorState.get("proj", issue.identifier, "u7")
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+      assert Agent.get(count, & &1) == 2
+    end
   end
 
   defp migrate_repo do
@@ -205,6 +257,28 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
         }
       ],
       conversation: []
+    }
+  end
+
+  defp review_findings_pr(marker) do
+    %{
+      number: 7,
+      url: "u7",
+      title: "t",
+      state: "open",
+      merged: false,
+      author: "bot",
+      head_sha: "abc",
+      checks_state: nil,
+      pipelines: [],
+      conversation: [
+        %{
+          author: "review-bot",
+          body: "Blocking: missing nil check",
+          review_state: "CHANGES_REQUESTED",
+          created_at: marker
+        }
+      ]
     }
   end
 

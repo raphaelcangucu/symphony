@@ -71,7 +71,18 @@ defmodule SymphonyElixir.PullRequestMonitor do
 
   defp handle_event(:merged, project, config, _repo, identifier, pr, opts) do
     if ProjectConfig.pr_monitor_done_on_merge?(config) do
-      apply_transition(project, config, identifier, pr, :move_done, merged_comment(pr), %{}, opts)
+      apply_transition(
+        project,
+        config,
+        identifier,
+        pr,
+        :move_done,
+        merged_comment(pr),
+        %{},
+        0,
+        %{},
+        opts
+      )
     end
   end
 
@@ -83,7 +94,17 @@ defmodule SymphonyElixir.PullRequestMonitor do
     context = ci_context(repo, project, identifier, pr, opts)
     {:ok, verdict} = classifier.(:ci_failure, context, opts)
 
-    run_decision(:ci_failure, verdict, project, config, repo, identifier, pr, opts)
+    run_decision(
+      :ci_failure,
+      verdict,
+      %{last_checks_fingerprint: nil},
+      project,
+      config,
+      repo,
+      identifier,
+      pr,
+      opts
+    )
   end
 
   defp handle_event({:review_findings, marker}, project, config, repo, identifier, pr, opts) do
@@ -95,10 +116,20 @@ defmodule SymphonyElixir.PullRequestMonitor do
     context = review_context(repo, project, identifier, pr, review, opts)
     {:ok, verdict} = classifier.(:review_findings, context, opts)
 
-    run_decision({:review_findings, review}, verdict, project, config, repo, identifier, pr, opts)
+    run_decision(
+      {:review_findings, review},
+      verdict,
+      %{last_review_marker: nil},
+      project,
+      config,
+      repo,
+      identifier,
+      pr,
+      opts
+    )
   end
 
-  defp run_decision(event, verdict, project, config, repo, identifier, pr, opts) do
+  defp run_decision(event, verdict, rollback_attrs, project, config, repo, identifier, pr, opts) do
     kind = event_kind(event)
     count = MonitorState.max_rework_count(project.slug, identifier)
     max = ProjectConfig.pr_monitor_max_auto_rework(config)
@@ -113,6 +144,8 @@ defmodule SymphonyElixir.PullRequestMonitor do
       action,
       comment,
       %{"verdict" => verdict_value(verdict, "verdict"), "summary" => verdict_value(verdict, "summary")},
+      count,
+      rollback_attrs,
       opts
     )
   end
@@ -120,43 +153,110 @@ defmodule SymphonyElixir.PullRequestMonitor do
   defp event_kind({:review_findings, _review}), do: :review_findings
   defp event_kind(kind) when is_atom(kind), do: kind
 
-  defp apply_transition(project, config, identifier, pr, action, comment, classification, opts) do
+  defp apply_transition(project, config, identifier, pr, action, comment, classification, count, rollback_attrs, opts) do
     dispatch = Keyword.get(opts, :issue_dispatch, &IssueAdapter.dispatch/3)
     pr_url = pr_field(pr, :url)
 
+    # Residual race accepted for v1: issue can leave wait state after this check
+    # and before dispatch; we still gate to reduce unintended transitions.
     if issue_still_waiting?(project, identifier, config) do
-      {:ok, _} = dispatch.(project, :add_comment, [identifier, comment, %{}])
+      case normalize_dispatch_result(dispatch.(project, :add_comment, [identifier, comment, %{}])) do
+        {:ok, _comment} ->
+          persist_action_after_comment(
+            project,
+            identifier,
+            pr_url,
+            action,
+            classification,
+            count,
+            dispatch,
+            rollback_attrs,
+            opts
+          )
 
-      {last_action, extra} =
-        case action do
-          :move_done ->
-            {:ok, _} = dispatch.(project, :move_issue, [identifier, %{"status" => @done_state}])
-            {"moved_to_done", %{}}
+        {:error, reason} ->
+          Logger.warning("PR monitor comment dispatch failed issue=#{identifier} pr_url=#{inspect(pr_url)} reason=#{inspect(reason)}")
 
-          :move_rework ->
-            {:ok, _} = dispatch.(project, :move_issue, [identifier, %{"status" => @rework_state}])
-            row = MonitorState.get(project.slug, identifier, pr_url)
-            {"moved_to_rework", %{auto_rework_count: ((row && row.auto_rework_count) || 0) + 1}}
-
-          {:stay, :limit_reached} ->
-            {"limit_reached", %{}}
-
-          {:stay, _reason} ->
-            {"kept_human_review", %{}}
-        end
-
-      attrs =
-        Map.merge(extra, %{
-          last_action: last_action,
-          last_classification: classification,
-          last_action_at: DateTime.utc_now()
-        })
-
-      {:ok, _} = MonitorState.upsert(project.slug, identifier, pr_url, attrs)
-      :ok
+          rollback_consumption(project, identifier, pr_url, rollback_attrs, reason)
+      end
     else
       Logger.debug("PR monitor action discarded issue=#{identifier} reason=:left_wait_state")
       :ok
+    end
+  end
+
+  defp persist_action_after_comment(
+         project,
+         identifier,
+         pr_url,
+         action,
+         classification,
+         count,
+         dispatch,
+         rollback_attrs,
+         _opts
+       ) do
+    with {:ok, {last_action, extra}} <-
+           apply_action_transition(project, identifier, action, count, dispatch),
+         attrs <-
+           Map.merge(extra, %{
+             last_action: last_action,
+             last_classification: classification,
+             last_action_at: DateTime.utc_now()
+           }),
+         {:ok, _row} <- MonitorState.upsert(project.slug, identifier, pr_url, attrs) do
+      :ok
+    else
+      {:error, reason} ->
+        rollback_consumption(project, identifier, pr_url, rollback_attrs, reason)
+    end
+  end
+
+  defp apply_action_transition(project, identifier, :move_done, _count, dispatch) do
+    case normalize_dispatch_result(dispatch.(project, :move_issue, [identifier, %{"status" => @done_state}])) do
+      {:ok, _issue} -> {:ok, {"moved_to_done", %{}}}
+      {:error, reason} -> {:error, {:move_failed, reason}}
+    end
+  end
+
+  defp apply_action_transition(project, identifier, :move_rework, count, dispatch) do
+    case normalize_dispatch_result(dispatch.(project, :move_issue, [identifier, %{"status" => @rework_state}])) do
+      {:ok, _issue} ->
+        {:ok, {"moved_to_rework", %{auto_rework_count: count + 1}}}
+
+      {:error, reason} ->
+        Logger.warning("PR monitor move to Rework failed after comment issue=#{identifier} reason=#{inspect(reason)} retry_may_duplicate_comment=true")
+
+        {:error, {:move_failed, reason}}
+    end
+  end
+
+  defp apply_action_transition(_project, _identifier, {:stay, :limit_reached}, _count, _dispatch),
+    do: {:ok, {"limit_reached", %{}}}
+
+  defp apply_action_transition(_project, _identifier, {:stay, _reason}, _count, _dispatch),
+    do: {:ok, {"kept_human_review", %{}}}
+
+  defp normalize_dispatch_result({:ok, _} = ok), do: ok
+  defp normalize_dispatch_result({:error, _} = error), do: error
+  defp normalize_dispatch_result(other), do: {:error, {:unexpected_dispatch_result, other}}
+
+  defp rollback_consumption(_project, _identifier, _pr_url, rollback_attrs, _reason)
+       when map_size(rollback_attrs) == 0 do
+    :ok
+  end
+
+  defp rollback_consumption(project, identifier, pr_url, rollback_attrs, reason) do
+    Logger.warning("PR monitor rolling back consumed event issue=#{identifier} pr_url=#{inspect(pr_url)} reason=#{inspect(reason)}")
+
+    case MonitorState.upsert(project.slug, identifier, pr_url, rollback_attrs) do
+      {:ok, _row} ->
+        :ok
+
+      {:error, rollback_reason} ->
+        Logger.warning("PR monitor failed to rollback consumed event issue=#{identifier} pr_url=#{inspect(pr_url)} reason=#{inspect(rollback_reason)}")
+
+        :ok
     end
   end
 
