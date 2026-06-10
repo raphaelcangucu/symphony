@@ -478,7 +478,9 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("dispatch_coding_agent", { goal_mode: true }));
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("dispatch_coding_agent", expect.objectContaining({ goal_mode: true })),
+    );
 
     const dispatchCallIndex = push.mock.calls.findIndex(([event]) => event === "dispatch_coding_agent");
     pushReceives[dispatchCallIndex]?.ok?.({ message: "Requested Codex work on MAC-1" });

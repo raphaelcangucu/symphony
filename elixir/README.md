@@ -285,7 +285,7 @@ These apply to the whole BEAM process and are read from `elixir/.env` when using
 | `SYMPHONY_CODEX_COMMAND` | `codex … app-server` | Default Codex app-server command |
 | `SYMPHONY_CODEX_APPROVAL_POLICY` | `never` | Instance Codex approval policy |
 | `SYMPHONY_CODEX_THREAD_SANDBOX` | `workspace-write` | Instance Codex thread sandbox |
-| `SYMPHONY_CLAUDE_COMMAND` | `symphony-claude` | Default Claude app-server command |
+| `SYMPHONY_CLAUDE_COMMAND` | `claude` | Claude Code CLI invoked per turn by the native backend |
 | `SYMPHONY_DEFAULT_AGENT_KIND` | `codex` | Fallback agent when a project omits `codex:`/`claude:` |
 | `SYMPHONY_EDITOR_*` | — | Browser editor (code-server) overrides |
 | `SYMPHONY_LOCAL_TRACKER_DATABASE` | `.symphony/tracker.sqlite3` | SQLite path |

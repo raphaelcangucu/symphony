@@ -483,7 +483,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     assert issue.agent_goal == "Ship the local goal"
   end
 
-  test "create ignores goal for non-Codex agents" do
+  test "create persists the trimmed workflow objective for Claude agents" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
     conn =
@@ -491,12 +491,12 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
         "title" => "Claude dispatch",
         "status" => "Todo",
         "agent" => "claude",
-        "goal" => "Do not persist"
+        "goal" => "  Ship the Claude workflow  "
       })
 
     assert %{"data" => %{"identifier" => "MAC-1"}} = json_response(conn, 201)
     assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
-    assert issue.agent_goal == nil
+    assert issue.agent_goal == "Ship the Claude workflow"
   end
 
   defp authorized_conn do

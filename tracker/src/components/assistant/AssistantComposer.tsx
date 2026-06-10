@@ -60,6 +60,8 @@ interface AssistantComposerProps {
   seedMessage?: string | null;
   onForceQueued?: () => void;
   onSubmit: (payload: AssistantComposerSubmit) => void;
+  /** Reports the currently selected agent (on mount and on every change). */
+  onAgentChange?: (agent: AgentKind) => void;
 }
 
 export function AssistantComposer({
@@ -71,6 +73,7 @@ export function AssistantComposer({
   seedMessage = null,
   onForceQueued,
   onSubmit,
+  onAgentChange,
 }: AssistantComposerProps) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
@@ -99,6 +102,11 @@ export function AssistantComposer({
   useEffect(() => {
     saveComposerState(composerState);
   }, [composerState]);
+
+  // Surface the selected agent so consumers (e.g. the dispatch panel) can mirror it.
+  useEffect(() => {
+    onAgentChange?.(composerState.agent);
+  }, [composerState.agent, onAgentChange]);
 
   // When bundle changes, re-validate current model against the catalog for active agent
   useEffect(() => {

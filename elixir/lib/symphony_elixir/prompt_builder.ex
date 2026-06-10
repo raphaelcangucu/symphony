@@ -33,8 +33,34 @@ defmodule SymphonyElixir.PromptBuilder do
       |> IO.iodata_to_binary()
       |> ensure_utf8()
 
-    rendered <> discussion_section(issue) <> artifacts_section(Keyword.get(opts, :workspace))
+    rendered <>
+      workflow_guidance_section(issue, Keyword.get(opts, :agent_kind)) <>
+      discussion_section(issue) <>
+      artifacts_section(Keyword.get(opts, :workspace))
   end
+
+  # Codex receives the long-running objective as a native goal (set on the
+  # thread by the orchestrator), so it is not duplicated here. Claude has no
+  # native goal primitive, so the workflow objective is injected into the prompt
+  # and Claude relies on the agent runner's multi-turn loop for continuation.
+  defp workflow_guidance_section(%SymphonyElixir.Issue{agent_goal: goal}, "claude") when is_binary(goal) do
+    case String.trim(goal) do
+      "" ->
+        ""
+
+      trimmed ->
+        """
+
+        ## Long-running workflow
+
+        Treat this issue as a long-running workflow: keep iterating across turns until the objective below is met or you are genuinely blocked. Do not end the run while the issue is still active and work remains.
+
+        #{trimmed}
+        """
+    end
+  end
+
+  defp workflow_guidance_section(_issue, _agent_kind), do: ""
 
   defp resolve_template(%SymphonyElixir.Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
     case Context.get_project(slug) do

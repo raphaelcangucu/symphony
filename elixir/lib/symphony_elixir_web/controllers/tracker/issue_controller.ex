@@ -240,7 +240,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   defp maybe_put_agent(attrs, agent) when agent in ["codex", "claude"], do: Map.put(attrs, "agent", agent)
   defp maybe_put_agent(attrs, _agent), do: attrs
 
-  defp maybe_put_agent_goal(attrs, "codex", goal) when is_binary(goal) do
+  # Codex stores this as a native goal; Claude consumes it as workflow guidance.
+  defp maybe_put_agent_goal(attrs, agent, goal) when agent in ["codex", "claude"] and is_binary(goal) do
     case String.trim(goal) do
       "" -> attrs
       trimmed -> Map.put(attrs, "agent_goal", trimmed)

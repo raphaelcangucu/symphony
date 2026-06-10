@@ -67,16 +67,19 @@ defmodule SymphonyElixir.Assistant.ToolExecutorDispatchTest do
     assert result.message =~ "Codex"
   end
 
-  test "claude dispatch nils the goal", %{issue: issue} do
+  test "claude dispatch persists the workflow objective", %{issue: issue} do
     {:ok, result} =
       ToolExecutor.execute("pref", "dispatch_coding_agent", %{
         "identifier" => issue.identifier,
         "instructions" => "do it",
         "agent" => "claude",
-        "goal" => "long goal"
+        "goal" => "  long workflow  "
       })
 
-    assert result.data.agent_goal == nil
+    assert result.data.agent_goal == "long workflow"
+
+    {:ok, reloaded} = Context.get_issue("pref", issue.identifier)
+    assert reloaded.agent_goal == "long workflow"
   end
 
   defp label_names(issue) do

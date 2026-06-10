@@ -1,5 +1,5 @@
 import { ExternalLink, Rocket, Sparkles } from "lucide-react";
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 
 import { DocumentViewer } from "@/components/assistant/DocumentViewer";
@@ -40,6 +40,12 @@ export function IssueAuthoringPanel({
 }: IssueAuthoringPanelProps) {
   const normalizedIdentifier = useMemo(() => normalizeIssueIdentifier(identifier) || null, [identifier]);
   const [effectiveAgent, setEffectiveAgent] = useState<AgentKind>(effectiveAgentProp ?? "codex");
+  const [composerAgent, setComposerAgent] = useState<AgentKind | null>(null);
+  // The composer's live selection wins the label; the server-resolved agent is
+  // only the seed shown before the composer reports.
+  const activeAgent: AgentKind = composerAgent ?? effectiveAgent;
+  const activeAgentRef = useRef<AgentKind>(activeAgent);
+  activeAgentRef.current = activeAgent;
   const [refreshKey, setRefreshKey] = useState(0);
   const [issueMode, setIssueMode] = useState<IssueAssistantMode>("triage");
   const [issueModeRequestId, setIssueModeRequestId] = useState(0);
@@ -99,16 +105,24 @@ export function IssueAuthoringPanel({
   }, []);
 
   const toggleGoalMode = useCallback((enabled: boolean) => {
+    const term = longRunningModeTerm(activeAgentRef.current);
+    const name = agentDisplayName(activeAgentRef.current);
     setGoalMode(enabled);
     setGoalModeRequestId((current) => current + 1);
     setGoalModeError(null);
-    setGoalModeStatus(enabled ? "Enabling Codex goal mode..." : "Disabling Codex goal mode...");
+    setGoalModeStatus(enabled ? `Enabling ${name} ${term} mode...` : `Disabling ${name} ${term} mode...`);
   }, []);
 
   const handleGoalModeChanged = useCallback((enabled: boolean) => {
+    const term = longRunningModeTerm(activeAgentRef.current);
+    const name = agentDisplayName(activeAgentRef.current);
     setGoalMode(enabled);
     setGoalModeError(null);
-    setGoalModeStatus(enabled ? "Goal mode on: Codex dispatches will follow a long-running goal." : "Goal mode off.");
+    setGoalModeStatus(
+      enabled
+        ? `${capitalize(term)} mode on: ${name} dispatches will follow a long-running ${term}.`
+        : `${capitalize(term)} mode off.`,
+    );
   }, []);
 
   const handleGoalModeError = useCallback((message: string) => {
@@ -120,13 +134,16 @@ export function IssueAuthoringPanel({
     setEffectiveAgent(agent);
   }, []);
 
+  const handleComposerAgentResolved = useCallback((agent: AgentKind) => {
+    setComposerAgent(agent);
+  }, []);
+
   const handleDispatch = useCallback(() => {
-    const label = effectiveAgent === "claude" ? "Claude" : "Codex";
     setDispatching(true);
     setDispatchError(null);
-    setDispatchStatus(`Dispatching to ${label}...`);
+    setDispatchStatus(`Dispatching to ${agentDisplayName(activeAgentRef.current)}...`);
     setDispatchRequestId((current) => current + 1);
-  }, [effectiveAgent]);
+  }, []);
 
   const handleDispatchSucceeded = useCallback((message: string) => {
     setDispatching(false);
@@ -167,6 +184,7 @@ export function IssueAuthoringPanel({
         onDispatchSucceeded={handleDispatchSucceeded}
         onDispatchError={handleDispatchError}
         onEffectiveAgentResolved={handleEffectiveAgentResolved}
+        onComposerAgentResolved={handleComposerAgentResolved}
         composerSeedMessage={composerSeedMessage}
       />
     </div>
@@ -265,36 +283,37 @@ export function IssueAuthoringPanel({
             ) : issueModeStatus ? (
               <p className="text-xs text-muted-foreground">{issueModeStatus}</p>
             ) : null}
-            {effectiveAgent !== "claude" ? (
-              <>
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2.5">
-                  <span className="min-w-0">
-                    <span className="block text-xs font-medium text-foreground">Codex goal mode (long-running)</span>
-                    <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-                      When on, dispatched Codex runs follow the spec/plan as a long-running goal.
-                    </span>
+            <>
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2.5">
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium text-foreground">
+                    {agentDisplayName(activeAgent)} {longRunningModeTerm(activeAgent)} mode (long-running)
                   </span>
-                  <span className="relative inline-flex shrink-0 items-center">
-                    <input
-                      type="checkbox"
-                      checked={goalMode}
-                      aria-label="Codex goal mode"
-                      onChange={(event) => toggleGoalMode(event.target.checked)}
-                      className="peer sr-only"
-                    />
-                    <span className="h-5 w-9 rounded-full bg-input transition-colors duration-200 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2" />
-                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-background shadow-sm transition-transform duration-200 peer-checked:translate-x-4" />
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                    When on, dispatched {agentDisplayName(activeAgent)} runs follow the spec/plan as a long-running{" "}
+                    {longRunningModeTerm(activeAgent)}.
                   </span>
-                </label>
-                {goalModeError ? (
-                  <p role="alert" className="text-xs text-destructive">
-                    {goalModeError}
-                  </p>
-                ) : goalModeStatus ? (
-                  <p className="text-xs text-muted-foreground">{goalModeStatus}</p>
-                ) : null}
-              </>
-            ) : null}
+                </span>
+                <span className="relative inline-flex shrink-0 items-center">
+                  <input
+                    type="checkbox"
+                    checked={goalMode}
+                    aria-label={`${agentDisplayName(activeAgent)} ${longRunningModeTerm(activeAgent)} mode`}
+                    onChange={(event) => toggleGoalMode(event.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <span className="h-5 w-9 rounded-full bg-input transition-colors duration-200 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2" />
+                  <span className="absolute left-0.5 h-4 w-4 rounded-full bg-background shadow-sm transition-transform duration-200 peer-checked:translate-x-4" />
+                </span>
+              </label>
+              {goalModeError ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {goalModeError}
+                </p>
+              ) : goalModeStatus ? (
+                <p className="text-xs text-muted-foreground">{goalModeStatus}</p>
+              ) : null}
+            </>
             <div>
               <Button
                 type="button"
@@ -305,16 +324,14 @@ export function IssueAuthoringPanel({
                 <Rocket className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                 {dispatching
                   ? "Dispatching..."
-                  : effectiveAgent === "claude"
-                    ? "Dispatch to Claude"
-                    : goalMode
-                      ? "Dispatch to Codex (goal)"
-                      : "Dispatch to Codex"}
+                  : goalMode
+                    ? `Dispatch to ${agentDisplayName(activeAgent)} (${longRunningModeTerm(activeAgent)})`
+                    : `Dispatch to ${agentDisplayName(activeAgent)}`}
               </Button>
               <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                {effectiveAgent === "claude"
-                  ? "Moves this issue to In Progress and hands it to the Claude coding agent."
-                  : `Moves this issue to In Progress and hands it to the Codex orchestrator${goalMode ? " as a long-running goal" : ""}.`}
+                {`Moves this issue to In Progress and hands it to the ${agentDisplayName(activeAgent)} ${
+                  activeAgent === "claude" ? "coding agent" : "orchestrator"
+                }${goalMode ? ` as a long-running ${longRunningModeTerm(activeAgent)}` : ""}.`}
               </p>
               {dispatchError ? (
                 <p role="alert" className="mt-1 text-xs text-destructive">
@@ -366,4 +383,17 @@ function issueModeLabel(mode: IssueAssistantMode): string {
   if (mode === "simple") return "Simple";
   if (mode === "complex") return "Complex";
   return "Triage";
+}
+
+function agentDisplayName(agent: AgentKind): string {
+  return agent === "claude" ? "Claude" : "Codex";
+}
+
+// Codex calls the long-running mode a "goal"; Claude Code calls it a "workflow".
+function longRunningModeTerm(agent: AgentKind): string {
+  return agent === "claude" ? "workflow" : "goal";
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
 }

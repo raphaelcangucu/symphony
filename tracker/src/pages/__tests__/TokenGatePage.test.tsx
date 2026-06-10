@@ -36,6 +36,16 @@ describe("TokenGatePage", () => {
     vi.clearAllMocks();
   });
 
+  it("revalidates a stored token instead of redirecting immediately", async () => {
+    window.localStorage.setItem(TRACKER_TOKEN_KEY, "stale-token");
+    vi.mocked(authService.validateTrackerToken).mockRejectedValue(new Error("invalid tracker token"));
+    renderTokenGate();
+
+    await waitFor(() => expect(authService.validateTrackerToken).toHaveBeenCalledWith("stale-token"));
+    expect(window.localStorage.getItem(TRACKER_TOKEN_KEY)).toBeNull();
+    expect(screen.getByText(/saved token no longer matches/i)).toBeTruthy();
+  });
+
   it("validates the token before saving and navigating to projects", async () => {
     vi.mocked(authService.validateTrackerToken).mockResolvedValue(undefined);
     vi.mocked(viewerService.fetchViewer).mockResolvedValue({

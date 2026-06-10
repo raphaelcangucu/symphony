@@ -172,6 +172,53 @@ defmodule SymphonyElixir.PromptBuilderTest do
     assert prompt =~ "_Skipped 1 additional authoring artifact(s) due to prompt size limits._"
   end
 
+  test "injects a long-running workflow section for Claude when a goal is set" do
+    issue = %Issue{
+      identifier: "MAC-6",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress",
+      agent_goal: "  Ship the OAuth login flow and verify it.  "
+    }
+
+    prompt = PromptBuilder.build_prompt(issue, agent_kind: "claude")
+
+    assert prompt =~ "Ticket MAC-6"
+    assert prompt =~ "## Long-running workflow"
+    assert prompt =~ "Ship the OAuth login flow and verify it."
+  end
+
+  test "omits the workflow section for Codex (native goal handles it)" do
+    issue = %Issue{
+      identifier: "MAC-7",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress",
+      agent_goal: "Ship the OAuth login flow and verify it."
+    }
+
+    prompt = PromptBuilder.build_prompt(issue, agent_kind: "codex")
+
+    refute prompt =~ "## Long-running workflow"
+  end
+
+  test "omits the workflow section for Claude without a goal" do
+    issue = %Issue{
+      identifier: "MAC-8",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress",
+      agent_goal: nil
+    }
+
+    prompt = PromptBuilder.build_prompt(issue, agent_kind: "claude")
+
+    refute prompt =~ "## Long-running workflow"
+  end
+
   test "builds the prompt from the issue's project template" do
     seed_project_with_setup("alpha", "ALPHA {{ issue.identifier }}")
 

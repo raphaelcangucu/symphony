@@ -179,7 +179,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "identifier" => string_schema("Issue identifier to dispatch, for example MAC-1."),
           "instructions" => string_schema("Concrete coding instructions for the agent."),
           "agent" => string_schema("Optional agent override: codex or claude. Omit to follow task > project > user preference."),
-          "goal" => string_schema("Optional long-running goal (Codex only) to persist for the orchestrator.")
+          "goal" => string_schema("Optional long-running objective to persist for the orchestrator (Codex goal or Claude workflow).")
         }
       }),
       tool_spec("dispatch_codex", "Alias for dispatch_coding_agent (resolves agent via task > project > user preference).", %{
@@ -984,11 +984,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   defp agent_display("claude"), do: "Claude"
   defp agent_display(_), do: "Codex"
 
+  # Persist the long-running objective for both agents: Codex consumes it as a
+  # native goal; Claude receives it as workflow guidance in its prompt.
   defp dispatch_agent_attrs(agent, arguments) do
     %{
       "status" => @in_progress_state,
       "agent" => agent,
-      "agent_goal" => if(agent == "codex", do: normalize_optional_string(Map.get(arguments, "goal")), else: nil)
+      "agent_goal" => normalize_optional_string(Map.get(arguments, "goal"))
     }
   end
 

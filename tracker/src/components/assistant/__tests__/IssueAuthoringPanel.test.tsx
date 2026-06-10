@@ -25,6 +25,7 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
     onIssueGoalModeChanged,
     onDispatchSucceeded,
     onDispatchError,
+    onComposerAgentResolved,
     projectSlug,
     view,
   }: {
@@ -37,6 +38,7 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
     onIssueGoalModeChanged?: (enabled: boolean) => void;
     onDispatchSucceeded?: (message: string) => void;
     onDispatchError?: (message: string) => void;
+    onComposerAgentResolved?: (agent: "codex" | "claude") => void;
     projectSlug?: string;
     view: "board" | "list";
   }) => (
@@ -61,6 +63,12 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
       </button>
       <button type="button" onClick={() => onDispatchError?.("dispatch failed")}>
         fail dispatch
+      </button>
+      <button type="button" onClick={() => onComposerAgentResolved?.("claude")}>
+        select claude
+      </button>
+      <button type="button" onClick={() => onComposerAgentResolved?.("codex")}>
+        select codex
       </button>
     </div>
   ),
@@ -196,6 +204,26 @@ describe("IssueAuthoringPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "fail dispatch" }));
 
     expect(screen.getByText("dispatch failed")).toBeTruthy();
+  });
+
+  it("follows the composer agent: relabels workflow mode and the dispatch button for Claude", () => {
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("checkbox", { name: /codex goal mode/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /dispatch to codex/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "select claude" }));
+
+    expect(screen.getByRole("checkbox", { name: /claude workflow mode/i })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /codex goal mode/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /dispatch to claude/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /claude workflow mode/i }));
+    expect(screen.getByRole("button", { name: /dispatch to claude \(workflow\)/i })).toBeInTheDocument();
   });
 
   it("reflects a mode rehydrated from the channel without a fresh selection", () => {

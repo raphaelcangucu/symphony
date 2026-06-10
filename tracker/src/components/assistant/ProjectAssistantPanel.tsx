@@ -78,6 +78,7 @@ interface ProjectAssistantPanelProps {
   onDispatchSucceeded?: (message: string) => void;
   onDispatchError?: (message: string) => void;
   onEffectiveAgentResolved?: (agent: AgentKind) => void;
+  onComposerAgentResolved?: (agent: AgentKind) => void;
   onOpenDocumentPath?: (path: string) => void;
   composerSeedMessage?: string | null;
 }
@@ -117,6 +118,7 @@ export function ProjectAssistantPanel({
   onDispatchSucceeded,
   onDispatchError,
   onEffectiveAgentResolved,
+  onComposerAgentResolved,
   onOpenDocumentPath,
   composerSeedMessage = null,
 }: ProjectAssistantPanelProps) {
@@ -142,6 +144,9 @@ export function ProjectAssistantPanel({
   const lastConfirmedGoalModeRef = useRef<boolean | null>(null);
   const pendingGoalModeRef = useRef<{ enabled: boolean; requestId: number } | null>(null);
   const lastDispatchRequestRef = useRef(0);
+  // The composer owns agent selection; mirror it here so dispatch + the parent
+  // panel can follow the live choice. A ref keeps the dispatch effect stable.
+  const composerAgentRef = useRef<AgentKind | null>(null);
   const [composerHeight, setComposerHeight] = useState(0);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
@@ -373,16 +378,19 @@ export function ProjectAssistantPanel({
     if (!channel) return;
 
     lastDispatchRequestRef.current = dispatchRequestId;
-    // Agent intentionally omitted — the server resolves task > project > user at dispatch.
-    const pushResult = dispatchCodingAgent(channel, { goalMode: issueGoalMode === true });
+    // Follow the composer's live agent choice; when unset the server still
+    // resolves task > project > user at dispatch.
+    const agent = composerAgentRef.current;
+    const agentName = agentDisplayName(agent);
+    const pushResult = dispatchCodingAgent(channel, { goalMode: issueGoalMode === true, agent });
     pushResult.receive("ok", (response) => {
-      onDispatchSucceeded?.(messageFromResponse(response) ?? "Dispatched to Codex.");
+      onDispatchSucceeded?.(messageFromResponse(response) ?? `Dispatched to ${agentName}.`);
     });
     pushResult.receive("error", (reason) => {
       onDispatchError?.(errorMessage(reason));
     });
     pushResult.receive("timeout", () => {
-      onDispatchError?.("Codex dispatch timed out");
+      onDispatchError?.(`${agentName} dispatch timed out`);
     });
   }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError]);
 
@@ -502,6 +510,14 @@ export function ProjectAssistantPanel({
     const [oldest] = queued;
     if (oldest) forceSendQueued(oldest.id);
   }, [queued, forceSendQueued]);
+
+  const handleComposerAgentChange = useCallback(
+    (agent: AgentKind) => {
+      composerAgentRef.current = agent;
+      onComposerAgentResolved?.(agent);
+    },
+    [onComposerAgentResolved],
+  );
 
   const onNew = useCallback(
     async (message: AppendMessage) => {
@@ -633,6 +649,7 @@ export function ProjectAssistantPanel({
         seedMessage={composerSeedMessage}
         onForceQueued={forceSendOldestQueued}
         onSubmit={sendMessage}
+        onAgentChange={handleComposerAgentChange}
       />
     ) : null;
 
@@ -1035,6 +1052,10 @@ function effectiveAgentFromResponse(response: unknown): AgentKind | null {
   const value = (response as Record<string, unknown>).effective_agent;
   if (value === "claude" || value === "codex") return value;
   return null;
+}
+
+function agentDisplayName(agent: AgentKind | null): string {
+  return agent === "claude" ? "Claude" : "Codex";
 }
 
 function messageFromResponse(response: unknown): string | null {

@@ -94,22 +94,35 @@ describe("IssueCreateDialog Codex goal mode", () => {
     );
   });
 
-  it("hides goal mode for Claude and omits goal from the payload", async () => {
+  it("shows workflow mode for Claude and sends an edited workflow when checked", async () => {
     const user = userEvent.setup();
 
     render(<IssueCreateDialog projectSlug="macro-markets" open onOpenChange={vi.fn()} />);
 
-    await screen.findByRole("button", { name: "Claude" });
-    await user.click(screen.getByRole("button", { name: "Claude" }));
-    expect(screen.queryByRole("checkbox", { name: /goal mode/i })).not.toBeInTheDocument();
-
     await user.type(screen.getByPlaceholderText("Issue title"), "Claude task");
+    await user.click(await screen.findByRole("button", { name: "Claude" }));
+
+    const workflowMode = await screen.findByRole("checkbox", { name: /workflow mode/i });
+    expect(workflowMode).toBeInTheDocument();
+
+    await user.click(workflowMode);
+
+    const workflow = await screen.findByRole("textbox", { name: /claude workflow/i });
+    expect(workflow).toHaveValue(
+      "Objective: Claude task\nConstraints: follow existing issue artifacts, specs, and plans when present; verify changes before reporting completion; stop when complete or blocked.",
+    );
+
+    await user.clear(workflow);
+    await user.type(workflow, "Ship the Claude workflow and verify it.");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(mockCreateIssue).toHaveBeenCalled());
     expect(mockCreateIssue).toHaveBeenCalledWith(
       "macro-markets",
-      expect.not.objectContaining({ goal: expect.anything() }),
+      expect.objectContaining({
+        agent: "claude",
+        goal: "Ship the Claude workflow and verify it.",
+      }),
     );
   });
 

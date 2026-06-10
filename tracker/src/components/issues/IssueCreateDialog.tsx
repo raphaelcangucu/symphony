@@ -63,7 +63,7 @@ function toggle(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
 
-function buildCodexGoal(title: string, description: string): string {
+function buildAgentGoal(title: string, description: string): string {
   const objective = title.trim() || "Complete this issue";
   const details = description.trim();
   const lines = [`Objective: ${objective}`];
@@ -75,6 +75,23 @@ function buildCodexGoal(title: string, description: string): string {
   );
 
   return lines.join("\n");
+}
+
+function agentDisplayName(agent: AgentKind): string {
+  return agent === "claude" ? "Claude" : "Codex";
+}
+
+// Codex calls the long-running mode a "goal"; Claude Code calls it a "workflow".
+function longRunningModeTerm(agent: AgentKind): string {
+  return agent === "claude" ? "workflow" : "goal";
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
+}
+
+function concreteAgent(agent: AgentKind | ""): AgentKind | null {
+  return agent === "codex" || agent === "claude" ? agent : null;
 }
 
 export function IssueCreateDialog({
@@ -117,12 +134,12 @@ export function IssueCreateDialog({
   }, [open, defaultStatus]);
 
   useEffect(() => {
-    if (agent !== "codex") setCodexGoalMode(false);
+    if (concreteAgent(agent) === null) setCodexGoalMode(false);
   }, [agent]);
 
   useEffect(() => {
-    if (agent === "codex" && codexGoalMode && !codexGoalEdited) {
-      setCodexGoal(buildCodexGoal(title, description));
+    if (concreteAgent(agent) !== null && codexGoalMode && !codexGoalEdited) {
+      setCodexGoal(buildAgentGoal(title, description));
     }
   }, [agent, codexGoalEdited, codexGoalMode, description, title]);
 
@@ -170,7 +187,7 @@ export function IssueCreateDialog({
   function handleGoalModeChange(checked: boolean) {
     setCodexGoalMode(checked);
     setCodexGoalEdited(false);
-    setCodexGoal(checked ? buildCodexGoal(title, description) : "");
+    setCodexGoal(checked ? buildAgentGoal(title, description) : "");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -180,8 +197,10 @@ export function IssueCreateDialog({
       toast.error(parsed.error.issues[0]?.message ?? "Invalid issue");
       return;
     }
-    if (agent === "codex" && codexGoalMode && !codexGoal.trim()) {
-      toast.error("Goal mode requires a goal.");
+    const goalAgent = concreteAgent(agent);
+    if (goalAgent !== null && codexGoalMode && !codexGoal.trim()) {
+      const term = longRunningModeTerm(goalAgent);
+      toast.error(`${capitalize(term)} mode requires a ${term}.`);
       return;
     }
 
@@ -195,7 +214,7 @@ export function IssueCreateDialog({
         labelIds: selectedLabels,
         assigneeIds: selectedAssignees,
         agent: agent || null,
-        goal: agent === "codex" && codexGoalMode ? codexGoal.trim() || null : null,
+        goal: goalAgent !== null && codexGoalMode ? codexGoal.trim() || null : null,
       });
       onCreated?.(issue);
       resetForm();
@@ -276,7 +295,7 @@ export function IssueCreateDialog({
             </div>
           ) : null}
 
-          {agent === "codex" ? (
+          {concreteAgent(agent) !== null ? (
             <div className="space-y-2 rounded-lg border bg-muted/20 p-3 text-sm">
               <label className="flex items-center gap-2 text-xs font-medium text-foreground">
                 <input
@@ -285,11 +304,14 @@ export function IssueCreateDialog({
                   onChange={(event) => handleGoalModeChange(event.target.checked)}
                   className="h-4 w-4 rounded border-input"
                 />
-                Goal mode (long-running)
+                {capitalize(longRunningModeTerm(concreteAgent(agent) as AgentKind))} mode (long-running)
               </label>
               {codexGoalMode ? (
                 <label className="block space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Codex goal</span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {agentDisplayName(concreteAgent(agent) as AgentKind)}{" "}
+                    {longRunningModeTerm(concreteAgent(agent) as AgentKind)}
+                  </span>
                   <Textarea
                     value={codexGoal}
                     onChange={(event) => {
@@ -297,7 +319,9 @@ export function IssueCreateDialog({
                       setCodexGoal(event.target.value);
                     }}
                     className="min-h-28"
-                    aria-label="Codex goal"
+                    aria-label={`${agentDisplayName(concreteAgent(agent) as AgentKind)} ${longRunningModeTerm(
+                      concreteAgent(agent) as AgentKind,
+                    )}`}
                   />
                 </label>
               ) : null}
