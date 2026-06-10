@@ -143,4 +143,32 @@ defmodule SymphonyElixir.GitHub.IssueCommentsTest do
                )
     end
   end
+
+  describe "create_for_subject/3" do
+    test "posts to the issue node id without a number lookup" do
+      request_fun = fn payload, _headers ->
+        refute payload["query"] =~ "SymphonyApiIssueNodeId"
+        assert payload["variables"]["subjectId"] == "I_node"
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "addComment" => %{
+                 "commentEdge" => %{"node" => %{"id" => "IC_7", "body" => "## Codex Evidence", "author" => %{"login" => "bot"}}}
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, %{id: "IC_7", kind: "evidence"}} =
+               IssueComments.create_for_subject("I_node", "## Codex Evidence", request_fun: request_fun)
+    end
+
+    test "rejects a blank subject id" do
+      assert {:error, :invalid_arguments} = IssueComments.create_for_subject("", "body")
+    end
+  end
 end

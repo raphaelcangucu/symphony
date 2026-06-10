@@ -565,6 +565,21 @@ persisted in the `issue_evidence` table — they survive workspace cleanup), a
 and everything is browsable in the issue drawer's **Evidence** tab
 (screenshot gallery, videos, reports, per-attempt history).
 
+The evidence comment is edited **in place** on every update (classified by
+`Tracker.Workpad`), so remote trackers never get spammed with duplicate
+comments. Embedded artifact URLs are made reachable per provider before the
+comment is pushed:
+
+- **GitHub** renders the Symphony-served URLs directly; when the public tunnel
+  is enabled the comment uses the tunnel URL (`PublicRouting.public_base_url/0`)
+  so images load outside localhost.
+- **Linear** and **Jira** upload the artifacts **natively** at push time
+  (`Evidence.RemoteArtifacts` rewrites the body): Linear via `fileUpload`
+  (`Linear.Uploads`, embeds the `assetUrl`), Jira as issue **attachments**
+  (`Jira.Uploads`, links the Jira `content` URL — the files also appear in the
+  issue's Attachments panel). Uploads are cached by content hash
+  (`evidence_remote_assets`) so repeated in-place updates never re-upload.
+
 ### Agent preference
 
 Symphony resolves which coding agent runs an issue through a four-level chain, from most

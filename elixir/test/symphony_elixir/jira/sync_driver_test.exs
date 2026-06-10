@@ -1,8 +1,10 @@
 defmodule SymphonyElixir.Jira.SyncDriverTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.Evidence.Store
   alias SymphonyElixir.Jira.SyncDriver
-  alias SymphonyElixir.LocalTracker.{IssueRecord, Project}
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project}
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueDTO
   alias SymphonyElixir.Tracker.Sync.OutboxEntry
 
@@ -28,8 +30,9 @@ defmodule SymphonyElixir.Jira.SyncDriverTest do
       {:ok, IssueDTO.build(%{id: "10001", identifier: "ABC-12", title: state, status: %{name: state}})}
     end
 
-    def add_comment(_project, _id, _body, _attrs) do
-      {:ok, %{remote_id: "c-2", body: "added", author: "Bot", remote_updated_at: "2026-06-01T02:00:00Z"}}
+    def add_comment(_project, _id, body, _attrs) do
+      send(self(), {:jira_add_comment, body})
+      {:ok, %{remote_id: "c-2", body: body, author: "Bot", remote_updated_at: "2026-06-01T02:00:00Z"}}
     end
 
     def create_issue(_project, _payload) do
@@ -97,5 +100,52 @@ defmodule SymphonyElixir.Jira.SyncDriverTest do
 
   test "pull_pull_requests is empty (GitHub owns source control)", %{project: project} do
     assert {:ok, []} = SyncDriver.pull_pull_requests(project, %IssueRecord{identifier: "ABC-12"})
+  end
+
+  describe "evidence artifact attachment on comment push" do
+    @describetag :tmp_dir
+
+    setup %{tmp_dir: tmp_dir, project: project} do
+      {:ok, _repo, _apps} =
+        Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
+
+      SymphonyElixir.TestSupport.truncate_tracker!(Repo)
+      {:ok, _project} = Context.ensure_project(%{name: "Acme", slug: project.slug})
+
+      workspace = Path.join(tmp_dir, "ws")
+      evidence_dir = Path.join(workspace, ".symphony/evidence/artifacts")
+      File.mkdir_p!(evidence_dir)
+      File.write!(Path.join(workspace, ".symphony/evidence/manifest.json"), Jason.encode!(%{"runs" => []}))
+      File.write!(Path.join(evidence_dir, "s.png"), "img")
+
+      {:ok, record} =
+        Store.persist(project.slug, "ABC-12", workspace, %{"runs" => []}, evidence_root: Path.join(tmp_dir, "durable"))
+
+      Application.put_env(:symphony_elixir, :jira_artifact_uploader, fn issue, _path, filename, _ct ->
+        send(self(), {:jira_attach, issue, filename})
+        {:ok, "https://acme.atlassian.net/rest/api/3/attachment/content/#{filename}"}
+      end)
+
+      on_exit(fn -> Application.delete_env(:symphony_elixir, :jira_artifact_uploader) end)
+
+      url =
+        "http://localhost:4000/api/tracker/v1/projects/#{project.slug}/issues/ABC-12/evidence/#{record.run_id}/artifacts/artifacts/s.png"
+
+      %{url: url}
+    end
+
+    test "comment create attaches artifacts and pushes the Jira-hosted URL", %{project: project, url: url} do
+      entry = %OutboxEntry{
+        entity_type: "comment",
+        operation: "create",
+        payload: %{"identifier" => "ABC-12", "body" => "## Codex Evidence\n![s.png](#{url})"}
+      }
+
+      assert {:ok, "c-2"} = SyncDriver.push(project, entry)
+      assert_received {:jira_attach, "ABC-12", "s.png"}
+      assert_received {:jira_add_comment, body}
+      assert body =~ "![s.png](https://acme.atlassian.net/rest/api/3/attachment/content/s.png)"
+      refute body =~ "/api/tracker/v1/"
+    end
   end
 end

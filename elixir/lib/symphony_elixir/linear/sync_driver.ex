@@ -10,6 +10,7 @@ defmodule SymphonyElixir.Linear.SyncDriver do
 
   @behaviour SymphonyElixir.Tracker.Sync.Driver
 
+  alias SymphonyElixir.Evidence.RemoteArtifacts
   alias SymphonyElixir.LocalTracker.{IssueRecord, Project}
   alias SymphonyElixir.Tracker.Sync.{Normalize, OutboxEntry}
 
@@ -30,7 +31,7 @@ defmodule SymphonyElixir.Linear.SyncDriver do
 
   def push(%Project{}, %OutboxEntry{entity_type: "comment", operation: "create", payload: payload} = entry) do
     with {:ok, issue_remote_id} <- issue_remote_id(entry) do
-      comments_module().create(issue_remote_id, payload["body"])
+      comments_module().create(issue_remote_id, rewrite_artifacts(payload["body"]))
     end
   end
 
@@ -39,7 +40,7 @@ defmodule SymphonyElixir.Linear.SyncDriver do
         %OutboxEntry{entity_type: "comment", operation: "update", payload: %{"remote_id" => remote_id} = payload}
       )
       when is_binary(remote_id) and remote_id != "" do
-    comments_module().update(remote_id, payload["body"])
+    comments_module().update(remote_id, rewrite_artifacts(payload["body"]))
   end
 
   # Update without a known remote id (workpad created before its first push
@@ -61,6 +62,23 @@ defmodule SymphonyElixir.Linear.SyncDriver do
       _missing ->
         {:error, :issue_remote_id_unknown}
     end
+  end
+
+  # Evidence comments embed Symphony-served artifact URLs; before they reach
+  # Linear, upload the underlying files natively and swap in the Linear-hosted
+  # `assetUrl` so the images render without a publicly reachable Symphony.
+  defp rewrite_artifacts(body) when is_binary(body) do
+    if RemoteArtifacts.contains_artifacts?(body) do
+      RemoteArtifacts.rewrite_markdown(body, "linear", uploader())
+    else
+      body
+    end
+  end
+
+  defp rewrite_artifacts(body), do: body
+
+  defp uploader do
+    Application.get_env(:symphony_elixir, :linear_artifact_uploader, &SymphonyElixir.Linear.Uploads.upload/3)
   end
 
   defp adapter, do: Application.get_env(:symphony_elixir, :linear_sync_adapter, SymphonyElixir.Linear.IssueAdapter)

@@ -21,6 +21,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.RunContract.Finalizer
   alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
   alias SymphonyElixir.Tracker.Sync.LocalStore
@@ -988,8 +989,11 @@ defmodule SymphonyElixir.Orchestrator do
     "#{base_url}/api/tracker/v1/projects/#{issue.project_slug}/issues/#{issue.identifier}/evidence/#{record.run_id}/artifacts/#{rel}"
   end
 
+  # Prefer the publicly reachable tunnel URL so remote renderers (GitHub, Linear,
+  # Jira) can actually fetch the embedded artifacts; fall back to the loopback
+  # host when the tunnel is off.
   defp symphony_base_url do
-    "http://#{Config.server_host()}:#{Config.server_port()}"
+    PublicRouting.public_base_url() || "http://#{Config.server_host()}:#{Config.server_port()}"
   end
 
   # Existing transition flow, extracted from the pre-contract apply_normal_completion body.

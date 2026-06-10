@@ -71,6 +71,20 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
     assert {:ok, "IC_new"} = SyncDriver.push(project, entry)
   end
 
+  defmodule NodeIdAdapter do
+    # The real GitHub adapter returns the created comment under `:id` (a GraphQL
+    # node id), not `:remote_id`; the driver must still link it.
+    def add_comment(_project, _identifier, _body, _attrs), do: {:ok, %{id: "IC_node", kind: "evidence"}}
+  end
+
+  test "push of a comment create links the created node id when the adapter returns :id", %{project: project} do
+    Application.put_env(:symphony_elixir, :github_sync_adapter, NodeIdAdapter)
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :github_sync_adapter) end)
+
+    entry = %OutboxEntry{entity_type: "comment", operation: "create", payload: %{"identifier" => "GAM-5", "body" => "## Codex Evidence"}}
+    assert {:ok, "IC_node"} = SyncDriver.push(project, entry)
+  end
+
   test "push of an issue archive calls archive_issue", %{project: project} do
     entry = %OutboxEntry{entity_type: "issue", operation: "archive", payload: %{"identifier" => "1"}}
     assert {:ok, "PVTI_archived_1"} = SyncDriver.push(project, entry)

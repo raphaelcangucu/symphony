@@ -8,6 +8,8 @@ defmodule SymphonyElixir.Jira.SyncDriver do
 
   @behaviour SymphonyElixir.Tracker.Sync.Driver
 
+  alias SymphonyElixir.Evidence.RemoteArtifacts
+  alias SymphonyElixir.Jira.Uploads
   alias SymphonyElixir.LocalTracker.{IssueRecord, Project}
   alias SymphonyElixir.Tracker.Sync.{Normalize, OutboxEntry}
 
@@ -32,7 +34,9 @@ defmodule SymphonyElixir.Jira.SyncDriver do
   end
 
   def push(%Project{} = project, %OutboxEntry{entity_type: "comment", operation: "create", payload: payload}) do
-    case adapter().add_comment(project, payload["identifier"], payload["body"], %{}) do
+    body = rewrite_artifacts(payload["body"], payload["identifier"])
+
+    case adapter().add_comment(project, payload["identifier"], body, %{}) do
       {:ok, %{remote_id: remote_id}} -> {:ok, remote_id}
       {:ok, _other} -> {:ok, nil}
       error -> error
@@ -42,7 +46,9 @@ defmodule SymphonyElixir.Jira.SyncDriver do
   def push(%Project{} = project, %OutboxEntry{entity_type: "comment", operation: "update", payload: payload} = entry) do
     case payload["remote_id"] do
       remote_id when is_binary(remote_id) and remote_id != "" ->
-        case adapter().update_comment(project, payload["identifier"], remote_id, payload["body"]) do
+        body = rewrite_artifacts(payload["body"], payload["identifier"])
+
+        case adapter().update_comment(project, payload["identifier"], remote_id, body) do
           {:ok, %{remote_id: updated_id}} -> {:ok, updated_id || remote_id}
           {:ok, _other} -> {:ok, remote_id}
           error -> error
@@ -74,6 +80,26 @@ defmodule SymphonyElixir.Jira.SyncDriver do
       {:ok, comments} -> comments
       {:error, _reason} -> []
     end
+  end
+
+  # Evidence comments embed Symphony-served artifact URLs; before they reach
+  # JIRA, attach the underlying files to the issue natively and swap in the
+  # Jira-hosted `content` URL so the evidence is reachable without a publicly
+  # exposed Symphony. Attachments are issue-scoped, so the cache provider key
+  # carries the issue identifier (repeated in-place updates still skip re-upload).
+  defp rewrite_artifacts(body, identifier) when is_binary(body) and is_binary(identifier) and identifier != "" do
+    if RemoteArtifacts.contains_artifacts?(body) do
+      RemoteArtifacts.rewrite_markdown(body, "jira:" <> identifier, uploader(identifier))
+    else
+      body
+    end
+  end
+
+  defp rewrite_artifacts(body, _identifier), do: body
+
+  defp uploader(identifier) do
+    upload = Application.get_env(:symphony_elixir, :jira_artifact_uploader, &Uploads.upload/4)
+    fn path, filename, content_type -> upload.(identifier, path, filename, content_type) end
   end
 
   defp adapter, do: Application.get_env(:symphony_elixir, :jira_sync_adapter, SymphonyElixir.Jira.IssueAdapter)

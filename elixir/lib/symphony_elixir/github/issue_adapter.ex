@@ -231,14 +231,35 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   end
 
   @impl true
-  def add_comment(%Project{} = project, identifier, body, _attrs) do
-    with {:ok, repo} <- resolve_issue_repo(project, identifier) do
-      case IssueComments.create(repo, identifier, body) do
-        {:ok, comment} -> {:ok, comment}
-        error -> {:error, map_error(error)}
-      end
-    else
+  def add_comment(%Project{} = project, identifier, body, attrs) do
+    case issue_remote_id(project, identifier, attrs || %{}) do
+      node_id when is_binary(node_id) and node_id != "" -> create_comment_by_node(node_id, body)
+      _no_node_id -> create_comment_by_identifier(project, identifier, body)
+    end
+  end
+
+  # Preferred path: the issue's GraphQL node id is known (local store), so we can
+  # post even when the tracker identifier is non-numeric (e.g. `GAM-5`) or the
+  # issue lives outside the configured repo.
+  defp create_comment_by_node(node_id, body) do
+    case IssueComments.create_for_subject(node_id, body) do
+      {:ok, comment} -> {:ok, comment}
+      error -> {:error, map_error(error)}
+    end
+  end
+
+  # Legacy fallback when no node id is stored: resolve repo + numeric number.
+  defp create_comment_by_identifier(project, identifier, body) do
+    case resolve_issue_repo(project, identifier) do
+      {:ok, repo} -> create_comment_in_repo(repo, identifier, body)
       {:error, reason} -> {:error, map_error(reason)}
+    end
+  end
+
+  defp create_comment_in_repo(repo, identifier, body) do
+    case IssueComments.create(repo, identifier, body) do
+      {:ok, comment} -> {:ok, comment}
+      error -> {:error, map_error(error)}
     end
   end
 
@@ -874,6 +895,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp map_error({:error, reason}), do: map_error(reason)
   defp map_error({:remote_validation, _details} = error), do: error
   defp map_error(:issue_not_found), do: :issue_not_found
+  defp map_error({:invalid_issue_identifier, _identifier}), do: :issue_not_found
   defp map_error(:status_not_found), do: :status_not_found
   defp map_error(:missing_github_token), do: :missing_credentials
 

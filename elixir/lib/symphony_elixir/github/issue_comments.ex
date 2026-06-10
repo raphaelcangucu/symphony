@@ -48,6 +48,21 @@ defmodule SymphonyElixir.GitHub.IssueComments do
   end
 
   @doc """
+  Posts a new comment using the issue/PR GraphQL node id (`subject_id`) directly,
+  without resolving a numeric issue number. Lets the agent's evidence/workpad
+  comments reach issues whose tracker identifier is non-numeric (e.g. `GAM-5`).
+  """
+  @spec create_for_subject(String.t() | nil, String.t(), keyword()) ::
+          {:ok, comment()} | {:error, term()}
+  def create_for_subject(subject_id, body, opts \\ []) do
+    if is_binary(subject_id) and subject_id != "" and is_binary(body) and body != "" do
+      Api.add_comment_by_subject(subject_id, body, opts)
+    else
+      {:error, :invalid_arguments}
+    end
+  end
+
+  @doc """
   Edits an existing GitHub issue comment in place and returns the updated
   comment map. `remote_id` is the comment's GraphQL node id or REST numeric id.
   """

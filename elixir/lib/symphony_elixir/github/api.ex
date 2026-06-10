@@ -123,16 +123,31 @@ defmodule SymphonyElixir.GitHub.Api do
     end
   end
 
-  defp graphql_add_comment(owner, name, number, body, opts) do
-    graphql_opts = graphql_opts(opts)
+  @doc """
+  Posts a comment directly on a GitHub issue/PR GraphQL node id (`subjectId`),
+  bypassing the owner/name/number resolution. Used when the issue's node id is
+  already known (e.g. the local store's `remote_id`), so comments reach issues
+  whose tracker identifier is non-numeric (like `GAM-5`) or that live outside
+  the configured repo.
+  """
+  @spec add_comment_by_subject(String.t(), String.t(), keyword()) :: {:ok, comment()} | {:error, term()}
+  def add_comment_by_subject(subject_id, body, opts \\ [])
+      when is_binary(subject_id) and is_binary(body) do
+    case Client.graphql(@add_comment_mutation, %{"subjectId" => subject_id, "body" => body}, graphql_opts(opts)) do
+      {:ok, %{"data" => %{"addComment" => %{"commentEdge" => %{"node" => node}}}}} ->
+        {:ok, IssueComments.parse_node(node)}
 
-    with {:ok, node_id} <- fetch_issue_node_id(owner, name, number, graphql_opts),
-         {:ok, %{"data" => %{"addComment" => %{"commentEdge" => %{"node" => node}}}}} <-
-           Client.graphql(@add_comment_mutation, %{"subjectId" => node_id, "body" => body}, graphql_opts) do
-      {:ok, IssueComments.parse_node(node)}
-    else
-      {:ok, _unexpected} -> {:error, :remote_unavailable}
-      {:error, _} = error -> error
+      {:ok, _unexpected} ->
+        {:error, :remote_unavailable}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp graphql_add_comment(owner, name, number, body, opts) do
+    with {:ok, node_id} <- fetch_issue_node_id(owner, name, number, graphql_opts(opts)) do
+      add_comment_by_subject(node_id, body, opts)
     end
   end
 

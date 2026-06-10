@@ -110,6 +110,46 @@ defmodule SymphonyElixir.GitHub.ApiTest do
     end
   end
 
+  describe "add_comment_by_subject/3" do
+    test "posts directly to the issue node id without resolving a numeric number" do
+      request_fun = fn payload, _headers ->
+        # No issue-number lookup happens: we already have the node id.
+        refute payload["query"] =~ "SymphonyApiIssueNodeId"
+        assert payload["query"] =~ "SymphonyApiAddComment"
+        assert payload["variables"]["subjectId"] == "I_kwDOJHngx8"
+
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "data" => %{
+               "addComment" => %{
+                 "commentEdge" => %{
+                   "node" => %{
+                     "id" => "IC_evidence",
+                     "url" => "https://gh/c/evidence",
+                     "body" => "## Codex Evidence",
+                     "author" => %{"login" => "bot"}
+                   }
+                 }
+               }
+             }
+           }
+         }}
+      end
+
+      assert {:ok, %{id: "IC_evidence", kind: "evidence"}} =
+               Api.add_comment_by_subject("I_kwDOJHngx8", "## Codex Evidence", request_fun: request_fun)
+    end
+
+    test "maps an unexpected payload to :remote_unavailable" do
+      request_fun = fn _payload, _headers -> {:ok, %{status: 200, body: %{"data" => %{}}}} end
+
+      assert {:error, :remote_unavailable} =
+               Api.add_comment_by_subject("I_node", "body", request_fun: request_fun)
+    end
+  end
+
   describe "list_comments/3" do
     test "GraphQL happy path, normalized" do
       request_fun = fn payload, _headers ->

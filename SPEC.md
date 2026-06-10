@@ -712,8 +712,13 @@ present in the Codex session log (anti-fraud, fails closed). Violations trigger
 up to 2 corrective turns, then the run ends incomplete (`validate_gate`) and the
 issue is annotated. On completion, evidence is copied to a durable store
 (`issue_evidence` table + `.symphony/evidence/<project>/<issue>/<run_id>/`), a
-`## Codex Evidence` comment is posted to the issue, and artifacts are served
-through the tracker API into the issue drawer's Evidence tab.
+`## Codex Evidence` comment is posted (edited in place on each update) to the
+issue, and artifacts are served through the tracker API into the issue drawer's
+Evidence tab. Before the comment reaches a remote tracker, embedded artifact
+URLs are made reachable per provider: GitHub uses the public tunnel URL when
+enabled; Linear and Jira upload the artifacts natively at push time
+(`Evidence.RemoteArtifacts` → `Linear.Uploads` `fileUpload` / `Jira.Uploads`
+issue attachments), cached by content hash in `evidence_remote_assets`.
 
 ### 7.3 Transition Triggers
 

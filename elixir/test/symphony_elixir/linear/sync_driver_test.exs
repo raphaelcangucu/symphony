@@ -1,8 +1,10 @@
 defmodule SymphonyElixir.Linear.SyncDriverTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.Evidence.Store
   alias SymphonyElixir.Linear.SyncDriver
-  alias SymphonyElixir.LocalTracker.{IssueRecord, Project}
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project}
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueDTO
   alias SymphonyElixir.Tracker.Sync.OutboxEntry
 
@@ -102,5 +104,49 @@ defmodule SymphonyElixir.Linear.SyncDriverTest do
   test "unsupported pushes still error", %{project: project} do
     entry = %OutboxEntry{entity_type: "label", operation: "add", payload: %{}}
     assert {:error, {:unsupported_push, "label", "add"}} = SyncDriver.push(project, entry)
+  end
+
+  describe "evidence artifact upload on comment push" do
+    @describetag :tmp_dir
+
+    setup %{tmp_dir: tmp_dir} do
+      {:ok, _repo, _apps} =
+        Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
+
+      SymphonyElixir.TestSupport.truncate_tracker!(Repo)
+      {:ok, _project} = Context.ensure_project(%{name: "MM", slug: "mm"})
+
+      workspace = Path.join(tmp_dir, "ws")
+      evidence_dir = Path.join(workspace, ".symphony/evidence/artifacts")
+      File.mkdir_p!(evidence_dir)
+      File.write!(Path.join(workspace, ".symphony/evidence/manifest.json"), Jason.encode!(%{"runs" => []}))
+      File.write!(Path.join(evidence_dir, "s.png"), "img")
+
+      {:ok, record} =
+        Store.persist("mm", "MM-12", workspace, %{"runs" => []}, evidence_root: Path.join(tmp_dir, "durable"))
+
+      Application.put_env(:symphony_elixir, :linear_artifact_uploader, fn _path, filename, _ct ->
+        {:ok, "https://uploads.linear.app/#{filename}"}
+      end)
+
+      on_exit(fn -> Application.delete_env(:symphony_elixir, :linear_artifact_uploader) end)
+
+      url = "http://localhost:4000/api/tracker/v1/projects/mm/issues/MM-12/evidence/#{record.run_id}/artifacts/artifacts/s.png"
+      %{url: url}
+    end
+
+    test "comment create uploads artifacts and pushes the Linear-hosted URL", %{project: project, url: url} do
+      entry = %OutboxEntry{
+        entity_type: "comment",
+        operation: "create",
+        payload: %{"identifier" => "MM-12", "body" => "## Codex Evidence\n![s.png](#{url})"},
+        issue: %IssueRecord{remote_id: "LIN_UUID"}
+      }
+
+      assert {:ok, "cmt-1"} = SyncDriver.push(project, entry)
+      assert_received {:comment_create, "LIN_UUID", body}
+      assert body =~ "![s.png](https://uploads.linear.app/s.png)"
+      refute body =~ "/api/tracker/v1/"
+    end
   end
 end

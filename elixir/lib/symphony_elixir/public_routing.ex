@@ -85,6 +85,24 @@ defmodule SymphonyElixir.PublicRouting do
     end
   end
 
+  @doc """
+  Externally reachable base URL for the Symphony tracker app over the public
+  tunnel (`https://<namespace>.<base_domain>`), or `nil` when the tunnel is
+  disabled or the namespace cannot resolve. Used to embed publicly fetchable
+  evidence artifact URLs in remote issue comments.
+  """
+  @spec public_base_url(keyword()) :: String.t() | nil
+  def public_base_url(opts \\ []) do
+    if public_tunnel_enabled?(opts) do
+      case fetch_namespace(opts) do
+        {:ok, _namespace} -> "https://" <> tracker_host(opts)
+        {:error, _reason} -> nil
+      end
+    else
+      nil
+    end
+  end
+
   @spec resolve_namespace(keyword()) :: {:ok, String.t()} | {:error, :no_namespace}
   def resolve_namespace(opts \\ []) do
     case Config.public_tunnel_namespace() do

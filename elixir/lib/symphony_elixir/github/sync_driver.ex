@@ -29,7 +29,10 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
 
   def push(%Project{} = project, %OutboxEntry{entity_type: "comment", operation: "create", payload: payload}) do
     case adapter().add_comment(project, payload["identifier"], payload["body"], %{}) do
-      {:ok, %{remote_id: remote_id}} -> {:ok, remote_id}
+      {:ok, %{remote_id: remote_id}} when is_binary(remote_id) -> {:ok, remote_id}
+      # The real adapter returns the created comment node under `:id`; link it so
+      # later edits (workpad/evidence) flow as in-place `comment:update`.
+      {:ok, %{id: id}} when is_binary(id) -> {:ok, id}
       {:ok, _other} -> {:ok, nil}
       error -> error
     end

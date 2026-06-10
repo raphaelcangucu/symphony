@@ -102,6 +102,29 @@ defmodule SymphonyElixir.PublicRoutingTest do
     end
   end
 
+  describe "public_base_url/1" do
+    test "nil when tunnel disabled" do
+      load_public_tunnel_workflow!(enabled: false)
+      assert PublicRouting.public_base_url() == nil
+    end
+
+    test "https tracker host when enabled and namespace resolves" do
+      load_public_tunnel_workflow!(namespace: "octocat")
+
+      assert PublicRouting.public_base_url(base_domain: "tracker.cods.dev") ==
+               "https://octocat.tracker.cods.dev"
+    end
+
+    test "nil when enabled but namespace cannot resolve" do
+      load_public_tunnel_workflow!(namespace: nil)
+
+      assert PublicRouting.public_base_url(
+               base_domain: "tracker.cods.dev",
+               viewer: fn -> {:error, :x} end
+             ) == nil
+    end
+  end
+
   describe "register/unregister/lookup" do
     setup do
       case Process.whereis(SymphonyElixir.PublicRouting) do
