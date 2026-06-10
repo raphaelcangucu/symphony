@@ -209,6 +209,28 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     assert hd(prs).state == "merged"
   end
 
+  describe "upsert_run_pull_request/3" do
+    test "links a PR with origin agent keyed by URL", %{project: project} do
+      url = "https://github.com/o/r/pull/42"
+
+      assert {:ok, record} =
+               LocalStore.upsert_run_pull_request(project.id, "GAM-9", %{
+                 url: url,
+                 repo: "o/r",
+                 number: 42,
+                 title: "GAM-9: Do the thing",
+                 state: "OPEN"
+               })
+
+      assert record.origin == "agent"
+      assert record.remote_id == url
+
+      # Idempotent on the same URL
+      assert {:ok, again} = LocalStore.upsert_run_pull_request(project.id, "GAM-9", %{url: url, state: "OPEN"})
+      assert again.id == record.id
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

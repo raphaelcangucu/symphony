@@ -221,6 +221,43 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   end
 
   @doc """
+  Links a pull request verified or created by the orchestrator's run contract
+  (publish gate / finalizer). Keyed by URL like manual links so the association
+  is deterministic and survives GitHub discovery gaps (e.g. non-numeric tracker
+  identifiers such as GAM-5). Origin `"agent"` distinguishes it in the UI.
+  """
+  @spec upsert_run_pull_request(integer(), String.t(), %{required(:url) => String.t(), optional(atom()) => term()}) ::
+          {:ok, PullRequestRecord.t()} | {:error, Ecto.Changeset.t()}
+  def upsert_run_pull_request(project_id, identifier, %{url: url} = attrs)
+      when is_integer(project_id) and is_binary(url) do
+    identifier = normalize_identifier(identifier)
+
+    base = %{
+      project_id: project_id,
+      issue_identifier: identifier,
+      remote_id: url,
+      url: url,
+      number: Map.get(attrs, :number),
+      repo: Map.get(attrs, :repo),
+      title: Map.get(attrs, :title) || manual_title(Map.get(attrs, :number)),
+      state: normalize_pr_state(Map.get(attrs, :state)),
+      origin: "agent",
+      last_synced_at: DateTime.utc_now()
+    }
+
+    case Repo.get_by(PullRequestRecord,
+           project_id: project_id,
+           issue_identifier: identifier,
+           remote_id: url
+         ) do
+      nil -> %PullRequestRecord{}
+      %PullRequestRecord{} = existing -> existing
+    end
+    |> PullRequestRecord.changeset(base)
+    |> Repo.insert_or_update()
+  end
+
+  @doc """
   Removes a manual pull request association (by `url`) from an issue.
   """
   @spec unlink_pull_request(integer(), String.t(), String.t()) :: :ok
@@ -267,6 +304,17 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   defp manual_title(number) when is_integer(number), do: "##{number}"
   defp manual_title(_number), do: nil
+
+  # `gh` reports PR states uppercase (OPEN/MERGED/CLOSED); the schema stores
+  # them lowercase.
+  defp normalize_pr_state(state) when is_binary(state) do
+    case String.downcase(state) do
+      s when s in ~w(open closed merged draft) -> s
+      _other -> "unknown"
+    end
+  end
+
+  defp normalize_pr_state(_state), do: "unknown"
 
   # -- issue insert/update -----------------------------------------------------
 

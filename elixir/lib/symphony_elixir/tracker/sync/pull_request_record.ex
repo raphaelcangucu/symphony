@@ -9,7 +9,7 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
   @type t :: %__MODULE__{}
 
   @states ~w(open closed merged draft unknown)
-  @origins ~w(auto manual)
+  @origins ~w(auto manual agent)
 
   schema "tracker_pull_requests" do
     field(:issue_identifier, :string)
