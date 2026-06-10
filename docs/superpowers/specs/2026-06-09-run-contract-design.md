@@ -264,9 +264,10 @@ Today `Linear.SyncDriver` returns `unsupported_push` for comments. Changes:
 - **Linear**: GraphQL `commentCreate`/`commentUpdate` (the `linear_graphql`
   client already exists).
 - **GitHub**: already works via outbox; standardize on the new behaviour.
-- **Jira**: no driver exists today — new driver implementing the same
-  behaviour (REST `POST/PUT /issue/{key}/comment`). Largest scope item in this
-  section; treated as its own sub-phase so it does not block Linear/GitHub.
+- **Jira**: `SymphonyElixir.Jira.SyncDriver` already exists and already pushes
+  `comment:create`. Remaining gaps: workpad classification in
+  `Jira.IssueAdapter.normalize_comment/1` and `comment:update` support —
+  small sub-phase 2b items, not a new driver.
 
 ### Remote workpad semantics
 
@@ -310,7 +311,8 @@ Each phase ships standalone value:
    issue detail, `symphony:blocked` + violation banner, hardened `push` skill.
 2. **Phase 2 — Reliable workpad**: PLAN gate, `workpad` skill, driver
    `push_comment`/`update_comment` (Linear first, GitHub standardized), edited
-   in-place remote workpad, sync badge. Jira driver as sub-phase 2b.
+   in-place remote workpad, sync badge. Jira workpad classification and
+   `comment:update` as sub-phase 2b.
 3. **Phase 3 — Evidence**: `evidence` block in `ProjectConfig`, `evidence`
    skill, VALIDATE gate (incl. mandatory screenshots/videos and session-log
    anti-fraud check), `issue_evidence` persistence + artifact directory,
