@@ -1,7 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantComposer } from "@/components/assistant/AssistantComposer";
+import { uploadAssistantAttachment } from "@/services/assistant";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 import { fallbackCatalogBundle } from "@/lib/assistantSettings";
 
@@ -220,6 +222,136 @@ describe("AssistantComposer", () => {
         message: "texto ditado",
         attachments: [],
       }),
+    );
+  });
+
+  it("uploads pasted images and attaches them to the next message", async () => {
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    URL.revokeObjectURL = vi.fn();
+
+    try {
+      const onSubmit = vi.fn();
+      render(<AssistantComposer projectSlug="gamba" bundle={mockBundle} onSubmit={onSubmit} />);
+
+      const textarea = screen.getByPlaceholderText("Write a message...");
+      const file = new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" });
+
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+          files: [file],
+        },
+      });
+
+      const removeButton = await screen.findByRole("button", { name: "Remove diagram.png" });
+      expect(removeButton).toBeTruthy();
+
+      fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+      await waitFor(() =>
+        expect(onSubmit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            attachments: [
+              expect.objectContaining({ type: "image", name: "diagram.png", path: "uploads/upload-1.png" }),
+            ],
+          }),
+        ),
+      );
+    } finally {
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+    }
+  });
+
+  it("uploads dropped files (e.g. markdown) and attaches them to the next message", async () => {
+    vi.mocked(uploadAssistantAttachment).mockResolvedValueOnce({
+      id: "upload-md",
+      type: "file",
+      name: "notes.md",
+      mediaType: "text/markdown",
+      path: "uploads/upload-md.md",
+    });
+
+    const onSubmit = vi.fn();
+    const { container } = render(
+      <AssistantComposer projectSlug="gamba" bundle={mockBundle} onSubmit={onSubmit} />,
+    );
+
+    const form = container.querySelector("form");
+    expect(form).not.toBeNull();
+
+    const file = new File(["# Notes"], "notes.md", { type: "text/markdown" });
+    fireEvent.drop(form as HTMLFormElement, {
+      dataTransfer: { files: [file], types: ["Files"] },
+    });
+
+    const removeButton = await screen.findByRole("button", { name: "Remove notes.md" });
+    expect(removeButton).toBeTruthy();
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [
+            expect.objectContaining({ type: "file", name: "notes.md", path: "uploads/upload-md.md" }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("uploads files dropped anywhere in the configured drop target, not only the form", async () => {
+    vi.mocked(uploadAssistantAttachment).mockResolvedValueOnce({
+      id: "upload-md",
+      type: "file",
+      name: "notes.md",
+      mediaType: "text/markdown",
+      path: "uploads/upload-md.md",
+    });
+
+    const onSubmit = vi.fn();
+
+    function PanelWrapper() {
+      const dropRef = useRef<HTMLElement | null>(null);
+      return (
+        <section ref={dropRef} data-testid="panel" style={{ height: 400 }}>
+          <div data-testid="messages" style={{ height: 200 }}>
+            messages area
+          </div>
+          <AssistantComposer
+            projectSlug="gamba"
+            bundle={mockBundle}
+            onSubmit={onSubmit}
+            dropTargetRef={dropRef}
+          />
+        </section>
+      );
+    }
+
+    render(<PanelWrapper />);
+
+    // Drop over the messages area (outside the composer form).
+    const messages = screen.getByTestId("messages");
+    const file = new File(["# Notes"], "notes.md", { type: "text/markdown" });
+    fireEvent.drop(messages, { dataTransfer: { files: [file], types: ["Files"] } });
+
+    const removeButton = await screen.findByRole("button", { name: "Remove notes.md" });
+    expect(removeButton).toBeTruthy();
+
+    fireEvent.keyDown(screen.getByPlaceholderText("Write a message..."), { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [
+            expect.objectContaining({ type: "file", name: "notes.md", path: "uploads/upload-md.md" }),
+          ],
+        }),
+      ),
     );
   });
 

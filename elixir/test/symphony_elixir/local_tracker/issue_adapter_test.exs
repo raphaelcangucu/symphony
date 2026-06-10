@@ -34,6 +34,15 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapterTest do
     assert {:error, :issue_not_found} = IssueAdapter.get_issue(project, "NOPE-1")
   end
 
+  test "list_issues returns when an issue label is stored as a github label id", %{project: project} do
+    {:ok, issue} = Context.create_issue("demo", %{title: "Labelled", status: "Todo"})
+    assert {:ok, _} = Context.add_issue_label("demo", issue.identifier, "LA_kwDOJHngx88AAAACmEYycw")
+
+    task = Task.async(fn -> IssueAdapter.list_issues(project, []) end)
+    assert {:ok, issues} = Task.await(task, 1_000)
+    assert length(issues) == 1
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

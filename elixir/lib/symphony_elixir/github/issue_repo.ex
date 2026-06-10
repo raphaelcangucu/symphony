@@ -38,8 +38,9 @@ defmodule SymphonyElixir.GitHub.IssueRepo do
 
   @spec resolve(Project.t(), String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def resolve(%Project{} = project, identifier, opts \\ []) when is_binary(identifier) do
-    with {:ok, number} <- parse_issue_number(identifier) do
-      find_repo(project, identifier, number, opts)
+    case parse_issue_number(identifier) do
+      {:ok, number} -> find_repo(project, identifier, number, opts)
+      {:error, _reason} -> resolve_local_mirror_issue(project, identifier, opts)
     end
   end
 
@@ -72,6 +73,16 @@ defmodule SymphonyElixir.GitHub.IssueRepo do
         _ -> {:cont, {:error, :issue_not_found}}
       end
     end)
+  end
+
+  defp resolve_local_mirror_issue(%Project{} = project, identifier, opts) do
+    case Context.get_issue(project.slug, identifier) do
+      {:ok, %{remote_number: number}} when is_integer(number) and number > 0 ->
+        find_repo(project, identifier, number, opts)
+
+      _ ->
+        {:error, {:invalid_issue_identifier, identifier}}
+    end
   end
 
   defp issue_exists?(owner, name, number, opts) do

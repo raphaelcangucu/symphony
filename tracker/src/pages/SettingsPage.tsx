@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { ConnectedIdentitiesCard } from "@/components/settings/ConnectedIdentitiesCard";
+import { OrchestrationRulesCard } from "@/components/settings/OrchestrationRulesCard";
+import { ProviderCredentialsCard } from "@/components/settings/ProviderCredentialsCard";
 import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   type AgentAvailability,
+  type OrchestratorSettings,
   fetchAgentAvailability,
   fetchSettings,
   updateAgentSettings,
@@ -14,6 +18,7 @@ import type { AgentKind } from "@/types/issue";
 
 export function SettingsPage() {
   const [defaultAgent, setDefaultAgent] = useState<AgentKind | null>(null);
+  const [orchestrator, setOrchestrator] = useState<OrchestratorSettings | null>(null);
   const [availability, setAvailability] = useState<AgentAvailability | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -23,7 +28,10 @@ export function SettingsPage() {
     let cancelled = false;
     void fetchSettings()
       .then((settings) => {
-        if (!cancelled) setDefaultAgent(settings.agents.default_agent_kind);
+        if (!cancelled) {
+          setDefaultAgent(settings.agents.default_agent_kind);
+          setOrchestrator(settings.orchestrator);
+        }
       })
       .catch(() => {
         if (!cancelled) setLoadError(true);
@@ -112,6 +120,12 @@ export function SettingsPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      <OrchestrationRulesCard initial={orchestrator} loadError={loadError} />
+
+      <ConnectedIdentitiesCard />
+
+      <ProviderCredentialsCard />
     </div>
   );
 }

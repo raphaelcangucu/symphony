@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
@@ -20,7 +21,10 @@ const formOptions: IssueFormOptions = {
   labels: [{ id: "L1", name: "bug", color: null }],
   assignees: [{ id: "U1", login: "alice", name: "Alice", avatarUrl: null }],
   statuses: ["Todo", "In Progress", "Done"],
-  agents: [],
+  agents: [
+    { value: "codex", label: "Codex", default: false },
+    { value: "claude", label: "Claude", default: false },
+  ],
   effectiveAgent: "codex",
 };
 
@@ -52,6 +56,7 @@ const editableHandlers = {
   onSaveStatus: async () => true,
   onSavePriority: async () => true,
   onSaveAssignee: async () => true,
+  onSaveAgent: async () => true,
 };
 
 describe("SummaryTab (editable)", () => {
@@ -81,7 +86,28 @@ describe("SummaryTab (editable)", () => {
 
     expect(await screen.findByRole("button", { name: /no priority/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /unassigned/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /inherit \(codex\)/i })).toBeInTheDocument();
     await waitFor(() => expect(getIssueFormOptionsMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("saves an explicit agent selection from the sidebar", async () => {
+    const onSaveAgent = vi.fn(async () => true);
+    const user = userEvent.setup();
+
+    render(
+      <SummaryTab
+        issue={issue({ agentKind: null })}
+        projectSlug="macro-markets"
+        {...editableHandlers}
+        onSaveAgent={onSaveAgent}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /inherit \(codex\)/i }));
+    await user.click(screen.getByRole("button", { name: /^claude$/i }));
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(onSaveAgent).toHaveBeenCalledWith("claude");
   });
 
   it("loads form options exactly once for an editable summary", async () => {

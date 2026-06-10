@@ -103,6 +103,46 @@ defmodule SymphonyElixir.Linear.Client do
   }
   """
 
+  @viewer_identity_query """
+  query SymphonyLinearViewerIdentity {
+    viewer {
+      id
+      name
+      displayName
+      email
+    }
+  }
+  """
+
+  @doc """
+  Resolves the authenticated Linear user via the GraphQL `viewer` query.
+
+  Returns the canonical user `id` plus name and email for operator identity
+  surfaces and assignee matching.
+  """
+  @spec viewer(keyword()) :: {:ok, map()} | {:error, term()}
+  def viewer(opts \\ []) when is_list(opts) do
+    case graphql(@viewer_identity_query, %{}, opts) do
+      {:ok, %{"data" => %{"viewer" => %{"id" => id} = viewer}}} when is_binary(id) and id != "" ->
+        {:ok,
+         %{
+           id: id,
+           name: present(viewer["name"]),
+           display_name: present(viewer["displayName"]),
+           email: present(viewer["email"])
+         }}
+
+      {:ok, %{"errors" => errors}} ->
+        {:error, {:linear_graphql_errors, errors}}
+
+      {:ok, _body} ->
+        {:error, :missing_linear_viewer_identity}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @spec fetch_candidate_issues() :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_candidate_issues do
     project_slug = Linear.Config.project_slug()
@@ -481,6 +521,8 @@ defmodule SymphonyElixir.Linear.Client do
   end
 
   defp normalize_assignee_match_value(_value), do: nil
+
+  defp present(value), do: normalize_assignee_match_value(value)
 
   defp extract_labels(%{"labels" => %{"nodes" => labels}}) when is_list(labels) do
     labels

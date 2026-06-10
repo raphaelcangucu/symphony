@@ -77,6 +77,24 @@ defmodule SymphonyElixir.Assistant.Payload do
     end
   end
 
+  defp normalize_attachment(%{"type" => "file", "path" => path} = attachment, project_slug)
+       when is_binary(path) and is_binary(project_slug) do
+    alias SymphonyElixir.Assistant.AttachmentStore
+
+    with {:ok, _absolute} <- AttachmentStore.resolve_path(project_slug, path),
+         {:ok, name} <- required_string(attachment, ["name", :name], "file"),
+         {:ok, media_type} <- required_string(attachment, ["media_type", :media_type], "application/octet-stream") do
+      base = %{"type" => "file", "name" => name, "media_type" => media_type, "path" => path}
+
+      case AttachmentStore.read_text(project_slug, path) do
+        {:ok, text, truncated?} -> [Map.merge(base, %{"text" => text, "truncated" => truncated?})]
+        {:error, _reason} -> [base]
+      end
+    else
+      _ -> []
+    end
+  end
+
   defp normalize_attachment(%{"type" => "audio"} = attachment, _project_slug) do
     with {:ok, name} <- required_string(attachment, ["name", :name], "recording.webm"),
          {:ok, media_type} <- required_string(attachment, ["media_type", :media_type], "audio/webm"),
@@ -115,6 +133,14 @@ defmodule SymphonyElixir.Assistant.Payload do
           "media_type" => Map.get(attachment, "media_type")
         }
 
+      %{"type" => "file"} = attachment ->
+        %{
+          "type" => "file",
+          "name" => Map.get(attachment, "name"),
+          "media_type" => Map.get(attachment, "media_type"),
+          "path" => Map.get(attachment, "path")
+        }
+
       _ ->
         %{}
     end)
@@ -122,6 +148,17 @@ defmodule SymphonyElixir.Assistant.Payload do
 
   defp attachment_note(%{"type" => "image", "name" => name}), do: ["Attached image: #{name}"]
   defp attachment_note(%{"type" => "image"}), do: ["Attached image"]
+
+  defp attachment_note(%{"type" => "file", "name" => name, "text" => text} = attachment)
+       when is_binary(text) and text != "" do
+    suffix = if Map.get(attachment, "truncated") == true, do: "\n[... file truncated ...]", else: ""
+    ["Attached file `#{name}`:\n<<<BEGIN FILE #{name}>>>\n#{text}#{suffix}\n<<<END FILE #{name}>>>"]
+  end
+
+  defp attachment_note(%{"type" => "file", "name" => name}),
+    do: ["Attached file: #{name} (binary; open it in the tracker UI)."]
+
+  defp attachment_note(%{"type" => "file"}), do: ["Attached file"]
 
   defp attachment_note(%{"type" => "audio", "name" => name, "transcript" => transcript})
        when is_binary(transcript) and transcript != "" do

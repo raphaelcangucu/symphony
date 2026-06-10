@@ -143,12 +143,14 @@ describe("updateIssue payload", () => {
       title: "New title",
       description: "Updated body",
       labelIds: ["bug", "frontend"],
+      agent: "claude",
     });
 
     expect(patch).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues/517", {
       title: "New title",
       description: "Updated body",
       label_ids: ["bug", "frontend"],
+      agent: "claude",
     });
     expect(result.identifier).toBe("517");
   });

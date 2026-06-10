@@ -75,6 +75,78 @@ defmodule SymphonyElixir.Tracker.Sync.OutboxTest do
     assert failed.attempts == 2
   end
 
+  test "requeue_failed_issue_creates revives only matching failed creates", %{project: project} do
+    {:ok, _matching} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        entity_type: "issue",
+        operation: "create",
+        payload: %{"title" => "Draft"},
+        dedup_key: "issue:create:#{project.id}:MM-1"
+      })
+
+    {:ok, _other_issue} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        entity_type: "issue",
+        operation: "create",
+        payload: %{"title" => "Other"},
+        dedup_key: "issue:create:#{project.id}:MM-2"
+      })
+
+    {:ok, _state_move} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        entity_type: "state",
+        operation: "move",
+        payload: %{"identifier" => "MM-1"},
+        dedup_key: "state:move:#{project.id}:MM-1"
+      })
+
+    Outbox.claim_pending(project.id, 10)
+    |> Enum.each(fn entry ->
+      assert {:ok, _failed} = Outbox.mark_failed(entry, "old credentials", 1)
+    end)
+
+    assert Outbox.requeue_failed_issue_creates(project.id, ["MM-1"]) == 1
+
+    revived = Repo.get_by!(OutboxEntry, dedup_key: "issue:create:#{project.id}:MM-1")
+    other_issue = Repo.get_by!(OutboxEntry, dedup_key: "issue:create:#{project.id}:MM-2")
+    state_move = Repo.get_by!(OutboxEntry, dedup_key: "state:move:#{project.id}:MM-1")
+
+    assert revived.status == "pending"
+    assert revived.attempts == 0
+    assert is_nil(revived.last_error)
+    assert other_issue.status == "failed"
+    assert state_move.status == "failed"
+  end
+
+  test "requeue_latest_failed_by_dedup_keys revives only the latest failed entry per key", %{project: project} do
+    attrs = %{
+      project_id: project.id,
+      entity_type: "state",
+      operation: "move",
+      payload: %{"identifier" => "MM-1"},
+      dedup_key: "state:move:#{project.id}:MM-1"
+    }
+
+    {:ok, _first} = Outbox.enqueue(attrs)
+    [claimed_first] = Outbox.claim_pending(project.id, 10)
+    assert {:ok, first_failed} = Outbox.mark_failed(claimed_first, "old failure", 1)
+
+    {:ok, _second} = Outbox.enqueue(%{attrs | payload: %{"identifier" => "MM-1", "state" => "Done"}})
+    [claimed_second] = Outbox.claim_pending(project.id, 10)
+    assert {:ok, second_failed} = Outbox.mark_failed(claimed_second, "new failure", 1)
+
+    assert Outbox.requeue_latest_failed_by_dedup_keys(project.id, [attrs.dedup_key]) == 1
+
+    assert Repo.get!(OutboxEntry, first_failed.id).status == "failed"
+    revived = Repo.get!(OutboxEntry, second_failed.id)
+    assert revived.status == "pending"
+    assert revived.attempts == 0
+    assert is_nil(revived.last_error)
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

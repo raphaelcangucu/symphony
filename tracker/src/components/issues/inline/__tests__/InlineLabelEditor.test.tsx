@@ -55,7 +55,7 @@ describe("InlineLabelEditor", () => {
     await user.click(await screen.findByRole("button", { name: /^frontend$/i }));
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
-    // Existing labels keep their stored value; toggled catalog options use the option id.
-    expect(onSave).toHaveBeenCalledWith(["bug", "L2"]);
+    // Save canonical GitHub label ids so the API can resolve and push them reliably.
+    expect(onSave).toHaveBeenCalledWith(["LA_kwDOJHngx88AAAACmEYycw", "L2"]);
   });
 });

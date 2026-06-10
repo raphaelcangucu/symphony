@@ -36,7 +36,38 @@ defmodule SymphonyElixir.SettingsTest do
     {:ok, _} = Settings.put("agents", "default_agent_kind", "claude")
 
     assert Settings.get_group("agents") == %{"default_agent_kind" => "claude"}
-    assert Settings.all() == %{"agents" => %{"default_agent_kind" => "claude"}}
+
+    assert Settings.all() == %{
+             "agents" => %{"default_agent_kind" => "claude"},
+             "orchestrator" => %{
+               "require_symphony_label" => true,
+               "require_assignee_match" => true
+             }
+           }
+  end
+
+  test "orchestrator group defaults to conservative gating" do
+    assert Settings.get_group("orchestrator") == %{
+             "require_symphony_label" => true,
+             "require_assignee_match" => true
+           }
+
+    assert Settings.Orchestration.require_symphony_label?() == true
+    assert Settings.Orchestration.require_assignee_match?() == true
+  end
+
+  test "orchestrator toggles persist and round-trip as booleans" do
+    assert {:ok, false} = Settings.put("orchestrator", "require_symphony_label", false)
+    assert Settings.get("orchestrator", "require_symphony_label") == false
+    assert Settings.Orchestration.require_symphony_label?() == false
+
+    assert {:ok, true} = Settings.put("orchestrator", "require_assignee_match", "true")
+    assert Settings.get("orchestrator", "require_assignee_match") == true
+  end
+
+  test "orchestrator group rejects non-boolean values" do
+    assert {:error, :invalid_value} = Settings.put("orchestrator", "require_symphony_label", "maybe")
+    assert {:error, :unknown_setting} = Settings.put("orchestrator", "nope", true)
   end
 
   test "a corrupt payload falls back to the default" do

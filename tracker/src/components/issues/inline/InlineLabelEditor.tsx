@@ -20,6 +20,17 @@ function labelValue(label: IssueLabelOption): string {
   return label.id ?? label.name;
 }
 
+function canonicalizeDraftLabels(draft: string[], options: IssueLabelOption[]): string[] {
+  const byId = new Map(options.map((option) => [labelValue(option), labelValue(option)]));
+  const byName = new Map(options.map((option) => [option.name.trim().toLowerCase(), labelValue(option)]));
+
+  return draft.map((label) => {
+    if (byId.has(label)) return label;
+    const canonical = byName.get(label.trim().toLowerCase());
+    return canonical ?? label;
+  });
+}
+
 function normalizeHexColor(color: string | null | undefined): string | null {
   if (!color) return null;
   const trimmed = color.trim().replace(/^#/, "");
@@ -93,9 +104,9 @@ export function InlineLabelEditor({
   }
 
   async function commit() {
-    const next = [...draft];
-    const unchanged =
-      next.length === visibleLabels.length && next.every((label) => visibleLabels.includes(label));
+    const next = canonicalizeDraftLabels([...draft], options);
+    const current = canonicalizeDraftLabels(visibleLabels, options);
+    const unchanged = next.length === current.length && next.every((label) => current.includes(label));
     if (unchanged) {
       setOpen(false);
       return;

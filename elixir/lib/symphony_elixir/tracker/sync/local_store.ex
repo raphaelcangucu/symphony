@@ -30,7 +30,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
           %IssueRecord{} = current -> update_issue!(current, remote, status_id)
         end
 
-      :ok = upsert_labels!(project, issue, Map.get(remote, :labels, []))
+      :ok = maybe_upsert_labels!(project, issue, Map.get(remote, :labels, []))
       :ok = upsert_comments!(issue, Map.get(remote, :comments, []))
 
       Repo.preload(issue, [:status, :labels, :comments], force: true)
@@ -128,6 +128,31 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
       issue
       |> IssueRecord.changeset(%{dirty_fields: dirty, sync_status: "pending"})
       |> Repo.update()
+    end
+  end
+
+  @doc """
+  Drops pushed fields from `dirty_fields` after a successful outbox write so later
+  remote pulls can reconcile them again.
+  """
+  @spec clear_dirty_fields(String.t(), String.t(), [atom() | String.t()]) ::
+          {:ok, IssueRecord.t()} | {:error, term()}
+  def clear_dirty_fields(identifier, project_slug, fields) when is_list(fields) do
+    with {:ok, issue} <- Context.get_issue(project_slug, identifier),
+         cleared_keys when cleared_keys != [] <- Enum.map(fields, &to_string/1) do
+      dirty =
+        Enum.reduce(cleared_keys, issue.dirty_fields || %{}, fn field, acc ->
+          Map.delete(acc, field)
+        end)
+
+      sync_status = if dirty == %{}, do: "synced", else: issue.sync_status
+
+      issue
+      |> IssueRecord.changeset(%{dirty_fields: dirty, sync_status: sync_status})
+      |> Repo.update()
+    else
+      [] -> {:error, :no_fields}
+      {:error, _} = error -> error
     end
   end
 
@@ -256,6 +281,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
       priority: remote[:priority],
       position: remote[:position] || 0,
       assignee_id: remote[:assignee_id],
+      assignee_remote_id: remote[:assignee_remote_id],
       creator: remote[:creator],
       branch_name: remote[:branch_name],
       url: remote[:remote_url],
@@ -285,6 +311,9 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
       url: remote[:remote_url],
       remote_url: remote[:remote_url],
       branch_name: remote[:branch_name],
+      # Provider-canonical assignee id is remote-authoritative (never edited
+      # locally), so it always takes the remote value rather than LWW-merging.
+      assignee_remote_id: remote[:assignee_remote_id],
       remote_updated_at: remote[:remote_updated_at],
       last_synced_at: DateTime.utc_now(),
       dirty_fields: merged.dirty_fields,
@@ -347,6 +376,13 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   end
 
   # -- labels ------------------------------------------------------------------
+
+  defp maybe_upsert_labels!(project, %IssueRecord{} = issue, labels) when is_list(labels) do
+    if labels_dirty?(issue), do: :ok, else: upsert_labels!(project, issue, labels)
+  end
+
+  defp labels_dirty?(%IssueRecord{dirty_fields: %{} = dirty}), do: Map.has_key?(dirty, "labels")
+  defp labels_dirty?(_issue), do: false
 
   defp upsert_labels!(project, issue, labels) when is_list(labels) do
     label_ids =

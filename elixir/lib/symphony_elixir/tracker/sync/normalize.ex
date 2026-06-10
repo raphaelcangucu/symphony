@@ -17,6 +17,7 @@ defmodule SymphonyElixir.Tracker.Sync.Normalize do
       state: status_name(dto.status),
       priority: dto.priority,
       assignee_id: dto.assignee,
+      assignee_remote_id: dto.assignee_remote_id,
       branch_name: nil,
       remote_url: dto.url,
       creator: dto.creator,

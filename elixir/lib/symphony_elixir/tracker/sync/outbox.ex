@@ -72,6 +72,111 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
     |> Repo.aggregate(:count)
   end
 
+  @doc """
+  Requeues failed `issue:create` entries for local issues that still need a
+  remote issue. This is intentionally narrow: board loads can safely retry
+  creates that were blocked by transient credentials/rate-limit failures without
+  replaying stale comments or status moves out of order.
+  """
+  @spec requeue_failed_issue_creates(integer(), [String.t()]) :: non_neg_integer()
+  def requeue_failed_issue_creates(project_id, identifiers) when is_integer(project_id) and is_list(identifiers) do
+    dedup_keys =
+      identifiers
+      |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
+      |> Enum.map(&"issue:create:#{project_id}:#{String.trim(&1)}")
+      |> Enum.uniq()
+
+    case dedup_keys do
+      [] ->
+        0
+
+      keys ->
+        {count, _rows} =
+          OutboxEntry
+          |> where(
+            [e],
+            e.project_id == ^project_id and e.entity_type == "issue" and e.operation == "create" and
+              e.status == "failed" and e.dedup_key in ^keys
+          )
+          |> Repo.update_all(
+            set: [
+              status: "pending",
+              attempts: 0,
+              last_error: nil,
+              updated_at: DateTime.utc_now()
+            ]
+          )
+
+        count
+    end
+  end
+
+  @doc """
+  Requeues the latest failed entry for each dedup key unless that key already has
+  a pending entry. This lets a board load recover current dirty writes after a
+  credentials outage without replaying every historical failed attempt.
+  """
+  @spec requeue_latest_failed_by_dedup_keys(integer(), [String.t()]) :: non_neg_integer()
+  def requeue_latest_failed_by_dedup_keys(project_id, dedup_keys) when is_integer(project_id) and is_list(dedup_keys) do
+    keys =
+      dedup_keys
+      |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
+      |> Enum.map(&String.trim/1)
+      |> Enum.uniq()
+
+    case keys do
+      [] ->
+        0
+
+      keys ->
+        pending_keys =
+          OutboxEntry
+          |> where([e], e.project_id == ^project_id and e.status == "pending" and e.dedup_key in ^keys)
+          |> select([e], e.dedup_key)
+          |> Repo.all()
+          |> MapSet.new()
+
+        failed_ids =
+          OutboxEntry
+          |> where([e], e.project_id == ^project_id and e.status == "failed" and e.dedup_key in ^keys)
+          |> order_by([e], desc: e.updated_at, desc: e.id)
+          |> Repo.all()
+          |> Enum.reduce({MapSet.new(), []}, fn entry, {seen, ids} ->
+            cond do
+              MapSet.member?(pending_keys, entry.dedup_key) ->
+                {seen, ids}
+
+              MapSet.member?(seen, entry.dedup_key) ->
+                {seen, ids}
+
+              true ->
+                {MapSet.put(seen, entry.dedup_key), [entry.id | ids]}
+            end
+          end)
+          |> elem(1)
+
+        requeue_failed_entries(failed_ids)
+    end
+  end
+
+  defp requeue_failed_entries([]), do: 0
+
+  defp requeue_failed_entries(ids) do
+    {count, _rows} =
+      OutboxEntry
+      |> where([e], e.id in ^ids)
+      |> Repo.update_all(
+        set: [
+          status: "pending",
+          attempts: 0,
+          last_error: nil,
+          updated_at: DateTime.utc_now()
+        ]
+      )
+
+    count
+  end
+
   defp pending_by_dedup(project_id, key) do
     OutboxEntry
     |> where([e], e.project_id == ^project_id and e.dedup_key == ^key and e.status == "pending")

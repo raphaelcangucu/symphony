@@ -5,6 +5,8 @@ defmodule SymphonyElixir.Linear.Config do
 
   @behaviour SymphonyElixir.TrackerConfig
 
+  alias SymphonyElixir.Settings.Credentials
+
   @default_endpoint "https://api.linear.app/graphql"
 
   @spec endpoint() :: String.t()
@@ -17,9 +19,15 @@ defmodule SymphonyElixir.Linear.Config do
 
   @spec api_key() :: String.t() | nil
   def api_key do
-    section_value("api_key")
-    |> resolve_env_value(System.get_env("LINEAR_API_KEY"))
-    |> normalize_secret()
+    case Credentials.get("linear", "api_key") do
+      value when is_binary(value) ->
+        normalize_secret(value)
+
+      _ ->
+        section_value("api_key")
+        |> resolve_env_value(System.get_env("LINEAR_API_KEY"))
+        |> normalize_secret()
+    end
   end
 
   @spec project_slug() :: String.t() | nil

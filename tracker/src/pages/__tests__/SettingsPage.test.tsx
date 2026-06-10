@@ -9,6 +9,11 @@ vi.mock("@/services/settings", () => ({
   fetchSettings: vi.fn(),
   updateAgentSettings: vi.fn(),
   fetchAgentAvailability: vi.fn(),
+  updateOrchestratorSettings: vi.fn(),
+  fetchIdentities: vi.fn(),
+  fetchCredentials: vi.fn(),
+  updateCredential: vi.fn(),
+  clearCredential: vi.fn(),
 }));
 
 describe("SettingsPage", () => {
@@ -16,11 +21,14 @@ describe("SettingsPage", () => {
     vi.clearAllMocks();
     vi.mocked(settingsService.fetchSettings).mockResolvedValue({
       agents: { default_agent_kind: "codex" },
+      orchestrator: { require_symphony_label: true, require_assignee_match: true },
     });
     vi.mocked(settingsService.fetchAgentAvailability).mockResolvedValue({
       codex: { available: true, version: "codex 3.1.0", command: "codex" },
       claude: { available: false, version: null, command: "claude" },
     });
+    vi.mocked(settingsService.fetchIdentities).mockResolvedValue([]);
+    vi.mocked(settingsService.fetchCredentials).mockResolvedValue([]);
   });
 
   it("renders the current default and availability", async () => {

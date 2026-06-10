@@ -9,6 +9,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   alias SymphonyElixir.{AgentRunner, Config, Issue, ProjectConfig, Repo, StatusDashboard, Tracker, Workspace}
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
 
   @incomplete_run_label "symphony:incomplete"
 
@@ -568,12 +569,19 @@ defmodule SymphonyElixir.Orchestrator do
          terminal_states
        )
        when is_binary(id) and is_binary(identifier) and is_binary(title) and is_binary(state_name) do
-    issue_routable_to_worker?(issue) and
+    issue_admitted_by_label?(issue) and
       active_issue_state?(state_name, active_states) and
       !terminal_issue_state?(state_name, terminal_states)
   end
 
   defp candidate_issue?(_issue, _active_states, _terminal_states), do: false
+
+  # When the `require_symphony_label` setting is on (default), only issues whose
+  # labels admit a Symphony agent are auto-dispatched. When off, the label gate
+  # is bypassed and any active, assigned issue is eligible.
+  defp issue_admitted_by_label?(%Issue{} = issue) do
+    not OrchestrationSettings.require_symphony_label?() or issue_routable_to_worker?(issue)
+  end
 
   defp issue_routable_to_worker?(%Issue{assigned_to_worker: assigned_to_worker})
        when is_boolean(assigned_to_worker),

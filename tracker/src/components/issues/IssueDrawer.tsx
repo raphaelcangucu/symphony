@@ -375,6 +375,10 @@ export function IssueDrawer({
                       const updated = await issueUpdater.save({ assigneeIds });
                       return updated !== null;
                     }}
+                    onSaveAgent={async (agent) => {
+                      const updated = await issueUpdater.save({ agent });
+                      return updated !== null;
+                    }}
                   />
                 </TabsContent>
                 <TabsContent value="pr">
@@ -394,6 +398,7 @@ export function IssueDrawer({
                     comments={commentsState.comments}
                     loading={commentsState.loading}
                     error={commentsState.error}
+                    projectSlug={projectSlug}
                     onAddComment={commentsState.addComment}
                   />
                 </TabsContent>

@@ -160,6 +160,28 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     assert updated.sync_status == "synced"
   end
 
+  test "preserves local labels when labels are marked dirty", %{project: project} do
+    {:ok, issue} =
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{labels: [%{name: "remote-only", remote_id: "LA_remote"}]})
+      )
+
+    assert {:ok, _} =
+             Context.update_issue(project.slug, issue.identifier, %{"label_ids" => ["local-label"]})
+
+    assert {:ok, _} = LocalStore.mark_dirty(issue.identifier, project.slug, [:labels])
+
+    {:ok, after_pull} =
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{labels: [%{name: "remote-only", remote_id: "LA_remote"}]})
+      )
+
+    loaded = Repo.get(IssueRecord, after_pull.id) |> Repo.preload(:labels)
+    assert Enum.map(loaded.labels, & &1.name) == ["local-label"]
+  end
+
   test "a newer pending local edit survives a remote pull", %{project: project} do
     {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "remote-v1"}))
 

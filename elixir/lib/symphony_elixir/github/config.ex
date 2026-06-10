@@ -6,6 +6,7 @@ defmodule SymphonyElixir.GitHub.Config do
   @behaviour SymphonyElixir.TrackerConfig
 
   alias SymphonyElixir.GitHub.Bootstrap
+  alias SymphonyElixir.Settings.Credentials
 
   @default_status_field "Status"
   @default_admission_label "symphony"
@@ -30,7 +31,7 @@ defmodule SymphonyElixir.GitHub.Config do
 
   @spec token() :: String.t() | nil
   def token do
-    normalize_secret(System.get_env("GITHUB_TOKEN"))
+    normalize_secret(Credentials.get("github", "token") || System.get_env("GITHUB_TOKEN"))
   end
 
   @spec project_mode() :: String.t()

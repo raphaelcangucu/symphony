@@ -308,6 +308,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
       description: content["body"],
       url: content["url"],
       assignee: first_login(content),
+      assignee_remote_id: first_login(content),
       labels: label_names(content),
       status: status_from_field_values(item["fieldValues"], status_field),
       project_slug: project_slug,

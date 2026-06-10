@@ -29,7 +29,36 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
   test "GET /api/tracker/v1/settings returns all groups with defaults" do
     conn = get(authed_conn(), "/api/tracker/v1/settings")
 
-    assert %{"data" => %{"agents" => %{"default_agent_kind" => "codex"}}} = json_response(conn, 200)
+    assert %{
+             "data" => %{
+               "agents" => %{"default_agent_kind" => "codex"},
+               "orchestrator" => %{
+                 "require_symphony_label" => true,
+                 "require_assignee_match" => true
+               }
+             }
+           } = json_response(conn, 200)
+  end
+
+  test "PUT /api/tracker/v1/settings/orchestrator toggles a boolean rule" do
+    conn = put(authed_conn(), "/api/tracker/v1/settings/orchestrator", %{"require_symphony_label" => false})
+    assert %{"data" => %{"require_symphony_label" => false}} = json_response(conn, 200)
+
+    conn = get(authed_conn(), "/api/tracker/v1/settings")
+    assert %{"data" => %{"orchestrator" => %{"require_symphony_label" => false}}} = json_response(conn, 200)
+  end
+
+  test "GET /api/tracker/v1/settings/identities lists every provider's connection state" do
+    conn = get(authed_conn(), "/api/tracker/v1/settings/identities")
+
+    assert %{"data" => statuses} = json_response(conn, 200)
+    providers = statuses |> Enum.map(& &1["provider"]) |> Enum.sort()
+    assert providers == ["github", "jira", "linear"]
+
+    Enum.each(statuses, fn status ->
+      assert is_boolean(status["configured"])
+      assert is_boolean(status["connected"])
+    end)
   end
 
   test "PUT /api/tracker/v1/settings/agents updates and echoes the group" do

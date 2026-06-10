@@ -15,7 +15,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   use GenServer
   require Logger
 
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixir.Tracker.Sync.{LocalStore, Normalize, Outbox, StateRecord}
@@ -376,7 +376,47 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     LocalStore.link_issue_remote_id(issue_id, remote_id)
   end
 
+  defp link_pushed_remote_id(%{entity_type: "state", operation: "move", project_id: project_id, payload: payload}, _remote_id)
+       when is_map(payload) do
+    with %{"identifier" => identifier} <- payload,
+         %Project{slug: slug} <- Repo.get(Project, project_id) do
+      LocalStore.clear_dirty_fields(identifier, slug, ["state"])
+    end
+
+    :ok
+  end
+
+  defp link_pushed_remote_id(
+         %{entity_type: "issue", operation: "update", project_id: project_id, payload: payload},
+         _remote_id
+       )
+       when is_map(payload) do
+    with %{"identifier" => identifier} <- payload,
+         %Project{slug: slug} <- Repo.get(Project, project_id),
+         fields when fields != [] <- pushed_dirty_fields(payload) do
+      LocalStore.clear_dirty_fields(identifier, slug, fields)
+    end
+
+    :ok
+  end
+
   defp link_pushed_remote_id(_entry, _remote_id), do: :ok
+
+  defp pushed_dirty_fields(payload) when is_map(payload) do
+    []
+    |> put_pushed_field(payload, "agent", "labels")
+    |> put_pushed_field(payload, "label_ids", "labels")
+    |> put_pushed_field(payload, "labels", "labels")
+    |> put_pushed_field(payload, "title", "title")
+    |> put_pushed_field(payload, "description", "description")
+    |> put_pushed_field(payload, "priority", "priority")
+    |> put_pushed_field(payload, "assignee_ids", "assignee_id")
+    |> Enum.uniq()
+  end
+
+  defp put_pushed_field(fields, payload, payload_key, dirty_key) do
+    if Map.has_key?(payload, payload_key), do: [dirty_key | fields], else: fields
+  end
 
   defp record_failed(acc, entry, reason, max_attempts) do
     {:ok, updated} = Outbox.mark_failed(entry, inspect(reason), max_attempts)

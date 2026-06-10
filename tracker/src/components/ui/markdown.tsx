@@ -2,6 +2,8 @@ import type { ReactElement, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { AttachmentImage } from "@/components/shared/AttachmentImage";
+import { isInternalAttachmentUrl } from "@/services/attachments";
 import { isAssistantWorkspaceMarkdownHref } from "@/services/threadDocuments";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +36,31 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
               <a href={href} target="_blank" rel="noreferrer noopener">
                 {linkChildren}
               </a>
+            );
+          },
+          img: ({ src, alt }) => {
+            const source = typeof src === "string" ? src : "";
+            const label = typeof alt === "string" && alt.length > 0 ? alt : "attachment";
+
+            if (isInternalAttachmentUrl(source)) {
+              return (
+                <AttachmentImage
+                  src={source}
+                  alt={label}
+                  className="my-2 max-h-80 w-auto max-w-full object-contain"
+                />
+              );
+            }
+
+            if (!source) return null;
+
+            return (
+              <img
+                src={source}
+                alt={label}
+                loading="lazy"
+                className="my-2 max-h-80 w-auto max-w-full rounded-lg border object-contain"
+              />
             );
           },
         }}

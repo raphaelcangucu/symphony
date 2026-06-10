@@ -68,6 +68,35 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     assert %{"data" => %{"slug" => "macro-markets"}} = json_response(show_conn, 200)
   end
 
+  test "lists issues when a label is stored as a github label id" do
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Gamba",
+        slug: "gamba",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "GambaLabs/frontend", "project_id" => "PVT_test"}
+      })
+
+    {:ok, issue} = Context.create_issue("gamba", %{title: "Labelled", status: "Todo"})
+    assert {:ok, _} = Context.add_issue_label("gamba", issue.identifier, "LA_kwDOJHngx88AAAACmEYycw")
+
+    previous_sync = Application.get_env(:symphony_elixir, :tracker, [])
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+
+    on_exit(fn ->
+      Application.put_env(:symphony_elixir, :tracker, previous_sync)
+    end)
+
+    task =
+      Task.async(fn ->
+        get(authorized_conn(), "/api/tracker/v1/projects/#{project.slug}/issues")
+      end)
+
+    conn = Task.await(task, 1_000)
+    assert %{"data" => [%{"identifier" => identifier}]} = json_response(conn, 200)
+    assert identifier == issue.identifier
+  end
+
   test "manages project issues, comments, and blockers" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 

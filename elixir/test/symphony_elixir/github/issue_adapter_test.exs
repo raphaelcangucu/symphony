@@ -584,6 +584,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
                    "nodes" => [
                      %{"id" => "L1", "name" => "bug", "color" => "ff0000"},
                      %{"id" => "AGC", "name" => "symphony:codex", "color" => nil},
+                    %{"id" => "AGCL", "name" => "symphony:claude", "color" => nil},
                      %{"id" => "P2", "name" => "priority:2", "color" => nil}
                    ]
                  }
@@ -798,6 +799,14 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
       assert_received {:update_input, %{"id" => "I_10", "labelIds" => label_ids}}
       assert "P2" in label_ids
       assert "AGC" in label_ids
+    end
+
+    test "updates agent routing label without preserving the previous agent" do
+      assert {:ok, %IssueDTO{identifier: "10"}} = IssueAdapter.update_issue(project(), "10", %{"agent" => "claude"})
+
+      assert_received {:update_input, %{"id" => "I_10", "labelIds" => label_ids}}
+      assert "AGCL" in label_ids
+      refute "AGC" in label_ids
     end
   end
 

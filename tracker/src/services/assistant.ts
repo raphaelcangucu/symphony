@@ -213,7 +213,7 @@ interface BackendUploadedAttachmentDto {
 
 export interface UploadedAssistantAttachment {
   id: string;
-  type: "image";
+  type: "image" | "file";
   name: string;
   mediaType: string;
   path: string;
@@ -240,7 +240,7 @@ export async function uploadAssistantAttachment(
 
   return {
     id: dto.id ?? path,
-    type: "image",
+    type: dto.type === "file" ? "file" : "image",
     name: dto.name ?? file.name,
     mediaType: dto.mediaType ?? dto.media_type ?? file.type,
     path,

@@ -9,6 +9,14 @@ export type AssistantAttachment =
     }
   | {
       id: string;
+      type: "file";
+      name: string;
+      mediaType: string;
+      path: string;
+      sizeBytes?: number;
+    }
+  | {
+      id: string;
       type: "audio";
       name: string;
       mediaType: string;
@@ -18,7 +26,7 @@ export type AssistantAttachment =
     };
 
 export interface AssistantOutgoingAttachment {
-  type: "image" | "audio";
+  type: "image" | "file" | "audio";
   name: string;
   media_type: string;
   path?: string;
@@ -27,6 +35,7 @@ export interface AssistantOutgoingAttachment {
 }
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 
 export function validateImageFile(file: File): void {
@@ -34,10 +43,25 @@ export function validateImageFile(file: File): void {
   if (file.size > MAX_IMAGE_BYTES) throw new Error("Images must be 4 MB or smaller.");
 }
 
-export function createImageAttachmentPreview(
-  file: File,
-  uploaded: { path: string; name: string; mediaType?: string; media_type?: string },
-): AssistantAttachment {
+export function validateAttachmentFile(file: File): void {
+  if (file.size === 0) throw new Error("Empty files cannot be attached.");
+  if (file.type.startsWith("image/")) {
+    validateImageFile(file);
+    return;
+  }
+  if (file.size > MAX_FILE_BYTES) throw new Error("Files must be 5 MB or smaller.");
+}
+
+interface UploadedAttachmentLike {
+  type?: "image" | "file";
+  path: string;
+  name: string;
+  mediaType?: string;
+  media_type?: string;
+  sizeBytes?: number;
+}
+
+export function createImageAttachmentPreview(file: File, uploaded: UploadedAttachmentLike): AssistantAttachment {
   return {
     id: cryptoRandomId(),
     type: "image",
@@ -46,6 +70,21 @@ export function createImageAttachmentPreview(
     previewUrl: URL.createObjectURL(file),
     path: uploaded.path,
   };
+}
+
+export function createFileAttachment(file: File, uploaded: UploadedAttachmentLike): AssistantAttachment {
+  return {
+    id: cryptoRandomId(),
+    type: "file",
+    name: uploaded.name || file.name,
+    mediaType: uploaded.mediaType || uploaded.media_type || file.type || "application/octet-stream",
+    path: uploaded.path,
+    sizeBytes: uploaded.sizeBytes ?? (file.size > 0 ? file.size : undefined),
+  };
+}
+
+export function createAttachmentPreview(file: File, uploaded: UploadedAttachmentLike): AssistantAttachment {
+  return uploaded.type === "file" ? createFileAttachment(file, uploaded) : createImageAttachmentPreview(file, uploaded);
 }
 
 export async function blobToAudioAttachment(blob: Blob, durationMs?: number): Promise<AssistantAttachment> {
@@ -68,6 +107,15 @@ export function serializeAttachments(attachments: AssistantAttachment[]): Assist
     if (attachment.type === "image") {
       return {
         type: "image",
+        name: attachment.name,
+        media_type: attachment.mediaType,
+        path: attachment.path,
+      };
+    }
+
+    if (attachment.type === "file") {
+      return {
+        type: "file",
         name: attachment.name,
         media_type: attachment.mediaType,
         path: attachment.path,

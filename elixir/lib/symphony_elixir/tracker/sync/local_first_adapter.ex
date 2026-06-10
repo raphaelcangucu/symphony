@@ -8,7 +8,10 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
 
   @behaviour SymphonyElixir.Tracker.IssueAdapter
 
-  alias SymphonyElixir.LocalTracker.{Context, IssueAdapter, Project}
+  import Ecto.Query
+
+  alias SymphonyElixir.LocalTracker.{Context, IssueAdapter, IssueRecord, Project}
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.{Engine, LocalStore, Outbox}
 
   @impl true
@@ -17,6 +20,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   @impl true
   def list_issues(%Project{} = project, filters) do
     Engine.ensure_seeded(project)
+    maybe_request_sync_for_pending_work(project)
     IssueAdapter.list_issues(project, filters)
   end
 
@@ -121,6 +125,114 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
     end
   end
 
+  defp maybe_request_sync_for_pending_work(%Project{id: project_id} = project) do
+    project
+    |> local_only_issue_identifiers()
+    |> then(&Outbox.requeue_failed_issue_creates(project_id, &1))
+
+    project
+    |> dirty_outbox_dedup_keys()
+    |> then(&Outbox.requeue_latest_failed_by_dedup_keys(project_id, &1))
+
+    enqueue_current_dirty_issue_updates(project)
+
+    if Outbox.pending_count(project_id) > 0 do
+      Engine.request_sync(force: true)
+    end
+
+    :ok
+  end
+
+  defp local_only_issue_identifiers(%Project{id: project_id}) do
+    IssueRecord
+    |> where([issue], issue.project_id == ^project_id)
+    |> where([issue], is_nil(issue.remote_id) or issue.remote_id == "")
+    |> where([issue], is_nil(issue.archived_at))
+    |> select([issue], issue.identifier)
+    |> Repo.all()
+  end
+
+  defp dirty_outbox_dedup_keys(%Project{id: project_id}) do
+    IssueRecord
+    |> where([issue], issue.project_id == ^project_id)
+    |> where([issue], not is_nil(issue.dirty_fields))
+    |> select([issue], {issue.identifier, issue.dirty_fields})
+    |> Repo.all()
+    |> Enum.flat_map(fn {identifier, dirty_fields} ->
+      dirty_fields
+      |> Map.keys()
+      |> Enum.flat_map(&dirty_field_dedup_keys(project_id, identifier, &1))
+    end)
+    |> Enum.uniq()
+  end
+
+  defp enqueue_current_dirty_issue_updates(%Project{} = project) do
+    project
+    |> dirty_issue_records()
+    |> Enum.each(fn issue ->
+      payload = dirty_issue_update_payload(issue)
+
+      if map_size(Map.delete(payload, "identifier")) > 0 do
+        enqueue(project, issue.identifier, "issue", "update", payload, "issue:update:#{project.id}:#{issue.identifier}")
+      end
+    end)
+  end
+
+  defp dirty_issue_records(%Project{id: project_id}) do
+    IssueRecord
+    |> where([issue], issue.project_id == ^project_id)
+    |> where([issue], not is_nil(issue.dirty_fields))
+    |> preload(:labels)
+    |> Repo.all()
+    |> Enum.filter(fn issue -> issue.dirty_fields != %{} end)
+  end
+
+  defp dirty_issue_update_payload(%IssueRecord{} = issue) do
+    dirty = issue.dirty_fields || %{}
+
+    %{"identifier" => issue.identifier}
+    |> maybe_put_dirty_value(dirty, "title", issue.title)
+    |> maybe_put_dirty_value(dirty, "description", issue.description)
+    |> maybe_put_dirty_value(dirty, "priority", issue.priority)
+    |> maybe_put_dirty_assignees(dirty, issue.assignee_id)
+    |> maybe_put_dirty_labels(dirty, issue.labels)
+  end
+
+  defp maybe_put_dirty_value(payload, dirty, field, value) do
+    if Map.has_key?(dirty, field), do: Map.put(payload, field, value), else: payload
+  end
+
+  defp maybe_put_dirty_assignees(payload, dirty, assignee_id) do
+    if Map.has_key?(dirty, "assignee_id") do
+      Map.put(payload, "assignee_ids", List.wrap(assignee_id) |> Enum.reject(&is_nil/1))
+    else
+      payload
+    end
+  end
+
+  defp maybe_put_dirty_labels(payload, dirty, labels) do
+    if Map.has_key?(dirty, "labels") do
+      label_names =
+        labels
+        |> List.wrap()
+        |> Enum.map(&Map.get(&1, :name))
+        |> Enum.reject(&(is_nil(&1) or &1 == ""))
+
+      Map.put(payload, "label_ids", label_names)
+    else
+      payload
+    end
+  end
+
+  defp dirty_field_dedup_keys(project_id, identifier, "state"),
+    do: ["state:move:#{project_id}:#{identifier}"]
+
+  defp dirty_field_dedup_keys(project_id, identifier, field)
+       when field in ["title", "description", "priority", "assignee_id", "labels"],
+       do: ["issue:update:#{project_id}:#{identifier}"]
+
+  defp dirty_field_dedup_keys(_project_id, _identifier, _field), do: []
+
   defp dirty_fields(attrs) do
     attrs
     |> Map.keys()
@@ -131,10 +243,12 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   defp to_dirty_field(key) when key in [:title, "title"], do: :title
   defp to_dirty_field(key) when key in [:description, "description"], do: :description
   defp to_dirty_field(key) when key in [:priority, "priority"], do: :priority
+
   defp to_dirty_field(key)
        when key in [:assignee_id, "assignee_id", :assignee, "assignee", :assignee_ids, "assignee_ids"],
        do: :assignee_id
-  defp to_dirty_field(key) when key in [:label_ids, "label_ids", :labels, "labels"], do: :labels
+
+  defp to_dirty_field(key) when key in [:label_ids, "label_ids", :labels, "labels", :agent, "agent"], do: :labels
   defp to_dirty_field(_key), do: nil
 
   defp stringify(map), do: Map.new(map, fn {k, v} -> {to_string(k), v} end)

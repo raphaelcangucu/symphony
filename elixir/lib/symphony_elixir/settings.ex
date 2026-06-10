@@ -11,7 +11,10 @@ defmodule SymphonyElixir.Settings do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Setting
 
-  @groups %{"agents" => SymphonyElixir.Settings.Agents}
+  @groups %{
+    "agents" => SymphonyElixir.Settings.Agents,
+    "orchestrator" => SymphonyElixir.Settings.Orchestration
+  }
 
   @spec groups() :: %{String.t() => module()}
   def groups, do: @groups

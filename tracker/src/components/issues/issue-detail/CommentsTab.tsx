@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarkdownImagePaste } from "@/hooks/useMarkdownImagePaste";
 import { cn } from "@/lib/utils";
 import type { Comment, CreateCommentInput } from "@/types/comment";
 
@@ -14,18 +15,20 @@ interface CommentsTabProps {
   comments: Comment[];
   loading: boolean;
   error: string | null;
+  projectSlug: string;
   onAddComment: (input: CreateCommentInput) => Promise<Comment>;
 }
 
 type ComposerMode = "write" | "preview";
 
-export function CommentsTab({ comments, loading, error, onAddComment }: CommentsTabProps) {
+export function CommentsTab({ comments, loading, error, projectSlug, onAddComment }: CommentsTabProps) {
   const [body, setBody] = useState("");
   const [mode, setMode] = useState<ComposerMode>("write");
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { handlePaste, uploading } = useMarkdownImagePaste({ projectSlug, setValue: setBody });
 
-  const canSubmit = body.trim().length > 0 && !submitting;
+  const canSubmit = body.trim().length > 0 && !submitting && !uploading;
 
   function restoreSelection(start: number, end: number) {
     requestAnimationFrame(() => {
@@ -149,7 +152,8 @@ export function CommentsTab({ comments, loading, error, onAddComment }: Comments
               value={body}
               onChange={(event) => setBody(event.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Use Markdown to format your comment"
+              onPaste={handlePaste}
+              placeholder="Use Markdown to format your comment · paste images to attach"
               className="min-h-28 resize-y border-0 bg-transparent p-0 shadow-none ring-offset-0 focus-visible:ring-0"
             />
           ) : body.trim() ? (
@@ -161,7 +165,7 @@ export function CommentsTab({ comments, loading, error, onAddComment }: Comments
         <div className="flex items-center justify-between border-t bg-muted/40 px-3 py-2">
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="rounded border px-1 font-mono text-[10px] font-semibold leading-tight">M↓</span>
-            Markdown supported · ⌘/Ctrl+Enter to send
+            {uploading ? "Uploading image…" : "Markdown supported · paste images · ⌘/Ctrl+Enter to send"}
           </span>
           <Button type="submit" size="sm" disabled={!canSubmit}>
             {submitting ? "Posting…" : "Comment"}

@@ -1129,6 +1129,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
       "position",
       :assignee_id,
       "assignee_id",
+      :assignee_remote_id,
+      "assignee_remote_id",
       :agent_goal,
       "agent_goal",
       :worker_id,
@@ -1159,6 +1161,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
       "priority",
       :assignee_id,
       "assignee_id",
+      :assignee_remote_id,
+      "assignee_remote_id",
       :agent_goal,
       "agent_goal",
       :creator,
@@ -1310,8 +1314,11 @@ defmodule SymphonyElixir.LocalTracker.Context do
           [first | _] -> resolve_assignee_login(project_id, first)
         end
 
+      # For local/GitHub projects the login is also the canonical assignee id
+      # used by the orchestrator's "assigned to me" gate.
       attrs
       |> Map.put("assignee_id", login)
+      |> Map.put("assignee_remote_id", login)
       |> Map.delete("assignee_ids")
       |> Map.delete(:assignee_ids)
     else

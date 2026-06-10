@@ -26,20 +26,48 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
   @spec upload_attachment(Conn.t(), map()) :: Conn.t()
   def upload_attachment(conn, %{"project_slug" => project_slug, "file" => %Plug.Upload{} = upload}) do
     with {:ok, _project} <- Context.get_project(project_slug),
-         {:ok, attachment} <- AttachmentStore.store_image(project_slug, upload) do
+         {:ok, attachment} <- AttachmentStore.store_file(project_slug, upload) do
       conn
       |> put_status(:created)
       |> json(%{data: attachment})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, :unsupported_file_type} -> TrackerErrors.validation(conn, "This file type is not supported.")
       {:error, :unsupported_image_type} -> TrackerErrors.validation(conn, "Only PNG, JPEG, GIF, and WebP images are supported.")
+      {:error, :file_too_large} -> TrackerErrors.validation(conn, "Files must be 5 MB or smaller.")
       {:error, :image_too_large} -> TrackerErrors.validation(conn, "Images must be 4 MB or smaller.")
-      {:error, :invalid_upload} -> TrackerErrors.validation(conn, "Invalid image upload.")
+      {:error, :invalid_upload} -> TrackerErrors.validation(conn, "Invalid upload.")
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
   def upload_attachment(conn, _params), do: TrackerErrors.validation(conn, "file is required")
+
+  @spec show_attachment(Conn.t(), map()) :: Conn.t()
+  def show_attachment(conn, %{"project_slug" => project_slug, "path" => path_segments}) do
+    relative_path = path_segments |> List.wrap() |> Enum.join("/")
+
+    with {:ok, _project} <- Context.get_project(project_slug),
+         {:ok, absolute_path} <- AttachmentStore.resolve_path(project_slug, relative_path) do
+      conn
+      |> Conn.put_resp_content_type(AttachmentStore.content_type(absolute_path))
+      |> Conn.put_resp_header("cache-control", "private, max-age=31536000, immutable")
+      |> Conn.send_file(200, absolute_path)
+    else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, :invalid_path} -> TrackerErrors.validation(conn, "Invalid attachment path.")
+      {:error, :attachment_not_found} -> attachment_not_found(conn)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def show_attachment(conn, _params), do: TrackerErrors.validation(conn, "attachment path is required")
+
+  defp attachment_not_found(conn) do
+    conn
+    |> put_status(:not_found)
+    |> json(%{error: %{code: "attachment_not_found", message: "Attachment not found"}})
+  end
 
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"project_slug" => project_slug, "message" => message} = params) when is_binary(message) do

@@ -1,16 +1,25 @@
-import { AudioLines, ChevronDown, Mic, Plus, Square, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { AudioLines, ChevronDown, FileText, Mic, Plus, Square, X } from "lucide-react";
+import {
+  type DragEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import {
   type AssistantAttachment,
-  createImageAttachmentPreview,
+  createAttachmentPreview,
   revokeAttachmentPreviews,
   serializeAttachments,
-  validateImageFile,
+  validateAttachmentFile,
 } from "@/components/assistant/assistantAttachments";
 import { matchingSlashCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
 import { uploadAssistantAttachment } from "@/services/assistant";
+import { extractFilesFromClipboard } from "@/lib/clipboardImages";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -41,6 +50,10 @@ import {
 import { cn } from "@/lib/utils";
 import type { AgentKind } from "@/types/issue";
 
+function eventHasFiles(event: DragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+}
+
 export type AssistantComposerSubmitKind = "message" | "infer" | "btw";
 
 export interface AssistantComposerSubmit {
@@ -62,6 +75,12 @@ interface AssistantComposerProps {
   onSubmit: (payload: AssistantComposerSubmit) => void;
   /** Reports the currently selected agent (on mount and on every change). */
   onAgentChange?: (agent: AgentKind) => void;
+  /**
+   * Optional element that acts as the file drop zone. When provided, dropping
+   * files anywhere inside it (e.g. the whole assistant panel) attaches them,
+   * instead of only the composer form.
+   */
+  dropTargetRef?: React.RefObject<HTMLElement | null>;
 }
 
 export function AssistantComposer({
@@ -74,10 +93,14 @@ export function AssistantComposer({
   onForceQueued,
   onSubmit,
   onAgentChange,
+  dropTargetRef,
 }: AssistantComposerProps) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [nativeDropZoneActive, setNativeDropZoneActive] = useState(false);
+  const dragDepthRef = useRef(0);
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(bundle));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recordingRef = useRef(false);
@@ -201,23 +224,122 @@ export function AssistantComposer({
     });
   }
 
-  async function handleImagePick(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
+  async function uploadFiles(files: File[]) {
+    if (files.length === 0) return;
+    if (!projectSlug.trim()) {
+      toast.error("Attachments are not available in this conversation.");
+      return;
+    }
 
     for (const file of files) {
       try {
-        validateImageFile(file);
+        validateAttachmentFile(file);
         setUploadingImage(true);
         const uploaded = await uploadAssistantAttachment(projectSlug, file);
-        const attachment = createImageAttachmentPreview(file, uploaded);
+        const attachment = createAttachmentPreview(file, uploaded);
         setAttachments((current) => [...current, attachment]);
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Failed to upload image.");
+        toast.error(cause instanceof Error ? cause.message : "Failed to upload file.");
       } finally {
         setUploadingImage(false);
       }
     }
+  }
+
+  const uploadFilesRef = useRef(uploadFiles);
+  uploadFilesRef.current = uploadFiles;
+
+  // When a drop target element is provided (e.g. the whole assistant panel),
+  // attach native drag-and-drop listeners to it so files can be dropped
+  // anywhere inside the panel, not only on the composer form.
+  useEffect(() => {
+    const el = dropTargetRef?.current ?? null;
+    if (!el) {
+      setNativeDropZoneActive(false);
+      return;
+    }
+
+    setNativeDropZoneActive(true);
+
+    const hasFiles = (event: globalThis.DragEvent) =>
+      Array.from(event.dataTransfer?.types ?? []).includes("Files");
+
+    const onDragEnter = (event: globalThis.DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current += 1;
+      setDragActive(true);
+    };
+    const onDragOver = (event: globalThis.DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    };
+    const onDragLeave = (event: globalThis.DragEvent) => {
+      if (!hasFiles(event)) return;
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (dragDepthRef.current === 0) setDragActive(false);
+    };
+    const onDrop = (event: globalThis.DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current = 0;
+      setDragActive(false);
+      void uploadFilesRef.current(Array.from(event.dataTransfer?.files ?? []));
+    };
+
+    el.addEventListener("dragenter", onDragEnter);
+    el.addEventListener("dragover", onDragOver);
+    el.addEventListener("dragleave", onDragLeave);
+    el.addEventListener("drop", onDrop);
+
+    return () => {
+      el.removeEventListener("dragenter", onDragEnter);
+      el.removeEventListener("dragover", onDragOver);
+      el.removeEventListener("dragleave", onDragLeave);
+      el.removeEventListener("drop", onDrop);
+    };
+  }, [dropTargetRef]);
+
+  async function handleFilePick(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    await uploadFiles(files);
+  }
+
+  function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const files = extractFilesFromClipboard(event);
+    if (files.length === 0) return;
+    event.preventDefault();
+    void uploadFiles(files);
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLFormElement>) {
+    if (!eventHasFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setDragActive(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLFormElement>) {
+    if (!eventHasFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLFormElement>) {
+    if (!eventHasFiles(event)) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragActive(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLFormElement>) {
+    if (!eventHasFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setDragActive(false);
+    const files = Array.from(event.dataTransfer.files ?? []);
+    void uploadFiles(files);
   }
 
   function removeAttachment(id: string) {
@@ -267,6 +389,10 @@ export function AssistantComposer({
     event.preventDefault();
 
     if (input.trim().length === 0) {
+      if (attachments.length > 0) {
+        submitCurrent();
+        return;
+      }
       if (hasQueued) onForceQueued?.();
       return;
     }
@@ -296,8 +422,26 @@ export function AssistantComposer({
     });
   }
 
+  const dropOverlay = dragActive ? (
+    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-primary/60 bg-background/85 text-sm font-medium text-primary">
+      Drop files to attach
+    </div>
+  ) : null;
+
   return (
-    <form className={cn("bg-background", floating ? "px-0 pb-0 pt-0" : "border-t p-4")} onSubmit={handleSubmit}>
+    <form
+      className={cn("relative bg-background", floating ? "px-0 pb-0 pt-0" : "border-t p-4")}
+      onSubmit={handleSubmit}
+      onDragEnter={nativeDropZoneActive ? undefined : handleDragEnter}
+      onDragOver={nativeDropZoneActive ? undefined : handleDragOver}
+      onDragLeave={nativeDropZoneActive ? undefined : handleDragLeave}
+      onDrop={nativeDropZoneActive ? undefined : handleDrop}
+    >
+      {nativeDropZoneActive
+        ? dragActive && dropTargetRef?.current
+          ? createPortal(dropOverlay, dropTargetRef.current)
+          : null
+        : dropOverlay}
       <div
         className={cn(
           "rounded-2xl border bg-card transition-shadow",
@@ -307,30 +451,35 @@ export function AssistantComposer({
       >
         {attachments.length > 0 ? (
           <div className="flex flex-wrap gap-2 border-b px-3 py-2">
-            {attachments.map((attachment) =>
-              attachment.type === "image" ? (
-                <div key={attachment.id} className="group relative">
-                  <img
-                    src={attachment.previewUrl}
-                    alt={attachment.name}
-                    className="h-16 w-16 rounded-lg border object-cover"
-                  />
-                  <button
-                    type="button"
-                    aria-label={`Remove ${attachment.name}`}
-                    onClick={() => removeAttachment(attachment.id)}
-                    className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ) : (
+            {attachments.map((attachment) => {
+              if (attachment.type === "image") {
+                return (
+                  <div key={attachment.id} className="group relative">
+                    <img
+                      src={attachment.previewUrl}
+                      alt={attachment.name}
+                      className="h-16 w-16 rounded-lg border object-cover"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove ${attachment.name}`}
+                      onClick={() => removeAttachment(attachment.id)}
+                      className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              }
+
+              const Icon = attachment.type === "audio" ? AudioLines : FileText;
+              return (
                 <div
                   key={attachment.id}
                   className="flex items-center gap-2 rounded-lg border bg-muted/40 px-2 py-1.5 text-xs"
                 >
-                  <AudioLines className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="max-w-[10rem] truncate">{attachment.name}</span>
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="max-w-[12rem] truncate">{attachment.name}</span>
                   <button
                     type="button"
                     aria-label={`Remove ${attachment.name}`}
@@ -340,8 +489,8 @@ export function AssistantComposer({
                     <X className="h-3 w-3" />
                   </button>
                 </div>
-              ),
-            )}
+              );
+            })}
           </div>
         ) : null}
 
@@ -366,6 +515,7 @@ export function AssistantComposer({
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder="Write a message..."
           className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
         />
@@ -375,10 +525,9 @@ export function AssistantComposer({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
               multiple
               className="hidden"
-              onChange={(event) => void handleImagePick(event)}
+              onChange={(event) => void handleFilePick(event)}
             />
             <Button
               type="button"
@@ -386,7 +535,7 @@ export function AssistantComposer({
               size="icon"
               className="h-8 w-8 rounded-full"
               disabled={disabled || uploadingImage}
-              aria-label="Attach image"
+              aria-label="Attach file"
               onClick={() => fileInputRef.current?.click()}
             >
               <Plus className="h-4 w-4" />
@@ -456,7 +605,7 @@ export function AssistantComposer({
       </div>
 
       <p className={cn("text-xs text-muted-foreground", floating ? "mt-1.5" : "mt-2")}>
-        Enter to send · Shift+Enter for a new line · Models from {catalog.command}
+        Enter to send · Shift+Enter for a new line · paste or drop files · Models from {catalog.command}
         {speechError ? <span className="text-destructive"> · Voice dictation unavailable ({speechError})</span> : null}
       </p>
     </form>

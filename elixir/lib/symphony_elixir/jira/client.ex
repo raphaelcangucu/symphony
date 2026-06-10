@@ -56,6 +56,31 @@ defmodule SymphonyElixir.Jira.Client do
     end
   end
 
+  @doc """
+  Resolves the authenticated JIRA user via `/rest/api/3/myself`.
+
+  Returns the canonical `accountId` plus display name and email for operator
+  identity surfaces and assignee matching.
+  """
+  @spec viewer(keyword()) :: {:ok, map()} | {:error, term()}
+  def viewer(opts \\ []) when is_list(opts) do
+    case request(:get, @myself_path, nil, opts) do
+      {:ok, %{"accountId" => account_id} = body} when is_binary(account_id) and account_id != "" ->
+        {:ok,
+         %{
+           account_id: account_id,
+           display_name: present(body["displayName"]),
+           email: present(body["emailAddress"])
+         }}
+
+      {:ok, _body} ->
+        {:error, :missing_jira_viewer_identity}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @spec fetch_candidate_issues(keyword()) :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_candidate_issues(opts \\ []) when is_list(opts) do
     project_key = Keyword.get(opts, :project_key, Jira.Config.project_key())
@@ -377,4 +402,13 @@ defmodule SymphonyElixir.Jira.Client do
       body
     end
   end
+
+  defp present(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp present(_value), do: nil
 end

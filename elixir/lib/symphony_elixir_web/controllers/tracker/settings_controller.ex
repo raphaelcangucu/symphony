@@ -6,10 +6,14 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
   alias Plug.Conn
   alias SymphonyElixir.AgentAvailability
   alias SymphonyElixir.Settings
+  alias SymphonyElixir.Tracker.Identity
   alias SymphonyElixirWeb.TrackerErrors
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, _params), do: json(conn, %{data: Settings.all()})
+
+  @spec identities(Conn.t(), map()) :: Conn.t()
+  def identities(conn, _params), do: json(conn, %{data: Identity.statuses()})
 
   @spec update(Conn.t(), map()) :: Conn.t()
   def update(conn, %{"group" => group} = params) do

@@ -8,25 +8,45 @@ defmodule SymphonyElixir.Jira.Config do
 
   @behaviour SymphonyElixir.TrackerConfig
 
+  alias SymphonyElixir.Settings.Credentials
+
   @spec base_url() :: String.t() | nil
   def base_url do
-    section_value("base_url")
-    |> resolve_env_value(System.get_env("JIRA_BASE_URL"))
-    |> normalize_url()
+    case Credentials.get("jira", "base_url") do
+      value when is_binary(value) ->
+        normalize_url(value)
+
+      _ ->
+        section_value("base_url")
+        |> resolve_env_value(System.get_env("JIRA_BASE_URL"))
+        |> normalize_url()
+    end
   end
 
   @spec email() :: String.t() | nil
   def email do
-    section_value("email")
-    |> resolve_env_value(System.get_env("JIRA_EMAIL"))
-    |> normalize_secret()
+    case Credentials.get("jira", "email") do
+      value when is_binary(value) ->
+        normalize_secret(value)
+
+      _ ->
+        section_value("email")
+        |> resolve_env_value(System.get_env("JIRA_EMAIL"))
+        |> normalize_secret()
+    end
   end
 
   @spec api_token() :: String.t() | nil
   def api_token do
-    section_value("api_token")
-    |> resolve_env_value(System.get_env("JIRA_API_TOKEN"))
-    |> normalize_secret()
+    case Credentials.get("jira", "api_token") do
+      value when is_binary(value) ->
+        normalize_secret(value)
+
+      _ ->
+        section_value("api_token")
+        |> resolve_env_value(System.get_env("JIRA_API_TOKEN"))
+        |> normalize_secret()
+    end
   end
 
   @spec project_key() :: String.t() | nil

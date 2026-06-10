@@ -5,13 +5,15 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { AudioLines, Bot, Clock, ImageIcon, SendHorizontal, X } from "lucide-react";
+import { AudioLines, Bot, Clock, FileText, ImageIcon, SendHorizontal, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
+import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
+import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
@@ -43,6 +45,7 @@ import {
   type AssistantIssueCreatedPayload,
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
+import { projectAttachmentUrl } from "@/services/attachments";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { AgentKind } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
@@ -139,6 +142,7 @@ export function ProjectAssistantPanel({
   const bundleRef = useRef<AssistantCatalogBundle | null>(null);
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const lastConfirmedIssueModeRef = useRef<IssueAssistantMode | null>(null);
   const pendingIssueModeRef = useRef<{ mode: IssueAssistantMode; requestId: number } | null>(null);
   const lastConfirmedGoalModeRef = useRef<boolean | null>(null);
@@ -580,7 +584,12 @@ export function ProjectAssistantPanel({
   const messageItems = (
     <>
       {visibleMessages.map((message) => (
-        <AssistantBubble key={message.id} message={message} onOpenDocumentPath={onOpenDocumentPath} />
+        <AssistantBubble
+          key={message.id}
+          message={message}
+          projectSlug={projectSlug}
+          onOpenDocumentPath={onOpenDocumentPath}
+        />
       ))}
       {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
       {isRunning && runningStartedAt != null ? (
@@ -650,6 +659,7 @@ export function ProjectAssistantPanel({
         onForceQueued={forceSendOldestQueued}
         onSubmit={sendMessage}
         onAgentChange={handleComposerAgentChange}
+        dropTargetRef={panelRef}
       />
     ) : null;
 
@@ -657,6 +667,7 @@ export function ProjectAssistantPanel({
     return (
       <AssistantRuntimeProvider runtime={runtime}>
         <section
+          ref={panelRef}
           className={cn(
             "relative flex flex-col",
             isPageMode && (isFullPageProjectAssistant ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
@@ -787,9 +798,11 @@ export function ProjectAssistantPanel({
 
 function AssistantBubble({
   message,
+  projectSlug,
   onOpenDocumentPath,
 }: {
   message: AssistantChatMessage;
+  projectSlug?: string;
   onOpenDocumentPath?: (path: string) => void;
 }) {
   const isUser = message.role === "user";
@@ -812,7 +825,12 @@ function AssistantBubble({
         {attachments.length > 0 ? (
           <div className={cn("mb-3 flex flex-wrap gap-2", isUser && "justify-end")}>
             {attachments.map((attachment, index) => (
-              <AttachmentPreview key={`${message.id}-attachment-${index}`} attachment={attachment} isUser={isUser} />
+              <AttachmentPreview
+                key={`${message.id}-attachment-${index}`}
+                attachment={attachment}
+                isUser={isUser}
+                projectSlug={projectSlug}
+              />
             ))}
           </div>
         ) : null}
@@ -867,7 +885,15 @@ function UserQuestionsReceipt({ message }: { message: AssistantChatMessage }) {
   );
 }
 
-function AttachmentPreview({ attachment, isUser }: { attachment: unknown; isUser: boolean }) {
+function AttachmentPreview({
+  attachment,
+  isUser,
+  projectSlug,
+}: {
+  attachment: unknown;
+  isUser: boolean;
+  projectSlug?: string;
+}) {
   if (!attachment || typeof attachment !== "object") return null;
 
   const record = attachment as Record<string, unknown>;
@@ -878,9 +904,19 @@ function AttachmentPreview({ attachment, isUser }: { attachment: unknown; isUser
   const path = typeof record.path === "string" ? record.path : "";
 
   if (type === "image" && (data || path)) {
+    if (path && projectSlug?.trim()) {
+      return (
+        <AttachmentImage
+          src={projectAttachmentUrl(projectSlug, path)}
+          alt={name}
+          className="max-h-40 max-w-full object-cover"
+        />
+      );
+    }
+
     if (data) {
       const src = data.startsWith("data:") ? data : `data:${mediaType || "image/png"};base64,${data}`;
-      return <img src={src} alt={name} className="max-h-40 max-w-full rounded-lg border object-cover" />;
+      return <AttachmentImage src={src} alt={name} className="max-h-40 max-w-full object-cover" />;
     }
 
     return (
@@ -892,6 +928,24 @@ function AttachmentPreview({ attachment, isUser }: { attachment: unknown; isUser
       >
         <ImageIcon className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">Image: {name}</span>
+      </span>
+    );
+  }
+
+  if (type === "file" && path) {
+    if (projectSlug?.trim()) {
+      return <AttachmentFileChip src={projectAttachmentUrl(projectSlug, path)} name={name} />;
+    }
+
+    return (
+      <span
+        className={cn(
+          "inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs",
+          isUser ? "border-primary-foreground/30 bg-primary-foreground/10" : "bg-muted/50",
+        )}
+      >
+        <FileText className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{name}</span>
       </span>
     );
   }

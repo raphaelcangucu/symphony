@@ -102,7 +102,25 @@ defmodule SymphonyElixir.LocalTracker.IssueMapperTest do
       source_relations: []
     }
 
-    assert IssueMapper.to_issue(record).agent_kind == nil
+    issue = IssueMapper.to_issue(record)
+    assert issue.agent_kind == nil
+    assert issue.assigned_to_worker == false
+  end
+
+  test "issue with a plain symphony label is routable to a worker" do
+    record = %IssueRecord{
+      id: 321,
+      identifier: "MAC-2",
+      title: "Plain symphony label",
+      status: %WorkflowStatus{name: "Todo"},
+      labels: [%Label{name: "symphony"}],
+      comments: [],
+      source_relations: []
+    }
+
+    issue = IssueMapper.to_issue(record)
+    assert issue.agent_kind == nil
+    assert issue.assigned_to_worker == true
   end
 
   test "maps the owning project slug onto the issue when project is preloaded" do

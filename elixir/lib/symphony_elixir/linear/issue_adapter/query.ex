@@ -11,7 +11,7 @@ defmodule SymphonyElixir.Linear.IssueAdapter.Query do
         nodes {
           id identifier title description priority url
           state { id name type position }
-          assignee { displayName }
+          assignee { id displayName }
           creator { displayName }
           createdAt updatedAt
         }
@@ -158,6 +158,7 @@ defmodule SymphonyElixir.Linear.IssueAdapter.Query do
       priority: node["priority"],
       url: node["url"],
       assignee: get_in(node, ["assignee", "displayName"]),
+      assignee_remote_id: get_in(node, ["assignee", "id"]),
       creator: get_in(node, ["creator", "displayName"]),
       status: state_to_status(node["state"]),
       project_slug: project_slug,

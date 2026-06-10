@@ -46,7 +46,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
         creator: nil,
         position: 0,
         remote_updated_at: DateTime.utc_now(),
-        labels: [],
+        labels: [%{name: "symphony"}],
         comments: []
       })
   end
@@ -280,6 +280,93 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
     stub_assignee({:ok, "alice"})
     assert :ok = LocalFirstTracker.update_issue_state("1", "Done")
     assert Outbox.pending_count(project.id) == 1
+  end
+
+  defp upsert_with_remote_assignee(project, identifier, assignee_display, assignee_remote_id) do
+    {:ok, _} =
+      LocalStore.upsert_remote_issue(project, %{
+        remote_id: "I_#{identifier}",
+        remote_number: System.unique_integer([:positive]),
+        identifier: identifier,
+        title: identifier,
+        description: nil,
+        state: "Todo",
+        priority: nil,
+        assignee_id: assignee_display,
+        assignee_remote_id: assignee_remote_id,
+        branch_name: nil,
+        remote_url: "u",
+        creator: nil,
+        position: 0,
+        remote_updated_at: DateTime.utc_now(),
+        labels: [%{name: "symphony"}],
+        comments: []
+      })
+  end
+
+  test "assignee filter matches the canonical remote id, not the display name" do
+    Application.delete_env(:symphony_elixir, :tracker_sync_project_slug)
+    setup_global_workflow(["Todo"])
+    stub_assignee({:ok, "acc-canonical"})
+
+    {:ok, board} =
+      Context.ensure_project(%{
+        name: "remote-assignee",
+        slug: "remote-assignee",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "owner/repo", "project_id" => "PVT_X"}
+      })
+
+    upsert_with_remote_assignee(board, "match", "Display Name", "acc-canonical")
+    upsert_with_remote_assignee(board, "nomatch", "acc-canonical", "other-account")
+
+    {:ok, issues} = LocalFirstTracker.fetch_issues_by_states(["Todo"])
+    ids = Enum.map(issues, & &1.identifier)
+
+    assert "match" in ids
+    refute "nomatch" in ids
+  end
+
+  test "require_assignee_match=false disables the assignee gate via the real resolver" do
+    Application.delete_env(:symphony_elixir, :tracker_sync_project_slug)
+    Application.delete_env(:symphony_elixir, :tracker_sync_assignee_fun)
+    setup_global_workflow(["Todo"])
+
+    SymphonyElixir.Repo.delete_all(SymphonyElixir.Settings.Setting)
+    on_exit(fn -> SymphonyElixir.Repo.delete_all(SymphonyElixir.Settings.Setting) end)
+    {:ok, _} = SymphonyElixir.Settings.put("orchestrator", "require_assignee_match", false)
+
+    project = local_project_with_active_states("no-assignee-gate", ["Todo"])
+    seed_issue(project, "n-1", "Todo")
+
+    {:ok, issues} = LocalFirstTracker.fetch_candidate_issues()
+    assert Enum.any?(issues, &(&1.identifier == "n-1"))
+  end
+
+  test "require_assignee_match=true skips a project whose identity cannot be resolved" do
+    Application.delete_env(:symphony_elixir, :tracker_sync_project_slug)
+    Application.delete_env(:symphony_elixir, :tracker_sync_assignee_fun)
+    setup_global_workflow(["Todo"])
+
+    SymphonyElixir.Repo.delete_all(SymphonyElixir.Settings.Setting)
+    previous_token = System.get_env("GITHUB_TOKEN")
+    previous_persist = Application.get_env(:symphony_elixir, :viewer_persist_enabled)
+    System.delete_env("GITHUB_TOKEN")
+    Application.put_env(:symphony_elixir, :viewer_persist_enabled, false)
+    SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+
+    on_exit(fn ->
+      SymphonyElixir.Repo.delete_all(SymphonyElixir.Settings.Setting)
+      if previous_token, do: System.put_env("GITHUB_TOKEN", previous_token)
+      Application.put_env(:symphony_elixir, :viewer_persist_enabled, previous_persist)
+      SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+    end)
+
+    project = local_project_with_active_states("identity-gated", ["Todo"])
+    seed_issue(project, "g-1", "Todo")
+
+    {:ok, issues} = LocalFirstTracker.fetch_candidate_issues()
+    refute Enum.any?(issues, &(&1.identifier == "g-1"))
   end
 
   defp migrate_repo do

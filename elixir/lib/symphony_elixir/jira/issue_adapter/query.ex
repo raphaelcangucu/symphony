@@ -24,6 +24,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter.Query do
       priority: Priority.to_int(get_in(fields, ["priority", "name"])),
       url: browse_url(ctx[:base_url], key),
       assignee: get_in(fields, ["assignee", "displayName"]),
+      assignee_remote_id: get_in(fields, ["assignee", "accountId"]),
       creator: get_in(fields, ["creator", "displayName"]),
       labels: normalize_labels(fields["labels"]),
       status: status_to_dto(fields["status"], nil),

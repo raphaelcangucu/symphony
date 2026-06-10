@@ -85,6 +85,55 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
     assert dto.identifier == "1"
   end
 
+  test "list_issues requeues failed creates for local-only issues", %{project: project} do
+    {:ok, issue} = Context.create_issue(project.slug, %{title: "Local draft", status: "Todo"})
+
+    {:ok, _entry} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: issue.id,
+        entity_type: "issue",
+        operation: "create",
+        payload: %{"title" => issue.title},
+        dedup_key: "issue:create:#{project.id}:#{issue.identifier}"
+      })
+
+    [claimed] = Outbox.claim_pending(project.id, 10)
+    assert {:ok, failed} = Outbox.mark_failed(claimed, "old credentials", 1)
+    assert failed.status == "failed"
+
+    assert {:ok, _issues} = LocalFirstAdapter.list_issues(project, [])
+
+    requeued = Repo.get_by!(SymphonyElixir.Tracker.Sync.OutboxEntry, id: failed.id)
+    assert requeued.status == "pending"
+    assert requeued.attempts == 0
+    assert is_nil(requeued.last_error)
+  end
+
+  test "list_issues requeues latest failed writes for dirty issues", %{project: project} do
+    assert {:ok, _dirty} = LocalStore.mark_dirty("1", project.slug, [:state])
+
+    {:ok, _entry} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        entity_type: "state",
+        operation: "move",
+        payload: %{"identifier" => "1", "state" => "Done"},
+        dedup_key: "state:move:#{project.id}:1"
+      })
+
+    [claimed] = Outbox.claim_pending(project.id, 10)
+    assert {:ok, failed} = Outbox.mark_failed(claimed, "old credentials", 1)
+    assert failed.status == "failed"
+
+    assert {:ok, _issues} = LocalFirstAdapter.list_issues(project, [])
+
+    requeued = Repo.get_by!(SymphonyElixir.Tracker.Sync.OutboxEntry, id: failed.id)
+    assert requeued.status == "pending"
+    assert requeued.attempts == 0
+    assert is_nil(requeued.last_error)
+  end
+
   test "move_issue updates locally and enqueues an outbox entry", %{project: project} do
     assert {:ok, _dto} = LocalFirstAdapter.move_issue(project, "1", %{"status" => "Done"})
 

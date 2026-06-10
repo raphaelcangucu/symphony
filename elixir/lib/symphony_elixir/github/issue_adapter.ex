@@ -121,12 +121,12 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   def update_issue(%Project{} = project, identifier, attrs) when is_map(attrs) do
     with {:ok, repo} <- resolve_issue_repo(project, identifier),
          {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, number} <- parse_issue_number(identifier),
+         {:ok, number} <- resolve_issue_number(project, identifier),
          {:ok, issue} <- fetch_issue_details(owner, name, number),
          {:ok, meta} <- fetch_repo_metadata(owner, name),
          {:ok, _} <- maybe_update_issue_content(project, issue, attrs),
          :ok <- maybe_sync_issue_labels(issue, meta.labels, attrs) do
-      get_issue(project, identifier)
+      get_issue(project, to_string(number))
     else
       {:error, reason} -> {:error, map_error(reason)}
     end
@@ -304,7 +304,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
     with {:ok, repo} <- resolve_issue_repo(project, identifier),
          {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, number} <- parse_issue_number(identifier),
+         {:ok, number} <- resolve_issue_number(project, identifier),
          {:ok, issue_node_id} <- fetch_issue_node_id(owner, name, number),
          {:ok, meta} <- fetch_repo_metadata(owner, name),
          {:ok, label_id} <- find_label_id(meta.labels, label_name),
@@ -547,14 +547,27 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp maybe_sync_issue_labels(issue, repo_labels, attrs) do
     label_change? = Map.has_key?(attrs, "label_ids") or Map.has_key?(attrs, "labels")
     priority_change? = Map.has_key?(attrs, "priority") or Map.has_key?(attrs, :priority)
+    agent_change? = Map.has_key?(attrs, "agent") or Map.has_key?(attrs, :agent)
 
-    if not label_change? and not priority_change? do
+    if not label_change? and not priority_change? and not agent_change? do
       :ok
     else
       issue_id = Map.fetch!(issue, "id")
       current = current_label_nodes(issue)
-      system_ids = system_label_ids(current)
       by_name = Map.new(repo_labels, fn label -> {String.downcase(label.name || ""), label.id} end)
+      requested_system_ids = requested_system_label_ids(repo_labels, label_ids_attr(attrs))
+
+      system_ids =
+        cond do
+          agent_change? ->
+            agent_label_ids(by_name, Map.get(attrs, "agent") || Map.get(attrs, :agent))
+
+          requested_system_ids != [] ->
+            requested_system_ids
+
+          true ->
+            system_label_ids(current)
+        end
 
       user_ids =
         case label_ids_attr(attrs) do
@@ -613,20 +626,51 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp priority_label_name?(_name), do: false
 
   defp resolve_requested_label_ids(labels, requested) do
-    by_name = Map.new(labels, fn label -> {String.downcase(label.name || ""), label.id} end)
-    by_id = Map.new(labels, fn label -> {label.id, label.id} end)
+    labels_by_id = Map.new(labels, fn label -> {label.id, label} end)
+    labels_by_name = Map.new(labels, fn label -> {String.downcase(label.name || ""), label} end)
 
     requested
     |> Enum.map(fn value ->
       cond do
-        is_binary(value) and Map.has_key?(by_id, value) -> value
-        is_binary(value) -> Map.get(by_name, String.downcase(String.trim(value)))
+        is_binary(value) and Map.has_key?(labels_by_id, value) -> reject_reserved_label_id(labels_by_id[value])
+        is_binary(value) -> labels_by_name |> Map.get(String.downcase(String.trim(value))) |> reject_reserved_label_id()
         true -> nil
       end
     end)
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
   end
+
+  defp requested_system_label_ids(_labels, nil), do: []
+
+  defp requested_system_label_ids(labels, requested) do
+    labels_by_id = Map.new(labels, fn label -> {label.id, label} end)
+    labels_by_name = Map.new(labels, fn label -> {String.downcase(label.name || ""), label} end)
+
+    requested
+    |> List.wrap()
+    |> Enum.map(fn value ->
+      cond do
+        is_binary(value) and Map.has_key?(labels_by_id, value) -> system_label_id(labels_by_id[value])
+        is_binary(value) -> labels_by_name |> Map.get(String.downcase(String.trim(value))) |> system_label_id()
+        true -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp reject_reserved_label_id(%{id: id, name: name}) when is_binary(id) do
+    if system_label_name?(name) or priority_label_name?(name), do: nil, else: id
+  end
+
+  defp reject_reserved_label_id(_label), do: nil
+
+  defp system_label_id(%{id: id, name: name}) when is_binary(id) do
+    if system_label_name?(name), do: id, else: nil
+  end
+
+  defp system_label_id(_label), do: nil
 
   defp title_attr(attrs) do
     case attrs |> Map.get("title") |> trim_string() do
@@ -720,6 +764,22 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   end
 
   defp parse_issue_number(_identifier), do: {:error, :invalid_issue_identifier}
+
+  defp resolve_issue_number(%Project{} = project, identifier) do
+    case parse_issue_number(identifier) do
+      {:ok, number} -> {:ok, number}
+      {:error, _reason} -> local_issue_remote_number(project, identifier)
+    end
+  end
+
+  defp local_issue_remote_number(%Project{slug: slug}, identifier) when is_binary(slug) do
+    case Context.get_issue(slug, identifier) do
+      {:ok, %{remote_number: number}} when is_integer(number) and number > 0 -> {:ok, number}
+      _ -> {:error, :invalid_issue_identifier}
+    end
+  end
+
+  defp local_issue_remote_number(_project, _identifier), do: {:error, :invalid_issue_identifier}
 
   defp parse_issue_digits(digits) do
     case Integer.parse(String.trim(digits)) do

@@ -74,6 +74,41 @@ defmodule SymphonyElixir.CoreTest do
     refute Orchestrator.should_dispatch_issue_for_test(global_active_issue, state)
   end
 
+  test "require_symphony_label gate blocks unlabeled issues and the toggle disables it" do
+    slug = seed_prompt_project!("Prompt", %{"tracker" => %{"active_states" => ["Todo"]}})
+
+    SymphonyElixir.Repo.delete_all(SymphonyElixir.Settings.Setting)
+    on_exit(fn -> SymphonyElixir.Repo.delete_all(SymphonyElixir.Settings.Setting) end)
+
+    state = empty_dispatch_state()
+
+    labeled_issue = %Issue{
+      id: "labeled",
+      identifier: "PP-10",
+      project_slug: slug,
+      title: "Labeled issue",
+      state: "Todo",
+      labels: ["symphony:codex"],
+      assigned_to_worker: true
+    }
+
+    unlabeled_issue = %{
+      labeled_issue
+      | id: "unlabeled",
+        identifier: "PP-11",
+        labels: [],
+        assigned_to_worker: false
+    }
+
+    # Default (require_symphony_label = true): only the routable issue dispatches.
+    assert Orchestrator.should_dispatch_issue_for_test(labeled_issue, state)
+    refute Orchestrator.should_dispatch_issue_for_test(unlabeled_issue, state)
+
+    # Toggle off: the label gate is bypassed and the unlabeled issue is eligible.
+    {:ok, _} = SymphonyElixir.Settings.put("orchestrator", "require_symphony_label", false)
+    assert Orchestrator.should_dispatch_issue_for_test(unlabeled_issue, state)
+  end
+
   test "config defaults and validation checks" do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_api_token: nil,

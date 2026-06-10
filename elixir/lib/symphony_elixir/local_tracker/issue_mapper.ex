@@ -29,7 +29,7 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
       comments: comments(record.comments),
       blocked_by: blockers(record.source_relations),
       agent_kind: agent_kind,
-      assigned_to_worker: true,
+      assigned_to_worker: AgentRouting.routable?(label_names),
       created_at: record.inserted_at,
       updated_at: record.updated_at
     }

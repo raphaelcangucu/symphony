@@ -22,9 +22,12 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.GitHub.Config, as: GitHubConfig
-  alias SymphonyElixir.GitHub.Viewer
+  alias SymphonyElixir.Jira.Config, as: JiraConfig
+  alias SymphonyElixir.Linear.Config, as: LinearConfig
   alias SymphonyElixir.LocalTracker.{Comment, Context, IssueMapper, IssueRecord, IssueRelation, Project}
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
+  alias SymphonyElixir.Tracker.Identity
   alias SymphonyElixir.Tracker.Sync.{LocalStore, Outbox}
 
   @impl true
@@ -165,9 +168,18 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
 
   defp apply_assignee_filter(query, :any), do: query
 
-  defp apply_assignee_filter(query, {:login, login}) when is_binary(login) do
-    lowered = String.downcase(login)
-    where(query, [issue, _status], fragment("lower(?) = ?", issue.assignee_id, ^lowered))
+  # Match the canonical provider assignee id (GitHub login / Linear user id /
+  # Jira accountId). Falls back to the display `assignee_id` only when the
+  # canonical id has not been synced yet (e.g. legacy GitHub rows where the
+  # display value already IS the login), which never produces false positives.
+  defp apply_assignee_filter(query, {:remote, value}) when is_binary(value) do
+    lowered = String.downcase(value)
+
+    where(
+      query,
+      [issue, _status],
+      fragment("lower(coalesce(?, ?)) = ?", issue.assignee_remote_id, issue.assignee_id, ^lowered)
+    )
   end
 
   defp issue_preloads do
@@ -253,7 +265,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     assignee_fun().(project)
     |> case do
       {:ok, :any} -> {:ok, :any}
-      {:ok, login} when is_binary(login) -> {:ok, {:login, login}}
+      {:ok, value} when is_binary(value) -> {:ok, {:remote, value}}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -262,28 +274,50 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     Application.get_env(:symphony_elixir, :tracker_sync_assignee_fun, &default_assignee/1)
   end
 
-  defp default_assignee(%Project{tracker_kind: "github"}) do
-    case GitHubConfig.assignee() do
-      nil -> {:ok, :any}
-      assignee -> resolve_github_assignee(assignee)
+  # Resolves the assignee gate for a project. Precedence:
+  #   1. An explicit, literal `assignee` config value (not "me") is honored as-is.
+  #   2. `assignee: me` — or, when `require_assignee_match` is on, no config —
+  #      restricts to the connected provider identity (login/accountId/user id).
+  #   3. Otherwise no assignee restriction.
+  # A `{:error, reason}` SKIPS the project so the orchestrator never grabs work
+  # that may not belong to this operator when the identity cannot be resolved.
+  defp default_assignee(%Project{tracker_kind: kind}) do
+    case configured_assignee_directive(kind) do
+      {:literal, value} -> {:ok, value}
+      :viewer -> resolve_viewer_match(kind)
+      :any -> {:ok, :any}
     end
   end
 
-  defp default_assignee(_project), do: {:ok, :any}
-
-  defp resolve_github_assignee(assignee) do
-    case String.downcase(String.trim(assignee)) do
-      "" ->
-        {:ok, :any}
-
-      "me" ->
-        case Viewer.cached_login(File.cwd!()) do
-          login when is_binary(login) -> {:ok, login}
-          _ -> {:error, :missing_github_viewer_login}
+  defp configured_assignee_directive(kind) do
+    case provider_assignee_config(kind) do
+      value when is_binary(value) ->
+        case value |> String.trim() |> String.downcase() do
+          "" -> enforcement_directive()
+          "me" -> :viewer
+          normalized -> {:literal, normalized}
         end
 
-      normalized ->
-        {:ok, normalized}
+      _ ->
+        enforcement_directive()
+    end
+  end
+
+  defp enforcement_directive do
+    if OrchestrationSettings.require_assignee_match?(), do: :viewer, else: :any
+  end
+
+  defp provider_assignee_config("github"), do: GitHubConfig.assignee()
+  defp provider_assignee_config("local"), do: GitHubConfig.assignee()
+  defp provider_assignee_config("linear"), do: LinearConfig.assignee()
+  defp provider_assignee_config("jira"), do: JiraConfig.assignee()
+  defp provider_assignee_config(_kind), do: nil
+
+  defp resolve_viewer_match(kind) do
+    case Identity.resolve(kind) do
+      {:ok, %{match_value: value}} when is_binary(value) and value != "" -> {:ok, value}
+      {:ok, _identity} -> {:error, :missing_viewer_identity}
+      {:error, reason} -> {:error, reason}
     end
   end
 

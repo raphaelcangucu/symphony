@@ -91,6 +91,7 @@ defmodule SymphonyElixir.LocalTracker.TrackerTest do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, blocker} = Context.create_issue("macro-markets", %{title: "Blocking work", status: "In Progress"})
     {:ok, blocked} = Context.create_issue("macro-markets", %{title: "Blocked work", status: "Todo"})
+    add_label!(blocked, "symphony:codex")
     {:ok, _relation} = Context.add_blocker("macro-markets", blocked.identifier, blocker.identifier)
 
     assert {:ok, issues} = Tracker.fetch_candidate_issues()
@@ -109,6 +110,7 @@ defmodule SymphonyElixir.LocalTracker.TrackerTest do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, blocker} = Context.create_issue("macro-markets", %{title: "Blocking rework", status: "In Progress"})
     {:ok, blocked} = Context.create_issue("macro-markets", %{title: "Blocked rework", status: "Rework"})
+    add_label!(blocked, "symphony:codex")
     {:ok, _relation} = Context.add_blocker("macro-markets", blocked.identifier, blocker.identifier)
 
     write_workflow_file!(Workflow.workflow_file_path(),

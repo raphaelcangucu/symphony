@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import { getStatusMeta } from "@/components/board/status-meta";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
+import { InlineAgentEditor } from "@/components/issues/inline/InlineAgentEditor";
 import { InlineAssigneeEditor } from "@/components/issues/inline/InlineAssigneeEditor";
 import { InlineEditableMarkdown } from "@/components/issues/inline/InlineEditableMarkdown";
 import { InlineLabelEditor } from "@/components/issues/inline/InlineLabelEditor";
@@ -17,6 +18,8 @@ import { cn, formatDateTime } from "@/lib/utils";
 import { getIssueFormOptions } from "@/services/issues";
 import type { Comment } from "@/types/comment";
 import type {
+  AgentKind,
+  AgentOption,
   Issue,
   IssueAssigneeOption,
   IssueDevServer,
@@ -42,6 +45,7 @@ interface SummaryTabProps {
   onSaveStatus?: (status: WorkflowStatusName) => Promise<boolean>;
   onSavePriority?: (priority: IssuePriority | null) => Promise<boolean>;
   onSaveAssignee?: (assigneeIds: string[]) => Promise<boolean>;
+  onSaveAgent?: (agent: AgentKind | null) => Promise<boolean>;
 }
 
 function issueLinkLabel(url: string): string {
@@ -63,10 +67,13 @@ export function SummaryTab({
   onSaveStatus,
   onSavePriority,
   onSaveAssignee,
+  onSaveAgent,
 }: SummaryTabProps) {
   const [labelOptions, setLabelOptions] = useState<IssueLabelOption[]>([]);
   const [assigneeOptions, setAssigneeOptions] = useState<IssueAssigneeOption[]>([]);
   const [statusOptions, setStatusOptions] = useState<WorkflowStatusName[]>([]);
+  const [agentOptions, setAgentOptions] = useState<AgentOption[]>([]);
+  const [effectiveAgent, setEffectiveAgent] = useState<AgentKind>("codex");
   const [labelOptionsLoading, setLabelOptionsLoading] = useState(false);
   const meta = getStatusMeta(issue.status);
   const StatusIcon = meta.Icon;
@@ -77,7 +84,7 @@ export function SummaryTab({
   const hasPreviewSummary = Boolean(previewUrl || previewStatus);
   const hasLinks = Boolean(issue.url) || issue.branchName !== null || pullRequests.length > 0 || hasPreviewSummary;
   const editable = Boolean(
-    onSaveDescription || onSaveLabels || onSaveStatus || onSavePriority || onSaveAssignee,
+    onSaveDescription || onSaveLabels || onSaveStatus || onSavePriority || onSaveAssignee || onSaveAgent,
   );
 
   useEffect(() => {
@@ -91,12 +98,16 @@ export function SummaryTab({
           setLabelOptions(options.labels);
           setAssigneeOptions(options.assignees);
           setStatusOptions(options.statuses);
+          setAgentOptions(options.agents);
+          setEffectiveAgent(options.effectiveAgent);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setLabelOptions([]);
           setAssigneeOptions([]);
+          setAgentOptions([]);
+          setEffectiveAgent("codex");
         }
       })
       .finally(() => {
@@ -162,6 +173,7 @@ export function SummaryTab({
           {onSaveDescription ? (
             <InlineEditableMarkdown
               value={issue.description ?? ""}
+              projectSlug={projectSlug}
               saving={saving}
               onSave={onSaveDescription}
             />
@@ -236,6 +248,22 @@ export function SummaryTab({
               </span>
             )}
           </Field>
+          <Field label="Agent">
+            {onSaveAgent ? (
+              <InlineAgentEditor
+                agent={issue.agentKind ?? null}
+                effectiveAgent={effectiveAgent}
+                options={agentOptions}
+                optionsLoading={labelOptionsLoading}
+                saving={saving}
+                onSave={onSaveAgent}
+              />
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                {issue.agentKind ? agentLabel(issue.agentKind) : `Inherit (${agentLabel(effectiveAgent)})`}
+              </span>
+            )}
+          </Field>
           <Field label="Updated">
             <span className="text-muted-foreground">{formatDateTime(issue.updatedAt)}</span>
           </Field>
@@ -277,6 +305,10 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <div className="text-sm text-foreground">{children}</div>
     </div>
   );
+}
+
+function agentLabel(agent: AgentKind): string {
+  return agent === "claude" ? "Claude" : "Codex";
 }
 
 function selectPrimaryPreviewServer(servers: IssueDevServer[]): IssueDevServer | null {

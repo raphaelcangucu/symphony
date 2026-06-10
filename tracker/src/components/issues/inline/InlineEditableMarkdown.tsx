@@ -2,11 +2,13 @@ import { Check, Eye, Pencil, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 
 import { Markdown } from "@/components/ui/markdown";
+import { useMarkdownImagePaste } from "@/hooks/useMarkdownImagePaste";
 import { cn } from "@/lib/utils";
 
 interface InlineEditableMarkdownProps {
   value: string;
   onSave: (value: string) => Promise<boolean>;
+  projectSlug?: string;
   disabled?: boolean;
   saving?: boolean;
   placeholder?: string;
@@ -15,6 +17,7 @@ interface InlineEditableMarkdownProps {
 export function InlineEditableMarkdown({
   value,
   onSave,
+  projectSlug = "",
   disabled = false,
   saving = false,
   placeholder = "Add a description…",
@@ -24,6 +27,7 @@ export function InlineEditableMarkdown({
   const [preview, setPreview] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaId = useId();
+  const { handlePaste, uploading } = useMarkdownImagePaste({ projectSlug, setValue: setDraft });
 
   useEffect(() => {
     if (!editing) {
@@ -95,6 +99,7 @@ export function InlineEditableMarkdown({
             className="min-h-32 w-full resize-y border-0 bg-transparent px-4 py-3 text-sm outline-none ring-0 focus-visible:ring-0"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={projectSlug ? handlePaste : undefined}
           />
         )}
         <div className="flex items-center gap-1.5 border-t border-border/60 px-3 py-2">
@@ -116,7 +121,9 @@ export function InlineEditableMarkdown({
             <X className="h-3.5 w-3.5" />
             Cancel
           </button>
-          <span className="text-[11px] text-muted-foreground">⌘↵ to save · Markdown supported</span>
+          <span className="text-[11px] text-muted-foreground">
+            {uploading ? "Uploading image…" : "⌘↵ to save · Markdown supported · paste images"}
+          </span>
         </div>
       </div>
     );

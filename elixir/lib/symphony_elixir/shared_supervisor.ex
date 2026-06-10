@@ -44,6 +44,7 @@ defmodule SymphonyElixir.SharedSupervisor do
         restart: :temporary
       },
       SymphonyElixir.LocalTracker.Viewer.Server,
+      SymphonyElixir.Tracker.Identity.Cache,
       {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
       SymphonyElixir.GitHub.ReadCache,
       SymphonyElixir.GitHub.RequestGateway,

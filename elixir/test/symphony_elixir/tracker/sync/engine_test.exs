@@ -277,6 +277,44 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     assert reloaded.sync_status == "synced"
   end
 
+  test "a pushed state move clears the state dirty field", %{project: project} do
+    {:ok, issue} =
+      SymphonyElixir.Tracker.Sync.LocalStore.upsert_remote_issue(project, %{
+        remote_id: "I_1",
+        remote_number: 1,
+        identifier: "1",
+        title: "t",
+        description: nil,
+        state: "Todo",
+        priority: nil,
+        assignee_id: nil,
+        branch_name: nil,
+        remote_url: nil,
+        creator: nil,
+        position: 0,
+        remote_updated_at: DateTime.utc_now(),
+        labels: [],
+        comments: []
+      })
+
+    assert {:ok, _dirty} = SymphonyElixir.Tracker.Sync.LocalStore.mark_dirty(issue.identifier, project.slug, [:state])
+
+    {:ok, _} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: issue.id,
+        entity_type: "state",
+        operation: "move",
+        payload: %{"identifier" => issue.identifier, "state" => "Done"},
+        dedup_key: "state:move:#{project.id}:#{issue.identifier}"
+      })
+
+    assert {:ok, _summary} = Engine.sync_project(project, driver: FakeDriver)
+
+    reloaded = Repo.get!(IssueRecord, issue.id)
+    refute Map.has_key?(reloaded.dirty_fields || %{}, "state")
+  end
+
   test "a pushed issue-create links the remote id onto the local draft so the pull does not duplicate it",
        %{project: project} do
     {:ok, draft} = Context.create_issue(project.slug, %{title: "Draft title", description: "body"})

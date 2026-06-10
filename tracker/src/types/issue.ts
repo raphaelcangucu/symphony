@@ -123,4 +123,5 @@ export interface UpdateIssueInput {
   labelIds?: string[];
   priority?: IssuePriority | null;
   assigneeIds?: string[];
+  agent?: AgentKind | null;
 }
