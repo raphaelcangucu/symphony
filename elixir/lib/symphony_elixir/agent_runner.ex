@@ -14,7 +14,11 @@ defmodule SymphonyElixir.AgentRunner do
   # repo+issue so a long-running issue does not re-query GitHub each turn.
   @open_pr_cache_ttl_ms 120_000
 
-  @type run_outcome :: :completed | {:incomplete, :max_turns}
+  # Extra turns granted to fix publish-gate violations before the orchestrator
+  # falls back to the mechanical finalizer.
+  @max_corrective_turns 2
+
+  @type run_outcome :: :completed | {:incomplete, :max_turns | {:publish_gate, [map()]}}
 
   @spec run(map(), pid() | nil, keyword()) :: :ok | no_return()
   def run(issue, codex_update_recipient \\ nil, opts \\ []) do
@@ -157,21 +161,82 @@ defmodule SymphonyElixir.AgentRunner do
 
     with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, session_opts) do
       try do
-        do_run_codex_turns(
-          session,
-          workspace,
-          issue,
-          codex_update_recipient,
-          opts,
-          issue_state_fetcher,
-          agent_kind,
-          1,
-          max_turns
-        )
+        result =
+          do_run_codex_turns(
+            session,
+            workspace,
+            issue,
+            codex_update_recipient,
+            opts,
+            issue_state_fetcher,
+            agent_kind,
+            1,
+            max_turns
+          )
+
+        evaluator =
+          Keyword.get(opts, :publish_gate_evaluator, fn ws ->
+            RunContract.evaluate_publish(RunContract.repo_states(ws), RunContract.gh_pr_checker())
+          end)
+
+        run_corrective_turn = fn prompt ->
+          case CodingAgent.run_turn(session, prompt, issue, agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)) do
+            {:ok, _turn_session} -> :ok
+            {:error, reason} -> {:error, reason}
+          end
+        end
+
+        apply_publish_gate(result, workspace, evaluator, run_corrective_turn, @max_corrective_turns)
       after
         CodingAgent.stop_session(session, agent_kind)
       end
     end
+  end
+
+  @doc false
+  @spec apply_publish_gate(
+          term(),
+          Path.t(),
+          (Path.t() -> :satisfied | {:violations, list()}),
+          (String.t() -> :ok | {:error, term()}),
+          non_neg_integer()
+        ) :: term()
+  def apply_publish_gate({:error, _reason} = error, _workspace, _evaluator, _run_turn, _budget), do: error
+
+  def apply_publish_gate(result, workspace, evaluator, run_turn, budget) do
+    case evaluator.(workspace) do
+      :satisfied ->
+        result
+
+      {:violations, violations} when budget > 0 ->
+        Logger.info("Publish gate violated; running corrective turn (remaining budget=#{budget}) violations=#{inspect(violations)}")
+
+        case run_turn.(corrective_publish_prompt(violations, workspace)) do
+          :ok -> apply_publish_gate(result, workspace, evaluator, run_turn, budget - 1)
+          {:error, _reason} -> {:incomplete, {:publish_gate, violations}}
+        end
+
+      {:violations, violations} ->
+        {:incomplete, {:publish_gate, violations}}
+    end
+  end
+
+  defp corrective_publish_prompt(violations, workspace) do
+    """
+    ## Publish gate failed (Symphony)
+
+    The run cannot finish because the following deliverables are missing:
+
+    #{Enum.map_join(violations, "\n", fn v -> "- #{v.repo}: #{v.detail}" end)}
+
+    Current deliverable state:
+
+    #{RunContract.summary_text(RunContract.repo_states(workspace))}
+
+    Follow the `push` skill now: commit any intentional pending changes, push each
+    branch with upstream tracking, and open a pull request for every repo with
+    commits. Do nothing else in this turn.
+    """
   end
 
   # The turn loop carries session, issue, and injected test dependencies explicitly.
