@@ -10,8 +10,6 @@ defmodule SymphonyElixir.GitHub.IssueComments do
 
   alias SymphonyElixir.GitHub.Api
 
-  @workpad_pattern ~r/^\s*#*\s*Codex Workpad/i
-
   @type comment :: %{atom() => term()}
 
   @doc """
@@ -64,9 +62,7 @@ defmodule SymphonyElixir.GitHub.IssueComments do
 
   def parse_node(_node), do: nil
 
-  defp classify(body) do
-    if Regex.match?(@workpad_pattern, body), do: "workpad", else: "comment"
-  end
+  defp classify(body), do: SymphonyElixir.Tracker.Workpad.classify(body)
 
   defp extract_author(node) do
     case Map.get(node, "author") do
