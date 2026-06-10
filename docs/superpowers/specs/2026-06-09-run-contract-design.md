@@ -234,6 +234,25 @@ orchestrator at the VALIDATE gate.
   images via upload; `linear_graphql` has an upload flow per the existing
   `linear` skill). The PR body generated at PUBLISH includes the same summary.
 
+### Evidence comment on the remote issue
+
+Evidence must reach the remote tracker, not only the Symphony UI:
+
+- After the VALIDATE gate passes, the orchestrator posts a dedicated
+  `## Codex Evidence` comment on the remote issue (Linear/GitHub/Jira) via the
+  same `push_comment`/`update_comment` driver capability as the workpad
+  (Section 4), **edited in place** per run — one evidence comment per issue,
+  updated on each attempt with the latest results and an attempt history line.
+- Comment content, generated from the manifest: per-run table (kind, repo,
+  command, status, totals, duration), key screenshots embedded as uploaded
+  images (Linear upload flow / GitHub markdown images / Jira attachments), and
+  links to the full artifacts (video, Playwright report, trace) served by
+  Symphony.
+- This comment is orchestrator-generated (deterministic), not agent-written —
+  the agent produces the manifest; the orchestrator renders and syncs the
+  comment. Push failures follow the same outbox retry + sync badge rules as
+  the workpad.
+
 ## Section 4 — Remote workpad sync + deterministic PR visibility
 
 ### Comment push as a required driver capability
@@ -296,7 +315,8 @@ Each phase ships standalone value:
    skill, VALIDATE gate (incl. mandatory screenshots/videos and session-log
    anti-fraud check), `issue_evidence` persistence + artifact directory,
    Evidence tab in issue detail, workpad/PR evidence summaries with embedded
-   screenshots.
+   screenshots, and the orchestrator-generated `## Codex Evidence` comment
+   synced to the remote issue (depends on Phase 2 driver capability).
 
 ## Error handling summary
 
@@ -306,7 +326,7 @@ Each phase ships standalone value:
 | Gate violated | Corrective turn citing skill + exact violation (max N, default 2 per gate) |
 | No PR after corrective turns, commits exist | Mechanical fallback: orchestrator pushes + creates PR from workpad |
 | Fallback fails | No transition; `symphony:blocked` label + issue detail banner |
-| Workpad push to remote fails | Outbox retry with backoff; sync badge shows `failed: <reason>` |
+| Workpad/evidence comment push to remote fails | Outbox retry with backoff; sync badge shows `failed: <reason>` |
 | Manifest fabricated (commands not in session log) | VALIDATE gate fails; corrective turn |
 | Task is a legitimate no-op | `## Outcome: no-op` recorded in workpad; VALIDATE/PUBLISH skipped; transition allowed |
 
