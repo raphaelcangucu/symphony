@@ -674,6 +674,18 @@ A run attempt transitions through these phases:
 
 Distinct terminal reasons are important because retry logic and logs differ.
 
+#### 7.2.1 Publish gate (run contract)
+
+After a normal worker exit, the orchestrator verifies deliverables before
+applying `completion_transitions`: every git repo in the issue workspace with
+committed work must have a pushed branch and a non-closed pull request.
+Violations first trigger up to 2 corrective agent turns inside the run; if work
+remains unpublished, the orchestrator pushes the branch mechanically (using
+`symphony/<identifier>` when work sits on the default branch) and opens the PR
+itself. If even that fails, the issue receives the `symphony:blocked` label plus
+a workpad note and is NOT transitioned. Verified or created PRs are linked to
+the issue deterministically (origin `agent`).
+
 ### 7.3 Transition Triggers
 
 - `Poll Tick`

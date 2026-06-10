@@ -493,6 +493,17 @@ projects mirror issues into SQLite and serve reads from the local store:
 Tune `SYMPHONY_POLL_INTERVAL_MS`, `SYMPHONY_TRACKER_SYNC_MIN_PULL_MS`, and
 `SYMPHONY_TRACKER_PR_SYNC_TTL_MS` in `elixir/.env` to reduce GitHub API pressure.
 
+### Publish gate (run contract)
+
+After each agent run, the orchestrator verifies deliverables before applying
+`completion_transitions`: every repo in the workspace with committed work must
+have a pushed branch and a non-closed pull request. Violations trigger up to 2
+corrective agent turns; if work remains unpublished, Symphony pushes the branch
+(`symphony/<identifier>` when work sits on the default branch) and opens the PR
+mechanically. If even that fails, the issue receives the `symphony:blocked`
+label plus a workpad note and is NOT transitioned. Verified/created PRs are
+linked to the issue deterministically (origin `agent`).
+
 ### Agent preference
 
 Symphony resolves which coding agent runs an issue through a four-level chain, from most

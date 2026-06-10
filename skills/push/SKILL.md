@@ -115,3 +115,28 @@ gh pr view --json url -q .url
   - Use the `pull` skill for non-fast-forward or stale-branch issues.
   - Surface auth, permissions, or workflow restrictions directly instead of
     changing remotes or protocols.
+
+## Definition of done (Symphony publish gate)
+
+Symphony's orchestrator verifies these exact conditions after your run; the
+turn is not done until ALL hold for every repo where you made commits:
+
+1. The working tree is clean (`git status --porcelain` is empty) — commit or
+   intentionally discard everything.
+2. The current branch has an upstream (`git rev-parse --abbrev-ref @{upstream}`
+   succeeds). If it fails, you have not pushed: run `git push -u origin HEAD`.
+3. An open (or merged) pull request exists for the branch:
+   `gh pr list --head "$(git branch --show-current)" --json url,state` returns
+   a non-closed entry.
+
+Self-check before ending the turn:
+
+```sh
+git status --porcelain                       # must be empty
+git rev-parse --abbrev-ref '@{upstream}'     # must succeed
+gh pr list --head "$(git branch --show-current)" --json url,state --limit 1
+```
+
+If any check fails, fix it now — do not end the turn and assume someone else
+will publish. If Symphony has to publish for you (finalizer), the PR will be
+flagged for extra-careful review.
