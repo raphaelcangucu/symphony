@@ -2,7 +2,7 @@ import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 
 export type WorkspaceView = "board" | "list";
 
-export const ISSUE_TABS = ["summary", "pr", "comments", "blockers", "agent", "preview", "activity", "terminal"] as const;
+export const ISSUE_TABS = ["summary", "pr", "comments", "evidence", "blockers", "agent", "preview", "activity", "terminal"] as const;
 
 export type IssueTab = (typeof ISSUE_TABS)[number];
 

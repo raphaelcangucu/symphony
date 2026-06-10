@@ -4,6 +4,7 @@ import {
   Archive,
   Bot,
   ChevronDown,
+  ClipboardCheck,
   Code2,
   FileText,
   GitPullRequest,
@@ -31,6 +32,7 @@ import { useIssueComments } from "@/hooks/useIssueComments";
 import { useIssueEditor } from "@/hooks/useIssueEditor";
 import { useIssueUpdater } from "@/hooks/useIssueUpdater";
 import type { EditorReason } from "@/services/editor";
+import { useIssueEvidence } from "@/hooks/useIssueEvidence";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { DEFAULT_ISSUE_TAB, type IssueTab, type WorkspaceView } from "@/lib/workspaceRoutes";
@@ -43,6 +45,7 @@ import { AgentTabs } from "./issue-detail/AgentTabs";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { BlockersTab } from "./issue-detail/BlockersTab";
 import { CommentsTab } from "./issue-detail/CommentsTab";
+import { EvidenceTab } from "./issue-detail/EvidenceTab";
 import { PriorityIndicator, priorityLabel } from "./PriorityIndicator";
 import { PreviewTab } from "./issue-detail/PreviewTab";
 import { PullRequestTab } from "./issue-detail/PullRequestTab";
@@ -54,6 +57,7 @@ const TABS = [
   { value: "summary", label: "Summary", Icon: FileText },
   { value: "pr", label: "Pull request", Icon: GitPullRequest },
   { value: "comments", label: "Comments", Icon: MessageSquare },
+  { value: "evidence", label: "Evidence", Icon: ClipboardCheck },
   { value: "blockers", label: "Blockers", Icon: ShieldAlert },
   { value: "agent", label: "Agent", Icon: Bot },
   { value: "preview", label: "Preview", Icon: Server },
@@ -102,6 +106,12 @@ export function IssueDrawer({
   const prRollup = primaryPr ? rollupMeta(primaryPr.checksState) : null;
 
   const commentsState = useIssueComments({
+    projectSlug,
+    identifier: issue?.identifier ?? null,
+    enabled: open && Boolean(issue),
+  });
+
+  const evidence = useIssueEvidence({
     projectSlug,
     identifier: issue?.identifier ?? null,
     enabled: open && Boolean(issue),
@@ -400,6 +410,16 @@ export function IssueDrawer({
                     error={commentsState.error}
                     projectSlug={projectSlug}
                     onAddComment={commentsState.addComment}
+                  />
+                </TabsContent>
+                <TabsContent value="evidence">
+                  <EvidenceTab
+                    error={evidence.error}
+                    identifier={issue.identifier}
+                    loading={evidence.loading}
+                    onRefresh={() => void evidence.refetch()}
+                    projectSlug={projectSlug}
+                    records={evidence.records}
                   />
                 </TabsContent>
                 <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
