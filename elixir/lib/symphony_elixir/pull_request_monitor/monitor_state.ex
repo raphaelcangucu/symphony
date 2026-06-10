@@ -49,6 +49,9 @@ defmodule SymphonyElixir.PullRequestMonitor.MonitorState do
 
     base
     |> cast(attrs, @updatable)
+    |> validate_required([:project_slug, :identifier, :pr_url])
+    |> validate_number(:auto_rework_count, greater_than_or_equal_to: 0)
+    |> unique_constraint([:project_slug, :identifier, :pr_url])
     |> Repo.insert_or_update()
   end
 
@@ -75,7 +78,7 @@ defmodule SymphonyElixir.PullRequestMonitor.MonitorState do
       |> Map.new(&{&1.pr_url, &1})
 
     Enum.map(prs, fn pr ->
-      Map.put(pr, :monitor, monitor_payload(Map.get(rows, Map.get(pr, :url))))
+      Map.put(pr, :monitor, monitor_payload(Map.get(rows, Map.get(pr, :url) || Map.get(pr, "url"))))
     end)
   end
 
