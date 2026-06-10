@@ -298,6 +298,29 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     |> Repo.insert_or_update!()
   end
 
+  @doc """
+  Sets a local comment's sync status. Locally authored comments start
+  `"pending"` and flip to `"synced"` once the outbox push succeeds (or
+  `"error"` when push attempts are exhausted).
+  """
+  @spec mark_comment_sync_status(integer(), String.t()) ::
+          {:ok, SymphonyElixir.LocalTracker.Comment.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def mark_comment_sync_status(comment_id, status)
+      when is_integer(comment_id) and status in ["synced", "pending", "conflict", "error", "archived"] do
+    case Repo.get(SymphonyElixir.LocalTracker.Comment, comment_id) do
+      nil ->
+        {:error, :not_found}
+
+      comment ->
+        comment
+        |> Ecto.Changeset.change(%{sync_status: status, last_synced_at: sync_timestamp(status)})
+        |> Repo.update()
+    end
+  end
+
+  defp sync_timestamp("synced"), do: DateTime.utc_now()
+  defp sync_timestamp(_status), do: nil
+
   defp normalize_identifier(identifier) when is_binary(identifier) do
     identifier |> String.trim() |> String.trim_leading("#")
   end

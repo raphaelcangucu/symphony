@@ -100,7 +100,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
 
   @impl true
   def add_comment(%Project{} = project, identifier, body, attrs) do
-    with {:ok, comment} <- IssueAdapter.add_comment(project, identifier, body, attrs) do
+    with {:ok, comment} <- IssueAdapter.add_comment(project, identifier, body, attrs),
+         {:ok, comment} <- LocalStore.mark_comment_sync_status(comment.id, "pending") do
       payload = %{"identifier" => identifier, "body" => body, "comment_id" => comment.id}
       enqueue(project, identifier, "comment", "create", payload, nil)
       {:ok, comment}

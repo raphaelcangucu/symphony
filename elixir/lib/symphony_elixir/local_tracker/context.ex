@@ -404,7 +404,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       |> Map.merge(%{
         issue_id: issue.id,
         body: body,
-        kind: attr(attrs, :kind, "comment"),
+        kind: attr(attrs, :kind, SymphonyElixir.Tracker.Workpad.classify(body)),
         author: attr(attrs, :author, "local")
       })
       |> then(&Comment.changeset(%Comment{}, &1))
@@ -426,6 +426,38 @@ defmodule SymphonyElixir.LocalTracker.Context do
          {:ok, label} <- ensure_label(project.id, label_name),
          {:ok, _issue_label} <- ensure_issue_label_idempotent(issue.id, label.id) do
       {:ok, issue}
+    end
+  end
+
+  @doc """
+  Replaces a comment's body in place, reclassifying its kind from the new body.
+  """
+  @spec update_comment(integer(), String.t()) :: {:ok, Comment.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def update_comment(comment_id, body) when is_integer(comment_id) and is_binary(body) do
+    case Repo.get(Comment, comment_id) do
+      nil ->
+        {:error, :not_found}
+
+      %Comment{} = comment ->
+        comment
+        |> Ecto.Changeset.change(%{body: body, kind: SymphonyElixir.Tracker.Workpad.classify(body)})
+        |> Repo.update()
+    end
+  end
+
+  @doc """
+  Returns the newest workpad comment for an issue, or `{:error, :not_found}`.
+  """
+  @spec latest_workpad(String.t(), String.t()) :: {:ok, Comment.t()} | {:error, :not_found | missing_error()}
+  def latest_workpad(project_slug, identifier) do
+    with {:ok, comments} <- list_comments(project_slug, identifier) do
+      comments
+      |> Enum.filter(&(&1.kind == "workpad"))
+      |> List.last()
+      |> case do
+        nil -> {:error, :not_found}
+        comment -> {:ok, comment}
+      end
     end
   end
 
