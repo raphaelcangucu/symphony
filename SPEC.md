@@ -698,6 +698,23 @@ publish gate). The workpad is a single comment edited in place:
 push as in-place comment edits. Locally authored comments carry a sync status
 (`pending` → `synced`/`error`) surfaced in the issue detail UI.
 
+#### 7.2.3 Validate gate (evidence)
+
+Projects may declare an `evidence` workflow block (`test_command` /
+`e2e_command` per repo, `ui_paths` globs, `required`). When required and the
+run changed any repo, a VALIDATE gate runs before the publish gate: the agent
+(per the `evidence` skill) writes `.symphony/evidence/manifest.json` with its
+test runs and artifacts, and the orchestrator verifies it — manifest valid and
+artifacts on disk; a passing `unit` run per changed repo; when changed files
+match `ui_paths` (computed by the orchestrator via git diff, not by the agent),
+a passing `e2e` run with ≥1 screenshot and ≥1 video; and every declared command
+present in the Codex session log (anti-fraud, fails closed). Violations trigger
+up to 2 corrective turns, then the run ends incomplete (`validate_gate`) and the
+issue is annotated. On completion, evidence is copied to a durable store
+(`issue_evidence` table + `.symphony/evidence/<project>/<issue>/<run_id>/`), a
+`## Codex Evidence` comment is posted to the issue, and artifacts are served
+through the tracker API into the issue drawer's Evidence tab.
+
 ### 7.3 Transition Triggers
 
 - `Poll Tick`

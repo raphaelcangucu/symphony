@@ -526,6 +526,45 @@ Workpads are first-class in sync:
   (`commentCreate`/`commentUpdate` GraphQL), and Jira (REST `PUT`). An update
   whose create was never pushed degrades to a create.
 
+### Validate gate and evidence
+
+Projects can require test evidence per run via an `evidence:` block in the
+workflow config:
+
+```yaml
+evidence:
+  test_command:
+    frontend: "npm test -- --watchAll=false"
+    backend: "php artisan test"
+  e2e_command:
+    frontend: "npx playwright test"
+  ui_paths:
+    - "frontend/src/**"
+  required: true
+```
+
+When `required: true` and the run changed any repo, the VALIDATE gate runs
+before the publish gate. The agent (guided by the `evidence` skill) must write
+`.symphony/evidence/manifest.json` with its test runs and artifacts. The
+orchestrator verifies — never trusting the agent's judgment — that:
+
+1. the manifest is valid and every referenced artifact exists on disk;
+2. every changed repo has a `unit` run with `status: "passed"`;
+3. when changed files match the `ui_paths` globs (computed by
+   `Evidence.GitDiff`, not declared by the agent), a passing `e2e` run exists
+   with at least 1 screenshot and 1 video;
+4. every declared command actually appears in the Codex session log
+   (`Evidence.SessionAudit` — anti-fraud, fails closed).
+
+Violations trigger up to 2 corrective turns; if still unsatisfied the run ends
+incomplete (`validate_gate`) and the issue is annotated instead of silently
+moving to review. On successful completion the manifest and artifacts are
+copied to a durable store (`.symphony/evidence/<project>/<issue>/<run_id>/`,
+persisted in the `issue_evidence` table — they survive workspace cleanup), a
+`## Codex Evidence` comment (table + screenshot links) is posted to the issue,
+and everything is browsable in the issue drawer's **Evidence** tab
+(screenshot gallery, videos, reports, per-attempt history).
+
 ### Agent preference
 
 Symphony resolves which coding agent runs an issue through a four-level chain, from most
