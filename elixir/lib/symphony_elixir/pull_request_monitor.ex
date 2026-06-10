@@ -214,8 +214,13 @@ defmodule SymphonyElixir.PullRequestMonitor do
 
   defp apply_action_transition(project, identifier, :move_done, _count, dispatch) do
     case normalize_dispatch_result(dispatch.(project, :move_issue, [identifier, %{"status" => @done_state}])) do
-      {:ok, _issue} -> {:ok, {"moved_to_done", %{}}}
-      {:error, reason} -> {:error, {:move_failed, reason}}
+      {:ok, _issue} ->
+        {:ok, {"moved_to_done", %{}}}
+
+      {:error, reason} ->
+        Logger.warning("PR monitor move to Done failed after comment issue=#{identifier} reason=#{inspect(reason)} retry_may_duplicate_comment=true")
+
+        {:error, {:move_failed, reason}}
     end
   end
 

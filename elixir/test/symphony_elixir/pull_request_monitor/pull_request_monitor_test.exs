@@ -215,6 +215,66 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
       assert :ok = PullRequestMonitor.process_issue(project, issue, o)
       assert Agent.get(count, & &1) == 2
     end
+
+    test "cross-PR counter ratchets from issue-level max and then reaches limit", %{
+      project: project,
+      issue: issue
+    } do
+      {:ok, _} = MonitorState.upsert("proj", issue.identifier, "other-url", %{auto_rework_count: 1})
+      calls = start_supervised!({Agent, fn -> [] end})
+      pull_reader_calls = :atomics.new(1, [])
+
+      dispatch = fn _p, fun, args ->
+        Agent.update(calls, &[{fun, args} | &1])
+        {:ok, %{}}
+      end
+
+      o =
+        opts(
+          pull_request_reader: fn _p, _i, _o ->
+            idx = :atomics.get(pull_reader_calls, 1)
+            :atomics.put(pull_reader_calls, 1, idx + 1)
+
+            pr =
+              case idx do
+                0 -> failing_pr()
+                _ -> failing_pr(%{head_sha: "def"})
+              end
+
+            {:ok, [pr]}
+          end,
+          classifier: fn :ci_failure, _ctx, _o -> {:ok, %{"verdict" => "pr_caused", "summary" => "s"}} end,
+          issue_dispatch: dispatch
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+      assert %{auto_rework_count: 2} = MonitorState.get("proj", issue.identifier, "u7")
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+      assert %{last_action: "limit_reached"} = MonitorState.get("proj", issue.identifier, "u7")
+
+      assert [
+               {:add_comment, _},
+               {:move_issue, [_, %{"status" => "Rework"}]},
+               {:add_comment, _}
+             ] = Agent.get(calls, &Enum.reverse/1)
+    end
+
+    test "review marker rolls back when add_comment dispatch fails", %{project: project, issue: issue} do
+      marker = "2026-06-11T00:00:00Z"
+
+      o =
+        opts(
+          pull_request_reader: fn _p, _i, _o -> {:ok, [review_findings_pr(marker)]} end,
+          classifier: fn :review_findings, _ctx, _o ->
+            {:ok, %{"verdict" => "fixable_by_agent", "summary" => "s"}}
+          end,
+          issue_dispatch: fn _p, :add_comment, _args -> {:error, :boom} end
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+      assert %{last_review_marker: nil} = MonitorState.get("proj", issue.identifier, "u7")
+    end
   end
 
   defp migrate_repo do
@@ -239,7 +299,7 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
     }
   end
 
-  defp failing_pr do
+  defp failing_pr(overrides \\ %{}) do
     %{
       number: 7,
       url: "u7",
@@ -258,6 +318,7 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
       ],
       conversation: []
     }
+    |> Map.merge(overrides)
   end
 
   defp review_findings_pr(marker) do
