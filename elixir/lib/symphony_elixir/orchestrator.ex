@@ -7,11 +7,13 @@ defmodule SymphonyElixir.Orchestrator do
   require Logger
   import Bitwise, only: [<<<: 2]
 
-  alias SymphonyElixir.{AgentRunner, Config, Issue, ProjectConfig, Repo, StatusDashboard, Tracker, Workspace}
+  alias SymphonyElixir.{AgentRunner, Config, Issue, ProjectConfig, Repo, RunContract, StatusDashboard, Tracker, Workspace}
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.RunContract.Finalizer
   alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
 
   @incomplete_run_label "symphony:incomplete"
+  @blocked_run_label "symphony:blocked"
 
   @continuation_retry_delay_ms 1_000
   @failure_retry_base_ms 10_000
@@ -40,7 +42,8 @@ defmodule SymphonyElixir.Orchestrator do
       retry_attempts: %{},
       agent_totals: nil,
       agent_totals_by_project: %{},
-      agent_rate_limits: nil
+      agent_rate_limits: nil,
+      publish_contract_deps: nil
     ]
   end
 
@@ -51,7 +54,7 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     warn_on_invalid_config()
 
     now_ms = System.monotonic_time(:millisecond)
@@ -63,7 +66,8 @@ defmodule SymphonyElixir.Orchestrator do
       poll_check_in_progress: false,
       agent_totals: @empty_agent_totals,
       agent_totals_by_project: %{},
-      agent_rate_limits: nil
+      agent_rate_limits: nil,
+      publish_contract_deps: Keyword.get(opts, :publish_contract_deps)
     }
 
     run_terminal_workspace_cleanup()
@@ -783,8 +787,101 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp apply_normal_completion(%State{} = state, running_entry, issue_id) do
-    maybe_annotate_incomplete(running_entry, issue_id)
+    issue = running_entry.issue
+    workspace = Workspace.path_for_issue(issue)
+    deps = state.publish_contract_deps || default_publish_contract_deps()
 
+    case run_publish_contract(issue, workspace, deps) do
+      {:ok, prs} ->
+        record_run_pull_requests(issue, prs)
+        maybe_annotate_incomplete(running_entry, issue_id)
+        apply_transition_after_contract(state, running_entry, issue_id)
+
+      {:blocked, violations, reason} ->
+        Logger.warning("Run blocked for issue_id=#{issue_id} issue_identifier=#{issue.identifier} reason=#{inspect(reason)}; skipping completion transition")
+
+        annotate_blocked(running_entry, issue_id, violations)
+        complete_issue(state, issue_id)
+    end
+  end
+
+  @doc false
+  @spec run_publish_contract(Issue.t(), Path.t(), map()) ::
+          {:ok, [map()]} | {:blocked, [map()], term()}
+  def run_publish_contract(%Issue{} = issue, workspace, deps) do
+    repo_states = deps.repo_states.(workspace)
+
+    case deps.evaluate.(repo_states, deps.pr_checker) do
+      :satisfied ->
+        {:ok, deps.pull_requests.(repo_states, deps.pr_checker)}
+
+      {:violations, violations} ->
+        Logger.warning("Publish contract violated for issue_id=#{issue.id} issue_identifier=#{issue.identifier} violations=#{inspect(violations)}; invoking finalizer")
+
+        case deps.finalize.(workspace, issue) do
+          {:ok, prs} -> {:ok, prs}
+          {:error, reason} -> {:blocked, violations, reason}
+        end
+    end
+  end
+
+  @doc false
+  @spec default_publish_contract_deps() :: map()
+  def default_publish_contract_deps do
+    %{
+      repo_states: &RunContract.repo_states/1,
+      evaluate: &RunContract.evaluate_publish/2,
+      pull_requests: &RunContract.pull_requests/2,
+      finalize: &Finalizer.finalize/2,
+      pr_checker: RunContract.gh_pr_checker()
+    }
+  end
+
+  @doc false
+  @spec blocked_comment_body([map()]) :: String.t()
+  def blocked_comment_body(violations) do
+    """
+    ## Codex Workpad
+
+    > 🛑 Symphony auto-note: this run is **blocked** — the publish gate could not be
+    > satisfied even after corrective turns and the mechanical finalizer.
+    >
+    #{Enum.map_join(violations, "\n", fn v -> "> - #{v.repo}: #{v.detail}" end)}
+    >
+    > The issue was NOT moved to review. Fix the underlying problem (auth, remote,
+    > branch state), then move the issue back to an active state to re-dispatch.
+    """
+  end
+
+  defp record_run_pull_requests(%Issue{project_slug: slug, identifier: identifier}, prs)
+       when is_binary(slug) and slug != "" and is_list(prs) and prs != [] do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        Enum.each(prs, fn pr ->
+          case SymphonyElixir.Tracker.Sync.LocalStore.upsert_run_pull_request(project.id, identifier, pr) do
+            {:ok, _record} -> :ok
+            {:error, error} -> Logger.warning("Failed to persist run PR link issue=#{identifier} url=#{pr[:url]}: #{inspect(error)}")
+          end
+        end)
+
+      {:error, error} ->
+        Logger.warning("Cannot persist run PR links issue=#{identifier}: project lookup failed #{inspect(error)}")
+    end
+  end
+
+  defp record_run_pull_requests(_issue, _prs), do: :ok
+
+  defp annotate_blocked(running_entry, issue_id, violations) do
+    case Tracker.create_comment(issue_id, blocked_comment_body(violations)) do
+      :ok -> :ok
+      {:error, error} -> Logger.warning("Failed to post blocked comment issue_id=#{issue_id}: #{inspect(error)}")
+    end
+
+    add_label(running_entry, @blocked_run_label)
+  end
+
+  # Existing transition flow, extracted from the pre-contract apply_normal_completion body.
+  defp apply_transition_after_contract(%State{} = state, running_entry, issue_id) do
     case apply_completion_transition(state, issue_id, running_entry.issue) do
       {:transitioned, transitioned_state} ->
         transitioned_state
@@ -929,21 +1026,27 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp incomplete_reason_text(:max_turns), do: "reached the configured max turns with the issue still active"
+
+  defp incomplete_reason_text({:publish_gate, _violations}),
+    do: "ended with the publish gate unsatisfied (deliverables missing)"
+
   defp incomplete_reason_text(other), do: "reason=#{inspect(other)}"
 
-  defp add_incomplete_label(%{issue: %Issue{identifier: identifier, project_slug: slug}})
+  defp add_incomplete_label(running_entry), do: add_label(running_entry, @incomplete_run_label)
+
+  defp add_label(%{issue: %Issue{identifier: identifier, project_slug: slug}}, label)
        when is_binary(identifier) and is_binary(slug) and slug != "" do
-    case Context.add_issue_label(slug, identifier, @incomplete_run_label) do
+    case Context.add_issue_label(slug, identifier, label) do
       {:ok, _issue} ->
         :ok
 
       {:error, error} ->
-        Logger.warning("Failed to add incomplete label issue=#{identifier} project=#{slug}: #{inspect(error)}")
+        Logger.warning("Failed to add label #{label} issue=#{identifier} project=#{slug}: #{inspect(error)}")
         :ok
     end
   end
 
-  defp add_incomplete_label(_running_entry), do: :ok
+  defp add_label(_running_entry, _label), do: :ok
 
   defp schedule_issue_retry(%State{} = state, issue_id, attempt, metadata)
        when is_binary(issue_id) and is_map(metadata) do
