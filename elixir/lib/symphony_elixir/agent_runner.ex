@@ -4,7 +4,7 @@ defmodule SymphonyElixir.AgentRunner do
   """
 
   require Logger
-  alias SymphonyElixir.{AgentPreference, CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, Tracker, Workspace}
+  alias SymphonyElixir.{AgentPreference, CodingAgent, Config, InstanceConfig, Issue, ProjectConfig, PromptBuilder, Repo, RunContract, Tracker, Workspace}
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.GitHub.ReadCache
@@ -263,10 +263,39 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp build_turn_prompt(issue, opts, workspace, 1, _max_turns) do
-    PromptBuilder.build_prompt(issue, Keyword.put(opts, :workspace, workspace))
+    base = PromptBuilder.build_prompt(issue, Keyword.put(opts, :workspace, workspace))
+    repo_states = RunContract.repo_states(workspace)
+
+    if RunContract.work_present?(repo_states) do
+      base <> "\n\n" <> resume_section(repo_states)
+    else
+      base
+    end
   end
 
-  defp build_turn_prompt(_issue, _opts, _workspace, turn_number, max_turns) do
+  defp build_turn_prompt(_issue, _opts, workspace, turn_number, max_turns) do
+    continuation_prompt(turn_number, max_turns, RunContract.repo_states(workspace))
+  end
+
+  @doc false
+  @spec resume_section([RunContract.RepoState.t()]) :: String.t()
+  def resume_section(repo_states) do
+    """
+    ## Resume notice (Symphony)
+
+    A previous run already worked in this workspace. Current deliverable state:
+
+    #{RunContract.summary_text(repo_states)}
+
+    Do NOT restart from scratch. Review the existing work, finish what is missing,
+    and ensure every repo with commits ends with a pushed branch and an open pull
+    request (follow the `push` skill).
+    """
+  end
+
+  @doc false
+  @spec continuation_prompt(pos_integer(), pos_integer(), [RunContract.RepoState.t()]) :: String.t()
+  def continuation_prompt(turn_number, max_turns, repo_states) do
     """
     Continuation guidance:
 
@@ -275,6 +304,12 @@ defmodule SymphonyElixir.AgentRunner do
     - Resume from the current workspace and workpad state instead of restarting from scratch.
     - The original task instructions and prior turn context are already present in this thread, so do not restate them before acting.
     - Focus on the remaining ticket work and do not end the turn while the issue stays active unless you are truly blocked.
+
+    Deliverable state (computed by the orchestrator from the workspace):
+
+    #{RunContract.summary_text(repo_states)}
+
+    Any repo with commits ahead must end with a pushed branch and an open pull request (follow the `push` skill).
     """
   end
 
