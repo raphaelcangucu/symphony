@@ -40,7 +40,8 @@ defmodule SymphonyElixir.ProjectConfig do
     :completion_transitions,
     :max_concurrent_agents_by_state,
     :dev_server,
-    :hooks
+    :hooks,
+    :evidence
   ]
 
   @type t :: %__MODULE__{}
@@ -75,7 +76,8 @@ defmodule SymphonyElixir.ProjectConfig do
       completion_transitions: agent_override(project_front_matter, "completion_transitions"),
       max_concurrent_agents_by_state: agent_override(project_front_matter, "max_concurrent_agents_by_state"),
       dev_server: front_matter_section(project_front_matter, "dev_server"),
-      hooks: front_matter_section(project_front_matter, "hooks")
+      hooks: front_matter_section(project_front_matter, "hooks"),
+      evidence: get_in(opts, [:evidence]) || %{}
     }
   end
 

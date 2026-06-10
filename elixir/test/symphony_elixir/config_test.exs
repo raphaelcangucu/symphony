@@ -49,6 +49,32 @@ defmodule SymphonyElixir.ConfigTest do
     end
   end
 
+  describe "evidence workflow section" do
+    test "validate_front_matter accepts and defaults the evidence block" do
+      validated =
+        SymphonyElixir.Config.validate_front_matter(%{
+          "evidence" => %{
+            "test_command" => %{"frontend" => "npm test"},
+            "e2e_command" => %{"frontend" => "npx playwright test"},
+            "ui_paths" => ["frontend/src/**"],
+            "required" => true
+          }
+        })
+
+      assert get_in(validated, [:evidence, :test_command]) == %{"frontend" => "npm test"}
+      assert get_in(validated, [:evidence, :e2e_command]) == %{"frontend" => "npx playwright test"}
+      assert get_in(validated, [:evidence, :ui_paths]) == ["frontend/src/**"]
+      assert get_in(validated, [:evidence, :required]) == true
+    end
+
+    test "omitted evidence block defaults to disabled" do
+      validated = SymphonyElixir.Config.validate_front_matter(%{})
+      assert get_in(validated, [:evidence, :required]) == false
+      assert get_in(validated, [:evidence, :ui_paths]) == []
+      assert get_in(validated, [:evidence, :test_command]) == %{}
+    end
+  end
+
   describe "validate_workflow_config/1 (strict)" do
     test "accepts well-formed config (lists, integers, csv strings)" do
       assert :ok =

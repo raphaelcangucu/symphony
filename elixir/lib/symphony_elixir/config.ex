@@ -275,6 +275,16 @@ defmodule SymphonyElixir.Config do
                                  ],
                                  namespace: [type: {:or, [:string, nil]}, default: nil]
                                ]
+                             ],
+                             evidence: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 test_command: [type: {:map, :string, :string}, default: %{}],
+                                 e2e_command: [type: {:map, :string, :string}, default: %{}],
+                                 ui_paths: [type: {:list, :string}, default: []],
+                                 required: [type: :boolean, default: false]
+                               ]
                              ]
                            )
 
@@ -922,7 +932,8 @@ defmodule SymphonyElixir.Config do
       server: extract_server_options(section_map(config, "server")),
       editor: extract_editor_options(section_map(config, "editor")),
       dev_server: extract_dev_server_options(section_map(config, "dev_server")),
-      public_tunnel: extract_public_tunnel_options(section_map(config, "public_tunnel"))
+      public_tunnel: extract_public_tunnel_options(section_map(config, "public_tunnel")),
+      evidence: extract_evidence_options(section_map(config, "evidence"))
     }
   end
 
@@ -1031,6 +1042,28 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:base_domain, scalar_string_value(Map.get(section, "base_domain")))
     |> put_if_present(:namespace, scalar_string_value(Map.get(section, "namespace")))
   end
+
+  defp extract_evidence_options(section) do
+    %{}
+    |> put_if_present(:test_command, string_map_value(Map.get(section, "test_command")))
+    |> put_if_present(:e2e_command, string_map_value(Map.get(section, "e2e_command")))
+    |> put_if_present(:ui_paths, csv_value(Map.get(section, "ui_paths")))
+    |> put_if_present(:required, boolean_value(Map.get(section, "required")))
+  end
+
+  # Map of repo-subdir => command string; non-string entries are dropped.
+  defp string_map_value(value) when is_map(value) do
+    value
+    |> Enum.flat_map(fn {key, command} ->
+      case {scalar_string_value(key), scalar_string_value(command)} do
+        {repo, cmd} when is_binary(repo) and is_binary(cmd) -> [{repo, cmd}]
+        _invalid -> []
+      end
+    end)
+    |> Map.new()
+  end
+
+  defp string_map_value(_value), do: :omit
 
   defp section_map(config, key) do
     case Map.get(config, key) do
