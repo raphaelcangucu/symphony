@@ -126,6 +126,21 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
     end
   end
 
+  @doc """
+  Edits an existing JIRA issue comment in place (workpad updates).
+  """
+  @spec update_comment(Project.t(), String.t(), String.t(), String.t()) ::
+          {:ok, map()} | {:error, term()}
+  def update_comment(%Project{} = _project, identifier, remote_id, body) when is_binary(body) do
+    payload = %{"body" => Adf.from_text(body)}
+
+    case request(:put, "/rest/api/3/issue/#{identifier}/comment/#{remote_id}", payload) do
+      {:ok, %{"id" => _} = comment} -> {:ok, normalize_comment(comment)}
+      {:ok, _response} -> {:ok, %{remote_id: remote_id, body: body, author: nil, remote_updated_at: nil}}
+      error -> {:error, map_error(error)}
+    end
+  end
+
   defp ctx(%Project{} = project) do
     %{project_slug: project.slug, base_url: Config.base_url()}
   end
@@ -209,9 +224,12 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   end
 
   defp normalize_comment(comment) do
+    body = Adf.to_text(comment["body"])
+
     %{
       remote_id: comment["id"],
-      body: Adf.to_text(comment["body"]),
+      body: body,
+      kind: SymphonyElixir.Tracker.Workpad.classify(body),
       author: get_in(comment, ["author", "displayName"]),
       remote_updated_at: comment["updated"]
     }

@@ -150,6 +150,45 @@ defmodule SymphonyElixir.Jira.IssueAdapterTest do
     assert comment.author == "Bot"
   end
 
+  test "update_comment puts ADF to the comment endpoint and returns the comment map" do
+    Stub.set(fn :put, "/rest/api/3/issue/ABC-12/comment/c-1", body ->
+      assert get_in(body, ["body", "type"]) == "doc"
+
+      {:ok,
+       %{
+         "id" => "c-1",
+         "body" => %{"type" => "doc", "content" => [%{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "v2"}]}]},
+         "author" => %{"displayName" => "Bot"},
+         "updated" => "2026-06-01T14:00:00.000Z"
+       }}
+    end)
+
+    assert {:ok, comment} = IssueAdapter.update_comment(@project, "ABC-12", "c-1", "v2")
+    assert comment.remote_id == "c-1"
+    assert comment.body == "v2"
+  end
+
+  test "comments whose body starts with Codex Workpad classify as workpad" do
+    Stub.set(fn :get, "/rest/api/3/issue/ABC-12/comment", _body ->
+      {:ok,
+       %{
+         "comments" => [
+           %{
+             "id" => "c-9",
+             "body" => %{
+               "type" => "doc",
+               "content" => [%{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "## Codex Workpad\nplan"}]}]
+             },
+             "author" => %{"displayName" => "Bot"},
+             "updated" => "2026-06-01T13:00:00.000Z"
+           }
+         ]
+       }}
+    end)
+
+    assert {:ok, [%{remote_id: "c-9", kind: "workpad"}]} = IssueAdapter.list_comments(@project, "ABC-12")
+  end
+
   test "list_comments maps comments to sync-shaped maps" do
     Stub.set(fn :get, "/rest/api/3/issue/ABC-12/comment", _body ->
       {:ok,

@@ -35,6 +35,11 @@ defmodule SymphonyElixir.Jira.SyncDriverTest do
     def create_issue(_project, _payload) do
       {:ok, IssueDTO.build(%{id: "10010", identifier: "ABC-99", title: "new"})}
     end
+
+    def update_comment(_project, _id, remote_id, body) do
+      send(self(), {:jira_update_comment, remote_id, body})
+      {:ok, %{remote_id: remote_id, body: body, author: "Bot", remote_updated_at: "2026-06-01T03:00:00Z"}}
+    end
   end
 
   setup do
@@ -56,6 +61,27 @@ defmodule SymphonyElixir.Jira.SyncDriverTest do
 
   test "push comment/create delegates to add_comment", %{project: project} do
     entry = %OutboxEntry{entity_type: "comment", operation: "create", payload: %{"identifier" => "ABC-12", "body" => "hi"}}
+    assert {:ok, "c-2"} = SyncDriver.push(project, entry)
+  end
+
+  test "push comment/update edits the comment in place", %{project: project} do
+    entry = %OutboxEntry{
+      entity_type: "comment",
+      operation: "update",
+      payload: %{"identifier" => "ABC-12", "body" => "v2", "remote_id" => "c-1", "comment_id" => 7}
+    }
+
+    assert {:ok, "c-1"} = SyncDriver.push(project, entry)
+    assert_received {:jira_update_comment, "c-1", "v2"}
+  end
+
+  test "push comment/update without remote id degrades to create", %{project: project} do
+    entry = %OutboxEntry{
+      entity_type: "comment",
+      operation: "update",
+      payload: %{"identifier" => "ABC-12", "body" => "v2", "remote_id" => nil, "comment_id" => 7}
+    }
+
     assert {:ok, "c-2"} = SyncDriver.push(project, entry)
   end
 
