@@ -146,6 +146,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       body: comment.body,
       author: comment.author,
       url: nil,
+      sync_status: comment.sync_status || "synced",
       inserted_at: iso8601(comment.inserted_at),
       updated_at: iso8601(comment.updated_at)
     }
@@ -159,6 +160,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       body: Map.get(comment, :body),
       author: Map.get(comment, :author),
       url: Map.get(comment, :url),
+      sync_status: Map.get(comment, :sync_status, "synced"),
       inserted_at: Map.get(comment, :created_at),
       updated_at: Map.get(comment, :updated_at)
     }

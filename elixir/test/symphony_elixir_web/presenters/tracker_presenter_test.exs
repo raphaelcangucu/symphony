@@ -45,6 +45,25 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
     assert json.tracker_config == %{"project_id" => "PVT_1"}
   end
 
+  test "comment/1 exposes sync_status for local comments" do
+    comment = %SymphonyElixir.LocalTracker.Comment{
+      id: 1,
+      issue_id: 2,
+      kind: "workpad",
+      body: "## Codex Workpad",
+      author: "agent",
+      sync_status: "pending",
+      inserted_at: ~U[2026-06-10 00:00:00.000000Z],
+      updated_at: ~U[2026-06-10 00:00:00.000000Z]
+    }
+
+    assert %{sync_status: "pending"} = TrackerPresenter.comment(comment)
+  end
+
+  test "comment/1 defaults sync_status for remote comment maps" do
+    assert %{sync_status: "synced"} = TrackerPresenter.comment(%{id: "c1", body: "hello"})
+  end
+
   test "agent_execution/1 serializes status, session and tokens" do
     execution = %{
       issue_identifier: "SYM-1",

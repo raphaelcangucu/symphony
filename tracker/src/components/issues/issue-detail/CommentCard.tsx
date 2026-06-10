@@ -56,6 +56,35 @@ export function CommentCard({ author, body, createdAt, url, badge, highlight, ac
   );
 }
 
+const SYNC_BADGE_STYLES: Record<string, string> = {
+  pending:
+    "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  conflict:
+    "border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-200",
+  error: "border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200",
+};
+
+const SYNC_BADGE_LABELS: Record<string, string> = {
+  pending: "Syncing…",
+  conflict: "Sync conflict",
+  error: "Sync failed",
+};
+
+export function SyncBadge({ syncStatus }: { syncStatus: string | null }) {
+  if (!syncStatus || syncStatus === "synced" || syncStatus === "archived") return null;
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium",
+        SYNC_BADGE_STYLES[syncStatus] ?? SYNC_BADGE_STYLES.error,
+      )}
+    >
+      {SYNC_BADGE_LABELS[syncStatus] ?? "Sync failed"}
+    </span>
+  );
+}
+
 export function WorkpadBadge() {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-medium text-primary">

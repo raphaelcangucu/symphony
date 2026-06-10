@@ -1,3 +1,5 @@
+export type CommentSyncStatus = "synced" | "pending" | "conflict" | "error" | "archived";
+
 export interface Comment {
   id: string;
   issueIdentifier: string;
@@ -5,6 +7,7 @@ export interface Comment {
   body: string;
   kind: string | null;
   url: string | null;
+  syncStatus: CommentSyncStatus | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -31,7 +31,7 @@ import type { PullRequest } from "@/types/pull-request";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
 import { BlockedBanner } from "./BlockedBanner";
-import { CommentCard, WorkpadBadge } from "./CommentCard";
+import { CommentCard, SyncBadge, WorkpadBadge } from "./CommentCard";
 
 interface SummaryTabProps {
   issue: Issue;
@@ -194,7 +194,12 @@ export function SummaryTab({
               createdAt={workpad.createdAt}
               url={workpad.url}
               highlight
-              badge={<WorkpadBadge />}
+              badge={
+                <>
+                  <WorkpadBadge />
+                  <SyncBadge syncStatus={workpad.syncStatus} />
+                </>
+              }
               actions={
                 onOpenComments ? (
                   <button type="button" onClick={onOpenComments} className="text-xs text-primary hover:underline">

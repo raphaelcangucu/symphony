@@ -9,7 +9,7 @@ import { useMarkdownImagePaste } from "@/hooks/useMarkdownImagePaste";
 import { cn } from "@/lib/utils";
 import type { Comment, CreateCommentInput } from "@/types/comment";
 
-import { CommentCard, WorkpadBadge } from "./CommentCard";
+import { CommentCard, SyncBadge, WorkpadBadge } from "./CommentCard";
 
 interface CommentsTabProps {
   comments: Comment[];
@@ -189,7 +189,12 @@ export function CommentsTab({ comments, loading, error, projectSlug, onAddCommen
           createdAt={comment.createdAt}
           url={comment.url}
           highlight={comment.kind === "workpad"}
-          badge={comment.kind === "workpad" ? <WorkpadBadge /> : undefined}
+          badge={
+            <>
+              {comment.kind === "workpad" ? <WorkpadBadge /> : null}
+              <SyncBadge syncStatus={comment.syncStatus} />
+            </>
+          }
         />
       ))}
     </div>

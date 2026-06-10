@@ -1,5 +1,5 @@
 import type { Blocker, BlockerState, BlockerSummary } from "@/types/blocker";
-import type { Comment } from "@/types/comment";
+import type { Comment, CommentSyncStatus } from "@/types/comment";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import {
   AGENT_KINDS,
@@ -184,6 +184,8 @@ export interface BackendCommentDto {
   author?: string | null;
   kind?: string | null;
   url?: string | null;
+  sync_status?: string | null;
+  syncStatus?: string | null;
   inserted_at?: string | null;
   created_at?: string | null;
   createdAt?: string | null;
@@ -401,9 +403,16 @@ export function normalizeComment(dto: BackendCommentDto, fallbackIssueIdentifier
     body: dto.body,
     kind: dto.kind ?? null,
     url: dto.url ?? null,
+    syncStatus: normalizeCommentSyncStatus(dto.syncStatus ?? dto.sync_status),
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };
+}
+
+const COMMENT_SYNC_STATUSES: readonly CommentSyncStatus[] = ["synced", "pending", "conflict", "error", "archived"];
+
+function normalizeCommentSyncStatus(value?: string | null): CommentSyncStatus | null {
+  return (COMMENT_SYNC_STATUSES as readonly string[]).includes(value ?? "") ? (value as CommentSyncStatus) : null;
 }
 
 export function normalizeBlocker(dto: BackendBlockerDto, fallbackIssueIdentifier?: string | null): Blocker {
