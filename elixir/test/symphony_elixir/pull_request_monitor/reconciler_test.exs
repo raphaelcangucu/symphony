@@ -11,7 +11,7 @@ defmodule SymphonyElixir.PullRequestMonitor.ReconcilerTest do
       %{identifier: nil, project_slug: "enabled"}
     ]
 
-    result = Reconciler.candidates(issues, MapSet.new(["enabled"]), MapSet.new(["#3"]))
+    result = Reconciler.candidates(issues, MapSet.new(["enabled"]), MapSet.new([{"enabled", "#3"}]))
 
     assert Enum.map(result, & &1.identifier) == ["#1"]
   end
@@ -22,5 +22,20 @@ defmodule SymphonyElixir.PullRequestMonitor.ReconcilerTest do
     result = Reconciler.candidates(issues, MapSet.new(["enabled"]), MapSet.new())
 
     assert length(result) == 10
+  end
+
+  test "handle_info/2 removes in-flight entry on :DOWN" do
+    ref = make_ref()
+
+    state = %{
+      in_flight: %{
+        {"enabled", "#1"} => make_ref(),
+        {"enabled", "#2"} => ref
+      }
+    }
+
+    assert {:noreply, next_state} = Reconciler.handle_info({:DOWN, ref, :process, self(), :normal}, state)
+    assert Map.has_key?(next_state.in_flight, {"enabled", "#1"})
+    refute Map.has_key?(next_state.in_flight, {"enabled", "#2"})
   end
 end

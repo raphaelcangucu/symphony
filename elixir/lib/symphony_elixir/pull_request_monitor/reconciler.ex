@@ -33,10 +33,9 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
       slug = issue_project_slug(issue)
       key = issue_key(slug, identifier)
 
-      is_binary(identifier) and identifier != "" and
-        is_binary(slug) and slug != "" and
+      not is_nil(key) and
         MapSet.member?(enabled_slugs, slug) and
-        not in_flight_member?(in_flight, key, identifier)
+        not MapSet.member?(in_flight, key)
     end)
     |> Enum.take(@max_issues_per_tick)
   end
@@ -61,6 +60,7 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
   end
 
   @impl true
+  # Task.Supervisor.async_nolink sends `{ref, result}`; `:DOWN` handles in-flight cleanup.
   def handle_info(_message, state), do: {:noreply, state}
 
   defp run_tick_safely(state) do
@@ -207,14 +207,6 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
   end
 
   defp issue_key(_slug, _identifier), do: nil
-
-  defp in_flight_member?(in_flight, key, identifier) when not is_nil(key) do
-    MapSet.member?(in_flight, key) or MapSet.member?(in_flight, identifier)
-  end
-
-  defp in_flight_member?(in_flight, _key, identifier) do
-    MapSet.member?(in_flight, identifier)
-  end
 
   defp map_value(value, key) when is_map(value) and is_atom(key) do
     Map.get(value, key) || Map.get(value, Atom.to_string(key))
