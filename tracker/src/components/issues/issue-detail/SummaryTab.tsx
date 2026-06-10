@@ -30,6 +30,7 @@ import type {
 import type { PullRequest } from "@/types/pull-request";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
+import { BlockedBanner } from "./BlockedBanner";
 import { CommentCard, WorkpadBadge } from "./CommentCard";
 
 interface SummaryTabProps {
@@ -122,6 +123,7 @@ export function SummaryTab({
   return (
     <div className="grid gap-x-8 gap-y-6 text-sm lg:grid-cols-[minmax(0,1fr)_236px]">
       <div className="min-w-0 space-y-6">
+        <BlockedBanner labels={issue.labels} />
         {hasLinks ? (
           <section className="flex flex-wrap items-center gap-2">
             {issue.url ? (
