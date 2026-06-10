@@ -29,6 +29,21 @@ defmodule SymphonyElixir.GitHub.WorkflowRunsTest do
     assert WorkflowRuns.run_ids(prs) == [99]
   end
 
+  test "run_ids/1 deduplicates run ids from multiple failing pipelines" do
+    url = "https://github.com/o/r/actions/runs/99"
+
+    prs = [
+      %{
+        pipelines: [
+          %{name: "CI", url: url, jobs: [%{conclusion: "FAILURE"}]},
+          %{name: "Deploy", url: url, jobs: [%{conclusion: "TIMED_OUT"}]}
+        ]
+      }
+    ]
+
+    assert WorkflowRuns.run_ids(prs) == [99]
+  end
+
   test "rerun_failed_jobs/3 posts to the rerun endpoint" do
     request_fun = fn path, _body, _opts ->
       send(self(), {:posted, path})
@@ -52,6 +67,13 @@ defmodule SymphonyElixir.GitHub.WorkflowRunsTest do
     request_fun = fn _path, _body, _opts -> {:error, {:github_api_status, 403}} end
 
     assert {:error, {:rerun_failed, 403, nil}} =
+             WorkflowRuns.rerun_failed_jobs("o/r", 99, request_fun: request_fun)
+  end
+
+  test "rerun_failed_jobs/3 passes through unknown errors unchanged" do
+    request_fun = fn _path, _body, _opts -> {:error, {:github_api_request, :timeout}} end
+
+    assert {:error, {:github_api_request, :timeout}} =
              WorkflowRuns.rerun_failed_jobs("o/r", 99, request_fun: request_fun)
   end
 end

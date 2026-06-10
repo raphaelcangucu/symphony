@@ -6,6 +6,7 @@ defmodule SymphonyElixir.GitHub.WorkflowRuns do
 
   alias SymphonyElixir.GitHub.Client
 
+  # STALE omitted: GitHub marks runs stale when superseded; retrying does not help.
   @failure_conclusions ~w(FAILURE TIMED_OUT CANCELLED STARTUP_FAILURE ACTION_REQUIRED)
   @run_id_pattern ~r{/actions/runs/(\d+)}
 
@@ -20,10 +21,11 @@ defmodule SymphonyElixir.GitHub.WorkflowRuns do
 
   @spec rerun_failed_jobs(String.t(), pos_integer(), keyword()) :: :ok | {:error, term()}
   def rerun_failed_jobs(repo, run_id, opts \\ [])
-      when is_binary(repo) and is_integer(run_id) do
+      when is_binary(repo) and is_integer(run_id) and run_id > 0 do
     request_fun = Keyword.get(opts, :request_fun, &default_request/3)
+    request_opts = Keyword.delete(opts, :request_fun)
 
-    case request_fun.("/repos/#{repo}/actions/runs/#{run_id}/rerun-failed-jobs", %{}, opts) do
+    case request_fun.("/repos/#{repo}/actions/runs/#{run_id}/rerun-failed-jobs", %{}, request_opts) do
       {:ok, %{status: 201}} -> :ok
       {:ok, %{status: status, body: body}} -> {:error, {:rerun_failed, status, body}}
       {:error, {:github_api_status, status}} -> {:error, {:rerun_failed, status, nil}}
@@ -37,7 +39,7 @@ defmodule SymphonyElixir.GitHub.WorkflowRuns do
     pipeline
     |> Map.get(:jobs, [])
     |> Enum.any?(fn job ->
-      String.upcase(to_string(job[:conclusion] || "")) in @failure_conclusions
+      String.upcase(to_string(job[:conclusion])) in @failure_conclusions
     end)
   end
 
