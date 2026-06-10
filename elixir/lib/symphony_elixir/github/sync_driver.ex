@@ -35,6 +35,22 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
     end
   end
 
+  def push(%Project{} = project, %OutboxEntry{entity_type: "comment", operation: "update", payload: payload} = entry) do
+    case payload["remote_id"] do
+      remote_id when is_binary(remote_id) and remote_id != "" ->
+        case adapter().update_comment(project, payload["identifier"], remote_id, payload["body"]) do
+          {:ok, %{remote_id: updated_id}} -> {:ok, updated_id || remote_id}
+          {:ok, _other} -> {:ok, remote_id}
+          error -> error
+        end
+
+      # Workpad updated before its create was pushed: degrade to create so the
+      # content still reaches GitHub.
+      _missing ->
+        push(project, %{entry | operation: "create"})
+    end
+  end
+
   def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "create", payload: payload}) do
     case adapter().create_issue(project, payload) do
       {:ok, dto} -> {:ok, dto.id}

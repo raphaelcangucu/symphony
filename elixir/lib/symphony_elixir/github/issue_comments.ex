@@ -46,6 +46,20 @@ defmodule SymphonyElixir.GitHub.IssueComments do
     end
   end
 
+  @doc """
+  Edits an existing GitHub issue comment in place and returns the updated
+  comment map. `remote_id` is the comment's GraphQL node id or REST numeric id.
+  """
+  @spec update(String.t() | nil, String.t() | nil, String.t(), keyword()) ::
+          {:ok, comment()} | {:error, term()}
+  def update(repo, remote_id, body, opts \\ []) do
+    if is_binary(repo) and is_binary(remote_id) and remote_id != "" and is_binary(body) and body != "" do
+      Api.update_comment(repo, remote_id, body, opts)
+    else
+      {:error, :invalid_arguments}
+    end
+  end
+
   @doc false
   @spec parse_node(map() | nil) :: comment() | nil
   def parse_node(%{"body" => body} = node) when is_binary(body) do

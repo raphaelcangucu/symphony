@@ -46,6 +46,14 @@ defmodule SymphonyElixir.GitHub.Api do
   }
   """
 
+  @update_comment_mutation """
+  mutation SymphonyApiUpdateComment($id: ID!, $body: String!) {
+    updateIssueComment(input: { id: $id, body: $body }) {
+      issueComment { id url body createdAt updatedAt author { login } }
+    }
+  }
+  """
+
   @issue_node_query """
   query SymphonyApiIssueNodeId($owner: String!, $name: String!, $number: Int!) {
     repository(owner: $owner, name: $name) { issue(number: $number) { id } }
@@ -142,6 +150,47 @@ defmodule SymphonyElixir.GitHub.Api do
     path = "/repos/#{owner}/#{name}/issues/#{number}/comments"
 
     case Client.rest_post(path, %{"body" => body}, rest_opts(opts)) do
+      {:ok, %{body: raw}} when is_map(raw) -> {:ok, normalize_rest_comment(raw)}
+      {:error, _} = error -> error
+    end
+  end
+
+  # -- update_comment ----------------------------------------------------------
+
+  @doc """
+  Edits an existing issue comment in place. A GraphQL node id (`IC_...`) uses the
+  `updateIssueComment` mutation; a REST numeric id uses
+  `PATCH /repos/{owner}/{name}/issues/comments/{id}`.
+  """
+  @spec update_comment(String.t(), String.t(), String.t(), keyword()) ::
+          {:ok, comment()} | {:error, term()}
+  def update_comment(repo, remote_id, body, opts \\ [])
+      when is_binary(repo) and is_binary(remote_id) and is_binary(body) do
+    with {:ok, {owner, name}} <- RepoSpec.split(repo) do
+      case Integer.parse(remote_id) do
+        {numeric_id, ""} -> rest_update_comment(owner, name, numeric_id, body, opts)
+        _ -> graphql_update_comment(remote_id, body, opts)
+      end
+    end
+  end
+
+  defp graphql_update_comment(node_id, body, opts) do
+    case Client.graphql(@update_comment_mutation, %{"id" => node_id, "body" => body}, graphql_opts(opts)) do
+      {:ok, %{"data" => %{"updateIssueComment" => %{"issueComment" => node}}}} when is_map(node) ->
+        {:ok, IssueComments.parse_node(node)}
+
+      {:ok, _unexpected} ->
+        {:error, :remote_unavailable}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp rest_update_comment(owner, name, comment_id, body, opts) do
+    path = "/repos/#{owner}/#{name}/issues/comments/#{comment_id}"
+
+    case Client.rest_patch(path, %{"body" => body}, rest_opts(opts)) do
       {:ok, %{body: raw}} when is_map(raw) -> {:ok, normalize_rest_comment(raw)}
       {:error, _} = error -> error
     end

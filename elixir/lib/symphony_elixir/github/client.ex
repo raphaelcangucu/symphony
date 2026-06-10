@@ -451,6 +451,25 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
+  @spec rest_patch(String.t(), map(), keyword()) ::
+          {:ok, %{status: pos_integer(), body: term()}} | {:error, term()}
+  def rest_patch(path, body \\ %{}, opts \\ [])
+      when is_binary(path) and is_map(body) and is_list(opts) do
+    request_fun = Keyword.get(opts, :request_fun, &patch_rest_request/3)
+    url = @rest_endpoint <> path
+
+    with {:ok, token} <- require_token(),
+         headers = rest_headers(token),
+         {:ok, %{status: status, body: resp}} when status in 200..299 <-
+           request_fun.(url, headers, body) do
+      {:ok, %{status: status, body: resp}}
+    else
+      {:error, :missing_github_token} = error -> error
+      {:ok, response} -> classify_rest_failure(response)
+      {:error, reason} -> {:error, {:github_api_request, reason}}
+    end
+  end
+
   defp classify_rest_failure(%{status: status} = response) do
     if RateLimit.rate_limited?(response) do
       {:error, {:rate_limited, RateLimit.reset_info(response)}}
@@ -1293,6 +1312,12 @@ defmodule SymphonyElixir.GitHub.Client do
   defp post_rest_request(url, headers, body) do
     RequestGateway.run([kind: :mutation], fn ->
       Req.post(url, headers: headers, json: body, connect_options: [timeout: 30_000])
+    end)
+  end
+
+  defp patch_rest_request(url, headers, body) do
+    RequestGateway.run([kind: :mutation], fn ->
+      Req.patch(url, headers: headers, json: body, connect_options: [timeout: 30_000])
     end)
   end
 

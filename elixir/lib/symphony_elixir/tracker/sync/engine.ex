@@ -370,6 +370,12 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   defp link_pushed_remote_id(%{entity_type: "comment", operation: "create", payload: payload}, remote_id)
        when is_map(payload) do
     LocalStore.link_comment_remote_id(payload["comment_id"], remote_id)
+    mark_comment_synced(payload)
+  end
+
+  defp link_pushed_remote_id(%{entity_type: "comment", operation: "update", payload: payload}, _remote_id)
+       when is_map(payload) do
+    mark_comment_synced(payload)
   end
 
   defp link_pushed_remote_id(%{entity_type: "issue", operation: "create", issue_id: issue_id}, remote_id) do
@@ -420,8 +426,29 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   defp record_failed(acc, entry, reason, max_attempts) do
     {:ok, updated} = Outbox.mark_failed(entry, inspect(reason), max_attempts)
-    if updated.status == "failed", do: %{acc | failed: acc.failed + 1}, else: acc
+
+    if updated.status == "failed" do
+      mark_comment_push_exhausted(updated)
+      %{acc | failed: acc.failed + 1}
+    else
+      acc
+    end
   end
+
+  defp mark_comment_synced(%{"comment_id" => comment_id}) when is_integer(comment_id) do
+    LocalStore.mark_comment_sync_status(comment_id, "synced")
+    :ok
+  end
+
+  defp mark_comment_synced(_payload), do: :ok
+
+  defp mark_comment_push_exhausted(%{entity_type: "comment", payload: %{"comment_id" => comment_id}})
+       when is_integer(comment_id) do
+    LocalStore.mark_comment_sync_status(comment_id, "error")
+    :ok
+  end
+
+  defp mark_comment_push_exhausted(_entry), do: :ok
 
   defp safe_push(driver, project, entry) do
     driver.push(project, entry)
