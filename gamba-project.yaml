@@ -1,0 +1,286 @@
+description: "Gamba workspace — frontend (GambaLabs/frontend) + backend (GambaLabs/backend) + goapi (GambaLabs/goapi)."
+dev_env_steps:
+
+kind: "symphony_project"
+metadata:
+  exported_at: "2026-06-11T18:30:52Z"
+  source_project_slug: "gamba"
+name: "Gamba"
+repositories:
+  - clone_url: "https://github.com/GambaLabs/backend.git"
+    default_branch: "dev"
+    github_full_name: "GambaLabs/backend"
+    role: "backend"
+    selected_branch: "dev"
+    workspace_path: "backend"
+  - clone_url: "https://github.com/GambaLabs/frontend.git"
+    default_branch: "development"
+    github_full_name: "GambaLabs/frontend"
+    role: "primary"
+    selected_branch: "development"
+    workspace_path: "frontend"
+  - clone_url: "https://github.com/GambaLabs/goapi.git"
+    default_branch: "dev"
+    github_full_name: "GambaLabs/goapi"
+    role: "service"
+    selected_branch: "dev"
+    workspace_path: "goapi"
+setup:
+  validation_commands:
+
+  workflow_markdown: |
+    ---
+    agent:
+      completion_transitions:
+        In Progress: Human Review
+        Merging: Done
+        Rework: Human Review
+        Todo: Human Review
+      max_concurrent_agents: 5
+      max_turns: 20
+    assistant:
+      draft_status: Backlog
+    claude:
+      command: symphony-claude
+    codex:
+      approval_policy: never
+      command: codex --config shell_environment_policy.inherit=all app-server
+      thread_sandbox: workspace-write
+      turn_sandbox_policy:
+        type: workspaceWrite
+    dev_server:
+      enabled: true
+      idle_timeout_ms: 1800000
+      port_range:
+        - 4100
+        - 4199
+    hooks:
+      after_create: |
+        gh repo clone GambaLabs/frontend frontend -- --depth 1 -b development
+        gh repo clone GambaLabs/backend backend -- --depth 1 -b dev
+        gh repo clone GambaLabs/goapi goapi -- --depth 1 -b dev
+    
+        if [ -f frontend/.env.example ]; then
+          cp frontend/.env.example frontend/.env
+          cp frontend/.env.example frontend/.env.local
+        else
+          touch frontend/.env frontend/.env.local
+        fi
+    
+        cat >> frontend/.env.local <<ENV
+    
+        # Symphony local/dev override for Nuxt/Vue frontend
+        NODE_ENV=development
+        APP_ENV=dev
+        NUXT_PUBLIC_APP_ENV=dev
+        NUXT_PUBLIC_API_URL=https://dev.gamba.com
+        NUXT_PUBLIC_API_BASE=https://dev.gamba.com
+        NUXT_PUBLIC_API_BASE_URL=https://dev.gamba.com
+        NUXT_PUBLIC_BACKEND_URL=https://dev.gamba.com
+        NUXT_PUBLIC_GOAPI_URL=https://dev.gamba.com
+        API_URL=https://dev.gamba.com
+        API_BASE=https://dev.gamba.com
+        API_BASE_URL=https://dev.gamba.com
+        BACKEND_URL=https://dev.gamba.com
+        GOAPI_URL=https://dev.gamba.com
+        ENV
+    pr_monitor:
+      done_on_merge: true
+      enabled: true
+      max_auto_rework: 2
+    public_tunnel:
+      base_domain: tracker.cods.dev
+      enabled: true
+    repositories:
+      - github_full_name: GambaLabs/frontend
+        role: primary
+        selected_branch: development
+        workspace_path: frontend
+      - github_full_name: GambaLabs/backend
+        role: backend
+        selected_branch: dev
+        workspace_path: backend
+      - github_full_name: GambaLabs/goapi
+        role: service
+        selected_branch: dev
+        workspace_path: goapi
+    tracker:
+      active_states:
+        - Todo
+        - In Progress
+        - Rework
+        - Merging
+      field_states:
+        - Backlog
+        - Todo
+        - In Progress
+        - Human Review
+        - Rework
+        - Merging
+        - Done
+        - Cancelled
+        - Duplicate
+      terminal_states:
+        - Done
+        - Cancelled
+        - Duplicate
+      wait_states:
+        - Human Review
+    workspace:
+      root: ~/code/gamba-workspaces
+    ---
+    
+    You are working on GitHub issue `{{ issue.identifier }}` in the **Gamba** board (`GambaLabs/frontend`).
+    
+    Read and follow **`AGENTS.md`** in the workspace root and each repository's local guidance when present.
+    
+    Symphony injects **recent issue and PR comments** into your prompt when available. On **Rework**, those comments and the workpad define what you must do next.
+    
+    ## Repositories
+    
+    This is a **multi-repository** workspace. Issues and the Project board live on `GambaLabs/frontend`, but a single issue may require changes in frontend, backend, goapi, or any combination of them.
+    
+    | Repo | Path | Integration branch | PR base |
+    |------|------|--------------------|---------|
+    | `GambaLabs/frontend` (Vue/Nuxt frontend) | `frontend/` | `development` | `development` |
+    | `GambaLabs/backend` (backend) | `backend/` | `dev` | `dev` |
+    | `GambaLabs/goapi` (goapi) | `goapi/` | `dev` | `dev` |
+    
+    - Workspaces are cloned by `hooks.after_create` into `frontend/`, `backend/`, and `goapi/`.
+    - The frontend is Vue/Nuxt, not Next. Do not copy assumptions from the Macro Markets frontend without checking Gamba's files first.
+    - The frontend env is based on `frontend/.env.example`, written to both `frontend/.env` and `frontend/.env.local`; Symphony appends local overrides in `.env.local` so frontend API/backend/goapi routes point to `https://dev.gamba.com`.
+    - Before handoff, sync each repo you touched with its integration branch:
+      - frontend: `cd frontend && git fetch origin && git merge origin/development`
+      - backend: `cd backend && git fetch origin && git merge origin/dev`
+      - goapi: `cd goapi && git fetch origin && git merge origin/dev`
+    - Open PRs **per repo against that repo's base**:
+      - frontend: `cd frontend && gh pr create --base development --title "..."`
+      - backend: `cd backend && gh pr create --base dev --title "..."`
+      - goapi: `cd goapi && gh pr create --base dev --title "..."`
+    - On **Rework**, sync with the right integration branch per repo and address all issue comments, PR comments, and inline review threads.
+    - Follow each repo's own test, lint, Docker/Sail/Vibe, and PR template conventions. Prefer repository-provided wrappers over bare tool invocations.
+    
+    ## Issue preview servers
+    
+    Symphony can expose a **Preview** tab for an issue workspace when `dev_server.enabled` is true and a cloned repo declares a serve step in `.symphony/devenv.yaml`.
+    
+    For the Vue/Nuxt frontend, use the repository's package manager and scripts. A typical serve step looks like this, but the agent must confirm the real script in `frontend/package.json` first:
+    
+    ```yaml
+    steps:
+      - description: Frontend Nuxt dev server
+        command: npm run dev -- --host 0.0.0.0
+        working_dir: frontend
+        role: serve
+        port_env: PORT
+        url_path: /
+        ready: http
+        ready_path: /
+        primary: true
+    ```
+    
+    Multiple setup and serve steps are allowed, so backend/goapi services can be started alongside the frontend when their repos define `.symphony/devenv.yaml`.
+    
+    ## Agent routing (GitHub labels)
+    
+    | Label | Agent |
+    |-------|--------|
+    | `symphony:codex` | Codex |
+    | `symphony:claude` | Claude |
+    | `symphony` | Default (**Codex** when this WORKFLOW includes `codex:`) |
+    
+    Symphony only dispatches issues whose label resolves to an agent configured above.
+    
+    Symphony reads and updates the GitHub Project **Status** field when moving cards.
+    
+    | State | Role |
+    |-------|------|
+    | Backlog | Out of scope; do not modify; wait for human to move to Todo |
+    | Todo | Queue; move to In Progress before work |
+    | In Progress | Active implementation |
+    | Human Review | PR ready; poll for human decision; no further coding turns |
+    | Rework | Address review feedback |
+    | Merging | Merge approved PRs using the correct base per repo |
+    | Done / Cancelled / Duplicate | Terminal |
+    
+    Use a single `## Codex Workpad` comment for progress. Blockers: `Blocked by #N` or `Depends on GambaLabs/frontend#N`.
+    
+    Raw GitHub GraphQL: `github_graphql`.
+    
+    ## Assistant authoring handoff
+    
+    The tracker **New issue** button opens the issue authoring assistant by default. It creates a draft in `assistant.draft_status`, then continues at `/projects/:slug/assistant/issue/:id`.
+    
+    Before execution, read any generated documents under `docs/superpowers/` when present.
+    
+    ## Rework flow (required)
+    
+    When the Project **Status** is **Rework**:
+    
+    1. Read all injected recent discussion, issue comments, linked PR comments, reviews, and inline review threads before editing code.
+    2. Find or create the `## Codex Workpad` comment. Summarize human feedback into acceptance criteria and a short rework plan before implementation.
+    3. Sync each repo you touched with its integration branch.
+    4. Implement fixes and add or update tests according to the touched repo's standards.
+    5. Push and update the PR per repo; run the relevant validation commands; record results in the workpad **Validation** section.
+    6. Move to **Human Review** only when feedback is addressed, tests pass, and PRs are open against the correct base.
+    
+    Do **not** ignore human comments that only appear on PRs. They are part of the rework scope.
+    
+    ## Tests and validation (mandatory)
+    
+    Symphony does **not** run test suites automatically. You must validate before **Human Review**.
+    
+    - Treat ticket `Validation`, `Test Plan`, or `Testing` sections as required; mirror them in the workpad.
+    - Frontend (`frontend/`): run the repo's lint and unit test commands when frontend code changes.
+    - Backend (`backend/`): run the repo's test command when backend code changes.
+    - Goapi (`goapi/`): run the repo's test command when goapi code changes.
+    - Record in workpad **Validation**: `targeted tests: <command>` and outcome for each repo touched.
+    - Do not move to **Human Review** until every touched repo has passing validation and an open PR against its base branch.
+slug: "gamba"
+tracker:
+  config:
+    owner_kind: "organization"
+    project_id: "PVT_kwDOB4KiCc4BZvjB"
+    project_number: 2
+    project_url: "https://github.com/orgs/GambaLabs/projects/2"
+    repo: "GambaLabs/frontend"
+    status_field: "Status"
+  kind: "github"
+version: 2
+workflow_statuses:
+  - category: "backlog"
+    is_terminal: false
+    name: "Backlog"
+    position: 0
+  - category: "unstarted"
+    is_terminal: false
+    name: "Todo"
+    position: 1
+  - category: "started"
+    is_terminal: false
+    name: "In Progress"
+    position: 2
+  - category: "started"
+    is_terminal: false
+    name: "Human Review"
+    position: 3
+  - category: "started"
+    is_terminal: false
+    name: "Rework"
+    position: 4
+  - category: "started"
+    is_terminal: false
+    name: "Merging"
+    position: 5
+  - category: "completed"
+    is_terminal: true
+    name: "Done"
+    position: 6
+  - category: "canceled"
+    is_terminal: true
+    name: "Cancelled"
+    position: 7
+  - category: "canceled"
+    is_terminal: true
+    name: "Duplicate"
+    position: 8

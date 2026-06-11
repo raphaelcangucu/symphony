@@ -111,9 +111,46 @@ defmodule Mix.Tasks.Symphony.Project do
     end
   end
 
+  @startup_apps [:logger, :telemetry, :phoenix_pubsub, :ecto, :ecto_sql, :db_connection, :jason]
+
   defp start! do
     load_dotenv!()
-    Mix.Task.run("app.start")
+    Mix.Task.run("app.config")
+    load_application!()
+    ensure_startup_apps!()
+    ensure_shared_supervisor!()
+  end
+
+  defp ensure_startup_apps! do
+    Enum.each(@startup_apps, fn app ->
+      case Application.ensure_all_started(app) do
+        {:ok, _} -> :ok
+        {:error, {^app, {:already_started, _}}} -> :ok
+        {:error, reason} -> Mix.raise("could not start #{app}: #{inspect(reason)}")
+      end
+    end)
+  end
+
+  defp load_application! do
+    case Application.load(:symphony_elixir) do
+      :ok -> :ok
+      {:error, {:already_loaded, :symphony_elixir}} -> :ok
+      {:error, reason} -> Mix.raise("could not load symphony_elixir: #{inspect(reason)}")
+    end
+  end
+
+  defp ensure_shared_supervisor! do
+    case Process.whereis(SymphonyElixir.SharedSupervisor) do
+      nil ->
+        case SymphonyElixir.SharedSupervisor.start_link() do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+          {:error, reason} -> Mix.raise("could not start shared supervisor: #{inspect(reason)}")
+        end
+
+      _pid ->
+        :ok
+    end
   end
 
   defp load_dotenv! do

@@ -59,7 +59,7 @@ defmodule Mix.Tasks.Symphony.ProjectTest do
   end
 
   test "import creates a project from YAML file", %{yaml_path: yaml_path, slug: slug} do
-    Mix.Task.reenable("app.start")
+    Mix.Task.reenable("app.config")
     Mix.Task.reenable("symphony.project")
 
     output =
@@ -71,7 +71,7 @@ defmodule Mix.Tasks.Symphony.ProjectTest do
   end
 
   test "export writes YAML bundle", %{yaml_path: yaml_path, slug: slug, export_path: export_path} do
-    Mix.Task.reenable("app.start")
+    Mix.Task.reenable("app.config")
     Mix.Task.reenable("symphony.project")
 
     capture_io(fn -> Task.run(["import", yaml_path]) end)
