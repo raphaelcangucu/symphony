@@ -1,9 +1,29 @@
 description: "Gamba workspace — frontend (GambaLabs/frontend) + backend (GambaLabs/backend) + goapi (GambaLabs/goapi)."
 dev_env_steps:
-
+  - command: "yarn install"
+    description: "Install frontend dependencies"
+    optional: false
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "frontend"
+  - command: "npm run dev -- --host 0.0.0.0"
+    description: "Frontend Nuxt dev server"
+    optional: false
+    port_env: "PORT"
+    primary: true
+    ready_path: "/"
+    ready_probe: "http"
+    role: "serve"
+    source: "manual"
+    url_path: "/"
+    working_dir: "frontend"
 kind: "symphony_project"
 metadata:
-  exported_at: "2026-06-11T18:30:52Z"
+  exported_at: "2026-06-11T19:57:27Z"
   source_project_slug: "gamba"
 name: "Gamba"
 repositories:

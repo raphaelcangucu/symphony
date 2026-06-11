@@ -136,6 +136,74 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
     assert step.command == "pnpm install"
   end
 
+  test "export/import round-trips preview serve steps" do
+    slug = create_sample_project()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(slug, [
+        %{
+          "description" => "Install frontend deps",
+          "command" => "yarn install",
+          "working_dir" => "frontend",
+          "role" => "setup"
+        },
+        %{
+          "description" => "Frontend dev server",
+          "command" => "npm run dev -- --host 0.0.0.0",
+          "working_dir" => "frontend",
+          "role" => "serve",
+          "port_env" => "PORT",
+          "url_path" => "/",
+          "ready_probe" => "http",
+          "ready_path" => "/",
+          "primary" => true
+        }
+      ])
+
+    {:ok, yaml} = Projects.export_yaml(slug)
+    assert yaml =~ "role: \"serve\""
+    assert yaml =~ "ready_probe: \"http\""
+    clean_repo()
+
+    post(authorized_conn(), "/api/tracker/v1/projects/import", %{"yaml" => yaml})
+
+    [setup, serve] = DevEnv.list_steps("sample-export")
+    assert setup.role == "setup"
+    assert serve.role == "serve"
+    assert serve.primary
+    assert serve.ready_probe == "http"
+    assert serve.port_env == "PORT"
+  end
+
+  test "import accepts ready alias for serve steps" do
+    slug = create_sample_project()
+
+    yaml = """
+    kind: symphony_project
+    version: 2
+    slug: sample-export
+    name: Sample Export
+    tracker:
+      kind: local
+      config: {}
+    dev_env_steps:
+      - description: Frontend dev server
+        command: npm run dev
+        working_dir: frontend
+        role: serve
+        port_env: PORT
+        ready: http
+        ready_path: /
+        primary: true
+    """
+
+    post(authorized_conn(), "/api/tracker/v1/projects/import", %{"yaml" => yaml})
+
+    [serve] = DevEnv.list_serve_steps(slug)
+    assert serve.ready_probe == "http"
+    assert serve.primary
+  end
+
   test "POST /projects/:id/import applies bundle to existing project" do
     source_slug = create_sample_project()
     {:ok, _dest} = Context.ensure_project(%{name: "Dest", slug: "dest", tracker_kind: "local"})

@@ -106,7 +106,23 @@ defmodule SymphonyElixir.LocalTracker.Projects do
   defp apply_dev_env_steps(_project_slug, steps) when steps in [[], nil], do: {:ok, []}
 
   defp apply_dev_env_steps(project_slug, steps) when is_list(steps) do
-    DevEnv.save_steps(project_slug, steps)
+    steps
+    |> Enum.map(&normalize_dev_env_step/1)
+    |> then(&DevEnv.save_steps(project_slug, &1))
+  end
+
+  defp normalize_dev_env_step(step) when is_map(step) do
+    step
+    |> Map.new(fn {key, value} -> {to_string(key), value} end)
+    |> then(fn map ->
+      case {Map.get(map, "ready"), Map.get(map, "ready_probe")} do
+        {ready, probe} when is_binary(ready) and probe in [nil, ""] ->
+          map |> Map.put("ready_probe", ready) |> Map.delete("ready")
+
+        _ ->
+          Map.delete(map, "ready")
+      end
+    end)
   end
 
   defp validate_bundle(%{"slug" => slug, "name" => name} = map)
