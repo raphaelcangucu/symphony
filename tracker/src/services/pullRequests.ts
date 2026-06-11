@@ -5,11 +5,13 @@ import type {
   PullRequestFixResult,
   MergePullRequestInput,
   MergePullRequestResult,
+  PullRequestMonitorInfo,
   PullRequestPipeline,
   PullRequestResult,
   PullRequestMergeMethod,
   PullRequestState,
   PullRequestStatusContext,
+  RerunResult,
   UpdateBranchResult,
 } from "@/types/pull-request";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
@@ -51,6 +53,13 @@ interface BackendConversationDto {
   createdAt?: string | null;
 }
 
+interface BackendMonitorDto {
+  last_action?: string | null;
+  summary?: string | null;
+  auto_rework_count?: number | null;
+  last_action_at?: string | null;
+}
+
 interface BackendPullRequestDto {
   number: number;
   title?: string | null;
@@ -81,6 +90,7 @@ interface BackendPullRequestDto {
   pipelines?: BackendPipelineDto[] | null;
   statuses?: BackendStatusDto[] | null;
   conversation?: BackendConversationDto[] | null;
+  monitor?: BackendMonitorDto | null;
 }
 
 interface BackendPullRequestEnvelope {
@@ -137,6 +147,16 @@ function normalizeConversation(dto: BackendConversationDto): PullRequestConversa
   };
 }
 
+function normalizeMonitor(dto: BackendMonitorDto | null | undefined): PullRequestMonitorInfo | null {
+  if (!dto) return null;
+  return {
+    lastAction: dto.last_action ?? null,
+    summary: dto.summary ?? null,
+    autoReworkCount: dto.auto_rework_count ?? 0,
+    lastActionAt: dto.last_action_at ?? null,
+  };
+}
+
 export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
   return {
     number: dto.number,
@@ -159,6 +179,7 @@ export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
     statuses: (dto.statuses ?? []).map(normalizeStatus),
     conversation: (dto.conversation ?? []).map(normalizeConversation),
     baseBehindBy: dto.base_behind_by ?? dto.baseBehindBy ?? null,
+    monitor: normalizeMonitor(dto.monitor),
   };
 }
 
@@ -323,4 +344,34 @@ export async function mergePullRequest(
 
 function isMergeMethod(value: unknown): value is PullRequestMergeMethod {
   return typeof value === "string" && (VALID_MERGE_METHODS as readonly string[]).includes(value);
+}
+
+interface BackendRerunEnvelope {
+  data?: {
+    reruns?: { run_id?: number | null; ok?: boolean | null; error?: string | null; status?: number | null }[] | null;
+  } | null;
+}
+
+export async function rerunFailedJobs(
+  projectSlug: string,
+  identifier: string,
+  number: number,
+): Promise<RerunResult[]> {
+  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!issueIdentifier) throw new Error("identifier is required");
+  if (!Number.isInteger(number) || number <= 0) throw new Error("number is required");
+
+  const response = await http.post<BackendRerunEnvelope>(
+    trackerPath(
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/${number}/rerun_failed`,
+    ),
+  );
+
+  return (response.data?.data?.reruns ?? []).map((entry) => ({
+    runId: entry.run_id ?? 0,
+    ok: entry.ok === true,
+    ...(entry.error ? { error: entry.error } : {}),
+    ...(typeof entry.status === "number" ? { status: entry.status } : {}),
+  }));
 }
