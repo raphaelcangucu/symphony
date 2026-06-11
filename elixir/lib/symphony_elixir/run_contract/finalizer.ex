@@ -19,22 +19,32 @@ defmodule SymphonyElixir.RunContract.Finalizer do
           title: String.t() | nil
         }
 
-  @spec finalize(Path.t(), Issue.t(), keyword()) :: {:ok, [pr()]} | {:error, {String.t(), term()}}
+  @spec finalize(Path.t(), Issue.t(), keyword()) ::
+          {:ok, [pr()]} | {:partial, [pr()], [{String.t(), term()}]}
   def finalize(workspace, %Issue{} = issue, opts \\ []) do
     runner = Keyword.get(opts, :runner, &System.cmd/3)
 
-    workspace
-    |> RunContract.repo_states()
-    |> Enum.filter(&(&1.dirty? or &1.ahead_count > 0))
-    |> Enum.reduce_while({:ok, []}, fn repo, {:ok, acc} ->
-      case finalize_repo(repo, issue, runner) do
-        {:ok, pr} -> {:cont, {:ok, [pr | acc]}}
-        {:error, reason} -> {:halt, {:error, {repo.name, reason}}}
-      end
-    end)
-    |> case do
-      {:ok, prs} -> {:ok, Enum.reverse(prs)}
-      error -> error
+    {prs, failures} =
+      workspace
+      |> RunContract.repo_states()
+      |> Enum.filter(&(&1.dirty? or &1.ahead_count > 0))
+      |> Enum.map(fn repo ->
+        case finalize_repo(repo, issue, runner) do
+          {:ok, pr} -> {:ok, pr}
+          {:error, reason} -> {:error, {repo.name, reason}}
+        end
+      end)
+      |> Enum.reduce({[], []}, fn
+        {:ok, pr}, {prs, failures} -> {[pr | prs], failures}
+        {:error, failure}, {prs, failures} -> {prs, [failure | failures]}
+      end)
+
+    prs = Enum.reverse(prs)
+    failures = Enum.reverse(failures)
+
+    case failures do
+      [] -> {:ok, prs}
+      _ -> {:partial, prs, failures}
     end
   end
 
@@ -43,7 +53,7 @@ defmodule SymphonyElixir.RunContract.Finalizer do
 
     with :ok <- maybe_commit_dirty(repo, issue, runner),
          :ok <- maybe_branch_off_default(repo, issue, runner),
-         :ok <- push(repo, runner),
+         :ok <- push(repo, issue, runner),
          {:ok, pr} <- ensure_pull_request(repo, issue, runner) do
       {:ok, Map.put(pr, :repo, repo.name)}
     end
@@ -64,8 +74,79 @@ defmodule SymphonyElixir.RunContract.Finalizer do
 
   defp maybe_branch_off_default(_repo, _issue, _runner), do: :ok
 
-  defp push(%RepoState{path: path}, runner) do
-    run(runner, "git", ["push", "-u", "origin", "HEAD"], path)
+  defp push(%RepoState{} = repo, issue, runner) do
+    path = repo.path
+    branch = repo.branch || current_branch(repo, runner)
+    push_ref = if is_binary(branch) and branch != "", do: branch, else: "HEAD"
+
+    with :ok <- run(runner, "git", ["fetch", "origin"], path),
+         :ok <- run(runner, "git", ["push", "-u", "origin", push_ref], path) do
+      :ok
+    else
+      {:error, {"git", ["push" | _], _status, output}} when is_binary(output) ->
+        if push_rejected?(output) do
+          recover_push_after_rejection(repo, issue, runner)
+        else
+          {:error, {:push_failed, output}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp push_rejected?(output) do
+    String.contains?(output, ["rejected", "fetch first", "non-fast-forward"])
+  end
+
+  defp recover_push_after_rejection(%RepoState{} = repo, issue, runner) do
+    path = repo.path
+    branch = current_branch(repo, runner)
+
+    case branch do
+      branch when is_binary(branch) and branch != "" ->
+        case run(runner, "git", ["pull", "--rebase", "origin", branch], path) do
+          :ok ->
+            case run(runner, "git", ["push", "-u", "origin", "HEAD"], path) do
+              :ok -> :ok
+              {:error, reason} -> push_fallback_branch(repo, issue, runner, reason)
+            end
+
+          {:error, _rebase_failed} ->
+            push_fallback_branch(repo, issue, runner, :rebase_failed)
+        end
+
+      _ ->
+        push_fallback_branch(repo, issue, runner, :missing_branch)
+    end
+  end
+
+  defp push_fallback_branch(%RepoState{path: path}, issue, runner, prior_reason) do
+    fallback = "symphony/#{String.downcase(issue.identifier)}"
+
+    with :ok <- checkout_branch(path, fallback, runner),
+         :ok <- run(runner, "git", ["push", "-u", "origin", "HEAD"], path) do
+      :ok
+    else
+      {:error, reason} -> {:error, {:push_failed, prior_reason, reason}}
+    end
+  end
+
+  defp checkout_branch(path, branch, runner) do
+    case run(runner, "git", ["checkout", branch], path) do
+      :ok ->
+        :ok
+
+      {:error, _} ->
+        run(runner, "git", ["checkout", "-B", branch], path)
+    end
+  end
+
+  defp current_branch(%RepoState{path: path}, runner) do
+    case runner.("git", ["branch", "--show-current"], cd: path, stderr_to_stdout: true) do
+      {output, 0} -> String.trim(output)
+      _failure -> nil
+    end
   end
 
   defp ensure_pull_request(%RepoState{path: path} = repo, issue, runner) do
@@ -86,11 +167,19 @@ defmodule SymphonyElixir.RunContract.Finalizer do
   defp create_pull_request(path, repo, issue, runner) do
     body_file = Path.join(System.tmp_dir!(), "symphony-pr-body-#{System.unique_integer([:positive])}.md")
     File.write!(body_file, pr_body(issue))
+    branch = current_branch(repo, runner)
 
+    head_args = if is_binary(branch) and branch != "", do: ["--head", branch], else: []
     base_args = if is_binary(repo.default_branch), do: ["--base", repo.default_branch], else: []
 
     try do
-      with :ok <- run(runner, "gh", ["pr", "create", "--title", pr_title(issue), "--body-file", body_file] ++ base_args, path) do
+      with :ok <-
+             run(
+               runner,
+               "gh",
+               ["pr", "create", "--title", pr_title(issue), "--body-file", body_file] ++ head_args ++ base_args,
+               path
+             ) do
         view_pull_request(path, runner)
       end
     after

@@ -597,6 +597,22 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
              Context.add_issue_label("missing", "MAC-1", "symphony:incomplete")
   end
 
+  test "remove_issue_label detaches a label and is idempotent" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Blocked run", status: "Todo"})
+
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "symphony:blocked")
+
+    assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    assert Enum.any?(issue.labels, &(&1.name == "symphony:blocked"))
+
+    assert {:ok, _} = Context.remove_issue_label("macro-markets", "MAC-1", "symphony:blocked")
+    assert {:ok, _} = Context.remove_issue_label("macro-markets", "MAC-1", "symphony:blocked")
+
+    assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    refute Enum.any?(issue.labels, &(&1.name == "symphony:blocked"))
+  end
+
   test "update_issue resolves assignee_ids via cached tracker users" do
     {:ok, project} = Context.ensure_project(%{name: "Assignee Edit", slug: "assignee-edit"})
     {:ok, _issue} = Context.create_issue("assignee-edit", %{title: "Assign me", status: "Todo"})

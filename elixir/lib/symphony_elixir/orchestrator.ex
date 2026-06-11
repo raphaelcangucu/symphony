@@ -811,6 +811,7 @@ defmodule SymphonyElixir.Orchestrator do
 
     case run_publish_contract(issue, workspace, deps) do
       {:ok, prs} ->
+        remove_label(running_entry, @blocked_run_label)
         record_run_pull_requests(issue, prs)
         persist_evidence(running_entry, issue, workspace)
         maybe_annotate_incomplete(running_entry, issue_id)
@@ -837,12 +838,35 @@ defmodule SymphonyElixir.Orchestrator do
       {:violations, violations} ->
         Logger.warning("Publish contract violated for issue_id=#{issue.id} issue_identifier=#{issue.identifier} violations=#{inspect(violations)}; invoking finalizer")
 
-        case deps.finalize.(workspace, issue) do
-          {:ok, prs} -> {:ok, prs}
-          {:error, reason} -> {:blocked, violations, reason}
+        finalize_result = deps.finalize.(workspace, issue)
+        fresh_states = deps.repo_states.(workspace)
+
+        case deps.evaluate.(fresh_states, deps.pr_checker) do
+          :satisfied ->
+            {:ok, collect_publish_prs(fresh_states, deps, finalize_result)}
+
+          {:violations, remaining_violations} ->
+            {:blocked, remaining_violations, finalize_block_reason(finalize_result, remaining_violations)}
         end
     end
   end
+
+  defp collect_publish_prs(fresh_states, deps, finalize_result) do
+    from_checker = deps.pull_requests.(fresh_states, deps.pr_checker)
+    from_finalizer = finalize_prs(finalize_result)
+
+    Enum.uniq_by(from_checker ++ from_finalizer, &Map.get(&1, :url))
+  end
+
+  defp finalize_prs({:ok, prs}) when is_list(prs), do: prs
+  defp finalize_prs({:partial, prs, _failures}) when is_list(prs), do: prs
+  defp finalize_prs(_other), do: []
+
+  defp finalize_block_reason({:partial, _prs, failures}, _remaining) when failures != [],
+    do: {:partial_failure, failures}
+
+  defp finalize_block_reason(_finalize_result, remaining_violations),
+    do: {:gate_still_violated, remaining_violations}
 
   @doc false
   @spec default_publish_contract_deps() :: map()
@@ -1170,6 +1194,20 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp add_label(_running_entry, _label), do: :ok
+
+  defp remove_label(%{issue: %Issue{identifier: identifier, project_slug: slug}}, label)
+       when is_binary(identifier) and is_binary(slug) and slug != "" do
+    case Context.remove_issue_label(slug, identifier, label) do
+      {:ok, _issue} ->
+        :ok
+
+      {:error, error} ->
+        Logger.warning("Failed to remove label #{label} issue=#{identifier} project=#{slug}: #{inspect(error)}")
+        :ok
+    end
+  end
+
+  defp remove_label(_running_entry, _label), do: :ok
 
   defp schedule_issue_retry(%State{} = state, issue_id, attempt, metadata)
        when is_binary(issue_id) and is_map(metadata) do

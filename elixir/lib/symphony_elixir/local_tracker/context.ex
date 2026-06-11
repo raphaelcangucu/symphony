@@ -470,6 +470,32 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   @doc """
+  Detaches a label (by name) from an issue. Idempotent: removing a label that is
+  not attached is a no-op success.
+  """
+  @spec remove_issue_label(String.t(), String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def remove_issue_label(project_slug, identifier, label_name)
+      when is_binary(project_slug) and is_binary(identifier) and is_binary(label_name) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      case Repo.get_by(Label, project_id: project.id, name: label_name) do
+        %Label{id: label_id} ->
+          Repo.delete_all(
+            from(issue_label in IssueLabel,
+              where: issue_label.issue_id == ^issue.id and issue_label.label_id == ^label_id
+            )
+          )
+
+        nil ->
+          :ok
+      end
+
+      {:ok, issue}
+    end
+  end
+
+  @doc """
   Replaces a comment's body in place, reclassifying its kind from the new body.
   """
   @spec update_comment(integer(), String.t()) :: {:ok, Comment.t()} | {:error, :not_found | Ecto.Changeset.t()}

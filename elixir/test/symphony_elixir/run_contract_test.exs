@@ -28,6 +28,21 @@ defmodule SymphonyElixir.RunContractTest do
     assert Enum.all?(states, &(&1.branch == "main" and &1.upstream? and &1.ahead_count == 0))
   end
 
+  test "treats remote branch without local upstream tracking as published", %{tmp_dir: tmp_dir} do
+    ws = workspace!(tmp_dir)
+    repo = make_repo!(tmp_dir, ws, "frontend")
+    sh!(repo, "git checkout -b feat/x && echo x > x.md && git add -A && git commit -m x")
+    sh!(repo, "git push origin HEAD:feat/x")
+
+    [state] = RunContract.repo_states(ws)
+
+    assert state.branch == "feat/x"
+    assert state.upstream?
+    assert state.ahead_count == 0
+    assert RunContract.evaluate_publish([state], fn _repo -> {:ok, %{url: "https://github.com/o/f/pull/1"}} end) ==
+             :satisfied
+  end
+
   test "detects unpushed branch with commits (GAM-3 case)", %{tmp_dir: tmp_dir} do
     ws = workspace!(tmp_dir)
     repo = make_repo!(tmp_dir, ws, "frontend")

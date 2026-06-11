@@ -82,13 +82,41 @@ defmodule SymphonyElixir.RunContract.FinalizerTest do
     assert {:ok, []} = Finalizer.finalize(ws, issue(), runner: gh_stub_runner(self(), "unused"))
   end
 
-  test "push failure halts with repo context", %{tmp_dir: tmp_dir} do
+  test "push failure records partial result and continues other repos", %{tmp_dir: tmp_dir} do
+    ws = Path.join(tmp_dir, "GAM-9")
+    File.mkdir_p!(ws)
+    bad_repo = make_repo!(tmp_dir, ws, "frontend")
+    good_repo = make_repo!(tmp_dir, ws, "backend")
+
+    sh!(bad_repo, "git checkout -b f/x && echo x > x.md && git add -A && git commit -m x && git remote set-url origin /nonexistent")
+    sh!(good_repo, "git checkout -b fix/gam-9 && echo y > y.md && git add -A && git commit -m y")
+
+    runner = fn
+      "git", args, opts -> System.cmd("git", args, opts)
+      "gh", ["pr", "list" | _rest], _opts -> {"[]", 0}
+      "gh", ["pr", "create" | _rest], _opts -> {"https://github.com/o/b/pull/11", 0}
+      "gh", ["pr", "view" | _rest], _opts ->
+        {~s({"url":"https://github.com/o/b/pull/11","number":11,"state":"OPEN","title":"GAM-9: Do the thing"}), 0}
+    end
+
+    assert {:partial, [%{repo: "backend", url: "https://github.com/o/b/pull/11"}], [{"frontend", _reason}]} =
+             Finalizer.finalize(ws, issue(), runner: runner)
+  end
+
+  test "non-fast-forward push is recovered via rebase or fallback branch", %{tmp_dir: tmp_dir} do
     ws = Path.join(tmp_dir, "GAM-9")
     File.mkdir_p!(ws)
     repo = make_repo!(tmp_dir, ws, "frontend")
-    sh!(repo, "git checkout -b f/x && echo x > x.md && git add -A && git commit -m x && git remote set-url origin /nonexistent")
+    sh!(repo, "git checkout -b feat/work && echo work > work.md && git add -A && git commit -m work")
+    sh!(repo, "git checkout main && echo remote > remote.md && git add -A && git commit -m remote")
+    sh!(repo, "git push origin HEAD:feat/work")
+    sh!(repo, "git checkout feat/work")
 
-    runner = fn cmd, args, opts -> System.cmd(cmd, args, opts) end
-    assert {:error, {"frontend", _reason}} = Finalizer.finalize(ws, issue(), runner: runner)
+    assert {:ok, [_pr]} =
+             Finalizer.finalize(ws, issue(), runner: gh_stub_runner(self(), "https://github.com/o/f/pull/12"))
+
+    [state] = RunContract.repo_states(ws)
+    assert state.upstream?
+    assert state.ahead_count == 0
   end
 end

@@ -29,12 +29,18 @@ defmodule SymphonyElixir.OrchestratorRunContractTest do
   end
 
   test "violations route to finalizer; finalizer success returns its prs" do
+    evaluate_calls = :atomics.new(1, [])
+
     deps = %{
       repo_states: fn _workspace -> [] end,
       evaluate: fn _states, _checker ->
-        {:violations, [%{repo: "frontend", kind: :missing_pull_request, detail: "no PR"}]}
+        if :atomics.add(evaluate_calls, 1, 1) == 1 do
+          {:violations, [%{repo: "frontend", kind: :missing_pull_request, detail: "no PR"}]}
+        else
+          :satisfied
+        end
       end,
-      pull_requests: fn _states, _checker -> [] end,
+      pull_requests: fn _states, _checker -> [%{repo: "frontend", url: "https://x/pull/2"}] end,
       finalize: fn _workspace, _issue -> {:ok, [%{repo: "frontend", url: "https://x/pull/2"}]} end,
       pr_checker: fn _repo -> :none end
     }
@@ -43,19 +49,43 @@ defmodule SymphonyElixir.OrchestratorRunContractTest do
     assert {:ok, [%{url: "https://x/pull/2"}]} = Orchestrator.run_publish_contract(issue, "/tmp/ws", deps)
   end
 
-  test "finalizer failure blocks with violations" do
+  test "finalizer partial success that satisfies the gate returns ok" do
+    evaluate_calls = :atomics.new(1, [])
+
+    deps = %{
+      repo_states: fn _workspace -> [] end,
+      evaluate: fn _states, _checker ->
+        if :atomics.add(evaluate_calls, 1, 1) == 1 do
+          {:violations, [%{repo: "frontend", kind: :unpublished_branch, detail: "no upstream"}]}
+        else
+          :satisfied
+        end
+      end,
+      pull_requests: fn _states, _checker -> [%{repo: "frontend", url: "https://x/pull/3"}] end,
+      finalize: fn _workspace, _issue ->
+        {:partial, [%{repo: "frontend", url: "https://x/pull/3"}], [{"backend", :push_failed}]}
+      end,
+      pr_checker: fn _repo -> :none end
+    }
+
+    issue = %SymphonyElixir.Issue{id: "uuid", identifier: "GAM-9", state: "In Progress"}
+    assert {:ok, [%{url: "https://x/pull/3"}]} = Orchestrator.run_publish_contract(issue, "/tmp/ws", deps)
+  end
+
+  test "finalizer failure blocks with remaining violations" do
     violations = [%{repo: "frontend", kind: :unpublished_branch, detail: "no upstream"}]
 
     deps = %{
       repo_states: fn _workspace -> [] end,
       evaluate: fn _states, _checker -> {:violations, violations} end,
       pull_requests: fn _states, _checker -> [] end,
-      finalize: fn _workspace, _issue -> {:error, {"frontend", :push_failed}} end,
+      finalize: fn _workspace, _issue -> {:partial, [], [{"frontend", :push_failed}]} end,
       pr_checker: fn _repo -> :none end
     }
 
     issue = %SymphonyElixir.Issue{id: "uuid", identifier: "GAM-9", state: "In Progress"}
-    assert {:blocked, ^violations, {"frontend", :push_failed}} = Orchestrator.run_publish_contract(issue, "/tmp/ws", deps)
+    assert {:blocked, ^violations, {:partial_failure, [{"frontend", :push_failed}]}} =
+             Orchestrator.run_publish_contract(issue, "/tmp/ws", deps)
   end
 
   test "evidence_comment_body renders run table, screenshots and ui-change note" do

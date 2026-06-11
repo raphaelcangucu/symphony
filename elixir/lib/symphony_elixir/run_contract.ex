@@ -51,7 +51,7 @@ defmodule SymphonyElixir.RunContract do
   @spec pull_requests([RepoState.t()], pr_checker()) :: [map()]
   def pull_requests(repo_states, pr_checker) when is_function(pr_checker, 1) do
     repo_states
-    |> Enum.filter(&(&1.ahead_count > 0 and &1.upstream?))
+    |> Enum.filter(&published_repo?/1)
     |> Enum.flat_map(fn repo ->
       case pr_checker.(repo) do
         {:ok, pr} -> [Map.put(pr, :repo, repo.name)]
@@ -154,6 +154,16 @@ defmodule SymphonyElixir.RunContract do
     end
   end
 
+  defp published_repo?(repo) do
+    repo.upstream? and (repo.ahead_count > 0 or feature_branch?(repo))
+  end
+
+  defp feature_branch?(%RepoState{branch: branch, default_branch: default}) do
+    is_binary(branch) and branch != "" and branch != default
+  end
+
+  defp feature_branch?(_repo), do: false
+
   defp yes_no(true), do: "yes"
   defp yes_no(false), do: "no"
 
@@ -177,23 +187,47 @@ defmodule SymphonyElixir.RunContract do
   defp inspect_repo(path) do
     branch = git_value(path, ["branch", "--show-current"])
     default_branch = default_branch(path)
-    upstream? = match?({:ok, _}, git(path, ["rev-parse", "--abbrev-ref", "@{upstream}"]))
+    branch = presence(branch)
+    upstream? = tracking_upstream?(path) or remote_contains_head?(path, branch)
 
     %RepoState{
       path: path,
       name: Path.basename(path),
-      branch: presence(branch),
+      branch: branch,
       default_branch: default_branch,
       dirty?: git_value(path, ["status", "--porcelain"]) != "",
       upstream?: upstream?,
-      ahead_count: ahead_count(path, presence(branch), default_branch, upstream?)
+      ahead_count: ahead_count(path, branch, default_branch, upstream?)
     }
   end
 
+  defp tracking_upstream?(path) do
+    match?({:ok, _}, git(path, ["rev-parse", "--abbrev-ref", "@{upstream}"]))
+  end
+
+  # Branches pushed without local upstream tracking (or after a mechanical publish)
+  # still count as published when origin has the same commit at refs/heads/<branch>.
+  defp remote_contains_head?(path, branch) when is_binary(branch) and branch != "" do
+    with {:ok, head} <- git(path, ["rev-parse", "HEAD"]),
+         {:ok, output} <- git(path, ["ls-remote", "--heads", "origin", branch]),
+         true <- output != "" do
+      output
+      |> String.split()
+      |> Enum.any?(fn sha -> sha == head end)
+    else
+      _ -> false
+    end
+  end
+
+  defp remote_contains_head?(_path, _branch), do: false
+
   defp ahead_count(path, branch, default_branch, upstream?) do
     cond do
-      upstream? ->
+      upstream? and tracking_upstream?(path) ->
         count(path, ["rev-list", "--count", "@{upstream}..HEAD"])
+
+      upstream? and is_binary(branch) and branch != "" ->
+        count(path, ["rev-list", "--count", "origin/#{branch}..HEAD"])
 
       is_binary(default_branch) and is_binary(branch) and branch != default_branch ->
         count(path, ["rev-list", "--count", "origin/#{default_branch}..HEAD"])
