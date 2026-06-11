@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
-  alias SymphonyElixir.LocalTracker.{Context, Projects}
+  alias SymphonyElixir.LocalTracker.{Context, DevEnv, Projects}
   alias SymphonyElixir.Repo
 
   @endpoint SymphonyElixirWeb.Endpoint
@@ -48,28 +48,92 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
     assert get_resp_header(conn, "content-type") == ["text/yaml; charset=utf-8"]
     assert conn.resp_body =~ "symphony_project"
     assert conn.resp_body =~ "slug: \"gamba\""
+    assert conn.resp_body =~ "workflow_markdown"
     assert conn.resp_body =~ "Hello"
   end
 
   test "POST /projects/import creates a project from YAML" do
     source_slug = create_sample_project()
     {:ok, yaml} = Projects.export_yaml(source_slug)
-    Repo.query!("delete from local_tracker_clone_jobs")
-    Repo.query!("delete from local_tracker_repositories")
-    Repo.query!("delete from local_tracker_project_setups")
-    Repo.query!("delete from local_tracker_workflow_statuses")
-    Repo.query!("delete from local_tracker_projects")
+    clean_repo()
 
     conn = post(authorized_conn(), "/api/tracker/v1/projects/import", %{"yaml" => yaml})
-    assert %{"data" => %{"slug" => "sample-export"}} = json_response(conn, 201)
+    assert %{"data" => %{"slug" => "sample-export", "setup" => %{"workflow_markdown" => markdown}}} =
+             json_response(conn, 201)
+
+    assert markdown =~ "Hello"
   end
 
-  test "POST /projects/import rejects duplicate slug" do
+  test "POST /projects/import overwrites an existing project configuration" do
     slug = create_sample_project()
     {:ok, yaml} = Projects.export_yaml(slug)
 
+    conn = post(authorized_conn(), "/api/tracker/v1/projects/import", %{"yaml" => updated_yaml(yaml)})
+    assert %{"data" => %{"slug" => "sample-export", "setup" => %{"workflow_markdown" => markdown}}} =
+             json_response(conn, 201)
+
+    assert markdown =~ "Updated prompt"
+  end
+
+  test "POST /projects/import persists workflow for github tracker projects" do
+    {:ok, project} =
+      Context.create_workspace_project(%{
+        "name" => "Remote",
+        "slug" => "remote-export",
+        "tracker" => %{"kind" => "github", "config" => %{"repo" => "org/repo", "project_id" => "1"}},
+        "repositories" => [
+          %{
+            "github_full_name" => "org/repo",
+            "clone_url" => "https://github.com/org/repo.git",
+            "workspace_path" => "repo",
+            "role" => "app"
+          }
+        ],
+        "workflow_statuses" => []
+      })
+
+    {:ok, _setup} =
+      Context.upsert_project_setup(project.slug, %{
+        "workflow_markdown" => "---\ntracker:\n  active_states: [Todo]\n---\n\nRemote prompt",
+        "validation_commands" => ["mix test"]
+      })
+
+    Context.import_workflow_statuses(project.slug, [
+      %{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false}
+    ])
+
+    {:ok, yaml} = Projects.export_yaml(project.slug)
+    clean_repo()
+
     conn = post(authorized_conn(), "/api/tracker/v1/projects/import", %{"yaml" => yaml})
-    assert json_response(conn, 422)["error"]["message"] =~ "slug already exists"
+
+    assert %{"data" => %{"slug" => "remote-export", "setup" => %{"workflow_markdown" => markdown}}} =
+             json_response(conn, 201)
+
+    assert markdown =~ "Remote prompt"
+  end
+
+  test "export/import round-trips dev env steps" do
+    slug = create_sample_project()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(slug, [
+        %{
+          "description" => "Install deps",
+          "command" => "pnpm install",
+          "working_dir" => "api",
+          "role" => "setup"
+        }
+      ])
+
+    {:ok, yaml} = Projects.export_yaml(slug)
+    clean_repo()
+
+    post(authorized_conn(), "/api/tracker/v1/projects/import", %{"yaml" => yaml})
+
+    [step] = DevEnv.list_steps("sample-export")
+    assert step.description == "Install deps"
+    assert step.command == "pnpm install"
   end
 
   test "POST /projects/:id/import applies bundle to existing project" do
@@ -106,7 +170,16 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
     project.slug
   end
 
+  defp updated_yaml(yaml) do
+    yaml
+    |> String.replace("Hello", "Updated prompt")
+    |> String.replace("Sample Export", "Sample Export Updated")
+  end
+
   defp clean_repo do
+    Repo.query!("delete from local_tracker_dev_env_step_runs")
+    Repo.query!("delete from local_tracker_dev_env_runs")
+    Repo.query!("delete from local_tracker_dev_env_steps")
     Repo.query!("delete from local_tracker_clone_jobs")
     Repo.query!("delete from local_tracker_repositories")
     Repo.query!("delete from local_tracker_project_setups")

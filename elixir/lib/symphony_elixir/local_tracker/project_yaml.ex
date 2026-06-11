@@ -4,7 +4,7 @@ defmodule SymphonyElixir.LocalTracker.ProjectYaml do
   alias SymphonyElixir.LocalTracker.{Project, ProjectSetup, Repository, TemplateYaml, WorkflowStatus}
 
   @bundle_kind "symphony_project"
-  @bundle_version 1
+  @bundle_version 2
 
   @export_keys ~w(
     kind
@@ -16,6 +16,7 @@ defmodule SymphonyElixir.LocalTracker.ProjectYaml do
     workflow_statuses
     repositories
     setup
+    dev_env_steps
     metadata
   )
 
@@ -27,8 +28,8 @@ defmodule SymphonyElixir.LocalTracker.ProjectYaml do
     end
   end
 
-  @spec encode(Project.t(), [WorkflowStatus.t()], [Repository.t()], ProjectSetup.t() | nil) :: binary()
-  def encode(%Project{} = project, statuses, repositories, setup) do
+  @spec encode(Project.t(), [WorkflowStatus.t()], [Repository.t()], ProjectSetup.t() | nil, [map()]) :: binary()
+  def encode(%Project{} = project, statuses, repositories, setup, dev_env_steps \\ []) do
     %{
       "kind" => @bundle_kind,
       "version" => @bundle_version,
@@ -42,6 +43,7 @@ defmodule SymphonyElixir.LocalTracker.ProjectYaml do
       "workflow_statuses" => Enum.map(statuses, &status_to_map/1),
       "repositories" => Enum.map(repositories, &repository_to_map/1),
       "setup" => setup_to_map(setup),
+      "dev_env_steps" => Enum.map(dev_env_steps, &dev_env_step_to_map/1),
       "metadata" => %{
         "exported_at" => DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
         "source_project_slug" => project.slug
@@ -90,7 +92,26 @@ defmodule SymphonyElixir.LocalTracker.ProjectYaml do
     map
     |> Map.take(@export_keys)
     |> Map.update("setup", %{}, &normalize_setup/1)
+    |> merge_legacy_workflow_markdown()
   end
+
+  defp merge_legacy_workflow_markdown(%{"setup" => setup} = map) when is_map(setup) do
+    case Map.get(setup, "workflow_markdown") do
+      markdown when is_binary(markdown) and markdown != "" ->
+        map
+
+      _ ->
+        case Map.get(map, "workflow_markdown") do
+          markdown when is_binary(markdown) and markdown != "" ->
+            Map.put(map, "setup", Map.put(setup, "workflow_markdown", markdown))
+
+          _ ->
+            map
+        end
+    end
+  end
+
+  defp merge_legacy_workflow_markdown(map), do: map
 
   defp normalize_setup(setup) when is_map(setup), do: setup
   defp normalize_setup(_), do: %{}
@@ -124,11 +145,33 @@ defmodule SymphonyElixir.LocalTracker.ProjectYaml do
     %{
       "workflow_markdown" => setup.workflow_markdown,
       "after_create_hook" => setup.after_create_hook,
-      "validation_commands" => validation_commands(setup)
+      "validation_commands" => validation_commands(setup),
+      "scan_summary" => empty_map_to_nil(setup.scan_summary)
     }
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
     |> Map.new()
   end
+
+  defp dev_env_step_to_map(step) do
+    %{
+      "description" => step.description,
+      "command" => step.command,
+      "working_dir" => step.working_dir,
+      "source" => step.source,
+      "optional" => step.optional,
+      "role" => step.role,
+      "port_env" => step.port_env,
+      "url_path" => step.url_path,
+      "ready_probe" => step.ready_probe,
+      "ready_path" => step.ready_path,
+      "primary" => step.primary
+    }
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+    |> Map.new()
+  end
+
+  defp empty_map_to_nil(%{} = map) when map_size(map) == 0, do: nil
+  defp empty_map_to_nil(map), do: map
 
   defp validation_commands(%ProjectSetup{validation_commands: %{"commands" => commands}}) when is_list(commands),
     do: commands

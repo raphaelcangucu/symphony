@@ -65,9 +65,6 @@ defmodule Mix.Tasks.Symphony.Project do
       {:error, :invalid_yaml} ->
         Mix.raise("✗  Invalid project YAML: #{path}")
 
-      {:error, :slug_taken} ->
-        Mix.raise("✗  A project with this slug already exists (use --into <slug> to apply to an existing project)")
-
       {:error, {:invalid_workflow_markdown, reason}} ->
         Mix.raise("✗  Invalid workflow_markdown: #{reason}")
 

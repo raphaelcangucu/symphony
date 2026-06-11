@@ -146,7 +146,7 @@ export function ProjectListPage() {
       const yaml = await file.text();
       const imported = await importProject(yaml);
       handleProjectCreated(imported);
-      toast.success(`Imported project "${imported.name}"`);
+      toast.success(`Imported project "${imported.name}" (existing projects are overwritten)`);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Unable to import project");
     }

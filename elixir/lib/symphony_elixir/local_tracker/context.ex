@@ -178,6 +178,45 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec import_workflow_statuses(String.t(), [map()]) ::
+          {:ok, [WorkflowStatus.t()]} | {:error, :project_not_found | Ecto.Changeset.t()}
+  def import_workflow_statuses(project_slug, statuses)
+      when is_binary(project_slug) and is_list(statuses) do
+    with {:ok, project} <- fetch_project(project_slug) do
+      statuses
+      |> normalize_statuses()
+      |> Enum.reduce_while({:ok, []}, fn attrs, {:ok, acc} ->
+        attrs = Map.put(attrs, :project_id, project.id)
+
+        result =
+          case Repo.get_by(WorkflowStatus, project_id: project.id, name: attrs.name) do
+            nil ->
+              %WorkflowStatus{}
+              |> WorkflowStatus.changeset(attrs)
+              |> Repo.insert()
+
+            %WorkflowStatus{} = existing ->
+              existing
+              |> WorkflowStatus.changeset(attrs)
+              |> Repo.update()
+          end
+
+        case result do
+          {:ok, status} -> {:cont, {:ok, [status | acc]}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+      |> case do
+        {:ok, imported} ->
+          Broadcaster.project_changed("project_updated", project)
+          {:ok, Enum.reverse(imported)}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
   @spec get_project_setup(String.t()) :: ProjectSetup.t() | nil
   def get_project_setup(project_slug) when is_binary(project_slug) do
     case Repo.get_by(Project, slug: project_slug) do

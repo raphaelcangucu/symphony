@@ -2,13 +2,11 @@ defmodule SymphonyElixir.LocalTracker.Projects do
   @moduledoc "Portable import/export for local tracker projects."
 
   alias SymphonyElixir.Config
-  alias SymphonyElixir.LocalTracker.{Context, Project, ProjectYaml, Templates}
-  alias SymphonyElixir.Repo
+  alias SymphonyElixir.LocalTracker.{Context, DevEnv, Project, ProjectYaml, Templates}
 
   @type import_error ::
           :invalid_yaml
           | :project_not_found
-          | :slug_taken
           | {:invalid_workflow_markdown, String.t()}
           | Ecto.Changeset.t()
 
@@ -18,7 +16,8 @@ defmodule SymphonyElixir.LocalTracker.Projects do
       statuses = Context.list_statuses(project_slug)
       repositories = Context.list_repositories(project_slug)
       setup = Context.get_project_setup(project_slug)
-      {:ok, ProjectYaml.encode(project, statuses, repositories, setup)}
+      dev_env_steps = DevEnv.list_steps(project_slug)
+      {:ok, ProjectYaml.encode(project, statuses, repositories, setup, dev_env_steps)}
     end
   end
 
@@ -26,8 +25,7 @@ defmodule SymphonyElixir.LocalTracker.Projects do
   def import_yaml(yaml) when is_binary(yaml) do
     with {:ok, decoded} <- ProjectYaml.decode(yaml),
          :ok <- validate_bundle(decoded),
-         :ok <- ensure_slug_available(decoded),
-         {:ok, project} <- Context.create_workspace_project(ProjectYaml.to_project_attrs(decoded)) do
+         {:ok, project} <- apply_bundle(decoded, nil) do
       Templates.start_clone_jobs(project.slug)
       {:ok, project}
     else
@@ -41,7 +39,8 @@ defmodule SymphonyElixir.LocalTracker.Projects do
     with {:ok, _project} <- Context.get_project(project_slug),
          {:ok, decoded} <- ProjectYaml.decode(yaml),
          :ok <- validate_bundle(decoded),
-         {:ok, project} <- apply_import(project_slug, ProjectYaml.to_update_attrs(decoded)) do
+         {:ok, project} <- apply_bundle(decoded, project_slug) do
+      Templates.start_clone_jobs(project.slug)
       {:ok, project}
     else
       {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
@@ -49,37 +48,66 @@ defmodule SymphonyElixir.LocalTracker.Projects do
     end
   end
 
-  defp apply_import(project_slug, attrs) do
-    setup = Map.get(attrs, "setup", %{})
+  defp apply_bundle(decoded, target_slug) do
+    slug = target_slug || Map.fetch!(decoded, "slug")
 
-    with {:ok, project} <- maybe_update_project(project_slug, attrs),
-         {:ok, _repositories} <- maybe_replace_repositories(project_slug, Map.get(attrs, "repositories")),
-         {:ok, _setup} <- maybe_upsert_setup(project_slug, setup) do
-      Context.get_project(project.slug)
+    with {:ok, project} <- ensure_project(slug, decoded),
+         :ok <- apply_configuration(project.slug, decoded),
+         {:ok, refreshed} <- Context.get_project(project.slug) do
+      {:ok, refreshed}
     end
   end
 
-  defp maybe_update_project(project_slug, attrs) do
-    update_attrs =
-      %{}
-      |> put_present("name", Map.get(attrs, "name"))
-      |> put_present("description", Map.get(attrs, "description"))
-      |> put_present("tracker", Map.get(attrs, "tracker"))
+  defp ensure_project(slug, decoded) do
+    case Context.get_project(slug) do
+      {:ok, _existing} ->
+        Context.update_project(slug, ProjectYaml.to_update_attrs(decoded))
 
-    if update_attrs == %{} do
-      Context.get_project(project_slug)
-    else
-      Context.update_project(project_slug, update_attrs)
+      {:error, :project_not_found} ->
+        Context.create_workspace_project(ProjectYaml.to_project_attrs(decoded))
     end
   end
 
-  defp maybe_replace_repositories(_project_slug, nil), do: {:ok, []}
-  defp maybe_replace_repositories(_project_slug, []), do: {:ok, []}
-  defp maybe_replace_repositories(project_slug, repositories) when is_list(repositories), do: Context.replace_repositories(project_slug, repositories)
-  defp maybe_replace_repositories(_project_slug, _repositories), do: {:ok, []}
+  defp apply_configuration(project_slug, decoded) do
+    setup = Map.get(decoded, "setup", %{})
+    statuses = Map.get(decoded, "workflow_statuses", [])
+    repositories = Map.get(decoded, "repositories")
+    dev_env_steps = Map.get(decoded, "dev_env_steps") || []
 
-  defp maybe_upsert_setup(_project_slug, setup) when setup in [%{}, nil], do: {:ok, nil}
-  defp maybe_upsert_setup(project_slug, setup) when is_map(setup), do: Context.upsert_project_setup(project_slug, setup)
+    with {:ok, _} <- apply_setup(project_slug, setup),
+         {:ok, _} <- apply_statuses(project_slug, statuses),
+         {:ok, _} <- apply_repositories(project_slug, repositories),
+         {:ok, _} <- apply_dev_env_steps(project_slug, dev_env_steps) do
+      :ok
+    end
+  end
+
+  defp apply_setup(_project_slug, setup) when setup in [%{}, nil], do: {:ok, nil}
+
+  defp apply_setup(project_slug, setup) when is_map(setup) do
+    case Context.upsert_project_setup(project_slug, setup) do
+      {:ok, _setup} -> {:ok, nil}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp apply_statuses(_project_slug, []), do: {:ok, []}
+
+  defp apply_statuses(project_slug, statuses) when is_list(statuses) do
+    Context.import_workflow_statuses(project_slug, statuses)
+  end
+
+  defp apply_repositories(_project_slug, nil), do: {:ok, []}
+
+  defp apply_repositories(project_slug, repositories) when is_list(repositories) do
+    Context.replace_repositories(project_slug, repositories)
+  end
+
+  defp apply_dev_env_steps(_project_slug, steps) when steps in [[], nil], do: {:ok, []}
+
+  defp apply_dev_env_steps(project_slug, steps) when is_list(steps) do
+    DevEnv.save_steps(project_slug, steps)
+  end
 
   defp validate_bundle(%{"slug" => slug, "name" => name} = map)
        when is_binary(slug) and slug != "" and is_binary(name) and name != "" do
@@ -99,17 +127,4 @@ defmodule SymphonyElixir.LocalTracker.Projects do
 
   defp validate_setup(%{"workflow_markdown" => _other}), do: {:error, :invalid_yaml}
   defp validate_setup(_setup), do: :ok
-
-  defp ensure_slug_available(%{"slug" => slug}) when is_binary(slug) do
-    case Repo.get_by(Project, slug: slug) do
-      nil -> :ok
-      _ -> {:error, :slug_taken}
-    end
-  end
-
-  defp ensure_slug_available(_map), do: {:error, :invalid_yaml}
-
-  defp put_present(map, _key, nil), do: map
-  defp put_present(map, _key, ""), do: map
-  defp put_present(map, key, value), do: Map.put(map, key, value)
 end

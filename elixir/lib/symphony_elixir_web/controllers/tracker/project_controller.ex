@@ -210,9 +210,6 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
       {:error, :invalid_yaml} ->
         TrackerErrors.validation(conn, "Invalid YAML")
 
-      {:error, :slug_taken} ->
-        TrackerErrors.validation(conn, "A project with this slug already exists")
-
       {:error, {:invalid_workflow_markdown, reason}} ->
         TrackerErrors.validation(conn, "invalid workflow_markdown: " <> reason)
 

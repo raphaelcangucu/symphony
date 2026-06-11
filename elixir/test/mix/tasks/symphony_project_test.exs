@@ -7,10 +7,11 @@ defmodule Mix.Tasks.Symphony.ProjectTest do
   alias SymphonyElixir.Repo
 
   setup do
+    slug = "imported-cli-#{:erlang.unique_integer([:positive])}"
     tmp = Path.join(System.tmp_dir!(), "symphony-project-mix-#{:erlang.unique_integer([:positive])}")
     db = Path.join(tmp, "tracker.sqlite3")
-    yaml_path = Path.join(tmp, "gamba.yaml")
-    export_path = Path.join(tmp, "exported.yaml")
+    yaml_path = Path.join(tmp, "#{slug}.yaml")
+    export_path = Path.join(tmp, "#{slug}-export.yaml")
 
     File.mkdir_p!(tmp)
     File.write!(db, "")
@@ -22,7 +23,7 @@ defmodule Mix.Tasks.Symphony.ProjectTest do
     yaml = """
     kind: symphony_project
     version: 1
-    slug: imported-cli
+    slug: #{slug}
     name: Imported CLI
     description: From mix task
     tracker:
@@ -52,15 +53,12 @@ defmodule Mix.Tasks.Symphony.ProjectTest do
 
     File.write!(yaml_path, yaml)
 
-    on_exit(fn ->
-      Application.stop(:symphony_elixir)
-      File.rm_rf(tmp)
-    end)
+    on_exit(fn -> File.rm_rf(tmp) end)
 
-    %{yaml_path: yaml_path, export_path: export_path}
+    %{slug: slug, yaml_path: yaml_path, export_path: export_path}
   end
 
-  test "import creates a project from YAML file", %{yaml_path: yaml_path} do
+  test "import creates a project from YAML file", %{yaml_path: yaml_path, slug: slug} do
     Mix.Task.reenable("app.start")
     Mix.Task.reenable("symphony.project")
 
@@ -69,10 +67,10 @@ defmodule Mix.Tasks.Symphony.ProjectTest do
         Task.run(["import", yaml_path])
       end)
 
-    assert output =~ "✓  Imported project imported-cli"
+    assert output =~ "✓  Imported project #{slug}"
   end
 
-  test "export writes YAML bundle", %{yaml_path: yaml_path, export_path: export_path} do
+  test "export writes YAML bundle", %{yaml_path: yaml_path, slug: slug, export_path: export_path} do
     Mix.Task.reenable("app.start")
     Mix.Task.reenable("symphony.project")
 
@@ -81,10 +79,10 @@ defmodule Mix.Tasks.Symphony.ProjectTest do
     output =
       capture_io(fn ->
         Mix.Task.reenable("symphony.project")
-        Task.run(["export", "imported-cli", "--output", export_path])
+        Task.run(["export", slug, "--output", export_path])
       end)
 
-    assert output =~ "✓  Exported imported-cli"
+    assert output =~ "✓  Exported #{slug}"
     assert File.read!(export_path) =~ "symphony_project"
   end
 end
