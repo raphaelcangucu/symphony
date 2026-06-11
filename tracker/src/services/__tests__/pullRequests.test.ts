@@ -48,4 +48,15 @@ describe("rerunFailedJobs", () => {
     );
     expect(result).toEqual([{ runId: 99, ok: true }]);
   });
+
+  it("requires project and issue identifiers", async () => {
+    await expect(rerunFailedJobs("", "508", 7)).rejects.toThrow("projectSlug is required");
+    await expect(rerunFailedJobs("macro-markets", "", 7)).rejects.toThrow("identifier is required");
+    expect(http.post).not.toHaveBeenCalled();
+  });
+
+  it("requires a positive number", async () => {
+    await expect(rerunFailedJobs("macro-markets", "508", 0)).rejects.toThrow("number is required");
+    expect(http.post).not.toHaveBeenCalled();
+  });
 });

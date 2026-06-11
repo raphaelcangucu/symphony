@@ -372,6 +372,7 @@ export async function rerunFailedJobs(
     runId: entry.run_id ?? 0,
     ok: entry.ok === true,
     ...(entry.error ? { error: entry.error } : {}),
+    // Passthrough of the backend HTTP status for failed reruns (additive; safe for callers that ignore it).
     ...(typeof entry.status === "number" ? { status: entry.status } : {}),
   }));
 }
