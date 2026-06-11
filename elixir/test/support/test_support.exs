@@ -457,6 +457,16 @@ defmodule SymphonyElixir.TestSupport do
     |> Enum.join("\n")
   end
 
+  defp agent_backend_yaml("cursor", config) do
+    command = Keyword.get(config, :command)
+
+    [
+      "cursor:",
+      "  command: #{yaml_value(command)}"
+    ]
+    |> Enum.join("\n")
+  end
+
   defp agent_backend_yaml(nil, _config), do: nil
   defp agent_backend_yaml(_kind, _config), do: nil
 

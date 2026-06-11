@@ -12,12 +12,20 @@ defmodule SymphonyElixir.AgentRoutingTest do
       assert AgentRouting.label_agent_kind(["symphony:claude"]) == "claude"
     end
 
+    test "symphony:cursor resolves to cursor" do
+      assert AgentRouting.label_agent_kind(["symphony:cursor"]) == "cursor"
+    end
+
     test "plain symphony label returns nil (no per-task preference)" do
       assert AgentRouting.label_agent_kind(["symphony"]) == nil
     end
 
     test "claude label wins over codex when both present" do
       assert AgentRouting.label_agent_kind(["symphony:codex", "symphony:claude"]) == "claude"
+    end
+
+    test "cursor label wins over codex when both present" do
+      assert AgentRouting.label_agent_kind(["symphony:codex", "symphony:cursor"]) == "cursor"
     end
 
     test "returns nil without symphony family labels" do
@@ -36,6 +44,10 @@ defmodule SymphonyElixir.AgentRoutingTest do
 
     test "symphony:codex is routable" do
       assert AgentRouting.routable?(["symphony:codex"])
+    end
+
+    test "symphony:cursor is routable" do
+      assert AgentRouting.routable?(["symphony:cursor"])
     end
 
     test "non-symphony label is not routable" do

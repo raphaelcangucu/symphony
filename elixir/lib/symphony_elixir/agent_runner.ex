@@ -595,16 +595,16 @@ defmodule SymphonyElixir.AgentRunner do
 
   # Codex defaults its dynamic tools internally (see Codex.CodingAgent.start_session/2 →
   # thread/start → dynamicTools: DynamicTool.coding_agent_tool_specs()).  The native
-  # Claude adapter takes them via session opts, so we inject them here to preserve
-  # spec §3.4 parity (set_issue_status / github_graphql / linear_graphql available in
-  # execution runs regardless of which adapter is active).
+  # Claude and Cursor adapters take them via session opts, so we inject them here to
+  # preserve spec §3.4 parity (set_issue_status / github_graphql / linear_graphql
+  # available in execution runs regardless of which adapter is active).
   @doc false
   @spec claude_session_opts(keyword(), String.t(), map()) :: keyword()
   def claude_session_opts(session_opts, agent_kind, issue) do
     maybe_put_claude_tools(session_opts, agent_kind, issue)
   end
 
-  defp maybe_put_claude_tools(session_opts, "claude", issue) do
+  defp maybe_put_claude_tools(session_opts, agent_kind, issue) when agent_kind in ["claude", "cursor"] do
     session_opts
     |> Keyword.put(:dynamic_tools, DynamicTool.coding_agent_tool_specs())
     |> Keyword.put(:tool_executor, fn tool, arguments ->

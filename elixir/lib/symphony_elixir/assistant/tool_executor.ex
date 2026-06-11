@@ -178,8 +178,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "properties" => %{
           "identifier" => string_schema("Issue identifier to dispatch, for example MAC-1."),
           "instructions" => string_schema("Concrete coding instructions for the agent."),
-          "agent" => string_schema("Optional agent override: codex or claude. Omit to follow task > project > user preference."),
-          "goal" => string_schema("Optional long-running objective to persist for the orchestrator (Codex goal or Claude workflow).")
+          "agent" => string_schema("Optional agent override: codex, claude, or cursor. Omit to follow task > project > user preference."),
+          "goal" => string_schema("Optional long-running objective to persist for the orchestrator (Codex goal or Claude/Cursor workflow).")
         }
       }),
       tool_spec("dispatch_codex", "Alias for dispatch_coding_agent (resolves agent via task > project > user preference).", %{
@@ -982,6 +982,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp agent_display("claude"), do: "Claude"
+  defp agent_display("cursor"), do: "Cursor"
   defp agent_display(_), do: "Codex"
 
   # Persist the long-running objective for both agents: Codex consumes it as a

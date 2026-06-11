@@ -110,9 +110,28 @@ export function fallbackClaudeCatalog(command = "claude"): AssistantAgentCatalog
   };
 }
 
+export function fallbackCursorCatalog(command = "cursor-agent"): AssistantAgentCatalog {
+  // Mirrors SymphonyElixir.Cursor.ModelCatalog: the cursor-agent CLI has no
+  // reasoning-effort flag, so every model hides the effort menu; "auto" lets
+  // the CLI pick its own default model.
+  return {
+    agent: "cursor",
+    agentLabel: "Cursor Agent",
+    command,
+    defaultModel: "auto",
+    models: [
+      fallbackModel("auto", "Auto", true, "", []),
+      fallbackModel("composer-1", "Composer 1", false, "", []),
+      fallbackModel("gpt-5", "GPT-5", false, "", []),
+      fallbackModel("sonnet-4", "Claude Sonnet 4", false, "", []),
+      fallbackModel("sonnet-4-thinking", "Claude Sonnet 4 Thinking", false, "", []),
+    ],
+  };
+}
+
 export function fallbackCatalogBundle(): AssistantCatalogBundle {
   return {
-    agents: [fallbackCodexCatalog(), fallbackClaudeCatalog()],
+    agents: [fallbackCodexCatalog(), fallbackClaudeCatalog(), fallbackCursorCatalog()],
     defaultAgent: "codex",
   };
 }
@@ -170,7 +189,7 @@ export function loadComposerState(bundle: AssistantCatalogBundle): AssistantComp
     if (!raw) return defaultState;
 
     const parsed = JSON.parse(raw) as Partial<AssistantComposerState>;
-    const agent: AgentKind = (parsed.agent === "codex" || parsed.agent === "claude")
+    const agent: AgentKind = (parsed.agent === "codex" || parsed.agent === "claude" || parsed.agent === "cursor")
       ? parsed.agent
       : bundle.defaultAgent;
 

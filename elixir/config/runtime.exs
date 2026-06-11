@@ -68,5 +68,6 @@ if config_env() != :test do
     codex_approval_policy: System.get_env("SYMPHONY_CODEX_APPROVAL_POLICY") || "never",
     codex_thread_sandbox: System.get_env("SYMPHONY_CODEX_THREAD_SANDBOX") || "workspace-write",
     claude_command: System.get_env("SYMPHONY_CLAUDE_COMMAND") || "claude",
+    cursor_command: System.get_env("SYMPHONY_CURSOR_COMMAND") || "cursor-agent",
     default_agent_kind: System.get_env("SYMPHONY_DEFAULT_AGENT_KIND") || "codex"
 end

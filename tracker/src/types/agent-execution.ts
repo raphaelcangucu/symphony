@@ -24,7 +24,7 @@ export interface AgentExecutionGoal {
 export interface AgentExecution {
   issueIdentifier: string;
   status: AgentExecutionStatus;
-  agentKind: "codex" | "claude" | null;
+  agentKind: "codex" | "claude" | "cursor" | null;
   sessionId: string | null;
   lastEvent: string | null;
   lastMessage: string | null;

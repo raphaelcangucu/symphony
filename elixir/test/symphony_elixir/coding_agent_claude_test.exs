@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.Claude.CodingAgentTest do
+defmodule SymphonyElixir.CodingAgentClaudeTest do
   use SymphonyElixir.TestSupport
 
   alias SymphonyElixir.Claude.CodingAgent, as: ClaudeAgent

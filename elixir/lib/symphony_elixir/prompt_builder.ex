@@ -40,10 +40,11 @@ defmodule SymphonyElixir.PromptBuilder do
   end
 
   # Codex receives the long-running objective as a native goal (set on the
-  # thread by the orchestrator), so it is not duplicated here. Claude has no
-  # native goal primitive, so the workflow objective is injected into the prompt
-  # and Claude relies on the agent runner's multi-turn loop for continuation.
-  defp workflow_guidance_section(%SymphonyElixir.Issue{agent_goal: goal}, "claude") when is_binary(goal) do
+  # thread by the orchestrator), so it is not duplicated here. Claude and Cursor
+  # have no native goal primitive, so the workflow objective is injected into the
+  # prompt and they rely on the agent runner's multi-turn loop for continuation.
+  defp workflow_guidance_section(%SymphonyElixir.Issue{agent_goal: goal}, agent_kind)
+       when agent_kind in ["claude", "cursor"] and is_binary(goal) do
     case String.trim(goal) do
       "" ->
         ""

@@ -214,7 +214,7 @@ defmodule SymphonyElixir.Assistant.History do
   """
   @spec set_thread_agent(Thread.t(), String.t()) ::
           {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
-  def set_thread_agent(%Thread{} = thread, kind) when kind in ["codex", "claude"] do
+  def set_thread_agent(%Thread{} = thread, kind) when kind in ["codex", "claude", "cursor"] do
     update_thread(thread, %{agent_kind: kind})
   end
 

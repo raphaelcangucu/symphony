@@ -595,8 +595,9 @@ comment is pushed:
 Symphony resolves which coding agent runs an issue through a four-level chain, from most
 specific to least:
 
-1. **Task label** — an issue labeled `symphony:codex` or `symphony:claude` overrides everything.
-2. **Project `agent.kind`** — the WORKFLOW front matter `agent.kind: codex|claude` sets the
+1. **Task label** — an issue labeled `symphony:codex`, `symphony:claude`, or `symphony:cursor`
+   overrides everything.
+2. **Project `agent.kind`** — the WORKFLOW front matter `agent.kind: codex|claude|cursor` sets the
    project default.
 3. **User default** — the operator default configured in **Settings** (tracker sidebar →
    Settings → Coding agent), shown with availability indicators (green dot = CLI found,
@@ -606,17 +607,32 @@ specific to least:
 Where to configure each level:
 
 - **Settings page** (tracker sidebar → Settings → Coding agent): set the instance-wide default
-  agent and see whether `codex` and `claude` CLIs are available on the server's `PATH`.
+  agent and see whether the `codex`, `claude`, and `cursor-agent` CLIs are available on the
+  server's `PATH`.
 - **Project picker** (Project settings → Workflow tab): set `agent.kind` for a single project
   without editing the WORKFLOW file directly.
 - **Per-issue chips**: the issue create dialog and the issue's Agent tab let you add or remove
-  `symphony:codex` / `symphony:claude` labels to pin a specific agent to that issue.
+  `symphony:codex` / `symphony:claude` / `symphony:cursor` labels to pin a specific agent to
+  that issue.
 - **Assistant composer**: the agent menu in the composer lets you choose which agent runs the
   next `dispatch_coding_agent` call (also exposed as `dispatch_codex` for back-compat).
 
-The Claude model catalog is static (opus / sonnet / haiku) and controlled by `claude.model` in
-the WORKFLOW front matter. Effort levels (`codex.approval_policy`, sandbox policy) are
-Codex-only and have no equivalent in the Claude backend.
+The Claude and Cursor model catalogs are static. Effort levels (`codex.approval_policy`, sandbox
+policy) are Codex-only and have no equivalent in the Claude/Cursor backends.
+
+#### Cursor Agent backend
+
+The `cursor` agent runs the [Cursor CLI](https://cursor.com/docs/cli) (`cursor-agent`) per turn in
+headless mode (`--print --output-format stream-json --stream-partial-output --force`), resuming the
+chat across turns via `--resume <chat id>`. Configure it with:
+
+- `SYMPHONY_CURSOR_COMMAND` — instance-wide CLI command (default `cursor-agent`).
+- A `cursor:` section (`command:` key) in a project's `workflow_markdown` for per-project overrides.
+- The CLI must be authenticated on the host (`cursor-agent login` or `CURSOR_API_KEY`).
+
+Symphony's dynamic tools (`set_issue_status`, `github_graphql`, ...) are exposed through the shared
+MCP gateway: the session merges a `symphony` server entry into `<workspace>/.cursor/mcp.json`
+(restored on session stop) and the run passes `--approve-mcps`.
 
 ### Local Tracker Development
 

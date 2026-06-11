@@ -3,7 +3,8 @@ defmodule SymphonyElixir.AgentRouting do
   Label-level agent signals for Symphony issues.
 
   - `label_agent_kind/1`: explicit per-task agent from `symphony:codex` /
-    `symphony:claude` labels; plain `symphony` carries NO preference (nil).
+    `symphony:claude` / `symphony:cursor` labels; plain `symphony` carries NO
+    preference (nil).
   - `routable?/1`: admission check — any `symphony*` label admits the issue.
 
   Effective-agent resolution (task > project > user default) lives in
@@ -13,8 +14,9 @@ defmodule SymphonyElixir.AgentRouting do
   @symphony_label "symphony"
   @label_codex "symphony:codex"
   @label_claude "symphony:claude"
+  @label_cursor "symphony:cursor"
 
-  @agent_labels [@label_codex, @label_claude]
+  @agent_labels [@label_codex, @label_claude, @label_cursor]
 
   @spec symphony_label() :: String.t()
   def symphony_label, do: @symphony_label
@@ -33,13 +35,14 @@ defmodule SymphonyElixir.AgentRouting do
 
   def symphony_label?(_), do: false
 
-  @doc "Explicit per-task agent from labels (`symphony:codex|claude`); plain `symphony` is no preference."
+  @doc "Explicit per-task agent from labels (`symphony:codex|claude|cursor`); plain `symphony` is no preference."
   @spec label_agent_kind([String.t()]) :: String.t() | nil
   def label_agent_kind(label_names) when is_list(label_names) do
     normalized = label_names |> Enum.map(&normalize_label/1) |> Enum.reject(&(&1 == ""))
 
     cond do
       @label_claude in normalized -> "claude"
+      @label_cursor in normalized -> "cursor"
       @label_codex in normalized -> "codex"
       true -> nil
     end

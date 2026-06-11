@@ -176,7 +176,7 @@ defmodule SymphonyElixir.AgentExecution do
     end
   end
 
-  defp goal_kind(%{agent_kind: "claude"}), do: "workflow"
+  defp goal_kind(%{agent_kind: kind}) when kind in ["claude", "cursor"], do: "workflow"
   defp goal_kind(_entry), do: "goal"
 
   defp goal_source("goal"), do: "native"

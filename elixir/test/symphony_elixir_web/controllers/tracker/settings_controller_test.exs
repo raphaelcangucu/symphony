@@ -86,8 +86,8 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
   test "GET /api/tracker/v1/settings/agents/availability reports both agents" do
     conn = get(authed_conn(), "/api/tracker/v1/settings/agents/availability")
 
-    assert %{"data" => %{"codex" => codex, "claude" => claude}} = json_response(conn, 200)
-    assert is_boolean(codex["available"]) and is_boolean(claude["available"])
+    assert %{"data" => %{"codex" => codex, "claude" => claude, "cursor" => cursor}} = json_response(conn, 200)
+    assert is_boolean(codex["available"]) and is_boolean(claude["available"]) and is_boolean(cursor["available"])
     assert Map.has_key?(codex, "version") and Map.has_key?(codex, "command")
   end
 end

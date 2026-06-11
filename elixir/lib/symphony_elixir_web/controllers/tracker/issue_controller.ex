@@ -11,7 +11,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
 
-  @agent_labels %{"codex" => "Codex", "claude" => "Claude"}
+  @agent_labels %{"codex" => "Codex", "claude" => "Claude", "cursor" => "Cursor"}
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug} = params) do
@@ -81,8 +81,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
         |> Map.drop(["project_slug", "id"])
         |> normalize_update_attrs(project)
 
-      if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", nil] do
-        TrackerErrors.validation(conn, "agent must be codex, claude, or null")
+      if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", "cursor", nil] do
+        TrackerErrors.validation(conn, "agent must be codex, claude, cursor, or null")
       else
         case IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
           {:ok, issue} -> json(conn, %{data: TrackerPresenter.issue(issue)})
@@ -237,11 +237,11 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     |> maybe_put_agent_goal(Map.get(params, "agent"), Map.get(params, "goal"))
   end
 
-  defp maybe_put_agent(attrs, agent) when agent in ["codex", "claude"], do: Map.put(attrs, "agent", agent)
+  defp maybe_put_agent(attrs, agent) when agent in ["codex", "claude", "cursor"], do: Map.put(attrs, "agent", agent)
   defp maybe_put_agent(attrs, _agent), do: attrs
 
-  # Codex stores this as a native goal; Claude consumes it as workflow guidance.
-  defp maybe_put_agent_goal(attrs, agent, goal) when agent in ["codex", "claude"] and is_binary(goal) do
+  # Codex stores this as a native goal; Claude/Cursor consume it as workflow guidance.
+  defp maybe_put_agent_goal(attrs, agent, goal) when agent in ["codex", "claude", "cursor"] and is_binary(goal) do
     case String.trim(goal) do
       "" -> attrs
       trimmed -> Map.put(attrs, "agent_goal", trimmed)
@@ -263,7 +263,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   # highlighted as "default" since the effective agent is exposed separately via
   # effective_agent/1 (resolved at the project level at form-load time).
   defp agent_options do
-    Enum.map(["codex", "claude"], fn kind ->
+    Enum.map(["codex", "claude", "cursor"], fn kind ->
       %{value: kind, label: Map.fetch!(@agent_labels, kind), default: false}
     end)
   end

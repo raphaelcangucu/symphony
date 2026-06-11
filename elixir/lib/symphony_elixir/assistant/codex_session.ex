@@ -771,6 +771,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   defp agent_label("claude"), do: "Claude"
   defp agent_label("codex"), do: "Codex"
+  defp agent_label("cursor"), do: "Cursor"
   defp agent_label(_), do: "The agent"
 
   defp normalize_runner_result({:ok, result}) when is_map(result) do

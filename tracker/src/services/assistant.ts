@@ -4,6 +4,7 @@ import {
   fallbackCatalogBundle,
   fallbackClaudeCatalog,
   fallbackCodexCatalog,
+  fallbackCursorCatalog,
   loadCachedCatalogBundle,
   saveCachedCatalogBundle,
   type AssistantAgentCatalog,
@@ -324,17 +325,22 @@ export function normalizeAssistantCatalogBundle(dto: BackendAssistantCatalogBund
   const agents: AssistantAgentCatalog[] = rawAgents
     .map((agentDto): AssistantAgentCatalog | null => {
       const agentKind = agentDto.agent;
-      if (agentKind !== "codex" && agentKind !== "claude") return null;
+      if (agentKind !== "codex" && agentKind !== "claude" && agentKind !== "cursor") return null;
 
       const models = (agentDto.models ?? []).map(normalizeAssistantModel).filter((m) => m.model.length > 0);
       if (models.length === 0) {
-        return agentKind === "claude" ? fallbackClaudeCatalog() : fallbackCodexCatalog();
+        if (agentKind === "claude") return fallbackClaudeCatalog();
+        if (agentKind === "cursor") return fallbackCursorCatalog();
+        return fallbackCodexCatalog();
       }
+
+      const fallbackLabels: Record<AgentKind, string> = { codex: "Codex CLI", claude: "Claude Code", cursor: "Cursor Agent" };
+      const fallbackCommands: Record<AgentKind, string> = { codex: "codex app-server", claude: "claude", cursor: "cursor-agent" };
 
       return {
         agent: agentKind as AgentKind,
-        agentLabel: agentDto.agentLabel ?? agentDto.agent_label ?? (agentKind === "claude" ? "Claude Code" : "Codex CLI"),
-        command: agentDto.command ?? (agentKind === "claude" ? "claude" : "codex app-server"),
+        agentLabel: agentDto.agentLabel ?? agentDto.agent_label ?? fallbackLabels[agentKind],
+        command: agentDto.command ?? fallbackCommands[agentKind],
         defaultModel: agentDto.defaultModel ?? agentDto.default_model ?? null,
         models,
       };
@@ -347,7 +353,7 @@ export function normalizeAssistantCatalogBundle(dto: BackendAssistantCatalogBund
 
   const rawDefault = dto.defaultAgent ?? dto.default_agent;
   const defaultAgent: AgentKind =
-    rawDefault === "codex" || rawDefault === "claude"
+    rawDefault === "codex" || rawDefault === "claude" || rawDefault === "cursor"
       ? rawDefault
       : (agents[0].agent as AgentKind);
 

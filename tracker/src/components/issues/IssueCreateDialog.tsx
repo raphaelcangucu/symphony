@@ -78,12 +78,14 @@ function buildAgentGoal(title: string, description: string): string {
 }
 
 function agentDisplayName(agent: AgentKind): string {
-  return agent === "claude" ? "Claude" : "Codex";
+  if (agent === "claude") return "Claude";
+  if (agent === "cursor") return "Cursor";
+  return "Codex";
 }
 
-// Codex calls the long-running mode a "goal"; Claude Code calls it a "workflow".
+// Codex calls the long-running mode a "goal"; Claude Code and Cursor call it a "workflow".
 function longRunningModeTerm(agent: AgentKind): string {
-  return agent === "claude" ? "workflow" : "goal";
+  return agent === "claude" || agent === "cursor" ? "workflow" : "goal";
 }
 
 function capitalize(value: string): string {
@@ -91,7 +93,7 @@ function capitalize(value: string): string {
 }
 
 function concreteAgent(agent: AgentKind | ""): AgentKind | null {
-  return agent === "codex" || agent === "claude" ? agent : null;
+  return agent === "codex" || agent === "claude" || agent === "cursor" ? agent : null;
 }
 
 export function IssueCreateDialog({

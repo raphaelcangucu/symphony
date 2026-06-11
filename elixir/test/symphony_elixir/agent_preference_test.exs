@@ -17,6 +17,7 @@ defmodule SymphonyElixir.AgentPreferenceTest do
     test "task label wins over project and user" do
       assert AgentPreference.resolve(["symphony:claude"], "codex", "codex") == "claude"
       assert AgentPreference.resolve(["Symphony:Codex"], "claude", "claude") == "codex"
+      assert AgentPreference.resolve(["symphony:cursor"], "codex", "codex") == "cursor"
     end
 
     test "project explicit wins over user when no task label" do
@@ -47,6 +48,7 @@ defmodule SymphonyElixir.AgentPreferenceTest do
     test "passes valid kinds and nils everything else" do
       assert AgentPreference.normalize("codex") == "codex"
       assert AgentPreference.normalize("claude") == "claude"
+      assert AgentPreference.normalize("cursor") == "cursor"
       assert AgentPreference.normalize(:claude) == nil
       assert AgentPreference.normalize("gemini") == nil
       assert AgentPreference.normalize(nil) == nil

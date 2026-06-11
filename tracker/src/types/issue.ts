@@ -71,7 +71,7 @@ export interface Issue {
   agentKind?: AgentKind | null;
 }
 
-export const AGENT_KINDS = ["codex", "claude"] as const;
+export const AGENT_KINDS = ["codex", "claude", "cursor"] as const;
 export type AgentKind = (typeof AGENT_KINDS)[number];
 
 export interface IssueLabelOption {

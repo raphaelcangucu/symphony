@@ -1608,16 +1608,18 @@ defmodule SymphonyElixir.Orchestrator do
   defp goal_update_payload(_update), do: nil
 
   defp normalize_goal_payload(goal, agent_kind, existing) when is_map(goal) do
+    prompt_goal? = agent_kind in ["claude", "cursor"]
+
     %{
-      kind: if(agent_kind == "claude", do: "workflow", else: "goal"),
-      source: if(agent_kind == "claude", do: "prompt", else: "native"),
+      kind: if(prompt_goal?, do: "workflow", else: "goal"),
+      source: if(prompt_goal?, do: "prompt", else: "native"),
       objective: goal_value(goal, "objective") || map_value(existing, :objective),
       status: goal_value(goal, "status") || map_value(existing, :status) || "active",
       token_budget: goal_value(goal, "tokenBudget") || map_value(existing, :token_budget),
       tokens_used: goal_value(goal, "tokensUsed") || map_value(existing, :tokens_used),
       time_used_seconds: goal_value(goal, "timeUsedSeconds") || map_value(existing, :time_used_seconds),
       updated_at: goal_value(goal, "updatedAt") || map_value(existing, :updated_at),
-      capabilities: if(agent_kind == "claude", do: ["view"], else: ["get", "edit", "pause", "resume", "clear"])
+      capabilities: if(prompt_goal?, do: ["view"], else: ["get", "edit", "pause", "resume", "clear"])
     }
   end
 

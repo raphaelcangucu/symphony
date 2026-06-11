@@ -345,7 +345,7 @@ export function IssueAuthoringPanel({
               </Button>
               <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
                 {`Moves this issue to In Progress and hands it to the ${agentDisplayName(activeAgent)} ${
-                  activeAgent === "claude" ? "coding agent" : "orchestrator"
+                  activeAgent === "codex" ? "orchestrator" : "coding agent"
                 }${goalMode ? ` as a long-running ${longRunningModeTerm(activeAgent)}` : ""}.`}
               </p>
               {dispatchError ? (
@@ -401,12 +401,14 @@ function issueModeLabel(mode: IssueAssistantMode): string {
 }
 
 function agentDisplayName(agent: AgentKind): string {
-  return agent === "claude" ? "Claude" : "Codex";
+  if (agent === "claude") return "Claude";
+  if (agent === "cursor") return "Cursor";
+  return "Codex";
 }
 
-// Codex calls the long-running mode a "goal"; Claude Code calls it a "workflow".
+// Codex calls the long-running mode a "goal"; Claude Code and Cursor call it a "workflow".
 function longRunningModeTerm(agent: AgentKind): string {
-  return agent === "claude" ? "workflow" : "goal";
+  return agent === "claude" || agent === "cursor" ? "workflow" : "goal";
 }
 
 function capitalize(value: string): string {

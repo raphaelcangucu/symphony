@@ -112,7 +112,7 @@ export function SettingsPage() {
                   <li key={kind}>
                     {entry.available
                       ? `✓ ${entry.version ?? entry.command}`
-                      : `✗ ${entry.command} not found — install it or pick the other agent`}
+                      : `✗ ${entry.command} not found — install it or pick another agent`}
                   </li>
                 );
               })}

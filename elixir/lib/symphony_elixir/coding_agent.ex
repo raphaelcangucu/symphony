@@ -16,6 +16,7 @@ defmodule SymphonyElixir.CodingAgent do
   @spec adapter_for(String.t() | nil) :: module()
   def adapter_for("codex"), do: SymphonyElixir.Codex.CodingAgent
   def adapter_for("claude"), do: SymphonyElixir.Claude.CodingAgent
+  def adapter_for("cursor"), do: SymphonyElixir.Cursor.CodingAgent
   def adapter_for(_), do: adapter_for(Config.default_agent_kind())
 
   @spec start_session(Path.t(), String.t() | nil, keyword()) :: {:ok, map()} | {:error, term()}

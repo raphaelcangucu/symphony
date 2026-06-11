@@ -38,6 +38,7 @@ defmodule SymphonyElixir.InstanceConfig do
   @default_codex_approval_policy "never"
   @default_codex_thread_sandbox "workspace-write"
   @default_claude_command "claude"
+  @default_cursor_command "cursor-agent"
   @default_agent_kind "codex"
 
   @spec poll_interval_ms() :: pos_integer()
@@ -206,6 +207,9 @@ defmodule SymphonyElixir.InstanceConfig do
 
   @spec claude_command() :: String.t()
   def claude_command, do: get(:claude_command, @default_claude_command)
+
+  @spec cursor_command() :: String.t()
+  def cursor_command, do: get(:cursor_command, @default_cursor_command)
 
   @spec default_agent_kind() :: String.t()
   def default_agent_kind, do: get(:default_agent_kind, @default_agent_kind)

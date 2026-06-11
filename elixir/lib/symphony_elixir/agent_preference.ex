@@ -16,7 +16,7 @@ defmodule SymphonyElixir.AgentPreference do
   # Single source of truth for kind names is Settings.Agents.agent_kinds/0;
   # duplicated here as a compile-time list so it can be used in guards.
   # Keep in sync (also: AgentRouting labels, GitHub.IssueAdapter@agent_kinds).
-  @valid_kinds ["codex", "claude"]
+  @valid_kinds ["codex", "claude", "cursor"]
 
   @spec resolve([String.t()], String.t() | nil) :: String.t()
   def resolve(label_names, project_agent_kind) do

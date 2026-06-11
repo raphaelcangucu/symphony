@@ -1104,12 +1104,14 @@ function goalModeFromResponse(response: unknown): boolean | null {
 function effectiveAgentFromResponse(response: unknown): AgentKind | null {
   if (!response || typeof response !== "object") return null;
   const value = (response as Record<string, unknown>).effective_agent;
-  if (value === "claude" || value === "codex") return value;
+  if (value === "claude" || value === "codex" || value === "cursor") return value;
   return null;
 }
 
 function agentDisplayName(agent: AgentKind | null): string {
-  return agent === "claude" ? "Claude" : "Codex";
+  if (agent === "claude") return "Claude";
+  if (agent === "cursor") return "Cursor";
+  return "Codex";
 }
 
 function messageFromResponse(response: unknown): string | null {

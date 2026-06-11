@@ -17,6 +17,7 @@ interface InlineAgentEditorProps {
 const AGENT_LABELS: Record<AgentKind, string> = {
   codex: "Codex",
   claude: "Claude",
+  cursor: "Cursor",
 };
 
 function agentLabel(agent: AgentKind): string {
@@ -38,7 +39,7 @@ export function InlineAgentEditor({
 
   const optionItems = useMemo(() => {
     if (options.length > 0) return options;
-    return (["codex", "claude"] as AgentKind[]).map((value) => ({
+    return (["codex", "claude", "cursor"] as AgentKind[]).map((value) => ({
       value,
       label: agentLabel(value),
       default: false,

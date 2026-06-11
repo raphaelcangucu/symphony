@@ -315,7 +315,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function agentLabel(agent: AgentKind): string {
-  return agent === "claude" ? "Claude" : "Codex";
+  if (agent === "claude") return "Claude";
+  if (agent === "cursor") return "Cursor";
+  return "Codex";
 }
 
 function selectPrimaryPreviewServer(servers: IssueDevServer[]): IssueDevServer | null {

@@ -19,12 +19,22 @@ function ClaudeIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function CursorIcon(props: SVGProps<SVGSVGElement>) {
+  // Simplified isometric-cube mark: outer hexagon with the top face cut out.
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd" aria-hidden="true" {...props}>
+      <path d="M12 1.5 21.09 6.75v10.5L12 22.5l-9.09-5.25V6.75L12 1.5Zm0 2.31L4.91 7.9 12 12l7.09-4.1L12 3.81Zm-7.18 5.32v6.96L11 19.86v-6.13L4.82 9.13Zm14.36 0L13 13.73v6.13l6.18-3.77V9.13Z" />
+    </svg>
+  );
+}
+
 export const AGENT_ICONS: Record<AgentKind, (props: SVGProps<SVGSVGElement>) => ReactElement> = {
   codex: CodexIcon,
   claude: ClaudeIcon,
+  cursor: CursorIcon,
 };
 
-export const AGENT_LABELS: Record<AgentKind, string> = { codex: "Codex", claude: "Claude Code" };
+export const AGENT_LABELS: Record<AgentKind, string> = { codex: "Codex", claude: "Claude Code", cursor: "Cursor Agent" };
 
 export interface AgentChipProps {
   label: string;

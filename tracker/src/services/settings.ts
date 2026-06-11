@@ -24,6 +24,7 @@ export interface AgentAvailabilityEntry {
 export interface AgentAvailability {
   codex: AgentAvailabilityEntry;
   claude: AgentAvailabilityEntry;
+  cursor: AgentAvailabilityEntry;
 }
 
 export async function fetchSettings(): Promise<AllSettings> {

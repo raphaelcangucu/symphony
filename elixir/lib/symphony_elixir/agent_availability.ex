@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.AgentAvailability do
   @moduledoc """
-  Probes whether the codex/claude CLI binaries are present, with a short
-  cache so the Settings page can poll cheaply. The probed binary is the
+  Probes whether the codex/claude/cursor CLI binaries are present, with a
+  short cache so the Settings page can poll cheaply. The probed binary is the
   first word of the configured command.
   """
 
@@ -12,7 +12,7 @@ defmodule SymphonyElixir.AgentAvailability do
 
   @type result :: %{available: boolean(), version: String.t() | nil, command: String.t()}
 
-  @spec probe() :: %{codex: result(), claude: result()}
+  @spec probe() :: %{codex: result(), claude: result(), cursor: result()}
   def probe do
     case cached() do
       {:ok, value} ->
@@ -21,7 +21,8 @@ defmodule SymphonyElixir.AgentAvailability do
       :miss ->
         value = %{
           codex: probe_command(InstanceConfig.codex_command()),
-          claude: probe_command(InstanceConfig.claude_command())
+          claude: probe_command(InstanceConfig.claude_command()),
+          cursor: probe_command(InstanceConfig.cursor_command())
         }
 
         :persistent_term.put(@cache_key, {value, now_ms()})

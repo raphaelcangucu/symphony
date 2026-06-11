@@ -54,8 +54,8 @@ function normalizeStatus(status: string | null | undefined): AgentExecutionStatu
   return KNOWN_STATUSES.includes(status as AgentExecutionStatus) ? (status as AgentExecutionStatus) : "idle";
 }
 
-function normalizeAgentKind(kind: string | null | undefined): "codex" | "claude" | null {
-  if (kind === "codex" || kind === "claude") return kind;
+function normalizeAgentKind(kind: string | null | undefined): "codex" | "claude" | "cursor" | null {
+  if (kind === "codex" || kind === "claude" || kind === "cursor") return kind;
   return null;
 }
 

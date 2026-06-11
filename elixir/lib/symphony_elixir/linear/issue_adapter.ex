@@ -123,7 +123,7 @@ defmodule SymphonyElixir.Linear.IssueAdapter do
     base = string_list(Map.get(attrs, "label_ids"))
 
     case Map.get(attrs, "agent") do
-      agent when agent in ["codex", "claude"] ->
+      agent when agent in ["codex", "claude", "cursor"] ->
         case run_query(Query.team_labels_query(), %{"projectId" => project_id}) do
           {:ok, response} ->
             ids = base ++ agent_label_ids(Query.team_labels(response), agent)

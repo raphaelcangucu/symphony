@@ -197,7 +197,7 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
             disabled={Boolean(execution) || agentPending}
             onClick={() => void changeAgent(null)}
           />
-          {(["codex", "claude"] as AgentKind[]).map((kind) => {
+          {(["codex", "claude", "cursor"] as AgentKind[]).map((kind) => {
             const Icon = AGENT_ICONS[kind];
             return (
               <AgentChip
