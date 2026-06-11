@@ -15,7 +15,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
         assert goal_message == %{
                  "id" => 4,
                  "method" => "thread/goal/set",
-                 "params" => %{"threadId" => "thread-goal", "goal" => "Ship the feature"}
+                 "params" => %{"threadId" => "thread-goal", "objective" => "Ship the feature", "status" => "active"}
                }
 
         assert message_order(messages) == ["initialize", "initialized", "thread/start", "thread/goal/set", "turn/start"]

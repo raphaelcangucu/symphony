@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueAssistantRoute } from "@/components/workspace/IssueAssistantRoute";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { IssueDocument } from "@/types/issueDocument";
 
 const projectAssistantPanel = vi.fn(
@@ -99,7 +100,41 @@ const useIssueDocuments = vi.fn(
   }),
 );
 
-let workspaceValue: { projectSlug: string; view: WorkspaceView };
+const execution: AgentExecution = {
+  agentKind: "codex",
+  error: null,
+  goal: {
+    kind: "goal",
+    source: "native",
+    objective: "Ship the issue",
+    status: "active",
+    capabilities: ["get", "edit", "pause", "resume", "clear"],
+    tokenBudget: null,
+    tokensUsed: null,
+    timeUsedSeconds: null,
+    updatedAt: null,
+  },
+  issueIdentifier: "MAC-1",
+  lastEvent: "notification",
+  lastEventAt: "2026-05-31T00:02:00Z",
+  lastMessage: "Working",
+  longRunning: true,
+  longRunningKind: "goal",
+  longRunningLabel: "Pursuing goal",
+  retryAttempt: 0,
+  runtimeSeconds: 42,
+  sessionId: "session-1",
+  startedAt: "2026-05-31T00:01:00Z",
+  status: "live",
+  tokens: null,
+  turnCount: 1,
+};
+
+let workspaceValue: {
+  agentExecutions: ReadonlyMap<string, AgentExecution>;
+  projectSlug: string;
+  view: WorkspaceView;
+};
 
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: (props: Parameters<typeof projectAssistantPanel>[0]) => projectAssistantPanel(props),
@@ -136,7 +171,7 @@ function renderAt(path: string) {
 
 describe("IssueAssistantRoute", () => {
   beforeEach(() => {
-    workspaceValue = { projectSlug: "macro", view: "board" };
+    workspaceValue = { agentExecutions: new Map(), projectSlug: "macro", view: "board" };
     projectAssistantPanel.mockClear();
     documentViewer.mockClear();
     useIssueDocuments.mockClear();
@@ -158,6 +193,18 @@ describe("IssueAssistantRoute", () => {
       enabled: true,
       refreshKey: 0,
     });
+  });
+
+  it("shows active long-running goal status on the issue assistant route", () => {
+    workspaceValue = {
+      ...workspaceValue,
+      agentExecutions: new Map([["MAC-1", execution]]),
+    };
+
+    renderAt("/projects/macro/assistant/issue/MAC-1");
+
+    expect(screen.getByText("Live")).toBeTruthy();
+    expect(screen.getByText("Pursuing goal")).toBeTruthy();
   });
 
   it("renders the new issue authoring placeholder without loading documents", () => {

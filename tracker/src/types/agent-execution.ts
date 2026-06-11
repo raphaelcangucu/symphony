@@ -6,9 +6,25 @@ export interface AgentExecutionTokens {
   total: number;
 }
 
+export type AgentExecutionGoalKind = "goal" | "workflow";
+export type AgentExecutionGoalSource = "native" | "prompt";
+
+export interface AgentExecutionGoal {
+  kind: AgentExecutionGoalKind;
+  source: AgentExecutionGoalSource;
+  objective: string | null;
+  status: string | null;
+  capabilities: string[];
+  tokenBudget: number | null;
+  tokensUsed: number | null;
+  timeUsedSeconds: number | null;
+  updatedAt: number | null;
+}
+
 export interface AgentExecution {
   issueIdentifier: string;
   status: AgentExecutionStatus;
+  agentKind: "codex" | "claude" | null;
   sessionId: string | null;
   lastEvent: string | null;
   lastMessage: string | null;
@@ -18,5 +34,9 @@ export interface AgentExecution {
   startedAt: string | null;
   retryAttempt: number;
   error: string | null;
+  goal: AgentExecutionGoal | null;
+  longRunning: boolean;
+  longRunningKind: AgentExecutionGoalKind | null;
+  longRunningLabel: string | null;
   tokens: AgentExecutionTokens | null;
 }

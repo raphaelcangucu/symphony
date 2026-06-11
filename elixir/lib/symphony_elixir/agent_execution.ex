@@ -26,6 +26,11 @@ defmodule SymphonyElixir.AgentExecution do
           started_at: DateTime.t() | nil,
           retry_attempt: non_neg_integer(),
           error: String.t() | nil,
+          agent_kind: String.t() | nil,
+          goal: map() | nil,
+          long_running: boolean(),
+          long_running_kind: String.t() | nil,
+          long_running_label: String.t() | nil,
           tokens: %{input: non_neg_integer(), output: non_neg_integer(), total: non_neg_integer()} | nil
         }
 
@@ -75,11 +80,13 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp running_execution(entry, now) do
     last_event_at = Map.get(entry, :last_codex_timestamp)
+    goal = execution_goal(entry)
 
     %{
       issue_id: issue_id(entry),
       issue_identifier: entry.identifier,
       status: running_status(entry, last_event_at, now),
+      agent_kind: Map.get(entry, :agent_kind),
       session_id: Map.get(entry, :session_id),
       last_event: Map.get(entry, :last_codex_event),
       last_message: Map.get(entry, :last_codex_message),
@@ -89,6 +96,10 @@ defmodule SymphonyElixir.AgentExecution do
       started_at: Map.get(entry, :started_at),
       retry_attempt: 0,
       error: nil,
+      goal: goal,
+      long_running: not is_nil(goal),
+      long_running_kind: long_running_kind(goal),
+      long_running_label: long_running_label(goal),
       tokens: %{
         input: Map.get(entry, :agent_input_tokens, 0),
         output: Map.get(entry, :agent_output_tokens, 0),
@@ -111,6 +122,11 @@ defmodule SymphonyElixir.AgentExecution do
       started_at: nil,
       retry_attempt: Map.get(entry, :attempt, 0) || 0,
       error: Map.get(entry, :error),
+      agent_kind: Map.get(entry, :agent_kind),
+      goal: nil,
+      long_running: false,
+      long_running_kind: nil,
+      long_running_label: nil,
       tokens: nil
     }
   end
@@ -131,6 +147,51 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp identifier(entry), do: Map.get(entry, :identifier)
   defp issue_id(entry), do: entry |> Map.get(:issue_id) |> maybe_to_string()
+
+  defp execution_goal(entry) do
+    Map.get(entry, :goal) || fallback_goal(entry)
+  end
+
+  defp fallback_goal(entry) do
+    case Map.get(entry, :agent_goal) do
+      goal when is_binary(goal) ->
+        objective = String.trim(goal)
+
+        if objective == "" do
+          nil
+        else
+          kind = goal_kind(entry)
+
+          %{
+            kind: kind,
+            source: goal_source(kind),
+            status: "active",
+            objective: objective,
+            capabilities: goal_capabilities(kind)
+          }
+        end
+
+      _goal ->
+        nil
+    end
+  end
+
+  defp goal_kind(%{agent_kind: "claude"}), do: "workflow"
+  defp goal_kind(_entry), do: "goal"
+
+  defp goal_source("goal"), do: "native"
+  defp goal_source("workflow"), do: "prompt"
+
+  defp goal_capabilities("goal"), do: ["get", "edit", "pause", "resume", "clear"]
+  defp goal_capabilities("workflow"), do: ["view"]
+  defp goal_capabilities(_kind), do: []
+
+  defp long_running_kind(%{kind: kind}) when is_binary(kind), do: kind
+  defp long_running_kind(_goal), do: nil
+
+  defp long_running_label(%{kind: "workflow"}), do: "Pursuing workflow"
+  defp long_running_label(%{kind: "goal"}), do: "Pursuing goal"
+  defp long_running_label(_goal), do: nil
 
   defp maybe_to_string(nil), do: nil
   defp maybe_to_string(value), do: to_string(value)

@@ -211,7 +211,7 @@ defmodule SymphonyElixir.AgentRunnerTest do
       assert Enum.find(messages, &(Map.get(&1, "method") == "thread/goal/set")) == %{
                "id" => 4,
                "method" => "thread/goal/set",
-               "params" => %{"threadId" => "thread-runner-goal", "goal" => "Ship from runner"}
+               "params" => %{"threadId" => "thread-runner-goal", "objective" => "Ship from runner", "status" => "active"}
              }
     after
       File.rm_rf(test_root)
@@ -292,7 +292,7 @@ defmodule SymphonyElixir.AgentRunnerTest do
       assert Enum.find(messages, &(Map.get(&1, "method") == "thread/goal/set")) == %{
                "id" => 4,
                "method" => "thread/goal/set",
-               "params" => %{"threadId" => "thread-runner-issue-goal", "goal" => "Ship from issue"}
+               "params" => %{"threadId" => "thread-runner-issue-goal", "objective" => "Ship from issue", "status" => "active"}
              }
     after
       File.rm_rf(test_root)

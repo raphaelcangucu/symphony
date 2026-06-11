@@ -455,7 +455,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       send_message(port, %{
         "method" => "thread/goal/set",
         "id" => @goal_set_id,
-        "params" => %{"threadId" => thread_id, "goal" => goal}
+        "params" => %{"threadId" => thread_id, "objective" => goal, "status" => "active"}
       })
 
       case await_response(port, @goal_set_id) do

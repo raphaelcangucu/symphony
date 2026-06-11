@@ -10,6 +10,20 @@ import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
+vi.mock("@/services/issues", async () => {
+  const actual = await vi.importActual<typeof import("@/services/issues")>("@/services/issues");
+  return {
+    ...actual,
+    getIssueFormOptions: vi.fn().mockResolvedValue({
+      agents: [],
+      assignees: [],
+      effectiveAgent: "codex",
+      labels: [],
+      statuses: [],
+    }),
+  };
+});
+
 vi.mock("@/hooks/useIssuePullRequests", () => ({
   useIssuePullRequests: () => ({
     available: false,
@@ -29,6 +43,15 @@ vi.mock("@/hooks/useIssueComments", () => ({
     loading: false,
     refetch: vi.fn(),
     workpad: null,
+  }),
+}));
+
+vi.mock("@/hooks/useIssueEvidence", () => ({
+  useIssueEvidence: () => ({
+    error: null,
+    loading: false,
+    records: [],
+    refetch: vi.fn(),
   }),
 }));
 
@@ -114,11 +137,16 @@ const issue: Issue = {
 };
 
 const execution: AgentExecution = {
+  agentKind: "codex",
   error: null,
+  goal: null,
   issueIdentifier: "MAC-1",
   lastEvent: "turn.completed",
   lastEventAt: "2026-05-31T00:02:00Z",
   lastMessage: "Ready",
+  longRunning: false,
+  longRunningKind: null,
+  longRunningLabel: null,
   retryAttempt: 0,
   runtimeSeconds: 42,
   sessionId: "session-1",
@@ -178,5 +206,37 @@ describe("IssueDrawer Agent tab", () => {
 
     expect(screen.getByTestId("agent-execution-panel")).toHaveTextContent("Execution panel for MAC-1:live");
     expect(screen.queryByTestId("issue-authoring-panel")).not.toBeInTheDocument();
+  });
+
+  it("shows a pursuing goal indicator in the issue header", () => {
+    renderDrawer(
+      <IssueDrawer
+        issue={issue}
+        projectSlug="macro-markets"
+        view="list"
+        execution={{
+          ...execution,
+          goal: {
+            kind: "goal",
+            source: "native",
+            objective: "Ship the issue",
+            status: "active",
+            capabilities: ["get", "edit", "pause", "resume", "clear"],
+            tokenBudget: null,
+            tokensUsed: null,
+            timeUsedSeconds: null,
+            updatedAt: null,
+          },
+          longRunning: true,
+          longRunningKind: "goal",
+          longRunningLabel: "Pursuing goal",
+        }}
+        open
+        onOpenChange={() => {}}
+        tab="summary"
+      />,
+    );
+
+    expect(screen.getByText("Pursuing goal")).toBeInTheDocument();
   });
 });

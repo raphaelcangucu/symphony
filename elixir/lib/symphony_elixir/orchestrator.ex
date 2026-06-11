@@ -722,6 +722,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp do_dispatch_issue(%State{} = state, issue, attempt) do
     recipient = self()
     issue = Tracker.enrich_issue(issue)
+    agent_kind = AgentRunner.issue_agent_kind(issue)
 
     case Task.Supervisor.start_child(SymphonyElixir.Orchestrator.TaskSupervisor, fn ->
            AgentRunner.run(issue, recipient, attempt: attempt)
@@ -737,6 +738,9 @@ defmodule SymphonyElixir.Orchestrator do
             ref: ref,
             identifier: issue.identifier,
             issue: issue,
+            agent_kind: agent_kind,
+            agent_goal: Map.get(issue, :agent_goal),
+            goal: nil,
             session_id: nil,
             last_codex_message: nil,
             last_codex_timestamp: nil,
@@ -1442,6 +1446,9 @@ defmodule SymphonyElixir.Orchestrator do
           identifier: metadata.identifier,
           project_slug: metadata.issue.project_slug,
           state: metadata.issue.state,
+          agent_kind: Map.get(metadata, :agent_kind),
+          agent_goal: Map.get(metadata, :agent_goal),
+          goal: Map.get(metadata, :goal),
           session_id: metadata.session_id,
           codex_app_server_pid: metadata.codex_app_server_pid,
           agent_input_tokens: metadata.agent_input_tokens,
@@ -1547,6 +1554,7 @@ defmodule SymphonyElixir.Orchestrator do
         last_codex_message: summarize_codex_update(update),
         session_id: session_id_for_update(running_entry.session_id, update),
         last_codex_event: event,
+        goal: goal_for_update(running_entry, update),
         codex_app_server_pid: codex_app_server_pid_for_update(codex_app_server_pid, update),
         agent_input_tokens: agent_input_tokens + token_delta.input_tokens,
         agent_output_tokens: agent_output_tokens + token_delta.output_tokens,
@@ -1577,6 +1585,52 @@ defmodule SymphonyElixir.Orchestrator do
     do: session_id
 
   defp session_id_for_update(existing, _update), do: existing
+
+  defp goal_for_update(running_entry, update) do
+    existing = Map.get(running_entry, :goal)
+
+    case goal_update_payload(update) do
+      :clear ->
+        nil
+
+      %{} = goal ->
+        normalize_goal_payload(goal, Map.get(running_entry, :agent_kind), existing)
+
+      nil ->
+        existing
+    end
+  end
+
+  defp goal_update_payload(%{payload: %{"method" => "thread/goal/cleared"}}), do: :clear
+  defp goal_update_payload(%{payload: %{"method" => "thread/goal/updated", "params" => %{"goal" => goal}}}), do: goal
+  defp goal_update_payload(%{payload: %{"method" => "turn/completed", "params" => %{"goal" => goal}}}), do: goal
+  defp goal_update_payload(%{payload: %{"params" => %{"goal" => goal}}}), do: goal
+  defp goal_update_payload(_update), do: nil
+
+  defp normalize_goal_payload(goal, agent_kind, existing) when is_map(goal) do
+    %{
+      kind: if(agent_kind == "claude", do: "workflow", else: "goal"),
+      source: if(agent_kind == "claude", do: "prompt", else: "native"),
+      objective: goal_value(goal, "objective") || map_value(existing, :objective),
+      status: goal_value(goal, "status") || map_value(existing, :status) || "active",
+      token_budget: goal_value(goal, "tokenBudget") || map_value(existing, :token_budget),
+      tokens_used: goal_value(goal, "tokensUsed") || map_value(existing, :tokens_used),
+      time_used_seconds: goal_value(goal, "timeUsedSeconds") || map_value(existing, :time_used_seconds),
+      updated_at: goal_value(goal, "updatedAt") || map_value(existing, :updated_at),
+      capabilities: if(agent_kind == "claude", do: ["view"], else: ["get", "edit", "pause", "resume", "clear"])
+    }
+  end
+
+  defp normalize_goal_payload(_goal, _agent_kind, existing), do: existing
+
+  defp goal_value(map, key) when is_map(map) do
+    Map.get(map, key) || Map.get(map, Macro.underscore(key) |> String.to_atom())
+  rescue
+    ArgumentError -> Map.get(map, key)
+  end
+
+  defp map_value(map, key) when is_map(map), do: Map.get(map, key)
+  defp map_value(_map, _key), do: nil
 
   defp turn_count_for_update(existing_count, existing_session_id, %{
          event: :session_started,

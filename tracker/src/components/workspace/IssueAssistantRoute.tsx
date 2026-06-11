@@ -3,13 +3,16 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { issueAssistantPath } from "@/lib/workspaceRoutes";
 
 export function IssueAssistantRoute() {
   const { issueId } = useParams();
   const navigate = useNavigate();
-  const { projectSlug, view } = useWorkspace();
+  const { agentExecutions, projectSlug, view } = useWorkspace();
   const identifier = issueId?.trim() ? issueId : undefined;
+  const normalizedIdentifier = normalizeIssueIdentifier(identifier);
+  const execution = normalizedIdentifier ? agentExecutions.get(normalizedIdentifier) : undefined;
 
   const handleIssueCreated = useCallback(
     (issue: { identifier: string }) => {
@@ -22,6 +25,7 @@ export function IssueAssistantRoute() {
     <IssueAuthoringPanel
       projectSlug={projectSlug}
       identifier={identifier}
+      execution={execution}
       view={view}
       onIssueCreated={handleIssueCreated}
     />
