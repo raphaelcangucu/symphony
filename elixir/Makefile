@@ -1,7 +1,7 @@
 .PHONY: help all setup deps ensure-deps build fmt fmt-check lint test coverage ci dialyzer repo-ci \
 	check-tools env-setup install-code-server configure-code-server db-create db-migrate migrate migration new-migration rollback \
 	backup backup-list backup-stats backup-cleanup serve update stop tracker-setup tracker-deps tracker-build tracker-lint tracker-test tracker-ci \
-	tracker-api tracker-api-escript tracker-dev
+	tracker-api tracker-api-escript tracker-dev project-import project-export
 
 # Prefer mise when available so targets work whether or not the shell has mise
 # activated. Override any of these on the command line (e.g. `make MIX=mix ...`).
@@ -27,6 +27,7 @@ help:
 	@echo "Run:      serve (boot daemon), update (restart web by default; ARGS=--orchestrator/--code-server/--all), stop, check-tools, env-setup"
 	@echo "Editor:   install-code-server, configure-code-server (browser VS Code for task workspaces)"
 	@echo "Tracker:  tracker-setup, tracker-deps, tracker-build, tracker-lint, tracker-test, tracker-ci, tracker-dev, repo-ci"
+	@echo "Project:  project-import FILE=path.yaml [INTO=slug], project-export SLUG=name [FILE=out.yaml]"
 	@echo "Packaged: tracker-api (alias of serve), tracker-api-escript (raw escript; no SQLite NIF)"
 
 # --- Quality / build -------------------------------------------------------
@@ -204,6 +205,26 @@ tracker-api-escript: build migrate
 
 tracker-dev:
 	$(NPM) --prefix $(TRACKER_DIR) run dev
+
+# --- Project import/export (CLI) -------------------------------------------
+
+project-import:
+	@test -n "$(FILE)" || { echo "Usage: make project-import FILE=path/to/project.yaml [INTO=slug]"; exit 1; }
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	if [ -n "$(INTO)" ]; then \
+		$(MIX) symphony.project import "$(FILE)" --into "$(INTO)"; \
+	else \
+		$(MIX) symphony.project import "$(FILE)"; \
+	fi
+
+project-export:
+	@test -n "$(SLUG)" || { echo "Usage: make project-export SLUG=project-slug [FILE=out.yaml]"; exit 1; }
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	if [ -n "$(FILE)" ]; then \
+		$(MIX) symphony.project export "$(SLUG)" --output "$(FILE)"; \
+	else \
+		$(MIX) symphony.project export "$(SLUG)"; \
+	fi
 
 # --- Public preview tunnel -------------------------------------------------
 
