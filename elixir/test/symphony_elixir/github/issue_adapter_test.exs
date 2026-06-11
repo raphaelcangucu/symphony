@@ -826,6 +826,137 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     end
   end
 
+  defmodule RewriterRestStub do
+    def rest_get(path, _opts \\ []) do
+      cond do
+        String.ends_with?(path, "/git/ref/heads/symphony-assets") -> {:error, {:github_api_status, 404}}
+        String.ends_with?(path, "/git/ref/heads/main") -> {:ok, %{status: 200, body: %{"object" => %{"sha" => "base"}}}}
+        String.contains?(path, "/contents/") -> {:error, {:github_api_status, 404}}
+        Regex.match?(~r{^/repos/[^/]+/[^/]+$}, path) -> {:ok, %{status: 200, body: %{"default_branch" => "main"}}}
+        true -> {:error, {:github_api_status, 404}}
+      end
+    end
+
+    def rest_post(_path, _body, _opts \\ []), do: {:ok, %{status: 201, body: %{}}}
+    def rest_put(_path, _body, _opts \\ []), do: {:ok, %{status: 201, body: %{}}}
+  end
+
+  describe "create_issue with attachments" do
+    setup do
+      tmp_dir = Path.join(System.tmp_dir!(), "symphony-adapter-attach-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp_dir)
+      Application.put_env(:symphony_elixir, :workspace_root, tmp_dir)
+      Application.put_env(:symphony_elixir, :github_client_module, CreateClientStub)
+      Application.put_env(:symphony_elixir, :github_rest_client, RewriterRestStub)
+
+      on_exit(fn ->
+        File.rm_rf!(tmp_dir)
+        Application.delete_env(:symphony_elixir, :workspace_root)
+        Application.delete_env(:symphony_elixir, :github_rest_client)
+      end)
+
+      :ok
+    end
+
+    test "rewrites local attachment URLs in the body sent to GitHub" do
+      png = <<137, 80, 78, 71, 13, 10, 26, 10>>
+      source = Path.join(System.tmp_dir!(), "shot-#{System.unique_integer([:positive])}.png")
+      File.write!(source, png)
+      upload = %Plug.Upload{path: source, filename: "shot.png", content_type: "image/png"}
+      {:ok, stored} = SymphonyElixir.Assistant.AttachmentStore.store_image("remote", upload)
+
+      local_url = "/api/tracker/v1/projects/remote/assistant/attachments/#{stored["path"]}"
+      attrs = %{"title" => "New", "status" => "Todo", "description" => "Look:\n\n![shot.png](#{local_url})"}
+
+      assert {:ok, %IssueDTO{identifier: "10"}} = IssueAdapter.create_issue(project(), attrs)
+
+      digest = :crypto.hash(:sha256, png) |> Base.encode16(case: :lower)
+      expected = "https://github.com/o/r/raw/symphony-assets/assets/#{digest}.png"
+
+      assert_received {:create_input, %{"body" => body}}
+      assert body == "Look:\n\n![shot.png](#{expected})"
+      refute body =~ "/api/tracker/v1/"
+    end
+  end
+
+  defmodule RestoreListClientStub do
+    def graphql(query, _vars, _opts) do
+      if String.contains?(query, "SymphonyUiListItems") do
+        body = Application.get_env(:symphony_elixir, :test_restore_body)
+
+        {:ok,
+         %{
+           "data" => %{
+             "node" => %{
+               "items" => %{
+                 "nodes" => [item(body)],
+                 "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+               }
+             }
+           }
+         }}
+      else
+        {:ok, %{"data" => %{}}}
+      end
+    end
+
+    defp item(body) do
+      %{
+        "id" => "PVTI_9",
+        "content" => %{
+          "__typename" => "Issue",
+          "id" => "I_9",
+          "number" => 9,
+          "title" => "img",
+          "body" => body,
+          "url" => "https://x/9",
+          "assignees" => %{"nodes" => []},
+          "labels" => %{"nodes" => []},
+          "createdAt" => "2026-05-28T00:00:00Z",
+          "updatedAt" => "2026-05-28T00:00:00Z"
+        },
+        "fieldValues" => %{
+          "nodes" => [
+            %{
+              "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+              "name" => "Todo",
+              "field" => %{"name" => "Symphony State"}
+            }
+          ]
+        }
+      }
+    end
+  end
+
+  describe "list_issues attachment restore" do
+    setup do
+      Application.put_env(:symphony_elixir, :github_client_module, RestoreListClientStub)
+
+      on_exit(fn ->
+        Application.delete_env(:symphony_elixir, :test_restore_body)
+      end)
+
+      :ok
+    end
+
+    test "maps Symphony-managed GitHub asset URLs back to local attachment URLs" do
+      bytes = <<137, 80, 78, 71, 13, 10, 26, 10>> <> <<System.unique_integer([:positive])::64>>
+      source = Path.join(System.tmp_dir!(), "ls-#{System.unique_integer([:positive])}.png")
+      File.write!(source, bytes)
+      upload = %Plug.Upload{path: source, filename: "shot.png", content_type: "image/png"}
+      {:ok, stored} = SymphonyElixir.Assistant.AttachmentStore.store_image("remote", upload)
+
+      digest = :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
+      raw = "https://github.com/o/r/raw/symphony-assets/assets/#{digest}.png"
+      Application.put_env(:symphony_elixir, :test_restore_body, "![image.png](#{raw})")
+
+      assert {:ok, [issue]} = IssueAdapter.list_issues(project(), [])
+
+      assert issue.description ==
+               "![image.png](/api/tracker/v1/projects/remote/assistant/attachments/#{stored["path"]})"
+    end
+  end
+
   defp migrate_repo do
     alias SymphonyElixir.Repo
 

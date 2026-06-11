@@ -22,8 +22,10 @@ defmodule SymphonyElixir.Ctl do
   # Assistant tool modules are hot-reloaded on every `make update` so dev edits
   # are picked up even when :code.modified_modules/0 is empty in a long-lived node.
   @assistant_reload_modules [
+    SymphonyElixir.Assistant.AttachmentStore,
     SymphonyElixir.Assistant.CodexSession,
     SymphonyElixir.Assistant.DiscoveryTools,
+    SymphonyElixir.Assistant.Payload,
     SymphonyElixir.Assistant.ProjectBoardTools,
     SymphonyElixir.Assistant.PullRequestLookup,
     SymphonyElixir.Assistant.ReadTools,

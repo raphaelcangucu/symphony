@@ -77,6 +77,22 @@ defmodule SymphonyElixir.Assistant.AttachmentStoreTest do
            }
   end
 
+  test "image attachments expose an embeddable Markdown URL for the agent" do
+    source = Path.join(System.tmp_dir!(), "shot-#{System.unique_integer([:positive])}.png")
+    File.write!(source, <<137, 80, 78, 71>>)
+
+    upload = %Plug.Upload{path: source, filename: "shot.png", content_type: "image/png"}
+    {:ok, stored} = AttachmentStore.store_file("macro-markets", upload)
+
+    [normalized] = Payload.normalize_attachments([stored], "macro-markets")
+    expected_url = "/api/tracker/v1/projects/macro-markets/assistant/attachments/#{stored["path"]}"
+    assert normalized["url"] == expected_url
+
+    enriched = Payload.enrich_message("Create a task with this screenshot", [normalized])
+    assert enriched =~ "Create a task with this screenshot"
+    assert enriched =~ "![shot.png](#{expected_url})"
+  end
+
   test "rejects unsupported file types" do
     source = Path.join(System.tmp_dir!(), "binary-#{System.unique_integer([:positive])}.bin")
     File.write!(source, <<0, 1, 2, 3>>)

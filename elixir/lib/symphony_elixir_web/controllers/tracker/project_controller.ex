@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   alias Plug.Conn
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Tracker.Sync.Engine, as: SyncEngine
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
 
@@ -79,7 +80,14 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
         statuses = Context.list_statuses(project.slug)
         repositories = Context.list_repositories(project.slug)
         setup = Context.get_project_setup(project.slug)
-        json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup)})
+        sync_state = TrackerPresenter.sync_state(SyncEngine.state_for(project))
+
+        data =
+          project
+          |> TrackerPresenter.project(statuses, repositories, setup)
+          |> Map.put(:sync_state, sync_state)
+
+        json(conn, %{data: data})
 
       {:error, :project_not_found} ->
         TrackerErrors.render(conn, :project_not_found)

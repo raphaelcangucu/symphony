@@ -16,6 +16,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   alias SymphonyElixir.AgentRouting
   alias SymphonyElixir.Tracker.ExternalUrl
   alias SymphonyElixir.Tracker.IssueDTO
+  alias SymphonyElixir.Tracker.Sync.StateRecord
 
   @spec project(Project.t(), [WorkflowStatus.t()] | nil, [Repository.t()] | nil, ProjectSetup.t() | nil) :: map()
   def project(%Project{} = project, statuses \\ nil, repositories \\ nil, setup \\ nil) do
@@ -33,6 +34,20 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       archived_at: iso8601(project.archived_at),
       inserted_at: iso8601(project.inserted_at),
       updated_at: iso8601(project.updated_at)
+    }
+  end
+
+  @doc "Serializes a project's background sync health for the tracker UI."
+  @spec sync_state(StateRecord.t() | nil) :: map() | nil
+  def sync_state(nil), do: nil
+
+  def sync_state(%StateRecord{} = state) do
+    %{
+      status: state.status,
+      last_error: state.last_error,
+      last_pull_at: iso8601(state.last_pull_at),
+      last_push_at: iso8601(state.last_push_at),
+      last_full_sync_at: iso8601(state.last_full_sync_at)
     }
   end
 

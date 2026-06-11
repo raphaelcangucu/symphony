@@ -464,3 +464,45 @@ describe("normalizeProject tracker", () => {
     expect(normalizeProject(dto).tracker).toEqual({ kind: "github", config: { project_id: "PVT_1" } });
   });
 });
+
+describe("normalizeProject sync state", () => {
+  it("defaults syncState to null when missing", () => {
+    const dto = { id: 1, slug: "p", name: "P" } as BackendProjectDto;
+    expect(normalizeProject(dto).syncState).toBeNull();
+  });
+
+  it("maps a snake_case sync_state payload", () => {
+    const dto = {
+      id: 1,
+      slug: "p",
+      name: "P",
+      tracker_kind: "github",
+      sync_state: {
+        status: "error",
+        last_error: ":remote_unavailable",
+        last_pull_at: "2026-06-10T21:00:00Z",
+        last_push_at: "2026-06-10T21:00:00Z",
+        last_full_sync_at: null,
+      },
+    } as unknown as BackendProjectDto;
+
+    expect(normalizeProject(dto).syncState).toEqual({
+      status: "error",
+      lastError: ":remote_unavailable",
+      lastPullAt: "2026-06-10T21:00:00Z",
+      lastPushAt: "2026-06-10T21:00:00Z",
+      lastFullSyncAt: null,
+    });
+  });
+
+  it("falls back to idle for unknown statuses", () => {
+    const dto = {
+      id: 1,
+      slug: "p",
+      name: "P",
+      sync_state: { status: "bogus" },
+    } as unknown as BackendProjectDto;
+
+    expect(normalizeProject(dto).syncState?.status).toBe("idle");
+  });
+});

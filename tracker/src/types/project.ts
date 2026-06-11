@@ -9,6 +9,16 @@ export interface ProjectTrackerConfig {
   config: Record<string, unknown>;
 }
 
+export type ProjectSyncStatus = "idle" | "syncing" | "error";
+
+export interface ProjectSyncState {
+  status: ProjectSyncStatus;
+  lastError: string | null;
+  lastPullAt: string | null;
+  lastPushAt: string | null;
+  lastFullSyncAt: string | null;
+}
+
 export interface Project {
   id: string;
   slug: string;
@@ -20,6 +30,7 @@ export interface Project {
   setup?: ProjectSetup | null;
   tracker: ProjectTrackerConfig;
   trackerUrl?: string | null;
+  syncState?: ProjectSyncState | null;
   createdAt?: string;
   updatedAt?: string;
   archivedAt?: string | null;

@@ -1,4 +1,4 @@
-import { LayoutDashboard, List, RefreshCw } from "lucide-react";
+import { AlertTriangle, LayoutDashboard, List, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
@@ -8,7 +8,7 @@ import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
 import { cn } from "@/lib/utils";
 import { workspaceBasePath } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
-import type { TrackerKind } from "@/types/project";
+import type { ProjectSyncState, TrackerKind } from "@/types/project";
 
 const TRACKER_LABELS: Record<Exclude<TrackerKind, "local">, string> = {
   github: "GitHub Project",
@@ -21,6 +21,7 @@ interface ProjectHeaderProps {
   title?: string;
   rightSlot?: ReactNode;
   trackerKind?: TrackerKind;
+  syncState?: ProjectSyncState | null;
   onRefresh?: () => void;
   refreshing?: boolean;
   pollingActive?: boolean;
@@ -29,18 +30,42 @@ interface ProjectHeaderProps {
 
 const POLLING_ACTIVE_LABEL = "Polling active";
 const POLLING_PAUSED_LABEL = "Polling paused (window not focused)";
+const SYNC_ERROR_LABEL = "Sync error";
+
+function formatTimeAgo(iso: string | null): string | null {
+  if (!iso) return null;
+  const timestamp = new Date(iso).getTime();
+  if (Number.isNaN(timestamp)) return null;
+  const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60_000));
+  if (minutes < 1) return "less than a minute ago";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return new Date(timestamp).toLocaleString();
+}
+
+function syncErrorTitle(syncState: ProjectSyncState): string {
+  const lines = ["Background sync with the remote tracker is failing."];
+  if (syncState.lastError) lines.push(`Last error: ${syncState.lastError}`);
+  const lastOk = formatTimeAgo(syncState.lastPullAt);
+  if (lastOk) lines.push(`Last successful sync: ${lastOk}`);
+  return lines.join("\n");
+}
 
 export function ProjectHeader({
   projectSlug,
   title,
   rightSlot,
   trackerKind,
+  syncState,
   onRefresh,
   refreshing = false,
   pollingActive = true,
   onIssueCreated,
 }: ProjectHeaderProps) {
   const pollingLabel = pollingActive ? POLLING_ACTIVE_LABEL : POLLING_PAUSED_LABEL;
+  const remoteTracker = trackerKind != null && trackerKind !== "local";
+  const syncFailing = remoteTracker && syncState?.status === "error";
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
       <div>
@@ -51,10 +76,22 @@ export function ProjectHeader({
         {refreshing ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            Syncing
+            Refreshing
           </span>
         ) : null}
-        {trackerKind != null && trackerKind !== "local" ? (
+        {syncFailing && syncState ? (
+          <Badge
+            variant="destructive"
+            role="status"
+            aria-label={SYNC_ERROR_LABEL}
+            title={syncErrorTitle(syncState)}
+            className="gap-1"
+          >
+            <AlertTriangle className="h-3 w-3" />
+            {SYNC_ERROR_LABEL}
+          </Badge>
+        ) : null}
+        {remoteTracker ? (
           <div className="flex items-center gap-2">
             <Badge variant="muted">{TRACKER_LABELS[trackerKind]}</Badge>
             <span

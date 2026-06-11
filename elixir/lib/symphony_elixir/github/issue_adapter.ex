@@ -3,6 +3,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   @behaviour SymphonyElixir.Tracker.IssueAdapter
 
+  alias SymphonyElixir.GitHub.AttachmentRewriter
   alias SymphonyElixir.GitHub.Client
   alias SymphonyElixir.GitHub.IssueAdapter.Query
   alias SymphonyElixir.GitHub.IssueComments
@@ -27,6 +28,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
           nodes
           |> Enum.map(&Query.normalize_item(&1, status_field, project.slug))
           |> Enum.reject(&is_nil/1)
+          |> restore_attachment_urls(project.slug)
 
         {:ok, issues}
 
@@ -108,7 +110,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
          {:ok, meta} <- fetch_repo_metadata(owner, name),
          label_ids = resolve_label_ids(meta.labels, attrs),
          {:ok, status_target} <- resolve_status_target(cfg, status_name(attrs)),
-         {:ok, issue} <- create_remote_issue(meta.repo_id, title, attrs, label_ids),
+         remote_body = AttachmentRewriter.rewrite(body(attrs), owner, name, project.slug),
+         {:ok, issue} <- create_remote_issue(meta.repo_id, title, attrs, label_ids, remote_body),
          {:ok, item_id} <- add_to_project(cfg.project_id, issue["id"]),
          :ok <- apply_status_target(cfg, item_id, status_target) do
       {:ok, build_created_dto(issue, project, attrs, meta.labels, label_ids)}
@@ -124,7 +127,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
          {:ok, number} <- resolve_issue_number(project, identifier),
          {:ok, issue} <- fetch_issue_details(owner, name, number),
          {:ok, meta} <- fetch_repo_metadata(owner, name),
-         {:ok, _} <- maybe_update_issue_content(project, issue, attrs),
+         {:ok, _} <- maybe_update_issue_content(project, owner, name, issue, attrs),
          :ok <- maybe_sync_issue_labels(issue, meta.labels, attrs) do
       get_issue(project, to_string(number))
     else
@@ -232,6 +235,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   @impl true
   def add_comment(%Project{} = project, identifier, body, attrs) do
+    body = maybe_rewrite_comment_body(project, identifier, body)
+
     case issue_remote_id(project, identifier, attrs || %{}) do
       node_id when is_binary(node_id) and node_id != "" -> create_comment_by_node(node_id, body)
       _no_node_id -> create_comment_by_identifier(project, identifier, body)
@@ -272,6 +277,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   def update_comment(%Project{} = project, identifier, remote_id, body) do
     case resolve_issue_repo(project, identifier) do
       {:ok, repo} ->
+        body = rewrite_body_for_repo(project, repo, body)
+
         case IssueComments.update(repo, remote_id, body) do
           {:ok, comment} -> {:ok, comment}
           error -> {:error, map_error(error)}
@@ -281,6 +288,54 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
         {:error, map_error(reason)}
     end
   end
+
+  # Comments take the bare body string, so attachment rewriting happens here
+  # rather than threaded through `attrs`. Repo resolution is skipped unless the
+  # body actually references a local attachment to keep the common path cheap.
+  defp maybe_rewrite_comment_body(%Project{slug: slug} = project, identifier, body)
+       when is_binary(body) and is_binary(slug) do
+    if AttachmentRewriter.contains_attachment?(body, slug) do
+      case resolve_issue_repo(project, identifier) do
+        {:ok, repo} -> rewrite_body_for_repo(project, repo, body)
+        _ -> body
+      end
+    else
+      body
+    end
+  end
+
+  defp maybe_rewrite_comment_body(_project, _identifier, body), do: body
+
+  defp rewrite_body_for_repo(%Project{slug: slug}, repo, body)
+       when is_binary(body) and is_binary(slug) do
+    with true <- AttachmentRewriter.contains_attachment?(body, slug),
+         {:ok, {owner, name}} <- RepoSpec.split(repo) do
+      AttachmentRewriter.rewrite(body, owner, name, slug)
+    else
+      _ -> body
+    end
+  end
+
+  defp rewrite_body_for_repo(_project, _repo, body), do: body
+
+  # Sync reads remote bodies that may carry Symphony-managed GitHub asset URLs
+  # (written by the outgoing rewrite). Map them back to local attachment URLs so
+  # the local store stays local-first and the tracker renders via its own
+  # authenticated endpoint. The uploads index is built once per call and only
+  # when a managed URL is present.
+  defp restore_attachment_urls(issues, slug) when is_binary(slug) do
+    if Enum.any?(issues, fn issue -> AttachmentRewriter.has_managed_asset?(Map.get(issue, :description)) end) do
+      index = AttachmentRewriter.build_index(slug)
+
+      Enum.map(issues, fn issue ->
+        %{issue | description: AttachmentRewriter.restore(issue.description, slug, index: index)}
+      end)
+    else
+      issues
+    end
+  end
+
+  defp restore_attachment_urls(issues, _slug), do: issues
 
   defp config(%Project{tracker_config: cfg}) do
     %{
@@ -421,9 +476,9 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
     end
   end
 
-  defp create_remote_issue(repo_id, title, attrs, label_ids) do
+  defp create_remote_issue(repo_id, title, attrs, label_ids, remote_body) do
     input =
-      %{"repositoryId" => repo_id, "title" => title, "body" => body(attrs)}
+      %{"repositoryId" => repo_id, "title" => title, "body" => remote_body}
       |> put_when_present("labelIds", label_ids)
       |> put_when_present("assigneeIds", string_list(Map.get(attrs, "assignee_ids")))
 
@@ -533,11 +588,13 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
     end
   end
 
-  defp maybe_update_issue_content(%Project{} = project, %{"id" => issue_id}, attrs) do
+  defp maybe_update_issue_content(%Project{} = project, owner, name, %{"id" => issue_id}, attrs) do
+    remote_body = AttachmentRewriter.rewrite(description_attr(attrs), owner, name, project.slug)
+
     fields =
       %{}
       |> maybe_put_issue_field("title", title_attr(attrs))
-      |> maybe_put_issue_field("body", description_attr(attrs))
+      |> maybe_put_issue_field("body", remote_body)
       |> maybe_put_assignee_ids(project, attrs)
 
     if fields == %{} do

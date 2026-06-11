@@ -11,7 +11,7 @@ import {
   type IssueLabelOption,
   type IssuePriority,
 } from "@/types/issue";
-import type { Project, TrackerKind } from "@/types/project";
+import type { Project, ProjectSyncState, ProjectSyncStatus, TrackerKind } from "@/types/project";
 import type { ProjectSetup, WorkspaceSuggestion } from "@/types/project-setup";
 import type {
   ProjectRealtimeEventName,
@@ -137,6 +137,20 @@ export interface BackendProjectDto {
   updatedAt?: string | null;
   archived_at?: string | null;
   archivedAt?: string | null;
+  sync_state?: BackendProjectSyncStateDto | null;
+  syncState?: BackendProjectSyncStateDto | null;
+}
+
+export interface BackendProjectSyncStateDto {
+  status?: string | null;
+  last_error?: string | null;
+  lastError?: string | null;
+  last_pull_at?: string | null;
+  lastPullAt?: string | null;
+  last_push_at?: string | null;
+  lastPushAt?: string | null;
+  last_full_sync_at?: string | null;
+  lastFullSyncAt?: string | null;
 }
 
 export interface BackendIssueDto {
@@ -322,9 +336,24 @@ export function normalizeProject(dto: BackendProjectDto): Project {
       config: dto.tracker_config ?? {},
     },
     trackerUrl: dto.trackerUrl ?? dto.tracker_url ?? null,
+    syncState: normalizeProjectSyncState(dto.syncState ?? dto.sync_state),
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? undefined,
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? undefined,
     archivedAt: dto.archivedAt ?? dto.archived_at ?? null,
+  };
+}
+
+const PROJECT_SYNC_STATUSES: readonly ProjectSyncStatus[] = ["idle", "syncing", "error"];
+
+function normalizeProjectSyncState(dto: BackendProjectSyncStateDto | null | undefined): ProjectSyncState | null {
+  if (!dto) return null;
+  const rawStatus = dto.status ?? "idle";
+  return {
+    status: (PROJECT_SYNC_STATUSES as readonly string[]).includes(rawStatus) ? (rawStatus as ProjectSyncStatus) : "idle",
+    lastError: dto.lastError ?? dto.last_error ?? null,
+    lastPullAt: dto.lastPullAt ?? dto.last_pull_at ?? null,
+    lastPushAt: dto.lastPushAt ?? dto.last_push_at ?? null,
+    lastFullSyncAt: dto.lastFullSyncAt ?? dto.last_full_sync_at ?? null,
   };
 }
 

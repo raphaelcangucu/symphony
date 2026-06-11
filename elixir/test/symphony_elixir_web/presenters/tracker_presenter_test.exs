@@ -45,6 +45,26 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
     assert json.tracker_config == %{"project_id" => "PVT_1"}
   end
 
+  test "sync_state/1 serializes a StateRecord and passes nil through" do
+    state = %SymphonyElixir.Tracker.Sync.StateRecord{
+      status: "error",
+      last_error: ":remote_unavailable",
+      last_pull_at: ~U[2026-06-10 21:00:00.000000Z],
+      last_push_at: ~U[2026-06-10 21:00:00.000000Z],
+      last_full_sync_at: nil
+    }
+
+    json = TrackerPresenter.sync_state(state)
+
+    assert json.status == "error"
+    assert json.last_error == ":remote_unavailable"
+    assert json.last_pull_at == "2026-06-10T21:00:00Z"
+    assert json.last_push_at == "2026-06-10T21:00:00Z"
+    assert json.last_full_sync_at == nil
+
+    assert TrackerPresenter.sync_state(nil) == nil
+  end
+
   test "comment/1 exposes sync_status for local comments" do
     comment = %SymphonyElixir.LocalTracker.Comment{
       id: 1,

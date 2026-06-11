@@ -4,6 +4,11 @@ defmodule SymphonyElixir.Assistant.Payload do
   @max_image_bytes 4 * 1024 * 1024
   @max_audio_bytes 8 * 1024 * 1024
 
+  # Stable tracker API prefix (see SymphonyElixirWeb.Router). Used to build the
+  # embeddable attachment URL the agent can drop into issue descriptions,
+  # comments, and documents so the tracker UI renders the file.
+  @api_prefix "/api/tracker/v1"
+
   @spec normalize_attachments(term(), String.t()) :: [map()]
   def normalize_attachments(attachments, project_slug) when is_list(attachments) and is_binary(project_slug) do
     attachments
@@ -61,7 +66,15 @@ defmodule SymphonyElixir.Assistant.Payload do
     with {:ok, _absolute} <- AttachmentStore.resolve_path(project_slug, path),
          {:ok, name} <- required_string(attachment, ["name", :name], "image"),
          {:ok, media_type} <- required_string(attachment, ["media_type", :media_type], "image/png") do
-      [%{"type" => "image", "name" => name, "media_type" => media_type, "path" => path}]
+      [
+        %{
+          "type" => "image",
+          "name" => name,
+          "media_type" => media_type,
+          "path" => path,
+          "url" => attachment_url(project_slug, path)
+        }
+      ]
     else
       _ -> []
     end
@@ -84,7 +97,13 @@ defmodule SymphonyElixir.Assistant.Payload do
     with {:ok, _absolute} <- AttachmentStore.resolve_path(project_slug, path),
          {:ok, name} <- required_string(attachment, ["name", :name], "file"),
          {:ok, media_type} <- required_string(attachment, ["media_type", :media_type], "application/octet-stream") do
-      base = %{"type" => "file", "name" => name, "media_type" => media_type, "path" => path}
+      base = %{
+        "type" => "file",
+        "name" => name,
+        "media_type" => media_type,
+        "path" => path,
+        "url" => attachment_url(project_slug, path)
+      }
 
       case AttachmentStore.read_text(project_slug, path) do
         {:ok, text, truncated?} -> [Map.merge(base, %{"text" => text, "truncated" => truncated?})]
@@ -146,17 +165,29 @@ defmodule SymphonyElixir.Assistant.Payload do
     end)
   end
 
+  defp attachment_note(%{"type" => "image", "name" => name, "url" => url}) when is_binary(url) do
+    [
+      "Attached image \"#{name}\" (already saved in this project). " <>
+        "To show it in an issue description, comment, or document, embed it with this exact Markdown " <>
+        "(keep the URL unchanged): ![#{markdown_alt(name)}](#{url})"
+    ]
+  end
+
   defp attachment_note(%{"type" => "image", "name" => name}), do: ["Attached image: #{name}"]
   defp attachment_note(%{"type" => "image"}), do: ["Attached image"]
 
   defp attachment_note(%{"type" => "file", "name" => name, "text" => text} = attachment)
        when is_binary(text) and text != "" do
     suffix = if Map.get(attachment, "truncated") == true, do: "\n[... file truncated ...]", else: ""
-    ["Attached file `#{name}`:\n<<<BEGIN FILE #{name}>>>\n#{text}#{suffix}\n<<<END FILE #{name}>>>"]
+    link = file_link_hint(name, Map.get(attachment, "url"))
+
+    ["Attached file `#{name}`#{link}:\n<<<BEGIN FILE #{name}>>>\n#{text}#{suffix}\n<<<END FILE #{name}>>>"]
   end
 
-  defp attachment_note(%{"type" => "file", "name" => name}),
-    do: ["Attached file: #{name} (binary; open it in the tracker UI)."]
+  defp attachment_note(%{"type" => "file", "name" => name} = attachment) do
+    link = file_link_hint(name, Map.get(attachment, "url"))
+    ["Attached file: #{name} (binary)#{link}."]
+  end
 
   defp attachment_note(%{"type" => "file"}), do: ["Attached file"]
 
@@ -167,6 +198,27 @@ defmodule SymphonyElixir.Assistant.Payload do
 
   defp attachment_note(%{"type" => "audio", "name" => name}), do: ["Audio attachment: #{name} (transcription unavailable)."]
   defp attachment_note(_attachment), do: []
+
+  defp file_link_hint(_name, url) when is_binary(url) and url != "" do
+    " (saved in this project; link it in Markdown with the exact URL #{url})"
+  end
+
+  defp file_link_hint(_name, _url), do: ""
+
+  defp markdown_alt(name) when is_binary(name), do: String.replace(name, ["[", "]"], "")
+  defp markdown_alt(_name), do: "image"
+
+  # Builds the root-relative tracker API URL that serves a stored attachment.
+  # The tracker UI Markdown renderer resolves these (with auth) into images.
+  defp attachment_url(project_slug, path) when is_binary(project_slug) and is_binary(path) do
+    encoded_path =
+      path
+      |> String.split("/", trim: true)
+      |> Enum.map_join("/", fn segment -> URI.encode(segment, &URI.char_unreserved?/1) end)
+
+    slug = URI.encode(project_slug, &URI.char_unreserved?/1)
+    "#{@api_prefix}/projects/#{slug}/assistant/attachments/#{encoded_path}"
+  end
 
   defp image_data_url(media_type, data, name) do
     cond do

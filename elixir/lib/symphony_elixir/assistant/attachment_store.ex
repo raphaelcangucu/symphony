@@ -104,6 +104,31 @@ defmodule SymphonyElixir.Assistant.AttachmentStore do
   @spec uploads_dir(Path.t()) :: Path.t()
   def uploads_dir(workspace), do: Path.join(workspace, "uploads")
 
+  @doc """
+  Lists stored uploads for a project as `{relative_path, absolute_path}` tuples.
+  Returns `{:ok, []}` when nothing has been uploaded yet.
+  """
+  @spec list_uploads(String.t()) :: {:ok, [{String.t(), Path.t()}]} | {:error, term()}
+  def list_uploads(project_slug) when is_binary(project_slug) do
+    with {:ok, workspace} <- CodexSession.assistant_workspace(project_slug) do
+      dir = uploads_dir(workspace)
+
+      case File.ls(dir) do
+        {:ok, names} ->
+          {:ok,
+           names
+           |> Enum.map(fn name -> {Path.join("uploads", name), Path.join(dir, name)} end)
+           |> Enum.filter(fn {_relative, absolute} -> File.regular?(absolute) end)}
+
+        {:error, :enoent} ->
+          {:ok, []}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
   @spec content_type(Path.t()) :: String.t()
   def content_type(path) when is_binary(path) do
     path

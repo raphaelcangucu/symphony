@@ -51,6 +51,14 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   end
 
   @doc """
+  Returns the persisted sync state row for a project (`nil` when the project has
+  never synced, e.g. local-only projects). Used by the tracker API to surface
+  sync health in the UI.
+  """
+  @spec state_for(%{required(:id) => term()}) :: StateRecord.t() | nil
+  def state_for(%{id: project_id}), do: Repo.get_by(StateRecord, project_id: project_id)
+
+  @doc """
   Synchronously sync one project. Returns a `summary`.
 
   Queued outbox writes are always pushed, but the remote pull is coalesced: a

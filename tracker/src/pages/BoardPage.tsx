@@ -25,12 +25,14 @@ export function BoardPage() {
     toggleCollapse,
     moveIssueOptimistically,
     setIssues,
-    refetch,
+    reloadProject,
   } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
 
-  useTrackerPolling({ kind: trackerKind, refetch });
+  // Poll reloadProject (not just issue refetch) so board data and the
+  // project's sync health badge refresh on the same cadence.
+  useTrackerPolling({ kind: trackerKind, refetch: () => void reloadProject() });
 
   const openIssue = useCallback(
     (issue: Issue) => {

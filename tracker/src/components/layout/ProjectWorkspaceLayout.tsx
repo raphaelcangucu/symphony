@@ -24,7 +24,7 @@ export function ProjectWorkspaceLayout() {
 }
 
 function WorkspaceChrome() {
-  const { projectSlug, project, trackerKind, refetch, refreshing, setIssues } = useWorkspace();
+  const { projectSlug, project, trackerKind, reloadProject, refreshing, setIssues } = useWorkspace();
   const pollingActive = useWindowFocus();
   const navigate = useNavigate();
 
@@ -51,7 +51,8 @@ function WorkspaceChrome() {
           </>
         }
         trackerKind={trackerKind}
-        onRefresh={() => void refetch()}
+        syncState={project?.syncState ?? null}
+        onRefresh={() => void reloadProject()}
         refreshing={refreshing}
         pollingActive={pollingActive}
         onIssueCreated={(issue) => setIssues((current) => upsertIssue(current, issue))}

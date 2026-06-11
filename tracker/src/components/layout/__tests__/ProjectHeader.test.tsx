@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import type { Issue } from "@/types/issue";
+import type { ProjectSyncState } from "@/types/project";
 
 const createdIssue: Issue = {
   id: "issue-1",
@@ -77,6 +78,62 @@ describe("ProjectHeader polling indicator", () => {
     );
     expect(screen.queryByLabelText("Polling active")).toBeNull();
     expect(screen.queryByLabelText("Polling paused (window not focused)")).toBeNull();
+  });
+
+  it("shows a sync error badge when background sync is failing", () => {
+    const syncState: ProjectSyncState = {
+      status: "error",
+      lastError: ":remote_unavailable",
+      lastPullAt: "2026-06-10T21:00:00Z",
+      lastPushAt: "2026-06-10T21:00:00Z",
+      lastFullSyncAt: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <ProjectHeader projectSlug="macro-markets" trackerKind="github" syncState={syncState} />
+      </MemoryRouter>,
+    );
+
+    const badge = screen.getByLabelText("Sync error");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", expect.stringContaining(":remote_unavailable"));
+  });
+
+  it("does not show the sync error badge when sync is healthy", () => {
+    const syncState: ProjectSyncState = {
+      status: "idle",
+      lastError: null,
+      lastPullAt: "2026-06-10T21:00:00Z",
+      lastPushAt: "2026-06-10T21:00:00Z",
+      lastFullSyncAt: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <ProjectHeader projectSlug="macro-markets" trackerKind="github" syncState={syncState} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByLabelText("Sync error")).toBeNull();
+  });
+
+  it("ignores sync errors for local trackers", () => {
+    const syncState: ProjectSyncState = {
+      status: "error",
+      lastError: "boom",
+      lastPullAt: null,
+      lastPushAt: null,
+      lastFullSyncAt: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <ProjectHeader projectSlug="macro-markets" trackerKind="local" syncState={syncState} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByLabelText("Sync error")).toBeNull();
   });
 
   it("passes header quick-create issues to the creation callback", async () => {
