@@ -77,6 +77,10 @@ Ask a coding agent to walk through setup:
 - **Optional**: browser VS Code (`make install-code-server`), Cursor Desktop, dev-server previews,
   Cloudflare public tunnel (`cloudflared`)
 
+For wait-state issues with linked PRs, Symphony now follows PR outcomes in the background: merged PRs
+can auto-move issues to `Done`, fixable CI/review-bot failures can auto-route to `Rework`, and
+unrelated/flaky failures stay in `Human Review` with rerun guidance.
+
 Implementation details, configuration tables, and feature guides live in
 [elixir/README.md](elixir/README.md).
 
