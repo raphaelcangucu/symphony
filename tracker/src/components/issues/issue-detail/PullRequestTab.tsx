@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { GitPullRequest, RefreshCw, Wrench } from "lucide-react";
+import { GitPullRequest, RefreshCw, RotateCcw, Wrench } from "lucide-react";
 import { toast } from "sonner";
 
 import { hasFailingChecks } from "@/components/issues/pull-request/pr-meta";
 import { PullRequestPanel } from "@/components/issues/pull-request/PullRequestPanel";
-import { linkPullRequest, requestPullRequestFix, unlinkPullRequest } from "@/services/pullRequests";
+import { linkPullRequest, requestPullRequestFix, rerunFailedJobs, unlinkPullRequest } from "@/services/pullRequests";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
-import type { PullRequest } from "@/types/pull-request";
+import type { PullRequest, PullRequestMonitorInfo } from "@/types/pull-request";
 
 interface PullRequestTabProps {
   issue: Issue;
@@ -31,9 +31,13 @@ export function PullRequestTab({
   onRefresh,
 }: PullRequestTabProps) {
   const [fixing, setFixing] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linking, setLinking] = useState(false);
   const canFix = pullRequests.some(hasFailingChecks);
+  const monitorEntries = pullRequests
+    .filter((pr) => pr.monitor?.lastAction)
+    .map((pr) => ({ pr, monitor: pr.monitor! }));
 
   async function handleFix() {
     if (fixing) return;
@@ -46,6 +50,23 @@ export function PullRequestTab({
       toast.error(cause instanceof Error ? cause.message : "Could not request a fix.");
     } finally {
       setFixing(false);
+    }
+  }
+
+  async function handleRerun() {
+    if (rerunning) return;
+    setRerunning(true);
+    try {
+      const failing = pullRequests.filter(hasFailingChecks);
+      for (const pr of failing) {
+        await rerunFailedJobs(projectSlug, issue.identifier, pr.number);
+      }
+      toast.success("Failed jobs were re-run. Refresh in a minute to see results.");
+      onRefresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not re-run the failed jobs.");
+    } finally {
+      setRerunning(false);
     }
   }
 
@@ -165,20 +186,40 @@ export function PullRequestTab({
         </span>
         <div className="flex items-center gap-2">
           {canFix ? (
-            <button
-              type="button"
-              onClick={() => void handleFix()}
-              disabled={fixing}
-              className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-60 dark:text-amber-300"
-            >
-              <Wrench className={cn("h-3.5 w-3.5", fixing && "animate-pulse")} />
-              {fixing ? "Sending…" : "Fix with agent"}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => void handleRerun()}
+                disabled={rerunning}
+                className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-60"
+              >
+                <RotateCcw className={cn("h-3.5 w-3.5", rerunning && "animate-spin")} />
+                {rerunning ? "Re-running…" : "Re-run failed jobs"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleFix()}
+                disabled={fixing}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-60 dark:text-amber-300"
+              >
+                <Wrench className={cn("h-3.5 w-3.5", fixing && "animate-pulse")} />
+                {fixing ? "Sending…" : "Fix with agent"}
+              </button>
+            </>
           ) : null}
           {refreshButton}
         </div>
       </div>
       {linkRow}
+      {monitorEntries.map(({ pr, monitor }) => (
+        <div
+          key={`monitor-${pr.number}`}
+          className="rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2 text-xs text-muted-foreground"
+        >
+          <span className="font-medium text-foreground">{monitorLabel(monitor)}</span>
+          {monitor.summary ? <> — {monitor.summary}</> : null}
+        </div>
+      ))}
       {pullRequests.map((pr) => (
         <PullRequestPanel
           key={pr.url ?? `${pr.repo}#${pr.number}`}
@@ -191,6 +232,21 @@ export function PullRequestTab({
       ))}
     </div>
   );
+}
+
+function monitorLabel(monitor: PullRequestMonitorInfo): string {
+  switch (monitor.lastAction) {
+    case "moved_to_rework":
+      return `CI/review failure attributed to this PR — sent to Rework (attempt ${monitor.autoReworkCount})`;
+    case "moved_to_done":
+      return "PR merged — issue moved to Done";
+    case "kept_human_review":
+      return "Kept in review — failure looks unrelated or needs a human";
+    case "limit_reached":
+      return "Automatic fix limit reached — human review required";
+    default:
+      return "PR monitor";
+  }
 }
 
 function EmptyState({ children }: { children: React.ReactNode }) {
