@@ -24,7 +24,9 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunController do
         Enum.map(run_ids, fn run_id ->
           case WorkflowRuns.rerun_failed_jobs(repo, run_id, request_fun: request_fun) do
             :ok -> %{run_id: run_id, ok: true}
-            {:error, reason} -> %{run_id: run_id, ok: false, error: inspect(reason)}
+            {:error, {:rerun_failed, status, _body}} -> %{run_id: run_id, ok: false, error: "rerun_failed", status: status}
+            {:error, {:rate_limited, _info}} -> %{run_id: run_id, ok: false, error: "rate_limited"}
+            {:error, _reason} -> %{run_id: run_id, ok: false, error: "request_failed"}
           end
         end)
 

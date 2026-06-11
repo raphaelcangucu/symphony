@@ -79,6 +79,16 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunControllerTest do
     end
   end
 
+  defmodule RerunForbiddenClient do
+    @moduledoc false
+
+    def graphql(query, variables, opts), do: RerunClient.graphql(query, variables, opts)
+
+    def rest_post(_path, _body, _opts) do
+      {:error, {:github_api_status, 403}}
+    end
+  end
+
   defmodule NoFailuresClient do
     @moduledoc false
 
@@ -174,8 +184,6 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunControllerTest do
   end
 
   test "POST rerun_failed reruns each failing run and returns the list" do
-    Application.put_env(:symphony_elixir, :github_client_module, RerunClient)
-
     conn = post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/42/pull_requests/7/rerun_failed")
 
     assert %{"data" => %{"reruns" => [%{"run_id" => 99, "ok" => true}]}} = json_response(conn, 200)
@@ -188,6 +196,26 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunControllerTest do
     conn = post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/42/pull_requests/7/rerun_failed")
 
     assert %{"error" => %{"code" => "no_failed_runs"}} = json_response(conn, 422)
+  end
+
+  test "returns invalid_pr_number for non-numeric pull request number" do
+    conn = post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/42/pull_requests/abc/rerun_failed")
+
+    assert %{"error" => %{"code" => "invalid_pr_number"}} = json_response(conn, 422)
+  end
+
+  test "returns structured rerun_failed error when rerun request is rejected" do
+    Application.put_env(:symphony_elixir, :github_client_module, RerunForbiddenClient)
+
+    conn = post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/42/pull_requests/7/rerun_failed")
+
+    assert %{
+             "data" => %{
+               "reruns" => [
+                 %{"run_id" => 99, "ok" => false, "error" => "rerun_failed", "status" => 403}
+               ]
+             }
+           } = json_response(conn, 200)
   end
 
   defp authorized_conn do
