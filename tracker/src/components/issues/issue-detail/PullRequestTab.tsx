@@ -7,7 +7,7 @@ import { PullRequestPanel } from "@/components/issues/pull-request/PullRequestPa
 import { linkPullRequest, requestPullRequestFix, rerunFailedJobs, unlinkPullRequest } from "@/services/pullRequests";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
-import type { PullRequest, PullRequestMonitorInfo } from "@/types/pull-request";
+import type { PullRequest, PullRequestMonitorInfo, RerunResult } from "@/types/pull-request";
 
 interface PullRequestTabProps {
   issue: Issue;
@@ -58,15 +58,20 @@ export function PullRequestTab({
     setRerunning(true);
     try {
       const failing = pullRequests.filter(hasFailingChecks);
+      const results: RerunResult[] = [];
       for (const pr of failing) {
-        await rerunFailedJobs(projectSlug, issue.identifier, pr.number);
+        results.push(...(await rerunFailedJobs(projectSlug, issue.identifier, pr.number)));
       }
-      toast.success("Failed jobs were re-run. Refresh in a minute to see results.");
-      onRefresh();
+      if (results.some((result) => result.ok === false)) {
+        toast.error("Some jobs could not be re-run. Refresh in a minute to see results.");
+      } else {
+        toast.success("Failed jobs were re-run. Refresh in a minute to see results.");
+      }
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Could not re-run the failed jobs.");
     } finally {
       setRerunning(false);
+      onRefresh();
     }
   }
 
@@ -193,7 +198,7 @@ export function PullRequestTab({
                 disabled={rerunning}
                 className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-60"
               >
-                <RotateCcw className={cn("h-3.5 w-3.5", rerunning && "animate-spin")} />
+                <RotateCcw aria-hidden="true" className={cn("h-3.5 w-3.5", rerunning && "animate-spin")} />
                 {rerunning ? "Re-running…" : "Re-run failed jobs"}
               </button>
               <button
@@ -237,7 +242,7 @@ export function PullRequestTab({
 function monitorLabel(monitor: PullRequestMonitorInfo): string {
   switch (monitor.lastAction) {
     case "moved_to_rework":
-      return `CI/review failure attributed to this PR — sent to Rework (attempt ${monitor.autoReworkCount})`;
+      return `CI/review failure attributed to this PR — sent to Rework (attempt ${Math.max(1, monitor.autoReworkCount)})`;
     case "moved_to_done":
       return "PR merged — issue moved to Done";
     case "kept_human_review":
@@ -245,7 +250,7 @@ function monitorLabel(monitor: PullRequestMonitorInfo): string {
     case "limit_reached":
       return "Automatic fix limit reached — human review required";
     default:
-      return "PR monitor";
+      return `Monitor: ${monitor.lastAction ?? "status"}`;
   }
 }
 
