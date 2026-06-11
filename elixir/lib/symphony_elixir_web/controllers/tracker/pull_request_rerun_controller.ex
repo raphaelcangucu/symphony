@@ -21,14 +21,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunController do
       request_fun = fn path, body, opts -> github_client().rest_post(path, body, opts) end
 
       reruns =
-        Enum.map(run_ids, fn run_id ->
-          case WorkflowRuns.rerun_failed_jobs(repo, run_id, request_fun: request_fun) do
-            :ok -> %{run_id: run_id, ok: true}
-            {:error, {:rerun_failed, status, _body}} -> %{run_id: run_id, ok: false, error: "rerun_failed", status: status}
-            {:error, {:rate_limited, _info}} -> %{run_id: run_id, ok: false, error: "rate_limited"}
-            {:error, _reason} -> %{run_id: run_id, ok: false, error: "request_failed"}
-          end
-        end)
+        Enum.map(run_ids, &rerun_result(repo, &1, request_fun))
 
       json(conn, %{data: %{reruns: reruns}})
     else
@@ -53,6 +46,22 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunController do
 
   defp ensure_runs([]), do: {:error, :no_failed_runs}
   defp ensure_runs([_ | _]), do: :ok
+
+  defp rerun_result(repo, run_id, request_fun) do
+    case WorkflowRuns.rerun_failed_jobs(repo, run_id, request_fun: request_fun) do
+      :ok ->
+        %{run_id: run_id, ok: true}
+
+      {:error, {:rerun_failed, status, _body}} ->
+        %{run_id: run_id, ok: false, error: "rerun_failed", status: status}
+
+      {:error, {:rate_limited, _info}} ->
+        %{run_id: run_id, ok: false, error: "rate_limited"}
+
+      {:error, _reason} ->
+        %{run_id: run_id, ok: false, error: "request_failed"}
+    end
+  end
 
   defp github_client do
     Application.get_env(:symphony_elixir, :github_client_module, SymphonyElixir.GitHub.Client)

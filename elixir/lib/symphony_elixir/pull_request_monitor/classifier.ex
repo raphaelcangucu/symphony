@@ -153,25 +153,8 @@ defmodule SymphonyElixir.PullRequestMonitor.Classifier do
 
   @spec append_collected_delta(pid(), map()) :: :ok
   defp append_collected_delta(collector, message) when is_pid(collector) and is_map(message) do
-    payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
-    method = Map.get(payload, "method") || Map.get(payload, :method)
-
-    delta =
-      cond do
-        method == "item/agentMessage/delta" ->
-          get_in(payload, ["params", "delta"]) || get_in(payload, [:params, :delta])
-
-        method == "item/created" ->
-          item = get_in(payload, ["params", "item"]) || get_in(payload, [:params, :item]) || %{}
-
-          case Map.get(item, "type") || Map.get(item, :type) do
-            "text" -> Map.get(item, "text") || Map.get(item, :text)
-            _ -> nil
-          end
-
-        true ->
-          nil
-      end
+    payload = payload_from_message(message)
+    delta = payload_delta(payload)
 
     if is_binary(delta) and delta != "" do
       Agent.update(collector, fn acc -> acc <> delta end)
@@ -181,6 +164,57 @@ defmodule SymphonyElixir.PullRequestMonitor.Classifier do
   end
 
   defp append_collected_delta(_collector, _message), do: :ok
+
+  @spec payload_from_message(map()) :: map()
+  defp payload_from_message(message) do
+    Map.get(message, :payload) || Map.get(message, "payload") || %{}
+  end
+
+  @spec payload_delta(map()) :: String.t() | nil
+  defp payload_delta(payload) do
+    case payload_method(payload) do
+      "item/agentMessage/delta" ->
+        params_value(payload, "delta")
+
+      "item/created" ->
+        created_item_text(payload)
+
+      _other ->
+        nil
+    end
+  end
+
+  @spec payload_method(map()) :: String.t() | nil
+  defp payload_method(payload) do
+    Map.get(payload, "method") || Map.get(payload, :method)
+  end
+
+  @spec created_item_text(map()) :: String.t() | nil
+  defp created_item_text(payload) do
+    item = params_value(payload, "item") || %{}
+
+    if item_type(item) == "text" do
+      Map.get(item, "text") || Map.get(item, :text)
+    else
+      nil
+    end
+  end
+
+  @spec item_type(map()) :: String.t() | nil
+  defp item_type(item) do
+    Map.get(item, "type") || Map.get(item, :type)
+  end
+
+  @spec params_value(map(), String.t()) :: term()
+  defp params_value(payload, key) do
+    atom_key =
+      case key do
+        "delta" -> :delta
+        "item" -> :item
+      end
+
+    get_in(payload, ["params", key]) || get_in(payload, [:params, atom_key])
+  end
 
   @spec scratch_workspace() :: Path.t()
   defp scratch_workspace do
