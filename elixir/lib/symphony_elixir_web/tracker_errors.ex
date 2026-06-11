@@ -105,6 +105,9 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :invalid_pr_number),
     do: error(conn, 422, "invalid_pr_number", "Invalid pull request number.")
 
+  def render(conn, :no_failed_runs),
+    do: error(conn, 422, "no_failed_runs", "No failed workflow runs found for this pull request.")
+
   def render(conn, :invalid_merge_method),
     do: error(conn, 422, "invalid_merge_method", "Merge method must be merge, squash, or rebase.")
 
