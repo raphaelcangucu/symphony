@@ -21,7 +21,9 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
     "## Review feedback",
     "## PR merged",
     "## Codex Workpad",
-    "## Evidence"
+    "## Evidence",
+    "## Automatic fix limit reached",
+    "## PR feedback"
   ]
 
   @spec detect(map(), MonitorState.t() | nil) :: event()

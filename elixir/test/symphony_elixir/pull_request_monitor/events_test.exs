@@ -115,6 +115,27 @@ defmodule SymphonyElixir.PullRequestMonitor.EventsTest do
     assert is_binary(Events.checks_fingerprint(failing))
   end
 
+  test "monitor-authored headers are excluded from review findings" do
+    convo = [
+      %{
+        author: "symphony-bot",
+        body: "## Automatic fix limit reached\nMax rework attempts hit.",
+        kind: "comment",
+        review_state: nil,
+        created_at: "2026-06-10T12:00:00Z"
+      },
+      %{
+        author: "symphony-bot",
+        body: "## PR feedback — needs human attention\nPlease review manually.",
+        kind: "comment",
+        review_state: nil,
+        created_at: "2026-06-10T12:05:00Z"
+      }
+    ]
+
+    assert Events.detect(pr(%{conversation: convo}), nil) == :none
+  end
+
   test "merged wins over pending review findings" do
     convo = [
       %{
