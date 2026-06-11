@@ -20,9 +20,7 @@ defmodule SymphonyElixir.Evidence.RemoteArtifactsTest do
     File.write!(Path.join(evidence_dir, "artifacts/s.png"), "img-bytes")
 
     {:ok, record} =
-      Store.persist("gam", "GAM-9", workspace, %{"issue" => "GAM-9", "runs" => []},
-        evidence_root: Path.join(tmp_dir, "durable")
-      )
+      Store.persist("gam", "GAM-9", workspace, %{"issue" => "GAM-9", "runs" => []}, evidence_root: Path.join(tmp_dir, "durable"))
 
     url =
       "http://localhost:4000/api/tracker/v1/projects/gam/issues/GAM-9/evidence/#{record.run_id}/artifacts/artifacts/s.png"

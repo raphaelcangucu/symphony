@@ -319,6 +319,26 @@ defmodule SymphonyElixir.ConfigTest do
     end
   end
 
+  describe "pr_monitor_interval_ms/0" do
+    test "falls back to poll_interval_ms when unset" do
+      clear_instance_env([:pr_monitor_interval_ms, :poll_interval_ms])
+
+      assert SymphonyElixir.Config.pr_monitor_interval_ms() ==
+               SymphonyElixir.Config.poll_interval_ms()
+
+      put_instance_env(poll_interval_ms: 30_000)
+
+      assert SymphonyElixir.Config.pr_monitor_interval_ms() == 30_000
+    end
+
+    test "uses explicit value when set" do
+      clear_instance_env([:pr_monitor_interval_ms, :poll_interval_ms])
+      put_instance_env(pr_monitor_interval_ms: 15_000)
+
+      assert SymphonyElixir.Config.pr_monitor_interval_ms() == 15_000
+    end
+  end
+
   describe "public_tunnel config" do
     test "defaults when public_tunnel section omitted" do
       load_workflow_with_front_matter("""

@@ -112,6 +112,12 @@ defmodule SymphonyElixirWeb.Router do
       :create
     )
 
+    post(
+      "/projects/:project_slug/issues/:identifier/pull_requests/:number/rerun_failed",
+      PullRequestRerunController,
+      :create
+    )
+
     get("/projects/:project_slug/issues/:identifier/activity", ActivityController, :index)
     get("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :index)
     post("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :create)

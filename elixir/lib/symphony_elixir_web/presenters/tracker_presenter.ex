@@ -196,6 +196,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       issue_id: Map.get(execution, :issue_id),
       issue_identifier: execution.issue_identifier,
       status: Atom.to_string(execution.status),
+      agent_kind: Map.get(execution, :agent_kind),
       session_id: execution.session_id,
       last_event: event_to_string(execution.last_event),
       last_message: AgentExecution.humanize_message(execution.last_message),
@@ -205,6 +206,10 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       started_at: iso8601(execution.started_at),
       retry_attempt: execution.retry_attempt,
       error: execution.error,
+      goal: Map.get(execution, :goal),
+      long_running: Map.get(execution, :long_running),
+      long_running_kind: Map.get(execution, :long_running_kind),
+      long_running_label: Map.get(execution, :long_running_label),
       tokens: execution.tokens
     }
   end

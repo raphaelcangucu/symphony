@@ -177,6 +177,11 @@ GitHub-backed projects surface a **board URL** in the tracker (from the linked P
 linked PR has failing checks, use **Request fix** on the issue drawer to post log tails as a comment
 and move the issue to `Rework` for re-dispatch.
 
+For wait-state issues, projects can also enable `pr_monitor` in `workflow_markdown` so Symphony
+follows linked PRs in the background: merges can auto-transition to `Done`, fixable CI/review-bot
+findings can auto-transition to `Rework` (up to a configured cap), and unrelated/flaky failures stay
+in `Human Review` with rerun guidance.
+
 ### Linear
 
 To get your project's slug, right-click the project and copy its URL. The slug is part of the URL.
@@ -278,6 +283,7 @@ These apply to the whole BEAM process and are read from `elixir/.env` when using
 | `SYMPHONY_TRACKER_PORT` | `4000` | HTTP port for the tracker + API |
 | `SYMPHONY_TRACKER_TOKEN` | — | Bearer token for tracker API and websocket auth |
 | `SYMPHONY_POLL_INTERVAL_MS` | `60000` | Orchestrator poll loop interval |
+| `SYMPHONY_PR_MONITOR_INTERVAL_MS` | `60000` (falls back to `SYMPHONY_POLL_INTERVAL_MS`) | PR follow-up monitor tick interval |
 | `SYMPHONY_TRACKER_SYNC_MIN_PULL_MS` | `60000` | Min spacing between remote pulls per project |
 | `SYMPHONY_TRACKER_PR_SYNC_TTL_MS` | `300000` | TTL before re-enriching an issue's linked PRs |
 | `SYMPHONY_MAX_CONCURRENT_AGENTS` | `10` | Global agent concurrency cap |
@@ -356,6 +362,10 @@ agent:
   kind: claude
   max_concurrent_agents: 5
   max_turns: 20
+pr_monitor:
+  enabled: false
+  max_auto_rework: 2
+  done_on_merge: true
 claude:
   command: claude
 ---

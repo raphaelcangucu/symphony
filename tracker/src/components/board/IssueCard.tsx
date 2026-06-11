@@ -2,7 +2,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useSortable } from "@dnd-kit/sortable";
 import { AlertTriangle, ExternalLink, GitBranch, MessageSquare } from "lucide-react";
 
-import { AgentStatusDot, agentStatusLabel } from "@/components/issues/AgentStatusBadge";
+import { AgentLongRunningBadge, AgentStatusDot, agentStatusLabel } from "@/components/issues/AgentStatusBadge";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { PriorityIndicator } from "@/components/issues/PriorityIndicator";
 import { cn } from "@/lib/utils";
@@ -81,6 +81,12 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
             <GitBranch className="h-3 w-3 shrink-0" />
             <span className="truncate">{issue.branchName}</span>
           </span>
+        </div>
+      ) : null}
+
+      {agent?.longRunning ? (
+        <div className="mt-2.5">
+          <AgentLongRunningBadge execution={agent} compact />
         </div>
       ) : null}
 

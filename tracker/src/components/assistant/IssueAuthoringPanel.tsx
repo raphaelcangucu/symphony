@@ -8,12 +8,14 @@ import {
   type DraftIssueCreated,
   type IssueAssistantMode,
 } from "@/components/assistant/ProjectAssistantPanel";
+import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { Button } from "@/components/ui/button";
 import { useIssueDocuments } from "@/hooks/useIssueDocuments";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { AgentKind } from "@/types/issue";
 import type { AssistantDocumentChangedPayload, AssistantIssueCreatedPayload } from "@/services/phoenix/assistantChannel";
 
@@ -24,6 +26,7 @@ interface IssueAuthoringPanelProps {
   view: WorkspaceView;
   compact?: boolean;
   effectiveAgent?: AgentKind;
+  execution?: AgentExecution;
   onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
   onIssueCreated?: (issue: AssistantIssueCreatedPayload) => void;
 }
@@ -35,6 +38,7 @@ export function IssueAuthoringPanel({
   view,
   compact = false,
   effectiveAgent: effectiveAgentProp,
+  execution,
   onDraftIssueCreated,
   onIssueCreated,
 }: IssueAuthoringPanelProps) {
@@ -163,6 +167,17 @@ export function IssueAuthoringPanel({
         "flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.02]",
       )}
     >
+      {execution ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 bg-muted/30 px-3 py-2">
+          <AgentStatusBadge status={execution.status} />
+          <AgentLongRunningBadge execution={execution} />
+          {execution.goal?.objective ? (
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              {execution.goal.objective}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <ProjectAssistantPanel
         projectSlug={projectSlug}
         threadId={threadId}

@@ -35,6 +35,27 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.session_id == "thread-turn"
       assert execution.turn_count == 2
       assert execution.tokens == %{input: 10, output: 20, total: 30}
+      refute execution.long_running
+      assert execution.long_running_kind == nil
+      assert execution.long_running_label == nil
+    end
+
+    test "marks Codex goal executions as pursuing a goal" do
+      snapshot = %{running: [running_entry(%{agent_kind: "codex", agent_goal: "Ship the issue"})], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.long_running
+      assert execution.long_running_kind == "goal"
+      assert execution.long_running_label == "Pursuing goal"
+    end
+
+    test "marks Claude goal executions as pursuing a workflow" do
+      snapshot = %{running: [running_entry(%{agent_kind: "claude", agent_goal: "Ship the issue"})], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.long_running
+      assert execution.long_running_kind == "workflow"
+      assert execution.long_running_label == "Pursuing workflow"
     end
 
     test "marks running issues with stale activity as idle" do

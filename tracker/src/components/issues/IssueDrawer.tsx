@@ -40,7 +40,7 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { ActivityTab } from "./issue-detail/ActivityTab";
-import { AgentStatusBadge } from "./AgentStatusBadge";
+import { AgentLongRunningBadge, AgentStatusBadge } from "./AgentStatusBadge";
 import { AgentTabs } from "./issue-detail/AgentTabs";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { BlockersTab } from "./issue-detail/BlockersTab";
@@ -200,6 +200,7 @@ export function IssueDrawer({
                     </span>
                   ) : null}
                   {execution ? <AgentStatusBadge status={execution.status} /> : null}
+                  {execution ? <AgentLongRunningBadge execution={execution} /> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <DropdownMenu>

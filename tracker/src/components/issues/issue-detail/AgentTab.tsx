@@ -2,7 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
-import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
+import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { ExecutionSteerComposer } from "@/components/issues/issue-detail/ExecutionSteerComposer";
 import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
 import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
@@ -64,7 +64,10 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
         <div className="flex items-center justify-between gap-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Execution</div>
           {execution ? (
-            <AgentStatusBadge status={execution.status} />
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <AgentStatusBadge status={execution.status} />
+              <AgentLongRunningBadge execution={execution} />
+            </div>
           ) : (
             <span className="text-xs text-muted-foreground">No active agent</span>
           )}
@@ -96,6 +99,22 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
               <div className="col-span-2">
                 <dt className="text-xs text-muted-foreground">Retry attempt</dt>
                 <dd className="mt-1">#{execution.retryAttempt}</dd>
+              </div>
+            ) : null}
+            {execution.goal ? (
+              <div className="col-span-2">
+                <dt className="text-xs text-muted-foreground">
+                  {execution.goal.kind === "workflow" ? "Workflow objective" : "Goal objective"}
+                </dt>
+                <dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground/90">
+                  {execution.goal.objective ?? "-"}
+                </dd>
+                <dd className="mt-2 text-xs text-muted-foreground">
+                  Source: {execution.goal.source === "native" ? "agent native state" : "prompt guidance"}
+                  {execution.goal.capabilities.length > 0
+                    ? ` · Capabilities: ${execution.goal.capabilities.join(", ")}`
+                    : ""}
+                </dd>
               </div>
             ) : null}
           </dl>

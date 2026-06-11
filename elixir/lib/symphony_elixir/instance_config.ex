@@ -44,6 +44,18 @@ defmodule SymphonyElixir.InstanceConfig do
   def poll_interval_ms, do: get(:poll_interval_ms, @default_poll_interval_ms)
 
   @doc """
+  PR follow-up monitor tick interval (ms). Defaults to `poll_interval_ms/0` when
+  `SYMPHONY_PR_MONITOR_INTERVAL_MS` is unset or invalid.
+  """
+  @spec pr_monitor_interval_ms() :: pos_integer()
+  def pr_monitor_interval_ms do
+    case Application.get_env(:symphony_elixir, :pr_monitor_interval_ms) do
+      ms when is_integer(ms) and ms > 0 -> ms
+      _ -> poll_interval_ms()
+    end
+  end
+
+  @doc """
   Minimum spacing (ms) between successive remote pulls for a single project in the
   background tracker sync. A pull requested within this window is coalesced into a
   push-only sync, so a fast orchestrator poll cannot multiply GitHub reads.

@@ -19,9 +19,8 @@ defmodule SymphonyElixir.PullRequestFix do
   def request_fix(%Project{} = project, identifier) when is_binary(identifier) do
     with {:ok, repo} <- PullRequests.resolve_repo(project),
          {:ok, prs} <- PullRequests.for_issue(repo, identifier),
-         failing = collect_failing(prs),
-         :ok <- ensure_present(failing),
-         enriched = enrich_with_logs(repo, failing),
+         enriched = failing_entries(repo, prs),
+         :ok <- ensure_present(enriched),
          body = build_comment(enriched),
          {:ok, comment} <- IssueAdapter.dispatch(project, :add_comment, [identifier, body, %{}]),
          {:ok, _issue} <-
@@ -30,8 +29,17 @@ defmodule SymphonyElixir.PullRequestFix do
     end
   end
 
-  @spec build_comment([map()]) :: String.t()
-  def build_comment(entries) when is_list(entries) do
+  @spec failing_entries(String.t(), [map()], keyword()) :: [map()]
+  def failing_entries(repo, prs, opts \\ []) when is_binary(repo) and is_list(prs) do
+    check_logs = Keyword.get(opts, :check_logs, &default_check_logs/2)
+
+    prs
+    |> collect_failing()
+    |> Enum.map(fn entry -> Map.put(entry, :excerpt, excerpt(check_logs, repo, entry.job)) end)
+  end
+
+  @spec build_comment([map()], header: String.t()) :: String.t()
+  def build_comment(entries, opts \\ []) when is_list(entries) do
     prs = entries |> Enum.map(& &1.pr) |> Enum.uniq_by(& &1.number)
 
     sections =
@@ -40,7 +48,7 @@ defmodule SymphonyElixir.PullRequestFix do
         pr_section(pr, pr_entries)
       end)
 
-    header() <> Enum.join(sections, "\n")
+    comment_header(opts) <> Enum.join(sections, "\n")
   end
 
   defp ensure_present([]), do: {:error, :no_failing_checks}
@@ -70,20 +78,23 @@ defmodule SymphonyElixir.PullRequestFix do
 
   defp failing_job?(_job), do: false
 
-  defp enrich_with_logs(repo, failing) do
-    Enum.map(failing, fn entry ->
-      Map.put(entry, :excerpt, fetch_excerpt(repo, entry.job))
-    end)
-  end
+  defp default_check_logs(repo, job_id), do: CheckLogs.failing_job_excerpt(repo, job_id)
 
-  defp fetch_excerpt(repo, %{job_id: id}) when is_integer(id) and id > 0 do
-    case CheckLogs.failing_job_excerpt(repo, id) do
+  defp excerpt(check_logs, repo, %{job_id: id}) when is_integer(id) and id > 0 do
+    case check_logs.(repo, id) do
       {:ok, text} -> text
       {:error, _reason} -> nil
     end
   end
 
-  defp fetch_excerpt(_repo, _job), do: nil
+  defp excerpt(_check_logs, _repo, _job), do: nil
+
+  defp comment_header(opts) do
+    case Keyword.get(opts, :header) do
+      header when is_binary(header) -> header
+      _ -> header()
+    end
+  end
 
   defp header do
     "## CI failure — automated fix requested\n\n" <>

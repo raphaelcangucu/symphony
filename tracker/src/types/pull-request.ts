@@ -50,6 +50,20 @@ export interface PullRequestConversationEntry {
 
 export type PullRequestOrigin = "auto" | "manual";
 
+export interface PullRequestMonitorInfo {
+  lastAction: string | null;
+  summary: string | null;
+  autoReworkCount: number;
+  lastActionAt: string | null;
+}
+
+export interface RerunResult {
+  runId: number;
+  ok: boolean;
+  error?: string;
+  status?: number;
+}
+
 export interface PullRequest {
   number: number;
   title: string | null;
@@ -71,6 +85,7 @@ export interface PullRequest {
   statuses: PullRequestStatusContext[];
   conversation: PullRequestConversationEntry[];
   baseBehindBy: number | null;
+  monitor: PullRequestMonitorInfo | null;
 }
 
 export interface PullRequestResult {

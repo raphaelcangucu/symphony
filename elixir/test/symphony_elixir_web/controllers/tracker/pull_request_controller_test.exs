@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
 
   alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.PullRequestMonitor.MonitorState
   alias SymphonyElixir.Repo
 
   @endpoint SymphonyElixirWeb.Endpoint
@@ -210,6 +211,25 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
       assert pr["number"] == 7
       assert pr["state"] == "open"
       assert [%{"name" => "CI", "jobs" => [%{"name" => "lint"}]}] = pr["pipelines"]
+      assert pr["monitor"] == nil
+    end
+
+    test "includes monitor payload when a monitor state exists" do
+      {:ok, _state} =
+        MonitorState.upsert("remote", "#7", "https://github.com/o/r/pull/7", %{
+          auto_rework_count: 2,
+          last_action: "kept_human_review",
+          last_action_at: ~U[2026-06-10 18:30:00Z],
+          last_classification: %{"summary" => "CI failure appears unrelated"}
+        })
+
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/remote/issues/%237/pull_requests")
+
+      assert %{"data" => [pr]} = json_response(conn, 200)
+      assert pr["monitor"]["last_action"] == "kept_human_review"
+      assert pr["monitor"]["summary"] == "CI failure appears unrelated"
+      assert pr["monitor"]["auto_rework_count"] == 2
+      assert pr["monitor"]["last_action_at"] == "2026-06-10T18:30:00.000000Z"
     end
 
     test "merges a manual cross-repo PR with live discovery", %{project: project} do

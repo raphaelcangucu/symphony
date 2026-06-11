@@ -19,6 +19,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   alias Plug.Conn
   alias SymphonyElixir.GitHub.{Api, PullRequests, PullRequestUrl, ReadCache}
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.PullRequestMonitor.MonitorState
   alias SymphonyElixir.Tracker.Sync.LocalStore
   alias SymphonyElixir.Tracker.Sync.PullRequests, as: SyncPullRequests
   alias SymphonyElixirWeb.TrackerErrors
@@ -75,17 +76,19 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
         respond_github(conn, project, identifier, refresh?)
 
       {:error, _reason} ->
-        json(conn, %{data: persisted(project.slug, identifier), supported: false, available: false})
+        data = persisted(project.slug, identifier) |> MonitorState.attach(project.slug, identifier)
+        json(conn, %{data: data, supported: false, available: false})
     end
   end
 
   defp respond_github(conn, project, identifier, refresh?) do
     if PullRequests.available?() do
       live = discover_live(project, identifier, refresh?)
-      data = merge(live, persisted(project.slug, identifier))
+      data = merge(live, persisted(project.slug, identifier)) |> MonitorState.attach(project.slug, identifier)
       json(conn, %{data: data, supported: true, available: true})
     else
-      json(conn, %{data: persisted(project.slug, identifier), supported: true, available: false})
+      data = persisted(project.slug, identifier) |> MonitorState.attach(project.slug, identifier)
+      json(conn, %{data: data, supported: true, available: false})
     end
   end
 

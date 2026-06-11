@@ -218,6 +218,32 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
       [%{jobs: [job]}] = PullRequests.parse_pr_node(node).pipelines
       assert job.job_id == 78_427_907_850
     end
+
+    test "exposes head_sha from the last commit oid" do
+      node = %{
+        "number" => 7,
+        "commits" => %{
+          "nodes" => [%{"commit" => %{"oid" => "abc123"}}]
+        }
+      }
+
+      assert %{head_sha: "abc123"} = PullRequests.parse_pr_node(node)
+    end
+
+    test "head_sha is nil when commits are absent" do
+      assert %{head_sha: nil} = PullRequests.parse_pr_node(%{"number" => 7})
+    end
+
+    test "head_sha is nil for empty nodes or blank oid" do
+      assert %{head_sha: nil} =
+               PullRequests.parse_pr_node(%{"number" => 7, "commits" => %{"nodes" => []}})
+
+      assert %{head_sha: nil} =
+               PullRequests.parse_pr_node(%{
+                 "number" => 7,
+                 "commits" => %{"nodes" => [%{"commit" => %{"oid" => ""}}]}
+               })
+    end
   end
 
   describe "for_issue/3" do

@@ -201,6 +201,34 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.after_create_hook == "gh repo clone clouapp/x . -- --depth 1"
   end
 
+  describe "pr_monitor" do
+    test "disabled by default" do
+      project = project_with_setup("pr-default", %{}, "prompt")
+      config = ProjectConfig.resolve(project)
+
+      refute ProjectConfig.pr_monitor_enabled?(config)
+      assert ProjectConfig.pr_monitor_max_auto_rework(config) == 2
+      assert ProjectConfig.pr_monitor_done_on_merge?(config)
+    end
+
+    test "reads the pr_monitor front-matter section" do
+      project =
+        project_with_setup(
+          "pr-config",
+          %{
+            "pr_monitor" => %{"enabled" => true, "max_auto_rework" => 3, "done_on_merge" => false}
+          },
+          "prompt"
+        )
+
+      config = ProjectConfig.resolve(project)
+
+      assert ProjectConfig.pr_monitor_enabled?(config)
+      assert ProjectConfig.pr_monitor_max_auto_rework(config) == 3
+      refute ProjectConfig.pr_monitor_done_on_merge?(config)
+    end
+  end
+
   test "resolve/1 prefers the ProjectSetup.after_create_hook column when present" do
     project =
       github_project_with_setup(

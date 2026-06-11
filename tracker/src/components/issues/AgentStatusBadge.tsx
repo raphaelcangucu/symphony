@@ -1,6 +1,7 @@
-import { Clock, Moon, RotateCcw, Zap, type LucideIcon } from "lucide-react";
+import { Clock, Moon, RotateCcw, Target, Zap, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { AgentExecutionStatus } from "@/types/agent-execution";
 
 interface AgentStatusMeta {
@@ -92,6 +93,34 @@ export function AgentStatusBadge({ status, className, showIcon = true }: AgentSt
     >
       {showIcon ? <Icon className={cn("h-3 w-3", meta.spin && "animate-spin")} /> : null}
       {meta.label}
+    </span>
+  );
+}
+
+interface AgentLongRunningBadgeProps {
+  execution: AgentExecution;
+  className?: string;
+  compact?: boolean;
+}
+
+export function AgentLongRunningBadge({ execution, className, compact = false }: AgentLongRunningBadgeProps) {
+  if (!execution.longRunning || !execution.longRunningLabel) return null;
+
+  const status = execution.goal?.status;
+  const statusSuffix = status && status !== "active" ? ` (${status})` : "";
+
+  return (
+    <span
+      title={execution.goal?.objective ?? execution.longRunningLabel}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 font-semibold text-violet-700 dark:text-violet-300",
+        compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]",
+        className,
+      )}
+    >
+      <Target className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+      {execution.longRunningLabel}
+      {statusSuffix}
     </span>
   );
 }

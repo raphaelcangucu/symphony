@@ -25,6 +25,7 @@ defmodule SymphonyElixir.OrchestratorSupervisor do
       SymphonyElixir.Orchestrator,
       SymphonyElixir.DevServer.Manager,
       SymphonyElixir.DevServer.Reconciler,
+      SymphonyElixir.PullRequestMonitor.Reconciler,
       SymphonyElixir.Observability.Reporter
     ]
   end

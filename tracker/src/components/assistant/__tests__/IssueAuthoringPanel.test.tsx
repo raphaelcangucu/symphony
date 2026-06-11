@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
+import type { AgentExecution } from "@/types/agent-execution";
 
 vi.mock("@/hooks/useIssueDocuments", () => ({
   useIssueDocuments: () => ({
@@ -82,6 +83,36 @@ vi.mock("@/components/assistant/DocumentViewer", () => ({
   ),
 }));
 
+const execution: AgentExecution = {
+  agentKind: "codex",
+  error: null,
+  goal: {
+    kind: "goal",
+    source: "native",
+    objective: "Ship the issue",
+    status: "active",
+    capabilities: ["get", "edit", "pause", "resume", "clear"],
+    tokenBudget: null,
+    tokensUsed: null,
+    timeUsedSeconds: null,
+    updatedAt: null,
+  },
+  issueIdentifier: "MAC-1",
+  lastEvent: "notification",
+  lastEventAt: "2026-05-31T00:02:00Z",
+  lastMessage: "Working",
+  longRunning: true,
+  longRunningKind: "goal",
+  longRunningLabel: "Pursuing goal",
+  retryAttempt: 0,
+  runtimeSeconds: 42,
+  sessionId: "session-1",
+  startedAt: "2026-05-31T00:01:00Z",
+  status: "live",
+  tokens: null,
+  turnCount: 1,
+};
+
 describe("IssueAuthoringPanel", () => {
   it("uses embedded drawer layout when compact", () => {
     render(
@@ -134,6 +165,17 @@ describe("IssueAuthoringPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "acknowledge mode" }));
 
     expect(screen.getByText("Complex mode active.")).toBeTruthy();
+  });
+
+  it("shows the active goal status above the assistant chat", () => {
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" execution={execution} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Live")).toBeTruthy();
+    expect(screen.getByText("Pursuing goal")).toBeTruthy();
   });
 
   it("exposes a Codex goal-mode toggle and confirms it when acknowledged", () => {

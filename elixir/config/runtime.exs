@@ -26,8 +26,23 @@ if config_env() != :test do
 
   editor_settings = SymphonyElixir.BootInstanceConfig.editor_settings()
 
+  # Integer.parse (not parse_int) so invalid values yield nil and fall back to
+  # poll_interval_ms at runtime instead of crashing boot.
+  pr_monitor_interval_ms =
+    case System.get_env("SYMPHONY_PR_MONITOR_INTERVAL_MS") do
+      value when is_binary(value) and value != "" ->
+        case Integer.parse(value) do
+          {ms, ""} when ms > 0 -> ms
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+
   config :symphony_elixir,
     poll_interval_ms: parse_int.("SYMPHONY_POLL_INTERVAL_MS", 60_000),
+    pr_monitor_interval_ms: pr_monitor_interval_ms,
     tracker_sync_min_pull_ms: parse_int.("SYMPHONY_TRACKER_SYNC_MIN_PULL_MS", 60_000),
     tracker_pr_sync_ttl_ms: parse_int.("SYMPHONY_TRACKER_PR_SYNC_TTL_MS", 300_000),
     max_concurrent_agents: parse_int.("SYMPHONY_MAX_CONCURRENT_AGENTS", 10),

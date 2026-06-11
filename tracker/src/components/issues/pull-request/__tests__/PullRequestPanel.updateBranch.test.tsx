@@ -31,6 +31,7 @@ function makePr(overrides: Partial<PullRequest> = {}): PullRequest {
     statuses: [],
     conversation: [],
     baseBehindBy: null,
+    monitor: null,
     ...overrides,
   };
 }

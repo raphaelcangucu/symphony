@@ -82,7 +82,7 @@ export function AgentTabs({ issue, projectSlug, execution, view, onIssueUpdated 
       </div>
 
       <TabsContent value="authoring" className="mt-0 min-h-0 flex-1 overflow-hidden">
-        <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} compact />
+        <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} execution={execution} compact />
       </TabsContent>
       <TabsContent value="execution" className="mt-0">
         <AgentTab
