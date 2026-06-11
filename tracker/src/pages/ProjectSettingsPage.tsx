@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { ProjectConfigEditor } from "@/components/projects/ProjectConfigEditor";
+import { ProjectImportExportActions } from "@/components/projects/ProjectImportExportActions";
 import { notifyTrackerProjectsChanged } from "@/lib/projectEvents";
 import {
   PROJECTS_PATH,
@@ -20,6 +21,7 @@ export function ProjectSettingsPage() {
   const slug = projectSlug.trim();
   const activeTab = resolveProjectSettingsTab(tab);
   const [project, setProject] = useState<Project | null>(null);
+  const [editorRevision, setEditorRevision] = useState(0);
 
   useEffect(() => {
     if (!slug) {
@@ -47,20 +49,30 @@ export function ProjectSettingsPage() {
   return (
     <div className="h-[calc(100vh-4rem)] overflow-y-auto">
       <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6">
-        <header className="flex items-start gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border bg-card shadow-sm">
-            <Settings2 className="h-5 w-5 text-muted-foreground" aria-hidden />
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border bg-card shadow-sm">
+              <Settings2 className="h-5 w-5 text-muted-foreground" aria-hidden />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Project settings</p>
+              <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
+              <p className="text-sm text-muted-foreground">
+                Per-project configuration. Process-level settings live in the server environment.
+              </p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Project settings</p>
-            <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
-            <p className="text-sm text-muted-foreground">
-              Per-project configuration. Process-level settings live in the server environment.
-            </p>
-          </div>
+          <ProjectImportExportActions
+            project={project}
+            onImported={(updated) => {
+              setProject(updated);
+              setEditorRevision((current) => current + 1);
+              notifyTrackerProjectsChanged();
+            }}
+          />
         </header>
       <ProjectConfigEditor
-        key={project.slug}
+        key={`${project.slug}-${editorRevision}`}
         project={project}
         activeTab={activeTab}
         onTabChange={(next) => navigate(projectSettingsPath(project.slug, next))}

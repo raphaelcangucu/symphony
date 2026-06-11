@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   alias Plug.Conn
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.Projects
   alias SymphonyElixir.Tracker.Sync.Engine, as: SyncEngine
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
@@ -185,4 +186,62 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
+
+  @spec export(Conn.t(), map()) :: Conn.t()
+  def export(conn, %{"id" => project_slug}) do
+    case Projects.export_yaml(project_slug) do
+      {:ok, yaml} -> conn |> put_resp_content_type("text/yaml") |> send_resp(200, yaml)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec import_bundle(Conn.t(), map()) :: Conn.t()
+  def import_bundle(conn, %{"yaml" => yaml}) when is_binary(yaml) do
+    case Projects.import_yaml(yaml) do
+      {:ok, project} ->
+        statuses = Context.list_statuses(project.slug)
+        repositories = Context.list_repositories(project.slug)
+        setup = Context.get_project_setup(project.slug)
+
+        conn
+        |> put_status(:created)
+        |> json(%{data: TrackerPresenter.project(project, statuses, repositories, setup)})
+
+      {:error, :invalid_yaml} ->
+        TrackerErrors.validation(conn, "Invalid YAML")
+
+      {:error, :slug_taken} ->
+        TrackerErrors.validation(conn, "A project with this slug already exists")
+
+      {:error, {:invalid_workflow_markdown, reason}} ->
+        TrackerErrors.validation(conn, "invalid workflow_markdown: " <> reason)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def import_bundle(conn, _params), do: TrackerErrors.validation(conn, "yaml is required")
+
+  @spec import_config(Conn.t(), map()) :: Conn.t()
+  def import_config(conn, %{"id" => project_slug, "yaml" => yaml}) when is_binary(yaml) do
+    case Projects.import_yaml_into(project_slug, yaml) do
+      {:ok, project} ->
+        statuses = Context.list_statuses(project.slug)
+        repositories = Context.list_repositories(project.slug)
+        setup = Context.get_project_setup(project.slug)
+        json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup)})
+
+      {:error, :invalid_yaml} ->
+        TrackerErrors.validation(conn, "Invalid YAML")
+
+      {:error, {:invalid_workflow_markdown, reason}} ->
+        TrackerErrors.validation(conn, "invalid workflow_markdown: " <> reason)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def import_config(conn, _params), do: TrackerErrors.validation(conn, "yaml is required")
 end

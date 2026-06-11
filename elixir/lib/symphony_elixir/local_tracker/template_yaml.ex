@@ -37,9 +37,11 @@ defmodule SymphonyElixir.LocalTracker.TemplateYaml do
           }
         end)
     }
-    |> reject_nil()
-    |> to_yaml()
+    |> encode_map()
   end
+
+  @spec encode_map(map()) :: binary()
+  def encode_map(map) when is_map(map), do: map |> reject_nil() |> to_yaml()
 
   defp normalize(map) do
     map
@@ -76,27 +78,28 @@ defmodule SymphonyElixir.LocalTracker.TemplateYaml do
     end)
   end
 
-  defp encode_value(value, _indent), do: scalar(value)
+  defp encode_value(value, indent), do: scalar(value, indent)
 
   defp encode_inline_or_block(value, indent) when is_map(value) or is_list(value) do
     "\n" <> encode_value(value, indent + 1)
   end
 
-  defp encode_inline_or_block(value, _indent), do: " " <> scalar(value)
+  defp encode_inline_or_block(value, indent), do: " " <> scalar(value, indent)
 
-  defp scalar(value) when is_binary(value) do
+  defp scalar(value, indent) when is_binary(value) do
     if String.contains?(value, "\n") do
-      "|\n" <> (value |> String.split("\n") |> Enum.map_join("\n", &("  " <> &1)))
+      content_indent = pad(indent + 1)
+      "|\n" <> (value |> String.split("\n") |> Enum.map_join("\n", &(content_indent <> &1)))
     else
       escaped = value |> String.replace("\\", "\\\\") |> String.replace("\"", "\\\"")
       ~s("#{escaped}")
     end
   end
 
-  defp scalar(value) when is_boolean(value), do: to_string(value)
-  defp scalar(value) when is_number(value), do: to_string(value)
-  defp scalar(nil), do: "null"
-  defp scalar(value), do: ~s("#{to_string(value)}")
+  defp scalar(value, _indent) when is_boolean(value), do: to_string(value)
+  defp scalar(value, _indent) when is_number(value), do: to_string(value)
+  defp scalar(nil, _indent), do: "null"
+  defp scalar(value, _indent), do: ~s("#{to_string(value)}")
 
   defp pad(indent), do: String.duplicate("  ", indent)
 end
