@@ -9,8 +9,19 @@ import { ViewerProvider } from "@/components/auth/ViewerProvider";
 import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRoute";
 import * as viewerService from "@/services/viewer";
 
+vi.mock("@/services/settings", () => ({
+  fetchIdentities: () => Promise.resolve([]),
+}));
+
 vi.mock("@/components/layout/WorkspaceContext", () => ({
-  useWorkspace: () => ({ projectSlug: "x", view: "board", knownLogins: ["alice", "bob"] }),
+  useWorkspace: () => ({
+    projectSlug: "x",
+    view: "board",
+    issues: [
+      { id: "1", assignee: "alice", creator: "alice" },
+      { id: "2", assignee: "bob", creator: "carol" },
+    ],
+  }),
 }));
 
 function Harness() {
@@ -77,15 +88,27 @@ describe("BoardFiltersDrawer (route-driven)", () => {
     vi.useRealTimers();
   });
 
-  it("applies assignee=me from the dropdown", async () => {
+  it("applies assignee=me from the people picker", async () => {
     renderHarness();
     await waitFor(() => expect(screen.getByRole("button", { name: /filters/i })).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole("button", { name: /filters/i }));
-    await userEvent.click(screen.getByRole("button", { name: /assignee/i }));
-    await userEvent.click(screen.getByText(/^Me$/));
+    await userEvent.click(screen.getByRole("button", { name: /^assignee$/i }));
+    await userEvent.click(await screen.findByRole("option", { name: /assigned to me/i }));
 
     expect(screen.getByTestId("params").textContent).toContain("assignee=me");
+  });
+
+  it("selects multiple assignees into a comma list", async () => {
+    renderHarness();
+    await waitFor(() => expect(screen.getByRole("button", { name: /filters/i })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^assignee$/i }));
+    await userEvent.click(await screen.findByRole("option", { name: /alice/i }));
+    await userEvent.click(await screen.findByRole("option", { name: /bob/i }));
+
+    expect(screen.getByTestId("params").textContent).toContain("assignee=alice%2Cbob");
   });
 
   it("clears all filters but keeps the drawer open", async () => {

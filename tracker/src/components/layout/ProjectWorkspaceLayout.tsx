@@ -4,6 +4,7 @@ import { Navigate, Outlet, useNavigate, useParams } from "react-router-dom";
 import { upsertIssue } from "@/components/board/board-utils";
 import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
+import { BoardQuickFilters } from "@/components/board/BoardQuickFilters";
 import { ProjectAssistantMenu } from "@/components/layout/ProjectAssistantMenu";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { WorkspaceProvider, useWorkspace } from "@/components/layout/WorkspaceContext";
@@ -58,6 +59,7 @@ function WorkspaceChrome() {
         onIssueCreated={(issue) => setIssues((current) => upsertIssue(current, issue))}
       />
       <BoardPaletteShortcuts />
+      <BoardQuickFilters />
       <Outlet />
     </div>
   );

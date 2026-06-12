@@ -5,7 +5,7 @@ import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { workspaceBasePath } from "@/lib/workspaceRoutes";
 
 export function WorkspaceFiltersRoute() {
-  const { projectSlug, view, knownLogins } = useWorkspace();
+  const { projectSlug, view } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -14,7 +14,6 @@ export function WorkspaceFiltersRoute() {
   return (
     <BoardFiltersDrawer
       open
-      knownLogins={knownLogins}
       focusSearch={focusSearch}
       onOpenChange={(open) => {
         if (!open) navigate({ pathname: workspaceBasePath(projectSlug, view), search: location.search });

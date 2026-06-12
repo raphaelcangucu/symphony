@@ -72,6 +72,7 @@ export function BoardPaletteShortcuts() {
           params.delete("assignee");
           params.delete("creator");
           params.delete("q");
+          params.delete("updated");
         }
         return params;
       },

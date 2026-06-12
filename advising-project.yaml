@@ -50,9 +50,70 @@ workflow_statuses:
   - { name: "To Do", category: "unstarted", position: 0, is_terminal: false }
   - { name: "Em andamento", category: "started", position: 1, is_terminal: false }
   - { name: "Done", category: "completed", position: 2, is_terminal: true }
+dev_env_steps:
+  - command: "test -f docker/.env || cp docker/.env.example docker/.env"
+    description: "Ensure docker/.env exists"
+    optional: true
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "advising"
+  - command: "./vibe shared up"
+    description: "Start shared Docker services (postgres, memcached, localstack)"
+    optional: false
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "advising"
+  - command: "COMPOSE_PROJECT_NAME=$(basename \"$(dirname \"$PWD\")\") ./vibe up"
+    description: "Inspire web app (PHP 7.4 Docker)"
+    optional: false
+    port_env: "INSPIRE_PORT"
+    primary: true
+    ready_path: "/"
+    ready_probe: "http"
+    role: "serve"
+    source: "manual"
+    url_path: "/"
+    working_dir: "advising"
 setup:
   workflow_markdown: |
     ---
+    evidence:
+      required: true
+      ui_paths:
+        - "advising/advisestream/web/**"
+        - "advising/accessible-ui/**"
+        - "advising/kiosk/**"
+      test_command:
+        advising: "cd advising && ./vibe test"
+      e2e_command:
+        advising: "cd advising/automation/playwright && npx playwright test"
+    agent:
+      max_turns: 20
+    dev_server:
+      enabled: true
+      port_range:
+        - 4300
+        - 4399
+      idle_timeout_ms: 1800000
+      auto_start_on: pull_request,human_review
+    public_tunnel:
+      base_domain: tracker.cods.dev
+      enabled: true
+    hooks:
+      after_create: |
+        gh repo clone civitaslearning/advising advising -- --depth 1 -b pre-release
+
+        if [ -f advising/docker/.env.example ] && [ ! -f advising/docker/.env ]; then
+          cp advising/docker/.env.example advising/docker/.env
+        fi
     tracker:
       field_states:
         - To Do
@@ -67,6 +128,8 @@ setup:
       branch_pattern: "symphony/{issue}"
       pr_title_pattern: "{issue}: {title}"
       issue_marker_key: "Symphony-Issue"
+    workspace:
+      root: ~/code/advising-workspaces
     ---
 
     You are working on Jira issue `{{ issue.identifier }}` in the **Advising** board
@@ -74,6 +137,89 @@ setup:
 
     Repository: `civitaslearning/advising` (workspace path `advising/`), integration
     branch and PR base `pre-release`.
+
+    Read `docs/SAIL.md`, `docs/VIBE.md`, `docs/TESTS.md`, and `docs/INSTALL.md` in
+    the repo before running commands. This is **PHP 7.4 Symfony 1.x** (legacy Inspire)
+    running in Docker — never run bare `php` on the host for app code.
+
+    ## Runtime (Docker + Sail + Vibe)
+
+    | Concern | Path | Notes |
+    |---------|------|-------|
+    | Main app (PHP 7.4) | `advisestream/` | Symfony 1.x LAMP stack, mounted at `/opt/inspire` in container |
+    | Accessible UI (React) | `accessible-ui/` | MUI portals spliced into Inspire |
+    | Kiosk (React) | `kiosk/` | Kiosk app |
+    | E2E automation | `automation/playwright/` | Playwright suite (needs running app) |
+
+    **Sail** (`./sail` → `scripts/sail`): Docker CLI for the main repo. Runs PHPUnit,
+    Symfony tasks, and shell commands inside the `inspire` container.
+
+    **Vibe** (`./vibe` → `scripts/vibe`): Git worktree manager. Each Symphony issue
+    workspace acts like a vibe — isolated app containers, **shared** postgres /
+    memcached / localstack across worktrees.
+
+    ### Startup (required before tests or manual QA)
+
+    ```bash
+    cd advising
+    ./vibe shared up          # postgres, memcached, localstack (once)
+    ./vibe up                 # inspire + accessible-ui + kiosk
+    ./vibe status             # confirm ports
+    ```
+
+    First-time setup may also need AWS ECR login (`./sail aws:login`) and
+    `docker/.env` credentials — see `docs/INSTALL.md`.
+
+    ### Running tests (mandatory before Human Review)
+
+    PHPUnit (primary unit/functional suite):
+
+    ```bash
+    cd advising
+    ./vibe test                                    # all tests
+    ./vibe test --filter=MyTestClass               # targeted
+    ./vibe phpunit advisestream/test/phpunit/unit/ # directory
+    ```
+
+    Accessible UI (when `accessible-ui/` changed):
+
+    ```bash
+    cd advising/accessible-ui && yarn test
+    ```
+
+    E2E Playwright (when UI paths changed — requires `./vibe up` first):
+
+    ```bash
+    cd advising/automation/playwright
+    npm install
+    npx playwright test
+    ```
+
+    During VALIDATE, follow the `evidence` skill: run real commands, copy artifacts
+    to `.symphony/evidence/artifacts/`, write `.symphony/evidence/manifest.json`.
+
+    ## Issue preview (Symphony Preview tab)
+
+    Preview steps live in the project's DevEnv config (`.symphony/devenv.yaml` in the
+    repo + saved steps in Symphony). The tracker **Preview** tab starts them on demand
+    or auto-starts on `pull_request` / `human_review`.
+
+    - Symphony allocates `INSPIRE_PORT` and runs `./vibe up` inside Docker.
+    - Each issue workspace gets an isolated `COMPOSE_PROJECT_NAME` (the workspace folder
+      name) so containers do not collide across issues.
+    - Shared infra (`./vibe shared up`) is global — same postgres/memcached as local dev.
+    - **Prerequisite**: AWS ECR login (`./sail aws:login`) and valid `docker/.env` on
+      the host running Symphony — see `docs/INSTALL.md`.
+
+    Manual preview from the workspace:
+
+    ```bash
+    cd advising
+    COMPOSE_PROJECT_NAME=$(basename "$(dirname "$PWD")") INSPIRE_PORT=4300 ./vibe up
+    ./vibe status
+    ```
+
+    Tenant URLs (when app is ready): `http://cwu.localhost:<port>/`, etc.
 
     ## Workflow
 
@@ -84,6 +230,7 @@ setup:
       links the PR to this issue deterministically: `Symphony-Issue: {{ issue.identifier }}`.
     - Use a single `## Codex Workpad` comment for progress and the machine-readable
       `symphony:prs` registry block.
+    - Record validation in the workpad: `targeted tests: <command>` and outcome.
 
     Follow the repository's own test, lint, and PR-template conventions; validate before
     moving the card to Human Review.

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GitHubProjectPicker } from "@/components/projects/GitHubProjectPicker";
+import { JiraTrackerFields } from "@/components/projects/JiraTrackerFields";
 import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
 import { ProjectAgentSelect } from "@/components/projects/ProjectAgentSelect";
 import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
@@ -449,6 +450,13 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
                 }
               />
             </div>
+          ) : null}
+
+          {trackerKind === "jira" ? (
+            <JiraTrackerFields
+              config={remoteConfig ?? {}}
+              onConfigChange={(changes) => setRemoteConfig((current) => ({ ...(current ?? {}), ...changes }))}
+            />
           ) : null}
 
           {trackerKind === "local" ? (

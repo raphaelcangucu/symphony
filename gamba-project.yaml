@@ -1,5 +1,6 @@
 description: "Gamba workspace — frontend (GambaLabs/frontend) + backend (GambaLabs/backend) + goapi (GambaLabs/goapi)."
 dev_env_steps:
+  # --- Frontend (Nuxt) ---
   - command: "yarn install"
     description: "Install frontend dependencies"
     optional: false
@@ -10,7 +11,7 @@ dev_env_steps:
     source: "manual"
     url_path: "/"
     working_dir: "frontend"
-  - command: "npm run dev -- --host 0.0.0.0"
+  - command: "NUXT_TELEMETRY_DISABLED=1 yarn dev -- --host 0.0.0.0"
     description: "Frontend Nuxt dev server"
     optional: false
     port_env: "PORT"
@@ -21,6 +22,90 @@ dev_env_steps:
     source: "manual"
     url_path: "/"
     working_dir: "frontend"
+  # --- Backend (Laravel Sail / Vibe) ---
+  - command: "test -f .env || cp .env.example .env"
+    description: "Create backend .env from example"
+    optional: true
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "backend"
+  - command: "test -x ./vendor/bin/sail || docker run --rm --pull=always --platform linux/amd64 -v \"$(pwd)\":/opt -w /opt raphaelcangucu/php82sqlite3:latest bash -c \"composer install --ignore-platform-reqs && cp -n .env.example .env && php ./artisan sail:install --with=redis,pgsql,memcached,selenium,mailpit\""
+    description: "Install backend deps + Sail when vendor/bin/sail is missing"
+    optional: true
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "backend"
+  - command: "./vibe shared up"
+    description: "Start shared Docker services (pgsql, redis, etc.)"
+    optional: false
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "backend"
+  - command: "test -x ./vendor/bin/sail && ./vendor/bin/sail artisan migrate --seed || true"
+    description: "Run backend migrations with seed data (when Sail is installed)"
+    optional: true
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "backend"
+  - command: "./vendor/bin/sail up -d"
+    description: "Backend Laravel API (Sail)"
+    optional: false
+    port_env: "APP_PORT"
+    primary: false
+    ready_path: "/graphiql"
+    ready_probe: "http"
+    role: "serve"
+    source: "manual"
+    url_path: "/graphiql"
+    working_dir: "backend"
+  # --- GoAPI (Go) ---
+  - command: "test -f .env || cp .env.example .env"
+    description: "Create goapi .env from example"
+    optional: true
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "goapi"
+  - command: "make build-local || true"
+    description: "Build GoAPI binary (fetches modules + compile check)"
+    optional: true
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "goapi"
+  - command: "go run cmd/server/main.go"
+    description: "GoAPI GraphQL server"
+    optional: false
+    port_env: "PORT"
+    primary: false
+    ready_path: "/graphiql"
+    ready_probe: "http"
+    role: "serve"
+    source: "manual"
+    url_path: "/graphiql"
+    working_dir: "goapi"
 kind: "symphony_project"
 metadata:
   exported_at: "2026-06-11T19:57:27Z"
@@ -74,6 +159,16 @@ setup:
       port_range:
         - 4100
         - 4199
+    evidence:
+      required: true
+      ui_paths:
+        - "frontend/**"
+      test_command:
+        frontend: "yarn test --run"
+        backend: "./vibe test"
+        goapi: "go test ./..."
+      e2e_command:
+        frontend: "npx playwright test"
     hooks:
       after_create: |
         gh repo clone GambaLabs/frontend frontend -- --depth 1 -b development
@@ -87,10 +182,19 @@ setup:
           touch frontend/.env frontend/.env.local
         fi
     
+        if [ -f backend/.env.example ] && [ ! -f backend/.env ]; then
+          cp backend/.env.example backend/.env
+        fi
+    
+        if [ -f goapi/.env.example ] && [ ! -f goapi/.env ]; then
+          cp goapi/.env.example goapi/.env
+        fi
+    
         cat >> frontend/.env.local <<ENV
     
         # Symphony local/dev override for Nuxt/Vue frontend
         NODE_ENV=development
+        NUXT_TELEMETRY_DISABLED=1
         APP_ENV=dev
         NUXT_PUBLIC_APP_ENV=dev
         NUXT_PUBLIC_API_URL=https://dev.gamba.com
@@ -196,24 +300,119 @@ setup:
     
     ## Issue preview servers
     
-    Symphony can expose a **Preview** tab for an issue workspace when `dev_server.enabled` is true and a cloned repo declares a serve step in `.symphony/devenv.yaml`.
+    Symphony exposes a **Preview** tab when `dev_server.enabled` is true and DevEnv serve steps are saved for this project (imported via `gamba-project.yaml` → `dev_env_steps`).
     
-    For the Vue/Nuxt frontend, use the repository's package manager and scripts. A typical serve step looks like this, but the agent must confirm the real script in `frontend/package.json` first:
+    ### Preview modes
     
-    ```yaml
-    steps:
-      - description: Frontend Nuxt dev server
-        command: npm run dev -- --host 0.0.0.0
-        working_dir: frontend
-        role: serve
-        port_env: PORT
-        url_path: /
-        ready: http
-        ready_path: /
-        primary: true
+    | Mode | When to use | API target |
+    |------|-------------|------------|
+    | **UI-only** (default) | Frontend-only issues | `https://dev.gamba.com` (set in `hooks.after_create`) |
+    | **Full stack** | Issues touching backend/goapi or needing local integration | Point `frontend/.env.local` at Symphony preview URLs for backend + goapi |
+    
+    ### How to run each service (manual or Preview tab)
+    
+    **Frontend — Nuxt (`frontend/`)**
+    
+    ```bash
+    cd frontend
+    yarn install
+    yarn dev -- --host 0.0.0.0       # listens on $PORT (Symphony injects it in Preview)
     ```
     
-    Multiple setup and serve steps are allowed, so backend/goapi services can be started alongside the frontend when their repos define `.symphony/devenv.yaml`.
+    - Script in `package.json`: `nuxi dev --dotenv .env.local`
+    - Env: copy from `.env.example` → `.env` + `.env.local`; Symphony appends dev overrides on clone
+    - Validation: `yarn lint` and `yarn test`
+    
+    **Backend — Laravel Sail / Vibe (`backend/`)**
+    
+    First-time setup (Docker required):
+    
+    ```bash
+    cd backend
+    make install                     # composer + sail:install + pull/build images (once)
+    ./vibe shared up                 # shared pgsql, redis, memcached, mailpit, etc.
+    ./vendor/bin/sail artisan migrate --seed
+    ```
+    
+    Start the API:
+    
+    ```bash
+    cd backend
+    ./vendor/bin/sail up -d          # Symphony sets APP_PORT before this in Preview
+    # GraphQL playground: http://127.0.0.1:<APP_PORT>/graphiql
+    ```
+    
+    Feature-branch isolation (optional, outside Symphony preview):
+    
+    ```bash
+    ./vibe create branch=feature/slug
+    cd ../vibe-feature-slug
+    ./vibe up -d
+    ./vibe artisan migrate --seed
+    ```
+    
+    Prefer `./vibe` / `./vendor/bin/sail` over bare `php` or `artisan`. Validation: `./vendor/bin/sail pest` (or `./vibe test`).
+    
+    **GoAPI — Go (`goapi/`)**
+    
+    Prerequisites: Go ≥ 1.23.5, shared Postgres/Redis from backend Sail (`localhost:5432`, `localhost:6379`).
+    Prefer **Makefile targets** over raw `go` commands (see `goapi/Makefile`).
+    
+    ```bash
+    cd goapi
+    cp .env.example .env             # DB_WRITE_URL → sail pgsql; PORT default 8091
+    make build-local                 # optional: compile check + fetch modules
+    make run-local                   # Symphony sets PORT in Preview (overrides .env)
+    # GraphiQL: http://127.0.0.1:<PORT>/graphiql
+    # GraphQL:  http://127.0.0.1:<PORT>/graphql
+    ```
+    
+    Other useful Makefile targets:
+    
+    | Target | Purpose |
+    |--------|---------|
+    | `make run-local` | Start GraphQL server locally |
+    | `make restart-local` | Kill process on :8091 and restart |
+    | `make build-local` | Build `bin/server` |
+    | `make test` | Run full test suite (`go test ./... -v`) |
+    | `make test-smart` | Run tests with gotestsum (if installed) |
+    | `make test-coverage` | Coverage report |
+    | `make run-lambda-local` | SAM local API (Lambda path; needs SAM CLI) |
+    
+    Validation: `make test` (or `make test-smart` when gotestsum is available).
+    
+    ### Full-stack preview wiring
+    
+    When starting **Start Preview** with all three serve steps:
+    
+    1. Start **backend** and **goapi** first (they need `./vibe shared up` + Sail).
+    2. Note the preview URLs from the Preview tab (or `http://127.0.0.1:<port>`).
+    3. Update `frontend/.env.local` before starting the frontend serve step:
+       ```
+       NUXT_PUBLIC_API_URL=http://127.0.0.1:<backend-port>
+       NUXT_PUBLIC_GOAPI_URL=http://127.0.0.1:<goapi-port>
+       GRAPHQL_BASE_URL=http://127.0.0.1:<backend-port>/graphql
+       ```
+    4. Restart the frontend preview if it was already running.
+    
+    ### Saved DevEnv steps (imported)
+    
+    | Step | Role | Dir | Command |
+    |------|------|-----|---------|
+    | Install frontend deps | setup | `frontend/` | `yarn install` |
+    | Nuxt dev server | serve (primary) | `frontend/` | `yarn dev -- --host 0.0.0.0` |
+    | Backend .env | setup (optional) | `backend/` | `test -f .env \|\| cp .env.example .env` |
+    | Backend install | setup (optional) | `backend/` | `test -x ./vendor/bin/sail \|\| docker run … composer install --ignore-platform-reqs …` |
+    | Shared Docker | setup | `backend/` | `./vibe shared up` |
+    | Migrations | setup (optional) | `backend/` | `test -x ./vendor/bin/sail && ./vendor/bin/sail artisan migrate --seed \|\| true` |
+    | Laravel API | serve | `backend/` | `./vendor/bin/sail up -d` |
+    | GoAPI .env | setup (optional) | `goapi/` | `test -f .env \|\| cp .env.example .env` |
+    | GoAPI build | setup (optional) | `goapi/` | `make build-local` |
+    | GoAPI server | serve | `goapi/` | `make run-local` |
+    
+    Setup steps for the same `working_dir` run automatically before their serve step. Optional steps are skipped on failure.
+    
+    Repositories may also declare steps in `.symphony/devenv.yaml` for DevEnv discovery; imported project steps take precedence after import.
     
     ## Agent routing (GitHub labels)
     
@@ -267,7 +466,7 @@ setup:
     - Treat ticket `Validation`, `Test Plan`, or `Testing` sections as required; mirror them in the workpad.
     - Frontend (`frontend/`): run the repo's lint and unit test commands when frontend code changes.
     - Backend (`backend/`): run the repo's test command when backend code changes.
-    - Goapi (`goapi/`): run the repo's test command when goapi code changes.
+    - Goapi (`goapi/`): `make test` (or `make test-smart`) when goapi code changes.
     - Record in workpad **Validation**: `targeted tests: <command>` and outcome for each repo touched.
     - Do not move to **Human Review** until every touched repo has passing validation and an open PR against its base branch.
 slug: "gamba"

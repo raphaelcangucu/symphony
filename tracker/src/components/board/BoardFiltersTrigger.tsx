@@ -2,9 +2,8 @@ import { ListFilter } from "lucide-react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { countActiveFilters, filtersFromSearchParams } from "@/lib/issueFilters";
 import { filtersPath, viewFromPathname, workspaceBasePath } from "@/lib/workspaceRoutes";
-
-const TRACKED_KEYS = ["q", "assignee", "creator"] as const;
 
 export function BoardFiltersTrigger() {
   const { projectSlug = "" } = useParams();
@@ -14,10 +13,7 @@ export function BoardFiltersTrigger() {
 
   const view = viewFromPathname(location.pathname);
   const isOpen = location.pathname === filtersPath(projectSlug, view);
-  const activeCount = TRACKED_KEYS.reduce((acc, key) => {
-    const value = searchParams.get(key);
-    return acc + (value && value.trim() ? 1 : 0);
-  }, 0);
+  const activeCount = countActiveFilters(filtersFromSearchParams(searchParams));
 
   const label = activeCount === 0 ? "Filters" : `Filters · ${activeCount}`;
 

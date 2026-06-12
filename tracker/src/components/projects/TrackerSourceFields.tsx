@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { JiraTrackerFields } from "@/components/projects/JiraTrackerFields";
 import { LinearProjectPicker } from "@/components/projects/LinearProjectPicker";
 import { TrackerSourcePicker } from "@/components/projects/TrackerSourcePicker";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ export function TrackerSourceFields({ slug, trackerKind, config, onKindChange, o
       <TrackerSourcePicker value={trackerKind} onChange={onKindChange} />
       {trackerKind === "github" ? <GitHubTrackerFields config={config} onConfigChange={onConfigChange} /> : null}
       {trackerKind === "linear" ? <LinearTrackerFields config={config} onConfigChange={onConfigChange} /> : null}
+      {trackerKind === "jira" ? <JiraTrackerFields config={config} onConfigChange={onConfigChange} /> : null}
       {trackerKind === "local" ? (
         <p className="rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">
           Issues will be stored in Symphony&apos;s local board. Remote configuration is cleared.

@@ -45,6 +45,54 @@ defmodule SymphonyElixir.Jira.IssueAdapter.Query do
 
   def statuses(_response), do: []
 
+  @doc """
+  Like `statuses/1` but keeps each status's JIRA `id` so the caller can reorder
+  them against a board column configuration. Returns intermediate maps shaped
+  `%{id, name, category, is_terminal}` (no `position` yet — apply `with_positions/1`).
+  """
+  @spec statuses_with_ids([map()]) :: [map()]
+  def statuses_with_ids(issue_types) when is_list(issue_types) do
+    issue_types
+    |> Enum.flat_map(fn type -> List.wrap(type["statuses"]) end)
+    |> Enum.uniq_by(& &1["name"])
+    |> Enum.map(&status_with_id/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  def statuses_with_ids(_response), do: []
+
+  @doc """
+  Reorders `statuses` (from `statuses_with_ids/1`) so the ones whose `id` appears
+  in `ordered_ids` come first, in that order; statuses not referenced keep their
+  original relative order and are appended after.
+  """
+  @spec reorder_by_ids([map()], [String.t()]) :: [map()]
+  def reorder_by_ids(statuses, ordered_ids) when is_list(statuses) and is_list(ordered_ids) do
+    by_id = Map.new(statuses, fn status -> {status.id, status} end)
+
+    ranked =
+      ordered_ids
+      |> Enum.map(&Map.get(by_id, &1))
+      |> Enum.reject(&is_nil/1)
+
+    ranked_ids = MapSet.new(ranked, & &1.id)
+    rest = Enum.reject(statuses, &MapSet.member?(ranked_ids, &1.id))
+    ranked ++ rest
+  end
+
+  @doc """
+  Assigns `position` from the list order and drops the transient `id`, yielding
+  the final status DTO shape consumed by the sync seeder.
+  """
+  @spec with_positions([map()]) :: [IssueDTO.status()]
+  def with_positions(statuses) when is_list(statuses) do
+    statuses
+    |> Enum.with_index()
+    |> Enum.map(fn {status, index} ->
+      %{name: status.name, category: status.category, position: index, is_terminal: status.is_terminal}
+    end)
+  end
+
   @spec labels(map()) :: [%{id: nil, name: String.t()}]
   def labels(%{"values" => values}) when is_list(values) do
     values
@@ -96,6 +144,13 @@ defmodule SymphonyElixir.Jira.IssueAdapter.Query do
   end
 
   defp status_to_dto(_status, _position), do: nil
+
+  defp status_with_id(%{"name" => name} = status) do
+    category = category_for(get_in(status, ["statusCategory", "key"]))
+    %{id: to_string(status["id"]), name: name, category: category, is_terminal: category == "completed"}
+  end
+
+  defp status_with_id(_status), do: nil
 
   defp normalize_labels(labels) when is_list(labels), do: Enum.filter(labels, &is_binary/1)
   defp normalize_labels(_labels), do: []

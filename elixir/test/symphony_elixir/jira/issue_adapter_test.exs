@@ -132,7 +132,76 @@ defmodule SymphonyElixir.Jira.IssueAdapterTest do
       {:ok, [%{"statuses" => [%{"id" => "1", "name" => "To Do", "statusCategory" => %{"key" => "new"}}]}]}
     end)
 
-    assert {:ok, [%{name: "To Do", category: "unstarted"}]} = IssueAdapter.list_statuses(@project)
+    assert {:ok, [%{name: "To Do", category: "unstarted", position: 0}]} = IssueAdapter.list_statuses(@project)
+  end
+
+  test "list_statuses orders statuses by the board columns when board_id is set" do
+    project = %Project{
+      id: 4,
+      slug: "advising",
+      tracker_kind: "jira",
+      tracker_config: %{"project_key" => "CDE", "board_id" => 33}
+    }
+
+    Stub.set(fn
+      :get, "/rest/api/3/project/CDE/statuses", _body ->
+        {:ok,
+         [
+           %{
+             "statuses" => [
+               %{"id" => "1", "name" => "Backlog", "statusCategory" => %{"key" => "new"}},
+               %{"id" => "2", "name" => "In Progress", "statusCategory" => %{"key" => "indeterminate"}},
+               %{"id" => "3", "name" => "Done", "statusCategory" => %{"key" => "done"}},
+               %{"id" => "4", "name" => "Orphan", "statusCategory" => %{"key" => "new"}}
+             ]
+           }
+         ]}
+
+      :get, "/rest/agile/1.0/board/33/configuration", _body ->
+        {:ok,
+         %{
+           "columnConfig" => %{
+             "columns" => [
+               %{"name" => "DONE", "statuses" => [%{"id" => "3"}]},
+               %{"name" => "DEV", "statuses" => [%{"id" => "2"}]},
+               %{"name" => "BACKLOG", "statuses" => [%{"id" => "1"}]}
+             ]
+           }
+         }}
+    end)
+
+    assert {:ok, statuses} = IssueAdapter.list_statuses(project)
+    # Board column order first (Done, In Progress, Backlog), then off-board status (Orphan) last.
+    assert Enum.map(statuses, & &1.name) == ["Done", "In Progress", "Backlog", "Orphan"]
+    assert Enum.map(statuses, & &1.position) == [0, 1, 2, 3]
+  end
+
+  test "list_statuses falls back to project-status order when the board config is unavailable" do
+    project = %Project{
+      id: 5,
+      slug: "advising",
+      tracker_kind: "jira",
+      tracker_config: %{"project_key" => "CDE", "board_id" => 33}
+    }
+
+    Stub.set(fn
+      :get, "/rest/api/3/project/CDE/statuses", _body ->
+        {:ok,
+         [
+           %{
+             "statuses" => [
+               %{"id" => "1", "name" => "Backlog", "statusCategory" => %{"key" => "new"}},
+               %{"id" => "2", "name" => "Done", "statusCategory" => %{"key" => "done"}}
+             ]
+           }
+         ]}
+
+      :get, "/rest/agile/1.0/board/33/configuration", _body ->
+        {:error, {:jira_api_status, 404}}
+    end)
+
+    assert {:ok, statuses} = IssueAdapter.list_statuses(project)
+    assert Enum.map(statuses, & &1.name) == ["Backlog", "Done"]
   end
 
   test "list_labels maps system labels" do

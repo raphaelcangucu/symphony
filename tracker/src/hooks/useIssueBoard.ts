@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { useViewer } from "@/components/auth/ViewerProvider";
 import {
   buildBoardState,
   findIssueStatus,
@@ -10,11 +9,12 @@ import {
   upsertIssue,
 } from "@/components/board/board-utils";
 import type { IssueFilters } from "@/lib/issueFilters";
-import { applyIssueFilters } from "@/lib/issueFilters";
+import { applyIssueFilters, emptyFilters } from "@/lib/issueFilters";
 import { listIssues, moveIssue } from "@/services/issues";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
+import { useMeIdentities } from "./useMeIdentities";
 import { useProjectChannel } from "./useProjectChannel";
 
 export interface UseIssueBoardResult {
@@ -32,12 +32,11 @@ export interface UseIssueBoardResult {
 
 export function useIssueBoard(
   projectSlug: string,
-  filters: IssueFilters = {},
+  filters: IssueFilters = emptyFilters(),
   statuses?: WorkflowStatusName[],
 ): UseIssueBoardResult {
-  const { viewer } = useViewer();
-  const viewerLogin = viewer?.githubLogin ?? null;
-  const { search, assignee, creator } = filters;
+  const meValues = useMeIdentities();
+  const { search } = filters;
 
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +49,9 @@ export function useIssueBoard(
     if (hasLoadedRef.current) setRefreshing(true);
     else setLoading(true);
     try {
-      setIssues(await listIssues(projectSlug, { search, assignee, creator }));
+      // Assignee/creator/recent narrowing happens client-side (multi-select), so
+      // we fetch the full board and only pass the text search to the server.
+      setIssues(await listIssues(projectSlug, { search }));
       hasLoadedRef.current = true;
       toast.dismiss(loadErrorToastId);
     } catch (cause) {
@@ -60,7 +61,7 @@ export function useIssueBoard(
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectSlug, search, assignee, creator]);
+  }, [projectSlug, search]);
 
   useEffect(() => {
     hasLoadedRef.current = false;
@@ -72,8 +73,8 @@ export function useIssueBoard(
   }, [refetch]);
 
   const filteredIssues = useMemo(
-    () => applyIssueFilters(issues, { search, assignee, creator }, viewerLogin),
-    [issues, search, assignee, creator, viewerLogin],
+    () => applyIssueFilters(issues, filters, meValues),
+    [issues, filters, meValues],
   );
 
   const board = useMemo(() => buildBoardState(filteredIssues, statuses), [filteredIssues, statuses]);

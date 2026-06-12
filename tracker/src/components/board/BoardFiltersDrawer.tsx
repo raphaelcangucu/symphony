@@ -1,16 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Clock } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { useViewer } from "@/components/auth/ViewerProvider";
+import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Sheet,
@@ -21,27 +14,44 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  ASSIGNEE_PARAM,
+  CREATOR_PARAM,
+  filtersFromSearchParams,
+  hasActiveFilters,
+  RECENT_PARAM,
+  SEARCH_PARAM,
+  toggleListParam,
+} from "@/lib/issueFilters";
+import { peopleFromIssues, unassignedCount } from "@/lib/people";
+import { cn } from "@/lib/utils";
+
+import { PeopleMultiSelect } from "./PeopleMultiSelect";
 
 const DEBOUNCE_MS = 250;
+const RECENT_VALUE = "7d";
 
 interface BoardFiltersDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  knownLogins?: string[];
   focusSearch?: boolean;
 }
 
-export function BoardFiltersDrawer({ open, onOpenChange, knownLogins = [], focusSearch = false }: BoardFiltersDrawerProps) {
+export function BoardFiltersDrawer({ open, onOpenChange, focusSearch = false }: BoardFiltersDrawerProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { viewer, status } = useViewer();
-  const viewerLogin = viewer?.githubLogin ?? null;
+  const { issues } = useWorkspace();
 
-  const [searchDraft, setSearchDraft] = useState(searchParams.get("q") ?? "");
+  const [searchDraft, setSearchDraft] = useState(searchParams.get(SEARCH_PARAM) ?? "");
   const debounceRef = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
+  const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
+  const assigneePeople = useMemo(() => peopleFromIssues(issues, "assignee"), [issues]);
+  const creatorPeople = useMemo(() => peopleFromIssues(issues, "creator"), [issues]);
+  const unassigned = useMemo(() => unassignedCount(issues), [issues]);
+
   useEffect(() => {
-    setSearchDraft(searchParams.get("q") ?? "");
+    setSearchDraft(searchParams.get(SEARCH_PARAM) ?? "");
   }, [searchParams]);
 
   useEffect(() => {
@@ -55,21 +65,42 @@ export function BoardFiltersDrawer({ open, onOpenChange, knownLogins = [], focus
       (current) => {
         const params = new URLSearchParams(current);
         const trimmed = next.trim();
-        if (trimmed) params.set("q", trimmed);
-        else params.delete("q");
+        if (trimmed) params.set(SEARCH_PARAM, trimmed);
+        else params.delete(SEARCH_PARAM);
         return params;
       },
       { replace: true },
     );
   }
 
-  function setFilter(key: "assignee" | "creator", value: string | null) {
+  function onSearchChange(value: string) {
+    setSearchDraft(value);
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => commitSearch(value), DEBOUNCE_MS);
+  }
+
+  function toggleParam(key: string, token: string) {
+    setSearchParams((current) => toggleListParam(current, key, token), { replace: true });
+  }
+
+  function clearParam(key: string) {
     setSearchParams(
       (current) => {
-        const params = new URLSearchParams(current);
-        if (value) params.set(key, value);
-        else params.delete(key);
-        return params;
+        const next = new URLSearchParams(current);
+        next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function toggleRecent() {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (next.has(RECENT_PARAM)) next.delete(RECENT_PARAM);
+        else next.set(RECENT_PARAM, RECENT_VALUE);
+        return next;
       },
       { replace: true },
     );
@@ -79,9 +110,10 @@ export function BoardFiltersDrawer({ open, onOpenChange, knownLogins = [], focus
     setSearchParams(
       (current) => {
         const params = new URLSearchParams(current);
-        params.delete("q");
-        params.delete("assignee");
-        params.delete("creator");
+        params.delete(SEARCH_PARAM);
+        params.delete(ASSIGNEE_PARAM);
+        params.delete(CREATOR_PARAM);
+        params.delete(RECENT_PARAM);
         return params;
       },
       { replace: true },
@@ -89,29 +121,19 @@ export function BoardFiltersDrawer({ open, onOpenChange, knownLogins = [], focus
     setSearchDraft("");
   }
 
-  function onSearchChange(value: string) {
-    setSearchDraft(value);
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => commitSearch(value), DEBOUNCE_MS);
-  }
-
-  const showViewerOptions = status === "ready" && viewerLogin;
-  const assignee = searchParams.get("assignee");
-  const creator = searchParams.get("creator");
-  const hasAny = Boolean(searchDraft) || Boolean(assignee) || Boolean(creator);
-  const logins = useMemo(() => Array.from(new Set(knownLogins.filter(Boolean))).sort(), [knownLogins]);
+  const recentActive = filters.recentDays != null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex h-full flex-col gap-6 sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Filters</SheetTitle>
-          <SheetDescription>Search and narrow issues by assignee or creator.</SheetDescription>
+          <SheetDescription>Search and narrow issues by people, recency, and text.</SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-5 overflow-auto">
+        <div className="space-y-5 overflow-visible">
           <div className="space-y-2">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Search</label>
+            <Label>Search</Label>
             <Input
               data-testid="board-filters-search"
               ref={searchInputRef}
@@ -121,27 +143,54 @@ export function BoardFiltersDrawer({ open, onOpenChange, knownLogins = [], focus
             />
           </div>
 
-          <FilterSection
-            label="Assignee"
-            currentValue={assignee}
-            viewerLogin={showViewerOptions ? viewerLogin : null}
-            logins={logins}
-            onSelect={(value) => setFilter("assignee", value)}
-            onClear={() => setFilter("assignee", null)}
-          />
+          <div className="space-y-2">
+            <Label>Assignee</Label>
+            <PeopleMultiSelect
+              triggerLabel="Assignee"
+              people={assigneePeople}
+              selected={filters.assignees}
+              onToggle={(token) => toggleParam(ASSIGNEE_PARAM, token)}
+              onClear={() => clearParam(ASSIGNEE_PARAM)}
+              includeMe
+              includeUnassigned
+              unassignedCount={unassigned}
+              className="w-full"
+            />
+          </div>
 
-          <FilterSection
-            label="Creator"
-            currentValue={creator}
-            viewerLogin={showViewerOptions ? viewerLogin : null}
-            logins={logins}
-            onSelect={(value) => setFilter("creator", value)}
-            onClear={() => setFilter("creator", null)}
-          />
+          <div className="space-y-2">
+            <Label>Creator</Label>
+            <PeopleMultiSelect
+              triggerLabel="Creator"
+              people={creatorPeople}
+              selected={filters.creators}
+              onToggle={(token) => toggleParam(CREATOR_PARAM, token)}
+              onClear={() => clearParam(CREATOR_PARAM)}
+              includeMe
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Recency</Label>
+            <button
+              type="button"
+              aria-pressed={recentActive}
+              onClick={toggleRecent}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                recentActive
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
+            >
+              <Clock className="h-3.5 w-3.5" /> Recently updated (7d)
+            </button>
+          </div>
         </div>
 
         <SheetFooter className="mt-auto flex flex-row items-center justify-between gap-2 sm:justify-between">
-          <Button variant="ghost" size="sm" disabled={!hasAny} onClick={clearFilters}>
+          <Button variant="ghost" size="sm" disabled={!hasActiveFilters(filters)} onClick={clearFilters}>
             Clear all filters
           </Button>
           <SheetClose asChild>
@@ -153,43 +202,6 @@ export function BoardFiltersDrawer({ open, onOpenChange, knownLogins = [], focus
   );
 }
 
-interface FilterSectionProps {
-  label: "Assignee" | "Creator";
-  currentValue: string | null;
-  viewerLogin: string | null;
-  logins: string[];
-  onSelect: (value: string) => void;
-  onClear: () => void;
-}
-
-function FilterSection({ label, currentValue, viewerLogin, logins, onSelect, onClear }: FilterSectionProps) {
-  const renderLabel = currentValue ? `${label}: ${currentValue === "me" ? "Me" : currentValue}` : `${label}: Any`;
-
-  return (
-    <div className="space-y-2">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="w-full justify-start">
-            {renderLabel}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuLabel>{label}</DropdownMenuLabel>
-          <DropdownMenuItem onSelect={() => onClear()}>Any</DropdownMenuItem>
-          {viewerLogin ? <DropdownMenuItem onSelect={() => onSelect("me")}>Me</DropdownMenuItem> : null}
-          <DropdownMenuSeparator />
-          {logins.length === 0 ? (
-            <DropdownMenuItem disabled>No known logins</DropdownMenuItem>
-          ) : (
-            logins.map((login) => (
-              <DropdownMenuItem key={login} onSelect={() => onSelect(login)}>
-                @{login}
-              </DropdownMenuItem>
-            ))
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
+function Label({ children }: { children: ReactNode }) {
+  return <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{children}</span>;
 }

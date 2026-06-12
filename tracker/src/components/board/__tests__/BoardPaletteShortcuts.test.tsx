@@ -9,8 +9,12 @@ import { ViewerProvider } from "@/components/auth/ViewerProvider";
 import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRoute";
 import * as viewerService from "@/services/viewer";
 
+vi.mock("@/services/settings", () => ({
+  fetchIdentities: () => Promise.resolve([]),
+}));
+
 vi.mock("@/components/layout/WorkspaceContext", () => ({
-  useWorkspace: () => ({ projectSlug: "x", view: "board", knownLogins: [] }),
+  useWorkspace: () => ({ projectSlug: "x", view: "board", issues: [] }),
 }));
 
 function Harness() {

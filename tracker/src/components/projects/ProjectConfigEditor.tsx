@@ -42,7 +42,7 @@ const SECTIONS: readonly SectionMeta[] = [
     label: "Tracker",
     icon: GitBranch,
     title: "Tracker source",
-    description: "Where issues are read from — the local board, GitHub Projects, or Linear.",
+    description: "Where issues are read from — the local board, GitHub Projects, Linear, or Jira.",
   },
   {
     id: "workflow",

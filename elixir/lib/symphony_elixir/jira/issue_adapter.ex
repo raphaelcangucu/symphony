@@ -34,10 +34,14 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
 
   @impl true
   def list_statuses(%Project{} = project) do
-    case request(:get, "/rest/api/3/project/#{project_key(project)}/statuses") do
-      {:ok, response} when is_list(response) -> {:ok, Query.statuses(response)}
-      {:ok, _response} -> {:ok, []}
-      error -> {:error, map_error(error)}
+    with {:ok, raw} <- fetch_project_statuses(project) do
+      statuses =
+        raw
+        |> Query.statuses_with_ids()
+        |> order_for_board(project)
+        |> Query.with_positions()
+
+      {:ok, statuses}
     end
   end
 
@@ -165,6 +169,61 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   defp truncate(project, issues, cap) do
     Logger.warning("jira board pull truncated project=#{project.slug} cap=#{cap}")
     Enum.take(issues, cap)
+  end
+
+  defp fetch_project_statuses(%Project{} = project) do
+    case request(:get, "/rest/api/3/project/#{project_key(project)}/statuses") do
+      {:ok, response} when is_list(response) -> {:ok, response}
+      {:ok, _response} -> {:ok, []}
+      error -> {:error, map_error(error)}
+    end
+  end
+
+  # Orders the project statuses to match the JIRA board's columns (left→right),
+  # so the local board mirrors the team's board. Falls back to the project-status
+  # order when no `board_id` is configured or the board config can't be fetched.
+  defp order_for_board(statuses, %Project{} = project) do
+    case board_status_ids(project) do
+      [] -> statuses
+      ordered_ids -> Query.reorder_by_ids(statuses, ordered_ids)
+    end
+  end
+
+  defp board_status_ids(%Project{} = project) do
+    case board_id(project) do
+      nil ->
+        []
+
+      id ->
+        case request(:get, "/rest/agile/1.0/board/#{id}/configuration") do
+          {:ok, %{"columnConfig" => %{"columns" => columns}}} when is_list(columns) ->
+            Enum.flat_map(columns, fn column ->
+              column
+              |> Map.get("statuses")
+              |> List.wrap()
+              |> Enum.map(&to_string(&1["id"]))
+            end)
+
+          _ ->
+            []
+        end
+    end
+  end
+
+  defp board_id(%Project{tracker_config: config}) do
+    case Map.get(config, "board_id") do
+      value when is_integer(value) and value > 0 ->
+        value
+
+      value when is_binary(value) ->
+        case Integer.parse(value) do
+          {parsed, _rest} when parsed > 0 -> parsed
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
   end
 
   defp max_results(%Project{tracker_config: config}) do

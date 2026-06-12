@@ -9,11 +9,12 @@ const OPTIONS: { kind: TrackerKind; title: string; description: string }[] = [
   { kind: "local", title: "Symphony local tracker", description: "Issues live in Symphony's local board (default)." },
   { kind: "github", title: "GitHub Project v2", description: "Read and move issues on a connected GitHub board." },
   { kind: "linear", title: "Linear project", description: "Read and move issues from a connected Linear board." },
+  { kind: "jira", title: "Jira project", description: "Read and move issues from a connected Jira board." },
 ];
 
 export function TrackerSourcePicker({ value, onChange }: TrackerSourcePickerProps) {
   return (
-    <div className="grid gap-2 md:grid-cols-3" role="radiogroup" aria-label="Tracker source">
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" role="radiogroup" aria-label="Tracker source">
       {OPTIONS.map((option) => (
         <button
           key={option.kind}
