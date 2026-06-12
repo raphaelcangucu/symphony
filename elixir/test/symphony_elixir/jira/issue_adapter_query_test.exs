@@ -130,6 +130,44 @@ defmodule SymphonyElixir.Jira.IssueAdapter.QueryTest do
     end
   end
 
+  describe "linked_keys/1" do
+    test "collects subtask and issuelink keys (both directions)" do
+      node = %{
+        "key" => "CDE-1075",
+        "fields" => %{
+          "subtasks" => [
+            %{"key" => "CDE-1118"},
+            %{"key" => "CDE-1131"}
+          ],
+          "issuelinks" => [
+            %{"type" => %{"name" => "Cloners"}, "inwardIssue" => %{"key" => "CDE-1115"}},
+            %{"type" => %{"name" => "Blocks"}, "outwardIssue" => %{"key" => "ADF-28"}}
+          ]
+        }
+      }
+
+      assert Query.linked_keys(node) == ["CDE-1118", "CDE-1131", "CDE-1115", "ADF-28"]
+    end
+
+    test "de-duplicates keys that appear in more than one relationship" do
+      node = %{
+        "fields" => %{
+          "subtasks" => [%{"key" => "CDE-2"}],
+          "issuelinks" => [%{"outwardIssue" => %{"key" => "CDE-2"}}]
+        }
+      }
+
+      assert Query.linked_keys(node) == ["CDE-2"]
+    end
+
+    test "ignores missing, blank, and non-list fields" do
+      assert Query.linked_keys(%{"fields" => %{}}) == []
+      assert Query.linked_keys(%{"fields" => %{"subtasks" => nil, "issuelinks" => "nope"}}) == []
+      assert Query.linked_keys(%{"fields" => %{"subtasks" => [%{"key" => ""}, %{"id" => "9"}]}}) == []
+      assert Query.linked_keys(:not_a_map) == []
+    end
+  end
+
   describe "statuses/1" do
     test "flattens project statuses across issue types, unique by name, ordered" do
       response = [

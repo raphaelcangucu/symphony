@@ -955,6 +955,7 @@ defmodule SymphonyElixir.Orchestrator do
     case Evidence.Store.persist(issue.project_slug, issue.identifier, workspace, manifest_map, opts) do
       {:ok, record} ->
         post_evidence_comment(issue, record)
+        SymphonyElixir.PushNotifications.Dispatcher.evidence_generated(issue, record)
 
       {:error, error} ->
         Logger.warning("Failed to persist evidence issue=#{issue.identifier}: #{inspect(error)}")

@@ -34,10 +34,17 @@ tracker:
     project_key: CDE
     fields:
       Product: Inspire
+    # Also pull issues linked to an in-scope (Product=Inspire) issue — e.g. a bug
+    # subtask of, or a clone of, an Inspire story that itself lacks the Product
+    # field — so they still show on the board. One hop; same project only.
+    include_linked_issues: true
+    # Linked-issue expansion roughly doubles the pulled set (every in-scope story
+    # drags in its subtasks/links), so raise the cap above the 500 default to
+    # avoid clipping linked work. Sized with headroom over the current ~760.
+    max_results: 1500
     # If "Product" is not directly queryable by name, drop `fields` above and use:
     # jql: 'cf[<PRODUCT_FIELD_ID>] = "Inspire"'
     # order_by: "created DESC"   # optional
-    # max_results: 500           # optional cap
 repositories:
   - github_full_name: civitaslearning/advising
     clone_url: https://github.com/civitaslearning/advising.git

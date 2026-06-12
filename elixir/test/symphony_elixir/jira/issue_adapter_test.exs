@@ -117,6 +117,68 @@ defmodule SymphonyElixir.Jira.IssueAdapterTest do
     assert {:ok, [%IssueDTO{identifier: "ABC-1"}]} = IssueAdapter.list_issues(project, [])
   end
 
+  test "list_issues pulls in linked issues when include_linked_issues is enabled" do
+    project = %Project{
+      id: 5,
+      slug: "advising",
+      tracker_kind: "jira",
+      tracker_config: %{
+        "project_key" => "CDE",
+        "fields" => %{"Product" => "Inspire"},
+        "include_linked_issues" => true
+      }
+    }
+
+    parent = self()
+
+    Stub.set(fn :post, "/rest/api/3/search/jql", body ->
+      if body["jql"] =~ "key in (" do
+        send(parent, {:linked, body["jql"], body["fields"]})
+        {:ok, %{"issues" => [issue_body("CDE-1142"), issue_body("CDE-1115")], "isLast" => true}}
+      else
+        send(parent, {:primary, body["fields"]})
+
+        story =
+          issue_body("CDE-1075")
+          |> put_in(["fields", "subtasks"], [%{"key" => "CDE-1142"}])
+          |> put_in(["fields", "issuelinks"], [
+            %{"inwardIssue" => %{"key" => "CDE-1115"}},
+            %{"outwardIssue" => %{"key" => "ADF-28"}}
+          ])
+
+        {:ok, %{"issues" => [story], "isLast" => true}}
+      end
+    end)
+
+    assert {:ok, issues} = IssueAdapter.list_issues(project, [])
+    assert Enum.map(issues, & &1.identifier) == ["CDE-1075", "CDE-1142", "CDE-1115"]
+
+    assert_received {:primary, primary_fields}
+    assert "subtasks" in primary_fields
+    assert "issuelinks" in primary_fields
+
+    assert_received {:linked, linked_jql, linked_fields}
+    # Cross-project link (ADF-28) is excluded; the already-present primary key is not re-fetched.
+    assert linked_jql == ~s|project = "CDE" AND key in ("CDE-1115", "CDE-1142") ORDER BY created DESC|
+    refute "subtasks" in linked_fields
+  end
+
+  test "list_issues neither requests link fields nor expands when disabled" do
+    parent = self()
+
+    Stub.set(fn :post, "/rest/api/3/search/jql", body ->
+      refute body["jql"] =~ "key in ("
+      send(parent, {:fields, body["fields"]})
+      {:ok, %{"issues" => [issue_body("ABC-1")], "isLast" => true}}
+    end)
+
+    assert {:ok, [%IssueDTO{identifier: "ABC-1"}]} = IssueAdapter.list_issues(@project, [])
+
+    assert_received {:fields, fields}
+    refute "subtasks" in fields
+    refute "issuelinks" in fields
+  end
+
   test "get_issue returns the DTO when found" do
     Stub.set(fn :get, "/rest/api/3/issue/ABC-12", _body -> {:ok, issue_body()} end)
     assert {:ok, %IssueDTO{identifier: "ABC-12"}} = IssueAdapter.get_issue(@project, "ABC-12")

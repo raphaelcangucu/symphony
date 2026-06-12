@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ConnectedIdentitiesCard } from "@/components/settings/ConnectedIdentitiesCard";
 import { OrchestrationRulesCard } from "@/components/settings/OrchestrationRulesCard";
 import { ProviderCredentialsCard } from "@/components/settings/ProviderCredentialsCard";
+import { PushNotificationsCard } from "@/components/settings/PushNotificationsCard";
 import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -122,6 +123,8 @@ export function SettingsPage() {
       </Card>
 
       <OrchestrationRulesCard initial={orchestrator} loadError={loadError} />
+
+      <PushNotificationsCard />
 
       <ConnectedIdentitiesCard />
 

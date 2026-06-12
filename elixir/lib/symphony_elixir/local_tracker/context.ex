@@ -25,6 +25,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   }
 
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.Tracker.LabelResolver
   alias SymphonyElixir.Tracker.Sync.UserRecord
   alias SymphonyElixir.Tracker.Workpad
@@ -1542,10 +1543,17 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp tap_issue_event({:ok, %IssueRecord{} = issue} = result, event_type, metadata) do
     insert_event(issue.id, event_type, metadata)
     Broadcaster.issue_changed(event_type, issue)
+    maybe_push_on_issue_event(event_type, issue, metadata)
     result
   end
 
   defp tap_issue_event(result, _event_type, _metadata), do: result
+
+  defp maybe_push_on_issue_event("issue_moved", issue, %{status: status_name}) when is_binary(status_name) do
+    PushDispatcher.human_review_needed(issue, status_name)
+  end
+
+  defp maybe_push_on_issue_event(_event_type, _issue, _metadata), do: :ok
 
   defp tap_comment_event({:ok, %Comment{} = comment} = result, issue) do
     insert_event(issue.id, "comment_created", %{comment_id: comment.id})

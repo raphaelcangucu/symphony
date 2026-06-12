@@ -5,11 +5,56 @@ defmodule SymphonyElixir.Jira.IssueAdapter.Query do
   alias SymphonyElixir.Tracker.IssueDTO
 
   @issue_fields ~w(summary description priority status assignee creator labels created updated)
+  @link_fields ~w(subtasks issuelinks)
 
   @type ctx :: %{required(:project_slug) => String.t() | nil, required(:base_url) => String.t() | nil}
 
   @spec issue_fields() :: [String.t()]
   def issue_fields, do: @issue_fields
+
+  @doc """
+  Extra REST fields needed to discover issues related to a board issue, so the
+  pull can pull in children/linked work that lacks the board's own field filter
+  (see `linked_keys/1`). Appended to `issue_fields/0` only when a project opts
+  into linked-issue expansion.
+  """
+  @spec link_fields() :: [String.t()]
+  def link_fields, do: @link_fields
+
+  @doc """
+  Collects the keys of issues related to a raw JIRA issue node, drawn from its
+  `subtasks` (classic parent/child) and `issuelinks` (clones/relates/blocks/…)
+  fields. Used to widen a filtered board pull to include linked work, e.g. a bug
+  subtask of, or a clone of, a `Product = Inspire` story that itself is missing
+  that field. Returns a de-duplicated list; missing/non-list fields yield `[]`.
+  """
+  @spec linked_keys(map()) :: [String.t()]
+  def linked_keys(node) when is_map(node) do
+    fields = Map.get(node, "fields") || %{}
+
+    (subtask_keys(fields["subtasks"]) ++ issuelink_keys(fields["issuelinks"]))
+    |> Enum.uniq()
+  end
+
+  def linked_keys(_node), do: []
+
+  defp subtask_keys(list) when is_list(list) do
+    list |> Enum.map(&node_key/1) |> Enum.reject(&is_nil/1)
+  end
+
+  defp subtask_keys(_list), do: []
+
+  defp issuelink_keys(list) when is_list(list) do
+    list
+    |> Enum.flat_map(fn link -> [link["outwardIssue"], link["inwardIssue"]] end)
+    |> Enum.map(&node_key/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp issuelink_keys(_list), do: []
+
+  defp node_key(%{"key" => key}) when is_binary(key) and key != "", do: key
+  defp node_key(_node), do: nil
 
   @spec normalize_issue(map(), ctx()) :: IssueDTO.t()
   def normalize_issue(node, ctx) when is_map(node) and is_map(ctx) do

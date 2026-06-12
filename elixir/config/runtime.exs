@@ -69,5 +69,19 @@ if config_env() != :test do
     codex_thread_sandbox: System.get_env("SYMPHONY_CODEX_THREAD_SANDBOX") || "workspace-write",
     claude_command: System.get_env("SYMPHONY_CLAUDE_COMMAND") || "claude",
     cursor_command: System.get_env("SYMPHONY_CURSOR_COMMAND") || "cursor-agent",
-    default_agent_kind: System.get_env("SYMPHONY_DEFAULT_AGENT_KIND") || "codex"
+    default_agent_kind: System.get_env("SYMPHONY_DEFAULT_AGENT_KIND") || "codex",
+    vapid_public_key: maybe.("SYMPHONY_VAPID_PUBLIC_KEY"),
+    vapid_private_key: maybe.("SYMPHONY_VAPID_PRIVATE_KEY"),
+    vapid_subject: System.get_env("SYMPHONY_VAPID_SUBJECT") || "mailto:symphony@localhost"
+
+  vapid_public_key = maybe.("SYMPHONY_VAPID_PUBLIC_KEY")
+  vapid_private_key = maybe.("SYMPHONY_VAPID_PRIVATE_KEY")
+  vapid_subject = System.get_env("SYMPHONY_VAPID_SUBJECT") || "mailto:symphony@localhost"
+
+  if vapid_public_key && vapid_private_key do
+    config :web_push_elixir,
+      vapid_public_key: vapid_public_key,
+      vapid_private_key: vapid_private_key,
+      vapid_subject: vapid_subject
+  end
 end

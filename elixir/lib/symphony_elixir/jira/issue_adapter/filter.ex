@@ -30,6 +30,20 @@ defmodule SymphonyElixir.Jira.IssueAdapter.Filter do
     Enum.join(clauses, " AND ") <> " ORDER BY " <> order_by(Map.get(config, "order_by"))
   end
 
+  @doc """
+  Builds a JQL that fetches a specific set of issue `keys`, scoped to the
+  project. Used by the linked-issue expansion to pull full data for issues
+  referenced from board issues (children/links) regardless of the board's field
+  filter. Keys are quoted defensively; the `project = "KEY"` clause keeps any
+  cross-project links out of the result.
+  """
+  @spec keys_jql(Project.t(), [String.t()]) :: String.t()
+  def keys_jql(%Project{tracker_config: config}, keys) when is_map(config) and is_list(keys) do
+    project_key = Map.fetch!(config, "project_key")
+    quoted = keys |> Enum.map(&quote_jql/1) |> Enum.join(", ")
+    project_clause(project_key) <> " AND key in (" <> quoted <> ") ORDER BY created DESC"
+  end
+
   defp project_clause(project_key), do: "project = " <> quote_jql(project_key)
 
   defp field_clauses(fields) when is_map(fields) do

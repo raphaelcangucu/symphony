@@ -15,13 +15,20 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   @search_path "/rest/api/3/search/jql"
   @page_size 100
   @default_max_results 500
+  @link_fetch_batch 100
 
   @impl true
   def kind, do: :jira
 
   @impl true
   def list_issues(%Project{} = project, _filters) do
-    search_all(project, Filter.build_jql(project), max_results(project), nil, [])
+    cap = max_results(project)
+    fields = list_fields(project)
+
+    with {:ok, primary, related} <-
+           search_all(project, Filter.build_jql(project), fields, cap, nil, [], MapSet.new()) do
+      {:ok, append_linked(project, primary, related, cap)}
+    end
   end
 
   @impl true
@@ -157,31 +164,97 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
     end
   end
 
-  defp search_all(project, jql, cap, token, acc) do
-    case request(:post, @search_path, search_body(jql, token)) do
+  defp search_all(project, jql, fields, cap, token, acc, related) do
+    case request(:post, @search_path, search_body(jql, fields, token)) do
       {:ok, %{"issues" => issues} = response} when is_list(issues) ->
         acc = acc ++ Enum.map(issues, &Query.normalize_issue(&1, ctx(project)))
+        related = collect_related(issues, related)
 
         cond do
-          length(acc) >= cap -> {:ok, truncate(project, acc, cap)}
-          last_page?(response) -> {:ok, acc}
-          true -> search_all(project, jql, cap, response["nextPageToken"], acc)
+          length(acc) >= cap -> {:ok, truncate(project, acc, cap), related}
+          last_page?(response) -> {:ok, acc, related}
+          true -> search_all(project, jql, fields, cap, response["nextPageToken"], acc, related)
         end
 
       {:ok, _response} ->
-        {:ok, acc}
+        {:ok, acc, related}
 
       error ->
         {:error, map_error(error)}
     end
   end
 
-  defp search_body(jql, nil) do
-    %{"jql" => jql, "fields" => Query.issue_fields(), "maxResults" => @page_size}
+  defp search_body(jql, fields, nil) do
+    %{"jql" => jql, "fields" => fields, "maxResults" => @page_size}
   end
 
-  defp search_body(jql, token) do
-    jql |> search_body(nil) |> Map.put("nextPageToken", token)
+  defp search_body(jql, fields, token) do
+    jql |> search_body(fields, nil) |> Map.put("nextPageToken", token)
+  end
+
+  # Fields requested for the primary board pull. Linked-issue expansion needs the
+  # `subtasks`/`issuelinks` of each board issue, so request them only when the
+  # project opts in (keeps payloads lean for every other JIRA project).
+  defp list_fields(project) do
+    if include_linked?(project), do: Query.issue_fields() ++ Query.link_fields(), else: Query.issue_fields()
+  end
+
+  defp collect_related(issues, related) do
+    Enum.reduce(issues, related, fn issue, set ->
+      issue |> Query.linked_keys() |> Enum.reduce(set, &MapSet.put(&2, &1))
+    end)
+  end
+
+  # Pulls in issues linked to the primary board set (children/links of e.g. a
+  # `Product = Inspire` story) that the board filter would otherwise exclude, so
+  # a bug linked to an in-scope task still lands on the board. One hop only: the
+  # second fetch does not itself expand. Failures degrade to the primary set.
+  defp append_linked(project, primary, related, cap) do
+    case linked_to_fetch(project, primary, related) do
+      [] -> primary
+      keys -> merge_capped(project, primary, fetch_linked(project, keys, cap), cap)
+    end
+  end
+
+  defp linked_to_fetch(project, primary, related) do
+    existing = MapSet.new(primary, & &1.identifier)
+    prefix = project_key(project) <> "-"
+
+    related
+    |> MapSet.difference(existing)
+    |> Enum.filter(&String.starts_with?(&1, prefix))
+    |> Enum.sort()
+  end
+
+  defp fetch_linked(project, keys, cap) do
+    keys
+    |> Enum.chunk_every(@link_fetch_batch)
+    |> Enum.flat_map(fn chunk ->
+      case search_all(project, Filter.keys_jql(project, chunk), Query.issue_fields(), cap, nil, [], MapSet.new()) do
+        {:ok, dtos, _related} ->
+          dtos
+
+        {:error, reason} ->
+          Logger.warning("jira linked-issue expansion failed project=#{project.slug} reason=#{inspect(reason)}")
+          []
+      end
+    end)
+  end
+
+  defp merge_capped(project, primary, extra, cap) do
+    existing = MapSet.new(primary, & &1.identifier)
+    additions = Enum.reject(extra, &MapSet.member?(existing, &1.identifier))
+    combined = primary ++ additions
+
+    if length(combined) > cap, do: truncate(project, combined, cap), else: combined
+  end
+
+  defp include_linked?(%Project{tracker_config: config}) do
+    case Map.get(config, "include_linked_issues") do
+      true -> true
+      "true" -> true
+      _ -> false
+    end
   end
 
   defp last_page?(%{"isLast" => true}), do: true

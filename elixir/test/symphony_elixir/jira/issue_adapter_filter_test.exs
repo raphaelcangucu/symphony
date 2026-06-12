@@ -50,4 +50,16 @@ defmodule SymphonyElixir.Jira.IssueAdapter.FilterTest do
     assert Filter.build_jql(project(%{"project_key" => "CDE", "order_by" => "Rank ASC"})) ==
              ~s|project = "CDE" ORDER BY Rank ASC|
   end
+
+  describe "keys_jql/2" do
+    test "scopes a quoted key set to the project" do
+      assert Filter.keys_jql(project(%{"project_key" => "CDE"}), ["CDE-1141", "CDE-1142"]) ==
+               ~s|project = "CDE" AND key in ("CDE-1141", "CDE-1142") ORDER BY created DESC|
+    end
+
+    test "escapes embedded quotes in keys" do
+      assert Filter.keys_jql(project(%{"project_key" => "CDE"}), [~s|CDE-"1|]) ==
+               ~s|project = "CDE" AND key in ("CDE-\\"1") ORDER BY created DESC|
+    end
+  end
 end
