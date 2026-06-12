@@ -1,9 +1,12 @@
 defmodule SymphonyElixir.PushNotifications.Sender do
   @moduledoc "Delivers encrypted Web Push payloads to all stored subscriptions."
 
+  alias ExNudge.Subscription, as: ExSubscription
   alias SymphonyElixir.PushNotifications.{Config, Subscription, Subscriptions}
 
   require Logger
+
+  @send_opts [urgency: :high, ttl: 300]
 
   @spec deliver_all(String.t(), map()) :: :ok
   def deliver_all(kind, payload) when is_binary(kind) and is_map(payload) do
@@ -20,20 +23,17 @@ defmodule SymphonyElixir.PushNotifications.Sender do
 
   @spec deliver_one(Subscription.t(), String.t()) :: :ok
   def deliver_one(%Subscription{} = subscription, body) when is_binary(body) do
-    web_subscription =
-      Jason.encode!(%{
-        "endpoint" => subscription.endpoint,
-        "keys" => %{
-          "p256dh" => subscription.p256dh,
-          "auth" => subscription.auth
-        }
-      })
+    ex_subscription = %ExSubscription{
+      endpoint: subscription.endpoint,
+      keys: %{p256dh: subscription.p256dh, auth: subscription.auth}
+    }
 
-    case WebPushElixir.send_notification(web_subscription, body) do
-      {:ok, _response} ->
+    case ExNudge.send_notification(ex_subscription, body, @send_opts) do
+      {:ok, %HTTPoison.Response{status_code: status}} ->
+        Logger.info("Push notification sent endpoint=#{subscription.endpoint} status=#{status}")
         :ok
 
-      {:error, :expired} ->
+      {:error, :subscription_expired} ->
         Logger.info("Removing expired push subscription endpoint=#{subscription.endpoint}")
         Subscriptions.delete(subscription)
 
@@ -41,6 +41,13 @@ defmodule SymphonyElixir.PushNotifications.Sender do
         Logger.warning("Push notification failed endpoint=#{subscription.endpoint}: #{inspect(reason)}")
         :ok
     end
+  rescue
+    error ->
+      Logger.warning(
+        "Push notification encryption failed endpoint=#{subscription.endpoint}: #{Exception.message(error)}"
+      )
+
+      :ok
   end
 
   @doc false

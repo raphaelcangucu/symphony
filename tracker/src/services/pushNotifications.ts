@@ -13,11 +13,15 @@ export interface PushSubscriptionRecord {
   inserted_at: string;
 }
 
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
+function urlBase64ToUint8Array(base64String: string): BufferSource {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = window.atob(base64);
-  return Uint8Array.from([...rawData], (char) => char.charCodeAt(0));
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
 
 export function serviceWorkerUrl(): string {
@@ -88,11 +92,18 @@ export async function getLocalPushSubscription(): Promise<PushSubscription | nul
   if (!("serviceWorker" in navigator)) return null;
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const scope = import.meta.env.BASE_URL;
+    const registration = await navigator.serviceWorker.getRegistration(scope);
+    if (!registration) return null;
     return registration.pushManager.getSubscription();
   } catch {
     return null;
   }
+}
+
+export async function sendTestPushNotification(): Promise<{ sent: boolean; subscription_count: number }> {
+  const response = await http.post(trackerPath("/push/test"));
+  return unwrapData<{ sent: boolean; subscription_count: number }>(response);
 }
 
 export function pushSupported(): boolean {

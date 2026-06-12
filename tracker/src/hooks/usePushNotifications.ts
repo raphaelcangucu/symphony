@@ -4,6 +4,7 @@ import {
   fetchPushConfig,
   getLocalPushSubscription,
   pushSupported,
+  sendTestPushNotification,
   subscribeToPush,
   unsubscribeFromPush,
   type PushConfig,
@@ -18,6 +19,7 @@ export interface UsePushNotificationsResult {
   error: string | null;
   enable: () => Promise<void>;
   disable: () => Promise<void>;
+  sendTest: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -91,6 +93,22 @@ export function usePushNotifications(): UsePushNotificationsResult {
     }
   }, []);
 
+  const sendTest = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+
+    try {
+      const result = await sendTestPushNotification();
+      if (result.subscription_count === 0) {
+        setError("No push subscriptions on the server — disable and re-enable notifications");
+      }
+    } catch {
+      setError("Failed to send test notification");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   return {
     supported,
     config,
@@ -100,6 +118,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
     error,
     enable,
     disable,
+    sendTest,
     refresh,
   };
 }

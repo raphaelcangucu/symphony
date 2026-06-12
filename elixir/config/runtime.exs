@@ -83,5 +83,10 @@ if config_env() != :test do
       vapid_public_key: vapid_public_key,
       vapid_private_key: vapid_private_key,
       vapid_subject: vapid_subject
+
+    config :ex_nudge,
+      vapid_public_key: vapid_public_key,
+      vapid_private_key: vapid_private_key,
+      vapid_subject: vapid_subject
   end
 end

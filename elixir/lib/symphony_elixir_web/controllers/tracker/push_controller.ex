@@ -58,6 +58,25 @@ defmodule SymphonyElixirWeb.Tracker.PushController do
     TrackerErrors.validation(conn, "endpoint is required")
   end
 
+  @spec test(Conn.t(), map()) :: Conn.t()
+  def test(conn, _params) do
+    if Config.enabled?() do
+      :ok =
+        SymphonyElixir.PushNotifications.Dispatcher.notify("test", %{
+          title: "Symphony test",
+          body: "Push notification test — tap to open Settings",
+          url: "/tracker/settings",
+          tag: "symphony-test"
+        })
+
+      json(conn, %{data: %{sent: true, subscription_count: Subscriptions.count()}})
+    else
+      conn
+      |> put_status(:service_unavailable)
+      |> json(%{error: %{code: "push_not_configured", message: "Web Push is not configured"}})
+    end
+  end
+
   defp present(%Subscription{} = subscription) do
     %{
       id: subscription.id,

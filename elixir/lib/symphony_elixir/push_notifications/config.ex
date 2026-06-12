@@ -10,19 +10,22 @@ defmodule SymphonyElixir.PushNotifications.Config do
 
   @spec vapid_public_key() :: String.t() | nil
   def vapid_public_key do
-    Application.get_env(:web_push_elixir, :vapid_public_key) ||
+    Application.get_env(:ex_nudge, :vapid_public_key) ||
+      Application.get_env(:web_push_elixir, :vapid_public_key) ||
       Application.get_env(:symphony_elixir, :vapid_public_key)
   end
 
   @spec vapid_private_key() :: String.t() | nil
   def vapid_private_key do
-    Application.get_env(:web_push_elixir, :vapid_private_key) ||
+    Application.get_env(:ex_nudge, :vapid_private_key) ||
+      Application.get_env(:web_push_elixir, :vapid_private_key) ||
       Application.get_env(:symphony_elixir, :vapid_private_key)
   end
 
   @spec vapid_subject() :: String.t()
   def vapid_subject do
-    Application.get_env(:web_push_elixir, :vapid_subject) ||
+    Application.get_env(:ex_nudge, :vapid_subject) ||
+      Application.get_env(:web_push_elixir, :vapid_subject) ||
       Application.get_env(:symphony_elixir, :vapid_subject) ||
       @default_subject
   end

@@ -45,6 +45,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/push/config", PushController, :config)
     post("/push/subscriptions", PushController, :create)
     delete("/push/subscriptions", PushController, :delete)
+    post("/push/test", PushController, :test)
     put("/settings/:group", SettingsController, :update)
     get("/observability", ObservabilityController, :index)
     get("/observability/pr_monitor", ObservabilityController, :pr_monitor)

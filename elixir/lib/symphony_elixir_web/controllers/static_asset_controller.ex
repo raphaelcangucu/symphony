@@ -27,7 +27,7 @@ defmodule SymphonyElixirWeb.StaticAssetController do
   def tracker_asset_or_index(conn, %{"path" => path}) when is_list(path) do
     case StaticAssets.fetch_tracker_asset(path) do
       {:ok, content_type, body} ->
-        serve_body(conn, content_type, "public, max-age=31536000", body)
+        serve_body(conn, content_type, tracker_cache_control(path), body)
 
       :error ->
         serve_tracker_index(conn)
@@ -59,5 +59,12 @@ defmodule SymphonyElixirWeb.StaticAssetController do
     |> put_resp_content_type(content_type)
     |> put_resp_header("cache-control", cache_control)
     |> send_resp(200, body)
+  end
+
+  defp tracker_cache_control(path_parts) do
+    case List.last(path_parts) do
+      "sw.js" -> "no-cache"
+      _ -> "public, max-age=31536000"
+    end
   end
 end

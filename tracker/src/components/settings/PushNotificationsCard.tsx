@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export function PushNotificationsCard() {
-  const { supported, config, subscribed, loading, busy, error, enable, disable } = usePushNotifications();
+  const { supported, config, subscribed, loading, busy, error, enable, disable, sendTest } =
+    usePushNotifications();
 
   return (
     <Card>
@@ -41,9 +42,14 @@ export function PushNotificationsCard() {
             </p>
             <div className="flex flex-wrap gap-2">
               {subscribed ? (
-                <Button variant="outline" disabled={busy} onClick={() => void disable()}>
-                  Disable notifications
-                </Button>
+                <>
+                  <Button variant="outline" disabled={busy} onClick={() => void disable()}>
+                    Disable notifications
+                  </Button>
+                  <Button variant="secondary" disabled={busy} onClick={() => void sendTest()}>
+                    Send test notification
+                  </Button>
+                </>
               ) : (
                 <Button disabled={busy} onClick={() => void enable()}>
                   Enable notifications

@@ -153,6 +153,7 @@ defmodule SymphonyElixir.MixProject do
       {:solid, "~> 1.2"},
       {:nimble_options, "~> 1.1"},
       {:web_push_elixir, "~> 0.8"},
+      {:ex_nudge, "~> 1.0"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false}
     ]
