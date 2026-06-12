@@ -41,6 +41,7 @@ defmodule SymphonyElixir.ProjectConfig do
     :completion_transitions,
     :max_concurrent_agents_by_state,
     :dev_server,
+    :source_control,
     :pr_monitor,
     :hooks,
     :evidence
@@ -79,6 +80,7 @@ defmodule SymphonyElixir.ProjectConfig do
       completion_transitions: agent_override(project_front_matter, "completion_transitions"),
       max_concurrent_agents_by_state: agent_override(project_front_matter, "max_concurrent_agents_by_state"),
       dev_server: front_matter_section(project_front_matter, "dev_server"),
+      source_control: front_matter_section(project_front_matter, "source_control"),
       pr_monitor: front_matter_section(project_front_matter, "pr_monitor"),
       hooks: front_matter_section(project_front_matter, "hooks"),
       evidence: get_in(opts, [:evidence]) || %{}
@@ -270,6 +272,43 @@ defmodule SymphonyElixir.ProjectConfig do
   @spec pr_monitor_done_on_merge?(t()) :: boolean()
   def pr_monitor_done_on_merge?(%__MODULE__{pr_monitor: %{"done_on_merge" => false}}), do: false
   def pr_monitor_done_on_merge?(%__MODULE__{}), do: true
+
+  @default_branch_pattern "symphony/{issue}"
+  @default_pr_title_pattern "{issue}: {title}"
+
+  @doc """
+  Branch naming convention (advisory; the marker is the authoritative link).
+  Reads `source_control.branch_pattern`, defaulting to `symphony/{issue}`.
+  """
+  @spec source_control_branch_pattern(t()) :: String.t()
+  def source_control_branch_pattern(%__MODULE__{source_control: %{"branch_pattern" => p}})
+      when is_binary(p) and p != "",
+      do: p
+
+  def source_control_branch_pattern(%__MODULE__{}), do: @default_branch_pattern
+
+  @doc """
+  PR title convention (advisory). Reads `source_control.pr_title_pattern`,
+  defaulting to `{issue}: {title}`.
+  """
+  @spec source_control_pr_title_pattern(t()) :: String.t()
+  def source_control_pr_title_pattern(%__MODULE__{source_control: %{"pr_title_pattern" => p}})
+      when is_binary(p) and p != "",
+      do: p
+
+  def source_control_pr_title_pattern(%__MODULE__{}), do: @default_pr_title_pattern
+
+  @doc """
+  Key of the PR-body marker that authoritatively links a PR to the issue.
+  Reads `source_control.issue_marker_key`, defaulting to `IssueMarker.default_key/0`.
+  """
+  @spec source_control_issue_marker_key(t()) :: String.t()
+  def source_control_issue_marker_key(%__MODULE__{source_control: %{"issue_marker_key" => k}})
+      when is_binary(k) and k != "",
+      do: k
+
+  def source_control_issue_marker_key(%__MODULE__{}),
+    do: SymphonyElixir.GitHub.IssueMarker.default_key()
 
   defp dispatch_states(opts) do
     case get_in(opts, [:tracker, :dispatch_states]) do

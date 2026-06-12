@@ -275,6 +275,45 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.codex == %{}
   end
 
+  describe "source_control accessors" do
+    test "default when section is absent" do
+      config = %ProjectConfig{project_id: 1, project_slug: "p", tracker_kind: "github"}
+
+      assert ProjectConfig.source_control_issue_marker_key(config) == "Symphony-Issue"
+      assert ProjectConfig.source_control_branch_pattern(config) == "symphony/{issue}"
+      assert ProjectConfig.source_control_pr_title_pattern(config) == "{issue}: {title}"
+    end
+
+    test "reads configured values" do
+      config = %ProjectConfig{
+        project_id: 1,
+        project_slug: "p",
+        tracker_kind: "github",
+        source_control: %{
+          "issue_marker_key" => "Linked-Issue",
+          "branch_pattern" => "agent/{issue}",
+          "pr_title_pattern" => "[{issue}] {title}"
+        }
+      }
+
+      assert ProjectConfig.source_control_issue_marker_key(config) == "Linked-Issue"
+      assert ProjectConfig.source_control_branch_pattern(config) == "agent/{issue}"
+      assert ProjectConfig.source_control_pr_title_pattern(config) == "[{issue}] {title}"
+    end
+
+    test "resolve/1 reads source_control from workflow_config" do
+      project =
+        project_with_setup(
+          "sc-project",
+          %{"source_control" => %{"issue_marker_key" => "Tracker-Issue"}},
+          "prompt"
+        )
+
+      config = ProjectConfig.resolve(project)
+      assert ProjectConfig.source_control_issue_marker_key(config) == "Tracker-Issue"
+    end
+  end
+
   defp github_project_with_setup(slug, repo, workflow_config, after_create_hook \\ nil) do
     {:ok, project} =
       Context.ensure_project(%{
