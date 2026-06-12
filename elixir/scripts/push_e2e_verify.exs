@@ -114,9 +114,9 @@ The Cursor embedded browser cannot subscribe (no push service).
     subject = System.get_env("SYMPHONY_VAPID_SUBJECT") || "mailto:symphony@localhost"
 
     if public && private do
-      Application.put_env(:web_push_elixir, :vapid_public_key, public)
-      Application.put_env(:web_push_elixir, :vapid_private_key, private)
-      Application.put_env(:web_push_elixir, :vapid_subject, subject)
+      Application.put_env(:ex_nudge, :vapid_public_key, public)
+      Application.put_env(:ex_nudge, :vapid_private_key, private)
+      Application.put_env(:ex_nudge, :vapid_subject, subject)
     end
 
     {:ok, _} = Repo.start_link()
