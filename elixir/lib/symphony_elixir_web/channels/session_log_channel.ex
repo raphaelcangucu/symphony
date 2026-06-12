@@ -18,10 +18,10 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
       when is_binary(project_slug) and project_slug != "" do
     with :ok <- authorize(socket),
          {:ok, issue_identifier} <- parse_topic(topic_rest, project_slug),
-         agent_kind <- resolve_agent_kind(project_slug, issue_identifier),
+         preferred_agent_kind <- resolve_agent_kind(project_slug, issue_identifier),
          workspace <- Workspace.path_for_issue(issue_identifier),
-         {:ok, path} <- SessionLog.resolve_log_path(agent_kind, workspace) do
-      {:ok, lines, offset} = SessionLog.tail(agent_kind, path)
+         {:ok, log_agent_kind, path} <- SessionLog.resolve_log_source(preferred_agent_kind, workspace) do
+      {:ok, lines, offset} = SessionLog.tail(log_agent_kind, path, SessionLog.join_tail_opts())
 
       socket =
         socket
@@ -30,11 +30,20 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
         |> assign(:workspace, workspace)
         |> assign(:path, path)
         |> assign(:offset, offset)
-        |> assign(:agent_kind, agent_kind)
+        |> assign(:agent_kind, log_agent_kind)
+        |> assign(:preferred_agent_kind, preferred_agent_kind)
 
       send(self(), :poll)
 
-      {:ok, %{entries: lines, offset: offset, path: path, agent_kind: agent_kind}, socket}
+      {:ok,
+       %{
+         entries: lines,
+         offset: offset,
+         path: path,
+         agent_kind: log_agent_kind,
+         preferred_agent_kind: preferred_agent_kind,
+         log_fallback: log_agent_kind != preferred_agent_kind
+       }, socket}
     else
       :error -> {:error, %{reason: "session_log_unavailable"}}
       {:error, reason} -> {:error, %{reason: error_reason(reason)}}

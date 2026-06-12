@@ -39,12 +39,10 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
   const [agentPending, setAgentPending] = useState(false);
   const agentRunActive =
     execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting";
-  const sessionLogEnabled =
-    agentRunActive || execution?.status === "retrying";
   const sessionLog = useSessionLogChannel({
     projectSlug,
     issueIdentifier: issue.identifier,
-    enabled: sessionLogEnabled,
+    enabled: true,
     agentKind: execution?.agentKind ?? issue.agentKind ?? null,
   });
   const canSteer = execution?.status === "live" || execution?.status === "waiting";
@@ -180,6 +178,8 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
         connected={sessionLog.connected}
         entries={sessionLog.entries}
         error={sessionLog.error}
+        logAgentKind={sessionLog.logAgentKind}
+        preferredAgentKind={issue.agentKind}
       />
 
       <Separator />

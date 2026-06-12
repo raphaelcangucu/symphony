@@ -13,9 +13,24 @@ interface IssueSessionLogProps {
   connected: boolean;
   entries: SessionLogEntry[];
   error: string | null;
+  logAgentKind?: string | null;
+  preferredAgentKind?: string | null;
 }
 
-export function IssueSessionLog({ issueIdentifier, connected, entries, error }: IssueSessionLogProps) {
+const LOG_AGENT_LABELS: Record<string, string> = {
+  codex: "Codex",
+  claude: "Claude Code",
+  cursor: "Cursor Agent",
+};
+
+export function IssueSessionLog({
+  issueIdentifier,
+  connected,
+  entries,
+  error,
+  logAgentKind = null,
+  preferredAgentKind = null,
+}: IssueSessionLogProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const items = pairSessionLogItems(entries);
@@ -46,6 +61,16 @@ export function IssueSessionLog({ issueIdentifier, connected, entries, error }: 
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Session log</div>
         <span className="text-[11px] text-muted-foreground">{connected ? "Streaming" : "Connecting…"}</span>
       </div>
+      {logAgentKind && preferredAgentKind && logAgentKind !== preferredAgentKind ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Showing {LOG_AGENT_LABELS[logAgentKind] ?? logAgentKind} history —{" "}
+          {LOG_AGENT_LABELS[preferredAgentKind] ?? preferredAgentKind} has not produced a log for this issue yet.
+        </p>
+      ) : logAgentKind ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Source: {LOG_AGENT_LABELS[logAgentKind] ?? logAgentKind}
+        </p>
+      ) : null}
       {error ? (
         <p className="mt-3 text-sm text-destructive">{error}</p>
       ) : (

@@ -88,6 +88,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
           {:ok, issue} ->
             if Map.has_key?(attrs, "agent") do
               Orchestrator.cancel_retry(identifier)
+              Orchestrator.request_refresh()
             end
 
             json(conn, %{data: TrackerPresenter.issue(issue)})

@@ -13,6 +13,38 @@ defmodule SymphonyElixir.SessionLog do
   alias SymphonyElixir.Codex.SessionLog, as: CodexLog
   alias SymphonyElixir.Cursor.SessionLog, as: CursorLog
 
+  @agent_kinds ["claude", "cursor", "codex"]
+  @join_tail_bytes 512_000
+
+  @doc """
+  Resolves the best available session log for a workspace.
+
+  Tries the preferred agent first, then falls back to other backends so prior
+  agent history remains visible after switching agents.
+  """
+  @spec resolve_log_source(String.t(), Path.t(), keyword()) :: {:ok, String.t(), Path.t()} | :error
+  def resolve_log_source(preferred_kind, workspace, opts \\ []) when is_binary(workspace) do
+    kinds =
+      [preferred_kind | @agent_kinds]
+      |> Enum.uniq()
+      |> Enum.reject(&is_nil/1)
+
+    Enum.find_value(kinds, fn kind ->
+      case resolve_log_path(kind, workspace, opts) do
+        {:ok, path} -> {kind, path}
+        :error -> nil
+      end
+    end)
+    |> case do
+      {kind, path} -> {:ok, kind, path}
+      nil -> :error
+    end
+  end
+
+  @doc false
+  @spec join_tail_opts() :: keyword()
+  def join_tail_opts, do: [max_bytes: @join_tail_bytes]
+
   @spec resolve_log_path(String.t(), Path.t(), keyword()) :: {:ok, Path.t()} | :error
   def resolve_log_path(agent_kind, workspace, opts \\ [])
 

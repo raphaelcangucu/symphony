@@ -222,7 +222,25 @@ defmodule SymphonyElixir.Cursor.CliRunner do
 
       {:error, _reason} ->
         log_non_json_stream_line(line, "cli stream")
-        receive_loop(port, on_event, timeout_ms, "", maybe_flag_invalid_resume(line, state))
+        receive_loop(port, on_event, timeout_ms, "", capture_cli_stream_error(line, state))
+    end
+  end
+
+  defp capture_cli_stream_error(line, state) do
+    state
+    |> maybe_flag_invalid_resume(line)
+    |> maybe_flag_auth_error(line)
+  end
+
+  defp maybe_flag_auth_error(state, line) do
+    if String.contains?(line, "Authentication required") do
+      %{
+        state
+        | error:
+            "Authentication required — run `cursor agent login` or set CURSOR_API_KEY"
+      }
+    else
+      state
     end
   end
 
