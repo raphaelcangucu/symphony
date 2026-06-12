@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.{AgentPreference, ProjectConfig, Repo}
+  alias SymphonyElixir.{AgentPreference, Orchestrator, ProjectConfig, Repo}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.{IssueAdapter, LabelResolver}
@@ -85,7 +85,12 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
         TrackerErrors.validation(conn, "agent must be codex, claude, cursor, or null")
       else
         case IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
-          {:ok, issue} -> json(conn, %{data: TrackerPresenter.issue(issue)})
+          {:ok, issue} ->
+            if Map.has_key?(attrs, "agent") do
+              Orchestrator.cancel_retry(identifier)
+            end
+
+            json(conn, %{data: TrackerPresenter.issue(issue)})
           {:error, reason} -> TrackerErrors.render(conn, reason)
         end
       end

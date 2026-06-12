@@ -102,4 +102,18 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.status == :live
     end
   end
+
+  describe "format_failure/1" do
+    test "extracts turn_failed messages" do
+      assert AgentExecution.format_failure({:turn_failed, "claude exited with code 1"}) ==
+               "claude exited with code 1"
+    end
+
+    test "strips runtime error stack traces" do
+      error =
+        "{%RuntimeError{message: \"Agent run failed for issue_id=5 issue_identifier=1859: {:turn_failed, \\\"claude exited with code 1\\\"}\"}, [{SymphonyElixir.AgentRunner, :fail_run, 2, [file: ~c\"lib/symphony_elixir/agent_runner.ex\", line: 87]}]}"
+
+      assert AgentExecution.format_failure("agent exited: " <> error) == "claude exited with code 1"
+    end
+  end
 end

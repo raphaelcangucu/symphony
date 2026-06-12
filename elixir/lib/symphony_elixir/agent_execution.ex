@@ -121,7 +121,7 @@ defmodule SymphonyElixir.AgentExecution do
       runtime_seconds: nil,
       started_at: nil,
       retry_attempt: Map.get(entry, :attempt, 0) || 0,
-      error: Map.get(entry, :error),
+      error: format_failure(Map.get(entry, :error)),
       agent_kind: Map.get(entry, :agent_kind),
       goal: nil,
       long_running: false,
@@ -200,4 +200,76 @@ defmodule SymphonyElixir.AgentExecution do
   @spec humanize_message(term()) :: String.t() | nil
   def humanize_message(nil), do: nil
   def humanize_message(message), do: StatusDashboard.humanize_codex_message(message)
+
+  @doc """
+  Formats agent failure reasons for UI and retry metadata.
+
+  Strips RuntimeError stack traces and normalizes common CLI exit messages.
+  """
+  @spec format_failure(term()) :: String.t() | nil
+  def format_failure(nil), do: nil
+
+  def format_failure(%RuntimeError{message: message}) when is_binary(message) do
+    format_failure(message)
+  end
+
+  def format_failure({:turn_failed, message}) when is_binary(message), do: message
+  def format_failure({:error, reason}), do: format_failure(reason)
+
+  def format_failure("agent exited: " <> rest) do
+    format_failure(rest)
+  end
+
+  def format_failure(message) when is_binary(message) do
+    cond do
+      match = Regex.run(~r/claude exited with code \d+/, message) ->
+        hd(match)
+
+      String.starts_with?(message, "Agent run failed for ") ->
+        case Regex.run(~r/Agent run failed for [^:]+: (.+)/, message) do
+          [_, reason] -> format_failure(parse_inspected_reason(reason))
+          _ -> truncate_failure(message)
+        end
+
+      String.starts_with?(message, "{%RuntimeError") ->
+        format_failure(parse_inspected_reason(message))
+
+      true ->
+        truncate_failure(message)
+    end
+  end
+
+  def format_failure(reason), do: truncate_failure(inspect(reason, limit: 8))
+
+  defp parse_inspected_reason(reason) when is_binary(reason) do
+    cond do
+      match = Regex.run(~r/\{:turn_failed,\s*"([^"]+)"\}/, reason) ->
+        Enum.at(match, 1)
+
+      match = Regex.run(~r/\{:turn_failed,\s*\\"([^\\"]+)\\"\}/, reason) ->
+        Enum.at(match, 1)
+
+      match = Regex.run(~r/claude exited with code \d+/, reason) ->
+        hd(match)
+
+      true ->
+        reason
+    end
+  end
+
+  defp truncate_failure(message) when is_binary(message) do
+    message
+    |> String.replace("\n", " ")
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+    |> truncate(240)
+  end
+
+  defp truncate(text, max) when byte_size(text) <= max, do: text
+
+  defp truncate(text, max) do
+    text
+    |> String.slice(0, max)
+    |> Kernel.<>("…")
+  end
 end

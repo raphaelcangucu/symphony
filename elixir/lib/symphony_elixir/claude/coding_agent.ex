@@ -83,6 +83,13 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
         run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
 
+      {:error, {:turn_failed, "claude exited with code 1"}} when session.cli_session_id != nil ->
+        # A resumed Claude session can exit non-zero when the local conversation
+        # ended outside Symphony. Retry once as a fresh session before failing.
+        Logger.warning("Claude resumed session #{inspect(session.cli_session_id)} exited for #{issue_context(issue)}; retrying with a fresh session")
+
+        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+
       {:error, reason} ->
         Logger.warning("Claude turn failed for #{issue_context(issue)}: #{inspect(reason)}")
         emit_message(on_message, :turn_ended_with_error, %{session_id: session_id, reason: reason}, %{})
