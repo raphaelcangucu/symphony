@@ -7,7 +7,8 @@ defmodule SymphonyElixir.Cursor.SessionLog do
   with `-` (e.g. `/home/foo/bar` → `home-foo-bar`, note: no leading dash unlike Claude).
 
   The most-recently-modified `.jsonl` file under that directory tree is used.
-  Cursor transcript lines follow the same Claude JSONL format.
+  Cursor transcript lines use a `role`/`message` shape (not Claude's `type`/`message`),
+  and tool calls omit stable ids — both are normalized before UI parsing.
   """
 
   @default_projects_dir "~/.cursor/projects"
@@ -64,11 +65,39 @@ defmodule SymphonyElixir.Cursor.SessionLog do
   @doc "Parses one Cursor JSONL line into a UI-facing entry map."
   @spec parse_line(String.t()) :: map() | nil
   def parse_line(line) when is_binary(line) do
-    # Cursor transcripts use the same Claude JSONL format
-    SymphonyElixir.Claude.SessionLog.parse_line(line)
+    line
+    |> parse_entries()
+    |> List.first()
   end
 
   def parse_line(_line), do: nil
+
+  @spec parse_entries(String.t()) :: [map()]
+  def parse_entries(line) when is_binary(line) do
+    case decode_line(line) do
+      {:ok, %{"role" => role, "message" => %{"content" => content}}}
+      when role in ["user", "assistant"] and is_list(content) ->
+        content
+        |> Enum.map(&normalize_content_block/1)
+        |> Enum.map(fn block ->
+          claude_line = Jason.encode!(%{"type" => role, "message" => %{"content" => [block]}})
+          SymphonyElixir.Claude.SessionLog.parse_line(claude_line)
+        end)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.map(&relabel_assistant/1)
+
+      {:ok, _decoded} ->
+        case SymphonyElixir.Claude.SessionLog.parse_line(line) do
+          nil -> []
+          entry -> [relabel_assistant(entry)]
+        end
+
+      :error ->
+        []
+    end
+  end
+
+  def parse_entries(_line), do: []
 
   @doc "Encodes a filesystem workspace path to the directory name used by Cursor."
   @spec encode_workspace(Path.t()) :: String.t()
@@ -107,9 +136,49 @@ defmodule SymphonyElixir.Cursor.SessionLog do
     entries =
       binary
       |> String.split("\n", trim: false)
-      |> Enum.map(&parse_line/1)
-      |> Enum.reject(&is_nil/1)
+      |> Enum.flat_map(&parse_entries/1)
 
     {:ok, entries, size}
   end
+
+  defp decode_line(line) do
+    trimmed = String.trim(line)
+
+    cond do
+      trimmed == "" ->
+        :error
+
+      true ->
+        case Jason.decode(trimmed) do
+          {:ok, decoded} -> {:ok, decoded}
+          {:error, _} -> :error
+        end
+    end
+  end
+
+  defp normalize_content_block(%{"type" => "tool_use", "name" => name} = block) when is_binary(name) do
+    id =
+      Map.get(block, "id") ||
+        Map.get(block, "call_id") ||
+        synthetic_tool_id(name, Map.get(block, "input"))
+
+    Map.put(block, "id", id)
+  end
+
+  defp normalize_content_block(block) when is_map(block), do: block
+  defp normalize_content_block(_block), do: %{"type" => "text", "text" => ""}
+
+  defp synthetic_tool_id(name, input) do
+    payload = Jason.encode!(%{name: name, input: input})
+
+    :crypto.hash(:sha256, payload)
+    |> Base.encode16(case: :lower)
+    |> String.slice(0, 12)
+  end
+
+  defp relabel_assistant(%{"kind" => "assistant"} = entry) do
+    Map.put(entry, "title", "Cursor Agent")
+  end
+
+  defp relabel_assistant(entry), do: entry
 end
