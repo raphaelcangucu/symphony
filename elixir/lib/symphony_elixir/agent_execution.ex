@@ -225,6 +225,9 @@ defmodule SymphonyElixir.AgentExecution do
       match = Regex.run(~r/claude exited with code \d+/, message) ->
         hd(match)
 
+      String.contains?(message, "Authentication required") ->
+        "Cursor Agent authentication required — run `cursor agent login` or set CURSOR_API_KEY"
+
       String.starts_with?(message, "Agent run failed for ") ->
         case Regex.run(~r/Agent run failed for [^:]+: (.+)/, message) do
           [_, reason] -> format_failure(parse_inspected_reason(reason))

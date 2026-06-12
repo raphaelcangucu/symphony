@@ -88,6 +88,16 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
 
         run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
 
+      {:error, {:turn_failed, "cursor-agent exited with code 1"}} when session.cli_session_id != nil ->
+        Logger.warning("Cursor resumed chat #{inspect(session.cli_session_id)} exited for #{issue_context(issue)}; retrying with a fresh session")
+
+        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+
+      {:error, {:turn_failed, "cursor-agent exited with code 1"}} when session.cli_session_id != nil ->
+        Logger.warning("Cursor resumed chat #{inspect(session.cli_session_id)} exited for #{issue_context(issue)}; retrying with a fresh session")
+
+        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+
       {:error, reason} ->
         Logger.warning("Cursor turn failed for #{issue_context(issue)}: #{inspect(reason)}")
         emit_message(on_message, :turn_ended_with_error, %{session_id: session_id, reason: reason}, %{})

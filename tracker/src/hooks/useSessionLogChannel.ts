@@ -17,6 +17,8 @@ interface UseSessionLogChannelResult {
   connected: boolean;
   entries: SessionLogEntry[];
   error: string | null;
+  logAgentKind: string | null;
+  logFallback: boolean;
   steerTurn: (message: string) => void;
   steerError: string | null;
   steerPending: boolean;
@@ -39,6 +41,8 @@ export function useSessionLogChannel({
   const [connected, setConnected] = useState(false);
   const [steerError, setSteerError] = useState<string | null>(null);
   const [steerPending, setSteerPending] = useState(false);
+  const [logAgentKind, setLogAgentKind] = useState<string | null>(null);
+  const [logFallback, setLogFallback] = useState(false);
   const channelRef = useRef<Channel | null>(null);
 
   useEffect(() => {
@@ -50,6 +54,8 @@ export function useSessionLogChannel({
       setError(null);
       setSteerError(null);
       setSteerPending(false);
+      setLogAgentKind(null);
+      setLogFallback(false);
       channelRef.current = null;
       return undefined;
     }
@@ -88,6 +94,9 @@ export function useSessionLogChannel({
         setConnected(true);
         setError(null);
         setEntries(payloadEntries(payload));
+        const record = payload as Record<string, unknown>;
+        setLogAgentKind(typeof record.agent_kind === "string" ? record.agent_kind : null);
+        setLogFallback(record.log_fallback === true);
       })
       .receive("error", (reason) => {
         if (cancelled) return;
@@ -128,6 +137,8 @@ export function useSessionLogChannel({
     connected,
     entries,
     error,
+    logAgentKind,
+    logFallback,
     steerTurn,
     steerError,
     steerPending,
