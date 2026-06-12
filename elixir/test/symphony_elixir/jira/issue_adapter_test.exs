@@ -62,6 +62,61 @@ defmodule SymphonyElixir.Jira.IssueAdapterTest do
     assert b.identifier == "ABC-2"
   end
 
+  test "list_issues applies the configured fields filter to the JQL" do
+    project = %Project{
+      id: 2,
+      slug: "advising",
+      tracker_kind: "jira",
+      tracker_config: %{"project_key" => "CDE", "fields" => %{"Product" => "Inspire"}}
+    }
+
+    Stub.set(fn :post, "/rest/api/3/search/jql", body ->
+      assert body["jql"] == ~s|project = "CDE" AND "Product" = "Inspire" ORDER BY created DESC|
+      {:ok, %{"issues" => [issue_body("CDE-1")], "isLast" => true}}
+    end)
+
+    assert {:ok, [%IssueDTO{identifier: "CDE-1"}]} = IssueAdapter.list_issues(project, [])
+  end
+
+  test "list_issues follows nextPageToken across pages, in order" do
+    parent = self()
+
+    Stub.set(fn :post, "/rest/api/3/search/jql", body ->
+      case body["nextPageToken"] do
+        nil ->
+          send(parent, :page_1)
+          {:ok, %{"issues" => [issue_body("ABC-1")], "nextPageToken" => "tok-2", "isLast" => false}}
+
+        "tok-2" ->
+          send(parent, :page_2)
+          {:ok, %{"issues" => [issue_body("ABC-2")], "isLast" => true}}
+      end
+    end)
+
+    assert {:ok, [%IssueDTO{identifier: "ABC-1"}, %IssueDTO{identifier: "ABC-2"}]} =
+             IssueAdapter.list_issues(@project, [])
+
+    assert_received :page_1
+    assert_received :page_2
+  end
+
+  test "list_issues stops at max_results and does not page further" do
+    project = %Project{
+      id: 3,
+      slug: "capped",
+      tracker_kind: "jira",
+      tracker_config: %{"project_key" => "ABC", "max_results" => 1}
+    }
+
+    Stub.set(fn :post, "/rest/api/3/search/jql", body ->
+      # The cap is hit on page 1, so a second page must never be requested.
+      assert body["nextPageToken"] == nil
+      {:ok, %{"issues" => [issue_body("ABC-1"), issue_body("ABC-2")], "nextPageToken" => "tok-2", "isLast" => false}}
+    end)
+
+    assert {:ok, [%IssueDTO{identifier: "ABC-1"}]} = IssueAdapter.list_issues(project, [])
+  end
+
   test "get_issue returns the DTO when found" do
     Stub.set(fn :get, "/rest/api/3/issue/ABC-12", _body -> {:ok, issue_body()} end)
     assert {:ok, %IssueDTO{identifier: "ABC-12"}} = IssueAdapter.get_issue(@project, "ABC-12")

@@ -3,35 +3,24 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
 
   @behaviour SymphonyElixir.Tracker.IssueAdapter
 
+  require Logger
+
   alias SymphonyElixir.Jira.{Adf, Client, Config, Priority}
-  alias SymphonyElixir.Jira.IssueAdapter.Query
+  alias SymphonyElixir.Jira.IssueAdapter.{Filter, Query}
   alias SymphonyElixir.LocalTracker.Project
   alias SymphonyElixir.Tracker.Workpad
 
   @default_issue_type "Task"
   @search_path "/rest/api/3/search/jql"
+  @page_size 100
+  @default_max_results 500
 
   @impl true
   def kind, do: :jira
 
   @impl true
   def list_issues(%Project{} = project, _filters) do
-    body = %{
-      "jql" => ~s|project = "#{project_key(project)}" ORDER BY created DESC|,
-      "fields" => Query.issue_fields(),
-      "maxResults" => 100
-    }
-
-    case request(:post, @search_path, body) do
-      {:ok, %{"issues" => issues}} when is_list(issues) ->
-        {:ok, Enum.map(issues, &Query.normalize_issue(&1, ctx(project)))}
-
-      {:ok, _response} ->
-        {:ok, []}
-
-      error ->
-        {:error, map_error(error)}
-    end
+    search_all(project, Filter.build_jql(project), max_results(project), nil, [])
   end
 
   @impl true
@@ -139,6 +128,49 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
       {:ok, %{"id" => _} = comment} -> {:ok, normalize_comment(comment)}
       {:ok, _response} -> {:ok, %{remote_id: remote_id, body: body, author: nil, remote_updated_at: nil}}
       error -> {:error, map_error(error)}
+    end
+  end
+
+  defp search_all(project, jql, cap, token, acc) do
+    case request(:post, @search_path, search_body(jql, token)) do
+      {:ok, %{"issues" => issues} = response} when is_list(issues) ->
+        acc = acc ++ Enum.map(issues, &Query.normalize_issue(&1, ctx(project)))
+
+        cond do
+          length(acc) >= cap -> {:ok, truncate(project, acc, cap)}
+          last_page?(response) -> {:ok, acc}
+          true -> search_all(project, jql, cap, response["nextPageToken"], acc)
+        end
+
+      {:ok, _response} ->
+        {:ok, acc}
+
+      error ->
+        {:error, map_error(error)}
+    end
+  end
+
+  defp search_body(jql, nil) do
+    %{"jql" => jql, "fields" => Query.issue_fields(), "maxResults" => @page_size}
+  end
+
+  defp search_body(jql, token) do
+    jql |> search_body(nil) |> Map.put("nextPageToken", token)
+  end
+
+  defp last_page?(%{"isLast" => true}), do: true
+  defp last_page?(%{"nextPageToken" => token}) when is_binary(token) and token != "", do: false
+  defp last_page?(_response), do: true
+
+  defp truncate(project, issues, cap) do
+    Logger.warning("jira board pull truncated project=#{project.slug} cap=#{cap}")
+    Enum.take(issues, cap)
+  end
+
+  defp max_results(%Project{tracker_config: config}) do
+    case Map.get(config, "max_results") do
+      value when is_integer(value) and value > 0 -> value
+      _ -> @default_max_results
     end
   end
 
