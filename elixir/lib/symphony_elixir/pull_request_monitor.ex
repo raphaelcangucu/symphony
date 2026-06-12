@@ -10,7 +10,10 @@ defmodule SymphonyElixir.PullRequestMonitor do
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.PullRequestFix
   alias SymphonyElixir.PullRequestMonitor.{Classifier, Events, MonitorState}
+  alias SymphonyElixir.Tracker
   alias SymphonyElixir.Tracker.IssueAdapter
+  alias SymphonyElixir.Tracker.Sync.LocalStore
+  alias SymphonyElixir.Workpad.PullRequestBlock
 
   require Logger
 
@@ -42,6 +45,7 @@ defmodule SymphonyElixir.PullRequestMonitor do
          {:ok, prs} <- reader.(project, identifier, opts) do
       Logger.info("PR monitor evaluated issue_identifier=#{identifier} project_slug=#{project.slug} prs=#{length(prs)}")
 
+      reconcile_task_pull_requests(project, identifier, prs, opts)
       Enum.each(prs, &process_pr(project, config, repo, identifier, &1, opts))
     else
       false ->
@@ -56,6 +60,64 @@ defmodule SymphonyElixir.PullRequestMonitor do
 
   defp default_pull_request_reader(project, identifier, _opts) do
     PullRequests.for_project_issue(project, identifier)
+  end
+
+  # Persist detected PRs onto the task: upsert the local cache (incl. head_branch)
+  # and merge the machine-readable block into the issue's workpad. Idempotent and
+  # best-effort — failures here must never block the monitor's transition logic.
+  defp reconcile_task_pull_requests(project, identifier, prs, opts) do
+    records =
+      prs
+      |> Enum.filter(&is_binary(pr_field(&1, :url)))
+      |> Enum.map(fn pr ->
+        %{
+          remote_id: pr_field(pr, :url),
+          url: pr_field(pr, :url),
+          number: pr_field(pr, :number),
+          title: pr_field(pr, :title),
+          state: pr_field(pr, :state) || "unknown",
+          repo: pr_field(pr, :repo),
+          head_branch: pr_field(pr, :head_ref),
+          origin: "auto"
+        }
+      end)
+
+    if records != [] do
+      LocalStore.upsert_discovered_pull_requests(project.id, identifier, records)
+      reconcile_workpad_block(project, identifier, records, opts)
+    end
+
+    :ok
+  rescue
+    error ->
+      Logger.warning("PR monitor reconcile failed issue=#{identifier} reason=#{inspect(error)}")
+      :ok
+  end
+
+  defp reconcile_workpad_block(project, identifier, records, opts) do
+    upsert_fun = Keyword.get(opts, :workpad_upsert, &Tracker.upsert_workpad/2)
+
+    current =
+      case Context.latest_workpad(project.slug, identifier) do
+        {:ok, %{body: body}} when is_binary(body) -> body
+        _ -> nil
+      end
+
+    refs =
+      Enum.map(records, fn record ->
+        %{repo: record.repo, number: record.number, branch: record.head_branch, url: record.url}
+      end)
+
+    new_body = PullRequestBlock.upsert_block(current, refs)
+
+    if new_body != current do
+      case Context.get_issue(project.slug, identifier) do
+        {:ok, issue} -> upsert_fun.(to_string(issue.id), new_body)
+        _ -> :ok
+      end
+    end
+
+    :ok
   end
 
   defp process_pr(project, config, repo, identifier, pr, opts) do

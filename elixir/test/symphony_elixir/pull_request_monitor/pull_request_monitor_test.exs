@@ -53,6 +53,47 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
       %{project: project, issue: issue}
     end
 
+    test "reconciles detected PRs to DB and workpad", %{project: project, issue: issue} do
+      test_pid = self()
+
+      prs = [
+        %{
+          url: "https://github.com/GambaLabs/backend/pull/3997",
+          number: 3997,
+          repo: "GambaLabs/backend",
+          state: "open",
+          head_ref: "symphony/1857",
+          title: "x",
+          merged: false,
+          head_sha: "abc",
+          checks_state: nil,
+          pipelines: [],
+          conversation: []
+        }
+      ]
+
+      o =
+        opts(
+          pull_request_reader: fn _p, _i, _o -> {:ok, prs} end,
+          workpad_upsert: fn issue_id, body ->
+            send(test_pid, {:workpad, issue_id, body})
+            :ok
+          end
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+
+      assert {:ok, [row]} =
+               SymphonyElixir.Tracker.Sync.PullRequests.for_issue("proj", issue.identifier)
+
+      assert row.url == "https://github.com/GambaLabs/backend/pull/3997"
+      assert row.head_branch == "symphony/1857"
+
+      assert_received {:workpad, _issue_id, body}
+      assert body =~ "symphony:prs"
+      assert body =~ "https://github.com/GambaLabs/backend/pull/3997"
+    end
+
     test "merged PR moves issue to Done and records action", %{project: project, issue: issue} do
       calls = start_supervised!({Agent, fn -> [] end})
 
