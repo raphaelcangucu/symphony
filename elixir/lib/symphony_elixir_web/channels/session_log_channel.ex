@@ -1,10 +1,13 @@
 defmodule SymphonyElixirWeb.SessionLogChannel do
-  @moduledoc "Streams Codex rollout JSONL session logs for an issue workspace."
+  @moduledoc "Streams agent session logs for an issue workspace, routing to the correct backend by agent_kind."
 
   use Phoenix.Channel
 
   alias Phoenix.Socket
-  alias SymphonyElixir.Codex.SessionLog
+  alias SymphonyElixir.AgentRunner
+  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.IssueMapper
+  alias SymphonyElixir.SessionLog
   alias SymphonyElixir.Workspace
   alias SymphonyElixirWeb.TrackerAuth
 
@@ -15,9 +18,10 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
       when is_binary(project_slug) and project_slug != "" do
     with :ok <- authorize(socket),
          {:ok, issue_identifier} <- parse_topic(topic_rest, project_slug),
+         agent_kind <- resolve_agent_kind(project_slug, issue_identifier),
          workspace <- Workspace.path_for_issue(issue_identifier),
-         {:ok, path} <- SessionLog.resolve_rollout_path(workspace) do
-      {:ok, lines, offset} = SessionLog.tail(path)
+         {:ok, path} <- SessionLog.resolve_log_path(agent_kind, workspace) do
+      {:ok, lines, offset} = SessionLog.tail(agent_kind, path)
 
       socket =
         socket
@@ -26,10 +30,11 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
         |> assign(:workspace, workspace)
         |> assign(:path, path)
         |> assign(:offset, offset)
+        |> assign(:agent_kind, agent_kind)
 
       send(self(), :poll)
 
-      {:ok, %{entries: lines, offset: offset, path: path}, socket}
+      {:ok, %{entries: lines, offset: offset, path: path, agent_kind: agent_kind}, socket}
     else
       :error -> {:error, %{reason: "session_log_unavailable"}}
       {:error, reason} -> {:error, %{reason: error_reason(reason)}}
@@ -70,9 +75,9 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   end
 
   @impl true
-  def handle_info(:poll, %{assigns: %{path: path, offset: offset}} = socket) do
+  def handle_info(:poll, %{assigns: %{path: path, offset: offset, agent_kind: agent_kind}} = socket) do
     socket =
-      case SessionLog.read_from(path, offset) do
+      case SessionLog.read_from(agent_kind, path, offset) do
         {:ok, lines, new_offset} when lines != [] ->
           push(socket, "entries", %{entries: lines, offset: new_offset})
           assign(socket, :offset, new_offset)
@@ -86,6 +91,13 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
 
     Process.send_after(self(), :poll, @poll_ms)
     {:noreply, socket}
+  end
+
+  defp resolve_agent_kind(project_slug, issue_identifier) do
+    case Context.get_issue(project_slug, issue_identifier) do
+      {:ok, record} -> record |> IssueMapper.to_issue() |> AgentRunner.issue_agent_kind()
+      {:error, _} -> AgentRunner.issue_agent_kind(%{})
+    end
   end
 
   defp authorized?(%Socket{assigns: %{tracker_token_valid: true}}), do: true

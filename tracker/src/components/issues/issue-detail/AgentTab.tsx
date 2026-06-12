@@ -43,6 +43,7 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
     projectSlug,
     issueIdentifier: issue.identifier,
     enabled: sessionLogEnabled,
+    agentKind: execution?.agentKind ?? issue.agentKind ?? null,
   });
   const canSteer = execution?.status === "live" || execution?.status === "waiting";
 

@@ -3,7 +3,10 @@ import { useEffect, useRef } from "react";
 import { SessionLogEntryCard } from "@/components/issues/issue-detail/SessionLogEntryCard";
 import { pairSessionLogItems, sessionPairToView } from "@/components/issues/issue-detail/sessionToolCall";
 import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
+import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { SessionLogEntry } from "@/types/session-log";
+
+const STICK_TO_BOTTOM_THRESHOLD_PX = 48;
 
 interface IssueSessionLogProps {
   issueIdentifier: string;
@@ -14,11 +17,26 @@ interface IssueSessionLogProps {
 
 export function IssueSessionLog({ issueIdentifier, connected, entries, error }: IssueSessionLogProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
   const items = pairSessionLogItems(entries);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) return undefined;
+
+    const updateStickiness = () => {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      stickToBottomRef.current = distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD_PX;
+    };
+
+    updateStickiness();
+    container.addEventListener("scroll", updateStickiness, { passive: true });
+    return () => container.removeEventListener("scroll", updateStickiness);
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !stickToBottomRef.current) return;
     container.scrollTop = container.scrollHeight;
   }, [entries]);
 
@@ -34,7 +52,7 @@ export function IssueSessionLog({ issueIdentifier, connected, entries, error }: 
         <div
           ref={containerRef}
           aria-label={`Session log for ${issueIdentifier}`}
-          className="mt-3 max-h-[520px] space-y-3 overflow-auto rounded-lg bg-muted/20 p-3"
+          className={cn("mt-3 max-h-[520px] space-y-3 overflow-auto rounded-lg bg-muted/20 p-3", SCROLLBAR_THIN)}
         >
           {items.length > 0 ? (
             items.map((item, index) =>
