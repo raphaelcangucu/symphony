@@ -47,6 +47,31 @@ defmodule SymphonyElixir.LocalTracker.ProjectTest do
       refute changeset.valid?
     end
 
+    test "accepts jira with a project_key" do
+      changeset =
+        Project.changeset(%Project{}, %{
+          name: "Advising",
+          slug: "advising",
+          tracker_kind: "jira",
+          tracker_config: %{"project_key" => "CDE"}
+        })
+
+      assert changeset.valid?
+    end
+
+    test "rejects jira without a project_key" do
+      changeset =
+        Project.changeset(%Project{}, %{
+          name: "Advising",
+          slug: "advising",
+          tracker_kind: "jira",
+          tracker_config: %{}
+        })
+
+      refute changeset.valid?
+      assert %{tracker_config: _} = errors_on(changeset)
+    end
+
     test "rejects unknown tracker_kind" do
       changeset =
         Project.changeset(%Project{}, %{name: "X", slug: "x", tracker_kind: "trello"})

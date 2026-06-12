@@ -49,6 +49,7 @@ defmodule SymphonyElixir.LocalTracker.Project do
     case get_field(changeset, :tracker_kind) do
       "github" -> validate_config_keys(changeset, ["repo", "project_id"])
       "linear" -> validate_config_keys(changeset, ["project_id"])
+      "jira" -> validate_config_keys(changeset, ["project_key"])
       _ -> changeset
     end
   end
