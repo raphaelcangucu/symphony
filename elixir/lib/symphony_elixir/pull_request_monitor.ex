@@ -8,6 +8,7 @@ defmodule SymphonyElixir.PullRequestMonitor do
   alias SymphonyElixir.GitHub.PullRequests
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.ProjectConfig
+  alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.PullRequestFix
   alias SymphonyElixir.PullRequestMonitor.{Classifier, Events, MonitorState}
   alias SymphonyElixir.Tracker
@@ -289,6 +290,7 @@ defmodule SymphonyElixir.PullRequestMonitor do
              last_action_at: DateTime.utc_now()
            }),
          {:ok, _row} <- MonitorState.upsert(project.slug, identifier, pr_url, attrs) do
+      PushDispatcher.pr_monitor_attention(project, identifier, action)
       :ok
     else
       {:error, reason} ->

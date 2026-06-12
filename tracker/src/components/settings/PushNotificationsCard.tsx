@@ -15,8 +15,9 @@ export function PushNotificationsCard() {
           Browser notifications
         </CardTitle>
         <CardDescription>
-          Get notified when an issue needs human review or when validation evidence is generated — even
-          when this tab is in the background.
+          Get notified when an issue needs human review, validation evidence is ready, an agent run
+          fails or stalls, or the PR monitor flags something for you — even when this tab is in the
+          background.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -36,7 +37,7 @@ export function PushNotificationsCard() {
             <p className="text-xs text-muted-foreground">
               {subscribed
                 ? "Notifications are enabled for this browser."
-                : "Enable notifications to receive Human Review and evidence alerts."}
+                : "Enable notifications for Human Review, evidence, agent failures, and PR monitor alerts."}
             </p>
             <div className="flex flex-wrap gap-2">
               {subscribed ? (

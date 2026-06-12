@@ -16,12 +16,16 @@ evidence. In-app Phoenix channels only help while a tab is connected.
 2. Notify on:
    - Issue moved to a project **wait state** (typically Human Review).
    - **Evidence** persisted after an agent run (`.symphony/evidence` gate).
+   - **Agent retry** scheduled after a real failure (not slot-contention backoff).
+   - **Agent run incomplete** (max turns / gate handoff without finished work).
+   - **Agent run blocked** (publish gate violations).
+   - **PR monitor** human-attention outcomes: auto-fix limit, needs human, CI unrelated.
 3. Opt-in from **Settings → Browser notifications**.
-4. Deep link opens the issue (evidence tab for evidence events).
+4. Deep link opens the issue (evidence or pull-request tab when relevant).
 
 ## Non-goals (v1)
 
-- Per-event toggles in the UI (Human Review vs evidence).
+- Per-event toggles in the UI (Human Review vs evidence vs PR monitor).
 - Per-project filters.
 - Push when tab is focused (always send; browser may suppress duplicates via `tag`).
 - Agent retry / PR monitor events (future).
@@ -74,6 +78,6 @@ Service worker scope: `/tracker/` (matches Vite `base`).
 
 ## Follow-ups
 
-- PR monitor `needs_human` without state change.
-- Agent retry exhausted.
-- Quiet hours / dedupe when tab is visible.
+- Per-event notification preferences in Settings UI.
+- Quiet hours / suppress when tracker tab is focused.
+- PR merged → Done (informational, lower priority).

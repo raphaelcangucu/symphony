@@ -22,6 +22,7 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.PublicRouting
+  alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
   alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
   alias SymphonyElixir.Tracker.Sync.LocalStore
@@ -923,6 +924,7 @@ defmodule SymphonyElixir.Orchestrator do
     end
 
     add_label(running_entry, @blocked_run_label)
+    PushDispatcher.agent_run_blocked(running_entry.issue, violations)
   end
 
   # Persists the run's evidence (when the agent produced a valid manifest) and
@@ -1138,6 +1140,7 @@ defmodule SymphonyElixir.Orchestrator do
 
         post_incomplete_workpad_comment(issue_id, reason)
         add_incomplete_label(running_entry)
+        PushDispatcher.agent_run_incomplete(running_entry.issue, reason)
         :ok
 
       _ ->
@@ -1230,6 +1233,8 @@ defmodule SymphonyElixir.Orchestrator do
     error_suffix = if is_binary(error), do: " error=#{error}", else: ""
 
     Logger.warning("Retrying issue_id=#{issue_id} issue_identifier=#{identifier} in #{delay_ms}ms (attempt #{next_attempt})#{error_suffix}")
+
+    maybe_notify_agent_retry(next_attempt, identifier, project_slug, error)
 
     %{
       state
@@ -1392,6 +1397,28 @@ defmodule SymphonyElixir.Orchestrator do
   defp pick_retry_error(previous_retry, metadata) do
     metadata[:error] || Map.get(previous_retry, :error)
   end
+
+  defp maybe_notify_agent_retry(next_attempt, identifier, project_slug, error)
+       when is_integer(next_attempt) and next_attempt >= 1 do
+    if notify_agent_retry_error?(error) and is_binary(identifier) and is_binary(project_slug) and project_slug != "" do
+      PushDispatcher.agent_retry_scheduled(%{
+        identifier: identifier,
+        project_slug: project_slug,
+        attempt: next_attempt,
+        error: error
+      })
+    end
+
+    :ok
+  end
+
+  defp maybe_notify_agent_retry(_next_attempt, _identifier, _project_slug, _error), do: :ok
+
+  defp notify_agent_retry_error?(error) when is_binary(error) do
+    not String.contains?(error, "no available orchestrator slots")
+  end
+
+  defp notify_agent_retry_error?(_error), do: true
 
   defp find_issue_by_id(issues, issue_id) when is_binary(issue_id) do
     Enum.find(issues, fn
