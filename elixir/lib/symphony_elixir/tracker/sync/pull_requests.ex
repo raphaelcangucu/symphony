@@ -20,6 +20,7 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequests do
           title: String.t() | nil,
           state: String.t(),
           repo: String.t() | nil,
+          head_branch: String.t() | nil,
           origin: String.t()
         }
 
@@ -48,6 +49,7 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequests do
       title: pr.title,
       state: pr.state,
       repo: pr.repo,
+      head_branch: pr.head_branch,
       origin: pr.origin
     }
   end

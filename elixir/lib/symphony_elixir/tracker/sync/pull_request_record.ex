@@ -19,6 +19,7 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
     field(:title, :string)
     field(:state, :string)
     field(:repo, :string)
+    field(:head_branch, :string)
     field(:origin, :string, default: "auto")
     field(:last_synced_at, :utc_datetime_usec)
 
@@ -41,6 +42,7 @@ defmodule SymphonyElixir.Tracker.Sync.PullRequestRecord do
       :title,
       :state,
       :repo,
+      :head_branch,
       :origin,
       :last_synced_at
     ])

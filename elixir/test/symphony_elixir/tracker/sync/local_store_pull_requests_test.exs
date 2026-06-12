@@ -82,6 +82,24 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStorePullRequestsTest do
     assert pr.origin == "auto"
   end
 
+  test "upsert_discovered_pull_requests persists head_branch", %{project: project} do
+    :ok =
+      LocalStore.upsert_discovered_pull_requests(project.id, "GAM-2", [
+        %{
+          remote_id: "https://github.com/GambaLabs/backend/pull/3997",
+          url: "https://github.com/GambaLabs/backend/pull/3997",
+          number: 3997,
+          repo: "GambaLabs/backend",
+          state: "open",
+          head_branch: "symphony/1857",
+          origin: "auto"
+        }
+      ])
+
+    assert {:ok, [pr]} = PullRequests.for_issue(project.slug, "GAM-2")
+    assert pr.head_branch == "symphony/1857"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
