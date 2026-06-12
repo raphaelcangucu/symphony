@@ -13,6 +13,7 @@ vi.mock("@/components/layout/WorkspaceContext", () => ({
     trackerKind: "local",
     refetch: vi.fn(),
     refreshing: false,
+    issues: [],
   }),
 }));
 
@@ -21,6 +22,30 @@ vi.mock("@/components/board/BoardPaletteShortcuts", () => ({
 }));
 
 describe("ProjectWorkspaceLayout assistant entry", () => {
+  it("hides board filters outside the board view", () => {
+    for (const path of [
+      "/projects/macro-markets/settings",
+      "/projects/macro-markets/list",
+      "/projects/macro-markets/assistant/explore",
+    ]) {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/projects/:projectSlug" element={<ProjectWorkspaceLayout />}>
+              <Route path="settings" element={<div>Settings route</div>} />
+              <Route path="list" element={<div>List route</div>} />
+              <Route path="assistant/explore" element={<div>Explore route</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(screen.queryByText("Quick filters")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Filters" })).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
   it("exposes the project assistant entry points from workspace chrome", async () => {
     const user = userEvent.setup();
 

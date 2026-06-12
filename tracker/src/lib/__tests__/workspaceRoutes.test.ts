@@ -6,6 +6,7 @@ import {
   devEnvPath,
   filtersPath,
   isIssueTab,
+  isBoardPath,
   isWorkspaceView,
   issueAgentTabPath,
   issueAssistantPath,
@@ -90,6 +91,17 @@ describe("workspaceRoutes", () => {
     expect(viewFromPathname("/projects/acme/board/issues/ABC-1")).toBe("board");
     expect(viewFromPathname("/projects/acme/list/filters")).toBe("list");
     expect(viewFromPathname("/projects/acme")).toBe("board");
+  });
+
+  it("detects board paths only", () => {
+    expect(isBoardPath("/projects/acme/board")).toBe(true);
+    expect(isBoardPath("/projects/acme/board/issues/ABC-1")).toBe(true);
+    expect(isBoardPath("/projects/acme/list/filters")).toBe(false);
+    expect(isBoardPath("/projects/acme/list")).toBe(false);
+    expect(isBoardPath("/projects/acme/settings")).toBe(false);
+    expect(isBoardPath("/projects/acme/settings/workflow")).toBe(false);
+    expect(isBoardPath("/projects/acme/assistant")).toBe(false);
+    expect(isBoardPath("/projects/acme/assistant/explore")).toBe(false);
   });
 
   it("builds the issue agent tab path with an optional section", () => {

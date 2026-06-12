@@ -133,6 +133,15 @@ export function viewFromPathname(pathname: string): WorkspaceView {
   return "board";
 }
 
+export function isBoardPath(pathname: string): boolean {
+  const normalized = pathname.replace(/\/+$/, "");
+  const marker = "/board";
+  const index = normalized.indexOf(marker);
+  if (index === -1) return false;
+  const after = normalized.slice(index + marker.length);
+  return after === "" || after.startsWith("/");
+}
+
 export function isAgentSection(value: string | undefined | null): value is AgentSection {
   return typeof value === "string" && (AGENT_SECTIONS as readonly string[]).includes(value);
 }

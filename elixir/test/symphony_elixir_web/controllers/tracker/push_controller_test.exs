@@ -16,19 +16,19 @@ defmodule SymphonyElixirWeb.Tracker.PushControllerTest do
     previous_token = System.get_env(@token_env)
     System.put_env(@token_env, "test-token")
 
-    previous_public = Application.get_env(:web_push_elixir, :vapid_public_key)
-    previous_private = Application.get_env(:web_push_elixir, :vapid_private_key)
-    previous_subject = Application.get_env(:web_push_elixir, :vapid_subject)
+    previous_public = Application.get_env(:ex_nudge, :vapid_public_key)
+    previous_private = Application.get_env(:ex_nudge, :vapid_private_key)
+    previous_subject = Application.get_env(:ex_nudge, :vapid_subject)
 
-    Application.put_env(:web_push_elixir, :vapid_public_key, "test-public-key")
-    Application.put_env(:web_push_elixir, :vapid_private_key, "test-private-key")
-    Application.put_env(:web_push_elixir, :vapid_subject, "mailto:test@example.com")
+    Application.put_env(:ex_nudge, :vapid_public_key, "test-public-key")
+    Application.put_env(:ex_nudge, :vapid_private_key, "test-private-key")
+    Application.put_env(:ex_nudge, :vapid_subject, "mailto:test@example.com")
 
     on_exit(fn ->
       restore_env(@token_env, previous_token)
-      restore_app_env(:web_push_elixir, :vapid_public_key, previous_public)
-      restore_app_env(:web_push_elixir, :vapid_private_key, previous_private)
-      restore_app_env(:web_push_elixir, :vapid_subject, previous_subject)
+      restore_app_env(:ex_nudge, :vapid_public_key, previous_public)
+      restore_app_env(:ex_nudge, :vapid_private_key, previous_private)
+      restore_app_env(:ex_nudge, :vapid_subject, previous_subject)
     end)
 
     :ok
@@ -88,8 +88,8 @@ defmodule SymphonyElixirWeb.Tracker.PushControllerTest do
   end
 
   test "POST returns 503 when VAPID is not configured" do
-    Application.delete_env(:web_push_elixir, :vapid_public_key)
-    Application.delete_env(:web_push_elixir, :vapid_private_key)
+    Application.delete_env(:ex_nudge, :vapid_public_key)
+    Application.delete_env(:ex_nudge, :vapid_private_key)
 
     conn = post(authed_conn(), "/api/tracker/v1/push/subscriptions", @valid_subscription)
     assert %{"error" => %{"code" => "push_not_configured"}} = json_response(conn, 503)

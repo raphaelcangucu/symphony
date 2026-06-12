@@ -1,5 +1,5 @@
 import { Settings } from "lucide-react";
-import { Navigate, Outlet, useNavigate, useParams } from "react-router-dom";
+import { Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { upsertIssue } from "@/components/board/board-utils";
 import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
@@ -10,7 +10,7 @@ import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { WorkspaceProvider, useWorkspace } from "@/components/layout/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
-import { projectSettingsPath } from "@/lib/workspaceRoutes";
+import { isBoardPath, projectSettingsPath } from "@/lib/workspaceRoutes";
 
 export function ProjectWorkspaceLayout() {
   const { projectSlug = "" } = useParams();
@@ -28,6 +28,8 @@ function WorkspaceChrome() {
   const { projectSlug, project, trackerKind, reloadProject, refreshing, setIssues } = useWorkspace();
   const pollingActive = useWindowFocus();
   const navigate = useNavigate();
+  const location = useLocation();
+  const showBoardFilters = isBoardPath(location.pathname);
 
   return (
     <div className="min-h-screen">
@@ -48,7 +50,7 @@ function WorkspaceChrome() {
               <Settings className="h-4 w-4" />
             </Button>
             <ProjectAssistantMenu projectSlug={projectSlug} />
-            <BoardFiltersTrigger />
+            {showBoardFilters ? <BoardFiltersTrigger /> : null}
           </>
         }
         trackerKind={trackerKind}
@@ -58,8 +60,8 @@ function WorkspaceChrome() {
         pollingActive={pollingActive}
         onIssueCreated={(issue) => setIssues((current) => upsertIssue(current, issue))}
       />
-      <BoardPaletteShortcuts />
-      <BoardQuickFilters />
+      {showBoardFilters ? <BoardPaletteShortcuts /> : null}
+      {showBoardFilters ? <BoardQuickFilters /> : null}
       <Outlet />
     </div>
   );
