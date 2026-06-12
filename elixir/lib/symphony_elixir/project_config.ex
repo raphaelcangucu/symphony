@@ -11,6 +11,7 @@ defmodule SymphonyElixir.ProjectConfig do
   """
 
   alias SymphonyElixir.Config
+  alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Project, ProjectSetup}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workflow
@@ -307,8 +308,7 @@ defmodule SymphonyElixir.ProjectConfig do
       when is_binary(k) and k != "",
       do: k
 
-  def source_control_issue_marker_key(%__MODULE__{}),
-    do: SymphonyElixir.GitHub.IssueMarker.default_key()
+  def source_control_issue_marker_key(%__MODULE__{}), do: IssueMarker.default_key()
 
   defp dispatch_states(opts) do
     case get_in(opts, [:tracker, :dispatch_states]) do

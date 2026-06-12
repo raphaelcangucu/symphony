@@ -97,9 +97,15 @@ defmodule SymphonyElixir.RunContract.FinalizerTest do
     sh!(good_repo, "git checkout -b fix/gam-9 && echo y > y.md && git add -A && git commit -m y")
 
     runner = fn
-      "git", args, opts -> System.cmd("git", args, opts)
-      "gh", ["pr", "list" | _rest], _opts -> {"[]", 0}
-      "gh", ["pr", "create" | _rest], _opts -> {"https://github.com/o/b/pull/11", 0}
+      "git", args, opts ->
+        System.cmd("git", args, opts)
+
+      "gh", ["pr", "list" | _rest], _opts ->
+        {"[]", 0}
+
+      "gh", ["pr", "create" | _rest], _opts ->
+        {"https://github.com/o/b/pull/11", 0}
+
       "gh", ["pr", "view" | _rest], _opts ->
         {~s({"url":"https://github.com/o/b/pull/11","number":11,"state":"OPEN","title":"GAM-9: Do the thing"}), 0}
     end

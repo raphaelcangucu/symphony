@@ -19,7 +19,7 @@ defmodule SymphonyElixir.Workpad.PullRequestBlock do
 
   @spec render([map()]) :: String.t()
   def render(prs) when is_list(prs) do
-    body = prs |> Enum.map(&render_one/1) |> Enum.join("\n")
+    body = Enum.map_join(prs, "\n", &render_one/1)
     @begin_marker <> "\n" <> body <> "\n" <> @end_marker
   end
 
@@ -61,24 +61,28 @@ defmodule SymphonyElixir.Workpad.PullRequestBlock do
   defp parse_block(block) do
     block
     |> String.split("\n")
-    |> Enum.reduce({[], nil}, fn line, {items, current} ->
-      cond do
-        Regex.match?(~r/^\s*-\s+/, line) ->
-          items = if current, do: [current | items], else: items
-          {items, parse_kv(strip_dash(line), %{})}
-
-        current != nil ->
-          {items, parse_kv(line, current)}
-
-        true ->
-          {items, current}
-      end
-    end)
+    |> Enum.reduce({[], nil}, &fold_block_line/2)
     |> close_items()
     |> Enum.map(&to_ref/1)
     |> Enum.reject(&(is_nil(&1.url) and is_nil(&1.repo)))
     |> Enum.reverse()
   end
+
+  defp fold_block_line(line, {items, current}) do
+    cond do
+      Regex.match?(~r/^\s*-\s+/, line) ->
+        {prepend_item(items, current), parse_kv(strip_dash(line), %{})}
+
+      current != nil ->
+        {items, parse_kv(line, current)}
+
+      true ->
+        {items, current}
+    end
+  end
+
+  defp prepend_item(items, nil), do: items
+  defp prepend_item(items, current), do: [current | items]
 
   defp close_items({items, nil}), do: items
   defp close_items({items, current}), do: [current | items]

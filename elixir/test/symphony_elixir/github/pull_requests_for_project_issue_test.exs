@@ -173,9 +173,7 @@ defmodule SymphonyElixir.GitHub.PullRequestsForProjectIssueTest do
     |> Repo.update!()
 
     assert {:ok, prs} =
-             PullRequests.for_project_issue(project, issue.identifier,
-               client_module: ClientStub
-             )
+             PullRequests.for_project_issue(project, issue.identifier, client_module: ClientStub)
 
     assert [%{number: 3992, merged: true, repo: "GambaLabs/backend"}] = prs
     assert_received {:issue_prs, %{"name" => "frontend", "number" => 1_860, "owner" => "GambaLabs"}}

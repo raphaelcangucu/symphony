@@ -342,14 +342,18 @@ defmodule SymphonyElixir.GitHub.PullRequests do
          {:ok, %{body: %{"items" => items}}} <- search_issues(query, opts),
          true <- is_list(items) do
       items
-      |> Enum.filter(&is_map/1)
-      |> Enum.filter(&(Map.get(&1, "pull_request") != nil))
-      |> Enum.map(fn item ->
-        number = Map.get(item, "number")
-        if is_integer(number) and number > 0, do: {repo, number}, else: nil
-      end)
-      |> Enum.reject(&is_nil/1)
+      |> Enum.filter(&pr_search_item?/1)
+      |> Enum.flat_map(&search_item_ref(repo, &1))
     else
+      _ -> []
+    end
+  end
+
+  defp pr_search_item?(item), do: is_map(item) and Map.get(item, "pull_request") != nil
+
+  defp search_item_ref(repo, item) do
+    case Map.get(item, "number") do
+      number when is_integer(number) and number > 0 -> [{repo, number}]
       _ -> []
     end
   end
