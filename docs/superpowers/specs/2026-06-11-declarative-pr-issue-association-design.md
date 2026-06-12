@@ -43,7 +43,10 @@ deterministically — instead of guessing.
   detects PRs, update the task's PR list (DB) **and** the `symphony:prs` workpad
   block, idempotently.
 - Surface GAM-2's two PRs (`frontend#1866`, `backend#3997`) via the marker /
-  workpad path.
+  workpad path **for PRs created under the contract**. The two PRs already open
+  today carry no marker; they are caught by the native-GitHub fallback or the
+  existing manual-link path (see "Legacy PRs" below) — the deterministic marker
+  is the going-forward mechanism.
 
 ## Non-Goals
 
@@ -159,25 +162,26 @@ Inside the single `## Codex Workpad` comment, a machine-readable sentinel block
 
 File: `elixir/lib/symphony_elixir/github/pull_requests.ex`
 
-Union these sources (dedupe by URL, then `sort_prs/1`, then
-`annotate_branch_status_per_repo/2`):
+`for_project_issue/3` unions these **live** sources (dedupe by URL, then
+`sort_prs/1`, then `annotate_branch_status_per_repo/2`):
 
-1. **DB** — persisted `tracker_pull_requests` rows for the issue
-   (`Tracker.Sync.PullRequests` reader).
-2. **Workpad** — read the issue's `## Codex Workpad` comment body from the
-   synced local comments (`Context.get_issue/2` comments; the workpad is synced
-   like any issue comment), run `Workpad.PullRequestBlock.parse/1`, and enrich
-   each ref via `for_pull_request/3`.
-3. **Marker** — marker-based discovery (above).
-4. **Native GitHub** — the existing `for_issue/3` strategies (closing/linked/
+1. **Workpad** — read the issue's `## Codex Workpad` comment body via
+   `Context.latest_workpad/2`, run `Workpad.PullRequestBlock.parse/1`, and
+   enrich each ref via `for_pull_request/3`.
+2. **Marker** — marker-based discovery (above).
+3. **Native GitHub** — the existing `for_issue/3` strategies (closing/linked/
    cross-ref), as a fallback for legacy/ad-hoc PRs.
 
 The previous prefix/title heuristic (`branch_search_prefixes/3`,
 `search_prs_by_title/3` added earlier this session) is **removed**; deterministic
 marker search replaces it. The native-GitHub fallback remains for legacy PRs.
 
-PRs discovered live (workpad/marker/native) are **persisted** (`origin: "auto"`)
-so subsequent reads hit the DB cache first.
+**DB cache layering (caller concern, unchanged architecture):** the
+`GitHub.PullRequests` module does not read `tracker_pull_requests`. As today, the
+read endpoint (`PullRequestController.index`) merges live discovery with the
+persisted rows (`SyncPullRequests.for_issue/2`) and persists discovered PRs
+(`origin: "auto"`); the monitor (below) upserts on detection. This keeps the
+GitHub module decoupled from the sync store.
 
 ## Reconciliation / write-back on detection (PR monitor)
 
@@ -223,6 +227,9 @@ not block the monitor's event processing (merge/CI/review handling) for the PR.
   add/update the `symphony:prs` workpad block. Covers agent-opened PRs (the
   Cursor case here). The gamba workflow body + the example workflows are
   updated.
+- **At runtime, the monitor is the only writer of the workpad PR block** (per
+  the "monitor_only" decision): the orchestrator publish path keeps its existing
+  DB persistence (`record_run_pull_requests/2`) and is otherwise unchanged.
 
 ## Data Model
 
@@ -252,17 +259,24 @@ keyed on `(project_id, issue_identifier, remote_id)`.
 - `elixir/lib/symphony_elixir/run_contract/finalizer.ex` — marker in `pr_body/1`.
 - `elixir/lib/symphony_elixir/tracker/sync/pull_request_record.ex` +
   `local_store.ex` + `pull_requests.ex` — persist/read `head_branch`.
-- `elixir/lib/symphony_elixir/orchestrator.ex` — write workpad PR block on
-  publish (where `record_run_pull_requests/2` runs).
 - `elixir/lib/symphony_elixir/pull_request_monitor.ex` — reconcile detected PRs
   onto the task (DB upsert + idempotent workpad block merge) in
-  `process_issue/3`.
+  `process_issue/3`. (Orchestrator publish path is unchanged.)
 
 **Modify (docs/config):**
 - `.claude/skills/workpad/SKILL.md` — define the `symphony:prs` block.
 - `gamba-project.yaml` (workflow body) + `elixir/WORKFLOW.*.example.md` —
   document `source_control` + agent instructions.
 - `elixir/README.md` — `source_control` config contract.
+
+## Legacy PRs (no marker)
+
+PRs opened before the contract (incl. GAM-2's current `frontend#1866` /
+`backend#3997`) have no `Symphony-Issue` trailer and no workpad block. They are
+surfaced only by the native-GitHub fallback (when it works) or the existing
+manual-link endpoint (`POST .../pull_requests/link`). Going forward, agents and
+the finalizer write the marker so discovery is deterministic. This is acceptable:
+we are not retrofitting old PRs, only making new ones reliable.
 
 ## Error Handling
 
