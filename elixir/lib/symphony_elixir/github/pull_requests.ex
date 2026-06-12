@@ -16,8 +16,10 @@ defmodule SymphonyElixir.GitHub.PullRequests do
      keyword does not register because they target a non-default base branch.
   """
 
-  alias SymphonyElixir.GitHub.{BranchStatus, Client, Config, IssueRepo, RepoSpec}
+  alias SymphonyElixir.GitHub.{BranchStatus, Client, Config, IssueMarker, IssueRepo, RepoSpec}
   alias SymphonyElixir.LocalTracker.{Context, Project}
+  alias SymphonyElixir.ProjectConfig
+  alias SymphonyElixir.Workpad.PullRequestBlock
 
   require Logger
 
@@ -30,6 +32,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   number
   title
   url
+  body
   state
   repository { nameWithOwner }
   isDraft
@@ -160,21 +163,31 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   @doc """
   Fetches related pull requests for a tracker issue in a multi-repo project.
 
-  Resolves the repository that owns the issue (see `GitHub.IssueRepo`), runs the
-  standard issue-scoped strategies there, then searches configured workspace
-  repositories for open PRs whose head branch matches the issue's linked branch,
-  common agent naming patterns (e.g. `codex/3984-*`, `symphony/3984`,
-  `symphony/gam-2`), or whose title contains the GitHub issue number.
+  Unions deterministic, declared sources (dedupe by URL):
+
+  1. **Workpad** — the `symphony:prs` block in the issue's `## Codex Workpad`
+     comment (`Workpad.PullRequestBlock`), enriched via `for_pull_request/3`.
+  2. **Marker** — PRs carrying the `source_control.issue_marker_key` trailer
+     (default `Symphony-Issue: <identifier>`) found via code search and
+     confirmed against the PR body (`GitHub.IssueMarker`).
+  3. **Native GitHub** — the issue-scoped strategies (`for_issue/3`:
+     closing/linked-branch/cross-reference), as a fallback for legacy PRs.
+
+  The DB cache is a caller concern (see `PullRequestController`); this function
+  reads only live sources.
   """
   @spec for_project_issue(Project.t(), String.t(), keyword()) ::
           {:ok, [pull_request()]} | {:error, term()}
   def for_project_issue(%Project{} = project, identifier, opts \\ []) when is_binary(identifier) do
     with {:ok, issue_repo} <- IssueRepo.resolve(project, identifier, opts),
          {:ok, number} <- resolve_issue_number(project, identifier),
-         {:ok, issue_prs} <- for_issue(issue_repo, issue_number_identifier(number), Keyword.put(opts, :annotate, false)),
-         branch_prs <- search_branch_linked_prs(project, identifier, number, opts) do
+         {:ok, issue_prs} <-
+           for_issue(issue_repo, issue_number_identifier(number), Keyword.put(opts, :annotate, false)) do
+      workpad_prs = workpad_pull_requests(project, identifier, opts)
+      marker_prs = marker_pull_requests(project, identifier, opts)
+
       merged =
-        (issue_prs ++ branch_prs)
+        (workpad_prs ++ marker_prs ++ issue_prs)
         |> dedupe_by_url()
         |> sort_prs()
         |> annotate_branch_status_per_repo(opts)
@@ -290,95 +303,105 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   defp cross_referenced_pr_node(%{"source" => %{"__typename" => "PullRequest"} = pr}), do: pr
   defp cross_referenced_pr_node(_event), do: nil
 
-  defp search_branch_linked_prs(%Project{} = project, identifier, issue_number, opts) do
-    branch_name = local_branch_name(project, identifier)
-    prefixes = branch_search_prefixes(issue_number, branch_name, identifier)
+  defp workpad_pull_requests(%Project{slug: slug}, identifier, opts) do
+    case Context.latest_workpad(slug, identifier) do
+      {:ok, %{body: body}} when is_binary(body) ->
+        body
+        |> PullRequestBlock.parse()
+        |> Enum.map(&enrich_ref(&1, opts))
+        |> Enum.reject(&is_nil/1)
 
-    branch_hits =
-      project
-      |> configured_repos()
-      |> Enum.flat_map(fn repo ->
-        prefixes
-        |> Enum.flat_map(&search_prs_by_head_prefix(repo, &1, opts))
-        |> Enum.flat_map(&fetch_search_hit/1)
-      end)
+      _ ->
+        []
+    end
+  end
 
-    title_hits =
-      project
-      |> configured_repos()
-      |> Enum.flat_map(fn repo ->
-        search_prs_by_title(repo, issue_number, opts)
-        |> Enum.flat_map(&fetch_search_hit/1)
-      end)
+  defp marker_pull_requests(%Project{} = project, identifier, opts) do
+    key = marker_key(project)
+    marker = IssueMarker.marker_line(identifier, key)
 
-    (branch_hits ++ title_hits)
+    project
+    |> configured_repos()
+    |> Enum.flat_map(&marker_candidates(&1, marker, opts))
+    |> Enum.flat_map(&fetch_search_hit(&1, opts))
+    |> Enum.filter(&marker_confirmed?(&1, identifier, key))
     |> dedupe_by_url()
+  end
+
+  defp marker_key(%Project{} = project) do
+    project
+    |> ProjectConfig.resolve()
+    |> ProjectConfig.source_control_issue_marker_key()
+  rescue
+    _ -> IssueMarker.default_key()
+  end
+
+  defp marker_candidates(repo, marker, opts) do
+    with {:ok, {owner, name}} <- RepoSpec.split(repo),
+         query = ~s(repo:#{owner}/#{name} type:pr in:body "#{marker}"),
+         {:ok, %{body: %{"items" => items}}} <- search_issues(query, opts),
+         true <- is_list(items) do
+      items
+      |> Enum.filter(&is_map/1)
+      |> Enum.filter(&(Map.get(&1, "pull_request") != nil))
+      |> Enum.map(fn item ->
+        number = Map.get(item, "number")
+        if is_integer(number) and number > 0, do: {repo, number}, else: nil
+      end)
+      |> Enum.reject(&is_nil/1)
+    else
+      _ -> []
+    end
+  end
+
+  defp marker_confirmed?(pr, identifier, key) do
+    wanted = identifier |> String.trim() |> String.downcase()
+
+    pr
+    |> Map.get(:body)
+    |> IssueMarker.extract(key)
+    |> Enum.map(&String.downcase/1)
+    |> Enum.member?(wanted)
+  end
+
+  defp enrich_ref(%{url: url, repo: repo, number: number} = ref, opts)
+       when is_binary(url) and is_binary(repo) and is_integer(number) do
+    case for_pull_request(repo, number, Keyword.put(opts, :annotate, false)) do
+      {:ok, pr} when is_map(pr) -> pr
+      _ -> ref_to_pr(ref)
+    end
+  end
+
+  defp enrich_ref(%{url: url} = ref, _opts) when is_binary(url), do: ref_to_pr(ref)
+  defp enrich_ref(_ref, _opts), do: nil
+
+  defp ref_to_pr(%{repo: repo, number: number, branch: branch, url: url}) do
+    %{
+      number: number,
+      title: nil,
+      body: nil,
+      url: url,
+      state: "unknown",
+      repo: repo,
+      head_ref: branch,
+      base_ref: nil,
+      is_draft: false,
+      merged: false,
+      head_sha: nil,
+      author: nil,
+      created_at: nil,
+      updated_at: nil,
+      merged_at: nil,
+      checks_state: nil,
+      pipelines: [],
+      statuses: [],
+      conversation: [],
+      base_behind_by: nil
+    }
   end
 
   defp configured_repos(%Project{} = project) do
     IssueRepo.candidate_repos(project, "")
-  end
-
-  defp local_branch_name(%Project{slug: slug}, identifier) do
-    case Context.get_issue(slug, identifier) do
-      {:ok, %{branch_name: branch}} when is_binary(branch) and branch != "" -> branch
-      _ -> nil
-    end
-  end
-
-  defp branch_search_prefixes(issue_number, branch_name, identifier) do
-    agent_prefix = "codex/#{issue_number}"
-    symphony_number = "symphony/#{issue_number}"
-
-    symphony_identifier =
-      if is_binary(identifier) and identifier != "" do
-        "symphony/#{String.downcase(identifier)}"
-      end
-
-    []
-    |> prepend_string(branch_name)
-    |> prepend_string(symphony_identifier)
-    |> prepend_string(symphony_number)
-    |> prepend_string(agent_prefix)
-    |> Enum.uniq()
-  end
-
-  defp prepend_string(list, value) when is_binary(value) and value != "", do: [value | list]
-  defp prepend_string(list, _), do: list
-
-  defp search_prs_by_head_prefix(repo, prefix, opts) do
-    with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         query = "repo:#{owner}/#{name} type:pr head:#{prefix}",
-         {:ok, %{body: %{"items" => items}}} <- search_issues(query, opts),
-         true <- is_list(items) do
-      pr_hits_from_search_items(repo, items)
-    else
-      _ -> []
-    end
-  end
-
-  defp search_prs_by_title(repo, issue_number, opts) when is_integer(issue_number) and issue_number > 0 do
-    with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         query = "repo:#{owner}/#{name} type:pr #{issue_number} in:title",
-         {:ok, %{body: %{"items" => items}}} <- search_issues(query, opts),
-         true <- is_list(items) do
-      pr_hits_from_search_items(repo, items)
-    else
-      _ -> []
-    end
-  end
-
-  defp search_prs_by_title(_repo, _issue_number, _opts), do: []
-
-  defp pr_hits_from_search_items(repo, items) do
-    items
-    |> Enum.filter(&is_map/1)
-    |> Enum.filter(&(Map.get(&1, "pull_request") != nil))
-    |> Enum.map(fn item ->
-      number = Map.get(item, "number")
-      if is_integer(number) and number > 0, do: {repo, number}, else: nil
-    end)
-    |> Enum.reject(&is_nil/1)
   end
 
   defp search_issues(query, opts) do
@@ -393,8 +416,8 @@ defmodule SymphonyElixir.GitHub.PullRequests do
     end
   end
 
-  defp fetch_search_hit({repo, number}) do
-    case for_pull_request(repo, number, annotate: false) do
+  defp fetch_search_hit({repo, number}, opts) do
+    case for_pull_request(repo, number, Keyword.put(opts, :annotate, false)) do
       {:ok, pr} when is_map(pr) -> [pr]
       _ -> []
     end
@@ -437,6 +460,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
     %{
       number: number,
       title: string_or_nil(Map.get(node, "title")),
+      body: string_or_nil(Map.get(node, "body")),
       url: string_or_nil(Map.get(node, "url")),
       state: derive_state(node),
       raw_state: string_or_nil(Map.get(node, "state")),

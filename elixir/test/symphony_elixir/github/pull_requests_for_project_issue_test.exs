@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.GitHub.PullRequestsForProjectIssueTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.GitHub.{IssueRepo, PullRequests}
+  alias SymphonyElixir.GitHub.PullRequests
   alias SymphonyElixir.LocalTracker.{Context, IssueRecord}
   alias SymphonyElixir.Repo
 
@@ -62,7 +62,7 @@ defmodule SymphonyElixir.GitHub.PullRequestsForProjectIssueTest do
     def rest_get(_path, _opts), do: {:ok, %{status: 200, body: %{"items" => []}}}
   end
 
-  defmodule BranchSearchClientStub do
+  defmodule MarkerClientStub do
     @moduledoc false
 
     def graphql(query, variables, _opts) do
@@ -85,54 +85,51 @@ defmodule SymphonyElixir.GitHub.PullRequestsForProjectIssueTest do
           {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_remote"}}}}}
 
         query =~ "SymphonyPullRequestByNumber" ->
-          number = variables["number"]
-
-          pr =
-            case {variables["owner"], variables["name"], number} do
-              {"GambaLabs", "backend", 3997} ->
-                pr_node(3997, "GambaLabs/backend", "symphony/1857")
-
-              {"GambaLabs", "frontend", 1866} ->
-                pr_node(1866, "GambaLabs/frontend", "feat/DailyTipLimit")
-
-              _ ->
-                nil
-            end
-
-          {:ok, %{"data" => %{"repository" => %{"pullRequest" => pr}}}}
+          {:ok, %{"data" => %{"repository" => %{"pullRequest" => pr_for(variables)}}}}
 
         true ->
           {:ok, %{"data" => %{"repository" => %{"pullRequests" => %{"nodes" => []}}}}}
       end
     end
 
+    # Marker candidate search: only the backend PR carries the marker in its body.
     def rest_get("/search/issues?" <> query, _opts) do
-      cond do
-        String.contains?(query, "head") and String.contains?(query, "symphony") and
-            String.contains?(query, "backend") ->
-          {:ok, %{status: 200, body: %{"items" => [search_item("GambaLabs/backend", 3997)]}}}
-
-        String.contains?(query, "in") and String.contains?(query, "title") and
-            String.contains?(query, "frontend") ->
-          {:ok, %{status: 200, body: %{"items" => [search_item("GambaLabs/frontend", 1866)]}}}
-
-        true ->
-          {:ok, %{status: 200, body: %{"items" => []}}}
+      if String.contains?(query, "backend") do
+        {:ok,
+         %{
+           status: 200,
+           body: %{
+             "items" => [
+               %{
+                 "number" => 3997,
+                 "pull_request" => %{
+                   "url" => "https://github.com/GambaLabs/backend/pull/3997"
+                 }
+               }
+             ]
+           }
+         }}
+      else
+        {:ok, %{status: 200, body: %{"items" => []}}}
       end
     end
 
-    defp search_item(repo, number) do
-      %{
-        "number" => number,
-        "pull_request" => %{"url" => "https://github.com/#{repo}/pull/#{number}"}
-      }
-    end
+    def rest_get(_path, _opts), do: {:error, :not_stubbed}
 
-    defp pr_node(number, repo, head_ref) do
+    defp pr_for(%{"name" => "backend", "number" => 3997}),
+      do: pr_node(3997, "GambaLabs/backend", "symphony/1857", "Recovery publish\n\nSymphony-Issue: GAM-2")
+
+    defp pr_for(%{"name" => "frontend", "number" => 1866}),
+      do: pr_node(1866, "GambaLabs/frontend", "feat/DailyTipLimit", "test")
+
+    defp pr_for(_variables), do: nil
+
+    defp pr_node(number, repo, head_ref, body) do
       %{
         "number" => number,
         "title" => "#{number}: test",
         "url" => "https://github.com/#{repo}/pull/#{number}",
+        "body" => body,
         "state" => "OPEN",
         "repository" => %{"nameWithOwner" => repo},
         "isDraft" => false,
@@ -184,58 +181,34 @@ defmodule SymphonyElixir.GitHub.PullRequestsForProjectIssueTest do
     assert_received {:issue_prs, %{"name" => "frontend", "number" => 1_860, "owner" => "GambaLabs"}}
   end
 
-  test "branch search stub matches symphony and title queries" do
-    assert function_exported?(BranchSearchClientStub, :rest_get, 2)
-
-    assert {:ok, %{body: %{"items" => [backend]}}} =
-             BranchSearchClientStub.rest_get(
-               "/search/issues?q=repo%3AGambaLabs%2Fbackend+type%3Apr+head%3Asymphony%2F1857&per_page=5",
-               []
-             )
-
-    assert backend["number"] == 3997
-
-    assert {:ok, %{body: %{"items" => [frontend]}}} =
-             BranchSearchClientStub.rest_get(
-               "/search/issues?per_page=5&q=repo%3AGambaLabs%2Ffrontend+type%3Apr+1857+in%3Atitle",
-               []
-             )
-
-    assert frontend["number"] == 1866
-  end
-
-  test "for_project_issue discovers PRs via symphony branch prefix and title search" do
+  test "for_project_issue unions workpad block + marker search" do
     {:ok, project} =
       Context.ensure_project(%{
         name: "Gamba",
-        slug: "gamba-branch-search",
+        slug: "gamba-marker",
         tracker_kind: "github",
         tracker_config: %{"repo" => "GambaLabs/frontend", "project_id" => "PVT_test"}
       })
 
     {:ok, repos} =
       Context.replace_repositories(project.slug, [
-      %{
-        github_full_name: "GambaLabs/frontend",
-        role: "primary",
-        workspace_path: "frontend",
-        selected_branch: "development"
-      },
-      %{
-        github_full_name: "GambaLabs/backend",
-        role: "backend",
-        workspace_path: "backend",
-        selected_branch: "dev"
-      }
-    ])
+        %{
+          github_full_name: "GambaLabs/frontend",
+          role: "primary",
+          workspace_path: "frontend",
+          selected_branch: "development"
+        },
+        %{
+          github_full_name: "GambaLabs/backend",
+          role: "backend",
+          workspace_path: "backend",
+          selected_branch: "dev"
+        }
+      ])
 
     assert length(repos) == 2
 
-    {:ok, issue} =
-      Context.create_issue(project.slug, %{
-        title: "Daily tip limit",
-        status: "Human Review"
-      })
+    {:ok, issue} = Context.create_issue(project.slug, %{title: "Daily tip limit", status: "Human Review"})
 
     issue
     |> IssueRecord.changeset(%{
@@ -246,20 +219,25 @@ defmodule SymphonyElixir.GitHub.PullRequestsForProjectIssueTest do
     })
     |> Repo.update!()
 
-    assert {:ok, "GambaLabs/frontend"} =
-             IssueRepo.resolve(project, "GAM-2", client_module: BranchSearchClientStub)
+    # Workpad block lists the frontend PR; marker search finds the backend PR.
+    workpad =
+      SymphonyElixir.Workpad.PullRequestBlock.upsert_block(nil, [
+        %{
+          repo: "GambaLabs/frontend",
+          number: 1866,
+          branch: "feat/DailyTipLimit",
+          url: "https://github.com/GambaLabs/frontend/pull/1866"
+        }
+      ])
 
-    assert {:ok, %{remote_number: 1_857}} = Context.get_issue(project.slug, "GAM-2")
-    assert length(Context.list_repositories(project.slug)) == 2
+    {:ok, _comment} = Context.add_comment(project.slug, "GAM-2", workpad)
 
     assert {:ok, prs} =
-             PullRequests.for_project_issue(project, "GAM-2",
-               client_module: BranchSearchClientStub
-             )
+             PullRequests.for_project_issue(project, "GAM-2", client_module: MarkerClientStub)
 
-    numbers = prs |> Enum.map(&{&1.repo, &1.number}) |> Enum.sort()
-    assert {"GambaLabs/backend", 3997} in numbers
-    assert {"GambaLabs/frontend", 1866} in numbers
+    pairs = prs |> Enum.map(&{&1.repo, &1.number}) |> Enum.sort()
+    assert {"GambaLabs/backend", 3997} in pairs
+    assert {"GambaLabs/frontend", 1866} in pairs
   end
 
   defp migrate_repo do
