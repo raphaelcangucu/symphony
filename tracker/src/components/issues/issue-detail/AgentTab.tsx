@@ -38,7 +38,10 @@ function formatTokens(value: number): string {
 export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = null, onIssueUpdated }: AgentTabProps) {
   const [agentPending, setAgentPending] = useState(false);
   const sessionLogEnabled =
-    execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting";
+    execution?.status === "live" ||
+    execution?.status === "idle" ||
+    execution?.status === "waiting" ||
+    execution?.status === "retrying";
   const sessionLog = useSessionLogChannel({
     projectSlug,
     issueIdentifier: issue.identifier,
