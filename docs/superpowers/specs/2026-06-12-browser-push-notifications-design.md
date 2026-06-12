@@ -59,7 +59,8 @@ evidence. In-app Phoenix channels only help while a tab is connected.
 **Config:** `SYMPHONY_VAPID_PUBLIC_KEY`, `SYMPHONY_VAPID_PRIVATE_KEY`,
 optional `SYMPHONY_VAPID_SUBJECT` (default `mailto:symphony@localhost`).
 
-Generate keys: `mix generate.vapid.keys` (from `web_push_elixir`).
+Generate keys via `ExNudge.generate_vapid_keys/0`. Delivery uses `ex_nudge`
+(RFC 8291 `aes128gcm` content encoding, required by modern Chrome/Edge).
 
 ## Frontend
 
