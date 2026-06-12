@@ -18,9 +18,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter.FilterTest do
 
   test "multiple fields entries are AND-joined, ordered by key" do
     jql =
-      Filter.build_jql(
-        project(%{"project_key" => "CDE", "fields" => %{"Product" => "Inspire", "Institution" => "westhillscollege"}})
-      )
+      Filter.build_jql(project(%{"project_key" => "CDE", "fields" => %{"Product" => "Inspire", "Institution" => "westhillscollege"}}))
 
     assert jql ==
              ~s|project = "CDE" AND "Institution" = "westhillscollege" AND "Product" = "Inspire" ORDER BY created DESC|
@@ -28,9 +26,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter.FilterTest do
 
   test "a raw jql fragment is parenthesized and ANDed after fields" do
     jql =
-      Filter.build_jql(
-        project(%{"project_key" => "CDE", "fields" => %{"Product" => "Inspire"}, "jql" => "updated >= -30d"})
-      )
+      Filter.build_jql(project(%{"project_key" => "CDE", "fields" => %{"Product" => "Inspire"}, "jql" => "updated >= -30d"}))
 
     assert jql ==
              ~s|project = "CDE" AND "Product" = "Inspire" AND (updated >= -30d) ORDER BY created DESC|
@@ -42,9 +38,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter.FilterTest do
   end
 
   test "blank/whitespace fields and jql are ignored" do
-    assert Filter.build_jql(
-             project(%{"project_key" => "CDE", "fields" => %{"  " => "x", "Product" => "  "}, "jql" => "   "})
-           ) == ~s|project = "CDE" ORDER BY created DESC|
+    assert Filter.build_jql(project(%{"project_key" => "CDE", "fields" => %{"  " => "x", "Product" => "  "}, "jql" => "   "})) == ~s|project = "CDE" ORDER BY created DESC|
   end
 
   test "values and names with embedded quotes are escaped" do
