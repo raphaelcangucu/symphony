@@ -58,6 +58,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
     clean_repo()
 
     conn = post(authorized_conn(), "/api/tracker/v1/projects/import", %{"yaml" => yaml})
+
     assert %{"data" => %{"slug" => "sample-export", "setup" => %{"workflow_markdown" => markdown}}} =
              json_response(conn, 201)
 
@@ -69,6 +70,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
     {:ok, yaml} = Projects.export_yaml(slug)
 
     conn = post(authorized_conn(), "/api/tracker/v1/projects/import", %{"yaml" => updated_yaml(yaml)})
+
     assert %{"data" => %{"slug" => "sample-export", "setup" => %{"workflow_markdown" => markdown}}} =
              json_response(conn, 201)
 

@@ -39,6 +39,7 @@ defmodule SymphonyElixir.RunContractTest do
     assert state.branch == "feat/x"
     assert state.upstream?
     assert state.ahead_count == 0
+
     assert RunContract.evaluate_publish([state], fn _repo -> {:ok, %{url: "https://github.com/o/f/pull/1"}} end) ==
              :satisfied
   end

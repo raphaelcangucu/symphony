@@ -84,6 +84,7 @@ defmodule SymphonyElixir.OrchestratorRunContractTest do
     }
 
     issue = %SymphonyElixir.Issue{id: "uuid", identifier: "GAM-9", state: "In Progress"}
+
     assert {:blocked, ^violations, {:partial_failure, [{"frontend", :push_failed}]}} =
              Orchestrator.run_publish_contract(issue, "/tmp/ws", deps)
   end
