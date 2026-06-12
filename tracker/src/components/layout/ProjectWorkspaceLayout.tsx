@@ -10,7 +10,7 @@ import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { WorkspaceProvider, useWorkspace } from "@/components/layout/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
-import { isIssueWorkspacePath, projectSettingsPath } from "@/lib/workspaceRoutes";
+import { isBoardPath, projectSettingsPath } from "@/lib/workspaceRoutes";
 
 export function ProjectWorkspaceLayout() {
   const { projectSlug = "" } = useParams();
@@ -29,7 +29,7 @@ function WorkspaceChrome() {
   const pollingActive = useWindowFocus();
   const navigate = useNavigate();
   const location = useLocation();
-  const showBoardFilters = isIssueWorkspacePath(location.pathname);
+  const showBoardFilters = isBoardPath(location.pathname);
 
   return (
     <div className="min-h-screen">

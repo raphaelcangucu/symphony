@@ -133,15 +133,13 @@ export function viewFromPathname(pathname: string): WorkspaceView {
   return "board";
 }
 
-export function isIssueWorkspacePath(pathname: string): boolean {
+export function isBoardPath(pathname: string): boolean {
   const normalized = pathname.replace(/\/+$/, "");
-  return WORKSPACE_VIEWS.some((view) => {
-    const marker = `/${view}`;
-    const index = normalized.indexOf(marker);
-    if (index === -1) return false;
-    const after = normalized.slice(index + marker.length);
-    return after === "" || after.startsWith("/");
-  });
+  const marker = "/board";
+  const index = normalized.indexOf(marker);
+  if (index === -1) return false;
+  const after = normalized.slice(index + marker.length);
+  return after === "" || after.startsWith("/");
 }
 
 export function isAgentSection(value: string | undefined | null): value is AgentSection {
