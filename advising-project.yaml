@@ -1,0 +1,89 @@
+# Advising project bundle (Jira CDE, Product = Inspire) + civitaslearning/advising.
+#
+# This is a DRAFT template. Two values must be confirmed against live Jira before
+# importing (see docs/superpowers/plans/2026-06-11-jira-board-filter.md, Task 6):
+#
+#   1) Product field JQL reference. `fields: {Product: Inspire}` compiles to
+#      project = "CDE" AND "Product" = "Inspire". This works only if the custom
+#      field name "Product" is unique/queryable in the site. If a probe search
+#      (POST /rest/api/3/search/jql with that JQL) returns 400 "Field 'Product'
+#      does not exist", remove `fields` and use the `jql` form with the field id:
+#         GET /rest/api/3/field  ->  find name == "Product"  ->  cf[<id>]
+#         jql: 'cf[<id>] = "Inspire"'
+#
+#   2) Workflow statuses. Replace the `workflow_statuses` list and the
+#      active_states / terminal_states in workflow_markdown with the REAL CDE
+#      statuses from GET /rest/api/3/project/CDE/statuses (category mapping:
+#      new -> unstarted, indeterminate -> started, done -> completed).
+#
+# Import:  make project-import FILE=advising-project.yaml
+#   (or)   SymphonyElixir.LocalTracker.Projects.import_yaml(File.read!("advising-project.yaml"))
+#
+# Dispatch safety: keep Settings -> orchestrator require_assignee_match and
+# require_symphony_label ON (defaults). The board shows all Product=Inspire
+# issues (incl. colleagues') for visibility, but only YOUR assigned, symphony:*-
+# labeled issues are ever auto-started.
+kind: symphony_project
+version: 2
+slug: advising
+name: Advising
+description: "Civitas Advising — Jira CDE (Product = Inspire) + civitaslearning/advising."
+tracker:
+  kind: jira
+  config:
+    project_key: CDE
+    fields:
+      Product: Inspire
+    # If "Product" is not directly queryable by name, drop `fields` above and use:
+    # jql: 'cf[<PRODUCT_FIELD_ID>] = "Inspire"'
+    # order_by: "created DESC"   # optional
+    # max_results: 500           # optional cap
+repositories:
+  - github_full_name: civitaslearning/advising
+    clone_url: https://github.com/civitaslearning/advising.git
+    default_branch: pre-release
+    selected_branch: pre-release
+    role: primary
+    workspace_path: advising
+workflow_statuses:
+  # TODO(setup): replace with the REAL CDE statuses (GET /rest/api/3/project/CDE/statuses).
+  - { name: "To Do", category: "unstarted", position: 0, is_terminal: false }
+  - { name: "Em andamento", category: "started", position: 1, is_terminal: false }
+  - { name: "Done", category: "completed", position: 2, is_terminal: true }
+setup:
+  workflow_markdown: |
+    ---
+    tracker:
+      field_states:
+        - To Do
+        - Em andamento
+        - Done
+      active_states:
+        - To Do
+        - Em andamento
+      terminal_states:
+        - Done
+    source_control:
+      branch_pattern: "symphony/{issue}"
+      pr_title_pattern: "{issue}: {title}"
+      issue_marker_key: "Symphony-Issue"
+    ---
+
+    You are working on Jira issue `{{ issue.identifier }}` in the **Advising** board
+    (Jira project `CDE`, scoped to Product `Inspire`).
+
+    Repository: `civitaslearning/advising` (workspace path `advising/`), integration
+    branch and PR base `pre-release`.
+
+    ## Workflow
+
+    - Sync before handoff: `cd advising && git fetch origin && git merge origin/pre-release`.
+    - Open the PR against `pre-release`:
+      `cd advising && gh pr create --base pre-release --title "{{ issue.identifier }}: ..."`.
+    - **Every PR body MUST include the association marker on its own line** so Symphony
+      links the PR to this issue deterministically: `Symphony-Issue: {{ issue.identifier }}`.
+    - Use a single `## Codex Workpad` comment for progress and the machine-readable
+      `symphony:prs` registry block.
+
+    Follow the repository's own test, lint, and PR-template conventions; validate before
+    moving the card to Human Review.
