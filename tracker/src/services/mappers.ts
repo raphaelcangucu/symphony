@@ -7,6 +7,7 @@ import {
   type AgentOption,
   type Issue,
   type IssueAssigneeOption,
+  type IssueAttachment,
   type IssueFormOptions,
   type IssueLabelOption,
   type IssuePriority,
@@ -174,11 +175,26 @@ export interface BackendIssueDto {
   branchName?: string | null;
   agent_kind?: string | null;
   agentKind?: string | null;
+  attachments?: BackendIssueAttachmentDto[] | null;
   inserted_at?: string | null;
   created_at?: string | null;
   createdAt?: string | null;
   updated_at?: string | null;
   updatedAt?: string | null;
+}
+
+interface BackendIssueAttachmentDto {
+  id?: BackendId | null;
+  filename?: string | null;
+  mime_type?: string | null;
+  mimeType?: string | null;
+  size?: number | null;
+  created?: string | null;
+  created_at?: string | null;
+  createdAt?: string | null;
+  author?: string | null;
+  is_image?: boolean | null;
+  isImage?: boolean | null;
 }
 
 interface BackendBlockerSummaryDto {
@@ -252,9 +268,27 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     url: dto.url ?? null,
     branchName: dto.branchName ?? dto.branch_name ?? null,
     agentKind,
+    attachments: (dto.attachments ?? []).flatMap(normalizeIssueAttachment),
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };
+}
+
+function normalizeIssueAttachment(dto: BackendIssueAttachmentDto): IssueAttachment[] {
+  const id = maybeString(dto.id);
+  if (!id) return [];
+
+  return [
+    {
+      id,
+      filename: dto.filename?.trim() || id,
+      mimeType: dto.mimeType ?? dto.mime_type ?? null,
+      size: typeof dto.size === "number" ? dto.size : null,
+      createdAt: dto.createdAt ?? dto.created_at ?? dto.created ?? null,
+      author: dto.author ?? null,
+      isImage: dto.isImage ?? dto.is_image ?? false,
+    },
+  ];
 }
 
 interface BackendLabelOptionDto {

@@ -3,7 +3,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunControllerTest do
 
   import Phoenix.ConnTest
 
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord}
   alias SymphonyElixir.Repo
 
   @endpoint SymphonyElixirWeb.Endpoint
@@ -14,63 +14,69 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunControllerTest do
     @moduledoc false
 
     def graphql(query, _variables, _opts) when is_binary(query) do
-      {:ok,
-       %{
-         "data" => %{
-           "repository" => %{
-             "issue" => %{
-               "linkedBranches" => %{"nodes" => []},
-               "timelineItems" => %{"nodes" => []},
-               "closedByPullRequestsReferences" => %{
-                 "nodes" => [
-                   %{
-                     "number" => 7,
-                     "title" => "Fix failing CI",
-                     "url" => "https://github.com/acme/app/pull/7",
-                     "state" => "OPEN",
-                     "isDraft" => false,
-                     "merged" => false,
-                     "headRefName" => "fix-7",
-                     "baseRefName" => "main",
-                     "repository" => %{"nameWithOwner" => "acme/app"},
-                     "author" => %{"login" => "codex-bot"},
-                     "updatedAt" => "2026-06-10T00:00:00Z",
-                     "commits" => %{
-                       "nodes" => [
-                         %{
-                           "commit" => %{
-                             "statusCheckRollup" => %{
-                               "state" => "FAILURE",
-                               "contexts" => %{
-                                 "nodes" => [
-                                   %{
-                                     "__typename" => "CheckRun",
-                                     "name" => "test",
-                                     "status" => "COMPLETED",
-                                     "conclusion" => "FAILURE",
-                                     "checkSuite" => %{
-                                       "workflowRun" => %{
-                                         "url" => "https://github.com/acme/app/actions/runs/99",
-                                         "workflow" => %{"name" => "CI"}
+      cond do
+        query =~ "issueNodeId" or query =~ "IssueNodeId" ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_node"}}}}}
+
+        true ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "timelineItems" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       %{
+                         "number" => 7,
+                         "title" => "Fix failing CI",
+                         "url" => "https://github.com/acme/app/pull/7",
+                         "state" => "OPEN",
+                         "isDraft" => false,
+                         "merged" => false,
+                         "headRefName" => "fix-7",
+                         "baseRefName" => "main",
+                         "repository" => %{"nameWithOwner" => "acme/app"},
+                         "author" => %{"login" => "codex-bot"},
+                         "updatedAt" => "2026-06-10T00:00:00Z",
+                         "commits" => %{
+                           "nodes" => [
+                             %{
+                               "commit" => %{
+                                 "statusCheckRollup" => %{
+                                   "state" => "FAILURE",
+                                   "contexts" => %{
+                                     "nodes" => [
+                                       %{
+                                         "__typename" => "CheckRun",
+                                         "name" => "test",
+                                         "status" => "COMPLETED",
+                                         "conclusion" => "FAILURE",
+                                         "checkSuite" => %{
+                                           "workflowRun" => %{
+                                             "url" => "https://github.com/acme/app/actions/runs/99",
+                                             "workflow" => %{"name" => "CI"}
+                                           }
+                                         }
                                        }
-                                     }
+                                     ]
                                    }
-                                 ]
+                                 }
                                }
                              }
-                           }
-                         }
-                       ]
-                     },
-                     "comments" => %{"nodes" => []},
-                     "reviews" => %{"nodes" => []}
+                           ]
+                         },
+                         "comments" => %{"nodes" => []},
+                         "reviews" => %{"nodes" => []}
+                       }
+                     ]
                    }
-                 ]
+                 }
                }
              }
-           }
-         }
-       }}
+           }}
+      end
     end
 
     def rest_post(path, body, _opts) do
@@ -93,63 +99,69 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunControllerTest do
     @moduledoc false
 
     def graphql(query, _variables, _opts) when is_binary(query) do
-      {:ok,
-       %{
-         "data" => %{
-           "repository" => %{
-             "issue" => %{
-               "linkedBranches" => %{"nodes" => []},
-               "timelineItems" => %{"nodes" => []},
-               "closedByPullRequestsReferences" => %{
-                 "nodes" => [
-                   %{
-                     "number" => 7,
-                     "title" => "Fix lint",
-                     "url" => "https://github.com/acme/app/pull/7",
-                     "state" => "OPEN",
-                     "isDraft" => false,
-                     "merged" => false,
-                     "headRefName" => "fix-7",
-                     "baseRefName" => "main",
-                     "repository" => %{"nameWithOwner" => "acme/app"},
-                     "author" => %{"login" => "codex-bot"},
-                     "updatedAt" => "2026-06-10T00:00:00Z",
-                     "commits" => %{
-                       "nodes" => [
-                         %{
-                           "commit" => %{
-                             "statusCheckRollup" => %{
-                               "state" => "SUCCESS",
-                               "contexts" => %{
-                                 "nodes" => [
-                                   %{
-                                     "__typename" => "CheckRun",
-                                     "name" => "lint",
-                                     "status" => "COMPLETED",
-                                     "conclusion" => "SUCCESS",
-                                     "checkSuite" => %{
-                                       "workflowRun" => %{
-                                         "url" => "https://github.com/acme/app/actions/runs/77",
-                                         "workflow" => %{"name" => "CI"}
+      cond do
+        query =~ "issueNodeId" or query =~ "IssueNodeId" ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_node"}}}}}
+
+        true ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "timelineItems" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       %{
+                         "number" => 7,
+                         "title" => "Fix lint",
+                         "url" => "https://github.com/acme/app/pull/7",
+                         "state" => "OPEN",
+                         "isDraft" => false,
+                         "merged" => false,
+                         "headRefName" => "fix-7",
+                         "baseRefName" => "main",
+                         "repository" => %{"nameWithOwner" => "acme/app"},
+                         "author" => %{"login" => "codex-bot"},
+                         "updatedAt" => "2026-06-10T00:00:00Z",
+                         "commits" => %{
+                           "nodes" => [
+                             %{
+                               "commit" => %{
+                                 "statusCheckRollup" => %{
+                                   "state" => "SUCCESS",
+                                   "contexts" => %{
+                                     "nodes" => [
+                                       %{
+                                         "__typename" => "CheckRun",
+                                         "name" => "lint",
+                                         "status" => "COMPLETED",
+                                         "conclusion" => "SUCCESS",
+                                         "checkSuite" => %{
+                                           "workflowRun" => %{
+                                             "url" => "https://github.com/acme/app/actions/runs/77",
+                                             "workflow" => %{"name" => "CI"}
+                                           }
+                                         }
                                        }
-                                     }
+                                     ]
                                    }
-                                 ]
+                                 }
                                }
                              }
-                           }
-                         }
-                       ]
-                     },
-                     "comments" => %{"nodes" => []},
-                     "reviews" => %{"nodes" => []}
+                           ]
+                         },
+                         "comments" => %{"nodes" => []},
+                         "reviews" => %{"nodes" => []}
+                       }
+                     ]
                    }
-                 ]
+                 }
                }
              }
-           }
-         }
-       }}
+           }}
+      end
     end
   end
 
@@ -216,6 +228,24 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestRerunControllerTest do
                ]
              }
            } = json_response(conn, 200)
+  end
+
+  test "POST rerun_failed resolves symbolic issue identifiers" do
+    {:ok, issue} = Context.create_issue("remote", %{title: "Integration health", status: "Todo"})
+
+    issue
+    |> IssueRecord.changeset(%{
+      identifier: "GAM-7",
+      remote_number: 42,
+      remote_url: "https://github.com/acme/app/issues/42",
+      url: "https://github.com/acme/app/issues/42"
+    })
+    |> Repo.update!()
+
+    conn = post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/GAM-7/pull_requests/7/rerun_failed")
+
+    assert %{"data" => %{"reruns" => [%{"run_id" => 99, "ok" => true}]}} = json_response(conn, 200)
+    assert_received {:rerun, "/repos/acme/app/actions/runs/99/rerun-failed-jobs", %{}}
   end
 
   defp authorized_conn do

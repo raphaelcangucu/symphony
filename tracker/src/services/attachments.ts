@@ -25,6 +25,20 @@ export function projectAttachmentUrl(projectSlug: string, relativePath: string):
 }
 
 /**
+ * Builds the authenticated tracker API path that proxies a JIRA issue
+ * attachment (the daemon fetches it from JIRA with the operator's credentials).
+ */
+export function jiraAttachmentUrl(projectSlug: string, attachmentId: string): string {
+  const slug = projectSlug.trim();
+  if (!slug) throw new Error("projectSlug is required");
+
+  const id = attachmentId.trim();
+  if (!id) throw new Error("attachmentId is required");
+
+  return trackerPath(`/projects/${encodeURIComponent(slug)}/jira/attachments/${encodeURIComponent(id)}`);
+}
+
+/**
  * True when a URL points at the local tracker attachment endpoint, which
  * requires an Authorization header and therefore cannot be rendered by a
  * plain <img src>.

@@ -120,6 +120,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       labels: dto.labels,
       agent_kind: AgentRouting.label_agent_kind(dto.labels),
       blocked_by: dto.blocked_by,
+      attachments: Enum.map(dto.attachments, &issue_attachment/1),
       started_at: nil,
       completed_at: nil,
       inserted_at: dto.created_at,
@@ -149,6 +150,18 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       completed_at: iso8601(issue.completed_at),
       inserted_at: iso8601(issue.inserted_at),
       updated_at: iso8601(issue.updated_at)
+    }
+  end
+
+  defp issue_attachment(attachment) do
+    %{
+      id: attachment.id,
+      filename: attachment.filename,
+      mime_type: attachment.mime_type,
+      size: attachment.size,
+      created: attachment.created,
+      author: attachment.author,
+      is_image: attachment.is_image
     }
   end
 

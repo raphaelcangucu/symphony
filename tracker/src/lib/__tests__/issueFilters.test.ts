@@ -30,6 +30,7 @@ function issueFixture(overrides: Partial<Issue>): Issue {
     branchName: null,
     createdAt: "",
     updatedAt: "",
+    attachments: [],
     ...overrides,
   };
 }

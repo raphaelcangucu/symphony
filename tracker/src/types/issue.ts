@@ -51,6 +51,16 @@ export interface IssueLabel {
   color?: string | null;
 }
 
+export interface IssueAttachment {
+  id: string;
+  filename: string;
+  mimeType: string | null;
+  size: number | null;
+  createdAt: string | null;
+  author: string | null;
+  isImage: boolean;
+}
+
 export interface Issue {
   id: string;
   identifier: string;
@@ -69,6 +79,7 @@ export interface Issue {
   createdAt: string;
   updatedAt: string;
   agentKind?: AgentKind | null;
+  attachments: IssueAttachment[];
 }
 
 export const AGENT_KINDS = ["codex", "claude", "cursor"] as const;

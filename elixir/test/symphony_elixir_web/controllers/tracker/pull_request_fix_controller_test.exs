@@ -36,50 +36,56 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestFixControllerTest do
 
   defmodule FailingChecksClient do
     def graphql(query, _vars, _opts) when is_binary(query) do
-      {:ok,
-       %{
-         "data" => %{
-           "repository" => %{
-             "issue" => %{
-               "linkedBranches" => %{"nodes" => []},
-               "timelineItems" => %{"nodes" => []},
-               "closedByPullRequestsReferences" => %{
-                 "nodes" => [
-                   %{
-                     "number" => 509,
-                     "title" => "docs: add llms.txt",
-                     "url" => "https://github.com/acme/app/pull/509",
-                     "state" => "OPEN",
-                     "updatedAt" => "2026-05-29T00:00:00Z",
-                     "commits" => %{
-                       "nodes" => [
-                         %{
-                           "commit" => %{
-                             "statusCheckRollup" => %{
-                               "state" => "FAILURE",
-                               "contexts" => %{
-                                 "nodes" => [
-                                   %{
-                                     "__typename" => "CheckRun",
-                                     "name" => "vitest / test",
-                                     "conclusion" => "FAILURE",
-                                     "databaseId" => 9,
-                                     "detailsUrl" => "https://github.com/acme/app/actions/runs/1/job/9"
+      cond do
+        query =~ "issueNodeId" or query =~ "IssueNodeId" ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_node"}}}}}
+
+        true ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "timelineItems" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       %{
+                         "number" => 509,
+                         "title" => "docs: add llms.txt",
+                         "url" => "https://github.com/acme/app/pull/509",
+                         "state" => "OPEN",
+                         "updatedAt" => "2026-05-29T00:00:00Z",
+                         "commits" => %{
+                           "nodes" => [
+                             %{
+                               "commit" => %{
+                                 "statusCheckRollup" => %{
+                                   "state" => "FAILURE",
+                                   "contexts" => %{
+                                     "nodes" => [
+                                       %{
+                                         "__typename" => "CheckRun",
+                                         "name" => "vitest / test",
+                                         "conclusion" => "FAILURE",
+                                         "databaseId" => 9,
+                                         "detailsUrl" => "https://github.com/acme/app/actions/runs/1/job/9"
+                                       }
+                                     ]
                                    }
-                                 ]
+                                 }
                                }
                              }
-                           }
+                           ]
                          }
-                       ]
-                     }
+                       }
+                     ]
                    }
-                 ]
+                 }
                }
              }
-           }
-         }
-       }}
+           }}
+      end
     end
 
     def rest_get(_path, _opts), do: {:ok, %{status: 200, body: "2026-05-29T00:00:00Z ##[error]boom"}}

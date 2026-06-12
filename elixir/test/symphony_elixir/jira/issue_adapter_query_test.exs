@@ -58,6 +58,76 @@ defmodule SymphonyElixir.Jira.IssueAdapter.QueryTest do
       assert dto.status.category == "completed"
       assert dto.status.is_terminal == true
     end
+
+    test "defaults attachments to an empty list when the issue has none" do
+      assert Query.normalize_issue(issue_node(), @ctx).attachments == []
+    end
+
+    test "normalizes issue attachments" do
+      node =
+        put_in(issue_node(), ["fields", "attachment"], [
+          %{
+            "id" => "10500",
+            "filename" => "WHCCD.VAR.docx",
+            "mimeType" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "size" => 24_576,
+            "created" => "2026-06-01T09:00:00.000Z",
+            "author" => %{"displayName" => "Maker"}
+          },
+          %{
+            "id" => "10501",
+            "filename" => "screenshot.png",
+            "mimeType" => "image/png",
+            "size" => 2048,
+            "created" => "2026-06-01T09:30:00.000Z",
+            "author" => %{"displayName" => "Maker"}
+          }
+        ])
+
+      assert Query.normalize_issue(node, @ctx).attachments == [
+               %{
+                 id: "10500",
+                 filename: "WHCCD.VAR.docx",
+                 mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                 size: 24_576,
+                 created: "2026-06-01T09:00:00.000Z",
+                 author: "Maker",
+                 is_image: false
+               },
+               %{
+                 id: "10501",
+                 filename: "screenshot.png",
+                 mime_type: "image/png",
+                 size: 2048,
+                 created: "2026-06-01T09:30:00.000Z",
+                 author: "Maker",
+                 is_image: true
+               }
+             ]
+    end
+  end
+
+  describe "attachments/1" do
+    test "skips entries without an id and coerces ids to strings" do
+      assert Query.attachments([
+               %{"filename" => "orphan.txt"},
+               %{"id" => 99, "filename" => "kept.txt", "mimeType" => "text/plain"}
+             ]) == [
+               %{
+                 id: "99",
+                 filename: "kept.txt",
+                 mime_type: "text/plain",
+                 size: nil,
+                 created: nil,
+                 author: nil,
+                 is_image: false
+               }
+             ]
+    end
+
+    test "returns [] for non-list payloads" do
+      assert Query.attachments(nil) == []
+    end
   end
 
   describe "statuses/1" do

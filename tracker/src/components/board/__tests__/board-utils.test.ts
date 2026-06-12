@@ -27,6 +27,7 @@ function issue(overrides: Partial<Issue>): Issue {
     branchName: overrides.branchName ?? null,
     createdAt: overrides.createdAt ?? "2026-05-27T00:00:00Z",
     updatedAt: overrides.updatedAt ?? "2026-05-27T00:00:00Z",
+    attachments: overrides.attachments ?? [],
   };
 }
 

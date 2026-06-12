@@ -21,6 +21,7 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
             agent_goal: nil,
             url: nil,
             project_slug: nil,
+            attachments: [],
             created_at: nil,
             updated_at: nil
 
@@ -29,6 +30,16 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
           category: String.t(),
           position: integer() | nil,
           is_terminal: boolean()
+        }
+
+  @type attachment :: %{
+          id: String.t(),
+          filename: String.t() | nil,
+          mime_type: String.t() | nil,
+          size: integer() | nil,
+          created: String.t() | nil,
+          author: String.t() | nil,
+          is_image: boolean()
         }
 
   @type t :: %__MODULE__{
@@ -47,6 +58,7 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
           agent_goal: String.t() | nil,
           url: String.t() | nil,
           project_slug: String.t() | nil,
+          attachments: [attachment()],
           created_at: String.t() | nil,
           updated_at: String.t() | nil
         }
@@ -62,6 +74,7 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
     |> normalize_identifier()
     |> Map.put_new(:labels, [])
     |> Map.put_new(:blocked_by, [])
+    |> Map.put_new(:attachments, [])
   end
 
   defp normalize_identifier(%{identifier: identifier} = attrs) when is_binary(identifier) do

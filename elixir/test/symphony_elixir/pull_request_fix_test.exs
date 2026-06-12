@@ -1,7 +1,9 @@
 defmodule SymphonyElixir.PullRequestFixTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord}
   alias SymphonyElixir.PullRequestFix
+  alias SymphonyElixir.Repo
 
   defmodule StubAdapter do
     @behaviour SymphonyElixir.Tracker.IssueAdapter
@@ -29,69 +31,81 @@ defmodule SymphonyElixir.PullRequestFixTest do
 
   defmodule FailingChecksClient do
     def graphql(query, _vars, _opts) when is_binary(query) do
-      {:ok,
-       %{
-         "data" => %{
-           "repository" => %{
-             "issue" => %{
-               "linkedBranches" => %{"nodes" => []},
-               "timelineItems" => %{"nodes" => []},
-               "closedByPullRequestsReferences" => %{
-                 "nodes" => [
-                   %{
-                     "number" => 509,
-                     "title" => "docs: add llms.txt",
-                     "url" => "https://github.com/acme/app/pull/509",
-                     "state" => "OPEN",
-                     "updatedAt" => "2026-05-29T00:00:00Z",
-                     "commits" => %{
-                       "nodes" => [
-                         %{
-                           "commit" => %{
-                             "statusCheckRollup" => %{
-                               "state" => "FAILURE",
-                               "contexts" => %{
-                                 "nodes" => [
-                                   %{
-                                     "__typename" => "CheckRun",
-                                     "name" => "vitest / test",
-                                     "conclusion" => "FAILURE",
-                                     "databaseId" => 9,
-                                     "detailsUrl" => "https://github.com/acme/app/actions/runs/1/job/9"
+      cond do
+        query =~ "issueNodeId" or query =~ "IssueNodeId" ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_node"}}}}}
+
+        true ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "timelineItems" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       %{
+                         "number" => 509,
+                         "title" => "docs: add llms.txt",
+                         "url" => "https://github.com/acme/app/pull/509",
+                         "state" => "OPEN",
+                         "updatedAt" => "2026-05-29T00:00:00Z",
+                         "commits" => %{
+                           "nodes" => [
+                             %{
+                               "commit" => %{
+                                 "statusCheckRollup" => %{
+                                   "state" => "FAILURE",
+                                   "contexts" => %{
+                                     "nodes" => [
+                                       %{
+                                         "__typename" => "CheckRun",
+                                         "name" => "vitest / test",
+                                         "conclusion" => "FAILURE",
+                                         "databaseId" => 9,
+                                         "detailsUrl" => "https://github.com/acme/app/actions/runs/1/job/9"
+                                       }
+                                     ]
                                    }
-                                 ]
+                                 }
                                }
                              }
-                           }
+                           ]
                          }
-                       ]
-                     }
+                       }
+                     ]
                    }
-                 ]
+                 }
                }
              }
-           }
-         }
-       }}
+           }}
+      end
     end
 
     def rest_get(_path, _opts), do: {:ok, %{status: 200, body: "2026-05-29T00:00:00Z ##[error]boom"}}
   end
 
   defmodule EmptyChecksClient do
-    def graphql(_q, _v, _o) do
-      {:ok,
-       %{
-         "data" => %{
-           "repository" => %{
-             "issue" => %{
-               "linkedBranches" => %{"nodes" => []},
-               "timelineItems" => %{"nodes" => []},
-               "closedByPullRequestsReferences" => %{"nodes" => []}
+    def graphql(query, _vars, _opts) when is_binary(query) do
+      cond do
+        query =~ "issueNodeId" or query =~ "IssueNodeId" ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_node"}}}}}
+
+        true ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "timelineItems" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{"nodes" => []}
+                 }
+               }
              }
-           }
-         }
-       }}
+           }}
+      end
     end
 
     def rest_get(_p, _o), do: {:ok, %{status: 200, body: ""}}
@@ -208,8 +222,9 @@ defmodule SymphonyElixir.PullRequestFixTest do
       end)
 
       project = %SymphonyElixir.LocalTracker.Project{
+        slug: "acme-fix",
         tracker_kind: "github",
-        tracker_config: %{"repo" => "acme/app"}
+        tracker_config: %{"repo" => "acme/app", "project_id" => "PVT_test"}
       }
 
       {:ok, project: project}
@@ -229,5 +244,43 @@ defmodule SymphonyElixir.PullRequestFixTest do
       Application.put_env(:symphony_elixir, :github_client_module, EmptyChecksClient)
       assert {:error, :no_failing_checks} = PullRequestFix.request_fix(project, "509")
     end
+
+    test "resolves symbolic identifiers via for_project_issue", %{project: _project} do
+      migrate_repo()
+      SymphonyElixir.TestSupport.truncate_tracker!(Repo)
+
+      {:ok, project} =
+        Context.ensure_project(%{
+          name: "Gamba",
+          slug: "gamba-fix",
+          tracker_kind: "github",
+          tracker_config: %{"repo" => "acme/app", "project_id" => "PVT_test"}
+        })
+
+      {:ok, issue} = Context.create_issue(project.slug, %{title: "Integration health", status: "Human Review"})
+
+      issue
+      |> IssueRecord.changeset(%{
+        identifier: "GAM-7",
+        remote_number: 509,
+        remote_url: "https://github.com/acme/app/issues/509",
+        url: "https://github.com/acme/app/issues/509"
+      })
+      |> Repo.update!()
+
+      assert {:ok, %{status: "Rework", jobs: [%{name: "vitest / test"}]}} =
+               PullRequestFix.request_fix(project, "GAM-7")
+
+      assert_received {:added_comment, body}
+      assert body =~ "vitest / test"
+      assert_received {:moved, %{"status" => "Rework"}}
+    end
+  end
+
+  defp migrate_repo do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(Repo, fn repo ->
+        Ecto.Migrator.run(repo, :up, all: true)
+      end)
   end
 end

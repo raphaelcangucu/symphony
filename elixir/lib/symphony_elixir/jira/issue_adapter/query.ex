@@ -29,10 +29,46 @@ defmodule SymphonyElixir.Jira.IssueAdapter.Query do
       labels: normalize_labels(fields["labels"]),
       status: status_to_dto(fields["status"], nil),
       project_slug: ctx[:project_slug],
+      attachments: attachments(fields["attachment"]),
       created_at: fields["created"],
       updated_at: fields["updated"]
     })
   end
+
+  @doc """
+  Normalizes a JIRA issue's `attachment` field into Symphony attachment maps.
+
+  The tracker builds the authenticated download URL from `id` (see the frontend
+  `jiraAttachmentUrl/2`), so only stable metadata is surfaced here. Entries
+  without an `id` are dropped and non-list payloads yield `[]`.
+  """
+  @spec attachments(term()) :: [IssueDTO.attachment()]
+  def attachments(list) when is_list(list) do
+    list
+    |> Enum.map(&attachment/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  def attachments(_list), do: []
+
+  defp attachment(%{"id" => id} = node) when not is_nil(id) do
+    mime_type = node["mimeType"]
+
+    %{
+      id: to_string(id),
+      filename: node["filename"],
+      mime_type: mime_type,
+      size: node["size"],
+      created: node["created"],
+      author: get_in(node, ["author", "displayName"]),
+      is_image: image_mime?(mime_type)
+    }
+  end
+
+  defp attachment(_node), do: nil
+
+  defp image_mime?(mime) when is_binary(mime), do: String.starts_with?(mime, "image/")
+  defp image_mime?(_mime), do: false
 
   @spec statuses([map()]) :: [IssueDTO.status()]
   def statuses(issue_types) when is_list(issue_types) do

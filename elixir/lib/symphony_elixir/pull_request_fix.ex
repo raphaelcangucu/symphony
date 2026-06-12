@@ -17,9 +17,8 @@ defmodule SymphonyElixir.PullRequestFix do
 
   @spec request_fix(Project.t(), String.t()) :: {:ok, map()} | {:error, term()}
   def request_fix(%Project{} = project, identifier) when is_binary(identifier) do
-    with {:ok, repo} <- PullRequests.resolve_repo(project),
-         {:ok, prs} <- PullRequests.for_issue(repo, identifier),
-         enriched = failing_entries(repo, prs),
+    with {:ok, prs} <- PullRequests.for_project_issue(project, identifier),
+         enriched = failing_entries(nil, prs),
          :ok <- ensure_present(enriched),
          body = build_comment(enriched),
          {:ok, comment} <- IssueAdapter.dispatch(project, :add_comment, [identifier, body, %{}]),
@@ -29,13 +28,16 @@ defmodule SymphonyElixir.PullRequestFix do
     end
   end
 
-  @spec failing_entries(String.t(), [map()], keyword()) :: [map()]
-  def failing_entries(repo, prs, opts \\ []) when is_binary(repo) and is_list(prs) do
+  @spec failing_entries(String.t() | nil, [map()], keyword()) :: [map()]
+  def failing_entries(repo, prs, opts \\ []) when is_list(prs) do
     check_logs = Keyword.get(opts, :check_logs, &default_check_logs/2)
 
     prs
     |> collect_failing()
-    |> Enum.map(fn entry -> Map.put(entry, :excerpt, excerpt(check_logs, repo, entry.job)) end)
+    |> Enum.map(fn entry ->
+      entry_repo = pr_repo(entry.pr) || repo
+      Map.put(entry, :excerpt, excerpt(check_logs, entry_repo, entry.job))
+    end)
   end
 
   @spec build_comment([map()], header: String.t()) :: String.t()
@@ -80,7 +82,12 @@ defmodule SymphonyElixir.PullRequestFix do
 
   defp default_check_logs(repo, job_id), do: CheckLogs.failing_job_excerpt(repo, job_id)
 
-  defp excerpt(check_logs, repo, %{job_id: id}) when is_integer(id) and id > 0 do
+  defp pr_repo(pr) do
+    Map.get(pr, :repo) || Map.get(pr, "repo")
+  end
+
+  defp excerpt(check_logs, repo, %{job_id: id})
+       when is_binary(repo) and is_integer(id) and id > 0 do
     case check_logs.(repo, id) do
       {:ok, text} -> text
       {:error, _reason} -> nil
