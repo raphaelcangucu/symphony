@@ -35,9 +35,10 @@ defmodule SymphonyElixir.AgentRunner do
 
   @type run_outcome ::
           :completed
+          | {:error, term()}
           | {:incomplete, :max_turns | {:publish_gate, [map()]} | {:validate_gate, [map()]}}
 
-  @spec run(map(), pid() | nil, keyword()) :: :ok | no_return()
+  @spec run(map(), pid() | nil, keyword()) :: :ok
   def run(issue, codex_update_recipient \\ nil, opts \\ []) do
     agent_kind = issue_agent_kind(issue)
 
@@ -54,7 +55,7 @@ defmodule SymphonyElixir.AgentRunner do
     :ok
   end
 
-  @spec do_run(map(), pid() | nil, keyword()) :: run_outcome() | no_return()
+  @spec do_run(map(), pid() | nil, keyword()) :: run_outcome()
   defp do_run(issue, codex_update_recipient, opts) do
     case Workspace.create_for_issue(issue) do
       {:ok, workspace} ->
@@ -66,25 +67,25 @@ defmodule SymphonyElixir.AgentRunner do
               |> handle_turns_result(issue)
 
             {:error, reason} ->
-              fail_run(issue, reason)
+              failed_run(issue, reason)
           end
         after
           Workspace.run_after_run_hook(workspace, issue)
         end
 
       {:error, reason} ->
-        fail_run(issue, reason)
+        failed_run(issue, reason)
     end
   end
 
   defp handle_turns_result(:completed, _issue), do: :completed
   defp handle_turns_result({:incomplete, _reason} = outcome, _issue), do: outcome
-  defp handle_turns_result({:error, reason}, issue), do: fail_run(issue, reason)
+  defp handle_turns_result({:error, reason}, issue), do: failed_run(issue, reason)
 
-  @spec fail_run(map(), term()) :: no_return()
-  defp fail_run(issue, reason) do
+  @spec failed_run(map(), term()) :: {:error, term()}
+  defp failed_run(issue, reason) do
     Logger.error("Agent run failed for #{issue_context(issue)}: #{inspect(reason)}")
-    raise RuntimeError, "Agent run failed for #{issue_context(issue)}: #{inspect(reason)}"
+    {:error, reason}
   end
 
   defp report_outcome(recipient, %Issue{id: id}, outcome)

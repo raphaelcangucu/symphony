@@ -9,6 +9,7 @@ interface UseSessionLogChannelArgs {
   projectSlug: string;
   issueIdentifier: string;
   enabled: boolean;
+  agentKind?: string | null;
 }
 
 interface UseSessionLogChannelResult {
@@ -21,10 +22,17 @@ interface UseSessionLogChannelResult {
   steerPending: boolean;
 }
 
+const AGENT_LOG_LABELS: Record<string, string> = {
+  codex: "Codex",
+  claude: "Claude Code",
+  cursor: "Cursor Agent",
+};
+
 export function useSessionLogChannel({
   projectSlug,
   issueIdentifier,
   enabled,
+  agentKind,
 }: UseSessionLogChannelArgs): UseSessionLogChannelResult {
   const [entries, setEntries] = useState<SessionLogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +92,7 @@ export function useSessionLogChannel({
       .receive("error", (reason) => {
         if (cancelled) return;
         setConnected(false);
-        setError(formatJoinError(reason));
+        setError(formatJoinError(reason, agentKind));
       })
       .receive("timeout", () => {
         if (cancelled) return;
@@ -98,7 +106,7 @@ export function useSessionLogChannel({
       channel.leave();
       socket.disconnect();
     };
-  }, [enabled, issueIdentifier, projectSlug]);
+  }, [agentKind, enabled, issueIdentifier, projectSlug]);
 
   const steerTurn = useCallback((message: string) => {
     const channel = channelRef.current;
@@ -126,13 +134,17 @@ export function useSessionLogChannel({
   };
 }
 
-function formatJoinError(reason: unknown): string {
+function formatJoinError(reason: unknown, agentKind?: string | null): string {
   if (typeof reason === "object" && reason !== null) {
     const record = reason as Record<string, unknown>;
     if (typeof record.reason === "string") {
-      return record.reason === "session_log_unavailable"
-        ? "No Codex session log found for this issue yet."
-        : record.reason;
+      if (record.reason === "session_log_unavailable") {
+        const label = agentKind ? (AGENT_LOG_LABELS[agentKind] ?? agentKind) : null;
+        return label
+          ? `No ${label} session log found for this issue yet.`
+          : "No session log found for this issue yet.";
+      }
+      return record.reason;
     }
   }
   return "Failed to open session log stream";

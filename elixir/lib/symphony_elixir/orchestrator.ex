@@ -8,6 +8,7 @@ defmodule SymphonyElixir.Orchestrator do
   import Bitwise, only: [<<<: 2]
 
   alias SymphonyElixir.{
+    AgentExecution,
     AgentRunner,
     Config,
     Issue,
@@ -142,7 +143,7 @@ defmodule SymphonyElixir.Orchestrator do
               schedule_issue_retry(state, issue_id, next_attempt, %{
                 identifier: running_entry.identifier,
                 project_slug: running_entry.issue.project_slug,
-                error: "agent exited: #{inspect(reason)}"
+                error: AgentExecution.format_failure(reason)
               })
           end
 
@@ -806,6 +807,24 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp apply_normal_completion(%State{} = state, running_entry, issue_id) do
+    case Map.get(running_entry, :agent_outcome) do
+      {:error, reason} ->
+        Logger.warning("Agent run failed for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier} reason=#{inspect(reason)}; scheduling retry")
+
+        next_attempt = next_retry_attempt_from_running(running_entry)
+
+        schedule_issue_retry(state, issue_id, next_attempt, %{
+          identifier: running_entry.identifier,
+          project_slug: running_entry.issue.project_slug,
+          error: AgentExecution.format_failure(reason)
+        })
+
+      _other ->
+        apply_successful_completion(state, running_entry, issue_id)
+    end
+  end
+
+  defp apply_successful_completion(%State{} = state, running_entry, issue_id) do
     issue = running_entry.issue
     workspace = Workspace.path_for_issue(issue)
     deps = state.publish_contract_deps || default_publish_contract_deps()
@@ -1453,6 +1472,20 @@ defmodule SymphonyElixir.Orchestrator do
     )
   end
 
+  @spec cancel_retry(String.t()) :: :ok | :not_found | :unavailable
+  def cancel_retry(identifier) when is_binary(identifier) do
+    cancel_retry(__MODULE__, identifier)
+  end
+
+  @spec cancel_retry(GenServer.server(), String.t()) :: :ok | :not_found | :unavailable
+  def cancel_retry(server, identifier) when is_binary(identifier) do
+    if Process.whereis(server) do
+      GenServer.call(server, {:cancel_retry, identifier})
+    else
+      :unavailable
+    end
+  end
+
   @spec request_refresh() :: map() | :unavailable
   def request_refresh do
     request_refresh(__MODULE__)
@@ -1557,6 +1590,17 @@ defmodule SymphonyElixir.Orchestrator do
      }, state}
   end
 
+  def handle_call({:cancel_retry, identifier}, _from, state) do
+    case cancel_retry_for_identifier(state, identifier) do
+      {:ok, updated_state} ->
+        notify_dashboard()
+        {:reply, :ok, updated_state}
+
+      :not_found ->
+        {:reply, :not_found, state}
+    end
+  end
+
   def handle_call(:request_refresh, _from, state) do
     now_ms = System.monotonic_time(:millisecond)
     already_due? = is_integer(state.next_poll_due_at_ms) and state.next_poll_due_at_ms <= now_ms
@@ -1602,6 +1646,43 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp find_running_by_identifier(_state, _identifier), do: nil
+
+  defp cancel_retry_for_identifier(%State{} = state, identifier) when is_binary(identifier) do
+    normalized = String.trim(identifier)
+
+    case find_retry_issue_id(state.retry_attempts, normalized) do
+      nil ->
+        :not_found
+
+      issue_id ->
+        previous_retry = Map.get(state.retry_attempts, issue_id, %{})
+
+        if is_reference(Map.get(previous_retry, :timer_ref)) do
+          Process.cancel_timer(previous_retry.timer_ref)
+        end
+
+        updated_state = %{
+          state
+          | retry_attempts: Map.delete(state.retry_attempts, issue_id),
+            claimed: MapSet.delete(state.claimed, issue_id)
+        }
+
+        Logger.info("Cancelled agent retry for issue_identifier=#{normalized} issue_id=#{issue_id}")
+        {:ok, updated_state}
+    end
+  end
+
+  defp find_retry_issue_id(retry_attempts, normalized) when is_map(retry_attempts) and is_binary(normalized) do
+    Enum.find_value(retry_attempts, fn {issue_id, entry} ->
+      case Map.get(entry, :identifier) do
+        identifier when is_binary(identifier) ->
+          if String.trim(identifier) == normalized, do: issue_id, else: nil
+
+        _ ->
+          nil
+      end
+    end)
+  end
 
   defp integrate_codex_update(running_entry, %{event: event, timestamp: timestamp} = update) do
     token_delta = extract_token_delta(running_entry, update)

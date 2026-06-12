@@ -52,7 +52,7 @@ export function AgentTabs({ issue, projectSlug, execution, view, onIssueUpdated 
       onValueChange={(value) => {
         if (isAgentSection(value)) setSection(value);
       }}
-      className="flex h-full min-h-0 flex-col gap-4"
+      className="flex flex-col gap-4"
     >
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
@@ -81,7 +81,10 @@ export function AgentTabs({ issue, projectSlug, execution, view, onIssueUpdated 
         </TabsList>
       </div>
 
-      <TabsContent value="authoring" className="mt-0 min-h-0 flex-1 overflow-hidden">
+      <TabsContent
+        value="authoring"
+        className="mt-0 flex min-h-[min(640px,calc(100dvh-13rem))] flex-col overflow-hidden"
+      >
         <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} execution={execution} compact />
       </TabsContent>
       <TabsContent value="execution" className="mt-0">

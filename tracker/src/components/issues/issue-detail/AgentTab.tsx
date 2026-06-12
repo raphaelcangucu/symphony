@@ -37,12 +37,15 @@ function formatTokens(value: number): string {
 
 export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = null, onIssueUpdated }: AgentTabProps) {
   const [agentPending, setAgentPending] = useState(false);
-  const sessionLogEnabled =
+  const agentRunActive =
     execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting";
+  const sessionLogEnabled =
+    agentRunActive || execution?.status === "retrying";
   const sessionLog = useSessionLogChannel({
     projectSlug,
     issueIdentifier: issue.identifier,
     enabled: sessionLogEnabled,
+    agentKind: execution?.agentKind ?? issue.agentKind ?? null,
   });
   const canSteer = execution?.status === "live" || execution?.status === "waiting";
 
@@ -194,7 +197,7 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
           <AgentChip
             label="Inherit"
             active={!issue.agentKind}
-            disabled={Boolean(execution) || agentPending}
+            disabled={agentRunActive || agentPending}
             onClick={() => void changeAgent(null)}
           />
           {(["codex", "claude", "cursor"] as AgentKind[]).map((kind) => {
@@ -205,14 +208,19 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
                 label={AGENT_LABELS[kind]}
                 icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
                 active={issue.agentKind === kind}
-                disabled={Boolean(execution) || agentPending}
+                disabled={agentRunActive || agentPending}
                 onClick={() => void changeAgent(kind)}
               />
             );
           })}
         </div>
-        {execution ? (
+        {agentRunActive ? (
           <p className="mt-1 text-xs text-muted-foreground">Stop the active run to change the agent.</p>
+        ) : execution?.status === "retrying" ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Retries are paused when you pick a different agent. Move the issue out of its active state to stop
+            re-dispatch entirely.
+          </p>
         ) : null}
       </section>
     </div>

@@ -428,7 +428,7 @@ export function IssueDrawer({
                   />
                 </TabsContent>
                 <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
-                <TabsContent value="agent" className="h-full min-h-0">
+                <TabsContent value="agent">
                   <AgentTabs issue={issue} projectSlug={projectSlug} execution={execution} view={view} onIssueUpdated={onIssueUpdated} />
                 </TabsContent>
                 <TabsContent value="preview">
