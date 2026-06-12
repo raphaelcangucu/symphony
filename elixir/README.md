@@ -366,6 +366,10 @@ pr_monitor:
   enabled: false
   max_auto_rework: 2
   done_on_merge: true
+source_control:
+  branch_pattern: "symphony/{issue}"
+  pr_title_pattern: "{issue}: {title}"
+  issue_marker_key: "Symphony-Issue"
 claude:
   command: claude
 ---
@@ -406,6 +410,13 @@ Title: {{ issue.title }} Body: {{ issue.description }}
 Notes:
 
 - If a value is missing, schema defaults are used.
+- **`source_control`** declares the PR↔issue association contract (all optional;
+  defaults shown above): `branch_pattern` and `pr_title_pattern` are advisory
+  naming conventions, while `issue_marker_key` is the **authoritative** link —
+  Symphony writes `<issue_marker_key>: <identifier>` (e.g. `Symphony-Issue: GAM-2`)
+  into PR bodies and discovers PRs by that marker plus the parseable
+  `symphony:prs` block in the issue's `## Codex Workpad` comment. The PR monitor
+  reconciles detected PRs back onto the task (local cache + workpad).
 - **Tracker backends**: `github` (default), `linear`, `jira`, `local` (SQLite-only), `memory`
   (testing). Detected from which YAML section (`github:`, `linear:`, `jira:`, `local:`, or
   `memory:`) is present in the front matter. Remote-backed projects (`github`, `linear`, `jira`)

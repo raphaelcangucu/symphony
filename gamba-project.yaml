@@ -108,6 +108,10 @@ setup:
       done_on_merge: true
       enabled: true
       max_auto_rework: 2
+    source_control:
+      branch_pattern: "symphony/{issue}"
+      pr_title_pattern: "{issue}: {title}"
+      issue_marker_key: "Symphony-Issue"
     public_tunnel:
       base_domain: tracker.cods.dev
       enabled: true
@@ -177,6 +181,16 @@ setup:
       - frontend: `cd frontend && gh pr create --base development --title "..."`
       - backend: `cd backend && gh pr create --base dev --title "..."`
       - goapi: `cd goapi && gh pr create --base dev --title "..."`
+    - **Every PR body MUST include the association marker on its own line** so Symphony can link the PR to this issue deterministically: `Symphony-Issue: {{ issue.identifier }}`
+    - Keep the machine-readable PR registry block in the `## Codex Workpad` comment updated with every PR you open (one item per PR, with repo, number, branch, url):
+      ```
+      <!-- symphony:prs
+      - repo: GambaLabs/frontend
+        number: 1866
+        branch: symphony/{{ issue.identifier }}
+        url: https://github.com/GambaLabs/frontend/pull/1866
+      -->
+      ```
     - On **Rework**, sync with the right integration branch per repo and address all issue comments, PR comments, and inline review threads.
     - Follow each repo's own test, lint, Docker/Sail/Vibe, and PR template conventions. Prefer repository-provided wrappers over bare tool invocations.
     

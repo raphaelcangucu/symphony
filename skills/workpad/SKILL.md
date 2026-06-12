@@ -34,6 +34,25 @@ description:
 (one of: `in-progress`, `done — PR <url>`, or `no-op — <justification>`)
 ```
 
+## PR registry block (machine-readable)
+
+When you open or update PRs for this issue, keep a single machine-readable block
+at the end of the workpad. Symphony parses it to associate PRs with the task:
+
+```markdown
+<!-- symphony:prs
+- repo: <owner>/<name>
+  number: <pr_number>
+  branch: <head_branch>
+  url: <pr_url>
+-->
+```
+
+One `- repo:` item per PR (front + back + any others). Also add the
+`Symphony-Issue: <issue_identifier>` trailer to each PR body. Symphony reconciles
+this block automatically when its monitor detects PRs, but writing it yourself
+makes the association immediate.
+
 ## Creating / updating
 
 Use the tracker tool available in your session:
