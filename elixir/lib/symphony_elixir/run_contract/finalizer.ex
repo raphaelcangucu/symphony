@@ -7,7 +7,10 @@ defmodule SymphonyElixir.RunContract.Finalizer do
   """
 
   require Logger
+  alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.Issue
+  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.RunContract
   alias SymphonyElixir.RunContract.RepoState
 
@@ -166,7 +169,7 @@ defmodule SymphonyElixir.RunContract.Finalizer do
 
   defp create_pull_request(path, repo, issue, runner) do
     body_file = Path.join(System.tmp_dir!(), "symphony-pr-body-#{System.unique_integer([:positive])}.md")
-    File.write!(body_file, pr_body(issue))
+    File.write!(body_file, pull_request_body(issue))
     branch = current_branch(repo, runner)
 
     head_args = if is_binary(branch) and branch != "", do: ["--head", branch], else: []
@@ -211,12 +214,16 @@ defmodule SymphonyElixir.RunContract.Finalizer do
 
   defp pr_title(%Issue{identifier: identifier, title: title}), do: "#{identifier}: #{title}"
 
-  defp pr_body(%Issue{} = issue) do
+  @doc false
+  @spec pull_request_body(Issue.t()) :: String.t()
+  def pull_request_body(%Issue{} = issue) do
     description =
       case Map.get(issue, :description) do
         text when is_binary(text) and text != "" -> String.slice(text, 0, 4_000)
         _missing -> "(no issue description)"
       end
+
+    marker = IssueMarker.marker_line(issue.identifier, marker_key(issue))
 
     """
     ## Summary
@@ -228,8 +235,24 @@ defmodule SymphonyElixir.RunContract.Finalizer do
     > ⚠️ Symphony run-contract finalizer: the agent completed work in this
     > workspace but did not publish it. Symphony pushed the branch and opened
     > this PR mechanically. Review with extra care.
+
+    #{marker}
     """
   end
+
+  defp marker_key(%Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        ProjectConfig.source_control_issue_marker_key(ProjectConfig.resolve(project))
+
+      _ ->
+        IssueMarker.default_key()
+    end
+  rescue
+    _ -> IssueMarker.default_key()
+  end
+
+  defp marker_key(_issue), do: IssueMarker.default_key()
 
   defp run(runner, cmd, args, path) do
     case runner.(cmd, args, cd: path, stderr_to_stdout: true) do
