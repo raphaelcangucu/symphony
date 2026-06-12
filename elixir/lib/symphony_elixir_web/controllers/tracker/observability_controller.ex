@@ -5,10 +5,24 @@ defmodule SymphonyElixirWeb.Tracker.ObservabilityController do
 
   alias Plug.Conn
   alias SymphonyElixir.Observability.Registry
+  alias SymphonyElixir.PullRequestMonitor.MonitorState
+  alias SymphonyElixir.PullRequestMonitor.Reconciler
+
+  @pr_monitor_recent_limit 50
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, _params) do
     json(conn, %{data: Registry.list()})
+  end
+
+  @spec pr_monitor(Conn.t(), map()) :: Conn.t()
+  def pr_monitor(conn, _params) do
+    json(conn, %{
+      data: %{
+        heartbeat: Reconciler.stats(),
+        evaluations: MonitorState.recent_summaries(@pr_monitor_recent_limit)
+      }
+    })
   end
 
   @spec report(Conn.t(), map()) :: Conn.t()

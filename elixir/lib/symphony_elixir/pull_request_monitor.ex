@@ -40,6 +40,8 @@ defmodule SymphonyElixir.PullRequestMonitor do
          true <- ProjectConfig.pr_monitor_enabled?(config),
          {:ok, repo} <- PullRequests.resolve_repo(project),
          {:ok, prs} <- reader.(project, identifier, opts) do
+      Logger.info("PR monitor evaluated issue_identifier=#{identifier} project_slug=#{project.slug} prs=#{length(prs)}")
+
       Enum.each(prs, &process_pr(project, config, repo, identifier, &1, opts))
     else
       false ->
@@ -61,13 +63,33 @@ defmodule SymphonyElixir.PullRequestMonitor do
 
     if is_binary(pr_url) do
       row = MonitorState.get(project.slug, identifier, pr_url)
+      event = Events.detect(pr, row)
 
-      case Events.detect(pr, row) do
+      record_evaluation(project.slug, identifier, pr_url, event)
+
+      case event do
         :none -> :ok
         event -> handle_event(event, project, config, repo, identifier, pr, opts)
       end
     end
   end
+
+  # Persist that this issue+PR was evaluated this tick, including no-op results,
+  # so "why didn't the monitor act?" is answerable from data (and the panel)
+  # instead of only from debug logs.
+  defp record_evaluation(project_slug, identifier, pr_url, event) do
+    MonitorState.upsert(project_slug, identifier, pr_url, %{
+      last_checked_at: DateTime.utc_now(),
+      last_event: event_label(event)
+    })
+
+    :ok
+  end
+
+  defp event_label(:none), do: "none"
+  defp event_label(:merged), do: "merged"
+  defp event_label({:ci_failure, _fingerprint}), do: "ci_failure"
+  defp event_label({:review_findings, _marker}), do: "review_findings"
 
   defp handle_event(:merged, project, config, _repo, identifier, pr, opts) do
     if ProjectConfig.pr_monitor_done_on_merge?(config) do
@@ -215,6 +237,7 @@ defmodule SymphonyElixir.PullRequestMonitor do
   defp apply_action_transition(project, identifier, :move_done, _count, dispatch) do
     case normalize_dispatch_result(dispatch.(project, :move_issue, [identifier, %{"status" => @done_state}])) do
       {:ok, _issue} ->
+        Logger.info("PR monitor moved issue_identifier=#{identifier} project_slug=#{project.slug} to=#{@done_state}")
         {:ok, {"moved_to_done", %{}}}
 
       {:error, reason} ->
@@ -227,6 +250,8 @@ defmodule SymphonyElixir.PullRequestMonitor do
   defp apply_action_transition(project, identifier, :move_rework, count, dispatch) do
     case normalize_dispatch_result(dispatch.(project, :move_issue, [identifier, %{"status" => @rework_state}])) do
       {:ok, _issue} ->
+        Logger.info("PR monitor moved issue_identifier=#{identifier} project_slug=#{project.slug} to=#{@rework_state} attempt=#{count + 1}")
+
         {:ok, {"moved_to_rework", %{auto_rework_count: count + 1}}}
 
       {:error, reason} ->

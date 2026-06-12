@@ -38,4 +38,33 @@ defmodule SymphonyElixir.PullRequestMonitor.ReconcilerTest do
     assert Map.has_key?(next_state.in_flight, {"enabled", "#1"})
     refute Map.has_key?(next_state.in_flight, {"enabled", "#2"})
   end
+
+  test "stats/2 returns an offline heartbeat when the reconciler is not running" do
+    stats = Reconciler.stats(:pr_monitor_reconciler_absent, 50)
+
+    assert stats.running == false
+    assert stats.in_flight == 0
+    assert stats.tick_count == 0
+    assert is_integer(stats.interval_ms) and stats.interval_ms > 0
+  end
+
+  test "handle_call(:stats) reports the in-flight count and tick metadata" do
+    state = %{
+      in_flight: %{{"enabled", "#1"} => make_ref()},
+      tick_count: 3,
+      last_tick_started_at: ~U[2026-06-11 10:00:00.000000Z],
+      last_tick_finished_at: ~U[2026-06-11 10:00:01.000000Z],
+      last_tick_status: :ok,
+      last_error: nil,
+      last_evaluated_count: 2
+    }
+
+    assert {:reply, stats, ^state} = Reconciler.handle_call(:stats, self(), state)
+
+    assert stats.running == true
+    assert stats.in_flight == 1
+    assert stats.tick_count == 3
+    assert stats.last_tick_status == :ok
+    assert stats.last_evaluated_count == 2
+  end
 end

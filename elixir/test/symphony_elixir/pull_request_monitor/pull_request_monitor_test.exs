@@ -260,6 +260,32 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
              ] = Agent.get(calls, &Enum.reverse/1)
     end
 
+    test "no-op evaluation persists last_checked_at and last_event without acting", %{
+      project: project,
+      issue: issue
+    } do
+      calls = start_supervised!({Agent, fn -> [] end})
+
+      dispatch = fn _p, fun, args ->
+        Agent.update(calls, &[{fun, args} | &1])
+        {:ok, %{}}
+      end
+
+      o =
+        opts(
+          pull_request_reader: fn _p, _i, _o -> {:ok, [clean_pr()]} end,
+          issue_dispatch: dispatch
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+
+      assert Agent.get(calls, & &1) == []
+      row = MonitorState.get("proj", issue.identifier, "u7")
+      assert row.last_event == "none"
+      assert row.last_action == nil
+      assert %DateTime{} = row.last_checked_at
+    end
+
     test "review marker rolls back when add_comment dispatch fails", %{project: project, issue: issue} do
       marker = "2026-06-11T00:00:00Z"
 
@@ -291,6 +317,21 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
       title: "t",
       state: "merged",
       merged: true,
+      author: "bot",
+      head_sha: "abc",
+      checks_state: nil,
+      pipelines: [],
+      conversation: []
+    }
+  end
+
+  defp clean_pr do
+    %{
+      number: 7,
+      url: "u7",
+      title: "t",
+      state: "open",
+      merged: false,
       author: "bot",
       head_sha: "abc",
       checks_state: nil,

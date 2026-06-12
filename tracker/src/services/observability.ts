@@ -1,4 +1,8 @@
 import type {
+  PrMonitorEvaluation,
+  PrMonitorHeartbeat,
+  PrMonitorObservability,
+  PrMonitorTickStatus,
   RetryEntry,
   RunningSession,
   RuntimeObservability,
@@ -106,4 +110,77 @@ export function normalizeRuntime(dto: BackendRuntimeDto): RuntimeObservability {
 export async function listObservability(): Promise<RuntimeObservability[]> {
   const response = await http.get(trackerPath("/observability"));
   return unwrapData<BackendRuntimeDto[]>(response).map(normalizeRuntime);
+}
+
+interface BackendPrMonitorHeartbeatDto {
+  running?: boolean | null;
+  in_flight?: number | null;
+  tick_count?: number | null;
+  last_tick_started_at?: string | null;
+  last_tick_finished_at?: string | null;
+  last_tick_status?: string | null;
+  last_error?: string | null;
+  last_evaluated_count?: number | null;
+  interval_ms?: number | null;
+}
+
+interface BackendPrMonitorEvaluationDto {
+  project_slug?: string | null;
+  identifier?: string | null;
+  pr_url?: string | null;
+  last_event?: string | null;
+  last_action?: string | null;
+  auto_rework_count?: number | null;
+  summary?: string | null;
+  last_checked_at?: string | null;
+  last_action_at?: string | null;
+}
+
+interface BackendPrMonitorDto {
+  heartbeat?: BackendPrMonitorHeartbeatDto | null;
+  evaluations?: BackendPrMonitorEvaluationDto[] | null;
+}
+
+function normalizeTickStatus(status: string | null | undefined): PrMonitorTickStatus {
+  return status === "ok" || status === "error" ? status : null;
+}
+
+function normalizeHeartbeat(dto: BackendPrMonitorHeartbeatDto | null | undefined): PrMonitorHeartbeat {
+  return {
+    running: dto?.running ?? false,
+    inFlight: dto?.in_flight ?? 0,
+    tickCount: dto?.tick_count ?? 0,
+    lastTickStartedAt: dto?.last_tick_started_at ?? null,
+    lastTickFinishedAt: dto?.last_tick_finished_at ?? null,
+    lastTickStatus: normalizeTickStatus(dto?.last_tick_status),
+    lastError: dto?.last_error ?? null,
+    lastEvaluatedCount: dto?.last_evaluated_count ?? 0,
+    intervalMs: dto?.interval_ms ?? 0,
+  };
+}
+
+function normalizeEvaluation(dto: BackendPrMonitorEvaluationDto): PrMonitorEvaluation {
+  return {
+    projectSlug: dto.project_slug ?? null,
+    issueIdentifier: normalizeIssueIdentifier(dto.identifier ?? ""),
+    prUrl: dto.pr_url ?? null,
+    lastEvent: dto.last_event ?? null,
+    lastAction: dto.last_action ?? null,
+    autoReworkCount: dto.auto_rework_count ?? 0,
+    summary: dto.summary ?? null,
+    lastCheckedAt: dto.last_checked_at ?? null,
+    lastActionAt: dto.last_action_at ?? null,
+  };
+}
+
+export function normalizePrMonitor(dto: BackendPrMonitorDto): PrMonitorObservability {
+  return {
+    heartbeat: normalizeHeartbeat(dto.heartbeat),
+    evaluations: (dto.evaluations ?? []).map(normalizeEvaluation),
+  };
+}
+
+export async function getPrMonitorObservability(): Promise<PrMonitorObservability> {
+  const response = await http.get(trackerPath("/observability/pr_monitor"));
+  return normalizePrMonitor(unwrapData<BackendPrMonitorDto>(response));
 }

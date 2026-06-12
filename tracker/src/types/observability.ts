@@ -46,3 +46,34 @@ export interface GlobalRunningRow extends RunningSession {
   runtimeLabel: string;
   projectSlug: string | null;
 }
+
+export type PrMonitorTickStatus = "ok" | "error" | null;
+
+export interface PrMonitorHeartbeat {
+  running: boolean;
+  inFlight: number;
+  tickCount: number;
+  lastTickStartedAt: string | null;
+  lastTickFinishedAt: string | null;
+  lastTickStatus: PrMonitorTickStatus;
+  lastError: string | null;
+  lastEvaluatedCount: number;
+  intervalMs: number;
+}
+
+export interface PrMonitorEvaluation {
+  projectSlug: string | null;
+  issueIdentifier: string;
+  prUrl: string | null;
+  lastEvent: string | null;
+  lastAction: string | null;
+  autoReworkCount: number;
+  summary: string | null;
+  lastCheckedAt: string | null;
+  lastActionAt: string | null;
+}
+
+export interface PrMonitorObservability {
+  heartbeat: PrMonitorHeartbeat;
+  evaluations: PrMonitorEvaluation[];
+}

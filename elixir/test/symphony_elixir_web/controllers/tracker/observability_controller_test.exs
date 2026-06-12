@@ -72,4 +72,19 @@ defmodule SymphonyElixirWeb.Tracker.ObservabilityControllerTest do
     data = json_response(conn, 200)["data"]
     assert Enum.any?(data, &(&1["runtime_id"] == "r1"))
   end
+
+  test "pr_monitor returns the reconciler heartbeat and recent evaluations" do
+    conn = build_conn() |> auth() |> get("/api/tracker/v1/observability/pr_monitor")
+    data = json_response(conn, 200)["data"]
+
+    assert is_map(data["heartbeat"])
+    assert Map.has_key?(data["heartbeat"], "running")
+    assert Map.has_key?(data["heartbeat"], "interval_ms")
+    assert is_list(data["evaluations"])
+  end
+
+  test "pr_monitor rejects unauthenticated requests" do
+    conn = get(build_conn(), "/api/tracker/v1/observability/pr_monitor")
+    assert json_response(conn, 401)
+  end
 end

@@ -25,11 +25,13 @@ defmodule SymphonyElixir.PullRequestMonitor.MonitorState do
     field(:last_classification, :map, default: %{})
     field(:last_action, :string)
     field(:last_action_at, :utc_datetime_usec)
+    field(:last_checked_at, :utc_datetime_usec)
+    field(:last_event, :string)
 
     timestamps(type: :utc_datetime_usec)
   end
 
-  @updatable ~w(last_head_sha last_checks_fingerprint last_review_marker auto_rework_count last_classification last_action last_action_at)a
+  @updatable ~w(last_head_sha last_checks_fingerprint last_review_marker auto_rework_count last_classification last_action last_action_at last_checked_at last_event)a
 
   @spec get(String.t(), String.t(), String.t()) :: t() | nil
   def get(project_slug, identifier, pr_url) do
@@ -68,6 +70,35 @@ defmodule SymphonyElixir.PullRequestMonitor.MonitorState do
     end
   end
 
+  @doc """
+  Returns the most recently evaluated monitor rows across all projects as
+  JSON-ready maps (newest first), for the observability PR-monitor panel.
+  """
+  @spec recent_summaries(pos_integer()) :: [map()]
+  def recent_summaries(limit \\ 50) when is_integer(limit) and limit > 0 do
+    from(s in __MODULE__,
+      order_by: [desc_nulls_last: s.last_checked_at, desc: s.updated_at],
+      limit: ^limit
+    )
+    |> Repo.all()
+    |> Enum.map(&summary/1)
+  end
+
+  @spec summary(t()) :: map()
+  def summary(%__MODULE__{} = row) do
+    %{
+      project_slug: row.project_slug,
+      identifier: row.identifier,
+      pr_url: row.pr_url,
+      last_event: row.last_event,
+      last_action: row.last_action,
+      auto_rework_count: row.auto_rework_count,
+      summary: Map.get(row.last_classification || %{}, "summary"),
+      last_checked_at: row.last_checked_at,
+      last_action_at: row.last_action_at
+    }
+  end
+
   @spec attach([map()], String.t(), String.t()) :: [map()]
   def attach(prs, project_slug, identifier) when is_list(prs) do
     rows =
@@ -89,7 +120,9 @@ defmodule SymphonyElixir.PullRequestMonitor.MonitorState do
       last_action: row.last_action,
       summary: Map.get(row.last_classification || %{}, "summary"),
       auto_rework_count: row.auto_rework_count,
-      last_action_at: row.last_action_at
+      last_action_at: row.last_action_at,
+      last_event: row.last_event,
+      last_checked_at: row.last_checked_at
     }
   end
 end

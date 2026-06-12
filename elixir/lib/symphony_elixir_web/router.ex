@@ -44,6 +44,7 @@ defmodule SymphonyElixirWeb.Router do
     delete("/settings/credentials/:provider/:key", CredentialsController, :delete)
     put("/settings/:group", SettingsController, :update)
     get("/observability", ObservabilityController, :index)
+    get("/observability/pr_monitor", ObservabilityController, :pr_monitor)
     post("/observability/report", ObservabilityController, :report)
     get("/backups", BackupController, :index)
     get("/backups/stats", BackupController, :stats)

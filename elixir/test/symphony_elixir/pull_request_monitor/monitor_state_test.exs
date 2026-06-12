@@ -61,6 +61,29 @@ defmodule SymphonyElixir.PullRequestMonitor.MonitorStateTest do
     assert without.monitor == nil
   end
 
+  test "recent_summaries/1 returns newest evaluations first as JSON-ready maps" do
+    older = ~U[2026-06-10 10:00:00.000000Z]
+    newer = ~U[2026-06-11 10:00:00.000000Z]
+
+    {:ok, _} =
+      MonitorState.upsert("proj", "#1", "url-old", %{last_event: "none", last_checked_at: older})
+
+    {:ok, _} =
+      MonitorState.upsert("proj", "#2", "url-new", %{
+        last_event: "merged",
+        last_action: "moved_to_done",
+        last_checked_at: newer
+      })
+
+    assert [first, second] = MonitorState.recent_summaries(10)
+
+    assert first.identifier == "#2"
+    assert first.last_event == "merged"
+    assert first.last_action == "moved_to_done"
+    assert first.pr_url == "url-new"
+    assert second.identifier == "#1"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

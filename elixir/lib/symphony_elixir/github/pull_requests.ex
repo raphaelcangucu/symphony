@@ -162,15 +162,16 @@ defmodule SymphonyElixir.GitHub.PullRequests do
 
   Resolves the repository that owns the issue (see `GitHub.IssueRepo`), runs the
   standard issue-scoped strategies there, then searches configured workspace
-  repositories for open PRs whose head branch matches the issue's linked branch
-  or common agent naming patterns (e.g. `codex/3984-*`).
+  repositories for open PRs whose head branch matches the issue's linked branch,
+  common agent naming patterns (e.g. `codex/3984-*`, `symphony/3984`,
+  `symphony/gam-2`), or whose title contains the GitHub issue number.
   """
   @spec for_project_issue(Project.t(), String.t(), keyword()) ::
           {:ok, [pull_request()]} | {:error, term()}
   def for_project_issue(%Project{} = project, identifier, opts \\ []) when is_binary(identifier) do
     with {:ok, issue_repo} <- IssueRepo.resolve(project, identifier, opts),
-         {:ok, number} <- parse_issue_number(identifier),
-         {:ok, issue_prs} <- for_issue(issue_repo, identifier, Keyword.put(opts, :annotate, false)),
+         {:ok, number} <- resolve_issue_number(project, identifier),
+         {:ok, issue_prs} <- for_issue(issue_repo, issue_number_identifier(number), Keyword.put(opts, :annotate, false)),
          branch_prs <- search_branch_linked_prs(project, identifier, number, opts) do
       merged =
         (issue_prs ++ branch_prs)
@@ -291,15 +292,26 @@ defmodule SymphonyElixir.GitHub.PullRequests do
 
   defp search_branch_linked_prs(%Project{} = project, identifier, issue_number, opts) do
     branch_name = local_branch_name(project, identifier)
-    prefixes = branch_search_prefixes(issue_number, branch_name)
+    prefixes = branch_search_prefixes(issue_number, branch_name, identifier)
 
-    project
-    |> configured_repos()
-    |> Enum.flat_map(fn repo ->
-      prefixes
-      |> Enum.flat_map(&search_prs_by_head_prefix(repo, &1, opts))
-      |> Enum.flat_map(&fetch_search_hit/1)
-    end)
+    branch_hits =
+      project
+      |> configured_repos()
+      |> Enum.flat_map(fn repo ->
+        prefixes
+        |> Enum.flat_map(&search_prs_by_head_prefix(repo, &1, opts))
+        |> Enum.flat_map(&fetch_search_hit/1)
+      end)
+
+    title_hits =
+      project
+      |> configured_repos()
+      |> Enum.flat_map(fn repo ->
+        search_prs_by_title(repo, issue_number, opts)
+        |> Enum.flat_map(&fetch_search_hit/1)
+      end)
+
+    (branch_hits ++ title_hits)
     |> dedupe_by_url()
   end
 
@@ -314,11 +326,19 @@ defmodule SymphonyElixir.GitHub.PullRequests do
     end
   end
 
-  defp branch_search_prefixes(issue_number, branch_name) do
+  defp branch_search_prefixes(issue_number, branch_name, identifier) do
     agent_prefix = "codex/#{issue_number}"
+    symphony_number = "symphony/#{issue_number}"
+
+    symphony_identifier =
+      if is_binary(identifier) and identifier != "" do
+        "symphony/#{String.downcase(identifier)}"
+      end
 
     []
     |> prepend_string(branch_name)
+    |> prepend_string(symphony_identifier)
+    |> prepend_string(symphony_number)
     |> prepend_string(agent_prefix)
     |> Enum.uniq()
   end
@@ -328,23 +348,40 @@ defmodule SymphonyElixir.GitHub.PullRequests do
 
   defp search_prs_by_head_prefix(repo, prefix, opts) do
     with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         {:ok, %{body: %{"items" => items}}} <- search_issues("#{owner}/#{name}", prefix, opts),
+         query = "repo:#{owner}/#{name} type:pr head:#{prefix}",
+         {:ok, %{body: %{"items" => items}}} <- search_issues(query, opts),
          true <- is_list(items) do
-      items
-      |> Enum.filter(&is_map/1)
-      |> Enum.filter(&(Map.get(&1, "pull_request") != nil))
-      |> Enum.map(fn item ->
-        number = Map.get(item, "number")
-        if is_integer(number) and number > 0, do: {repo, number}, else: nil
-      end)
-      |> Enum.reject(&is_nil/1)
+      pr_hits_from_search_items(repo, items)
     else
       _ -> []
     end
   end
 
-  defp search_issues(repo, head_prefix, opts) do
-    query = "repo:#{repo} type:pr head:#{head_prefix}"
+  defp search_prs_by_title(repo, issue_number, opts) when is_integer(issue_number) and issue_number > 0 do
+    with {:ok, {owner, name}} <- RepoSpec.split(repo),
+         query = "repo:#{owner}/#{name} type:pr #{issue_number} in:title",
+         {:ok, %{body: %{"items" => items}}} <- search_issues(query, opts),
+         true <- is_list(items) do
+      pr_hits_from_search_items(repo, items)
+    else
+      _ -> []
+    end
+  end
+
+  defp search_prs_by_title(_repo, _issue_number, _opts), do: []
+
+  defp pr_hits_from_search_items(repo, items) do
+    items
+    |> Enum.filter(&is_map/1)
+    |> Enum.filter(&(Map.get(&1, "pull_request") != nil))
+    |> Enum.map(fn item ->
+      number = Map.get(item, "number")
+      if is_integer(number) and number > 0, do: {repo, number}, else: nil
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp search_issues(query, opts) do
     path = "/search/issues?" <> URI.encode_query(%{"q" => query, "per_page" => "5"})
     client = client_module(opts)
     rest_opts = Keyword.take(opts, [:request_fun])
@@ -650,6 +687,24 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   defp sort_prs(prs) do
     Enum.sort_by(prs, & &1.updated_at, &>=/2)
   end
+
+  defp resolve_issue_number(%Project{} = project, identifier) do
+    case parse_issue_number(identifier) do
+      {:ok, number} -> {:ok, number}
+      {:error, _reason} -> local_issue_remote_number(project, identifier)
+    end
+  end
+
+  defp local_issue_remote_number(%Project{slug: slug}, identifier) when is_binary(slug) do
+    case Context.get_issue(slug, identifier) do
+      {:ok, %{remote_number: number}} when is_integer(number) and number > 0 -> {:ok, number}
+      _ -> {:error, {:invalid_issue_identifier, identifier}}
+    end
+  end
+
+  defp local_issue_remote_number(_project, identifier), do: {:error, {:invalid_issue_identifier, identifier}}
+
+  defp issue_number_identifier(number) when is_integer(number) and number > 0, do: Integer.to_string(number)
 
   defp parse_issue_number(identifier) do
     identifier

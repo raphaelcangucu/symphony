@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeRuntime } from "../observability";
+import { normalizePrMonitor, normalizeRuntime } from "../observability";
 
 describe("normalizeRuntime", () => {
   it("maps snake_case backend DTO to camelCase domain", () => {
@@ -101,5 +101,63 @@ describe("normalizeRuntime", () => {
       outputTokens: 0,
       totalTokens: 0,
     });
+  });
+});
+
+describe("normalizePrMonitor", () => {
+  it("maps heartbeat and evaluations from snake_case DTO", () => {
+    const result = normalizePrMonitor({
+      heartbeat: {
+        running: true,
+        in_flight: 2,
+        tick_count: 5,
+        last_tick_started_at: "2026-06-11T10:00:00Z",
+        last_tick_finished_at: "2026-06-11T10:00:01Z",
+        last_tick_status: "ok",
+        last_error: null,
+        last_evaluated_count: 3,
+        interval_ms: 60000,
+      },
+      evaluations: [
+        {
+          project_slug: "gamba",
+          identifier: "#GAM-5",
+          pr_url: "https://github.com/o/r/pull/7",
+          last_event: "merged",
+          last_action: "moved_to_done",
+          auto_rework_count: 1,
+          summary: "merged",
+          last_checked_at: "2026-06-11T10:00:01Z",
+          last_action_at: "2026-06-11T10:00:01Z",
+        },
+      ],
+    });
+
+    expect(result.heartbeat.running).toBe(true);
+    expect(result.heartbeat.inFlight).toBe(2);
+    expect(result.heartbeat.lastTickStatus).toBe("ok");
+    expect(result.heartbeat.intervalMs).toBe(60000);
+    expect(result.evaluations[0]).toMatchObject({
+      projectSlug: "gamba",
+      issueIdentifier: "GAM-5",
+      lastEvent: "merged",
+      lastAction: "moved_to_done",
+      autoReworkCount: 1,
+    });
+  });
+
+  it("fills offline defaults for an empty DTO", () => {
+    const result = normalizePrMonitor({});
+
+    expect(result.heartbeat.running).toBe(false);
+    expect(result.heartbeat.inFlight).toBe(0);
+    expect(result.heartbeat.tickCount).toBe(0);
+    expect(result.heartbeat.lastTickStatus).toBeNull();
+    expect(result.evaluations).toEqual([]);
+  });
+
+  it("coerces unknown tick status to null", () => {
+    expect(normalizePrMonitor({ heartbeat: { last_tick_status: "weird" } }).heartbeat.lastTickStatus).toBeNull();
+    expect(normalizePrMonitor({ heartbeat: { last_tick_status: "error" } }).heartbeat.lastTickStatus).toBe("error");
   });
 });

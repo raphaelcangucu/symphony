@@ -24,6 +24,19 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
 
+  @doc """
+  Returns a heartbeat/liveness snapshot of the reconciler for observability.
+
+  Safe to call even when the reconciler is not running: returns an offline
+  snapshot (`running: false`) instead of crashing the caller.
+  """
+  @spec stats(GenServer.name(), timeout()) :: map()
+  def stats(name \\ __MODULE__, timeout \\ 1_000) do
+    GenServer.call(name, :stats, timeout)
+  catch
+    :exit, _reason -> offline_stats()
+  end
+
   @doc false
   @spec candidates([map()], MapSet.t(), MapSet.t()) :: [map()]
   def candidates(issues, enabled_slugs, in_flight) do
@@ -43,12 +56,29 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
   @impl true
   def init(_opts) do
     schedule_tick_safely()
-    {:ok, %{in_flight: %{}}}
+    {:ok, initial_state()}
+  end
+
+  defp initial_state do
+    %{
+      in_flight: %{},
+      tick_count: 0,
+      last_tick_started_at: nil,
+      last_tick_finished_at: nil,
+      last_tick_status: nil,
+      last_error: nil,
+      last_evaluated_count: 0
+    }
+  end
+
+  @impl true
+  def handle_call(:stats, _from, state) do
+    {:reply, build_stats(state), state}
   end
 
   @impl true
   def handle_info(:tick, state) do
-    state = run_tick_safely(state)
+    state = run_tick_safely(%{state | last_tick_started_at: DateTime.utc_now()})
     schedule_tick_safely()
     {:noreply, state}
   end
@@ -64,31 +94,84 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
   def handle_info(_message, state), do: {:noreply, state}
 
   defp run_tick_safely(state) do
-    run_cycle(state)
+    run_cycle(state) |> mark_tick_ok()
   rescue
     exception ->
       Logger.debug("PR monitor tick skipped reason=#{inspect(exception)}")
-      state
+      mark_tick_error(state, exception)
   catch
     kind, reason ->
       Logger.debug("PR monitor tick skipped reason=#{inspect({kind, reason})}")
+      mark_tick_error(state, {kind, reason})
+  end
+
+  defp mark_tick_ok(state) do
+    %{
       state
+      | tick_count: state.tick_count + 1,
+        last_tick_finished_at: DateTime.utc_now(),
+        last_tick_status: :ok,
+        last_error: nil
+    }
+  end
+
+  defp mark_tick_error(state, reason) do
+    %{
+      state
+      | tick_count: state.tick_count + 1,
+        last_tick_finished_at: DateTime.utc_now(),
+        last_tick_status: :error,
+        last_error: inspect(reason)
+    }
+  end
+
+  defp build_stats(state) do
+    %{
+      running: true,
+      in_flight: map_size(state.in_flight),
+      tick_count: state.tick_count,
+      last_tick_started_at: state.last_tick_started_at,
+      last_tick_finished_at: state.last_tick_finished_at,
+      last_tick_status: state.last_tick_status,
+      last_error: state.last_error,
+      last_evaluated_count: state.last_evaluated_count,
+      interval_ms: interval_ms()
+    }
+  end
+
+  defp offline_stats do
+    %{
+      running: false,
+      in_flight: 0,
+      tick_count: 0,
+      last_tick_started_at: nil,
+      last_tick_finished_at: nil,
+      last_tick_status: nil,
+      last_error: nil,
+      last_evaluated_count: 0,
+      interval_ms: interval_ms()
+    }
   end
 
   defp run_cycle(state) do
     configs = enabled_project_configs()
 
     if configs == %{} do
-      state
+      %{state | last_evaluated_count: 0}
     else
       enabled_slugs = MapSet.new(Map.keys(configs))
       in_flight_keys = state.in_flight |> Map.keys() |> MapSet.new()
 
-      configs
-      |> fetch_wait_state_issues()
-      |> Enum.filter(&issue_in_project_wait_state?(&1, configs))
-      |> candidates(enabled_slugs, in_flight_keys)
-      |> Enum.reduce(state, fn issue, acc -> start_issue_task(issue, configs, acc) end)
+      candidates =
+        configs
+        |> fetch_wait_state_issues()
+        |> Enum.filter(&issue_in_project_wait_state?(&1, configs))
+        |> candidates(enabled_slugs, in_flight_keys)
+
+      candidates
+      |> Enum.reduce(%{state | last_evaluated_count: length(candidates)}, fn issue, acc ->
+        start_issue_task(issue, configs, acc)
+      end)
     end
   end
 

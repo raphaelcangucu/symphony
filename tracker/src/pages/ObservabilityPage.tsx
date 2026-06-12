@@ -2,9 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useObservability } from "@/hooks/useObservability";
+import { usePrMonitorObservability } from "@/hooks/usePrMonitorObservability";
 import { issuePath, withAgentSection } from "@/lib/workspaceRoutes";
 import { listProjects } from "@/services/projects";
-import type { GlobalRunningRow, RuntimeObservability } from "@/types/observability";
+import type {
+  GlobalRunningRow,
+  PrMonitorEvaluation,
+  PrMonitorHeartbeat,
+  RuntimeObservability,
+} from "@/types/observability";
 import type { Project } from "@/types/project";
 
 const ALL_PROJECTS = "__all__";
@@ -32,6 +38,17 @@ function formatRuntime(startedAt: string | null, nowMs: number): string {
   if (Number.isNaN(started)) return "--";
   const seconds = Math.max(Math.floor((nowMs - started) / 1000), 0);
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function formatAgo(at: string | null, nowMs: number): string {
+  if (!at) return "never";
+  const ts = Date.parse(at);
+  if (Number.isNaN(ts)) return "never";
+  const seconds = Math.max(Math.floor((nowMs - ts) / 1000), 0);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m ago`;
 }
 
 function flattenRows(runtimeViews: RuntimeView[]): ProjectRunningRow[] {
@@ -84,6 +101,7 @@ function projectOptions(runtimeViews: RuntimeView[]): Array<{ key: string; label
 
 export function ObservabilityPage() {
   const { runtimes, loading } = useObservability();
+  const { data: prMonitor } = usePrMonitorObservability();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState(ALL_PROJECTS);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -128,6 +146,11 @@ export function ObservabilityPage() {
     [runtimeViews, selectedProject],
   );
   const rows = useMemo(() => flattenRows(visibleRuntimeViews), [visibleRuntimeViews]);
+  const prMonitorEvaluations = useMemo(() => {
+    const evaluations = prMonitor?.evaluations ?? [];
+    if (selectedProject === ALL_PROJECTS) return evaluations;
+    return evaluations.filter((evaluation) => evaluation.projectSlug === selectedProject);
+  }, [prMonitor, selectedProject]);
 
   return (
     <div className="space-y-6 p-6">
@@ -250,6 +273,166 @@ export function ObservabilityPage() {
           </div>
         )}
       </section>
+
+      <PrMonitorSection heartbeat={prMonitor?.heartbeat ?? null} evaluations={prMonitorEvaluations} nowMs={nowMs} />
     </div>
+  );
+}
+
+const PR_MONITOR_EVENT_LABELS: Record<string, string> = {
+  none: "no change",
+  merged: "PR merged",
+  ci_failure: "CI failure",
+  review_findings: "review findings",
+};
+
+const PR_MONITOR_ACTION_LABELS: Record<string, string> = {
+  moved_to_done: "→ Done",
+  moved_to_rework: "→ Rework",
+  limit_reached: "limit reached",
+  kept_human_review: "kept in Human Review",
+};
+
+function prMonitorEventLabel(event: string | null): string {
+  if (!event) return "--";
+  return PR_MONITOR_EVENT_LABELS[event] ?? event;
+}
+
+function prMonitorActionLabel(action: string | null): string {
+  if (!action) return "--";
+  return PR_MONITOR_ACTION_LABELS[action] ?? action;
+}
+
+interface PrMonitorSectionProps {
+  heartbeat: PrMonitorHeartbeat | null;
+  evaluations: PrMonitorEvaluation[];
+  nowMs: number;
+}
+
+function PrMonitorSection({ heartbeat, evaluations, nowMs }: PrMonitorSectionProps) {
+  const online = heartbeat?.running ?? false;
+  const tickFailed = heartbeat?.lastTickStatus === "error";
+
+  return (
+    <section className="rounded-lg border">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b p-3">
+        <div>
+          <h2 className="font-medium">PR monitor</h2>
+          <p className="text-xs text-muted-foreground">
+            Background follow-up of PRs for issues in wait states (merge → Done, CI/review → Rework).
+          </p>
+        </div>
+        <span
+          className={
+            online && !tickFailed
+              ? "rounded-full bg-green-500/15 px-2 py-0.5 text-xs text-green-600"
+              : online && tickFailed
+                ? "rounded-full bg-amber-500/15 px-2 py-0.5 text-xs text-amber-600"
+                : "rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+          }
+        >
+          {online ? (tickFailed ? "degraded" : "running") : "offline"}
+        </span>
+      </div>
+
+      {heartbeat ? (
+        <dl className="grid grid-cols-2 gap-3 p-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
+          <div>
+            <dt className="text-xs text-muted-foreground">Last tick</dt>
+            <dd className="font-medium tabular-nums">{formatAgo(heartbeat.lastTickFinishedAt, nowMs)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">In-flight</dt>
+            <dd className="font-medium tabular-nums">{heartbeat.inFlight}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Evaluated last tick</dt>
+            <dd className="font-medium tabular-nums">{heartbeat.lastEvaluatedCount}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Ticks</dt>
+            <dd className="font-medium tabular-nums">{heartbeat.tickCount}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Interval</dt>
+            <dd className="font-medium tabular-nums">{Math.round(heartbeat.intervalMs / 1000)}s</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Last tick status</dt>
+            <dd className="font-medium">{heartbeat.lastTickStatus ?? "--"}</dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="p-3 text-sm text-muted-foreground">Heartbeat unavailable.</p>
+      )}
+
+      {heartbeat?.lastError ? (
+        <p className="border-t px-3 py-2 text-xs text-amber-600">Last error: {heartbeat.lastError}</p>
+      ) : null}
+
+      <div className="border-t">
+        {evaluations.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground">No PR evaluations recorded yet.</p>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th className="p-2">Project</th>
+                  <th className="p-2">Issue</th>
+                  <th className="p-2">PR</th>
+                  <th className="p-2">Event</th>
+                  <th className="p-2">Action</th>
+                  <th className="p-2">Checked</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evaluations.map((evaluation) => (
+                  <tr key={`${evaluation.projectSlug}:${evaluation.issueIdentifier}:${evaluation.prUrl}`} className="border-t">
+                    <td className="p-2">{evaluation.projectSlug ?? "--"}</td>
+                    <td className="p-2 font-medium">
+                      {evaluation.projectSlug && evaluation.issueIdentifier.trim() ? (
+                        <Link
+                          className="text-primary underline-offset-2 hover:underline"
+                          to={withAgentSection(
+                            issuePath(evaluation.projectSlug, "board", evaluation.issueIdentifier, "agent"),
+                            "",
+                            "execution",
+                          )}
+                        >
+                          {evaluation.issueIdentifier}
+                        </Link>
+                      ) : (
+                        evaluation.issueIdentifier || "--"
+                      )}
+                    </td>
+                    <td className="p-2">
+                      {evaluation.prUrl ? (
+                        <a
+                          className="text-primary underline-offset-2 hover:underline"
+                          href={evaluation.prUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          link
+                        </a>
+                      ) : (
+                        "--"
+                      )}
+                    </td>
+                    <td className="p-2">{prMonitorEventLabel(evaluation.lastEvent)}</td>
+                    <td className="p-2">
+                      {prMonitorActionLabel(evaluation.lastAction)}
+                      {evaluation.autoReworkCount > 0 ? ` (${evaluation.autoReworkCount})` : ""}
+                    </td>
+                    <td className="p-2 tabular-nums">{formatAgo(evaluation.lastCheckedAt, nowMs)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

@@ -4,11 +4,12 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ObservabilityPage } from "../ObservabilityPage";
-import type { RuntimeObservability } from "@/types/observability";
+import type { PrMonitorObservability, RuntimeObservability } from "@/types/observability";
 import type { Project } from "@/types/project";
 
 let runtimes: RuntimeObservability[];
 let projects: Project[];
+let prMonitor: PrMonitorObservability | null;
 
 const macroRuntime: RuntimeObservability = {
   runtimeId: "r1",
@@ -58,14 +59,46 @@ vi.mock("@/hooks/useObservability", () => ({
   useObservability: () => ({ runtimes, loading: false }),
 }));
 
+vi.mock("@/hooks/usePrMonitorObservability", () => ({
+  usePrMonitorObservability: () => ({ data: prMonitor, loading: false }),
+}));
+
 vi.mock("@/services/projects", () => ({
   listProjects: vi.fn(() => Promise.resolve(projects)),
 }));
+
+const prMonitorData: PrMonitorObservability = {
+  heartbeat: {
+    running: true,
+    inFlight: 0,
+    tickCount: 4,
+    lastTickStartedAt: new Date().toISOString(),
+    lastTickFinishedAt: new Date().toISOString(),
+    lastTickStatus: "ok",
+    lastError: null,
+    lastEvaluatedCount: 1,
+    intervalMs: 60000,
+  },
+  evaluations: [
+    {
+      projectSlug: "macro-markets",
+      issueIdentifier: "510",
+      prUrl: "https://github.com/acme/app/pull/7",
+      lastEvent: "merged",
+      lastAction: "moved_to_done",
+      autoReworkCount: 0,
+      summary: "merged",
+      lastCheckedAt: new Date().toISOString(),
+      lastActionAt: new Date().toISOString(),
+    },
+  ],
+};
 
 describe("ObservabilityPage", () => {
   beforeEach(() => {
     runtimes = [macroRuntime];
     projects = [macroProject];
+    prMonitor = prMonitorData;
   });
 
   it("renders a runtime card and the global sessions table row", async () => {
@@ -100,5 +133,35 @@ describe("ObservabilityPage", () => {
 
     expect(screen.queryByRole("link", { name: "508" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "9" })).toBeInTheDocument();
+  });
+
+  it("renders the PR monitor heartbeat and evaluation row", async () => {
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("PR monitor")).toBeInTheDocument();
+    expect(screen.getByText("running")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "510" })).toHaveAttribute(
+      "href",
+      "/projects/macro-markets/board/issues/510/agent?agent=execution",
+    );
+    expect(screen.getByText("PR merged")).toBeInTheDocument();
+  });
+
+  it("shows an offline PR monitor when heartbeat is unavailable", async () => {
+    prMonitor = null;
+
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("PR monitor")).toBeInTheDocument();
+    expect(screen.getByText("offline")).toBeInTheDocument();
+    expect(screen.getByText("No PR evaluations recorded yet.")).toBeInTheDocument();
   });
 });
