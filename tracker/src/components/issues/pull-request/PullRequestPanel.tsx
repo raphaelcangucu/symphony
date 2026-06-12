@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { CommentCard, ReviewBadge } from "@/components/issues/issue-detail/CommentCard";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn, formatDateTime } from "@/lib/utils";
 import { mergePullRequest, updatePullRequestBranch } from "@/services/pullRequests";
@@ -128,64 +129,70 @@ export function PullRequestPanel({
                 value={mergeMethod}
                 onChange={(event) => setMergeMethod(event.target.value as PullRequestMergeMethod)}
                 disabled={merging !== null}
-                className="rounded-md border bg-background px-2 py-1.5 text-xs font-medium"
+                className="h-8 rounded-md border border-input bg-background px-3 text-xs font-medium disabled:opacity-50"
               >
                 <option value="merge">Merge commit</option>
                 <option value="squash">Squash</option>
                 <option value="rebase">Rebase</option>
               </select>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => void handleMerge(false)}
                 disabled={merging !== null}
-                className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 disabled:opacity-60 dark:text-emerald-300"
+                className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300"
               >
-                <GitMerge className={cn("h-3.5 w-3.5", merging === "normal" && "animate-pulse")} />
+                <GitMerge className={cn("h-4 w-4", merging === "normal" && "animate-pulse")} />
                 {merging === "normal" ? "Merging…" : "Merge"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => void handleMerge(true)}
                 disabled={merging !== null}
-                className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/20 disabled:opacity-60 dark:text-red-300"
+                className="border-red-500/40 bg-red-500/10 text-red-700 hover:bg-red-500/20 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
                 title="Attempts an immediate merge with the configured GitHub token. GitHub still enforces token permissions and branch rules."
               >
-                <ShieldCheck className={cn("h-3.5 w-3.5", merging === "force" && "animate-pulse")} />
+                <ShieldCheck className={cn("h-4 w-4", merging === "force" && "animate-pulse")} />
                 {merging === "force" ? "Force merging…" : "Force merge"}
-              </button>
+              </Button>
             </>
           ) : null}
           {canUpdate ? (
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => void handleUpdateBranch()}
               disabled={updating}
-              className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/40 bg-blue-500/10 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-500/20 disabled:opacity-60 dark:text-blue-300"
+              className="border-blue-500/40 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-300"
             >
-              <ArrowDownToLine className={cn("h-3.5 w-3.5", updating && "animate-pulse")} />
+              <ArrowDownToLine className={cn("h-4 w-4", updating && "animate-pulse")} />
               {updating ? "Updating…" : `Update branch (${behind} behind)`}
-            </button>
+            </Button>
           ) : null}
           {pr.url ? (
-            <a
-              href={pr.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Open
-            </a>
+            <Button asChild variant="outline" size="sm">
+              <a href={pr.url} target="_blank" rel="noreferrer noopener">
+                <ExternalLink className="h-4 w-4" />
+                Open
+              </a>
+            </Button>
           ) : null}
           {onRemove ? (
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={onRemove}
               title="Unlink this pull request"
-              className="inline-flex items-center justify-center rounded-md border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
+              aria-label="Unlink this pull request"
+              className="w-8 px-0 text-muted-foreground"
             >
-              <X className="h-3.5 w-3.5" />
-            </button>
+              <X className="h-4 w-4" />
+            </Button>
           ) : null}
         </div>
       </header>

@@ -127,6 +127,45 @@ defmodule SymphonyElixir.Jira.IssueAdapterTest do
     assert {:error, :issue_not_found} = IssueAdapter.get_issue(@project, "ABC-404")
   end
 
+  test "list_attachments fetches only the attachment field and normalizes" do
+    Stub.set(fn :get, "/rest/api/3/issue/ABC-12?fields=attachment", _body ->
+      {:ok,
+       %{
+         "key" => "ABC-12",
+         "fields" => %{
+           "attachment" => [
+             %{
+               "id" => "9001",
+               "filename" => "spec.pdf",
+               "mimeType" => "application/pdf",
+               "size" => 2048,
+               "created" => "2026-06-01T10:00:00.000Z",
+               "author" => %{"displayName" => "Alice"}
+             }
+           ]
+         }
+       }}
+    end)
+
+    assert {:ok, [attachment]} = IssueAdapter.list_attachments(@project, "ABC-12")
+    assert attachment.id == "9001"
+    assert attachment.filename == "spec.pdf"
+    assert attachment.is_image == false
+  end
+
+  test "list_attachments returns an empty list when the issue has no attachments" do
+    Stub.set(fn :get, "/rest/api/3/issue/ABC-12?fields=attachment", _body ->
+      {:ok, %{"key" => "ABC-12", "fields" => %{}}}
+    end)
+
+    assert {:ok, []} = IssueAdapter.list_attachments(@project, "ABC-12")
+  end
+
+  test "list_attachments maps a 404 to :issue_not_found" do
+    Stub.set(fn :get, _path, _body -> {:error, {:jira_api_status, 404}} end)
+    assert {:error, :issue_not_found} = IssueAdapter.list_attachments(@project, "ABC-404")
+  end
+
   test "list_statuses flattens project statuses" do
     Stub.set(fn :get, "/rest/api/3/project/ABC/statuses", _body ->
       {:ok, [%{"statuses" => [%{"id" => "1", "name" => "To Do", "statusCategory" => %{"key" => "new"}}]}]}

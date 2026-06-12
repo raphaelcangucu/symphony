@@ -37,6 +37,44 @@ describe("tracker DTO mappers", () => {
     });
   });
 
+  it("normalizes issue attachments and drops entries without an id", () => {
+    const issue = normalizeIssue({
+      id: 123,
+      identifier: "CDE-1",
+      project_slug: "advising",
+      title: "With attachments",
+      attachments: [
+        {
+          id: 10_500,
+          filename: "WHCCD.VAR.docx",
+          mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          size: 24_576,
+          created: "2026-06-01T09:00:00.000Z",
+          author: "Maker",
+          is_image: false,
+        },
+        { filename: "orphan.txt" },
+      ],
+    });
+
+    expect(issue.attachments).toEqual([
+      {
+        id: "10500",
+        filename: "WHCCD.VAR.docx",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        size: 24_576,
+        createdAt: "2026-06-01T09:00:00.000Z",
+        author: "Maker",
+        isImage: false,
+      },
+    ]);
+  });
+
+  it("defaults attachments to an empty array when omitted", () => {
+    const issue = normalizeIssue({ id: 1, identifier: "CDE-2", project_slug: "advising", title: "No files" });
+    expect(issue.attachments).toEqual([]);
+  });
+
   it("strips a leading hash from issue identifiers at the API boundary", () => {
     const issue = normalizeIssue({
       id: 508,

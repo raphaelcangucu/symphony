@@ -41,6 +41,7 @@ const sampleIssue: Issue = {
   branchName: null,
   createdAt: "2026-05-29T00:00:00Z",
   updatedAt: "2026-05-29T00:00:00Z",
+  attachments: [],
 };
 
 let workspaceValue: {
@@ -86,17 +87,20 @@ describe("IssueDetailRoute", () => {
       loading: false,
     };
     vi.clearAllMocks();
+    vi.mocked(getIssue).mockResolvedValue(sampleIssue);
   });
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("renders an issue already present in the workspace without fetching", async () => {
+  it("renders the cached issue immediately and still refreshes from the server", async () => {
     workspaceValue.issues = [sampleIssue];
 
     renderAt("/projects/x/board/issues/ABC-1");
 
     expect(await screen.findByText("Deep linkable issue")).toBeInTheDocument();
-    expect(getIssue).not.toHaveBeenCalled();
+    // The full issue is fetched in the background so remote-only data (e.g. Jira
+    // attachments) the board list omits gets filled in.
+    await waitFor(() => expect(getIssue).toHaveBeenCalledWith("x", "ABC-1"));
   });
 
   it("fetches an issue that is not in the workspace list", async () => {

@@ -89,6 +89,7 @@ function issue(): Issue {
     title: "Add preview chip",
     updatedAt: "2026-05-30T13:00:00Z",
     url: "https://linear.app/acme/issue/MAC-1/add-preview-chip",
+    attachments: [],
   };
 }
 

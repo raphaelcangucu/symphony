@@ -179,8 +179,9 @@ export function BoardColumn({
 
       <div
         ref={setNodeRef}
+        data-board-column-scroll
         className={cn(
-          "relative min-h-80 flex-1 overflow-y-auto rounded-2xl border border-border/60 p-2.5 transition-colors",
+          "scrollbar-discrete relative min-h-80 flex-1 overflow-y-auto rounded-2xl border border-border/60 p-2.5 transition-colors",
           meta.surfaceClass,
           overLimit && "border-rose-500/40 ring-1 ring-rose-500/20",
           isOver && "border-primary/50 ring-2 ring-primary/15",

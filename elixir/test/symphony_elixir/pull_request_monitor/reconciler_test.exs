@@ -3,6 +3,24 @@ defmodule SymphonyElixir.PullRequestMonitor.ReconcilerTest do
 
   alias SymphonyElixir.PullRequestMonitor.Reconciler
 
+  test "issue_state_name/1 reads Issue.state when status is absent" do
+    assert Reconciler.issue_state_name(%{state: "Human Review"}) == "Human Review"
+    assert Reconciler.issue_state_name(%{"state" => "Human Review"}) == "Human Review"
+    assert Reconciler.issue_state_name(%{status: %{name: "Human Review"}}) == "Human Review"
+    assert Reconciler.issue_state_name(%{identifier: "GAM-1"}) == nil
+  end
+
+  test "issue_in_project_wait_state?/2 accepts tracker Issue maps with state field" do
+    configs = %{
+      "gamba" => {nil, %{wait_states: ["Human Review"]}}
+    }
+
+    issue = %{identifier: "GAM-5", project_slug: "gamba", state: "Human Review"}
+
+    assert Reconciler.issue_in_project_wait_state?(issue, configs)
+    refute Reconciler.issue_in_project_wait_state?(%{issue | state: "Done"}, configs)
+  end
+
   test "candidates/3 keeps wait-state issues of enabled projects, skips in-flight" do
     issues = [
       %{identifier: "#1", project_slug: "enabled"},

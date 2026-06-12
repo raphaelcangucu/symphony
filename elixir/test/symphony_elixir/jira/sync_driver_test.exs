@@ -22,7 +22,8 @@ defmodule SymphonyElixir.Jira.SyncDriverTest do
        ]}
     end
 
-    def list_comments(_project, "ABC-12") do
+    def list_comments(_project, identifier) do
+      send(self(), {:jira_list_comments, identifier})
       {:ok, [%{remote_id: "c-1", body: "hi", author: "Bot", remote_updated_at: "2026-06-01T01:00:00Z"}]}
     end
 
@@ -51,10 +52,13 @@ defmodule SymphonyElixir.Jira.SyncDriverTest do
     %{project: %Project{id: 1, slug: "acme", tracker_kind: "jira", tracker_config: %{"project_key" => "ABC"}}}
   end
 
-  test "pull normalizes issues with comments", %{project: project} do
+  test "pull is light: normalizes issues without fetching comments per issue", %{project: project} do
     assert {:ok, [issue]} = SyncDriver.pull(project, [])
     assert issue.remote_id == "10001"
-    assert [%{remote_id: "c-1"}] = issue.comments
+    # Comments are enriched lazily by the engine (active issues, TTL-gated), not
+    # per-issue on every pull — this is what avoids the N+1 comment fetch.
+    assert issue.comments == []
+    refute_received {:jira_list_comments, _identifier}
   end
 
   test "push state/move delegates to move_issue", %{project: project} do

@@ -361,6 +361,8 @@ defmodule SymphonyElixir.PullRequestMonitor do
 
   defp issue_state_name(%{status: %{name: name}}) when is_binary(name), do: name
   defp issue_state_name(%{"status" => %{"name" => name}}) when is_binary(name), do: name
+  defp issue_state_name(%{state: state}) when is_binary(state) and state != "", do: state
+  defp issue_state_name(%{"state" => state}) when is_binary(state) and state != "", do: state
   defp issue_state_name(_), do: nil
 
   defp merged_comment(pr) do

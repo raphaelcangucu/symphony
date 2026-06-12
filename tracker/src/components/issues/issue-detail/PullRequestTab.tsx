@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { hasFailingChecks } from "@/components/issues/pull-request/pr-meta";
 import { PullRequestPanel } from "@/components/issues/pull-request/PullRequestPanel";
+import { Button } from "@/components/ui/button";
 import { linkPullRequest, requestPullRequestFix, rerunFailedJobs, unlinkPullRequest } from "@/services/pullRequests";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
@@ -102,15 +103,17 @@ export function PullRequestTab({
   }
 
   const refreshButton = (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       onClick={onRefresh}
       disabled={loading}
-      className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-60"
+      className="text-muted-foreground"
     >
-      <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+      <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
       Refresh
-    </button>
+    </Button>
   );
 
   const linkRow = (
@@ -120,16 +123,18 @@ export function PullRequestTab({
         value={linkUrl}
         onChange={(event) => setLinkUrl(event.target.value)}
         placeholder="https://github.com/owner/repo/pull/123"
-        className="flex-1 rounded-md border px-2 py-1 text-xs"
+        className="h-8 flex-1 rounded-md border px-3 text-xs"
       />
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         onClick={() => void handleLink()}
         disabled={linking || !linkUrl.trim()}
-        className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-60"
+        className="shrink-0 text-muted-foreground"
       >
         {linking ? "Linking…" : "Link PR"}
-      </button>
+      </Button>
     </div>
   );
 
@@ -192,24 +197,28 @@ export function PullRequestTab({
         <div className="flex items-center gap-2">
           {canFix ? (
             <>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => void handleRerun()}
                 disabled={rerunning}
-                className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent disabled:opacity-60"
+                className="text-muted-foreground"
               >
-                <RotateCcw aria-hidden="true" className={cn("h-3.5 w-3.5", rerunning && "animate-spin")} />
+                <RotateCcw aria-hidden="true" className={cn("h-4 w-4", rerunning && "animate-spin")} />
                 {rerunning ? "Re-running…" : "Re-run failed jobs"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => void handleFix()}
                 disabled={fixing}
-                className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-60 dark:text-amber-300"
+                className="border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
               >
-                <Wrench className={cn("h-3.5 w-3.5", fixing && "animate-pulse")} />
+                <Wrench className={cn("h-4 w-4", fixing && "animate-pulse")} />
                 {fixing ? "Sending…" : "Fix with agent"}
-              </button>
+              </Button>
             </>
           ) : null}
           {refreshButton}

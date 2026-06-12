@@ -32,6 +32,7 @@ import type { WorkflowStatusName } from "@/types/workflow-status";
 
 import { BlockedBanner } from "./BlockedBanner";
 import { CommentCard, SyncBadge, WorkpadBadge } from "./CommentCard";
+import { IssueAttachments } from "./IssueAttachments";
 
 interface SummaryTabProps {
   issue: Issue;
@@ -185,6 +186,7 @@ export function SummaryTab({
             <p className="text-sm text-muted-foreground">No description yet.</p>
           )}
         </section>
+        <IssueAttachments attachments={issue.attachments} projectSlug={projectSlug || issue.projectSlug} />
         {workpad ? (
           <section className="space-y-2">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agent Workpad</h3>

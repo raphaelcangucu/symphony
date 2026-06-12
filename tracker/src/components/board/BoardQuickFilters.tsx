@@ -80,7 +80,7 @@ export function BoardQuickFilters() {
   const quickPeople = people.slice(0, QUICK_AVATARS);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border/60 bg-background/70 px-6 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/50">
+    <div className="relative z-30 flex flex-wrap items-center gap-2 border-b border-border/60 bg-background/70 px-6 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/50">
       <span className="mr-1 hidden items-center gap-1.5 text-xs font-medium text-muted-foreground sm:flex">
         <ListFilter className="h-3.5 w-3.5" />
         Quick filters
@@ -129,27 +129,27 @@ export function BoardQuickFilters() {
 
       <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
 
-      <Chip active={meActive} onClick={() => toggleAssignee(ME_TOKEN)} icon={<UserRound className="h-3.5 w-3.5" />}>
+      <Chip active={meActive} onClick={() => toggleAssignee(ME_TOKEN)} icon={<UserRound className="h-4 w-4" />}>
         Assigned to me
       </Chip>
       <Chip
         active={unassignedActive}
         onClick={() => toggleAssignee(UNASSIGNED_TOKEN)}
         icon={
-          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-dashed border-current text-[8px]">
+          <span className="flex h-4 w-4 items-center justify-center rounded-full border border-dashed border-current text-[9px]">
             ?
           </span>
         }
       >
         Unassigned
       </Chip>
-      <Chip active={recentActive} onClick={toggleRecent} icon={<Clock className="h-3.5 w-3.5" />}>
+      <Chip active={recentActive} onClick={toggleRecent} icon={<Clock className="h-4 w-4" />}>
         Recently updated
       </Chip>
 
       {anyActive ? (
-        <Button variant="ghost" size="sm" className="ml-auto h-7 gap-1 rounded-full text-xs" onClick={clearAll}>
-          <X className="h-3 w-3" /> Clear
+        <Button variant="ghost" size="sm" className="ml-auto" onClick={clearAll}>
+          <X className="h-4 w-4" /> Clear
         </Button>
       ) : null}
     </div>
@@ -165,19 +165,20 @@ interface ChipProps {
 
 function Chip({ active, onClick, icon, children }: ChipProps) {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
         active
-          ? "border-primary/40 bg-primary/10 text-primary"
-          : "border-border bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+          : "text-muted-foreground",
       )}
     >
       {icon}
       {children}
-    </button>
+    </Button>
   );
 }

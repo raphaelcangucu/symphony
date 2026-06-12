@@ -231,3 +231,35 @@ textarea {
   border-radius: 0.6rem;
   border: 1px solid hsl(var(--border));
 }
+
+.scrollbar-discrete {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.scrollbar-discrete:hover {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+}
+
+.scrollbar-discrete::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.scrollbar-discrete::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-discrete::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.scrollbar-discrete:hover::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.35);
+}
+
+.scrollbar-discrete:hover::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.55);
+}

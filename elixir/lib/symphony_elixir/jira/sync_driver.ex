@@ -4,6 +4,12 @@ defmodule SymphonyElixir.Jira.SyncDriver do
   `Jira.IssueAdapter`. Pull requests are owned by GitHub source control, so
   `pull_pull_requests/2` returns an empty list (the engine pulls PRs via the
   GitHub driver).
+
+  `pull/2` is intentionally "light": it returns issue metadata with no comments
+  (one list call), mirroring the GitHub driver. The engine then enriches comments
+  lazily — only for active-state issues, at most once per TTL — via
+  `Tracker.Sync.Engine`'s enrichment path. This avoids an N+1 comment fetch over
+  every issue on large boards each pull cycle.
   """
 
   @behaviour SymphonyElixir.Tracker.Sync.Driver
@@ -16,12 +22,7 @@ defmodule SymphonyElixir.Jira.SyncDriver do
   @impl true
   def pull(%Project{} = project, _opts) do
     with {:ok, dtos} <- adapter().list_issues(project, []) do
-      issues =
-        Enum.map(dtos, fn dto ->
-          Normalize.issue(dto, comments: fetch_comments(project, dto.identifier))
-        end)
-
-      {:ok, issues}
+      {:ok, Enum.map(dtos, &Normalize.issue(&1, comments: []))}
     end
   end
 
@@ -74,13 +75,6 @@ defmodule SymphonyElixir.Jira.SyncDriver do
 
   @impl true
   def pull_pull_requests(%Project{}, %IssueRecord{}), do: {:ok, []}
-
-  defp fetch_comments(project, identifier) do
-    case adapter().list_comments(project, identifier) do
-      {:ok, comments} -> comments
-      {:error, _reason} -> []
-    end
-  end
 
   # Evidence comments embed Symphony-served artifact URLs; before they reach
   # JIRA, attach the underlying files to the issue natively and swap in the

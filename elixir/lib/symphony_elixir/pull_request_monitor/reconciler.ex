@@ -38,6 +38,15 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
   end
 
   @doc false
+  @spec issue_state_name(map()) :: String.t() | nil
+  def issue_state_name(issue) when is_map(issue), do: issue_state_name_impl(issue)
+
+  @doc false
+  @spec issue_in_project_wait_state?(map(), map()) :: boolean()
+  def issue_in_project_wait_state?(issue, configs) when is_map(issue) and is_map(configs),
+    do: issue_in_project_wait_state_impl(issue, configs)
+
+  @doc false
   @spec candidates([map()], MapSet.t(), MapSet.t()) :: [map()]
   def candidates(issues, enabled_slugs, in_flight) do
     issues
@@ -165,7 +174,7 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
       candidates =
         configs
         |> fetch_wait_state_issues()
-        |> Enum.filter(&issue_in_project_wait_state?(&1, configs))
+        |> Enum.filter(&issue_in_project_wait_state_impl(&1, configs))
         |> candidates(enabled_slugs, in_flight_keys)
 
       candidates
@@ -211,9 +220,9 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
     end
   end
 
-  defp issue_in_project_wait_state?(issue, configs) do
+  defp issue_in_project_wait_state_impl(issue, configs) do
     slug = issue_project_slug(issue)
-    state_name = issue_state_name(issue)
+    state_name = issue_state_name_impl(issue)
 
     case Map.get(configs, slug) do
       {_project, %{wait_states: wait_states}} when is_list(wait_states) and is_binary(state_name) ->
@@ -267,10 +276,18 @@ defmodule SymphonyElixir.PullRequestMonitor.Reconciler do
     _kind, _reason -> @fallback_interval_ms
   end
 
-  defp issue_state_name(issue) do
-    issue
-    |> map_value(:status)
-    |> map_value(:name)
+  # Tracker reads return `%Issue{state: ...}`; API-shaped maps use `status.name`.
+  defp issue_state_name_impl(issue) do
+    case map_value(issue, :status) |> map_value(:name) do
+      name when is_binary(name) and name != "" ->
+        name
+
+      _ ->
+        case map_value(issue, :state) do
+          state when is_binary(state) and state != "" -> state
+          _ -> nil
+        end
+    end
   end
 
   defp issue_project_slug(issue) do

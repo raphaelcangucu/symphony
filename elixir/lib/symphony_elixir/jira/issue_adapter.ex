@@ -8,6 +8,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   alias SymphonyElixir.Jira.{Adf, Client, Config, Priority}
   alias SymphonyElixir.Jira.IssueAdapter.{Filter, Query}
   alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.Tracker.IssueDTO
   alias SymphonyElixir.Tracker.Workpad
 
   @default_issue_type "Task"
@@ -29,6 +30,27 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
       {:ok, %{"key" => _} = issue} -> {:ok, Query.normalize_issue(issue, ctx(project))}
       {:ok, _response} -> {:error, :issue_not_found}
       error -> {:error, map_error(error)}
+    end
+  end
+
+  @doc """
+  Fetches just the attachment metadata for an issue.
+
+  Lighter than `get_issue/2`; used to enrich locally-mirrored issues with
+  remote-only attachment data on detail reads.
+  """
+  @spec list_attachments(Project.t(), String.t()) ::
+          {:ok, [IssueDTO.attachment()]} | {:error, term()}
+  def list_attachments(%Project{} = _project, identifier) do
+    case request(:get, "/rest/api/3/issue/#{identifier}?fields=attachment") do
+      {:ok, %{"fields" => fields}} when is_map(fields) ->
+        {:ok, Query.attachments(fields["attachment"])}
+
+      {:ok, _response} ->
+        {:ok, []}
+
+      error ->
+        {:error, map_error(error)}
     end
   end
 

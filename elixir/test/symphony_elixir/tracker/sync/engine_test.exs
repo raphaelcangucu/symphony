@@ -390,6 +390,28 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     assert {:error, :sync_disabled} = Engine.sync_issue(project, "1")
   end
 
+  test "reset_orphaned_syncing flips stale 'syncing' rows to idle when sync is enabled", %{project: project} do
+    prev = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+    on_exit(fn -> restore_env(:tracker, prev) end)
+
+    Repo.insert!(%StateRecord{project_id: project.id, status: "syncing"})
+
+    assert Engine.reset_orphaned_syncing() == :ok
+    assert Repo.get_by!(StateRecord, project_id: project.id).status == "idle"
+  end
+
+  test "reset_orphaned_syncing is a no-op when sync is disabled", %{project: project} do
+    prev = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: false)
+    on_exit(fn -> restore_env(:tracker, prev) end)
+
+    Repo.insert!(%StateRecord{project_id: project.id, status: "syncing"})
+
+    assert Engine.reset_orphaned_syncing() == :ok
+    assert Repo.get_by!(StateRecord, project_id: project.id).status == "syncing"
+  end
+
   describe "coalescing and enrichment gates" do
     setup do
       prev_min = Application.get_env(:symphony_elixir, :tracker_sync_min_pull_ms)

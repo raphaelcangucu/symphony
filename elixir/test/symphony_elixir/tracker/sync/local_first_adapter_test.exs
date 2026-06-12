@@ -85,6 +85,50 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
     assert dto.identifier == "1"
   end
 
+  describe "get_issue attachment enrichment" do
+    defmodule AttachmentRemoteStub do
+      @moduledoc false
+      def list_attachments(_project, _identifier) do
+        {:ok,
+         [
+           %{
+             id: "att-1",
+             filename: "a.png",
+             mime_type: "image/png",
+             size: 10,
+             created_at: nil,
+             author: "Bob",
+             is_image: true
+           }
+         ]}
+      end
+    end
+
+    defmodule NoAttachmentRemoteStub do
+      @moduledoc false
+    end
+
+    setup do
+      previous = Application.get_env(:symphony_elixir, :issue_adapters)
+      on_exit(fn -> restore(:issue_adapters, previous) end)
+      %{previous_adapters: previous}
+    end
+
+    test "reads the local mirror and enriches with live remote attachments", %{project: project} do
+      Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => AttachmentRemoteStub})
+
+      assert {:ok, dto} = LocalFirstAdapter.get_issue(project, "1")
+      assert [%{id: "att-1", filename: "a.png", is_image: true}] = dto.attachments
+    end
+
+    test "falls back to no attachments when the remote adapter cannot list them", %{project: project} do
+      Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => NoAttachmentRemoteStub})
+
+      assert {:ok, dto} = LocalFirstAdapter.get_issue(project, "1")
+      assert dto.attachments == []
+    end
+  end
+
   test "list_issues requeues failed creates for local-only issues", %{project: project} do
     {:ok, issue} = Context.create_issue(project.slug, %{title: "Local draft", status: "Todo"})
 

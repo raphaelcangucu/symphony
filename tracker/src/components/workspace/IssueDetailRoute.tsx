@@ -17,7 +17,11 @@ export function IssueDetailRoute() {
   const tab: IssueTab = isIssueTab(tabParam) ? tabParam : DEFAULT_ISSUE_TAB;
   const issueFromList = issues.find((candidate) => candidate.identifier === identifier) ?? null;
   const [fetchedIssue, setFetchedIssue] = useState<Issue | null>(null);
-  const issue = issueFromList ?? (fetchedIssue?.identifier === identifier ? fetchedIssue : null);
+  const matchedFetched = fetchedIssue?.identifier === identifier ? fetchedIssue : null;
+  // Prefer the freshly fetched issue: it carries remote-only data (e.g. Jira
+  // attachments) that the board list endpoint omits. Fall back to the cached
+  // list entry for an instant first paint while the full fetch is in flight.
+  const issue = matchedFetched ?? issueFromList;
 
   const basePath = workspaceBasePath(projectSlug, view);
 
@@ -72,7 +76,7 @@ export function IssueDetailRoute() {
   }
 
   useEffect(() => {
-    if (!identifier || issueFromList || loading) return;
+    if (!identifier || loading) return;
     if (fetchedIssue?.identifier === identifier) return;
 
     let active = true;
@@ -82,8 +86,12 @@ export function IssueDetailRoute() {
       })
       .catch(() => {
         if (!active) return;
-        toast.error(`Issue ${identifier} was not found`);
-        navigate({ pathname: basePath, search: location.search }, { replace: true });
+        // Keep showing the cached list entry if we have one; only bounce back to
+        // the board when there is nothing at all to display.
+        if (!issueFromList) {
+          toast.error(`Issue ${identifier} was not found`);
+          navigate({ pathname: basePath, search: location.search }, { replace: true });
+        }
       });
 
     return () => {

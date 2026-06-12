@@ -134,6 +134,7 @@ const issue: Issue = {
   title: "Split agent detail tab",
   updatedAt: "2026-05-31T00:00:00Z",
   url: null,
+  attachments: [],
 };
 
 const execution: AgentExecution = {

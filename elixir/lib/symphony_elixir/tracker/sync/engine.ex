@@ -8,12 +8,23 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   fire-and-forget `cast`, so callers (the orchestrator poll) never block on the
   remote — reads remain local even while the remote is rate limited.
 
-  `sync_project/2` is the synchronous unit of work used by the cast handler and by
+  Each project syncs in its **own supervised task**, so projects run concurrently
+  and one slow/hung remote (e.g. a large JIRA board) never blocks the others. A
+  per-project timeout cancels a stuck task and marks that project's sync state as
+  errored. A project already in flight coalesces further requests instead of
+  starting a duplicate task. `request_sync_project/2` targets a single project so
+  a local write (e.g. a status move) can push immediately without waiting for the
+  next full poll. Stale `syncing` rows left by an interrupted run are reset to
+  `idle` on boot.
+
+  `sync_project/2` is the synchronous unit of work used by the task body and by
   tests; it accepts a `:driver` override and an optional `:max_attempts`.
   """
 
   use GenServer
   require Logger
+
+  import Ecto.Query, only: [from: 2]
 
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Repo
@@ -23,6 +34,10 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   @default_seed_retry_seconds 60
 
   @default_max_attempts 5
+
+  # Per-project sync task timeout. A task still running after this is cancelled so
+  # a hung remote cannot pin the project in `syncing` forever or starve retries.
+  @default_project_sync_timeout_ms 120_000
 
   @type summary :: %{
           required(:pushed) => non_neg_integer(),
@@ -45,6 +60,22 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   def request_sync(opts \\ []) do
     if alive?() and SymphonyElixir.Config.tracker_sync_enabled?() do
       GenServer.cast(__MODULE__, {:sync_all, opts})
+    end
+
+    :ok
+  end
+
+  @doc """
+  Fire-and-forget request to sync a single project by slug. Used by local writes
+  (e.g. a status move) so the queued outbox flushes immediately for that project
+  without waiting for the next full poll, and without coupling to the other
+  projects' (possibly slow) remotes. No-op when the engine is down or sync is
+  globally disabled.
+  """
+  @spec request_sync_project(String.t(), keyword()) :: :ok
+  def request_sync_project(slug, opts \\ []) when is_binary(slug) do
+    if alive?() and SymphonyElixir.Config.tracker_sync_enabled?() do
+      GenServer.cast(__MODULE__, {:sync_project, slug, opts})
     end
 
     :ok
@@ -312,19 +343,96 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   @impl true
   def init(opts) do
     ensure_enrich_table()
-    {:ok, %{driver_for: Keyword.get(opts, :driver_for, &default_driver_for/1)}}
+    reset_orphaned_syncing()
+    {:ok, %{driver_for: Keyword.get(opts, :driver_for, &default_driver_for/1), in_flight: %{}}}
   end
 
   @impl true
   def handle_cast({:sync_all, opts}, state) do
-    Enum.each(sync_enabled_projects(), &sync_one(&1, opts, state))
+    state =
+      sync_enabled_projects()
+      |> Enum.reduce(state, fn project, acc -> start_project_sync(project, opts, acc) end)
+
     {:noreply, state}
   end
 
-  defp sync_one(project, opts, state) do
-    case Keyword.get(opts, :driver) || state.driver_for.(project) do
-      nil -> :ok
-      driver -> run_project_sync(project, Keyword.put(opts, :driver, driver))
+  def handle_cast({:sync_project, slug, opts}, state) do
+    state =
+      case Context.get_project(slug) do
+        {:ok, project} ->
+          if sync_enabled?(project), do: start_project_sync(project, opts, state), else: state
+
+        _ ->
+          state
+      end
+
+    {:noreply, state}
+  end
+
+  # async_nolink delivers the task result as `{ref, result}` first, then `:DOWN`.
+  # We clear in-flight tracking on the result and demonitor so the trailing
+  # `:DOWN` is a no-op for a task that finished on its own.
+  @impl true
+  def handle_info({ref, _result}, state) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, clear_in_flight(state, ref)}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) when is_reference(ref) do
+    state =
+      case Map.get(state.in_flight, ref) do
+        %{project_id: project_id} when reason not in [:normal, :shutdown] ->
+          Logger.warning("Tracker sync task down project_id=#{project_id} reason=#{inspect(reason)}")
+          mark_state_by_project_id(project_id, %{status: "error", last_error: "sync crashed: #{inspect(reason)}"})
+          clear_in_flight(state, ref)
+
+        _ ->
+          clear_in_flight(state, ref)
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info({:sync_timeout, ref}, state) do
+    case Map.get(state.in_flight, ref) do
+      nil ->
+        {:noreply, state}
+
+      %{task: task, project_id: project_id} ->
+        Logger.warning("Tracker sync timed out project_id=#{project_id}; cancelling task")
+        Task.shutdown(task, :brutal_kill)
+        mark_state_by_project_id(project_id, %{status: "error", last_error: "sync timeout"})
+        {:noreply, clear_in_flight(state, ref)}
+    end
+  end
+
+  def handle_info(_message, state), do: {:noreply, state}
+
+  # Spawns a supervised, isolated task to sync one project. Coalesces when that
+  # project already has a task in flight, so concurrent requests never run two
+  # overlapping syncs (which could double-claim outbox entries).
+  defp start_project_sync(project, opts, state) do
+    driver = Keyword.get(opts, :driver) || state.driver_for.(project)
+
+    cond do
+      is_nil(driver) ->
+        state
+
+      project_in_flight?(state, project.id) ->
+        Logger.debug("Tracker sync coalesced; already in flight project=#{project.slug}")
+        state
+
+      true ->
+        project = Repo.preload(project, :setup)
+        sync_opts = Keyword.put(opts, :driver, driver)
+
+        task =
+          Task.Supervisor.async_nolink(SymphonyElixir.TaskSupervisor, fn ->
+            run_project_sync(project, sync_opts)
+          end)
+
+        timer = Process.send_after(self(), {:sync_timeout, task.ref}, sync_timeout_ms())
+        put_in_flight(state, task.ref, project.id, timer, task)
     end
   end
 
@@ -333,6 +441,55 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
       {:ok, summary} -> log_summary(project, summary)
       {:error, reason} -> Logger.warning("Tracker sync failed for #{project.slug}: #{inspect(reason)}")
     end
+
+    :ok
+  end
+
+  defp project_in_flight?(state, project_id) do
+    Enum.any?(state.in_flight, fn {_ref, %{project_id: id}} -> id == project_id end)
+  end
+
+  defp put_in_flight(state, ref, project_id, timer, task) do
+    entry = %{project_id: project_id, timer: timer, task: task}
+    %{state | in_flight: Map.put(state.in_flight, ref, entry)}
+  end
+
+  defp clear_in_flight(state, ref) do
+    case Map.pop(state.in_flight, ref) do
+      {nil, _in_flight} ->
+        state
+
+      {%{timer: timer}, rest} ->
+        Process.cancel_timer(timer)
+        %{state | in_flight: rest}
+    end
+  end
+
+  defp sync_timeout_ms do
+    case Application.get_env(:symphony_elixir, :tracker_sync_project_timeout_ms) do
+      ms when is_integer(ms) and ms > 0 -> ms
+      _ -> @default_project_sync_timeout_ms
+    end
+  end
+
+  @doc """
+  Resets any `syncing` sync-state row to `idle`. On boot such a row is always
+  stale (no task runs yet) — it was left by a run interrupted by a crash or
+  restart — so clearing it keeps a project from being pinned in `syncing`. Gated
+  on `tracker_sync_enabled?/0`: when sync is off the sync-state is irrelevant, so
+  it is a no-op (also keeping boot order independent of the sync-state table).
+  """
+  @spec reset_orphaned_syncing() :: :ok
+  def reset_orphaned_syncing do
+    if SymphonyElixir.Config.tracker_sync_enabled?() do
+      {count, _} =
+        from(s in StateRecord, where: s.status == "syncing")
+        |> Repo.update_all(set: [status: "idle", updated_at: now()])
+
+      if count > 0, do: Logger.info("Tracker sync reset orphaned syncing rows count=#{count}")
+    end
+
+    :ok
   end
 
   @doc "Emits a structured, single-line sync summary for observability."
@@ -543,11 +700,13 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   # -- sync state --------------------------------------------------------------
 
-  defp mark_state(project, attrs) do
-    base = Repo.get_by(StateRecord, project_id: project.id) || %StateRecord{}
+  defp mark_state(project, attrs), do: mark_state_by_project_id(project.id, attrs)
+
+  defp mark_state_by_project_id(project_id, attrs) do
+    base = Repo.get_by(StateRecord, project_id: project_id) || %StateRecord{}
 
     base
-    |> StateRecord.changeset(Map.merge(%{project_id: project.id}, attrs))
+    |> StateRecord.changeset(Map.merge(%{project_id: project_id}, attrs))
     |> Repo.insert_or_update!()
   end
 

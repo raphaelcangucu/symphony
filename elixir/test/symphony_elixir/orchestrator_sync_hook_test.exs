@@ -6,4 +6,8 @@ defmodule SymphonyElixir.OrchestratorSyncHookTest do
   test "request_sync returns :ok immediately (non-blocking contract)" do
     assert Engine.request_sync(force: true) == :ok
   end
+
+  test "request_sync_project returns :ok immediately (non-blocking contract)" do
+    assert Engine.request_sync_project("any-slug", force: true) == :ok
+  end
 end

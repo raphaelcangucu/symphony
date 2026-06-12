@@ -9,7 +9,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -55,6 +55,7 @@ export function BoardView({
   onChangeLimit,
 }: BoardViewProps) {
   const [activeIdentifier, setActiveIdentifier] = useState<string | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
   const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 8 } }), useSensor(TouchSensor));
   const statusNames = useMemo(() => workflowStatusNames(statuses ?? Object.keys(board)), [board, statuses]);
 
@@ -98,9 +99,37 @@ export function BoardView({
     void onMoveIssue(identifier, targetStatus, targetIndex);
   }
 
+  useEffect(() => {
+    const scroller = boardRef.current;
+    if (!scroller) return;
+
+    function onWheel(event: WheelEvent) {
+      const el = boardRef.current;
+      if (!el || el.scrollWidth <= el.clientWidth) return;
+
+      // Trackpad / mouse horizontal tilt — let the browser handle it.
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+
+      const columnBody = (event.target as HTMLElement).closest("[data-board-column-scroll]");
+      if (columnBody instanceof HTMLElement) {
+        const canScrollVertical = columnBody.scrollHeight > columnBody.clientHeight + 1;
+        if (canScrollVertical && !event.shiftKey) return;
+      }
+
+      el.scrollLeft += event.deltaY;
+      event.preventDefault();
+    }
+
+    scroller.addEventListener("wheel", onWheel, { passive: false });
+    return () => scroller.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex h-[calc(100vh-4rem)] gap-3 overflow-x-auto px-6 py-5">
+      <div
+        ref={boardRef}
+        className="scrollbar-discrete flex h-[calc(100vh-7.25rem)] w-full min-w-0 gap-3 overflow-x-auto px-6 pb-3 pt-5"
+      >
         {statusNames.map((status) => (
           <BoardColumn
             key={status}

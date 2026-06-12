@@ -19,6 +19,7 @@ import {
 import { type ReactNode, useCallback, useEffect } from "react";
 
 import { getStatusMeta } from "@/components/board/status-meta";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -205,17 +206,18 @@ export function IssueDrawer({
                 <div className="flex shrink-0 items-center gap-1.5">
                   <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button
+                        <Button
                           type="button"
+                          variant="outline"
+                          size="sm"
                           disabled={!anyEditorAvailable && !editor.loading}
                           title={editorMenuTitle}
                           aria-label="Open in VS Code"
-                          className="inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          <Code2 className="h-3.5 w-3.5" />
+                          <Code2 className="h-4 w-4" />
                           <span className="hidden sm:inline">VS Code</span>
-                          <ChevronDown className="h-3 w-3 opacity-60" />
-                        </button>
+                          <ChevronDown className="h-4 w-4 opacity-60" />
+                        </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-44">
                         {showBrowserEditor ? (
@@ -249,14 +251,16 @@ export function IssueDrawer({
                   {onArchive || onDelete || onForceSync ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button
+                        <Button
                           type="button"
+                          variant="outline"
+                          size="sm"
                           aria-label="Issue actions"
                           title="Issue actions"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          className="w-8 px-0 text-muted-foreground"
                         >
-                          <MoreHorizontal className="h-3.5 w-3.5" />
-                        </button>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-40">
                         {onForceSync ? (

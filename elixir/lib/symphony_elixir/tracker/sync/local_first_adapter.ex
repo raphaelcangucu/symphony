@@ -27,7 +27,10 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   @impl true
   def get_issue(%Project{} = project, identifier) do
     Engine.ensure_seeded(project)
-    IssueAdapter.get_issue(project, identifier)
+
+    with {:ok, dto} <- IssueAdapter.get_issue(project, identifier) do
+      {:ok, %{dto | attachments: remote_attachments(project, identifier)}}
+    end
   end
 
   @impl true
@@ -67,6 +70,9 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
       state = attrs["status"] || attrs["state"] || attrs[:status]
       payload = %{"identifier" => identifier, "state" => state}
       enqueue(project, identifier, "state", "move", payload, "state:move:#{project.id}:#{identifier}")
+      # Flush this project's outbox immediately (targeted, non-blocking) so a
+      # status move reaches the remote board without waiting for the next poll.
+      Engine.request_sync_project(project.slug, force: true)
       {:ok, dto}
     end
   end
@@ -105,6 +111,19 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
       payload = %{"identifier" => identifier, "body" => body, "comment_id" => comment.id}
       enqueue(project, identifier, "comment", "create", payload, nil)
       {:ok, comment}
+    end
+  end
+
+  # Attachments are remote-only metadata that the local mirror does not persist,
+  # so we fetch them live for the single-issue detail read. Best-effort: a remote
+  # hiccup must not break rendering the locally-cached issue.
+  defp remote_attachments(%Project{tracker_kind: kind} = project, identifier) do
+    with adapter when not is_nil(adapter) <- SymphonyElixir.Tracker.IssueAdapter.remote_for(kind),
+         true <- function_exported?(adapter, :list_attachments, 2),
+         {:ok, attachments} when is_list(attachments) <- adapter.list_attachments(project, identifier) do
+      attachments
+    else
+      _ -> []
     end
   end
 
