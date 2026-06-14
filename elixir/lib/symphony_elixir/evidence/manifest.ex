@@ -6,7 +6,7 @@ defmodule SymphonyElixir.Evidence.Manifest do
   """
 
   @enforce_keys [:issue, :runs]
-  defstruct [:issue, :generated_at, ui_change: false, runs: []]
+  defstruct [:issue, :generated_at, ui_change: false, runs: [], impact: []]
 
   defmodule Run do
     @moduledoc false
@@ -73,14 +73,15 @@ defmodule SymphonyElixir.Evidence.Manifest do
   end
 
   defp build(%{"runs" => runs} = decoded) when is_list(runs) do
-    case Enum.flat_map(runs, &run_issues/1) do
+    case Enum.flat_map(runs, &run_issues/1) ++ impact_issues(decoded["impact"]) do
       [] ->
         {:ok,
          %__MODULE__{
            issue: decoded["issue"],
            generated_at: decoded["generated_at"],
            ui_change: decoded["ui_change"] == true,
-           runs: Enum.map(runs, &to_run/1)
+           runs: Enum.map(runs, &to_run/1),
+           impact: to_impact(decoded["impact"])
          }}
 
       issues ->
@@ -89,6 +90,50 @@ defmodule SymphonyElixir.Evidence.Manifest do
   end
 
   defp build(_decoded), do: {:error, {:manifest_invalid, "missing runs list"}}
+
+  # `impact` is the agent's per-source-repo cross-repo decision: whether a change
+  # in repo `from` impacts the UI repo `to`. Optional, but when present each
+  # entry must be well-formed, and a `false` decision must carry a rationale so
+  # the skip is auditable rather than silent.
+  defp impact_issues(nil), do: []
+  defp impact_issues(entries) when is_list(entries), do: Enum.flat_map(entries, &impact_entry_issues/1)
+  defp impact_issues(_other), do: ["impact must be a list"]
+
+  defp impact_entry_issues(%{} = entry) do
+    from_to_issues(entry) ++ impacts_ui_issues(entry)
+  end
+
+  defp impact_entry_issues(_entry), do: ["impact entries must be objects"]
+
+  defp from_to_issues(entry) do
+    ["from", "to"]
+    |> Enum.reject(&present_string?(entry[&1]))
+    |> Enum.map(&"impact entry missing required field: #{&1}")
+  end
+
+  defp impacts_ui_issues(%{"impacts_ui" => impacts_ui} = entry) when is_boolean(impacts_ui) do
+    if impacts_ui == false and not present_string?(entry["rationale"]) do
+      ["impact entry #{entry["from"]} -> #{entry["to"]} with impacts_ui=false must include a rationale"]
+    else
+      []
+    end
+  end
+
+  defp impacts_ui_issues(_entry), do: ["impact entry impacts_ui must be a boolean"]
+
+  defp present_string?(value), do: is_binary(value) and String.trim(value) != ""
+
+  defp to_impact(entries) when is_list(entries), do: Enum.map(entries, &to_impact_entry/1)
+  defp to_impact(_entries), do: []
+
+  defp to_impact_entry(entry) do
+    %{
+      from: entry["from"],
+      to: entry["to"],
+      impacts_ui: entry["impacts_ui"] == true,
+      rationale: entry["rationale"]
+    }
+  end
 
   defp run_issues(run) when is_map(run) do
     @required_run_fields

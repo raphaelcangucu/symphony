@@ -89,6 +89,45 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     assert "artifacts/unit.txt" in missing
   end
 
+  test "parses cross-repo impact decisions", %{tmp_dir: ws} do
+    manifest =
+      valid_manifest()
+      |> Map.put("impact", [
+        %{"from" => "backend", "to" => "frontend", "impacts_ui" => false, "rationale" => "internal only"},
+        %{"from" => "goapi", "to" => "frontend", "impacts_ui" => true}
+      ])
+
+    write_manifest!(ws, manifest)
+    touch_artifacts!(ws)
+
+    assert {:ok, %{impact: impact}} = Manifest.read(ws)
+
+    assert %{from: "backend", to: "frontend", impacts_ui: false, rationale: "internal only"} in impact
+    assert %{from: "goapi", to: "frontend", impacts_ui: true, rationale: nil} in impact
+  end
+
+  test "impacts_ui=false without a rationale is invalid", %{tmp_dir: ws} do
+    manifest =
+      valid_manifest()
+      |> Map.put("impact", [%{"from" => "backend", "to" => "frontend", "impacts_ui" => false}])
+
+    write_manifest!(ws, manifest)
+
+    assert {:error, {:manifest_invalid, reasons}} = Manifest.read(ws)
+    assert Enum.any?(reasons, &(&1 =~ "rationale"))
+  end
+
+  test "impact entry missing from/to is invalid", %{tmp_dir: ws} do
+    manifest =
+      valid_manifest()
+      |> Map.put("impact", [%{"to" => "frontend", "impacts_ui" => true}])
+
+    write_manifest!(ws, manifest)
+
+    assert {:error, {:manifest_invalid, reasons}} = Manifest.read(ws)
+    assert Enum.any?(reasons, &(&1 =~ "from"))
+  end
+
   test "artifact_paths collects reports, screenshots, videos and traces" do
     {:ok, manifest} = build_valid_in_tmp()
     paths = Manifest.artifact_paths(manifest)

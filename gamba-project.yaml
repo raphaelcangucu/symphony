@@ -171,14 +171,31 @@ setup:
         - 4199
     evidence:
       required: true
-      ui_paths:
-        - "frontend/**"
-      test_command:
-        frontend: "yarn test --run"
-        backend: "./vibe test"
-        goapi: "go test ./..."
-      e2e_command:
-        frontend: "npx playwright test"
+      repos:
+        frontend:
+          unit_command: "yarn test --run"
+          ui_paths:
+            - "**"
+          e2e:
+            command: "npx playwright test"
+        backend:
+          unit_command: "./vibe test"
+          impacts:
+            - "frontend"
+          contract_paths:
+            - "app/Http/**"
+            - "routes/**"
+            - "graphql/**"
+            - "app/GraphQL/**"
+        goapi:
+          unit_command: "go test ./..."
+          impacts:
+            - "frontend"
+          contract_paths:
+            - "**/*.proto"
+            - "internal/handler/**"
+            - "internal/handlers/**"
+            - "openapi*.y*ml"
     hooks:
       after_create: |
         gh repo clone GambaLabs/frontend frontend -- --depth 1 -b development

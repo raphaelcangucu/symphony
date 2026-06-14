@@ -94,14 +94,15 @@ setup:
     ---
     evidence:
       required: true
-      ui_paths:
-        - "advising/advisestream/web/**"
-        - "advising/accessible-ui/**"
-        - "advising/kiosk/**"
-      test_command:
-        advising: "cd advising && ./vibe test"
-      e2e_command:
-        advising: "cd advising/automation/playwright && npx playwright test"
+      repos:
+        advising:
+          unit_command: "cd advising && ./vibe test"
+          ui_paths:
+            - "advisestream/web/**"
+            - "accessible-ui/**"
+            - "kiosk/**"
+          e2e:
+            command: "cd advising/automation/playwright && npx playwright test"
     agent:
       max_turns: 20
     dev_server:

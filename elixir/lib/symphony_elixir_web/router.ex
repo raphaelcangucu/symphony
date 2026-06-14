@@ -96,6 +96,8 @@ defmodule SymphonyElixirWeb.Router do
     delete("/projects/:project_slug/issues/:identifier", IssueController, :delete)
     get("/projects/:project_slug/issues/:identifier/comments", CommentController, :index)
     post("/projects/:project_slug/issues/:identifier/comments", CommentController, :create)
+    post("/projects/:project_slug/evidence/propose", EvidenceConfigController, :propose)
+    put("/projects/:project_slug/evidence", EvidenceConfigController, :save)
     get("/projects/:project_slug/issues/:identifier/evidence", EvidenceController, :index)
 
     get(

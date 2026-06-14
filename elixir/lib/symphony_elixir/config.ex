@@ -280,10 +280,8 @@ defmodule SymphonyElixir.Config do
                                type: :map,
                                default: %{},
                                keys: [
-                                 test_command: [type: {:map, :string, :string}, default: %{}],
-                                 e2e_command: [type: {:map, :string, :string}, default: %{}],
-                                 ui_paths: [type: {:list, :string}, default: []],
-                                 required: [type: :boolean, default: false]
+                                 required: [type: :boolean, default: false],
+                                 repos: [type: {:map, :string, :any}, default: %{}]
                                ]
                              ]
                            )
@@ -1049,13 +1047,104 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:namespace, scalar_string_value(Map.get(section, "namespace")))
   end
 
+  # Evidence is normalized to a single per-repo shape:
+  #
+  #   %{required: bool, repos: %{name => %{unit_command, ui_paths, e2e, impacts,
+  #     contract_paths}}}
+  #
+  # Both the per-repo `repos:` format and the legacy flat format
+  # (`test_command`/`e2e_command`/`ui_paths`) are accepted; the flat format is
+  # converted into the same per-repo shape so the gate only deals with one form.
   defp extract_evidence_options(section) do
     %{}
-    |> put_if_present(:test_command, string_map_value(Map.get(section, "test_command")))
-    |> put_if_present(:e2e_command, string_map_value(Map.get(section, "e2e_command")))
-    |> put_if_present(:ui_paths, csv_value(Map.get(section, "ui_paths")))
     |> put_if_present(:required, boolean_value(Map.get(section, "required")))
+    |> put_evidence_repos(section)
   end
+
+  defp put_evidence_repos(map, section) do
+    case evidence_repos(section) do
+      repos when map_size(repos) > 0 -> Map.put(map, :repos, repos)
+      _ -> map
+    end
+  end
+
+  defp evidence_repos(section) do
+    case Map.get(section, "repos") do
+      repos when is_map(repos) and map_size(repos) > 0 -> parse_repo_configs(repos)
+      _ -> repos_from_flat(section)
+    end
+  end
+
+  defp parse_repo_configs(repos) do
+    Enum.reduce(repos, %{}, fn {name, cfg}, acc ->
+      case {trim_string(to_string(name)), parse_repo_config(cfg)} do
+        {nil, _config} -> acc
+        {_name, config} when map_size(config) == 0 -> acc
+        {name, config} -> Map.put(acc, name, config)
+      end
+    end)
+  end
+
+  defp parse_repo_config(cfg) when is_map(cfg) do
+    %{}
+    |> put_if_present(:unit_command, scalar_string_value(Map.get(cfg, "unit_command")))
+    |> put_if_present(:ui_paths, csv_value(Map.get(cfg, "ui_paths")))
+    |> put_if_present(:e2e, parse_e2e(Map.get(cfg, "e2e")))
+    |> put_if_present(:impacts, csv_value(Map.get(cfg, "impacts")))
+    |> put_if_present(:contract_paths, csv_value(Map.get(cfg, "contract_paths")))
+  end
+
+  defp parse_repo_config(_cfg), do: %{}
+
+  defp parse_e2e(%{} = e2e), do: e2e_command_map(scalar_string_value(Map.get(e2e, "command")))
+  defp parse_e2e(command) when is_binary(command), do: e2e_command_map(scalar_string_value(command))
+  defp parse_e2e(_e2e), do: :omit
+
+  defp e2e_command_map(:omit), do: :omit
+  defp e2e_command_map(command), do: %{command: command}
+
+  defp repos_from_flat(section) do
+    unit = value_or(string_map_value(Map.get(section, "test_command")), %{})
+    e2e = value_or(string_map_value(Map.get(section, "e2e_command")), %{})
+    ui = group_ui_paths(value_or(csv_value(Map.get(section, "ui_paths")), []))
+
+    [Map.keys(unit), Map.keys(e2e), Map.keys(ui)]
+    |> Enum.concat()
+    |> Enum.uniq()
+    |> Enum.reduce(%{}, fn name, acc ->
+      config =
+        %{}
+        |> put_if_present(:unit_command, scalar_string_value(Map.get(unit, name)))
+        |> put_if_present(:e2e, parse_e2e(Map.get(e2e, name)))
+        |> put_if_present(:ui_paths, present_list(Map.get(ui, name)))
+
+      if map_size(config) == 0, do: acc, else: Map.put(acc, name, config)
+    end)
+  end
+
+  # Legacy `ui_paths` are repo-prefixed globs (e.g. "frontend/src/**"); split the
+  # leading segment as the repo name and keep the remainder as a repo-relative
+  # glob so it matches the per-repo `changed_files` map.
+  defp group_ui_paths(globs) do
+    Enum.reduce(globs, %{}, fn glob, acc ->
+      {repo, rest} = split_repo_prefix(glob)
+      Map.update(acc, repo, [rest], &(&1 ++ [rest]))
+    end)
+  end
+
+  defp split_repo_prefix(glob) do
+    case String.split(glob, "/", parts: 2) do
+      [repo, rest] when rest != "" -> {repo, rest}
+      [repo | _rest] -> {repo, "**"}
+    end
+  end
+
+  defp value_or(:omit, default), do: default
+  defp value_or(value, _default), do: value
+
+  defp present_list(nil), do: :omit
+  defp present_list([]), do: :omit
+  defp present_list(list) when is_list(list), do: list
 
   defp section_map(config, key) do
     case Map.get(config, key) do

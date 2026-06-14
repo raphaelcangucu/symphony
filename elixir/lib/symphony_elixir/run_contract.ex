@@ -169,7 +169,7 @@ defmodule SymphonyElixir.RunContract do
 
   defp repo_dirs(workspace) do
     cond do
-      File.dir?(Path.join(workspace, ".git")) ->
+      git_worktree_root?(workspace) ->
         [workspace]
 
       File.dir?(workspace) ->
@@ -177,10 +177,22 @@ defmodule SymphonyElixir.RunContract do
         |> File.ls!()
         |> Enum.sort()
         |> Enum.map(&Path.join(workspace, &1))
-        |> Enum.filter(&File.dir?(Path.join(&1, ".git")))
+        |> Enum.filter(&File.dir?/1)
+        |> Enum.filter(&git_worktree_root?/1)
 
       true ->
         []
+    end
+  end
+
+  # A directory is a repo root only when git resolves its own top level back to
+  # that same directory. This deliberately ignores an orphan or partial `.git`
+  # at the workspace root (git fails, or resolves to an ancestor) so the genuine
+  # sub-repos are still discovered instead of being masked by a bogus root entry.
+  defp git_worktree_root?(dir) do
+    case git(dir, ["rev-parse", "--show-toplevel"]) do
+      {:ok, toplevel} -> toplevel != "" and Path.expand(toplevel) == Path.expand(dir)
+      {:error, _reason} -> false
     end
   end
 

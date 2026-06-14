@@ -21,20 +21,46 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
           {:ok, IssueRecord.t()} | {:error, term()}
   def upsert_remote_issue(%Project{} = project, %{remote_id: remote_id} = remote)
       when is_binary(remote_id) do
+    Repo.transaction(fn -> do_upsert_remote_issue(project, remote) end)
+  end
+
+  @doc """
+  Upserts many remote issues (with their labels/comments) in a **single
+  transaction**, so a full pull commits once instead of once per issue. This
+  collapses SQLite write-lock acquisitions and WAL fsyncs from O(issues) to O(1)
+  per pull, which is the main source of `Database busy` contention.
+
+  No network is performed here: callers must pre-fetch any per-issue remote data
+  (e.g. comments) and attach it to each map first, so the write lock is never
+  held across I/O. Returns the count of issues processed.
+  """
+  @spec upsert_remote_issues(Project.t(), [map()]) :: {:ok, non_neg_integer()} | {:error, term()}
+  def upsert_remote_issues(%Project{} = project, remotes) when is_list(remotes) do
     Repo.transaction(fn ->
-      status_id = resolve_status_id(project.id, remote[:state])
+      Enum.reduce(remotes, 0, fn
+        %{remote_id: remote_id} = remote, acc when is_binary(remote_id) ->
+          do_upsert_remote_issue(project, remote)
+          acc + 1
 
-      issue =
-        case existing_issue(project.id, remote_id) do
-          nil -> insert_issue!(project, remote, status_id)
-          %IssueRecord{} = current -> update_issue!(current, remote, status_id)
-        end
-
-      :ok = maybe_upsert_labels!(project, issue, Map.get(remote, :labels, []))
-      :ok = upsert_comments!(issue, Map.get(remote, :comments, []))
-
-      Repo.preload(issue, [:status, :labels, :comments], force: true)
+        _invalid, acc ->
+          acc
+      end)
     end)
+  end
+
+  defp do_upsert_remote_issue(project, %{remote_id: remote_id} = remote) do
+    status_id = resolve_status_id(project.id, remote[:state])
+
+    issue =
+      case existing_issue(project.id, remote_id) do
+        nil -> insert_issue!(project, remote, status_id)
+        %IssueRecord{} = current -> update_issue!(current, remote, status_id)
+      end
+
+    :ok = maybe_upsert_labels!(project, issue, Map.get(remote, :labels, []))
+    :ok = upsert_comments!(issue, Map.get(remote, :comments, []))
+
+    Repo.preload(issue, [:status, :labels, :comments], force: true)
   end
 
   @doc """
@@ -377,27 +403,47 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
         @syncable_fields
       )
 
-    base = %{
-      remote_number: remote[:remote_number],
-      url: remote[:remote_url],
-      remote_url: remote[:remote_url],
-      branch_name: remote[:branch_name],
-      # Provider-canonical assignee id is remote-authoritative (never edited
-      # locally), so it always takes the remote value rather than LWW-merging.
-      assignee_remote_id: remote[:assignee_remote_id],
-      remote_updated_at: remote[:remote_updated_at],
-      last_synced_at: DateTime.utc_now(),
-      dirty_fields: merged.dirty_fields,
-      sync_status: if(merged.conflict?, do: "conflict", else: "synced")
-    }
+    desired =
+      %{
+        remote_number: remote[:remote_number],
+        url: remote[:remote_url],
+        remote_url: remote[:remote_url],
+        branch_name: remote[:branch_name],
+        # Provider-canonical assignee id is remote-authoritative (never edited
+        # locally), so it always takes the remote value rather than LWW-merging.
+        assignee_remote_id: remote[:assignee_remote_id],
+        remote_updated_at: remote[:remote_updated_at],
+        dirty_fields: merged.dirty_fields,
+        sync_status: if(merged.conflict?, do: "conflict", else: "synced")
+      }
+      # Only move status when the local `state` is not a pending local edit.
+      |> maybe_put_status_id(merged.dirty_fields, status_id)
+      |> Map.merge(merged.attrs)
 
-    # Only move status when the local `state` is not a pending local edit.
-    base = if Map.has_key?(merged.dirty_fields, "state"), do: base, else: Map.put(base, :status_id, status_id)
-
-    current
-    |> IssueRecord.changeset(Map.merge(base, merged.attrs))
-    |> Repo.update!()
+    # Skip the write entirely when the pull changes nothing. The mirror is
+    # rewritten on every poll, so without this guard an idle board issues one
+    # UPDATE per issue per cycle (the bulk of the SQLite write contention).
+    # `last_synced_at` is deliberately excluded from the comparison so it does
+    # not force a write on every otherwise-identical pull.
+    if issue_unchanged?(current, desired) do
+      current
+    else
+      current
+      |> IssueRecord.changeset(Map.put(desired, :last_synced_at, DateTime.utc_now()))
+      |> Repo.update!()
+    end
   end
+
+  defp maybe_put_status_id(attrs, dirty_fields, status_id) do
+    if Map.has_key?(dirty_fields, "state"), do: attrs, else: Map.put(attrs, :status_id, status_id)
+  end
+
+  defp issue_unchanged?(%IssueRecord{} = current, desired) do
+    Enum.all?(desired, fn {field, value} -> field_equal?(Map.get(current, field), value) end)
+  end
+
+  defp field_equal?(%DateTime{} = a, %DateTime{} = b), do: DateTime.compare(a, b) == :eq
+  defp field_equal?(a, b), do: a == b
 
   defp existing_issue(project_id, remote_id) do
     IssueRecord
@@ -456,21 +502,34 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   defp labels_dirty?(_issue), do: false
 
   defp upsert_labels!(project, issue, labels) when is_list(labels) do
-    label_ids =
-      Enum.map(labels, fn label ->
-        ensure_label!(project.id, label).id
-      end)
+    desired_ids =
+      labels
+      |> Enum.map(fn label -> ensure_label!(project.id, label).id end)
+      |> Enum.uniq()
 
-    # Replace the remote-origin label set: clear current links, re-link.
-    Repo.delete_all(from(il in IssueLabel, where: il.issue_id == ^issue.id))
+    # Only rewrite the link set when it actually differs from what is stored, so
+    # an unchanged label set on a routine pull issues no DELETE/INSERT at all.
+    if MapSet.new(desired_ids) == MapSet.new(current_label_link_ids(issue.id)) do
+      :ok
+    else
+      # Replace the remote-origin label set: clear current links, re-link in a
+      # single bulk insert instead of one statement per label.
+      Repo.delete_all(from(il in IssueLabel, where: il.issue_id == ^issue.id))
 
-    Enum.each(label_ids, fn label_id ->
-      %IssueLabel{}
-      |> IssueLabel.changeset(%{issue_id: issue.id, label_id: label_id})
-      |> Repo.insert!(on_conflict: :nothing)
-    end)
+      if desired_ids != [] do
+        rows = Enum.map(desired_ids, fn label_id -> %{issue_id: issue.id, label_id: label_id} end)
+        Repo.insert_all(IssueLabel, rows, on_conflict: :nothing)
+      end
 
-    :ok
+      :ok
+    end
+  end
+
+  defp current_label_link_ids(issue_id) do
+    IssueLabel
+    |> where([il], il.issue_id == ^issue_id)
+    |> select([il], il.label_id)
+    |> Repo.all()
   end
 
   defp ensure_label!(project_id, %{name: name} = label) do
@@ -561,26 +620,42 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   defp upsert_comments!(issue, comments) when is_list(comments) do
     Enum.each(comments, fn comment ->
       remote_id = comment[:remote_id] || comment[:id]
+      existing = find_comment_for_upsert(issue.id, remote_id, comment[:body])
 
-      attrs = %{
-        issue_id: issue.id,
-        kind: comment[:kind] || "comment",
-        body: comment[:body],
-        author: comment[:author] || "remote",
-        remote_id: remote_id,
-        remote_updated_at: comment[:remote_updated_at],
-        last_synced_at: DateTime.utc_now(),
-        sync_status: "synced"
-      }
+      # Skip the write when the matched row already mirrors this remote comment.
+      # Without this guard every enrich rewrites every comment (the changeset
+      # always carried a fresh `last_synced_at`), churning the comments table.
+      unless comment_unchanged?(existing, comment, remote_id) do
+        attrs = %{
+          issue_id: issue.id,
+          kind: comment[:kind] || "comment",
+          body: comment[:body],
+          author: comment[:author] || "remote",
+          remote_id: remote_id,
+          remote_updated_at: comment[:remote_updated_at],
+          last_synced_at: DateTime.utc_now(),
+          sync_status: "synced"
+        }
 
-      issue.id
-      |> find_comment_for_upsert(remote_id, comment[:body])
-      |> Comment.changeset(attrs)
-      |> Repo.insert_or_update!()
+        existing
+        |> Comment.changeset(attrs)
+        |> Repo.insert_or_update!()
+      end
     end)
 
     :ok
   end
+
+  defp comment_unchanged?(%Comment{id: id} = existing, comment, remote_id) when not is_nil(id) do
+    existing.remote_id == remote_id and
+      existing.body == comment[:body] and
+      existing.kind == (comment[:kind] || "comment") and
+      existing.author == (comment[:author] || "remote") and
+      existing.sync_status == "synced" and
+      field_equal?(existing.remote_updated_at, comment[:remote_updated_at])
+  end
+
+  defp comment_unchanged?(_existing, _comment, _remote_id), do: false
 
   # Reconcile an incoming remote comment with an existing local row so a pull
   # never duplicates a comment that already exists locally:

@@ -105,6 +105,16 @@ config :symphony_elixir,
 config :symphony_elixir, SymphonyElixir.Repo,
   database: local_tracker_database,
   pool_size: String.to_integer(System.get_env("SYMPHONY_LOCAL_TRACKER_POOL_SIZE") || "5"),
+  # SQLite permits only one writer at a time. Under the default DEFERRED mode a
+  # transaction that reads first and writes later (tracker sync's
+  # `upsert_remote_issue/2`, assistant `append_message_once/2`, the outbox claim)
+  # must *upgrade* its lock mid-transaction; when two pooled connections try to
+  # upgrade at once SQLite returns SQLITE_BUSY ("Database busy") *immediately* and
+  # `busy_timeout` cannot help, because waiting would deadlock. IMMEDIATE takes the
+  # write lock up front so concurrent writers queue (honoring `busy_timeout`)
+  # instead of crashing the sync/assistant task.
+  default_transaction_mode: :immediate,
+  busy_timeout: String.to_integer(System.get_env("SYMPHONY_LOCAL_TRACKER_BUSY_TIMEOUT_MS") || "5000"),
   stacktrace: Mix.env() in [:dev, :test],
   show_sensitive_data_on_connection_error: Mix.env() in [:dev, :test]
 

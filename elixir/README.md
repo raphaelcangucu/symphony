@@ -295,6 +295,7 @@ These apply to the whole BEAM process and are read from `elixir/.env` when using
 | `SYMPHONY_DEFAULT_AGENT_KIND` | `codex` | Fallback agent when a project omits `codex:`/`claude:` |
 | `SYMPHONY_EDITOR_*` | — | Browser editor (code-server) overrides |
 | `SYMPHONY_LOCAL_TRACKER_DATABASE` | `.symphony/tracker.sqlite3` | SQLite path |
+| `SYMPHONY_LOCAL_TRACKER_BUSY_TIMEOUT_MS` | `5000` | How long a write waits for SQLite's single writer lock before raising `Database busy` |
 | `SYMPHONY_BACKUP_DIR` | `.symphony/backups` | Backup storage directory |
 | `SYMPHONY_BACKUP_RETENTION_DAYS` | `30` | Backup retention window |
 | `SYMPHONY_EDITOR_ENABLED` | `false` | Enable browser code-server |

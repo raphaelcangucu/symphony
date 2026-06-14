@@ -34,17 +34,28 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
   @spec claim_pending(integer(), pos_integer()) :: [OutboxEntry.t()]
   def claim_pending(project_id, limit \\ 50) when is_integer(limit) and limit > 0 do
     Repo.transaction(fn ->
-      entries =
+      ids =
         OutboxEntry
         |> where([e], e.project_id == ^project_id and e.status == "pending")
         |> order_by([e], asc: e.inserted_at, asc: e.id)
         |> limit(^limit)
+        |> select([e], e.id)
         |> Repo.all()
 
-      Enum.map(entries, fn entry ->
-        {:ok, claimed} = entry |> OutboxEntry.changeset(%{status: "in_flight"}) |> Repo.update()
-        claimed
-      end)
+      if ids == [] do
+        []
+      else
+        # Mark the whole claimed batch `in_flight` in one statement instead of one
+        # UPDATE per entry, then reload them in claim order.
+        OutboxEntry
+        |> where([e], e.id in ^ids)
+        |> Repo.update_all(set: [status: "in_flight", updated_at: DateTime.utc_now()])
+
+        OutboxEntry
+        |> where([e], e.id in ^ids)
+        |> order_by([e], asc: e.inserted_at, asc: e.id)
+        |> Repo.all()
+      end
     end)
     |> case do
       {:ok, claimed} -> claimed
