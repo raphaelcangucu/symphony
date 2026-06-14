@@ -8,6 +8,7 @@ defmodule SymphonyElixirWeb.Tracker.EditorControllerTest do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.TestSupport
   alias SymphonyElixir.Workflow
+  alias SymphonyElixir.Workspace
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
@@ -50,9 +51,29 @@ defmodule SymphonyElixirWeb.Tracker.EditorControllerTest do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Editor issue", "status" => "Todo"})
 
+    # The endpoint always reports a `cursor_desktop` target alongside the browser
+    # editor. Its availability depends solely on whether the task workspace dir
+    # exists on disk (and `WSL_DISTRO_NAME` only shapes the URL once available).
+    # A leftover workspace from a prior run would flip it to `available: true`,
+    # so remove any so the contract is deterministic regardless of the host env.
+    workspace = Workspace.path_for_issue("MAC-1")
+    File.rm_rf(workspace)
+    refute File.dir?(workspace)
+
     conn = get(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues/MAC-1/editor")
 
-    assert json_response(conn, 200) == %{"data" => %{"available" => false, "reason" => "disabled"}}
+    assert json_response(conn, 200) == %{
+             "data" => %{
+               "available" => false,
+               "url" => nil,
+               "reason" => "disabled",
+               "cursor_desktop" => %{
+                 "available" => false,
+                 "url" => nil,
+                 "reason" => "workspace_missing"
+               }
+             }
+           }
   end
 
   test "returns 404 for an unknown issue" do
