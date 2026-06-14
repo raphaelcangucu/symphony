@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
-import { ExecutionSteerComposer } from "@/components/issues/issue-detail/ExecutionSteerComposer";
+import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
 import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
 import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
 import { Separator } from "@/components/ui/separator";
@@ -165,12 +165,17 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
         </section>
       ) : null}
 
-      <ExecutionSteerComposer
-        disabled={!canSteer || !sessionLog.connected}
-        pending={sessionLog.steerPending}
-        error={sessionLog.steerError}
+      <ExecutionControlComposer
+        projectSlug={projectSlug}
+        issue={issue}
+        execution={execution}
+        sessionConnected={sessionLog.connected}
+        canSteer={canSteer}
+        steerPending={sessionLog.steerPending}
+        steerError={sessionLog.steerError}
         seedMessage={steerSeedMessage}
         onSteer={sessionLog.steerTurn}
+        onIssueUpdated={onIssueUpdated}
       />
 
       <IssueSessionLog

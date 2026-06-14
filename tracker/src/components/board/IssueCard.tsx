@@ -32,6 +32,8 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
   } satisfies React.CSSProperties;
 
   const isBlocked = issue.blockedBy.length > 0;
+  const agentNeedsAttention = agent?.status === "error" || agent?.status === "aborted";
+  const agentStatusTitle = agent?.error ?? (agent ? `Agent: ${agentStatusLabel(agent.status)}` : undefined);
 
   return (
     <article
@@ -40,6 +42,7 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
       className={cn(
         "group cursor-pointer rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-all",
         "hover:-translate-y-px hover:border-primary/40 hover:shadow-md",
+        agentNeedsAttention && "border-rose-500/40 ring-1 ring-rose-500/20",
         isDragging && "opacity-40",
         dragOverlay && "w-72 rotate-2 shadow-xl ring-2 ring-primary/20",
       )}
@@ -117,7 +120,13 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/50 pt-2.5">
         <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
           {agent ? (
-            <span className="inline-flex items-center gap-1 font-medium">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 font-medium",
+                agentNeedsAttention && "text-rose-600 dark:text-rose-300",
+              )}
+              title={agentStatusTitle}
+            >
               <AgentStatusDot status={agent.status} />
               {agentStatusLabel(agent.status)}
             </span>

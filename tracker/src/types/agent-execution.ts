@@ -1,4 +1,4 @@
-export type AgentExecutionStatus = "live" | "idle" | "waiting" | "retrying";
+export type AgentExecutionStatus = "live" | "idle" | "waiting" | "retrying" | "error" | "aborted";
 
 export interface AgentExecutionTokens {
   input: number;

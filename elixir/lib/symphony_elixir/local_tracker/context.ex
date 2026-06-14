@@ -14,6 +14,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
     Broadcaster,
     Comment,
     IssueLabel,
+    IssueMapper,
     IssueRecord,
     IssueRelation,
     Label,
@@ -276,6 +277,24 @@ defmodule SymphonyElixir.LocalTracker.Context do
       {:error, :project_not_found} ->
         []
     end
+  end
+
+  @spec list_routable_non_terminal_issues() :: [IssueRecord.t()]
+  def list_routable_non_terminal_issues do
+    IssueRecord
+    |> join(:inner, [issue], status in WorkflowStatus, on: issue.status_id == status.id)
+    |> where([issue, status], is_nil(issue.archived_at) and status.is_terminal == false)
+    |> order_by([issue], asc: issue.project_id, asc: issue.position, asc: issue.id)
+    |> preload(^@issue_preloads)
+    |> Repo.all()
+    |> Enum.filter(&routable_issue?/1)
+  end
+
+  defp routable_issue?(%IssueRecord{} = record) do
+    record
+    |> IssueMapper.to_issue()
+    |> Map.get(:labels, [])
+    |> AgentRouting.routable?()
   end
 
   @spec get_issue(String.t(), String.t()) :: {:ok, IssueRecord.t()} | {:error, missing_error()}

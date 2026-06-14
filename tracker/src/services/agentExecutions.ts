@@ -48,7 +48,7 @@ export interface BackendAgentExecutionDto {
   tokens?: BackendAgentExecutionTokensDto | null;
 }
 
-const KNOWN_STATUSES: readonly AgentExecutionStatus[] = ["live", "idle", "waiting", "retrying"];
+const KNOWN_STATUSES: readonly AgentExecutionStatus[] = ["live", "idle", "waiting", "retrying", "error", "aborted"];
 
 function normalizeStatus(status: string | null | undefined): AgentExecutionStatus {
   return KNOWN_STATUSES.includes(status as AgentExecutionStatus) ? (status as AgentExecutionStatus) : "idle";

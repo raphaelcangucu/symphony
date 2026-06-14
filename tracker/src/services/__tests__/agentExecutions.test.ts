@@ -41,4 +41,22 @@ describe("normalizeAgentExecution", () => {
       capabilities: ["get", "edit", "pause", "resume", "clear"],
     });
   });
+
+  it("normalizes error and aborted statuses", () => {
+    const error = normalizeAgentExecution({
+      issue_identifier: "CDE-1132",
+      status: "error",
+      error: "claude exited with code 1",
+    });
+    const aborted = normalizeAgentExecution({
+      issue_identifier: "CDE-1132",
+      status: "aborted",
+      error: "Agent run interrupted — use Resume in the execution panel",
+    });
+
+    expect(error.status).toBe("error");
+    expect(error.error).toBe("claude exited with code 1");
+    expect(aborted.status).toBe("aborted");
+    expect(aborted.error).toContain("Resume");
+  });
 });
