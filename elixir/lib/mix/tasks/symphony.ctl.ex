@@ -56,13 +56,21 @@ defmodule Mix.Tasks.Symphony.Ctl do
     elixir = System.find_executable("elixir") || Mix.raise("`elixir` not found on PATH")
     File.mkdir_p!(".symphony")
 
+    # The detached daemon does not inherit a parent shell's `source .env`; load
+    # elixir/.env here so SYMPHONY_TRACKER_TOKEN and other secrets are always
+    # present regardless of how `mix symphony.ctl serve` was invoked.
     command =
-      "setsid #{shell_escape(elixir)} --name #{node} --cookie #{cookie} " <>
+      env_prefix() <>
+        "setsid #{shell_escape(elixir)} --name #{node} --cookie #{cookie} " <>
         "-S mix run --no-start dev/serve.exs " <>
         "> .symphony/serve.log 2>&1 < /dev/null &"
 
     {_out, 0} = System.cmd("sh", ["-c", command])
     :ok
+  end
+
+  defp env_prefix do
+    if File.exists?(".env"), do: "set -a && . ./.env && set +a && ", else: ""
   end
 
   defp rpc_restart(targets) do
