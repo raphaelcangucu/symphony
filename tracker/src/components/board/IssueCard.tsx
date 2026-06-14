@@ -5,6 +5,7 @@ import { AlertTriangle, ExternalLink, GitBranch, MessageSquare } from "lucide-re
 import { AgentLongRunningBadge, AgentStatusDot, agentStatusLabel } from "@/components/issues/AgentStatusBadge";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { PriorityIndicator } from "@/components/issues/PriorityIndicator";
+import { executionNeedsAttention, resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { cn } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -32,8 +33,9 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
   } satisfies React.CSSProperties;
 
   const isBlocked = issue.blockedBy.length > 0;
-  const agentNeedsAttention = agent?.status === "error" || agent?.status === "aborted";
-  const agentStatusTitle = agent?.error ?? (agent ? `Agent: ${agentStatusLabel(agent.status)}` : undefined);
+  const displayStatus = agent ? resolveDisplayStatus(agent) : null;
+  const agentNeedsAttention = agent ? executionNeedsAttention(agent) : false;
+  const agentStatusTitle = agent?.error ?? (displayStatus ? `Agent: ${agentStatusLabel(displayStatus)}` : undefined);
 
   return (
     <article
@@ -127,8 +129,8 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
               )}
               title={agentStatusTitle}
             >
-              <AgentStatusDot status={agent.status} />
-              {agentStatusLabel(agent.status)}
+              <AgentStatusDot status={displayStatus!} />
+              {agentStatusLabel(displayStatus!)}
             </span>
           ) : null}
           {isBlocked ? (

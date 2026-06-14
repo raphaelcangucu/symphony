@@ -8,8 +8,24 @@ defmodule SymphonyElixir.IssueDispatchTest do
   setup do
     migrate_repo()
     clean_repo()
+    previous_sync = Application.get_env(:symphony_elixir, :tracker, []) |> Keyword.get(:sync_enabled)
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+
+    on_exit(fn ->
+      tracker_config = Application.get_env(:symphony_elixir, :tracker, [])
+
+      tracker_config =
+        case previous_sync do
+          nil -> Keyword.delete(tracker_config, :sync_enabled)
+          value -> Keyword.put(tracker_config, :sync_enabled, value)
+        end
+
+      Application.put_env(:symphony_elixir, :tracker, tracker_config)
+    end)
+
     {:ok, _project} = Context.ensure_project(%{name: "Pref", slug: "pref"})
     {:ok, issue} = Context.create_issue("pref", %{"title" => "Dispatchable", "status" => "Todo"})
+    {:ok, issue} = Context.update_issue("pref", issue.identifier, %{"labels" => ["symphony"]})
     {:ok, issue: issue}
   end
 

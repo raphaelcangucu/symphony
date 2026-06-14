@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
@@ -98,6 +99,39 @@ describe("ExecutionControlComposer", () => {
       ),
     );
     expect(onIssueUpdated).toHaveBeenCalledWith(issue);
+  });
+
+  it("enables resume when the run was interrupted but reported as idle", async () => {
+    const interrupted = {
+      issueIdentifier: "CDE-1132",
+      status: "idle",
+      agentKind: "codex",
+      sessionId: "sess-1",
+      lastEvent: "turn_aborted",
+      lastMessage: "Agent run interrupted — resume from the session log",
+      lastEventAt: null,
+      turnCount: 0,
+      runtimeSeconds: null,
+      startedAt: null,
+      retryAttempt: 0,
+      error: "Agent run interrupted — use Resume in the execution panel",
+      goal: null,
+      longRunning: false,
+      longRunningKind: null,
+      longRunningLabel: null,
+      tokens: null,
+    } satisfies AgentExecution;
+
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interrupted}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: /^resume$/i })[0]).not.toBeDisabled();
   });
 
   it("shows a friendly steer error when no turn is steerable", () => {

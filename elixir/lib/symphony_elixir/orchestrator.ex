@@ -306,6 +306,12 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   @doc false
+  @spec should_manual_dispatch_issue_for_test(Issue.t()) :: boolean()
+  def should_manual_dispatch_issue_for_test(%Issue{} = issue) do
+    manual_dispatch_candidate?(issue)
+  end
+
+  @doc false
   @spec should_dispatch_issue_for_test(Issue.t(), term()) :: boolean()
   def should_dispatch_issue_for_test(%Issue{} = issue, %State{} = state) do
     sets = project_state_sets(issue)
@@ -1500,6 +1506,27 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
+  @doc """
+  Dispatches a specific issue immediately for manual resume/restart controls.
+
+  Unlike the poll loop, this accepts issues in `active_states` (not only
+  `dispatch_states`), which covers workflows where work moves to an in-progress
+  column after the first dispatch.
+  """
+  @spec request_dispatch(String.t()) :: {:ok, map()} | {:error, term()} | :unavailable
+  def request_dispatch(identifier) when is_binary(identifier) do
+    request_dispatch(__MODULE__, identifier)
+  end
+
+  @spec request_dispatch(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()} | :unavailable
+  def request_dispatch(server, identifier) when is_binary(identifier) do
+    if Process.whereis(server) do
+      GenServer.call(server, {:request_dispatch, identifier})
+    else
+      :unavailable
+    end
+  end
+
   @spec steer(String.t(), String.t(), pid() | nil) :: :ok | {:error, term()}
   def steer(identifier, message, reply_to \\ nil) do
     steer(__MODULE__, identifier, message, reply_to)
@@ -1617,6 +1644,41 @@ defmodule SymphonyElixir.Orchestrator do
        requested_at: DateTime.utc_now(),
        operations: ["poll", "reconcile"]
      }, state}
+  end
+
+  def handle_call({:request_dispatch, identifier}, _from, state) do
+    normalized = String.trim(identifier)
+
+    case fetch_issue_by_identifier(normalized) do
+      {:ok, %Issue{} = issue} ->
+        cond do
+          Map.has_key?(state.running, issue.id) ->
+            {:reply, {:error, :already_running}, state}
+
+          manual_dispatch_candidate?(issue) ->
+            state =
+              state
+              |> cancel_retry_in_state(normalized)
+              |> release_issue_claim(issue.id)
+
+            if dispatch_slots_available?(issue, state) do
+              state = dispatch_issue_for_manual_resume(state, issue)
+              notify_dashboard()
+              {:reply, {:ok, %{dispatched: true, issue_identifier: issue.identifier}}, state}
+            else
+              {:reply, {:error, :no_slots}, state}
+            end
+
+          true ->
+            {:reply, {:error, :not_dispatchable}, state}
+        end
+
+      {:error, :not_found} ->
+        {:reply, {:error, :issue_not_found}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   def handle_call({:steer, identifier, message, reply_to}, _from, state) do
@@ -1864,6 +1926,52 @@ defmodule SymphonyElixir.Orchestrator do
 
     candidate_issue?(issue, dispatch_set(sets), terminal_set(sets)) and
       !issue_blocked_by_non_terminal?(issue, terminal_set(sets))
+  end
+
+  defp manual_dispatch_candidate?(%Issue{} = issue) do
+    sets = project_state_sets(issue)
+
+    candidate_issue?(issue, active_set(sets), terminal_set(sets)) and
+      !issue_blocked_by_non_terminal?(issue, terminal_set(sets))
+  end
+
+  defp fetch_issue_by_identifier(identifier) when is_binary(identifier) do
+    case Tracker.fetch_issue_states_by_ids([identifier]) do
+      {:ok, [%Issue{} = issue | _]} -> {:ok, issue}
+      {:ok, []} -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp dispatch_issue_for_manual_resume(%State{} = state, issue) do
+    case manual_revalidate_issue(issue) do
+      {:ok, refreshed_issue} -> do_dispatch_issue(state, refreshed_issue, nil)
+      _other -> state
+    end
+  end
+
+  defp manual_revalidate_issue(%Issue{id: issue_id}) when is_binary(issue_id) do
+    case Tracker.fetch_issue_states_by_ids([issue_id]) do
+      {:ok, [%Issue{} = refreshed_issue | _]} ->
+        if manual_dispatch_candidate?(refreshed_issue) do
+          {:ok, refreshed_issue}
+        else
+          {:skip, refreshed_issue}
+        end
+
+      {:ok, []} ->
+        {:skip, :missing}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp cancel_retry_in_state(%State{} = state, identifier) when is_binary(identifier) do
+    case cancel_retry_for_identifier(state, identifier) do
+      {:ok, updated_state} -> updated_state
+      :not_found -> state
+    end
   end
 
   defp dispatch_slots_available?(%Issue{} = issue, %State{} = state) do

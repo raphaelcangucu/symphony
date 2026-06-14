@@ -59,4 +59,15 @@ describe("normalizeAgentExecution", () => {
     expect(aborted.status).toBe("aborted");
     expect(aborted.error).toContain("Resume");
   });
+
+  it("reconciles idle status with abort signals to aborted", () => {
+    const execution = normalizeAgentExecution({
+      issue_identifier: "CDE-1132",
+      status: "idle",
+      last_event: "turn_aborted",
+      error: "Agent run interrupted — use Resume in the execution panel",
+    });
+
+    expect(execution.status).toBe("aborted");
+  });
 });

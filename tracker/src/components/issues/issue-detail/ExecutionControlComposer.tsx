@@ -32,6 +32,7 @@ import {
   type AssistantEffort,
 } from "@/lib/assistantSettings";
 import { cn } from "@/lib/utils";
+import { canResumeExecution } from "@/lib/agentExecutionDisplay";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -81,9 +82,9 @@ export function ExecutionControlComposer({
     return null;
   }, [execution?.goal?.objective]);
 
-  const agentRunActive = execution?.status === "live" || execution?.status === "waiting" || execution?.status === "idle";
-  const canResume = !agentRunActive;
-  const canRestart = !agentRunActive;
+  const agentRunActive = execution ? !canResumeExecution(execution) : false;
+  const canResume = canResumeExecution(execution);
+  const canRestart = canResumeExecution(execution);
 
   useEffect(() => {
     if (!seedMessage?.trim()) return;
@@ -282,13 +283,11 @@ export function ExecutionControlComposer({
             <Button
               type="button"
               size="sm"
-              disabled={!canResume || controlsDisabled || !sessionConnected}
+              disabled={!canResume || controlsDisabled}
               title={
-                !sessionConnected
-                  ? "Connect to the session log first"
-                  : canResume
-                    ? "Resume from the current workspace and session log"
-                    : "Stop the active run before resuming"
+                canResume
+                  ? "Resume from the current workspace and session log"
+                  : "Stop the active run before resuming"
               }
               onClick={() => void runDispatch("resume")}
             >
@@ -299,13 +298,11 @@ export function ExecutionControlComposer({
               type="button"
               size="sm"
               variant="outline"
-              disabled={!canRestart || controlsDisabled || !sessionConnected}
+              disabled={!canRestart || controlsDisabled}
               title={
-                !sessionConnected
-                  ? "Connect to the session log first"
-                  : canRestart
-                    ? "Start a fresh agent pass on this issue"
-                    : "Stop the active run before restarting"
+                canRestart
+                  ? "Start a fresh agent pass on this issue"
+                  : "Stop the active run before restarting"
               }
               onClick={() => void runDispatch("restart")}
             >

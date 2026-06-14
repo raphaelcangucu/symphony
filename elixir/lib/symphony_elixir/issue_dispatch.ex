@@ -35,7 +35,7 @@ defmodule SymphonyElixir.IssueDispatch do
          {:ok, _} <- maybe_update_agent(project, identifier, opts),
          {:ok, _} <- maybe_move_for_dispatch(project, issue),
          :ok <- cancel_retry(identifier),
-         _refresh <- Orchestrator.request_refresh() do
+         :ok <- nudge_manual_dispatch(identifier) do
       {:ok, reloaded} = IssueAdapter.dispatch(project, :get_issue, [identifier])
 
       {:ok,
@@ -161,6 +161,14 @@ defmodule SymphonyElixir.IssueDispatch do
       :ok -> :ok
       :not_found -> :ok
       :unavailable -> {:error, :orchestrator_unavailable}
+    end
+  end
+
+  defp nudge_manual_dispatch(identifier) do
+    case Orchestrator.request_dispatch(identifier) do
+      {:ok, _result} -> :ok
+      :unavailable -> :ok
+      {:error, reason} -> {:error, reason}
     end
   end
 

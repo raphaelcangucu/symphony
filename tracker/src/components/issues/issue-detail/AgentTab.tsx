@@ -9,6 +9,7 @@ import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentC
 import { Separator } from "@/components/ui/separator";
 import { useSessionLogChannel } from "@/hooks/useSessionLogChannel";
 import { formatDateTime } from "@/lib/utils";
+import { canResumeExecution, canSteerExecution, resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { updateIssueAgent } from "@/services/issues";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AgentKind, Issue } from "@/types/issue";
@@ -37,15 +38,15 @@ function formatTokens(value: number): string {
 
 export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = null, onIssueUpdated }: AgentTabProps) {
   const [agentPending, setAgentPending] = useState(false);
-  const agentRunActive =
-    execution?.status === "live" || execution?.status === "idle" || execution?.status === "waiting";
+  const displayStatus = execution ? resolveDisplayStatus(execution) : undefined;
+  const agentRunActive = execution ? !canResumeExecution(execution) : false;
   const sessionLog = useSessionLogChannel({
     projectSlug,
     issueIdentifier: issue.identifier,
     enabled: true,
     agentKind: execution?.agentKind ?? issue.agentKind ?? null,
   });
-  const canSteer = execution?.status === "live" || execution?.status === "waiting";
+  const canSteer = canSteerExecution(execution);
 
   async function changeAgent(agent: AgentKind | null) {
     setAgentPending(true);
@@ -66,7 +67,7 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Execution</div>
           {execution ? (
             <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <AgentStatusBadge status={execution.status} />
+              <AgentStatusBadge status={displayStatus!} />
               <AgentLongRunningBadge execution={execution} />
             </div>
           ) : (

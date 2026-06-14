@@ -109,6 +109,24 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :no_failed_runs),
     do: error(conn, 422, "no_failed_runs", "No failed workflow runs found for this pull request.")
 
+  def render(conn, :orchestrator_unavailable),
+    do: error(conn, 503, "orchestrator_unavailable", "Orchestrator is unavailable. Try again in a moment.")
+
+  def render(conn, :already_running),
+    do: error(conn, 409, "already_running", "An agent is already running on this issue.")
+
+  def render(conn, :no_slots),
+    do: error(conn, 503, "no_slots", "No orchestrator slots are available right now.")
+
+  def render(conn, :not_dispatchable),
+    do:
+      error(
+        conn,
+        422,
+        "not_dispatchable",
+        "This issue is not in an active, routable state for agent dispatch."
+      )
+
   def render(conn, :invalid_merge_method),
     do: error(conn, 422, "invalid_merge_method", "Merge method must be merge, squash, or rebase.")
 

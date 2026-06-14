@@ -64,12 +64,32 @@ defmodule SymphonyElixir.AgentExecution do
   def list(orchestrator, snapshot_timeout_ms) do
     case Orchestrator.snapshot(orchestrator, snapshot_timeout_ms) do
       %{running: _running, retrying: _retrying} = snapshot ->
-        from_snapshot(snapshot) ++ interrupted_executions(snapshot)
+        snapshot
+        |> executions_from_snapshot()
+        |> dedupe_executions()
 
       _other ->
         []
     end
   end
+
+  defp executions_from_snapshot(snapshot) do
+    from_snapshot(snapshot) ++ interrupted_executions(snapshot)
+  end
+
+  defp dedupe_executions(executions) when is_list(executions) do
+    executions
+    |> Enum.group_by(& &1.issue_identifier)
+    |> Enum.map(fn {_identifier, group} -> Enum.min_by(group, &status_priority(&1.status)) end)
+  end
+
+  defp status_priority(:aborted), do: 0
+  defp status_priority(:error), do: 1
+  defp status_priority(:retrying), do: 2
+  defp status_priority(:waiting), do: 3
+  defp status_priority(:live), do: 4
+  defp status_priority(:idle), do: 5
+  defp status_priority(_status), do: 6
 
   @doc "Projects a raw orchestrator snapshot into agent execution views."
   @spec from_snapshot(map()) :: [t()]
@@ -91,25 +111,27 @@ defmodule SymphonyElixir.AgentExecution do
   defp running_execution(entry, now) do
     last_event_at = Map.get(entry, :last_codex_timestamp)
     goal = execution_goal(entry)
+    status = running_status(entry, last_event_at, now)
+    interrupted? = status == :idle and running_entry_interrupted?(entry)
 
     %{
       issue_id: issue_id(entry),
       issue_identifier: entry.identifier,
-      status: running_status(entry, last_event_at, now),
+      status: if(interrupted?, do: :aborted, else: status),
       agent_kind: Map.get(entry, :agent_kind),
       session_id: Map.get(entry, :session_id),
-      last_event: Map.get(entry, :last_codex_event),
-      last_message: Map.get(entry, :last_codex_message),
+      last_event: running_last_event(entry, interrupted?),
+      last_message: running_last_message(entry, interrupted?),
       last_event_at: last_event_at,
       turn_count: Map.get(entry, :turn_count, 0),
       runtime_seconds: Map.get(entry, :runtime_seconds),
       started_at: Map.get(entry, :started_at),
       retry_attempt: 0,
-      error: nil,
+      error: if(interrupted?, do: interrupted_error_message(), else: nil),
       goal: goal,
-      long_running: not is_nil(goal),
-      long_running_kind: long_running_kind(goal),
-      long_running_label: long_running_label(goal),
+      long_running: not is_nil(goal) and not interrupted?,
+      long_running_kind: if(interrupted?, do: nil, else: long_running_kind(goal)),
+      long_running_label: if(interrupted?, do: nil, else: long_running_label(goal)),
       tokens: %{
         input: Map.get(entry, :agent_input_tokens, 0),
         output: Map.get(entry, :agent_output_tokens, 0),
@@ -117,6 +139,35 @@ defmodule SymphonyElixir.AgentExecution do
       }
     }
   end
+
+  defp running_last_event(_entry, true), do: "turn_aborted"
+  defp running_last_event(entry, false), do: Map.get(entry, :last_codex_event)
+
+  defp running_last_message(_entry, true),
+    do: "Agent run interrupted — resume from the session log"
+
+  defp running_last_message(entry, false), do: Map.get(entry, :last_codex_message)
+
+  defp interrupted_error_message,
+    do: "Agent run interrupted — use Resume in the execution panel"
+
+  defp running_entry_interrupted?(entry) do
+    subject = Map.get(entry, :issue) || identifier(entry)
+    agent_kind = Map.get(entry, :agent_kind) || issue_agent_kind(subject)
+
+    with false <- is_nil(subject),
+         workspace when is_binary(workspace) <- Workspace.path_for_issue(subject),
+         true <- File.dir?(workspace),
+         {:ok, kind, path} <- SessionLog.resolve_log_source(agent_kind || "codex", workspace) do
+      session_log_interrupted?(kind, path)
+    else
+      _ -> false
+    end
+  end
+
+  defp issue_agent_kind(%{agent_kind: kind}) when is_binary(kind) and kind != "", do: kind
+  defp issue_agent_kind(%{labels: labels}) when is_list(labels), do: AgentRouting.label_agent_kind(labels)
+  defp issue_agent_kind(_issue), do: "codex"
 
   defp retry_execution(entry) do
     error = format_failure(Map.get(entry, :error))
