@@ -124,13 +124,30 @@ setup:
         fi
     tracker:
       field_states:
-        - To Do
+        - Backlog
+        - BLOCKED BY CUSTOMER
+        - Selected for Development
         - Em andamento
+        - READY FOR QA
+        - IN QA
+        - Revisão de pares
+        - Ready for Deploy
+        - CUSTOMER APPROVAL
+        - Concluído
+        - Won't Do
+        - To Do
         - Done
       active_states:
-        - To Do
+        - Selected for Development
         - Em andamento
+        - To Do
+      dispatch_states:
+        - Selected for Development
+      wait_states:
+        - Revisão de pares
       terminal_states:
+        - Concluído
+        - Won't Do
         - Done
     source_control:
       branch_pattern: "symphony/{issue}"
