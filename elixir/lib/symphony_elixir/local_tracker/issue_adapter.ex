@@ -118,6 +118,38 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
     Context.add_comment(slug, identifier, body, attrs)
   end
 
+  @impl true
+  def update_comment(%Project{slug: slug}, identifier, comment_id, body) do
+    with {:ok, id} <- local_comment_id(comment_id),
+         {:ok, comment} <- Context.update_issue_comment(slug, identifier, id, body) do
+      {:ok, comment}
+    else
+      {:error, :comment_not_found} -> {:error, :comment_not_found}
+      {:error, :not_found} -> {:error, :comment_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  def delete_comment(%Project{slug: slug}, identifier, comment_id) do
+    with {:ok, id} <- local_comment_id(comment_id),
+         {:ok, comment} <- Context.delete_issue_comment(slug, identifier, id) do
+      {:ok, comment}
+    else
+      {:error, :comment_not_found} -> {:error, :comment_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp local_comment_id(id) when is_integer(id), do: {:ok, id}
+
+  defp local_comment_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {comment_id, ""} -> {:ok, comment_id}
+      _ -> {:error, :comment_not_found}
+    end
+  end
+
   @spec to_dto(IssueRecord.t()) :: IssueDTO.t()
   def to_dto(%IssueRecord{} = issue) do
     IssueDTO.build(%{

@@ -152,6 +152,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   @doc """
   Edits an existing JIRA issue comment in place (workpad updates).
   """
+  @impl true
   @spec update_comment(Project.t(), String.t(), String.t(), String.t()) ::
           {:ok, map()} | {:error, term()}
   def update_comment(%Project{} = _project, identifier, remote_id, body) when is_binary(body) do
@@ -160,6 +161,15 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
     case request(:put, "/rest/api/3/issue/#{identifier}/comment/#{remote_id}", payload) do
       {:ok, %{"id" => _} = comment} -> {:ok, normalize_comment(comment)}
       {:ok, _response} -> {:ok, %{remote_id: remote_id, body: body, author: nil, remote_updated_at: nil}}
+      error -> {:error, map_error(error)}
+    end
+  end
+
+  @impl true
+  @spec delete_comment(Project.t(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def delete_comment(%Project{} = _project, identifier, remote_id) do
+    case request(:delete, "/rest/api/3/issue/#{identifier}/comment/#{remote_id}") do
+      {:ok, _response} -> {:ok, %{id: remote_id}}
       error -> {:error, map_error(error)}
     end
   end

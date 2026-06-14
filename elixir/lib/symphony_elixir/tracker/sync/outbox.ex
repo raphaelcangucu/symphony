@@ -84,6 +84,23 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
   end
 
   @doc """
+  Drops pending/in-flight outbox entries for a locally deleted comment that never
+  reached the remote (no `remote_id` yet).
+  """
+  @spec discard_comment_entries(integer(), integer()) :: :ok
+  def discard_comment_entries(project_id, comment_id) when is_integer(project_id) and is_integer(comment_id) do
+    OutboxEntry
+    |> where(
+      [e],
+      e.project_id == ^project_id and e.entity_type == "comment" and e.status in ["pending", "in_flight"] and
+        fragment("json_extract(?, '$.comment_id') = ?", e.payload, ^comment_id)
+    )
+    |> Repo.delete_all()
+
+    :ok
+  end
+
+  @doc """
   Requeues failed `issue:create` entries for local issues that still need a
   remote issue. This is intentionally narrow: board loads can safely retry
   creates that were blocked by transient credentials/rate-limit failures without

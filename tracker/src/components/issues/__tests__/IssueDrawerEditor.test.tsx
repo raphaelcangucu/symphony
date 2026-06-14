@@ -124,7 +124,7 @@ describe("IssueDrawer editor button", () => {
 
     render(<IssueDrawer issue={issue} projectSlug="macro-markets" view="board" open onOpenChange={() => {}} />);
 
-    const trigger = await screen.findByRole("button", { name: /open in vs code/i });
+    const trigger = await screen.findByRole("button", { name: /open in code/i });
     await waitFor(() => expect(trigger).toBeEnabled());
     await user.click(trigger);
     await user.click(await screen.findByRole("menuitem", { name: /vs code/i }));
@@ -136,7 +136,7 @@ describe("IssueDrawer editor button", () => {
     );
   });
 
-  it("opens Cursor Desktop when installed and the workspace is ready", async () => {
+  it("opens Cursor when installed and the workspace is ready", async () => {
     useIssueEditorMock.mockReturnValue({
       browser: { available: false, url: null, reason: "disabled" },
       cursorDesktop: {
@@ -152,9 +152,9 @@ describe("IssueDrawer editor button", () => {
 
     render(<IssueDrawer issue={issue} projectSlug="macro-markets" view="board" open onOpenChange={() => {}} />);
 
-    const trigger = await screen.findByRole("button", { name: /open in vs code/i });
+    const trigger = await screen.findByRole("button", { name: /open in code/i });
     await user.click(trigger);
-    await user.click(await screen.findByRole("menuitem", { name: /cursor desktop/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /^cursor$/i }));
 
     expect(linkClick).toHaveBeenCalled();
     const anchor = linkClick.mock.contexts[0] as HTMLAnchorElement;
@@ -174,8 +174,8 @@ describe("IssueDrawer editor button", () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);
 
     render(<IssueDrawer issue={issue} projectSlug="macro-markets" view="board" open onOpenChange={() => {}} />);
-    await screen.findByRole("button", { name: /open in vs code/i });
-    await waitFor(() => expect(screen.getByRole("button", { name: /open in vs code/i })).toBeEnabled());
+    await screen.findByRole("button", { name: /open in code/i });
+    await waitFor(() => expect(screen.getByRole("button", { name: /open in code/i })).toBeEnabled());
 
     fireEvent.keyDown(window, { key: "." });
 

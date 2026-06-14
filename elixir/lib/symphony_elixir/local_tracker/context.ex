@@ -512,6 +512,42 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec fetch_issue_comment(String.t(), String.t(), integer()) ::
+          {:ok, Comment.t()} | {:error, :comment_not_found | missing_error()}
+  def fetch_issue_comment(project_slug, identifier, comment_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(comment_id) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      case Repo.get_by(Comment, id: comment_id, issue_id: issue.id) do
+        %Comment{} = comment -> {:ok, comment}
+        nil -> {:error, :comment_not_found}
+      end
+    end
+  end
+
+  @spec update_issue_comment(String.t(), String.t(), integer(), String.t()) ::
+          {:ok, Comment.t()} | {:error, :comment_not_found | :not_found | Ecto.Changeset.t() | missing_error()}
+  def update_issue_comment(project_slug, identifier, comment_id, body)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(comment_id) and is_binary(body) do
+    with {:ok, comment} <- fetch_issue_comment(project_slug, identifier, comment_id),
+         {:ok, updated} <- update_comment(comment.id, body) do
+      {:ok, updated}
+    else
+      {:error, :not_found} -> {:error, :comment_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec delete_issue_comment(String.t(), String.t(), integer()) ::
+          {:ok, Comment.t()} | {:error, :comment_not_found | missing_error()}
+  def delete_issue_comment(project_slug, identifier, comment_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(comment_id) do
+    with {:ok, comment} <- fetch_issue_comment(project_slug, identifier, comment_id),
+         {:ok, deleted} <- Repo.delete(comment) do
+      {:ok, deleted}
+    end
+  end
+
   @doc """
   Returns the newest workpad comment for an issue, or `{:error, :not_found}`.
   """

@@ -60,6 +60,8 @@ defmodule SymphonyElixir.Tracker.Sync.EngineSeedTest do
     def list_comments(_project, _identifier), do: {:ok, []}
     @impl true
     def add_comment(_project, _identifier, _body, _opts), do: {:error, :not_supported_on_remote}
+    def update_comment(_project, _identifier, _comment_id, _body), do: {:error, :not_supported_on_remote}
+    def delete_comment(_project, _identifier, _comment_id), do: {:error, :not_supported_on_remote}
   end
 
   setup do

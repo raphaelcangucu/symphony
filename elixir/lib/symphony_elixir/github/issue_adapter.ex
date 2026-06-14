@@ -272,6 +272,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   Edits an existing issue comment in place (workpad updates). `remote_id` is the
   comment id returned when it was created (GraphQL node id or REST numeric id).
   """
+  @impl true
   @spec update_comment(Project.t(), String.t(), String.t(), String.t()) ::
           {:ok, map()} | {:error, term()}
   def update_comment(%Project{} = project, identifier, remote_id, body) do
@@ -281,6 +282,21 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
         case IssueComments.update(repo, remote_id, body) do
           {:ok, comment} -> {:ok, comment}
+          error -> {:error, map_error(error)}
+        end
+
+      {:error, reason} ->
+        {:error, map_error(reason)}
+    end
+  end
+
+  @impl true
+  @spec delete_comment(Project.t(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def delete_comment(%Project{} = project, identifier, remote_id) do
+    case resolve_issue_repo(project, identifier) do
+      {:ok, repo} ->
+        case IssueComments.delete(repo, remote_id) do
+          :ok -> {:ok, %{id: remote_id}}
           error -> {:error, map_error(error)}
         end
 

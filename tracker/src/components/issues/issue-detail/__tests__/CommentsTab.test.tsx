@@ -26,6 +26,8 @@ describe("CommentsTab image paste", () => {
         error={null}
         projectSlug="gamba"
         onAddComment={vi.fn()}
+        onUpdateComment={vi.fn()}
+        onDeleteComment={vi.fn()}
       />,
     );
 

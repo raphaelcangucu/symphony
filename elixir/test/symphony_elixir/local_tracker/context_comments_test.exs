@@ -36,6 +36,17 @@ defmodule SymphonyElixir.LocalTracker.ContextCommentsTest do
     assert {:error, :not_found} = Context.update_comment(999_999, "body")
   end
 
+  test "delete_issue_comment removes the comment", %{project: project, issue: issue} do
+    {:ok, comment} = Context.add_comment(project.slug, issue.identifier, "to delete", %{})
+    assert {:ok, deleted} = Context.delete_issue_comment(project.slug, issue.identifier, comment.id)
+    assert deleted.id == comment.id
+    assert {:ok, []} = Context.list_comments(project.slug, issue.identifier)
+  end
+
+  test "delete_issue_comment for an unknown id returns not_found", %{project: project, issue: issue} do
+    assert {:error, :comment_not_found} = Context.delete_issue_comment(project.slug, issue.identifier, 999_999)
+  end
+
   test "latest_workpad returns the newest workpad comment", %{project: project, issue: issue} do
     {:ok, _} = Context.add_comment(project.slug, issue.identifier, "plain", %{})
     {:ok, wp} = Context.add_comment(project.slug, issue.identifier, "## Codex Workpad\nv1", %{})

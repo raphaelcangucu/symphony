@@ -23,6 +23,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :issue_not_found), do: not_found(conn, "issue_not_found", "Issue not found")
   def render(conn, :status_not_found), do: not_found(conn, "status_not_found", "Status not found")
   def render(conn, :blocker_not_found), do: not_found(conn, "blocker_not_found", "Blocker not found")
+  def render(conn, :comment_not_found), do: not_found(conn, "comment_not_found", "Comment not found")
   def render(conn, :dev_server_not_found), do: not_found(conn, "dev_server_not_found", "Dev server not found")
   def render(conn, :template_not_found), do: not_found(conn, "template_not_found", "Template not found")
 

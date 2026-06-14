@@ -50,6 +50,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
     def list_comments(_project, _id), do: {:ok, []}
     @impl true
     def add_comment(_project, _id, _body, _attrs), do: {:error, :not_supported_on_remote}
+    def update_comment(_project, _id, _comment_id, _body), do: {:error, :not_supported_on_remote}
+    def delete_comment(_project, _id, _comment_id), do: {:error, :not_supported_on_remote}
   end
 
   setup do

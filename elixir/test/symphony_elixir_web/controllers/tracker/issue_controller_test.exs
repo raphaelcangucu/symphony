@@ -151,8 +151,26 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
 
     list_comments_conn = get(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues/MAC-1/comments")
 
-    assert %{"data" => [%{"body" => "Needs review", "author" => "api"}]} =
+    assert %{"data" => [%{"body" => "Needs review", "author" => "api", "id" => comment_id}]} =
              json_response(list_comments_conn, 200)
+
+    update_comment_conn =
+      authorized_conn()
+      |> patch("/api/tracker/v1/projects/macro-markets/issues/MAC-1/comments/#{comment_id}", %{
+        "body" => "Updated review"
+      })
+
+    assert %{"data" => %{"body" => "Updated review", "id" => ^comment_id}} =
+             json_response(update_comment_conn, 200)
+
+    delete_comment_conn =
+      authorized_conn()
+      |> delete("/api/tracker/v1/projects/macro-markets/issues/MAC-1/comments/#{comment_id}")
+
+    assert response(delete_comment_conn, 204)
+
+    list_after_delete_conn = get(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues/MAC-1/comments")
+    assert %{"data" => []} = json_response(list_after_delete_conn, 200)
 
     blocker_conn =
       authorized_conn()
@@ -355,6 +373,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
 
     def list_comments(_p, _i), do: {:error, :not_supported_on_remote}
     def add_comment(_p, _i, _b, _a), do: {:error, :not_supported_on_remote}
+    def update_comment(_p, _i, _c, _b), do: {:error, :not_supported_on_remote}
+    def delete_comment(_p, _i, _c), do: {:error, :not_supported_on_remote}
   end
 
   defmodule FakeCreatingAdapter do
@@ -389,6 +409,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     def list_assignable_users(_p), do: {:ok, []}
     def list_comments(_p, _i), do: {:error, :not_supported_on_remote}
     def add_comment(_p, _i, _b, _a), do: {:error, :not_supported_on_remote}
+    def update_comment(_p, _i, _c, _b), do: {:error, :not_supported_on_remote}
+    def delete_comment(_p, _i, _c), do: {:error, :not_supported_on_remote}
   end
 
   describe "remote project dispatch" do

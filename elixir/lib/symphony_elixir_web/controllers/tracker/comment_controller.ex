@@ -35,4 +35,27 @@ defmodule SymphonyElixirWeb.Tracker.CommentController do
   end
 
   def create(conn, _params), do: TrackerErrors.validation(conn, "body is required")
+
+  @spec update(Conn.t(), map()) :: Conn.t()
+  def update(conn, %{"project_slug" => project_slug, "identifier" => identifier, "comment_id" => comment_id, "body" => body})
+      when is_binary(body) and body != "" do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, comment} <- IssueAdapter.dispatch(project, :update_comment, [identifier, comment_id, body]) do
+      json(conn, %{data: TrackerPresenter.comment(comment)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def update(conn, _params), do: TrackerErrors.validation(conn, "body is required")
+
+  @spec delete(Conn.t(), map()) :: Conn.t()
+  def delete(conn, %{"project_slug" => project_slug, "identifier" => identifier, "comment_id" => comment_id}) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _comment} <- IssueAdapter.dispatch(project, :delete_comment, [identifier, comment_id]) do
+      send_resp(conn, :no_content, "")
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
 end

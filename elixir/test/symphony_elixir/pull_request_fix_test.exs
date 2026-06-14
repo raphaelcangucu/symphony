@@ -23,6 +23,9 @@ defmodule SymphonyElixir.PullRequestFixTest do
       {:ok, %{id: "c1", body: body}}
     end
 
+    def update_comment(_p, _i, _c, _b), do: {:error, :not_supported_on_remote}
+    def delete_comment(_p, _i, _c), do: {:error, :not_supported_on_remote}
+
     def move_issue(_p, _i, attrs) do
       send(self(), {:moved, attrs})
       {:ok, %{id: "i1"}}

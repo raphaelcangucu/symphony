@@ -50,6 +50,10 @@ defmodule SymphonyElixir.Tracker.IssueAdapter do
   @callback list_comments(Project.t(), String.t()) :: {:ok, [map()]} | {:error, tracker_error()}
   @callback add_comment(Project.t(), String.t(), String.t(), map()) ::
               {:ok, map()} | {:error, tracker_error()}
+  @callback update_comment(Project.t(), String.t(), term(), String.t()) ::
+              {:ok, map()} | {:error, tracker_error()}
+  @callback delete_comment(Project.t(), String.t(), term()) ::
+              {:ok, map()} | {:error, tracker_error()}
 
   @default_adapters %{
     "local" => SymphonyElixir.LocalTracker.IssueAdapter,

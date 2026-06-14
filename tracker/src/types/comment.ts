@@ -15,3 +15,7 @@ export interface Comment {
 export interface CreateCommentInput {
   body: string;
 }
+
+export interface UpdateCommentInput {
+  body: string;
+}

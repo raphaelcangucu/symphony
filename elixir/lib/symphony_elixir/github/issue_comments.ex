@@ -76,6 +76,19 @@ defmodule SymphonyElixir.GitHub.IssueComments do
     end
   end
 
+  @doc """
+  Deletes an existing GitHub issue comment. `remote_id` is the comment's GraphQL
+  node id or REST numeric id.
+  """
+  @spec delete(String.t() | nil, String.t() | nil, keyword()) :: :ok | {:error, term()}
+  def delete(repo, remote_id, opts \\ []) do
+    if is_binary(repo) and is_binary(remote_id) and remote_id != "" do
+      Api.delete_comment(repo, remote_id, opts)
+    else
+      {:error, :invalid_arguments}
+    end
+  end
+
   @doc false
   @spec parse_node(map() | nil) :: comment() | nil
   def parse_node(%{"body" => body} = node) when is_binary(body) do

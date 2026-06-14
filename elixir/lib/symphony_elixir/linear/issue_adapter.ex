@@ -99,6 +99,12 @@ defmodule SymphonyElixir.Linear.IssueAdapter do
   @impl true
   def add_comment(%Project{} = _project, _identifier, _body, _attrs), do: {:error, :not_supported_on_remote}
 
+  @impl true
+  def update_comment(%Project{} = _project, _identifier, _comment_id, _body), do: {:error, :not_supported_on_remote}
+
+  @impl true
+  def delete_comment(%Project{} = _project, _identifier, _comment_id), do: {:error, :not_supported_on_remote}
+
   defp run_query(query, variables) do
     case client().graphql(query, variables, []) do
       {:ok, %{"errors" => errors}} when is_list(errors) and errors != [] ->

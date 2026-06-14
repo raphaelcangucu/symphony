@@ -177,10 +177,9 @@ export function IssueDrawer({
 
   const commentsCount = commentsState.comments.length;
   const blockersCount = issue?.blockedBy.length ?? 0;
-  const showBrowserEditor = editor.browser.reason !== "disabled";
   const anyEditorAvailable = editor.browser.available || editor.cursorDesktop.available;
   const editorMenuTitle = editor.browser.available
-    ? "Open this task's workspace in VS Code (.)"
+    ? "Open this task's workspace in Code (.)"
     : editorUnavailableTitle(editor.browser.reason ?? editor.cursorDesktop.reason, editor.loading);
 
   return (
@@ -212,39 +211,37 @@ export function IssueDrawer({
                           size="sm"
                           disabled={!anyEditorAvailable && !editor.loading}
                           title={editorMenuTitle}
-                          aria-label="Open in VS Code"
+                          aria-label="Open in Code"
                         >
                           <Code2 className="h-4 w-4" />
-                          <span className="hidden sm:inline">VS Code</span>
+                          <span className="hidden sm:inline">Code</span>
                           <ChevronDown className="h-4 w-4 opacity-60" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-44">
-                        {showBrowserEditor ? (
-                          <DropdownMenuItem
-                            disabled={!editor.browser.available}
-                            title={
-                              editor.browser.available
-                                ? "Open in VS Code (browser)"
-                                : editorUnavailableTitle(editor.browser.reason, editor.loading)
-                            }
-                            onSelect={() => openBrowserEditor()}
-                          >
-                            <Code2 className="mr-2 h-4 w-4" />
-                            VS Code
-                          </DropdownMenuItem>
-                        ) : null}
+                        <DropdownMenuItem
+                          disabled={!editor.browser.available}
+                          title={
+                            editor.browser.available
+                              ? "Open in VS Code (browser)"
+                              : editorUnavailableTitle(editor.browser.reason, editor.loading)
+                          }
+                          onSelect={() => openBrowserEditor()}
+                        >
+                          <Code2 className="mr-2 h-4 w-4" />
+                          VS Code
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={!editor.cursorDesktop.available}
                           title={
                             editor.cursorDesktop.available
-                              ? "Open in Cursor Desktop (local app)"
+                              ? "Open in Cursor (local app)"
                               : editorUnavailableTitle(editor.cursorDesktop.reason, editor.loading)
                           }
                           onSelect={() => openCursorDesktop()}
                         >
                           <Code2 className="mr-2 h-4 w-4" />
-                          Cursor Desktop
+                          Cursor
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -415,6 +412,8 @@ export function IssueDrawer({
                     error={commentsState.error}
                     projectSlug={projectSlug}
                     onAddComment={commentsState.addComment}
+                    onUpdateComment={commentsState.updateComment}
+                    onDeleteComment={commentsState.deleteComment}
                   />
                 </TabsContent>
                 <TabsContent value="evidence">
