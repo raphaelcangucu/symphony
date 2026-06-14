@@ -9,6 +9,12 @@ interface StepDto {
   position?: number;
   source: DevEnvStep["source"];
   optional?: boolean;
+  role?: DevEnvStep["role"];
+  primary?: boolean;
+  port_env?: string | null;
+  url_path?: string | null;
+  ready_probe?: DevEnvStep["readyProbe"];
+  ready_path?: string | null;
 }
 
 interface StepRunDto {
@@ -36,6 +42,12 @@ function normalizeStep(dto: StepDto): DevEnvStep {
     position: dto.position,
     source: dto.source,
     optional: dto.optional ?? false,
+    role: dto.role ?? "setup",
+    primary: dto.primary ?? false,
+    portEnv: dto.port_env ?? null,
+    urlPath: dto.url_path ?? "/",
+    readyProbe: dto.ready_probe ?? "tcp",
+    readyPath: dto.ready_path ?? "/",
   };
 }
 
@@ -46,6 +58,12 @@ function denormalizeStep(step: DevEnvStep): Record<string, unknown> {
     working_dir: step.workingDir,
     source: step.source,
     optional: step.optional,
+    role: step.role,
+    primary: step.primary,
+    port_env: step.portEnv,
+    url_path: step.urlPath,
+    ready_probe: step.readyProbe,
+    ready_path: step.readyPath,
   };
 }
 

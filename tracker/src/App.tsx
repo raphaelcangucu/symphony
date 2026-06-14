@@ -5,7 +5,6 @@ import { Toaster } from "sonner";
 import { ViewerProvider } from "@/components/auth/ViewerProvider";
 import { Layout } from "@/components/layout/Layout";
 import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
-import { ProjectDevEnvRoute } from "@/components/projects/ProjectDevEnvRoute";
 import { NewProjectRoute } from "@/components/projects/NewProjectRoute";
 import { ProjectFiltersRoute } from "@/components/projects/ProjectFiltersRoute";
 import { IssueAssistantRoute } from "@/components/workspace/IssueAssistantRoute";
@@ -57,7 +56,6 @@ export function App() {
             <Route path="projects" element={<ProjectListPage />}>
               <Route path="new" element={<NewProjectRoute />} />
               <Route path="filters" element={<ProjectFiltersRoute />} />
-              <Route path=":projectSlug/dev-env" element={<ProjectDevEnvRoute />} />
               <Route path=":projectSlug/edit" element={<EditToSettingsRedirect />} />
             </Route>
             <Route path="projects/:projectSlug" element={<ProjectWorkspaceLayout />}>

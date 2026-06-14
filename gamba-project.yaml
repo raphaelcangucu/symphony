@@ -33,8 +33,18 @@ dev_env_steps:
     source: "manual"
     url_path: "/"
     working_dir: "backend"
-  - command: "test -x ./vendor/bin/sail || docker run --rm --pull=always --platform linux/amd64 -v \"$(pwd)\":/opt -w /opt raphaelcangucu/php82sqlite3:latest bash -c \"composer install --ignore-platform-reqs && cp -n .env.example .env && php ./artisan sail:install --with=redis,pgsql,memcached,selenium,mailpit\""
-    description: "Install backend deps + Sail when vendor/bin/sail is missing"
+  - command: "test -x ./vendor/bin/sail || (docker run --rm --pull=always --platform linux/amd64 -v \"$(pwd)\":/opt -w /opt raphaelcangucu/php82sqlite3:latest bash -c \"composer install --ignore-platform-reqs && cp -n .env.example .env && php ./artisan sail:install --with=redis,pgsql,memcached,selenium,mailpit --no-interaction\" && ./vendor/bin/sail pull pgsql redis memcached selenium mailpit && ./vendor/bin/sail build)"
+    description: "Bootstrap Sail (composer + sail:install + pull/build) when vendor/bin/sail missing"
+    optional: true
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "backend"
+  - command: "sudo chown -R \"$USER:$USER\" storage bootstrap/cache || true"
+    description: "Fix storage/bootstrap/cache ownership after Docker/Sail (avoids permission denied in logs)"
     optional: true
     primary: false
     ready_path: "/"
@@ -63,8 +73,8 @@ dev_env_steps:
     source: "manual"
     url_path: "/"
     working_dir: "backend"
-  - command: "./vendor/bin/sail up -d"
-    description: "Backend Laravel API (Sail)"
+  - command: "./vendor/bin/sail up -d --no-deps laravel.test"
+    description: "Backend Laravel API (Sail app only; shared services via vibe)"
     optional: false
     port_env: "APP_PORT"
     primary: false
@@ -402,10 +412,11 @@ setup:
     | Install frontend deps | setup | `frontend/` | `yarn install` |
     | Nuxt dev server | serve (primary) | `frontend/` | `yarn dev -- --host 0.0.0.0` |
     | Backend .env | setup (optional) | `backend/` | `test -f .env \|\| cp .env.example .env` |
-    | Backend install | setup (optional) | `backend/` | `test -x ./vendor/bin/sail \|\| docker run … composer install --ignore-platform-reqs …` |
+    | Backend install | setup (optional) | `backend/` | Sail bootstrap: `composer install` + `sail:install` + `sail pull/build` (see Makefile) |
+    | Storage permissions | setup (optional) | `backend/` | `sudo chown -R $USER:$USER storage bootstrap/cache \|\| true` |
     | Shared Docker | setup | `backend/` | `./vibe shared up` |
     | Migrations | setup (optional) | `backend/` | `test -x ./vendor/bin/sail && ./vendor/bin/sail artisan migrate --seed \|\| true` |
-    | Laravel API | serve | `backend/` | `./vendor/bin/sail up -d` |
+    | Laravel API | serve | `backend/` | `./vendor/bin/sail up -d --no-deps laravel.test` |
     | GoAPI .env | setup (optional) | `goapi/` | `test -f .env \|\| cp .env.example .env` |
     | GoAPI build | setup (optional) | `goapi/` | `make build-local` |
     | GoAPI server | serve | `goapi/` | `make run-local` |

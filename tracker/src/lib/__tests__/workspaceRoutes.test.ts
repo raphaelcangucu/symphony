@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   agentSectionFromSearchParams,
   DEFAULT_ISSUE_TAB,
-  devEnvPath,
   filtersPath,
   isIssueTab,
   isBoardPath,
@@ -38,7 +37,6 @@ describe("workspaceRoutes", () => {
   it("builds modal paths", () => {
     expect(newIssuePath("acme", "board")).toBe("/projects/acme/board/new-issue");
     expect(filtersPath("acme", "list")).toBe("/projects/acme/list/filters");
-    expect(devEnvPath("acme", "board")).toBe("/projects/acme/board/dev-env");
   });
 
   it("builds assistant issue authoring paths", () => {

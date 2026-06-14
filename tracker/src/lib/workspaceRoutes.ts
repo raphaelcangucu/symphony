@@ -60,19 +60,11 @@ export function filtersPath(projectSlug: string, view: WorkspaceView): string {
   return `${workspaceBasePath(projectSlug, view)}/filters`;
 }
 
-export function devEnvPath(projectSlug: string, view: WorkspaceView): string {
-  return `${workspaceBasePath(projectSlug, view)}/dev-env`;
-}
-
-export function projectsDevEnvPath(projectSlug: string): string {
-  return `${PROJECTS_PATH}/${requireSlug(projectSlug)}/dev-env`;
-}
-
 export function projectEditPath(projectSlug: string): string {
   return `${PROJECTS_PATH}/${requireSlug(projectSlug)}/edit`;
 }
 
-export const PROJECT_SETTINGS_TABS = ["general", "tracker", "workflow"] as const;
+export const PROJECT_SETTINGS_TABS = ["general", "tracker", "workflow", "dev"] as const;
 
 export type ProjectSettingsTab = (typeof PROJECT_SETTINGS_TABS)[number];
 
@@ -85,7 +77,6 @@ const LEGACY_WORKFLOW_SETTINGS_TABS = new Set([
   "hooks",
   "workspace",
   "editor",
-  "dev",
   "github",
 ]);
 

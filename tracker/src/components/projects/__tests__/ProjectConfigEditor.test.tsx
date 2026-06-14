@@ -1,17 +1,37 @@
 import "@testing-library/jest-dom/vitest";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ProjectConfigEditor } from "@/components/projects/ProjectConfigEditor";
+import * as devEnv from "@/services/devEnv";
 import * as projects from "@/services/projects";
 import * as projectSetup from "@/services/projectSetup";
 import * as remote from "@/services/remoteTrackers";
+import type { DevEnvStep } from "@/types/devEnv";
 import type { Project } from "@/types/project";
 
 vi.mock("@/services/projects");
 vi.mock("@/services/projectSetup");
 vi.mock("@/services/remoteTrackers");
+vi.mock("@/services/devEnv");
+
+function devStep(overrides: Partial<DevEnvStep> = {}): DevEnvStep {
+  return {
+    description: "",
+    command: "",
+    workingDir: null,
+    source: "manual",
+    optional: false,
+    role: "setup",
+    primary: false,
+    portEnv: null,
+    urlPath: "/",
+    readyProbe: "tcp",
+    readyPath: "/",
+    ...overrides,
+  };
+}
 
 const workflowMarkdown = `---
 tracker:
@@ -40,6 +60,10 @@ function project(overrides: Partial<Project> = {}): Project {
 }
 
 describe("ProjectConfigEditor", () => {
+  beforeEach(() => {
+    vi.mocked(devEnv.listDevEnvSteps).mockResolvedValue([]);
+    vi.mocked(devEnv.saveDevEnvSteps).mockResolvedValue([]);
+  });
   afterEach(() => vi.clearAllMocks());
 
   it("hydrates the workflow editor from workflow_markdown", async () => {
@@ -110,6 +134,49 @@ describe("ProjectConfigEditor", () => {
     expect(projects.updateProjectRepositories).toHaveBeenCalledWith("macro-markets", [
       expect.objectContaining({ fullName: "acme/web", workspacePath: "acme/web-app" }),
     ]);
+  });
+
+  it("renders the dev environment tab grouped by repository", async () => {
+    vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
+    vi.mocked(devEnv.listDevEnvSteps).mockResolvedValue([]);
+    const withRepos = project({
+      repositories: [
+        { fullName: "acme/web", workspacePath: "web", role: "frontend", selectedBranch: "main" },
+        { fullName: "acme/api", workspacePath: "api", role: "backend", selectedBranch: "main" },
+      ],
+    });
+
+    render(<ProjectConfigEditor project={withRepos} onSaved={vi.fn()} activeTab="dev" />);
+
+    expect(await screen.findByText("acme/web")).toBeInTheDocument();
+    expect(screen.getByText("acme/api")).toBeInTheDocument();
+    await waitFor(() => expect(devEnv.listDevEnvSteps).toHaveBeenCalledWith("macro-markets"));
+  });
+
+  it("saves dev steps together with the project configuration in repository order", async () => {
+    vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
+    const withRepos = project({
+      repositories: [
+        { fullName: "acme/web", workspacePath: "web", role: "frontend", selectedBranch: "main" },
+        { fullName: "acme/api", workspacePath: "api", role: "backend", selectedBranch: "main" },
+      ],
+    });
+    vi.mocked(devEnv.listDevEnvSteps).mockResolvedValue([
+      devStep({ id: "1", description: "API", command: "go run", workingDir: "api", role: "serve" }),
+      devStep({ id: "2", description: "Web", command: "yarn dev", workingDir: "web", role: "serve" }),
+    ]);
+    vi.mocked(devEnv.saveDevEnvSteps).mockImplementation(async (_slug, steps) => steps);
+    vi.mocked(projects.updateProject).mockResolvedValue(withRepos);
+    vi.mocked(projects.updateProjectSetup).mockResolvedValue(withRepos);
+
+    render(<ProjectConfigEditor project={withRepos} onSaved={vi.fn()} activeTab="dev" />);
+
+    await screen.findByDisplayValue("yarn dev");
+    await userEvent.click(screen.getByRole("button", { name: /save configuration/i }));
+
+    await waitFor(() => expect(devEnv.saveDevEnvSteps).toHaveBeenCalledTimes(1));
+    const savedSteps = vi.mocked(devEnv.saveDevEnvSteps).mock.calls[0][1];
+    expect(savedSteps.map((s) => s.workingDir)).toEqual(["web", "api"]);
   });
 
   it("does not save when the name is empty", async () => {
