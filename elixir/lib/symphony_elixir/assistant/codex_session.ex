@@ -7,6 +7,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.{AgentPreference, InstanceConfig, ProjectConfig, Repo, Settings, Skills, Workspace}
+  alias SymphonyElixir.Settings.Orchestration
 
   @history_limit 20
 
@@ -201,6 +202,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Answer naturally in the user's language. Use tracker tools only when the user asks for tracker data or a concrete tracker action.
     Prefer get_issue, get_project, list_project_repositories, get_template, list_templates, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
     Project workflow markdown lives in the database (use get_workflow). Do not expect WORKFLOW.md in the workspace; read_workspace_file redirects that path to project settings.
+    For orchestrator/dispatch questions: call get_workflow and read tracker.dispatch_states (queue for new auto-runs), active_states (polled), terminal_states, wait_states in data.config — not board status categories from get_project. Follow the workflow skill when editing workflow YAML.
     For GitHub Projects use list_github_projects, provision_github_project, or create_github_tracker_project — or github_graphql — with Symphony's server GITHUB_TOKEN. Do not run gh/curl in the shell for tracker setup.
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
     Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_pull_requests, manage_preview (start/stop/restart/status), update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_project, list_project_repositories, get_workflow, read_workspace_file.
@@ -364,11 +366,26 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     do: ProjectExploreWorkspace.ensure(project_slug, opts)
 
   defp build_project_explore_prompt(project_slug, message, context, history) do
+    orchestrator_summary = orchestrator_config_summary(project_slug)
+
     """
     You are the Symphony project explore assistant for `#{project_slug}`.
     You are running inside the project's working tree. The repositories are cloned here on their default integration branches.
     Behave like a real conversational coding assistant. Answer naturally in the user's language.
-    Help the user understand the codebase, architecture, and conventions. Read and search files as needed.
+    Help the user understand the codebase, architecture, conventions, and Symphony project configuration.
+    Read and search files as needed.
+
+    Workflow and orchestrator (Symphony tracker):
+    - Project workflow lives in the database — call get_workflow, not WORKFLOW.md in the repo.
+    - get_project status categories (unstarted/started/completed) are board UI metadata; they do NOT define orchestrator dispatch.
+    - Orchestrator reads YAML front matter: tracker.dispatch_states (queue for NEW auto-runs), tracker.active_states (polled candidates), tracker.wait_states, tracker.terminal_states.
+    - Global gates: require_symphony_label and require_assignee_match (Settings).
+    - When changing dispatch behavior, use update_project_workflow and preserve/update the tracker.* YAML keys — body prose alone does not change auto-dispatch.
+    - Follow the workflow skill for full contract and debugging steps.
+
+    #{orchestrator_summary}
+
+    Tools: get_workflow, get_project, list_project_repositories, get_template, list_templates, read_workspace_file, list_issues, get_issue, update_project_workflow, update_project_repositories, and other tracker tools when needed.
     Do not create or update tracker issues unless the user explicitly asks. Do not dispatch Codex execution unless asked.
     Do not post issue comments - your replies are shown to the user directly in this chat.
     Prefer answering questions and exploring the code over making changes; only edit files when the user clearly wants that.
@@ -383,6 +400,27 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     #{message}
     """
     |> String.trim()
+  end
+
+  defp orchestrator_config_summary(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        project = Repo.preload(project, :setup)
+        config = ProjectConfig.resolve(project)
+
+        """
+        Resolved orchestrator config for `#{project_slug}` (from stored workflow YAML):
+        - dispatch_states (new auto-runs): #{inspect(config.dispatch_states)}
+        - active_states (polled): #{inspect(config.active_states)}
+        - wait_states: #{inspect(config.wait_states)}
+        - terminal_states: #{inspect(config.terminal_states)}
+        - require_symphony_label: #{Orchestration.require_symphony_label?()}
+        - require_assignee_match: #{Orchestration.require_assignee_match?()}
+        """
+
+      _ ->
+        ""
+    end
   end
 
   defp build_freeform_prompt(message, context, history) do

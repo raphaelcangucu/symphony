@@ -248,6 +248,14 @@ setup:
 
     ## Workflow
 
+    Status contract (orchestrator + agent):
+
+    - **Selected for Development**: queue; Symphony auto-dispatches here. On your first turn, call `set_issue_status` to move to **Em andamento** before coding.
+    - **Em andamento**: active implementation.
+    - **Revisão de pares**: PR ready for human review (move here when handoff is complete).
+    - **READY FOR QA** / **IN QA** / **Ready for Deploy**: post-review pipeline (humans or QA move these).
+    - **Concluído**: done.
+
     - Sync before handoff: `cd advising && git fetch origin && git merge origin/pre-release`.
     - Open the PR against `pre-release`:
       `cd advising && gh pr create --base pre-release --title "{{ issue.identifier }}: ..."`.
