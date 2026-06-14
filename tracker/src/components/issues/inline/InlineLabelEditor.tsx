@@ -1,10 +1,10 @@
-import { Check, Plus, Tag, X } from "lucide-react";
+import { Check, Plus, Search, Tag, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { labelDotClass } from "@/components/board/label-colors";
 import { resolveLabelColor, resolveLabelDisplay } from "@/lib/labelDisplay";
+import { isSymphonyLabelName, matchesPickerSearch, sortLabelPickerItems } from "@/lib/pickerOptions";
 import { cn } from "@/lib/utils";
-import { userVisibleLabels } from "@/lib/symphonyLabels";
 import type { IssueLabelOption } from "@/types/issue";
 
 interface InlineLabelEditorProps {
@@ -46,20 +46,27 @@ export function InlineLabelEditor({
   saving = false,
   onSave,
 }: InlineLabelEditorProps) {
-  const visibleLabels = useMemo(() => userVisibleLabels(labels), [labels]);
-  // Stable value-key so the sync effect below only runs when the labels' content
-  // changes — depending on `visibleLabels` (a fresh array each render) would make
-  // the effect call setDraft on every render and loop infinitely.
-  const visibleLabelsKey = visibleLabels.join("\u0000");
+  const selectedLabels = useMemo(
+    () => labels.filter((label) => label.trim() !== ""),
+    [labels],
+  );
+  // Stable value-key so the sync effect below only runs when label content changes.
+  const selectedLabelsKey = selectedLabels.join("\u0000");
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<string[]>(visibleLabels);
+  const [draft, setDraft] = useState<string[]>(selectedLabels);
+  const [searchQuery, setSearchQuery] = useState("");
   const [customLabel, setCustomLabel] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!open) setDraft(visibleLabels);
+    if (!open) {
+      setDraft(selectedLabels);
+      setSearchQuery("");
+      setCustomLabel("");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, visibleLabelsKey]);
+  }, [open, selectedLabelsKey]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -71,6 +78,7 @@ export function InlineLabelEditor({
     }
 
     window.addEventListener("mousedown", handlePointerDown);
+    requestAnimationFrame(() => searchRef.current?.focus());
     return () => window.removeEventListener("mousedown", handlePointerDown);
   }, [open]);
 
@@ -89,8 +97,13 @@ export function InlineLabelEditor({
       }
     }
 
-    return items;
+    return sortLabelPickerItems(items);
   }, [draft, options]);
+
+  const filteredOptionItems = useMemo(
+    () => optionItems.filter((item) => matchesPickerSearch(searchQuery, item.label, item.value)),
+    [optionItems, searchQuery],
+  );
 
   function toggle(value: string) {
     setDraft((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
@@ -105,7 +118,7 @@ export function InlineLabelEditor({
 
   async function commit() {
     const next = canonicalizeDraftLabels([...draft], options);
-    const current = canonicalizeDraftLabels(visibleLabels, options);
+    const current = canonicalizeDraftLabels(selectedLabels, options);
     const unchanged = next.length === current.length && next.every((label) => current.includes(label));
     if (unchanged) {
       setOpen(false);
@@ -129,20 +142,26 @@ export function InlineLabelEditor({
         )}
       >
         <div className="flex flex-wrap items-center gap-1.5">
-          {visibleLabels.length === 0 ? (
+          {selectedLabels.length === 0 ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <Tag className="h-3.5 w-3.5" />
               Add labels
             </span>
           ) : (
-            visibleLabels.map((label) => {
+            selectedLabels.map((label) => {
               const displayName = resolveLabelDisplay(label, options);
               const hex = normalizeHexColor(resolveLabelColor(label, options));
+              const symphony = isSymphonyLabelName(displayName) || isSymphonyLabelName(label);
               return (
                 <span
                   key={label}
                   title={displayName}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-xs font-medium text-foreground"
+                  className={cn(
+                    "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                    symphony
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border/60 bg-card text-foreground",
+                  )}
                 >
                   {hex ? (
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: hex }} aria-hidden="true" />
@@ -165,13 +184,26 @@ export function InlineLabelEditor({
       {open ? (
         <div className="absolute left-0 right-0 z-20 mt-2 overflow-hidden rounded-xl border border-border/70 bg-popover p-3 shadow-lg">
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Labels</div>
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              ref={searchRef}
+              value={searchQuery}
+              placeholder="Search labels…"
+              aria-label="Search labels"
+              className="h-8 w-full rounded-md border border-border/70 bg-background pl-8 pr-2.5 text-xs outline-none ring-0 focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/15"
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+          </div>
           {optionsLoading ? (
             <p className="text-xs text-muted-foreground">Loading labels…</p>
-          ) : optionItems.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Type a label name below to add one.</p>
+          ) : filteredOptionItems.length === 0 ? (
+            <p className="mb-3 text-xs text-muted-foreground">
+              {searchQuery.trim() ? "No labels match your search." : "Type a label name below to add one."}
+            </p>
           ) : (
             <div className="mb-3 flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
-              {optionItems.map((item) => {
+              {filteredOptionItems.map((item) => {
                 const active = draft.includes(item.value);
                 const hex = normalizeHexColor(item.color);
                 return (
@@ -203,6 +235,7 @@ export function InlineLabelEditor({
             <input
               value={customLabel}
               placeholder="New label"
+              aria-label="New label"
               className="h-8 flex-1 rounded-md border border-border/70 bg-background px-2.5 text-xs outline-none ring-0 focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/15"
               onChange={(event) => setCustomLabel(event.target.value)}
               onKeyDown={(event) => {
