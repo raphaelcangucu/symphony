@@ -50,6 +50,18 @@ export function isInternalAttachmentUrl(src: string | null | undefined): boolean
   return src.includes(`${API_PREFIX}/projects/`) && src.includes(ATTACHMENT_PATH_SEGMENT);
 }
 
+export function isVideoMediaType(mediaType: string | null | undefined): boolean {
+  if (typeof mediaType !== "string" || mediaType.length === 0) return false;
+  return mediaType.startsWith("video/");
+}
+
+export function isVideoAttachmentSource(src: string | null | undefined): boolean {
+  if (typeof src !== "string" || src.length === 0) return false;
+
+  const path = src.split("?")[0]?.split("#")[0] ?? src;
+  return /\.(webm|mp4)$/i.test(path);
+}
+
 const objectUrlCache = new Map<string, Promise<string>>();
 
 /**

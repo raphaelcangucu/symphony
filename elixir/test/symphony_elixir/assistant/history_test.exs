@@ -46,6 +46,35 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert same_thread.workspace_path == "/tmp/assistant/macro-markets"
   end
 
+  test "append_message survives sqlite write lock contention" do
+    {:ok, _project} = Context.ensure_project(%{name: "Gamba", slug: "gamba"})
+    {:ok, thread} = History.ensure_thread("gamba", %{workspace_path: "/tmp/assistant/gamba"})
+    parent = self()
+
+    lock_holder =
+      spawn(fn ->
+        Repo.checkout(fn ->
+          Ecto.Adapters.SQL.query!(Repo, "BEGIN IMMEDIATE", [])
+          send(parent, :write_lock_held)
+          receive do :release_write_lock -> :ok end
+          Ecto.Adapters.SQL.query!(Repo, "COMMIT", [])
+        end)
+      end)
+
+    assert_receive :write_lock_held
+
+    append_task =
+      Task.async(fn ->
+        History.append_message(thread, %{role: "user", content: "queued while sync writes"})
+      end)
+
+    Process.sleep(50)
+    send(lock_holder, :release_write_lock)
+
+    assert {:ok, %Message{} = message} = Task.await(append_task, 10_000)
+    assert message.content == "queued while sync writes"
+  end
+
   test "appends messages with stable sequence and returns project history in order" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, thread} = History.ensure_thread("macro-markets", %{workspace_path: "/tmp/assistant/macro-markets"})

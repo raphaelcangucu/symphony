@@ -14,6 +14,7 @@ import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
+import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
@@ -45,7 +46,7 @@ import {
   type AssistantIssueCreatedPayload,
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
-import { projectAttachmentUrl } from "@/services/attachments";
+import { isVideoAttachmentSource, isVideoMediaType, projectAttachmentUrl } from "@/services/attachments";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { AgentKind } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
@@ -934,7 +935,17 @@ function AttachmentPreview({
 
   if (type === "file" && path) {
     if (projectSlug?.trim()) {
-      return <AttachmentFileChip src={projectAttachmentUrl(projectSlug, path)} name={name} />;
+      const src = projectAttachmentUrl(projectSlug, path);
+      if (isVideoMediaType(mediaType) || isVideoAttachmentSource(name) || isVideoAttachmentSource(path)) {
+        return (
+          <figure className="max-w-full space-y-1">
+            <AttachmentVideo src={src} label={name} className="max-h-40 max-w-full rounded-lg border object-contain" />
+            <figcaption className="truncate text-[11px] text-muted-foreground">{name}</figcaption>
+          </figure>
+        );
+      }
+
+      return <AttachmentFileChip src={src} name={name} />;
     }
 
     return (

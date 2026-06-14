@@ -240,9 +240,11 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
-  @spec append_message(Thread.t(), attrs()) :: {:ok, Message.t()} | {:error, Ecto.Changeset.t()}
+  @append_message_retry_attempts 5
+
+  @spec append_message(Thread.t(), attrs()) :: {:ok, Message.t()} | {:error, Ecto.Changeset.t() | term()}
   def append_message(%Thread{id: thread_id} = thread, attrs) when is_integer(thread_id) and is_map(attrs) do
-    append_message_with_retry(thread, attrs, 3)
+    append_message_with_retry(thread, attrs, @append_message_retry_attempts)
   end
 
   @spec copy_messages_to_empty_thread(Thread.t(), [Message.t() | map()]) :: {:ok, Thread.t()} | {:error, term()}
@@ -497,12 +499,13 @@ defmodule SymphonyElixir.Assistant.History do
   defp filter_archived(query, _), do: where(query, [t], t.status != "archived")
 
   defp append_message_with_retry(thread, attrs, attempts_left) do
-    case append_message_once(thread, attrs) do
-      {:error, changeset} when attempts_left > 1 ->
-        if unique_sequence_error?(changeset) do
+    case catch_append_message_once(thread, attrs) do
+      {:error, reason} when attempts_left > 1 ->
+        if append_message_retryable?(reason) do
+          Process.sleep(append_message_retry_backoff(attempts_left))
           append_message_with_retry(thread, attrs, attempts_left - 1)
         else
-          {:error, changeset}
+          {:error, reason}
         end
 
       result ->
@@ -510,19 +513,31 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
-  defp append_message_once(%Thread{id: thread_id} = thread, attrs) do
-    Repo.transaction(fn ->
-      next_sequence = next_sequence(thread)
+  defp catch_append_message_once(thread, attrs) do
+    try do
+      append_message_once(thread, attrs)
+    catch
+      :error, %Exqlite.Error{} = reason ->
+        {:error, reason}
+    end
+  end
 
-      attrs
-      |> normalize_message_attrs()
-      |> Map.merge(%{thread_id: thread_id, sequence: next_sequence})
-      |> insert_message()
-      |> case do
-        {:ok, message} -> message
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-    end)
+  defp append_message_once(%Thread{id: thread_id} = thread, attrs) do
+    Repo.transaction(
+      fn ->
+        next_sequence = next_sequence(thread)
+
+        attrs
+        |> normalize_message_attrs()
+        |> Map.merge(%{thread_id: thread_id, sequence: next_sequence})
+        |> insert_message()
+        |> case do
+          {:ok, message} -> message
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end,
+      mode: :immediate
+    )
   end
 
   defp create_thread(project_slug, attrs) do
@@ -597,6 +612,15 @@ defmodule SymphonyElixir.Assistant.History do
     attrs
     |> Map.take([:git])
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+  end
+
+  defp append_message_retryable?(%Ecto.Changeset{} = changeset), do: unique_sequence_error?(changeset)
+  defp append_message_retryable?(%Exqlite.Error{message: "Database busy"}), do: true
+  defp append_message_retryable?(_reason), do: false
+
+  defp append_message_retry_backoff(attempts_left) do
+    base = 25 * (@append_message_retry_attempts - attempts_left + 1)
+    base + :rand.uniform(50)
   end
 
   defp unique_sequence_error?(%Ecto.Changeset{errors: errors}) do

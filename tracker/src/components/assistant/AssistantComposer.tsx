@@ -19,6 +19,7 @@ import {
 } from "@/components/assistant/assistantAttachments";
 import { matchingSlashCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
 import { uploadAssistantAttachment } from "@/services/assistant";
+import { isVideoMediaType } from "@/services/attachments";
 import { extractFilesFromClipboard } from "@/lib/clipboardImages";
 import { Button } from "@/components/ui/button";
 import {
@@ -459,6 +460,30 @@ export function AssistantComposer({
                       src={attachment.previewUrl}
                       alt={attachment.name}
                       className="h-16 w-16 rounded-lg border object-cover"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove ${attachment.name}`}
+                      onClick={() => removeAttachment(attachment.id)}
+                      className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              }
+
+              if (attachment.type === "file" && attachment.previewUrl && isVideoMediaType(attachment.mediaType)) {
+                return (
+                  <div key={attachment.id} className="group relative">
+                    {/* eslint-disable-next-line jsx-a11y/media-has-caption -- composer preview has no captions */}
+                    <video
+                      src={attachment.previewUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      aria-label={attachment.name}
+                      className="h-24 w-40 rounded-lg border bg-black/5 object-contain"
                     />
                     <button
                       type="button"

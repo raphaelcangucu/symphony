@@ -3,7 +3,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
-import { isInternalAttachmentUrl } from "@/services/attachments";
+import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
+import { isInternalAttachmentUrl, isVideoAttachmentSource } from "@/services/attachments";
 import { isAssistantWorkspaceMarkdownHref } from "@/services/threadDocuments";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,17 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
 
             if (isAssistantWorkspaceMarkdownHref(href)) {
               return <span className="font-medium text-primary underline underline-offset-2">{linkChildren}</span>;
+            }
+
+            if (href && isInternalAttachmentUrl(href) && isVideoAttachmentSource(href)) {
+              const label = linkText(linkChildren) || "video";
+              return (
+                <AttachmentVideo
+                  src={href}
+                  label={label}
+                  className="my-2 max-h-80 w-auto max-w-full rounded-lg border object-contain"
+                />
+              );
             }
 
             return (
@@ -69,4 +81,15 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
       </ReactMarkdown>
     </div>
   );
+}
+
+function linkText(children: ReactNode): string {
+  if (typeof children === "string") return children.trim();
+  if (typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(linkText).join("").trim();
+  if (children && typeof children === "object" && "props" in children) {
+    const props = (children as { props?: { children?: ReactNode } }).props;
+    return linkText(props?.children);
+  }
+  return "";
 }
