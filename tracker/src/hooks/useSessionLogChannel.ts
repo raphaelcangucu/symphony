@@ -18,6 +18,7 @@ interface UseSessionLogChannelResult {
   entries: SessionLogEntry[];
   error: string | null;
   logAgentKind: string | null;
+  preferredAgentKind: string | null;
   logFallback: boolean;
   steerTurn: (message: string) => void;
   steerError: string | null;
@@ -42,6 +43,7 @@ export function useSessionLogChannel({
   const [steerError, setSteerError] = useState<string | null>(null);
   const [steerPending, setSteerPending] = useState(false);
   const [logAgentKind, setLogAgentKind] = useState<string | null>(null);
+  const [preferredAgentKind, setPreferredAgentKind] = useState<string | null>(null);
   const [logFallback, setLogFallback] = useState(false);
   const channelRef = useRef<Channel | null>(null);
 
@@ -55,6 +57,7 @@ export function useSessionLogChannel({
       setSteerError(null);
       setSteerPending(false);
       setLogAgentKind(null);
+      setPreferredAgentKind(null);
       setLogFallback(false);
       channelRef.current = null;
       return undefined;
@@ -63,7 +66,10 @@ export function useSessionLogChannel({
     const socket = createTrackerSocket();
     socket.connect();
 
-    const channel = socket.channel(sessionLogTopic(project, identifier), { project_slug: project });
+    const joinParams: Record<string, string> = { project_slug: project };
+    const preferredKind = agentKind?.trim();
+    if (preferredKind) joinParams.agent_kind = preferredKind;
+    const channel = socket.channel(sessionLogTopic(project, identifier), joinParams);
     channelRef.current = channel;
     let cancelled = false;
 
@@ -96,6 +102,9 @@ export function useSessionLogChannel({
         setEntries(payloadEntries(payload));
         const record = payload as Record<string, unknown>;
         setLogAgentKind(typeof record.agent_kind === "string" ? record.agent_kind : null);
+        setPreferredAgentKind(
+          typeof record.preferred_agent_kind === "string" ? record.preferred_agent_kind : null,
+        );
         setLogFallback(record.log_fallback === true);
       })
       .receive("error", (reason) => {
@@ -138,6 +147,7 @@ export function useSessionLogChannel({
     entries,
     error,
     logAgentKind,
+    preferredAgentKind,
     logFallback,
     steerTurn,
     steerError,

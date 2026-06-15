@@ -185,7 +185,7 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
         entries={sessionLog.entries}
         error={sessionLog.error}
         logAgentKind={sessionLog.logAgentKind}
-        preferredAgentKind={issue.agentKind}
+        preferredAgentKind={sessionLog.preferredAgentKind ?? execution?.agentKind ?? issue.agentKind}
       />
 
       <Separator />

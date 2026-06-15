@@ -68,11 +68,31 @@ defmodule SymphonyElixir.Terminal.Tmux do
   @spec capture_pane(String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def capture_pane(session_name) when is_binary(session_name) do
     case run(["capture-pane", "-t", session_name, "-p", "-S", "-2000"]) do
-      {output, 0} -> {:ok, output}
+      {output, 0} -> {:ok, normalize_captured_output(output)}
       {output, _status} -> {:error, error_message(output)}
     end
   rescue
     error in ErlangError -> {:error, Exception.message(error)}
+  end
+
+  # Detached sessions resized to match the browser viewport leave many blank
+  # lines below the prompt. xterm renders the full capture and scrolls to the
+  # end, so the UI looks empty even though the shell is healthy.
+  defp normalize_captured_output(output) when is_binary(output) do
+    output
+    |> String.split("\n", trim: false)
+    |> trim_trailing_blank_lines()
+    |> case do
+      [] -> ""
+      lines -> Enum.join(lines, "\n")
+    end
+  end
+
+  defp trim_trailing_blank_lines(lines) do
+    lines
+    |> Enum.reverse()
+    |> Enum.drop_while(&(String.trim(&1) == ""))
+    |> Enum.reverse()
   end
 
   @spec kill_session(String.t()) :: command_result()
