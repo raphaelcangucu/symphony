@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -67,6 +67,12 @@ vi.mock("@/services/projects", () => ({
   listProjects: vi.fn(() => Promise.resolve(projects)),
 }));
 
+const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/issueDispatch", () => ({
+  dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
+}));
+
 const prMonitorData: PrMonitorObservability = {
   heartbeat: {
     running: true,
@@ -99,6 +105,8 @@ describe("ObservabilityPage", () => {
     runtimes = [macroRuntime];
     projects = [macroProject];
     prMonitor = prMonitorData;
+    dispatchIssueAgentMock.mockReset();
+    dispatchIssueAgentMock.mockResolvedValue({ action: "stop", message: "ok", issue: {} });
   });
 
   it("renders a runtime card and the global sessions table row", async () => {
@@ -133,6 +141,41 @@ describe("ObservabilityPage", () => {
 
     expect(screen.queryByRole("link", { name: "508" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "9" })).toBeInTheDocument();
+  });
+
+  it("pauses a running session directly", async () => {
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("link", { name: "508" });
+    await userEvent.click(screen.getByRole("button", { name: /pause/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith("macro-markets", "508", { action: "stop" }),
+    );
+  });
+
+  it("requires confirmation before hard resetting a session", async () => {
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("link", { name: "508" });
+    await userEvent.click(screen.getByRole("button", { name: /hard reset/i }));
+
+    expect(dispatchIssueAgentMock).not.toHaveBeenCalled();
+
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: /hard reset/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith("macro-markets", "508", { action: "hard_reset" }),
+    );
   });
 
   it("renders the PR monitor heartbeat and evaluation row", async () => {

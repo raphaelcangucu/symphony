@@ -72,6 +72,23 @@ defmodule SymphonyElixir.IssueDispatchTest do
     assert updated.status.name == "In Progress"
   end
 
+  test "stop pauses the run but preserves the agent session and status", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, record} = Context.set_agent_session_id("pref", issue.identifier, "thread-keep")
+
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, result} = IssueDispatch.stop(project, issue.identifier, %{})
+    assert result.action == "stop"
+    assert result.message =~ issue.identifier
+
+    # Session is intentionally kept so the issue can be resumed later.
+    assert Repo.get!(IssueRecord, record.id).agent_session_id == "thread-keep"
+
+    {:ok, updated} = Context.get_issue("pref", issue.identifier)
+    assert updated.status.name == "In Progress"
+  end
+
   test "resume moves non-active issues into a dispatchable status", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "Done"})
     {:ok, project} = Context.get_project("pref")

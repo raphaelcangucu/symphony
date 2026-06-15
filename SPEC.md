@@ -1180,6 +1180,25 @@ Optional client-side tool extension:
 - Return the GraphQL response or error payload as structured tool output that the model can inspect
   in-session.
 
+Tracker-agnostic execution-session tools:
+
+- In execution (coding-agent) runs, the runtime should additionally advertise a small set of
+  issue-bound, tracker-agnostic client-side tools that operate on the issue currently bound to the
+  session and route through the local-first tracker boundary (write locally, sync to the project's
+  real tracker — Jira / Linear / GitHub — in the background). These avoid forcing the agent to pick a
+  tracker-specific tool (e.g. `linear_graphql`) on a non-Linear project just to record progress.
+- Recommended standardized tools:
+  - `set_issue_status` — move the bound issue to a workflow status on the local-first board.
+  - `add_comment` — add a comment to the bound issue (used to create the `## Codex Workpad`).
+  - `list_comments` — list the bound issue's comments (used to find the existing workpad `id`).
+  - `update_comment` — edit a comment on the bound issue by `id` (used to update the workpad in
+    place rather than posting duplicates).
+- Availability: meaningful for any tracker kind, since they target the local-first board rather than
+  a specific remote API. They require an issue to be bound to the session; otherwise they return a
+  failure result and continue the session.
+- These tools are exposed to execution runs only (not to the project-chat assistant surface), which
+  has its own project-scoped tool set.
+
 Illustrative responses (equivalent payload shapes are acceptable if they preserve the same outcome):
 
 ```json

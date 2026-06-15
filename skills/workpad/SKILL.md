@@ -55,14 +55,21 @@ makes the association immediate.
 
 ## Creating / updating
 
-Use the tracker tool available in your session:
+Use the **tracker-agnostic** comment tools available in your execution session.
+They write to Symphony's local-first board and sync to the project's real
+tracker (Jira / Linear / GitHub) in the background — so they work the same way
+regardless of which tracker backs the project. Do NOT reach for
+`linear_graphql` on a non-Linear (e.g. Jira) project, and do not hunt for a CLI.
 
-- Local-first projects (Linear/GitHub/Jira synced): create or update the
-  comment through the project's comment mechanism (`add_comment` API /
-  `linear_graphql` `commentCreate`-`commentUpdate` / `gh issue comment` with
-  `--edit-last` for updates). Symphony syncs it to the remote tracker.
-- To update: fetch the existing workpad comment id first; only create a new
-  comment when none exists.
+- **Create** the workpad with `add_comment` (body must start with
+  `## Codex Workpad`). Keep the returned comment `id`.
+- **Update in place**: call `list_comments` to find the existing
+  `## Codex Workpad` comment's `id`, then `update_comment` with that `id`.
+  Only `add_comment` when no workpad exists yet — never post a second one.
+
+`linear_graphql` (Linear) and `gh issue comment` (GitHub) remain available as
+tracker-specific escape hatches, but the `add_comment` / `list_comments` /
+`update_comment` tools are the correct default for every project.
 
 ## No-op outcome
 

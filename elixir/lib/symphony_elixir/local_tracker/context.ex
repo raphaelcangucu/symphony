@@ -371,10 +371,11 @@ defmodule SymphonyElixir.LocalTracker.Context do
       with {:ok, updated} <-
              issue
              |> IssueRecord.changeset(changes)
-             |> Repo.update()
-             |> sync_agent_routing_label_result(project.id, fetch_agent_attr(attrs)),
-           {:ok, labeled} <- maybe_replace_user_labels(updated, project.id, label_names),
-           {:ok, issue} <- preload_issue_result({:ok, labeled}) do
+             |> Repo.update(),
+           {:ok, _labeled} <- maybe_replace_labels(updated, project.id, label_names),
+           {:ok, _routed} <-
+             sync_agent_routing_label_result({:ok, updated}, project.id, fetch_agent_attr(attrs)),
+           {:ok, issue} <- fetch_issue_by_id(updated.id) do
         tap_issue_event({:ok, issue}, "issue_updated", %{status: status.name})
       end
     end
@@ -1552,12 +1553,17 @@ defmodule SymphonyElixir.LocalTracker.Context do
     LabelResolver.resolve_names(project, names)
   end
 
-  defp maybe_replace_user_labels(issue, _project_id, nil), do: {:ok, issue}
+  # nil means the caller did not touch labels at all (no-op). A list — even an
+  # empty one — is treated as the authoritative full label set for the issue,
+  # so the inline label editor can also remove symphony:* labels. The agent
+  # routing label is reapplied afterwards by sync_agent_routing_label_result/3
+  # whenever the request explicitly carries an "agent" attribute.
+  defp maybe_replace_labels(issue, _project_id, nil), do: {:ok, issue}
 
-  defp maybe_replace_user_labels(%IssueRecord{} = issue, project_id, label_names)
+  defp maybe_replace_labels(%IssueRecord{} = issue, project_id, label_names)
        when is_integer(project_id) and is_list(label_names) do
-    with :ok <- delete_user_labels(issue.id),
-         :ok <- attach_user_labels(issue.id, project_id, label_names),
+    with :ok <- delete_all_issue_labels(issue.id),
+         :ok <- attach_labels(issue.id, project_id, label_names),
          {:ok, reloaded} <- fetch_issue_by_id(issue.id) do
       {:ok, reloaded}
     end
@@ -1570,28 +1576,12 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
-  defp delete_user_labels(issue_id) do
-    label_ids_to_delete =
-      IssueLabel
-      |> join(:inner, [issue_label], label in Label, on: issue_label.label_id == label.id)
-      |> where([issue_label], issue_label.issue_id == ^issue_id)
-      |> select([issue_label, label], {issue_label.label_id, label.name})
-      |> Repo.all()
-      |> Enum.reject(fn {_id, name} -> system_label?(name) end)
-      |> Enum.map(fn {label_id, _name} -> label_id end)
-
-    if label_ids_to_delete != [] do
-      Repo.delete_all(
-        from(issue_label in IssueLabel,
-          where: issue_label.issue_id == ^issue_id and issue_label.label_id in ^label_ids_to_delete
-        )
-      )
-    end
-
+  defp delete_all_issue_labels(issue_id) do
+    Repo.delete_all(from(issue_label in IssueLabel, where: issue_label.issue_id == ^issue_id))
     :ok
   end
 
-  defp attach_user_labels(issue_id, project_id, label_names) do
+  defp attach_labels(issue_id, project_id, label_names) do
     Enum.reduce_while(label_names, :ok, fn label_name, :ok ->
       with {:ok, label} <- ensure_label(project_id, label_name),
            {:ok, _issue_label} <- ensure_issue_label_idempotent(issue_id, label.id) do
@@ -1601,12 +1591,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
       end
     end)
   end
-
-  defp system_label?(name) when is_binary(name) do
-    String.match?(String.downcase(String.trim(name)), ~r/^symphony(?::.*)?$/)
-  end
-
-  defp system_label?(_name), do: false
 
   defp preload_relation_result({:ok, %IssueRelation{} = relation}) do
     {:ok, Repo.preload(relation, [:source_issue, :target_issue])}
