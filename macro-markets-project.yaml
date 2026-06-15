@@ -44,7 +44,7 @@ dev_env_steps:
     working_dir: "back"
 kind: "symphony_project"
 metadata:
-  exported_at: "2026-06-15T16:54:58Z"
+  exported_at: "2026-06-15T17:09:09Z"
   source_project_slug: "macro-markets"
 name: "Macro Markets"
 repositories:
@@ -112,91 +112,30 @@ setup:
     - "cd back && ./vibe test"
   workflow_markdown: |
     ---
-    github:
-      repo: clouapp/front
-      project:
-        mode: existing
-        id: "PVT_kwDOCpPais4BY509"
-      comment_context_limit: 30
-      # Base label; issues with symphony, symphony:codex, or symphony:claude are admitted.
-      admission_label: symphony
-    # The tracker UI can create issues directly on this GitHub board (the "New issue"
-    # modal supports labels, assignees, and a Codex/Claude agent selector).
-    #
-    # To dogfood the local tracker UI/API against this workflow instead of GitHub,
-    # remove the `github:` section and uncomment:
-    #
-    # local:
-    #   database_path: .symphony/tracker.sqlite3
-    #   project_slug: macro-markets
-    #   api_token_env: SYMPHONY_TRACKER_TOKEN
-    tracker:
-      field_states:
-        - Backlog
-        - Planning
-        - Todo
-        - In Progress
-        - Human Review
-        - Rework
-        - Merging
-        - Done
-        - Cancelled
-        - Duplicate
-      active_states:
-        - Todo
-        - In Progress
-        - Rework
-        - Merging
-      dispatch_states:
-        - Todo
-      wait_states:
-        - Human Review
-      terminal_states:
-        - Done
-        - Cancelled
-        - Duplicate
-    polling:
-      interval_ms: 5000
+    agent:
+      completion_transitions:
+        In Progress: Human Review
+        Merging: Done
+        Rework: Human Review
+        Todo: Human Review
+      max_concurrent_agents: 5
+      max_turns: 20
     assistant:
-      # Draft issues created by the New issue assistant start here. Default is
-      # Triage; this board uses Planning for assistant spec/plan/handoff work.
       draft_status: Planning
-    # Report this process's orchestrator snapshot to a central observability hub.
-    # observability:
-    #   hub_url: http://localhost:4000      # where this process reports to; OMIT on the hub process itself (it self-registers in-process)
-    #   heartbeat_interval_ms: 5000         # liveness ping interval
-    #   min_report_interval_ms: 250         # coalesce window for burst updates
-    #   label: macro-markets                # human-friendly name shown on the observability page
-    #   # runtime_id: macro-markets-1       # optional stable id; defaults to the workflow file path
-    # Browser VS Code (code-server) for task workspaces. Disabled by default.
-    # Requires code-server installed on the host. auth: none is only safe on localhost.
-    # Set enabled: true after `make install-code-server`.
-    editor:
-      enabled: true
-      binary: code-server   # binary name on PATH, or an absolute path
-      host: 127.0.0.1
-      port: 4002
-      auth: none            # "none" (localhost only) or "password"
-      # password: your-password               # required when auth: password
-      # base_url: https://editor.example.com  # browser-facing URL override (remote/proxy)
-    # Issue preview dev servers. Requires at least one `.symphony/devenv.yaml`
-    # step with `role: serve` in a workspace repository.
+    claude:
+      command: claude
+    codex:
+      approval_policy: never
+      command: codex --config shell_environment_policy.inherit=all app-server
+      thread_sandbox: workspace-write
+      turn_sandbox_policy:
+        type: workspaceWrite
     dev_server:
       enabled: true
-      port_range: [4100, 4199]
       idle_timeout_ms: 1800000
-      # Omit auto_start_on for manual-only previews (Start Preview in the tracker).
-      # auto_start_on: pull_request,human_review
-      # base_url: https://previews.example.com  # optional proxy-facing base URL
-    # Public preview tunnel (Cloudflare). Exposes the tracker and ready dev-server
-    # previews publicly via a named tunnel. Previews become UNAUTHENTICATED to anyone
-    # with the URL once enabled.
-    public_tunnel:
-      enabled: true
-      base_domain: tracker.cods.dev
-      # namespace: raphaelcangucu   # defaults to the GitHub login when unset
-    workspace:
-      root: ~/code/macro-markets-workspaces
+      port_range:
+        - 4100
+        - 4199
     hooks:
       after_create: |
         gh repo clone clouapp/front front -- --depth 1 -b homolog
@@ -241,24 +180,36 @@ setup:
         CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-85869ee1df284e998701dafe6e734c5d}
         CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
         ENV
-    agent:
-      max_concurrent_agents: 5
-      max_turns: 20
-      completion_transitions:
-        Todo: Human Review
-        In Progress: Human Review
-        Rework: Human Review
-        Merging: Done
-    codex:
-      command: codex --config shell_environment_policy.inherit=all app-server
-      # Enables the Codex-only Goal mode checkbox at dispatch time.
-      # goals_enabled: true
-      approval_policy: never
-      thread_sandbox: workspace-write
-      turn_sandbox_policy:
-        type: workspaceWrite
-    claude:
-      command: claude
+    public_tunnel:
+      base_domain: tracker.cods.dev
+      enabled: true
+    tracker:
+      active_states:
+        - Todo
+        - In Progress
+        - Rework
+        - Merging
+      dispatch_states:
+        - Todo
+      field_states:
+        - Backlog
+        - Planning
+        - Todo
+        - In Progress
+        - Human Review
+        - Rework
+        - Merging
+        - Done
+        - Cancelled
+        - Duplicate
+      terminal_states:
+        - Done
+        - Cancelled
+        - Duplicate
+      wait_states:
+        - Human Review
+    workspace:
+      root: ~/code/macro-markets-workspaces
     ---
     
     You are working on GitHub issue `{{ issue.identifier }}` in the **Macro Markets** board (`clouapp/front`).
@@ -407,7 +358,6 @@ setup:
       - That repo's tests pass for the latest commit
       - A PR is open against that repo's base branch (front → `homolog`, back → `dev`), linked on the issue, checks green where applicable
     - In **Human Review**, do not implement; wait and poll for human feedback.
-    
 slug: "macro-markets"
 tracker:
   config:

@@ -5,6 +5,8 @@ defmodule SymphonyElixir.GitHub.StateReconciliation do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.GitHub.{Client, ProjectMetadata}
+  alias SymphonyElixir.LocalTracker.{Context, Project}
+  alias SymphonyElixir.ProjectConfig
 
   @update_field_mutation """
   mutation SymphonyGitHubUpdateField($input: UpdateProjectV2FieldInput!) {
@@ -14,6 +16,23 @@ defmodule SymphonyElixir.GitHub.StateReconciliation do
           id
           name
           options { id name }
+        }
+      }
+    }
+  }
+  """
+
+  @read_status_field_query """
+  query SymphonyGitHubReadStatusField($projectId: ID!, $name: String!) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        url
+        field(name: $name) {
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+            options { id name }
+          }
         }
       }
     }
@@ -43,10 +62,36 @@ defmodule SymphonyElixir.GitHub.StateReconciliation do
   }
   """
 
-  @spec reconcile(Path.t(), map(), keyword()) :: :ok | {:error, String.t()}
+  @spec reconcile_project(Project.t(), keyword()) :: :ok | {:error, String.t()}
+  def reconcile_project(project, opts \\ [])
+
+  def reconcile_project(%Project{tracker_kind: "github", tracker_config: cfg} = project, opts) do
+    with {:ok, project_id} <- fetch_tracker_config_string(cfg, "project_id"),
+         status_field_name <- Map.get(cfg, "status_field", "Status"),
+         desired when desired != [] <- Keyword.get_lazy(opts, :desired_states, fn -> desired_states_for_project(project) end),
+         {:ok, field, project_url} <-
+           fetch_status_field(client_module(opts), project_id, status_field_name, opts) do
+      metadata = %{
+        "project_id" => project_id,
+        "project_url" => project_url || "GitHub project",
+        "status_field_id" => field["id"],
+        "status_field_name" => field["name"] || status_field_name,
+        "state_options" => field_options_to_map(field)
+      }
+
+      reconcile(nil, metadata, Keyword.put(opts, :desired_states, desired))
+    else
+      [] -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def reconcile_project(_project, _opts), do: :ok
+
+  @spec reconcile(Path.t() | nil, map(), keyword()) :: :ok | {:error, String.t()}
   def reconcile(base_dir, metadata, opts \\ []) when is_map(metadata) do
     client = client_module(opts)
-    desired = desired_states()
+    desired = Keyword.get(opts, :desired_states, desired_states())
     cached_options = metadata["state_options"] || %{}
     status_field_name = metadata["status_field_name"] || SymphonyElixir.GitHub.Config.status_field()
     field_id = metadata["status_field_id"]
@@ -141,13 +186,65 @@ defmodule SymphonyElixir.GitHub.StateReconciliation do
   end
 
   defp maybe_refresh_metadata(base_dir, metadata, updated_options, previous_options) do
-    if updated_options == previous_options do
-      :ok
-    else
-      ProjectMetadata.write!(base_dir, Map.put(metadata, "state_options", updated_options))
-      :ok
+    cond do
+      updated_options == previous_options ->
+        :ok
+
+      is_binary(base_dir) ->
+        ProjectMetadata.write!(base_dir, Map.put(metadata, "state_options", updated_options))
+        :ok
+
+      true ->
+        :ok
     end
   end
+
+  defp desired_states_for_project(%Project{} = project) do
+    local =
+      project.slug
+      |> Context.list_statuses()
+      |> Enum.sort_by(& &1.position)
+      |> Enum.map(& &1.name)
+
+    case local do
+      [_ | _] = names -> names
+      _ -> ProjectConfig.resolve(project).field_states || []
+    end
+  end
+
+  defp fetch_status_field(client, project_id, status_field_name, opts) do
+    case client.graphql(
+           @read_status_field_query,
+           %{"projectId" => project_id, "name" => status_field_name},
+           graphql_opts(opts)
+         ) do
+      {:ok, %{"data" => %{"node" => %{"url" => url, "field" => %{"id" => _} = field}}}} ->
+        {:ok, field, url}
+
+      {:ok, %{"data" => %{"node" => %{"field" => nil}}}} ->
+        {:error,
+         "GitHub Project #{inspect(status_field_name)} field not found or is not a single-select field."}
+
+      {:ok, body} ->
+        {:error, "Unexpected read status field response: #{inspect(body)}"}
+
+      {:error, reason} ->
+        {:error, "read status field failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp fetch_tracker_config_string(cfg, key) do
+    case Map.get(cfg, key) do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, "tracker_config missing #{key}"}
+    end
+  end
+
+  defp field_options_to_map(%{"options" => options}) when is_list(options) do
+    options_to_map(options)
+  end
+
+  defp field_options_to_map(_field), do: %{}
 
   defp count_items_with_state(client, project_id, field_id, status_field_name, state_name, opts) do
     count_items_page(client, project_id, field_id, status_field_name, state_name, nil, 0, opts)

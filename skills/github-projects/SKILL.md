@@ -16,6 +16,7 @@ Symphony expects the GitHub Project v2 `Status` single-select field to be the on
 
 Recommended `Status` options:
 - Backlog
+- Planning
 - Todo
 - In Progress
 - Human Review

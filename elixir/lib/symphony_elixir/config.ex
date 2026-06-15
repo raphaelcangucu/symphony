@@ -467,6 +467,30 @@ defmodule SymphonyElixir.Config do
   @forbidden_per_project_sections ~w(github linear local server observability polling editor)
 
   @doc """
+  Strips process/connection-owned sections from workflow markdown so bundles
+  round-trip through import/export. Connection identity lives in the project
+  `tracker` field; runtime settings belong in process config.
+  """
+  @spec portable_workflow_markdown(String.t()) :: String.t()
+  def portable_workflow_markdown(markdown) when is_binary(markdown) do
+    case SymphonyElixir.Workflow.parse_string(markdown) do
+      {:ok, %{config: raw, prompt: body}} when is_map(raw) ->
+        filtered =
+          Map.reject(raw, fn {key, _value} ->
+            key
+            |> to_string()
+            |> String.downcase()
+            |> then(&(&1 in @forbidden_per_project_sections))
+          end)
+
+        SymphonyElixir.Workflow.to_markdown(filtered, body || "")
+
+      _ ->
+        markdown
+    end
+  end
+
+  @doc """
   Parses per-project WORKFLOW markdown (YAML front matter + prompt body).
 
   Validates that only per-project behavior keys are present (rejecting connection
