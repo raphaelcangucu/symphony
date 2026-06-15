@@ -45,9 +45,15 @@ defmodule SymphonyElixir.Codex.Config do
 
   @spec turn_sandbox_policy(map(), Path.t() | nil) :: map()
   def turn_sandbox_policy(section \\ codex_section(), workspace \\ nil) do
-    case resolve_turn_sandbox_policy(section, workspace) do
+    thread_sandbox =
+      case resolve_thread_sandbox(section) do
+        {:ok, value} -> value
+        {:error, _} -> @default_thread_sandbox
+      end
+
+    case resolve_turn_sandbox_policy(section, workspace, thread_sandbox) do
       {:ok, value} -> value
-      {:error, _} -> default_turn_sandbox_policy(workspace)
+      {:error, _} -> default_turn_sandbox_policy(workspace, thread_sandbox)
     end
   end
 
@@ -55,7 +61,7 @@ defmodule SymphonyElixir.Codex.Config do
   def runtime_settings(section \\ codex_section(), workspace \\ nil) do
     with {:ok, ap} <- resolve_approval_policy(section),
          {:ok, ts} <- resolve_thread_sandbox(section),
-         {:ok, tsp} <- resolve_turn_sandbox_policy(section, workspace) do
+         {:ok, tsp} <- resolve_turn_sandbox_policy(section, workspace, ts) do
       {:ok,
        %{
          approval_policy: ap,
@@ -113,10 +119,10 @@ defmodule SymphonyElixir.Codex.Config do
     end
   end
 
-  defp resolve_turn_sandbox_policy(section, workspace) do
+  defp resolve_turn_sandbox_policy(section, workspace, thread_sandbox) do
     case Map.get(section, "turn_sandbox_policy") do
       nil ->
-        {:ok, default_turn_sandbox_policy(workspace)}
+        {:ok, default_turn_sandbox_policy(workspace, thread_sandbox)}
 
       value when is_map(value) ->
         {:ok, value}
@@ -126,7 +132,13 @@ defmodule SymphonyElixir.Codex.Config do
     end
   end
 
-  defp default_turn_sandbox_policy(workspace) do
+  defp default_turn_sandbox_policy(workspace, thread_sandbox)
+
+  defp default_turn_sandbox_policy(_workspace, "danger-full-access") do
+    %{"type" => "dangerFullAccess"}
+  end
+
+  defp default_turn_sandbox_policy(workspace, _thread_sandbox) do
     writable_root =
       if is_binary(workspace) and String.trim(workspace) != "" do
         Path.expand(workspace)

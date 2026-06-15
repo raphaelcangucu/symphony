@@ -134,6 +134,72 @@ describe("ExecutionControlComposer", () => {
     expect(screen.getAllByRole("button", { name: /^resume$/i })[0]).not.toBeDisabled();
   });
 
+  it("pauses an active run", async () => {
+    const onIssueUpdated = vi.fn();
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "stop",
+      message: "Paused agent run for CDE-1132",
+      issue,
+    });
+
+    const active = {
+      issueIdentifier: "CDE-1132",
+      status: "live",
+      agentKind: "codex",
+      sessionId: "sess-1",
+      lastEvent: "turn_started",
+      lastMessage: "working",
+      lastEventAt: null,
+      turnCount: 2,
+      runtimeSeconds: 120,
+      startedAt: null,
+      retryAttempt: 0,
+      error: null,
+      goal: null,
+      longRunning: false,
+      longRunningKind: null,
+      longRunningLabel: null,
+      tokens: null,
+    } satisfies AgentExecution;
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={active}
+        onSteer={vi.fn()}
+        onIssueUpdated={onIssueUpdated}
+      />,
+    );
+
+    const pauseButton = screen.getByRole("button", { name: /^pause$/i });
+    expect(pauseButton).not.toBeDisabled();
+
+    await user.click(pauseButton);
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({ action: "stop" }),
+      ),
+    );
+    expect(onIssueUpdated).toHaveBeenCalledWith(issue);
+  });
+
+  it("disables pause when no run is active", () => {
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^pause$/i })).toBeDisabled();
+  });
+
   it("hard resets the session after confirmation", async () => {
     const onIssueUpdated = vi.fn();
     dispatchIssueAgentMock.mockResolvedValue({

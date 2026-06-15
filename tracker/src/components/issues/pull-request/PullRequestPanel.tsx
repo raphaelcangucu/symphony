@@ -94,7 +94,7 @@ export function PullRequestPanel({
                 linked
               </span>
             ) : null}
-            {pr.origin === "agent" ? (
+            {pr.origin === "auto" ? (
               <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                 agent
               </span>

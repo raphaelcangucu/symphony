@@ -277,7 +277,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   defp seed_statuses(project) do
     case remote_list_statuses(project) do
-      {:ok, statuses} -> LocalStore.upsert_statuses(project, statuses)
+      {:ok, statuses} -> LocalStore.merge_remote_statuses(project, statuses)
       {:error, _reason} -> :ok
     end
   rescue

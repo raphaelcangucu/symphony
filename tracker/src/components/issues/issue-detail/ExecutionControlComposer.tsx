@@ -1,4 +1,4 @@
-import { Eraser, Play, RotateCcw, Send } from "lucide-react";
+import { Eraser, Pause, Play, RotateCcw, Send } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -76,7 +76,7 @@ export function ExecutionControlComposer({
   const [bundle, setBundle] = useState<AssistantCatalogBundle>(fallbackCatalogBundle());
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(fallbackCatalogBundle()));
   const [goalMode, setGoalMode] = useState(() => execution?.goal?.kind === "goal");
-  const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | "hard_reset" | null>(null);
+  const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | "hard_reset" | "stop" | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [hardResetOpen, setHardResetOpen] = useState(false);
@@ -169,13 +169,14 @@ export function ExecutionControlComposer({
     [agent, composerState, persistComposer, settings],
   );
 
-  const dispatchProgressLabel: Record<"resume" | "restart" | "hard_reset", string> = {
+  const dispatchProgressLabel: Record<"resume" | "restart" | "hard_reset" | "stop", string> = {
     resume: "Resuming agent…",
     restart: "Restarting agent…",
     hard_reset: "Hard resetting session…",
+    stop: "Pausing agent…",
   };
 
-  async function runDispatch(action: "resume" | "restart" | "hard_reset") {
+  async function runDispatch(action: "resume" | "restart" | "hard_reset" | "stop") {
     setDispatchPending(action);
     setDispatchError(null);
     setDispatchStatus(dispatchProgressLabel[action]);
@@ -238,8 +239,10 @@ export function ExecutionControlComposer({
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agent control</div>
           <p className="mt-1 text-xs text-muted-foreground">
             {canSteer
-              ? "Steer the live run with /infer, or queue guidance for the next resume."
-              : "Resume where the run stopped, restart fresh, or add guidance for the next dispatch."}
+              ? "Steer the live run with /infer, pause to stop safely, or queue guidance for the next resume."
+              : agentRunActive
+                ? "Pause the active run, or steer with /infer while the agent is live."
+                : "Resume where the run stopped, restart fresh, or add guidance for the next dispatch."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1">
@@ -296,6 +299,21 @@ export function ExecutionControlComposer({
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!agentRunActive || controlsDisabled}
+              title={
+                agentRunActive
+                  ? "Pause the run (keeps the session to resume later)"
+                  : "No active run to pause"
+              }
+              onClick={() => void runDispatch("stop")}
+            >
+              <Pause className="mr-1.5 h-3.5 w-3.5" />
+              {dispatchPending === "stop" ? "Pausing…" : "Pause"}
+            </Button>
             <Button
               type="button"
               size="sm"

@@ -251,7 +251,7 @@ export function PullRequestTab({
           issueIdentifier={issue.identifier}
           onRefresh={onRefresh}
           onRemove={
-            pr.origin === "manual" || pr.origin === "agent"
+            pr.origin === "manual" || pr.origin === "auto"
               ? () => void handleRemove(pr.url)
               : undefined
           }

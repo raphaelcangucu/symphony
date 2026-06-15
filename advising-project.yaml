@@ -42,6 +42,8 @@ tracker:
     # drags in its subtasks/links), so raise the cap above the 500 default to
     # avoid clipping linked work. Sized with headroom over the current ~760.
     max_results: 1500
+    # Optional: Jira board id for column order during first sync (before YAML import).
+    # board_id: <CDE board id from GET /rest/agile/1.0/board?projectKeyOrId=CDE>
     # If "Product" is not directly queryable by name, drop `fields` above and use:
     # jql: 'cf[<PRODUCT_FIELD_ID>] = "Inspire"'
     # order_by: "created DESC"   # optional
@@ -49,16 +51,26 @@ repositories:
   # default_branch / selected_branch: Symphony publish gate uses these when the clone
   # lacks origin/HEAD (common in ephemeral workspaces). Must match the PR base branch.
   - github_full_name: civitaslearning/advising
-    clone_url: https://github.com/civitaslearning/advising.git
+    clone_url: git@github.com:civitaslearning/advising.git
     default_branch: pre-release
     selected_branch: pre-release
     role: primary
     workspace_path: advising
 workflow_statuses:
-  # TODO(setup): replace with the REAL CDE statuses (GET /rest/api/3/project/CDE/statuses).
-  - { name: "To Do", category: "unstarted", position: 0, is_terminal: false }
-  - { name: "Em andamento", category: "started", position: 1, is_terminal: false }
-  - { name: "Done", category: "completed", position: 2, is_terminal: true }
+  # Column order matches the CDE Jira board (left -> right).
+  # Backlog is the intake column; Selected for Development is the orchestrator dispatch queue.
+  - { name: "Backlog", category: "unstarted", position: 0, is_terminal: false }
+  - { name: "BLOCKED BY CUSTOMER", category: "started", position: 1, is_terminal: false }
+  - { name: "Selected for Development", category: "unstarted", position: 2, is_terminal: false }
+  - { name: "Em andamento", category: "started", position: 3, is_terminal: false }
+  - { name: "READY FOR QA", category: "started", position: 4, is_terminal: false }
+  - { name: "IN QA", category: "started", position: 5, is_terminal: false }
+  - { name: "Revisão de pares", category: "started", position: 6, is_terminal: false }
+  - { name: "Ready for Deploy", category: "started", position: 7, is_terminal: false }
+  - { name: "CUSTOMER APPROVAL", category: "started", position: 8, is_terminal: false }
+  - { name: "Done", category: "completed", position: 9, is_terminal: true }
+  - { name: "Concluído", category: "completed", position: 10, is_terminal: true }
+  - { name: "Won't Do", category: "completed", position: 11, is_terminal: true }
 dev_env_steps:
   - command: "test -f docker/.env || cp docker/.env.example docker/.env"
     description: "Ensure docker/.env exists"
@@ -107,6 +119,11 @@ setup:
             command: "cd advising/automation/playwright && npx playwright test"
     agent:
       max_turns: 20
+    codex:
+      approval_policy: never
+      thread_sandbox: danger-full-access
+      turn_sandbox_policy:
+        type: dangerFullAccess
     dev_server:
       enabled: true
       port_range:
@@ -119,6 +136,7 @@ setup:
       enabled: true
     hooks:
       after_create: |
+        # Prefer gh (SSH per `gh config`) or git+SSH — not the Codex GitHub app connector.
         gh repo clone civitaslearning/advising advising -- --depth 1 -b pre-release
 
         if [ -f advising/docker/.env.example ] && [ ! -f advising/docker/.env ]; then
@@ -135,14 +153,12 @@ setup:
         - Revisão de pares
         - Ready for Deploy
         - CUSTOMER APPROVAL
+        - Done
         - Concluído
         - Won't Do
-        - To Do
-        - Done
       active_states:
         - Selected for Development
         - Em andamento
-        - To Do
       dispatch_states:
         - Selected for Development
       wait_states:
@@ -168,6 +184,18 @@ setup:
     Read `docs/SAIL.md`, `docs/VIBE.md`, `docs/TESTS.md`, and `docs/INSTALL.md` in
     the repo before running commands. This is **PHP 7.4 Symfony 1.x** (legacy Inspire)
     running in Docker — never run bare `php` on the host for app code.
+
+    ## Git / GitHub
+
+    Use **shell `git` and `gh`** for clone, fetch, push, and PRs. This machine has
+    GitHub SSH (`git@github.com`) and `gh auth` configured (`gh` uses SSH for git ops).
+
+    - Clone/fetch/push: `git` / `gh repo clone` / `gh pr view` / `gh pr create`
+    - **Do not** use the Codex GitHub app connector (`codex_apps`, `github_search_*`,
+      `github_get_pr_info`, etc.) for `civitaslearning/*` — that integration is not
+      installed on the private org and returns 404/422. Use `gh` and `git` instead.
+    - Symphony tracker API tools (`github_graphql`, etc.) use the server `GITHUB_TOKEN`
+      (same token as `gh auth token`).
 
     ## Runtime (Docker + Sail + Vibe)
 

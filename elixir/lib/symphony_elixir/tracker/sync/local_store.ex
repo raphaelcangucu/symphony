@@ -91,6 +91,51 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   end
 
   @doc """
+  Merges remote workflow statuses without reshuffling columns already configured locally.
+
+  Cold start (no local statuses) mirrors the remote list in full. After YAML import
+  or any local configuration, existing rows are left untouched and only brand-new
+  remote status names are appended at the end.
+  """
+  @spec merge_remote_statuses(Project.t(), [map()]) :: :ok
+  def merge_remote_statuses(%Project{} = project, statuses) when is_list(statuses) do
+    local = Context.list_statuses(project.slug)
+
+    if local == [] do
+      upsert_statuses(project, statuses)
+    else
+      local_names = MapSet.new(local, & &1.name)
+
+      max_position =
+        local
+        |> Enum.map(& &1.position)
+        |> Enum.max(fn -> -1 end)
+
+      statuses
+      |> Enum.reject(fn status ->
+        name = status_attr(status, :name)
+        is_binary(name) and MapSet.member?(local_names, name)
+      end)
+      |> Enum.with_index(max_position + 1)
+      |> Enum.each(fn {status, position} ->
+        name = status_attr(status, :name)
+
+        if is_binary(name) and name != "" do
+          upsert_status!(project.id, %{
+            project_id: project.id,
+            name: name,
+            category: status_attr(status, :category) || "active",
+            position: position,
+            is_terminal: status_attr(status, :is_terminal) || false
+          })
+        end
+      end)
+
+      :ok
+    end
+  end
+
+  @doc """
   Upserts assignable users from the remote tracker into `tracker_users` (idempotent
   on `(project_id, login)`). Used during sync so form options and assignee
   resolution work offline after the first pull.
@@ -134,11 +179,19 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   defp upsert_status!(project_id, %{name: name} = attrs) do
     case Repo.get_by(WorkflowStatus, project_id: project_id, name: name) do
-      nil -> %WorkflowStatus{}
-      %WorkflowStatus{} = existing -> existing
+      nil ->
+        %WorkflowStatus{}
+        |> WorkflowStatus.changeset(attrs)
+        |> Repo.insert!()
+
+      %WorkflowStatus{} = existing ->
+        # YAML import defines board column order; later Jira syncs must not reshuffle it.
+        update_attrs = Map.drop(attrs, [:position])
+
+        existing
+        |> WorkflowStatus.changeset(update_attrs)
+        |> Repo.update!()
     end
-    |> WorkflowStatus.changeset(attrs)
-    |> Repo.insert_or_update!()
   end
 
   @doc """
