@@ -21,7 +21,8 @@ defmodule SymphonyElixir.Orchestrator do
   }
 
   alias SymphonyElixir.Evidence
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.GitHub.IssueMarker
+  alias SymphonyElixir.LocalTracker.{Context, Repository}
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -833,7 +834,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp apply_successful_completion(%State{} = state, running_entry, issue_id) do
     issue = running_entry.issue
     workspace = Workspace.path_for_issue(issue)
-    deps = state.publish_contract_deps || default_publish_contract_deps()
+    deps = publish_contract_deps_for(issue, state.publish_contract_deps)
 
     case run_publish_contract(issue, workspace, deps) do
       {:ok, prs} ->
@@ -906,6 +907,62 @@ defmodule SymphonyElixir.Orchestrator do
     }
   end
 
+  defp publish_contract_deps_for(%Issue{} = issue, nil), do: publish_contract_deps_for(issue, default_publish_contract_deps())
+
+  defp publish_contract_deps_for(%Issue{} = issue, base) when is_map(base) do
+    default_branches = project_repo_default_branches(issue.project_slug)
+    marker_key = publish_marker_key(issue)
+    identifier = issue.identifier
+
+    Map.merge(base, %{
+      repo_states: fn workspace -> RunContract.repo_states(workspace, default_branches: default_branches) end,
+      pr_checker: RunContract.gh_pr_checker(issue_identifier: identifier, marker_key: marker_key),
+      finalize: fn workspace, iss ->
+        Finalizer.finalize(workspace, iss, default_branches: default_branches)
+      end
+    })
+  end
+
+  defp project_repo_default_branches(slug) when is_binary(slug) and slug != "" do
+    import Ecto.Query
+
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        Repository
+        |> where([repo], repo.project_id == ^project.id)
+        |> Repo.all()
+        |> Enum.reduce(%{}, fn repo, acc ->
+          branch = repo.default_branch || repo.selected_branch
+          key = repo.workspace_path || repo.github_full_name
+
+          if is_binary(key) and is_binary(branch) and branch != "" do
+            Map.put(acc, key, branch)
+          else
+            acc
+          end
+        end)
+
+      {:error, _} ->
+        %{}
+    end
+  end
+
+  defp project_repo_default_branches(_slug), do: %{}
+
+  defp publish_marker_key(%Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        ProjectConfig.source_control_issue_marker_key(ProjectConfig.resolve(project))
+
+      _ ->
+        IssueMarker.default_key()
+    end
+  rescue
+    _ -> IssueMarker.default_key()
+  end
+
+  defp publish_marker_key(_issue), do: IssueMarker.default_key()
+
   @doc false
   @spec blocked_comment_body([map()]) :: String.t()
   def blocked_comment_body(violations) do
@@ -923,17 +980,42 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp record_run_pull_requests(%Issue{project_slug: slug, identifier: identifier}, prs)
-       when is_binary(slug) and slug != "" and is_list(prs) and prs != [] do
-    case Context.get_project(slug) do
-      {:ok, project} ->
-        Enum.each(prs, &persist_run_pull_request(project.id, identifier, &1))
+       when is_binary(slug) and slug != "" and is_binary(identifier) and is_list(prs) and prs != [] do
+    marker_key = publish_marker_key(%Issue{project_slug: slug, identifier: identifier})
+    verified_prs = Enum.filter(prs, &run_pull_request_matches_issue?(&1, identifier, marker_key))
 
-      {:error, error} ->
-        Logger.warning("Cannot persist run PR links issue=#{identifier}: project lookup failed #{inspect(error)}")
+    case verified_prs do
+      [] ->
+        if prs != [] do
+          Logger.warning(
+            "Skipping run PR links issue=#{identifier}: no PR matched Symphony-Issue marker #{marker_key}"
+          )
+        end
+
+        :ok
+
+      linked ->
+        case Context.get_project(slug) do
+          {:ok, project} ->
+            Enum.each(linked, &persist_run_pull_request(project.id, identifier, &1))
+
+          {:error, error} ->
+            Logger.warning("Cannot persist run PR links issue=#{identifier}: project lookup failed #{inspect(error)}")
+        end
     end
   end
 
   defp record_run_pull_requests(_issue, _prs), do: :ok
+
+  defp run_pull_request_matches_issue?(pr, identifier, marker_key) do
+    case Map.get(pr, :body) do
+      body when is_binary(body) ->
+        identifier in IssueMarker.extract(body, marker_key)
+
+      _ ->
+        false
+    end
+  end
 
   defp persist_run_pull_request(project_id, identifier, pr) do
     case LocalStore.upsert_run_pull_request(project_id, identifier, pr) do

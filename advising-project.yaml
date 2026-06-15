@@ -46,6 +46,8 @@ tracker:
     # jql: 'cf[<PRODUCT_FIELD_ID>] = "Inspire"'
     # order_by: "created DESC"   # optional
 repositories:
+  # default_branch / selected_branch: Symphony publish gate uses these when the clone
+  # lacks origin/HEAD (common in ephemeral workspaces). Must match the PR base branch.
   - github_full_name: civitaslearning/advising
     clone_url: https://github.com/civitaslearning/advising.git
     default_branch: pre-release

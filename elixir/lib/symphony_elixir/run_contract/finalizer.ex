@@ -27,9 +27,11 @@ defmodule SymphonyElixir.RunContract.Finalizer do
   def finalize(workspace, %Issue{} = issue, opts \\ []) do
     runner = Keyword.get(opts, :runner, &System.cmd/3)
 
+    default_branches = Keyword.get(opts, :default_branches, %{})
+
     {prs, failures} =
       workspace
-      |> RunContract.repo_states()
+      |> RunContract.repo_states(default_branches: default_branches)
       |> Enum.filter(&(&1.dirty? or &1.ahead_count > 0))
       |> Enum.map(fn repo ->
         case finalize_repo(repo, issue, runner) do

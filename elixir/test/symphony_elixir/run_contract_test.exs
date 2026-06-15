@@ -144,17 +144,53 @@ defmodule SymphonyElixir.RunContractTest do
   end
 
   describe "gh_pr_checker/1" do
-    test "parses gh pr list output and skips closed PRs" do
-      open = fn "gh", _args, _opts -> {~s([{"url":"https://x/pull/1","state":"OPEN","number":1,"title":"t"}]), 0} end
+    test "parses gh pr list output, requires OPEN state and issue marker" do
+      open =
+        fn "gh", _args, _opts ->
+          {~s([{"url":"https://x/pull/1","state":"OPEN","number":1,"title":"t","body":"Symphony-Issue: GAM-9"}]), 0}
+        end
+
+      open_no_marker =
+        fn "gh", _args, _opts ->
+          {~s([{"url":"https://x/pull/1","state":"OPEN","number":1,"title":"t","body":"no marker"}]), 0}
+        end
+
+      merged =
+        fn "gh", _args, _opts ->
+          {~s([{"url":"https://x/pull/1","state":"MERGED","number":1,"title":"t","body":"Symphony-Issue: GAM-9"}]), 0}
+        end
+
       closed = fn "gh", _args, _opts -> {~s([{"url":"https://x/pull/1","state":"CLOSED","number":1,"title":"t"}]), 0} end
       empty = fn "gh", _args, _opts -> {"[]", 0} end
       failing = fn "gh", _args, _opts -> {"gh: auth error", 1} end
       repo = struct!(RepoState, %{path: "/tmp", name: "r", branch: "feat/x"})
+      checker = RunContract.gh_pr_checker(issue_identifier: "GAM-9", runner: open)
 
-      assert {:ok, %{url: "https://x/pull/1"}} = RunContract.gh_pr_checker(runner: open).(repo)
-      assert :none = RunContract.gh_pr_checker(runner: closed).(repo)
-      assert :none = RunContract.gh_pr_checker(runner: empty).(repo)
-      assert {:error, _reason} = RunContract.gh_pr_checker(runner: failing).(repo)
+      assert {:ok, %{url: "https://x/pull/1"}} = checker.(repo)
+      assert :none = RunContract.gh_pr_checker(issue_identifier: "GAM-9", runner: open_no_marker).(repo)
+      assert :none = RunContract.gh_pr_checker(issue_identifier: "GAM-9", runner: merged).(repo)
+      assert :none = RunContract.gh_pr_checker(issue_identifier: "GAM-9", runner: closed).(repo)
+      assert :none = RunContract.gh_pr_checker(issue_identifier: "GAM-9", runner: empty).(repo)
+      assert {:error, _reason} = RunContract.gh_pr_checker(issue_identifier: "GAM-9", runner: failing).(repo)
+    end
+  end
+
+  describe "repo_states/2 default_branches" do
+    test "configured default_branch prevents default checkout from counting as published work", %{tmp_dir: tmp_dir} do
+      ws = workspace!(tmp_dir)
+      repo = make_repo!(tmp_dir, ws, "frontend")
+      sh!(repo, "git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main")
+      sh!(repo, "git update-ref -d refs/remotes/origin/HEAD")
+
+      [state] = RunContract.repo_states(ws, default_branches: %{"frontend" => "main"})
+
+      assert state.branch == "main"
+      assert state.default_branch == "main"
+      refute RunContract.work_present?([state])
+
+      assert RunContract.pull_requests([state], fn _repo ->
+               {:ok, %{url: "https://github.com/o/f/pull/99", state: "OPEN"}}
+             end) == []
     end
   end
 

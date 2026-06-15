@@ -250,7 +250,11 @@ export function PullRequestTab({
           projectSlug={projectSlug}
           issueIdentifier={issue.identifier}
           onRefresh={onRefresh}
-          onRemove={pr.origin === "manual" ? () => void handleRemove(pr.url) : undefined}
+          onRemove={
+            pr.origin === "manual" || pr.origin === "agent"
+              ? () => void handleRemove(pr.url)
+              : undefined
+          }
         />
       ))}
     </div>
