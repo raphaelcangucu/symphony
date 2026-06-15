@@ -4,12 +4,16 @@ import { toast } from "sonner";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
+import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
 import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
 import { Separator } from "@/components/ui/separator";
 import { useSessionLogChannel } from "@/hooks/useSessionLogChannel";
 import { formatDateTime } from "@/lib/utils";
 import { canResumeExecution, canSteerExecution, resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
+import { assessEvidenceAttention, type EvidenceAttention } from "@/lib/evidenceStatus";
+import type { ReturnToAgentTemplate } from "@/lib/returnToAgent";
+import { isWaitState, parseWorkflowTrackerConfig, type WorkflowTrackerConfig } from "@/lib/workflowTracker";
 import { updateIssueAgent } from "@/services/issues";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AgentKind, Issue } from "@/types/issue";
@@ -18,6 +22,9 @@ interface AgentTabProps {
   issue: Issue;
   execution?: AgentExecution;
   projectSlug: string;
+  workflowMarkdown?: string | null;
+  evidenceAttention?: EvidenceAttention;
+  returnToAgentTemplate?: ReturnToAgentTemplate | null;
   steerSeedMessage?: string | null;
   onIssueUpdated?: (updated: Issue) => void;
 }
@@ -36,8 +43,21 @@ function formatTokens(value: number): string {
   return value.toLocaleString();
 }
 
-export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = null, onIssueUpdated }: AgentTabProps) {
+export function AgentTab({
+  issue,
+  execution,
+  projectSlug,
+  workflowMarkdown = null,
+  evidenceAttention,
+  returnToAgentTemplate = null,
+  steerSeedMessage = null,
+  onIssueUpdated,
+}: AgentTabProps) {
   const [agentPending, setAgentPending] = useState(false);
+  const trackerConfig: WorkflowTrackerConfig = parseWorkflowTrackerConfig(workflowMarkdown);
+  const inWaitState = isWaitState(issue.status, trackerConfig);
+  const showReturnPanel = inWaitState && canResumeExecution(execution);
+  const resolvedEvidenceAttention = evidenceAttention ?? assessEvidenceAttention([]);
   const displayStatus = execution ? resolveDisplayStatus(execution) : undefined;
   const agentRunActive = execution ? !canResumeExecution(execution) : false;
   const sessionLog = useSessionLogChannel({
@@ -166,18 +186,49 @@ export function AgentTab({ issue, execution, projectSlug, steerSeedMessage = nul
         </section>
       ) : null}
 
-      <ExecutionControlComposer
-        projectSlug={projectSlug}
-        issue={issue}
-        execution={execution}
-        sessionConnected={sessionLog.connected}
-        canSteer={canSteer}
-        steerPending={sessionLog.steerPending}
-        steerError={sessionLog.steerError}
-        seedMessage={steerSeedMessage}
-        onSteer={sessionLog.steerTurn}
-        onIssueUpdated={onIssueUpdated}
-      />
+      {showReturnPanel ? (
+        <ReturnToAgentPanel
+          projectSlug={projectSlug}
+          issue={issue}
+          trackerConfig={trackerConfig}
+          evidenceAttention={resolvedEvidenceAttention}
+          initialTemplate={returnToAgentTemplate}
+          onIssueUpdated={onIssueUpdated}
+        />
+      ) : null}
+
+      {showReturnPanel ? (
+        <details className="rounded-xl border border-border/70 bg-card/20 p-3">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Controles avançados</summary>
+          <div className="mt-3">
+            <ExecutionControlComposer
+              projectSlug={projectSlug}
+              issue={issue}
+              execution={execution}
+              sessionConnected={sessionLog.connected}
+              canSteer={canSteer}
+              steerPending={sessionLog.steerPending}
+              steerError={sessionLog.steerError}
+              seedMessage={steerSeedMessage}
+              onSteer={sessionLog.steerTurn}
+              onIssueUpdated={onIssueUpdated}
+            />
+          </div>
+        </details>
+      ) : (
+        <ExecutionControlComposer
+          projectSlug={projectSlug}
+          issue={issue}
+          execution={execution}
+          sessionConnected={sessionLog.connected}
+          canSteer={canSteer}
+          steerPending={sessionLog.steerPending}
+          steerError={sessionLog.steerError}
+          seedMessage={steerSeedMessage}
+          onSteer={sessionLog.steerTurn}
+          onIssueUpdated={onIssueUpdated}
+        />
+      )}
 
       <IssueSessionLog
         issueIdentifier={issue.identifier}

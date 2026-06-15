@@ -3,13 +3,14 @@ import type { AgentKind, Issue } from "@/types/issue";
 import { http, trackerPath, unwrapData } from "./http";
 import { type BackendIssueDto, normalizeIssue } from "./mappers";
 
-export type IssueDispatchAction = "resume" | "restart" | "hard_reset" | "stop";
+export type IssueDispatchAction = "resume" | "restart" | "hard_reset" | "stop" | "continue_work";
 
 export interface IssueDispatchInput {
   action: IssueDispatchAction;
   agent?: AgentKind | null;
   goal?: string | null;
   instructions?: string | null;
+  targetStatus?: string | null;
 }
 
 export interface IssueDispatchResult {
@@ -36,6 +37,7 @@ export async function dispatchIssueAgent(
   if (input.agent) payload.agent = input.agent;
   if (input.goal?.trim()) payload.goal = input.goal.trim();
   if (input.instructions?.trim()) payload.instructions = input.instructions.trim();
+  if (input.targetStatus?.trim()) payload.target_status = input.targetStatus.trim();
 
   const response = await http.post(
     trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/dispatch`),
@@ -53,6 +55,8 @@ export async function dispatchIssueAgent(
 }
 
 function normalizeDispatchAction(action: string | undefined): IssueDispatchAction {
-  if (action === "restart" || action === "hard_reset" || action === "stop") return action;
+  if (action === "restart" || action === "hard_reset" || action === "stop" || action === "continue_work") {
+    return action;
+  }
   return "resume";
 }

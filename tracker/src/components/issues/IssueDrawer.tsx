@@ -36,6 +36,9 @@ import type { EditorReason } from "@/services/editor";
 import { useIssueEvidence } from "@/hooks/useIssueEvidence";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
+import { canResumeExecution } from "@/lib/agentExecutionDisplay";
+import { evidenceNeedsAttention } from "@/lib/evidenceStatus";
+import { isWaitState, parseWorkflowTrackerConfig } from "@/lib/workflowTracker";
 import { DEFAULT_ISSUE_TAB, type IssueTab, type WorkspaceView } from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -72,10 +75,12 @@ interface IssueDrawerProps {
   projectSlug: string;
   view: WorkspaceView;
   execution?: AgentExecution;
+  workflowMarkdown?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tab?: IssueTab;
   onTabChange?: (tab: IssueTab) => void;
+  onOpenAgentExecution?: () => void;
   onArchive?: (issue: Issue) => void | Promise<void>;
   onDelete?: (issue: Issue) => void | Promise<void>;
   onForceSync?: (issue: Issue) => void | Promise<void>;
@@ -87,10 +92,12 @@ export function IssueDrawer({
   projectSlug,
   view,
   execution,
+  workflowMarkdown = null,
   open,
   onOpenChange,
   tab = DEFAULT_ISSUE_TAB,
   onTabChange,
+  onOpenAgentExecution,
   onArchive,
   onDelete,
   onForceSync,
@@ -130,6 +137,12 @@ export function IssueDrawer({
     issue,
     onUpdated: onIssueUpdated,
   });
+
+  const trackerConfig = parseWorkflowTrackerConfig(workflowMarkdown);
+  const inWaitState = issue ? isWaitState(issue.status, trackerConfig) : false;
+  const evidenceNeedsResume = !evidence.loading && evidenceNeedsAttention(evidence.records);
+  const showEvidenceContinueWork =
+    inWaitState && evidenceNeedsResume && canResumeExecution(execution);
 
   const openBrowserEditor = useCallback(() => {
     if (editor.browser.available && editor.browser.url) {
@@ -421,15 +434,27 @@ export function IssueDrawer({
                   <EvidenceTab
                     error={evidence.error}
                     identifier={issue.identifier}
+                    issue={issue}
                     loading={evidence.loading}
+                    onIssueUpdated={onIssueUpdated}
                     onRefresh={() => void evidence.refetch()}
                     projectSlug={projectSlug}
                     records={evidence.records}
+                    showContinueWork={showEvidenceContinueWork}
+                    trackerConfig={trackerConfig}
                   />
                 </TabsContent>
                 <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
                 <TabsContent value="agent">
-                  <AgentTabs issue={issue} projectSlug={projectSlug} execution={execution} view={view} onIssueUpdated={onIssueUpdated} />
+                  <AgentTabs
+                    issue={issue}
+                    projectSlug={projectSlug}
+                    execution={execution}
+                    view={view}
+                    workflowMarkdown={workflowMarkdown}
+                    evidenceRecords={evidence.records}
+                    onIssueUpdated={onIssueUpdated}
+                  />
                 </TabsContent>
                 <TabsContent value="preview">
                   <PreviewTab

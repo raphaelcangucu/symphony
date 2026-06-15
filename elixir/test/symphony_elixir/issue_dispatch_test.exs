@@ -100,6 +100,23 @@ defmodule SymphonyElixir.IssueDispatchTest do
     refute updated.status.is_terminal
   end
 
+  test "continue_work moves wait-state issues to in-progress and nudges dispatch", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "Human Review"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, result} =
+             IssueDispatch.continue_work(project, issue.identifier, %{
+               "instructions" => "Complete evidence only",
+               "target_status" => "In Progress"
+             })
+
+    assert result.action == "continue_work"
+    assert result.message =~ issue.identifier
+
+    {:ok, updated} = Context.get_issue("pref", issue.identifier)
+    assert updated.status.name == "In Progress"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

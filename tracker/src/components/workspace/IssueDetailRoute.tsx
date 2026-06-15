@@ -4,13 +4,20 @@ import { toast } from "sonner";
 
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
-import { DEFAULT_ISSUE_TAB, isIssueTab, issuePath, workspaceBasePath, type IssueTab } from "@/lib/workspaceRoutes";
+import {
+  DEFAULT_ISSUE_TAB,
+  isIssueTab,
+  issueAgentTabPath,
+  issuePath,
+  workspaceBasePath,
+  type IssueTab,
+} from "@/lib/workspaceRoutes";
 import { archiveIssue, deleteIssue, forceSyncIssue, getIssue } from "@/services/issues";
 import type { Issue } from "@/types/issue";
 
 export function IssueDetailRoute() {
   const { identifier = "", tab: tabParam } = useParams();
-  const { projectSlug, view, issues, setIssues, agentExecutions, loading, trackerKind } = useWorkspace();
+  const { projectSlug, view, issues, setIssues, agentExecutions, loading, trackerKind, project } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -122,6 +129,7 @@ export function IssueDetailRoute() {
       view={view}
       issue={issue}
       execution={issue ? agentExecutions.get(issue.identifier) : undefined}
+      workflowMarkdown={project?.setup?.workflowMarkdown ?? null}
       open
       onOpenChange={(open) => {
         if (!open) goToBase();
@@ -129,6 +137,15 @@ export function IssueDetailRoute() {
       tab={tab}
       onTabChange={(nextTab) => {
         navigate({ pathname: issuePath(projectSlug, view, identifier, nextTab), search: location.search }, { replace: true });
+      }}
+      onOpenAgentExecution={() => {
+        navigate(
+          {
+            pathname: issueAgentTabPath(projectSlug, view, identifier, "execution"),
+            search: location.search,
+          },
+          { replace: true },
+        );
       }}
       onArchive={handleArchive}
       onDelete={handleDelete}

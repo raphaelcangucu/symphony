@@ -1,10 +1,18 @@
 import { ClipboardCheck, RefreshCw } from "lucide-react";
 
+import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  assessEvidenceAttention,
+  evidenceAttentionSummary,
+  type EvidenceAttention,
+} from "@/lib/evidenceStatus";
 import { evidenceArtifactUrl } from "@/services/evidence";
 import { cn } from "@/lib/utils";
+import type { WorkflowTrackerConfig } from "@/lib/workflowTracker";
 import type { EvidenceRecord, EvidenceRun } from "@/types/evidence";
+import type { Issue } from "@/types/issue";
 
 interface EvidenceTabProps {
   projectSlug: string;
@@ -13,6 +21,10 @@ interface EvidenceTabProps {
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  showContinueWork?: boolean;
+  issue?: Issue;
+  trackerConfig?: WorkflowTrackerConfig;
+  onIssueUpdated?: (issue: Issue) => void;
 }
 
 export function EvidenceTab({
@@ -22,9 +34,29 @@ export function EvidenceTab({
   loading,
   error,
   onRefresh,
+  showContinueWork = false,
+  issue,
+  trackerConfig,
+  onIssueUpdated,
 }: EvidenceTabProps) {
+  const evidenceAttention = assessEvidenceAttention(records);
+  const attentionSummary = evidenceAttentionSummary(evidenceAttention);
+  const canContinueWork =
+    showContinueWork && issue && trackerConfig && evidenceAttention.kind !== "none";
+
   return (
     <div className="space-y-4">
+      {canContinueWork ? (
+        <ReturnToAgentPanel
+          projectSlug={projectSlug}
+          issue={issue}
+          trackerConfig={trackerConfig}
+          evidenceAttention={evidenceAttention}
+          initialTemplate="evidence"
+          onIssueUpdated={onIssueUpdated}
+        />
+      ) : null}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium">
           <ClipboardCheck className="h-4 w-4 opacity-80" />
@@ -37,6 +69,10 @@ export function EvidenceTab({
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+      {!error && evidenceAttention.kind !== "none" && !canContinueWork ? (
+        <p className="text-sm text-amber-700 dark:text-amber-300">{attentionSummary}</p>
+      ) : null}
 
       {!error && records.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -178,7 +214,21 @@ function ArtifactLinks({
 function summaryText(run: EvidenceRun): string {
   const summary = run.summary;
   if (!summary) return "-";
-  return `${summary.passed}/${summary.total} passed, ${summary.failed} failed`;
+
+  if (typeof summary === "object" && "reason" in summary) {
+    const reason = (summary as { reason?: unknown }).reason;
+    if (typeof reason === "string" && reason.trim()) return reason.trim();
+  }
+
+  if (
+    typeof summary.total === "number" &&
+    typeof summary.passed === "number" &&
+    typeof summary.failed === "number"
+  ) {
+    return `${summary.passed}/${summary.total} passed, ${summary.failed} failed`;
+  }
+
+  return "-";
 }
 
 function StatusPill({ status }: { status: string }) {
@@ -196,3 +246,5 @@ function StatusPill({ status }: { status: string }) {
     </span>
   );
 }
+
+export type { EvidenceAttention };

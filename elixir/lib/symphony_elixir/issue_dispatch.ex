@@ -15,11 +15,12 @@ defmodule SymphonyElixir.IssueDispatch do
 
   require Logger
 
-  @type action :: :resume | :restart | :hard_reset | :stop
+  @type action :: :resume | :restart | :hard_reset | :stop | :continue_work
   @type opts :: %{
           optional(:agent) => String.t() | nil,
           optional(:goal) => String.t() | nil,
-          optional(:instructions) => String.t() | nil
+          optional(:instructions) => String.t() | nil,
+          optional(:target_status) => String.t() | nil
         }
 
   @spec resume(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
@@ -30,6 +31,16 @@ defmodule SymphonyElixir.IssueDispatch do
   @spec restart(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
   def restart(%Project{} = project, identifier, opts \\ %{}) when is_binary(identifier) do
     dispatch(project, identifier, :restart, opts)
+  end
+
+  @doc """
+  Return an issue from a human-review wait state to active work: move to the
+  rework target status (usually the in-progress column), then resume the agent
+  with optional instructions.
+  """
+  @spec continue_work(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
+  def continue_work(%Project{} = project, identifier, opts \\ %{}) when is_binary(identifier) do
+    dispatch(project, identifier, :continue_work, opts)
   end
 
   @doc """
@@ -65,12 +76,12 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   defp dispatch(%Project{} = project, identifier, action, opts)
-       when action in [:resume, :restart, :hard_reset] do
+       when action in [:resume, :restart, :hard_reset, :continue_work] do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
          {:ok, _comment} <- maybe_add_comment(project, identifier, action, opts),
          {:ok, _} <- maybe_update_agent(project, identifier, opts),
          :ok <- maybe_hard_reset(project, identifier, issue, action),
-         {:ok, _} <- maybe_move_for_dispatch(project, issue),
+         {:ok, _} <- maybe_move_for_action(project, issue, action, opts),
          :ok <- cancel_retry(identifier),
          :ok <- nudge_manual_dispatch(identifier) do
       {:ok, reloaded} = IssueAdapter.dispatch(project, :get_issue, [identifier])
@@ -123,6 +134,18 @@ defmodule SymphonyElixir.IssueDispatch do
           ## Hard reset agent run (tracker)
 
           The previous agent session was discarded (turns and token counters cleared) and a brand-new session is starting. The workspace is preserved — review the existing workspace and git state, then continue the ticket.
+          """
+
+        :continue_work ->
+          """
+          ## Continue agent work (tracker)
+
+          This issue was sent back from human review. Move to active implementation and follow the instructions below.
+
+          **Priority:**
+          1. Follow the human/tracker instructions first.
+          2. Finish any remaining implementation before full VALIDATE runs unless the instructions say otherwise.
+          3. Run VALIDATE/evidence (`evidence` skill) when handoff is ready.
           """
       end
 
@@ -189,6 +212,23 @@ defmodule SymphonyElixir.IssueDispatch do
     |> CodexSession.clear()
   end
 
+  defp maybe_move_for_action(%Project{} = project, %IssueDTO{} = issue, :continue_work, opts) do
+    config = project |> Repo.preload(:setup) |> ProjectConfig.resolve()
+    target = resolve_rework_target(config, opts)
+
+    if status_matches?(issue, target) do
+      {:ok, nil}
+    else
+      with {:ok, moved} <- IssueAdapter.dispatch(project, :move_issue, [issue.identifier, %{"status" => target}]) do
+        {:ok, moved}
+      end
+    end
+  end
+
+  defp maybe_move_for_action(%Project{} = project, %IssueDTO{} = issue, _action, _opts) do
+    maybe_move_for_dispatch(project, issue)
+  end
+
   defp maybe_move_for_dispatch(%Project{} = project, %IssueDTO{} = issue) do
     config = project |> Repo.preload(:setup) |> ProjectConfig.resolve()
 
@@ -201,6 +241,38 @@ defmodule SymphonyElixir.IssueDispatch do
       end
     end
   end
+
+  defp resolve_rework_target(config, opts) do
+    case normalize_optional_string(Map.get(opts, :target_status)) do
+      status when is_binary(status) -> status
+      _ -> infer_rework_target(config)
+    end
+  end
+
+  defp infer_rework_target(config) do
+    active = config.active_states || []
+    dispatch = MapSet.new(config.dispatch_states || [])
+
+    case Enum.find(active, &(not MapSet.member?(dispatch, &1))) do
+      status when is_binary(status) ->
+        status
+
+      _ ->
+        Enum.find(["Em andamento", "In Progress", "Rework"], &(&1 in active)) ||
+          List.first(active) ||
+          List.first(config.dispatch_states || []) ||
+          "In Progress"
+    end
+  end
+
+  defp status_matches?(%IssueDTO{} = issue, target) when is_binary(target) do
+    case status_name(issue.status) do
+      name when is_binary(name) -> normalize_status_name(name) == normalize_status_name(target)
+      _ -> false
+    end
+  end
+
+  defp status_matches?(_issue, _target), do: false
 
   defp issue_in_active_states?(%IssueDTO{status: status}, config) do
     name = status_name(status)
@@ -270,6 +342,9 @@ defmodule SymphonyElixir.IssueDispatch do
 
   defp dispatch_message(:hard_reset, %IssueDTO{identifier: identifier}),
     do: "Hard reset — starting a fresh agent session for #{identifier}"
+
+  defp dispatch_message(:continue_work, %IssueDTO{identifier: identifier}),
+    do: "Continuing agent work on #{identifier}"
 
   defp dispatch_message(:stop, %IssueDTO{identifier: identifier}),
     do: "Paused agent run for #{identifier} — resume when ready"

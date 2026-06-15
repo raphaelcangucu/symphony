@@ -152,7 +152,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       json(conn, %{data: result})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
-      {:error, :invalid_action} -> TrackerErrors.validation(conn, "action must be resume, restart, hard_reset, or stop")
+      {:error, :invalid_action} -> TrackerErrors.validation(conn, "action must be resume, restart, hard_reset, stop, or continue_work")
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
@@ -169,13 +169,17 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   defp run_dispatch_action(project, identifier, "stop", opts),
     do: IssueDispatch.stop(project, identifier, opts)
 
+  defp run_dispatch_action(project, identifier, "continue_work", opts),
+    do: IssueDispatch.continue_work(project, identifier, opts)
+
   defp run_dispatch_action(_project, _identifier, _action, _opts), do: {:error, :invalid_action}
 
   defp dispatch_opts(params) do
     %{
       agent: Map.get(params, "agent"),
       goal: Map.get(params, "goal"),
-      instructions: Map.get(params, "instructions")
+      instructions: Map.get(params, "instructions"),
+      target_status: Map.get(params, "target_status")
     }
   end
 
