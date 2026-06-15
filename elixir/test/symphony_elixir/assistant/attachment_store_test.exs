@@ -93,6 +93,35 @@ defmodule SymphonyElixir.Assistant.AttachmentStoreTest do
     assert enriched =~ "![shot.png](#{expected_url})"
   end
 
+  test "stores webm video uploads" do
+    source = Path.join(System.tmp_dir!(), "clip-#{System.unique_integer([:positive])}.webm")
+    File.write!(source, <<0x1A, 0x45, 0xDF, 0xA3>>)
+
+    upload = %Plug.Upload{path: source, filename: "clip.webm", content_type: "video/webm"}
+
+    assert {:ok, stored} = AttachmentStore.store_file("macro-markets", upload)
+    assert stored["type"] == "file"
+    assert stored["name"] == "clip.webm"
+    assert stored["media_type"] == "video/webm"
+    assert stored["path"] =~ "uploads/"
+    assert stored["path"] =~ ".webm"
+    assert {:error, :not_text} = AttachmentStore.read_text("macro-markets", stored["path"])
+  end
+
+  test "stores mp4 video uploads" do
+    source = Path.join(System.tmp_dir!(), "clip-#{System.unique_integer([:positive])}.mp4")
+    File.write!(source, <<0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70>>)
+
+    upload = %Plug.Upload{path: source, filename: "clip.mp4", content_type: "video/mp4"}
+
+    assert {:ok, stored} = AttachmentStore.store_file("macro-markets", upload)
+    assert stored["type"] == "file"
+    assert stored["name"] == "clip.mp4"
+    assert stored["media_type"] == "video/mp4"
+    assert stored["path"] =~ ".mp4"
+    assert {:error, :not_text} = AttachmentStore.read_text("macro-markets", stored["path"])
+  end
+
   test "rejects unsupported file types" do
     source = Path.join(System.tmp_dir!(), "binary-#{System.unique_integer([:positive])}.bin")
     File.write!(source, <<0, 1, 2, 3>>)

@@ -3,6 +3,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
 
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Issue
+  alias SymphonyElixir.LocalTracker.Context
 
   test "tool_specs advertises linear_graphql and github_graphql" do
     names = Enum.map(DynamicTool.tool_specs(), & &1["name"])
@@ -47,6 +48,115 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert Jason.decode!(text)["error"]["message"] =~ "non-empty `status`"
   end
 
+  test "coding_agent_tool_specs advertises tracker-agnostic comment tools" do
+    specs = DynamicTool.coding_agent_tool_specs()
+    names = Enum.map(specs, & &1["name"])
+
+    assert "add_comment" in names
+    assert "list_comments" in names
+    assert "update_comment" in names
+
+    add = Enum.find(specs, &(&1["name"] == "add_comment"))
+    assert add["inputSchema"]["required"] == ["body"]
+    assert add["description"] =~ "local-first"
+    # Steer agents away from the wrong tracker tool on non-Linear projects.
+    assert add["description"] =~ "NOT `linear_graphql`"
+
+    update = Enum.find(specs, &(&1["name"] == "update_comment"))
+    assert update["inputSchema"]["required"] == ["comment_id", "body"]
+  end
+
+  test "comment tools stay off the assistant-facing tool_specs surface" do
+    names = Enum.map(DynamicTool.tool_specs(), & &1["name"])
+    refute "add_comment" in names
+    refute "list_comments" in names
+    refute "update_comment" in names
+  end
+
+  test "comment tools fail when no issue is bound to the session" do
+    for tool <- ["add_comment", "list_comments", "update_comment"] do
+      response = DynamicTool.execute(tool, %{"body" => "## Codex Workpad"})
+
+      assert response["success"] == false
+      text = hd(response["contentItems"])["text"]
+      assert Jason.decode!(text)["error"]["message"] =~ "no issue is bound"
+    end
+  end
+
+  test "add_comment requires a non-empty body even with a bound issue" do
+    issue = %Issue{project_slug: "demo", identifier: "DEMO-1"}
+    response = DynamicTool.execute("add_comment", %{"body" => "   "}, issue: issue)
+
+    assert response["success"] == false
+    text = hd(response["contentItems"])["text"]
+    assert Jason.decode!(text)["error"]["message"] =~ "non-empty `body`"
+  end
+
+  test "update_comment requires a comment_id even with a bound issue" do
+    issue = %Issue{project_slug: "demo", identifier: "DEMO-1"}
+    response = DynamicTool.execute("update_comment", %{"body" => "## Codex Workpad"}, issue: issue)
+
+    assert response["success"] == false
+    text = hd(response["contentItems"])["text"]
+    assert Jason.decode!(text)["error"]["message"] =~ "requires a `comment_id`"
+  end
+
+  describe "comment tools against the local-first board" do
+    setup do
+      SymphonyElixir.TestSupport.truncate_tracker!()
+      {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+      {:ok, issue} = Context.create_issue("macro-markets", %{"title" => "Workpad", "status" => "Todo"})
+
+      %{issue: %Issue{project_slug: "macro-markets", identifier: issue.identifier}}
+    end
+
+    test "add_comment creates a comment and returns its id, then update_comment edits it in place", %{issue: issue} do
+      created =
+        DynamicTool.execute(
+          "add_comment",
+          %{"body" => "## Codex Workpad\n\n### Plan\n- [ ] step"},
+          issue: issue
+        )
+
+      assert created["success"] == true
+      payload = created["contentItems"] |> hd() |> Map.fetch!("text") |> Jason.decode!()
+      assert payload["tool"] == "add_comment"
+      assert payload["identifier"] == issue.identifier
+      comment_id = payload["comment"]["id"]
+      assert is_integer(comment_id)
+
+      listed = DynamicTool.execute("list_comments", %{}, issue: issue)
+      assert listed["success"] == true
+      list_payload = listed["contentItems"] |> hd() |> Map.fetch!("text") |> Jason.decode!()
+      assert Enum.any?(list_payload["comments"], &(&1["id"] == comment_id))
+
+      updated =
+        DynamicTool.execute(
+          "update_comment",
+          %{"comment_id" => comment_id, "body" => "## Codex Workpad\n\n### Outcome\nno-op"},
+          issue: issue
+        )
+
+      assert updated["success"] == true
+
+      assert {:ok, [%{body: body}]} = Context.list_comments("macro-markets", issue.identifier)
+      assert body =~ "### Outcome"
+    end
+
+    test "update_comment reports a missing comment id", %{issue: issue} do
+      response =
+        DynamicTool.execute(
+          "update_comment",
+          %{"comment_id" => 999_999, "body" => "## Codex Workpad"},
+          issue: issue
+        )
+
+      assert response["success"] == false
+      text = hd(response["contentItems"])["text"]
+      assert Jason.decode!(text)["error"]["message"] =~ "No comment with that id"
+    end
+  end
+
   test "unsupported tools return a failure payload with the supported tool list" do
     response = DynamicTool.execute("not_a_real_tool", %{})
 
@@ -62,7 +172,14 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert Jason.decode!(text) == %{
              "error" => %{
                "message" => ~s(Unsupported dynamic tool: "not_a_real_tool".),
-               "supportedTools" => ["linear_graphql", "github_graphql", "set_issue_status"]
+               "supportedTools" => [
+                 "linear_graphql",
+                 "github_graphql",
+                 "set_issue_status",
+                 "add_comment",
+                 "list_comments",
+                 "update_comment"
+               ]
              }
            }
   end

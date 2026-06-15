@@ -203,6 +203,82 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     assert is_integer(completed_state.agent_totals.seconds_running)
   end
 
+  test "orchestrator snapshot tracks codex thread/tokenUsage/updated params.usage payloads" do
+    issue_id = "issue-usage-params-snapshot"
+
+    issue = %Issue{
+      id: issue_id,
+      identifier: "MT-202",
+      title: "Usage params snapshot test",
+      description: "Collect usage stats",
+      state: "In Progress",
+      url: "https://example.org/issues/MT-202",
+      project_slug: "advising"
+    }
+
+    orchestrator_name = Module.concat(__MODULE__, :UsageParamsOrchestrator)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        Process.exit(pid, :normal)
+      end
+    end)
+
+    initial_state = :sys.get_state(pid)
+    process_ref = make_ref()
+    started_at = DateTime.utc_now()
+
+    running_entry = %{
+      pid: self(),
+      ref: process_ref,
+      identifier: issue.identifier,
+      issue: issue,
+      session_id: nil,
+      turn_count: 0,
+      last_codex_message: nil,
+      last_codex_timestamp: nil,
+      last_codex_event: nil,
+      agent_input_tokens: 0,
+      agent_output_tokens: 0,
+      agent_total_tokens: 0,
+      codex_last_reported_input_tokens: 0,
+      codex_last_reported_output_tokens: 0,
+      codex_last_reported_total_tokens: 0,
+      started_at: started_at
+    }
+
+    :sys.replace_state(pid, fn _ ->
+      initial_state
+      |> Map.put(:running, %{issue_id => running_entry})
+      |> Map.put(:claimed, MapSet.put(initial_state.claimed, issue_id))
+    end)
+
+    now = DateTime.utc_now()
+
+    send(
+      pid,
+      {:codex_worker_update, issue_id,
+       normalize(%{
+         event: :notification,
+         payload: %{
+           "method" => "thread/tokenUsage/updated",
+           "params" => %{
+             "usage" => %{"input_tokens" => 8, "output_tokens" => 3, "total_tokens" => 11}
+           }
+         },
+         timestamp: now
+       })}
+    )
+
+    snapshot = GenServer.call(pid, :snapshot)
+    assert %{running: [snapshot_entry]} = snapshot
+    assert snapshot_entry.agent_input_tokens == 8
+    assert snapshot_entry.agent_output_tokens == 3
+    assert snapshot_entry.agent_total_tokens == 11
+    assert Map.get(snapshot.agent_totals_by_project, "advising").input_tokens == 8
+  end
+
   test "normal agent completion applies the configured transition and releases the claim" do
     issue_id = "issue-transition"
 

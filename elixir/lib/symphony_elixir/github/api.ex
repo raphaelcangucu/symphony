@@ -54,6 +54,14 @@ defmodule SymphonyElixir.GitHub.Api do
   }
   """
 
+  @delete_comment_mutation """
+  mutation SymphonyApiDeleteComment($id: ID!) {
+    deleteIssueComment(input: { id: $id }) {
+      clientMutationId
+    }
+  }
+  """
+
   @issue_node_query """
   query SymphonyApiIssueNodeId($owner: String!, $name: String!, $number: Int!) {
     repository(owner: $owner, name: $name) { issue(number: $number) { id } }
@@ -207,6 +215,41 @@ defmodule SymphonyElixir.GitHub.Api do
 
     case Client.rest_patch(path, %{"body" => body}, rest_opts(opts)) do
       {:ok, %{body: raw}} when is_map(raw) -> {:ok, normalize_rest_comment(raw)}
+      {:error, _} = error -> error
+    end
+  end
+
+  # -- delete_comment ----------------------------------------------------------
+
+  @doc """
+  Deletes an existing issue comment. A GraphQL node id (`IC_...`) uses the
+  `deleteIssueComment` mutation; a REST numeric id uses
+  `DELETE /repos/{owner}/{name}/issues/comments/{id}`.
+  """
+  @spec delete_comment(String.t(), String.t(), keyword()) :: :ok | {:error, term()}
+  def delete_comment(repo, remote_id, opts \\ [])
+      when is_binary(repo) and is_binary(remote_id) do
+    with {:ok, {owner, name}} <- RepoSpec.split(repo) do
+      case Integer.parse(remote_id) do
+        {numeric_id, ""} -> rest_delete_comment(owner, name, numeric_id, opts)
+        _ -> graphql_delete_comment(remote_id, opts)
+      end
+    end
+  end
+
+  defp graphql_delete_comment(node_id, opts) do
+    case Client.graphql(@delete_comment_mutation, %{"id" => node_id}, graphql_opts(opts)) do
+      {:ok, %{"data" => %{"deleteIssueComment" => _payload}}} -> :ok
+      {:ok, _unexpected} -> {:error, :remote_unavailable}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp rest_delete_comment(owner, name, comment_id, opts) do
+    path = "/repos/#{owner}/#{name}/issues/comments/#{comment_id}"
+
+    case Client.rest_delete(path, rest_opts(opts)) do
+      :ok -> :ok
       {:error, _} = error -> error
     end
   end

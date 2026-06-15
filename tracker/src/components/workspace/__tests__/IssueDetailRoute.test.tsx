@@ -20,6 +20,10 @@ vi.mock("@/services/issues", () => ({
   updateIssue: vi.fn(),
 }));
 vi.mock("@/services/comments", () => ({ listComments: vi.fn().mockResolvedValue([]), createComment: vi.fn() }));
+// The drawer renders inline editors that resolve the "me" identity via useViewer
+// + a network call; stub it so these routing-focused tests don't need a
+// ViewerProvider or a live backend.
+vi.mock("@/hooks/useMeIdentities", () => ({ useMeIdentities: () => [] }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 
 import { toast } from "sonner";
@@ -56,8 +60,8 @@ vi.mock("@/components/layout/WorkspaceContext", () => ({
   useWorkspace: () => workspaceValue,
 }));
 
-function renderAt(path: string) {
-  return render(
+function routesTree(path: string) {
+  return (
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
@@ -73,8 +77,12 @@ function renderAt(path: string) {
           <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
         </Route>
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderAt(path: string) {
+  return render(routesTree(path));
 }
 
 describe("IssueDetailRoute", () => {
@@ -101,6 +109,37 @@ describe("IssueDetailRoute", () => {
     // The full issue is fetched in the background so remote-only data (e.g. Jira
     // attachments) the board list omits gets filled in.
     await waitFor(() => expect(getIssue).toHaveBeenCalledWith("x", "ABC-1"));
+  });
+
+  it("fetches the issue only once even as the board list updates underneath", async () => {
+    // Reproduces a page refresh: the board list reference churns (realtime
+    // upserts, polling) *while* the full issue fetch is still in flight. The
+    // fetch must fire exactly once instead of restarting on every update.
+    let resolveFetch: (issue: Issue) => void = () => {};
+    vi.mocked(getIssue).mockImplementationOnce(
+      () =>
+        new Promise<Issue>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    workspaceValue.issues = [];
+    const { rerender } = renderAt("/projects/x/board/issues/ABC-1");
+
+    await waitFor(() => expect(getIssue).toHaveBeenCalledTimes(1));
+
+    for (let i = 0; i < 3; i += 1) {
+      workspaceValue.issues = [{ ...sampleIssue }];
+      rerender(routesTree("/projects/x/board/issues/ABC-1"));
+    }
+
+    // No extra requests while the first one is still pending.
+    expect(getIssue).toHaveBeenCalledTimes(1);
+
+    resolveFetch(sampleIssue);
+
+    expect(await screen.findByText("Deep linkable issue")).toBeInTheDocument();
+    expect(getIssue).toHaveBeenCalledTimes(1);
   });
 
   it("fetches an issue that is not in the workspace list", async () => {

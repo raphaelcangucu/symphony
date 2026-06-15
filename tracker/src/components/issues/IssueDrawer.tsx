@@ -33,15 +33,20 @@ import { useIssueComments } from "@/hooks/useIssueComments";
 import { useIssueEditor } from "@/hooks/useIssueEditor";
 import { useIssueUpdater } from "@/hooks/useIssueUpdater";
 import type { EditorReason } from "@/services/editor";
+import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
 import { useIssueEvidence } from "@/hooks/useIssueEvidence";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
+import { canResumeExecution } from "@/lib/agentExecutionDisplay";
+import { evidenceNeedsAttention } from "@/lib/evidenceStatus";
+import { isWaitState, parseWorkflowTrackerConfig } from "@/lib/workflowTracker";
 import { DEFAULT_ISSUE_TAB, type IssueTab, type WorkspaceView } from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { ActivityTab } from "./issue-detail/ActivityTab";
 import { AgentLongRunningBadge, AgentStatusBadge } from "./AgentStatusBadge";
+import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { AgentTabs } from "./issue-detail/AgentTabs";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { BlockersTab } from "./issue-detail/BlockersTab";
@@ -71,10 +76,12 @@ interface IssueDrawerProps {
   projectSlug: string;
   view: WorkspaceView;
   execution?: AgentExecution;
+  workflowMarkdown?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tab?: IssueTab;
   onTabChange?: (tab: IssueTab) => void;
+  onOpenAgentExecution?: () => void;
   onArchive?: (issue: Issue) => void | Promise<void>;
   onDelete?: (issue: Issue) => void | Promise<void>;
   onForceSync?: (issue: Issue) => void | Promise<void>;
@@ -86,10 +93,12 @@ export function IssueDrawer({
   projectSlug,
   view,
   execution,
+  workflowMarkdown = null,
   open,
   onOpenChange,
   tab = DEFAULT_ISSUE_TAB,
   onTabChange,
+  onOpenAgentExecution,
   onArchive,
   onDelete,
   onForceSync,
@@ -118,6 +127,12 @@ export function IssueDrawer({
     enabled: open && Boolean(issue),
   });
 
+  const commitEvidence = useIssueCommitEvidence({
+    projectSlug,
+    identifier: issue?.identifier ?? null,
+    enabled: open && Boolean(issue),
+  });
+
   const editor = useIssueEditor({
     projectSlug,
     identifier: issue?.identifier ?? null,
@@ -129,6 +144,12 @@ export function IssueDrawer({
     issue,
     onUpdated: onIssueUpdated,
   });
+
+  const trackerConfig = parseWorkflowTrackerConfig(workflowMarkdown);
+  const inWaitState = issue ? isWaitState(issue.status, trackerConfig) : false;
+  const evidenceNeedsResume = !evidence.loading && evidenceNeedsAttention(evidence.records);
+  const showEvidenceContinueWork =
+    inWaitState && evidenceNeedsResume && canResumeExecution(execution);
 
   const openBrowserEditor = useCallback(() => {
     if (editor.browser.available && editor.browser.url) {
@@ -177,10 +198,9 @@ export function IssueDrawer({
 
   const commentsCount = commentsState.comments.length;
   const blockersCount = issue?.blockedBy.length ?? 0;
-  const showBrowserEditor = editor.browser.reason !== "disabled";
   const anyEditorAvailable = editor.browser.available || editor.cursorDesktop.available;
   const editorMenuTitle = editor.browser.available
-    ? "Open this task's workspace in VS Code (.)"
+    ? "Open this task's workspace in Code (.)"
     : editorUnavailableTitle(editor.browser.reason ?? editor.cursorDesktop.reason, editor.loading);
 
   return (
@@ -200,7 +220,7 @@ export function IssueDrawer({
                       Blocked
                     </span>
                   ) : null}
-                  {execution ? <AgentStatusBadge status={execution.status} /> : null}
+                  {execution ? <AgentStatusBadge status={resolveDisplayStatus(execution)} /> : null}
                   {execution ? <AgentLongRunningBadge execution={execution} /> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
@@ -212,39 +232,37 @@ export function IssueDrawer({
                           size="sm"
                           disabled={!anyEditorAvailable && !editor.loading}
                           title={editorMenuTitle}
-                          aria-label="Open in VS Code"
+                          aria-label="Open in Code"
                         >
                           <Code2 className="h-4 w-4" />
-                          <span className="hidden sm:inline">VS Code</span>
+                          <span className="hidden sm:inline">Code</span>
                           <ChevronDown className="h-4 w-4 opacity-60" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-44">
-                        {showBrowserEditor ? (
-                          <DropdownMenuItem
-                            disabled={!editor.browser.available}
-                            title={
-                              editor.browser.available
-                                ? "Open in VS Code (browser)"
-                                : editorUnavailableTitle(editor.browser.reason, editor.loading)
-                            }
-                            onSelect={() => openBrowserEditor()}
-                          >
-                            <Code2 className="mr-2 h-4 w-4" />
-                            VS Code
-                          </DropdownMenuItem>
-                        ) : null}
+                        <DropdownMenuItem
+                          disabled={!editor.browser.available}
+                          title={
+                            editor.browser.available
+                              ? "Open in VS Code (browser)"
+                              : editorUnavailableTitle(editor.browser.reason, editor.loading)
+                          }
+                          onSelect={() => openBrowserEditor()}
+                        >
+                          <Code2 className="mr-2 h-4 w-4" />
+                          VS Code
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={!editor.cursorDesktop.available}
                           title={
                             editor.cursorDesktop.available
-                              ? "Open in Cursor Desktop (local app)"
+                              ? "Open in Cursor (local app)"
                               : editorUnavailableTitle(editor.cursorDesktop.reason, editor.loading)
                           }
                           onSelect={() => openCursorDesktop()}
                         >
                           <Code2 className="mr-2 h-4 w-4" />
-                          Cursor Desktop
+                          Cursor
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -415,21 +433,40 @@ export function IssueDrawer({
                     error={commentsState.error}
                     projectSlug={projectSlug}
                     onAddComment={commentsState.addComment}
+                    onUpdateComment={commentsState.updateComment}
+                    onDeleteComment={commentsState.deleteComment}
                   />
                 </TabsContent>
                 <TabsContent value="evidence">
                   <EvidenceTab
+                    commitWorkspace={commitEvidence.workspace}
+                    commits={commitEvidence.commits}
+                    commitsError={commitEvidence.error}
+                    commitsLoading={commitEvidence.loading}
                     error={evidence.error}
                     identifier={issue.identifier}
+                    issue={issue}
                     loading={evidence.loading}
+                    onIssueUpdated={onIssueUpdated}
                     onRefresh={() => void evidence.refetch()}
+                    onRefreshCommits={() => void commitEvidence.refetch()}
                     projectSlug={projectSlug}
                     records={evidence.records}
+                    showContinueWork={showEvidenceContinueWork}
+                    trackerConfig={trackerConfig}
                   />
                 </TabsContent>
                 <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
                 <TabsContent value="agent">
-                  <AgentTabs issue={issue} projectSlug={projectSlug} execution={execution} view={view} onIssueUpdated={onIssueUpdated} />
+                  <AgentTabs
+                    issue={issue}
+                    projectSlug={projectSlug}
+                    execution={execution}
+                    view={view}
+                    workflowMarkdown={workflowMarkdown}
+                    evidenceRecords={evidence.records}
+                    onIssueUpdated={onIssueUpdated}
+                  />
                 </TabsContent>
                 <TabsContent value="preview">
                   <PreviewTab

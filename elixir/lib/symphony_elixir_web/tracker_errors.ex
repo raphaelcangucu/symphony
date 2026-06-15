@@ -23,6 +23,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :issue_not_found), do: not_found(conn, "issue_not_found", "Issue not found")
   def render(conn, :status_not_found), do: not_found(conn, "status_not_found", "Status not found")
   def render(conn, :blocker_not_found), do: not_found(conn, "blocker_not_found", "Blocker not found")
+  def render(conn, :comment_not_found), do: not_found(conn, "comment_not_found", "Comment not found")
   def render(conn, :dev_server_not_found), do: not_found(conn, "dev_server_not_found", "Dev server not found")
   def render(conn, :template_not_found), do: not_found(conn, "template_not_found", "Template not found")
 
@@ -107,6 +108,24 @@ defmodule SymphonyElixirWeb.TrackerErrors do
 
   def render(conn, :no_failed_runs),
     do: error(conn, 422, "no_failed_runs", "No failed workflow runs found for this pull request.")
+
+  def render(conn, :orchestrator_unavailable),
+    do: error(conn, 503, "orchestrator_unavailable", "Orchestrator is unavailable. Try again in a moment.")
+
+  def render(conn, :already_running),
+    do: error(conn, 409, "already_running", "An agent is already running on this issue.")
+
+  def render(conn, :no_slots),
+    do: error(conn, 503, "no_slots", "No orchestrator slots are available right now.")
+
+  def render(conn, :not_dispatchable),
+    do:
+      error(
+        conn,
+        422,
+        "not_dispatchable",
+        "This issue is not in an active, routable state for agent dispatch."
+      )
 
   def render(conn, :invalid_merge_method),
     do: error(conn, 422, "invalid_merge_method", "Merge method must be merge, squash, or rebase.")

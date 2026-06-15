@@ -30,6 +30,51 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreStatusesTest do
     assert Enum.map(rows, & &1.category) == ["backlog", "completed"]
   end
 
+  test "upsert_statuses preserves imported column order on later sync", %{project: project} do
+    :ok =
+      LocalStore.upsert_statuses(project, [
+        %{name: "Backlog", category: "backlog", position: 0, is_terminal: false},
+        %{name: "Done", category: "completed", position: 1, is_terminal: true}
+      ])
+
+    :ok =
+      LocalStore.upsert_statuses(project, [
+        %{name: "Done", category: "completed", position: 0, is_terminal: true},
+        %{name: "Backlog", category: "backlog", position: 1, is_terminal: false}
+      ])
+
+    rows =
+      Repo.all(from(s in WorkflowStatus, where: s.project_id == ^project.id, order_by: s.position))
+
+    assert Enum.map(rows, &{&1.name, &1.position}) == [{"Backlog", 0}, {"Done", 1}]
+  end
+
+  test "merge_remote_statuses leaves configured columns alone and appends new remote statuses", %{
+    project: project
+  } do
+    :ok =
+      LocalStore.upsert_statuses(project, [
+        %{name: "Backlog", category: "backlog", position: 0, is_terminal: false},
+        %{name: "Done", category: "completed", position: 1, is_terminal: true}
+      ])
+
+    :ok =
+      LocalStore.merge_remote_statuses(project, [
+        %{name: "Done", category: "completed", position: 0, is_terminal: true},
+        %{name: "Backlog", category: "backlog", position: 1, is_terminal: false},
+        %{name: "In QA", category: "started", position: 2, is_terminal: false}
+      ])
+
+    rows =
+      Repo.all(from(s in WorkflowStatus, where: s.project_id == ^project.id, order_by: s.position))
+
+    assert Enum.map(rows, &{&1.name, &1.position}) == [
+             {"Backlog", 0},
+             {"Done", 1},
+             {"In QA", 2}
+           ]
+  end
+
   test "upsert_remote_issue creates a status on the fly when none is seeded", %{
     project: project
   } do

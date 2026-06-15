@@ -78,18 +78,29 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert statuses == [:waiting, :waiting]
     end
 
-    test "projects retry entries as retrying with attempt and error" do
+    test "projects retry entries with an error as error status" do
       snapshot = %{
         running: [],
         retrying: [%{issue_id: "issue-9", identifier: "SYM-9", attempt: 3, due_in_ms: 5_000, error: "boom"}]
       }
 
       assert [execution] = AgentExecution.from_snapshot(snapshot)
-      assert execution.status == :retrying
+      assert execution.status == :error
       assert execution.issue_id == "issue-9"
       assert execution.issue_identifier == "SYM-9"
       assert execution.retry_attempt == 3
       assert execution.error == "boom"
+    end
+
+    test "projects retry entries without an error as retrying" do
+      snapshot = %{
+        running: [],
+        retrying: [%{issue_id: "issue-9", identifier: "SYM-9", attempt: 2, due_in_ms: 5_000, error: nil}]
+      }
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.status == :retrying
+      assert execution.error == nil
     end
 
     test "prefers the running entry when an issue is both running and retrying" do

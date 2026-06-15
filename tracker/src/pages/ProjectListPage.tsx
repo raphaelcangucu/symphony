@@ -1,4 +1,4 @@
-import { Archive, ExternalLink, FolderKanban, Pencil, Plus, RotateCcw, Settings2, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { Archive, ExternalLink, FolderKanban, Pencil, Plus, RotateCcw, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { notifyTrackerProjectsChanged } from "@/lib/projectEvents";
 import { githubProjectBoardUrl, projectTrackerLinkLabel, resolveProjectTrackerUrl } from "@/lib/projectTrackerUrl";
-import { projectEditPath, projectsDevEnvPath, projectsFiltersPath, projectsNewPath } from "@/lib/workspaceRoutes";
+import { projectEditPath, projectsFiltersPath, projectsNewPath } from "@/lib/workspaceRoutes";
 import { discoverGitHubProjects } from "@/services/remoteTrackers";
 import { archiveProject, deleteProject, listProjects, restoreProject } from "@/services/projects";
 import { importProject } from "@/services/projectImportExport";
@@ -304,17 +304,6 @@ export function ProjectListPage() {
                       onClick={() => navigate({ pathname: projectEditPath(project.slug), search: location.search })}
                     >
                       <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground"
-                      aria-label={`Dev environment setup for ${project.name}`}
-                      title="Dev environment setup"
-                      onClick={() => navigate({ pathname: projectsDevEnvPath(project.slug), search: location.search })}
-                    >
-                      <Settings2 className="h-4 w-4" />
                     </Button>
                     {isArchived ? (
                       <>

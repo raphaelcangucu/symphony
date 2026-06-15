@@ -176,6 +176,58 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
     assert %{"data" => [], "supported" => false} = json_response(conn, 200)
   end
 
+  describe "jira project with github repositories" do
+    setup do
+      Application.put_env(:symphony_elixir, :github_client_module, FakeGitHubClient)
+      previous_github = System.get_env(@github_token_env)
+      System.put_env(@github_token_env, "gh-token")
+
+      {:ok, project} =
+        Context.create_workspace_project(%{
+          "name" => "Advising",
+          "slug" => "advising-jira-pr",
+          "tracker" => %{"kind" => "jira", "config" => %{"project_key" => "CDE"}},
+          "repositories" => [
+            %{
+              "github_full_name" => "civitaslearning/advising",
+              "clone_url" => "https://github.com/civitaslearning/advising.git",
+              "role" => "primary",
+              "workspace_path" => "advising"
+            }
+          ],
+          "setup" => %{}
+        })
+
+      {:ok, _pr} =
+        SymphonyElixir.Tracker.Sync.LocalStore.link_manual_pull_request(project.id, "CDE-1132", %{
+          url: "https://github.com/civitaslearning/advising/pull/9540",
+          repo: "civitaslearning/advising",
+          number: 9540
+        })
+
+      on_exit(fn ->
+        Application.delete_env(:symphony_elixir, :github_client_module)
+        restore_env(@github_token_env, previous_github)
+      end)
+
+      %{project: project}
+    end
+
+    test "returns supported: true and persisted PRs for external tracker issues", %{project: _project} do
+      conn = get(authorized_conn(), "/api/tracker/v1/projects/advising-jira-pr/issues/CDE-1132/pull_requests")
+
+      assert %{
+               "supported" => true,
+               "available" => true,
+               "data" => [pr]
+             } = json_response(conn, 200)
+
+      assert pr["number"] == 9540
+      assert pr["url"] == "https://github.com/civitaslearning/advising/pull/9540"
+      assert pr["origin"] == "manual"
+    end
+  end
+
   describe "github project" do
     setup do
       Application.put_env(:symphony_elixir, :github_client_module, FakeGitHubClient)

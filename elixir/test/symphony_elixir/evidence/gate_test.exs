@@ -5,16 +5,16 @@ defmodule SymphonyElixir.Evidence.GateTest do
   alias SymphonyElixir.Evidence.Manifest
   alias SymphonyElixir.Evidence.Manifest.Run
 
-  defp manifest(runs), do: %Manifest{issue: "GAM-9", runs: runs}
+  defp manifest(runs, impact \\ []), do: %Manifest{issue: "GAM-9", runs: runs, impact: impact}
 
   defp unit(repo, status \\ "passed"),
     do: %Run{kind: "unit", repo: repo, command: "npm test", status: status}
 
-  defp e2e(extra \\ []) do
+  defp e2e(repo \\ "frontend", extra \\ []) do
     struct!(
       %Run{
         kind: "e2e",
-        repo: "frontend",
+        repo: repo,
         command: "npx playwright test",
         status: "passed",
         screenshots: ["s.png"],
@@ -23,6 +23,9 @@ defmodule SymphonyElixir.Evidence.GateTest do
       Map.new(extra)
     )
   end
+
+  defp impact(from, to, impacts_ui, rationale \\ nil),
+    do: %{from: from, to: to, impacts_ui: impacts_ui, rationale: rationale}
 
   defp deps(overrides \\ []) do
     Map.merge(
@@ -35,10 +38,21 @@ defmodule SymphonyElixir.Evidence.GateTest do
     )
   end
 
-  @config %{required: true, ui_paths: ["frontend/src/**"]}
+  @config %{
+    required: true,
+    repos: %{
+      "frontend" => %{ui_paths: ["src/**"], e2e: %{command: "npx playwright test"}},
+      "backend" => %{
+        unit_command: "./vibe test",
+        impacts: ["frontend"],
+        contract_paths: ["app/Http/**", "routes/**"]
+      },
+      "goapi" => %{unit_command: "go test ./..."}
+    }
+  }
 
   test "disabled evidence is satisfied" do
-    assert :satisfied = Gate.evaluate("/ws", %{required: false, ui_paths: []}, deps())
+    assert :satisfied = Gate.evaluate("/ws", %{required: false, repos: %{}}, deps())
   end
 
   test "no changed repos is satisfied" do
@@ -58,26 +72,122 @@ defmodule SymphonyElixir.Evidence.GateTest do
   test "changed repo without passing unit run" do
     d =
       deps(
-        read_manifest: fn _ws -> {:ok, manifest([unit("frontend", "failed")])} end,
-        changed_files: fn _ws -> %{"frontend" => ["src/x.ts"]} end
+        read_manifest: fn _ws -> {:ok, manifest([unit("goapi", "failed")])} end,
+        changed_files: fn _ws -> %{"goapi" => ["main.go"]} end
       )
 
-    assert {:violations, [%{kind: :unit_not_green, repo: "frontend"}]} =
-             Gate.evaluate("/ws", %{required: true, ui_paths: []}, d)
+    assert {:violations, [%{kind: :unit_not_green, repo: "goapi"}]} =
+             Gate.evaluate("/ws", @config, d)
   end
 
-  test "ui change demands e2e with screenshots and video" do
-    d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend")])} end)
-    assert {:violations, [%{kind: :e2e_missing}]} = Gate.evaluate("/ws", @config, d)
+  describe "frontend-only (direct UI change)" do
+    test "demands e2e for frontend with screenshots and video" do
+      d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend")])} end)
+      assert {:violations, [%{kind: :e2e_missing, repo: "frontend"}]} = Gate.evaluate("/ws", @config, d)
 
-    d2 =
-      deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e(screenshots: [])])} end)
+      d2 =
+        deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e("frontend", screenshots: [])])} end)
 
-    assert {:violations, [%{kind: :visual_capture_missing}]} = Gate.evaluate("/ws", @config, d2)
+      assert {:violations, [%{kind: :visual_capture_missing, repo: "frontend"}]} =
+               Gate.evaluate("/ws", @config, d2)
+    end
+
+    test "fully green with visual capture is satisfied" do
+      d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e()])} end)
+      assert :satisfied = Gate.evaluate("/ws", @config, d)
+    end
   end
 
-  test "fully green with visual capture is satisfied" do
-    d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e()])} end)
+  describe "backend internal change (gray zone, agent decides)" do
+    test "agent dismissal with rationale is satisfied" do
+      d =
+        deps(
+          changed_files: fn _ws -> %{"backend" => ["app/Services/Internal.php"]} end,
+          read_manifest: fn _ws ->
+            {:ok, manifest([unit("backend")], [impact("backend", "frontend", false, "internal service, no API surface change")])}
+          end
+        )
+
+      assert :satisfied = Gate.evaluate("/ws", @config, d)
+    end
+
+    test "missing impact decision is a violation" do
+      d =
+        deps(
+          changed_files: fn _ws -> %{"backend" => ["app/Services/Internal.php"]} end,
+          read_manifest: fn _ws -> {:ok, manifest([unit("backend")])} end
+        )
+
+      assert {:violations, [%{kind: :impact_assessment_missing, repo: "frontend"}]} =
+               Gate.evaluate("/ws", @config, d)
+    end
+
+    test "agent declaring impact true demands frontend e2e" do
+      d =
+        deps(
+          changed_files: fn _ws -> %{"backend" => ["app/Services/Internal.php"]} end,
+          read_manifest: fn _ws ->
+            {:ok, manifest([unit("backend")], [impact("backend", "frontend", true)])}
+          end
+        )
+
+      assert {:violations, [%{kind: :e2e_missing, repo: "frontend"}]} = Gate.evaluate("/ws", @config, d)
+
+      d2 =
+        deps(
+          changed_files: fn _ws -> %{"backend" => ["app/Services/Internal.php"]} end,
+          read_manifest: fn _ws ->
+            {:ok, manifest([unit("backend"), e2e()], [impact("backend", "frontend", true)])}
+          end
+        )
+
+      assert :satisfied = Gate.evaluate("/ws", @config, d2)
+    end
+  end
+
+  describe "backend contract change (deterministic backstop)" do
+    test "touching contract_paths demands frontend e2e even with impacts_ui false" do
+      d =
+        deps(
+          changed_files: fn _ws -> %{"backend" => ["routes/api.php"]} end,
+          read_manifest: fn _ws ->
+            {:ok, manifest([unit("backend")], [impact("backend", "frontend", false, "I think it is fine")])}
+          end
+        )
+
+      assert {:violations, [%{kind: :e2e_missing, repo: "frontend"}]} = Gate.evaluate("/ws", @config, d)
+    end
+
+    test "backstop satisfied when frontend e2e ran" do
+      d =
+        deps(
+          changed_files: fn _ws -> %{"backend" => ["routes/api.php"]} end,
+          read_manifest: fn _ws -> {:ok, manifest([unit("backend"), e2e()])} end
+        )
+
+      assert :satisfied = Gate.evaluate("/ws", @config, d)
+    end
+  end
+
+  describe "goapi-only (no impacts configured)" do
+    test "only requires its own unit run" do
+      d =
+        deps(
+          changed_files: fn _ws -> %{"goapi" => ["internal/x.go"]} end,
+          read_manifest: fn _ws -> {:ok, manifest([unit("goapi")])} end
+        )
+
+      assert :satisfied = Gate.evaluate("/ws", @config, d)
+    end
+  end
+
+  test "multi-repo: frontend UI + backend contract both need frontend e2e and units" do
+    d =
+      deps(
+        changed_files: fn _ws -> %{"frontend" => ["src/App.tsx"], "backend" => ["routes/api.php"]} end,
+        read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), unit("backend"), e2e()])} end
+      )
+
     assert :satisfied = Gate.evaluate("/ws", @config, d)
   end
 
@@ -98,7 +208,6 @@ defmodule SymphonyElixir.Evidence.GateTest do
         audit: fn _commands, _opts -> {:error, :session_log_unavailable} end
       )
 
-    assert {:violations, [%{kind: :session_log_unavailable}]} =
-             Gate.evaluate("/ws", @config, d)
+    assert {:violations, [%{kind: :session_log_unavailable}]} = Gate.evaluate("/ws", @config, d)
   end
 end

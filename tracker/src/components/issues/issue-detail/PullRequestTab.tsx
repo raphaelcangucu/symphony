@@ -40,6 +40,8 @@ export function PullRequestTab({
     .filter((pr) => pr.monitor?.lastAction)
     .map((pr) => ({ pr, monitor: pr.monitor! }));
 
+  const canUseLiveActions = supported && available;
+
   async function handleFix() {
     if (fixing) return;
     setFixing(true);
@@ -138,27 +140,6 @@ export function PullRequestTab({
     </div>
   );
 
-  if (!supported) {
-    return (
-      <EmptyState>
-        Pull request linkage is only available for GitHub-backed projects.
-        {issue.url ? (
-          <>
-            {" "}
-            <a href={issue.url} target="_blank" rel="noreferrer noopener" className="underline">
-              Open the issue
-            </a>{" "}
-            to see related work.
-          </>
-        ) : null}
-      </EmptyState>
-    );
-  }
-
-  if (!available) {
-    return <EmptyState>A GitHub token is required to load pull request and CI details.</EmptyState>;
-  }
-
   if (loading && pullRequests.length === 0) {
     return <EmptyState>Loading pull request details…</EmptyState>;
   }
@@ -175,6 +156,28 @@ export function PullRequestTab({
   }
 
   if (pullRequests.length === 0) {
+    if (!supported) {
+      return (
+        <EmptyState>
+          Pull requests require a configured GitHub repository. Add one in project settings to link PRs to{" "}
+          <span className="font-mono">{issue.identifier}</span>.
+        </EmptyState>
+      );
+    }
+
+    if (!available) {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-end">{refreshButton}</div>
+          <EmptyState>
+            A GitHub token is required to discover pull requests and load CI details. Set{" "}
+            <span className="font-mono">GITHUB_TOKEN</span> and refresh, or link a PR manually below.
+          </EmptyState>
+          {linkRow}
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-end">{refreshButton}</div>
@@ -190,12 +193,18 @@ export function PullRequestTab({
 
   return (
     <div className="space-y-4">
+      {!available ? (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Limited GitHub access.</span> Linked pull requests are shown,
+          but CI details and merge actions need <span className="font-mono">GITHUB_TOKEN</span> configured.
+        </div>
+      ) : null}
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
           {pullRequests.length} related pull request{pullRequests.length === 1 ? "" : "s"}
         </span>
         <div className="flex items-center gap-2">
-          {canFix ? (
+          {canUseLiveActions && canFix ? (
             <>
               <Button
                 type="button"
@@ -241,7 +250,11 @@ export function PullRequestTab({
           projectSlug={projectSlug}
           issueIdentifier={issue.identifier}
           onRefresh={onRefresh}
-          onRemove={pr.origin === "manual" ? () => void handleRemove(pr.url) : undefined}
+          onRemove={
+            pr.origin === "manual" || pr.origin === "auto"
+              ? () => void handleRemove(pr.url)
+              : undefined
+          }
         />
       ))}
     </div>

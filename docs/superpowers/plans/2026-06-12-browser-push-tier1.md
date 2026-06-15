@@ -4,7 +4,7 @@
 
 **Architecture:** Add focused functions on `PushNotifications.Dispatcher` and call them from existing orchestrator retry/completion paths and PR monitor `persist_action_after_comment/8`. Reuse the same JSON payload shape (`title`, `body`, `url`, `tag`, `kind`) and `Sender.deliver_all/2`. No new tables or UI toggles in v1.
 
-**Tech Stack:** Elixir (`SymphonyElixir.PushNotifications`), existing `web_push_elixir`, tracker Service Worker unchanged.
+**Tech Stack:** Elixir (`SymphonyElixir.PushNotifications`), `ex_nudge` (RFC 8291 `aes128gcm`), tracker Service Worker unchanged.
 
 ---
 

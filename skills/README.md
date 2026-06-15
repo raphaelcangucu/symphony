@@ -28,7 +28,7 @@ duplication and every skill is shared across agents:
   upstream. Because these live one level deeper, repo-local CLI auto-discovery
   does not surface them directly from this canonical tree.
 - `commit/`, `debug/`, `github-projects/`, `land/`, `linear/`, `pull/`,
-  `push/` — operational workflow skills (git, PRs, tracker).
+  `push/`, `workflow/` — operational workflow skills (git, PRs, tracker, orchestrator config).
 - `release/` — release workflow skill.
 
 ## Workspace discovery

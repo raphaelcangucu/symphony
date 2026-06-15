@@ -141,7 +141,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       ),
       tool_spec(
         "update_project_workflow",
-        "Update this project's workflow markdown (YAML front matter + prompt body).",
+        "Update workflow markdown (YAML front matter + body). Orchestrator behavior requires tracker.* lists in front matter (dispatch_states, active_states, terminal_states, wait_states, field_states) — editing body prose alone does not change auto-dispatch. Preserve or update YAML when changing queue/work statuses.",
         %{
           "type" => "object",
           "additionalProperties" => false,

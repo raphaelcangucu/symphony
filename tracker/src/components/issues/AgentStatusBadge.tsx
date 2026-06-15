@@ -1,4 +1,4 @@
-import { Clock, Moon, RotateCcw, Target, Zap, type LucideIcon } from "lucide-react";
+import { AlertCircle, Ban, Clock, Moon, RotateCcw, Target, Zap, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -50,6 +50,24 @@ const AGENT_STATUS_META: Record<AgentExecutionStatus, AgentStatusMeta> = {
     chipClass: "border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-300",
     pulse: false,
     spin: true,
+  },
+  error: {
+    label: "Error",
+    Icon: AlertCircle,
+    dotClass: "bg-rose-500",
+    textClass: "text-rose-600 dark:text-rose-300",
+    chipClass: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300",
+    pulse: false,
+    spin: false,
+  },
+  aborted: {
+    label: "Aborted",
+    Icon: Ban,
+    dotClass: "bg-rose-400",
+    textClass: "text-rose-500 dark:text-rose-300",
+    chipClass: "border-rose-400/30 bg-rose-400/10 text-rose-500 dark:text-rose-300",
+    pulse: false,
+    spin: false,
   },
 };
 

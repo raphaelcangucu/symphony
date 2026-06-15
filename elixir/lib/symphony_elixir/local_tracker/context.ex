@@ -14,6 +14,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
     Broadcaster,
     Comment,
     IssueLabel,
+    IssueMapper,
     IssueRecord,
     IssueRelation,
     Label,
@@ -278,6 +279,24 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec list_routable_non_terminal_issues() :: [IssueRecord.t()]
+  def list_routable_non_terminal_issues do
+    IssueRecord
+    |> join(:inner, [issue], status in WorkflowStatus, on: issue.status_id == status.id)
+    |> where([issue, status], is_nil(issue.archived_at) and status.is_terminal == false)
+    |> order_by([issue], asc: issue.project_id, asc: issue.position, asc: issue.id)
+    |> preload(^@issue_preloads)
+    |> Repo.all()
+    |> Enum.filter(&routable_issue?/1)
+  end
+
+  defp routable_issue?(%IssueRecord{} = record) do
+    record
+    |> IssueMapper.to_issue()
+    |> Map.get(:labels, [])
+    |> AgentRouting.routable?()
+  end
+
   @spec get_issue(String.t(), String.t()) :: {:ok, IssueRecord.t()} | {:error, missing_error()}
   def get_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
     with {:ok, project} <- fetch_project(project_slug),
@@ -352,10 +371,11 @@ defmodule SymphonyElixir.LocalTracker.Context do
       with {:ok, updated} <-
              issue
              |> IssueRecord.changeset(changes)
-             |> Repo.update()
-             |> sync_agent_routing_label_result(project.id, fetch_agent_attr(attrs)),
-           {:ok, labeled} <- maybe_replace_user_labels(updated, project.id, label_names),
-           {:ok, issue} <- preload_issue_result({:ok, labeled}) do
+             |> Repo.update(),
+           {:ok, _labeled} <- maybe_replace_labels(updated, project.id, label_names),
+           {:ok, _routed} <-
+             sync_agent_routing_label_result({:ok, updated}, project.id, fetch_agent_attr(attrs)),
+           {:ok, issue} <- fetch_issue_by_id(updated.id) do
         tap_issue_event({:ok, issue}, "issue_updated", %{status: status.name})
       end
     end
@@ -370,6 +390,25 @@ defmodule SymphonyElixir.LocalTracker.Context do
          {:ok, issue} <- fetch_project_issue(project.id, identifier) do
       issue
       |> IssueRecord.changeset(%{agent_session_id: agent_session_id})
+      |> Repo.update()
+      |> preload_issue_result()
+    end
+  end
+
+  @doc """
+  Clears the persisted agent session id for an issue.
+
+  Used by the hard-reset control so the issue starts a fresh agent session
+  instead of resolving the previous Codex thread.
+  """
+  @spec clear_agent_session_id(String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def clear_agent_session_id(project_slug, identifier)
+      when is_binary(project_slug) and is_binary(identifier) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      issue
+      |> IssueRecord.changeset(%{agent_session_id: nil})
       |> Repo.update()
       |> preload_issue_result()
     end
@@ -509,6 +548,42 @@ defmodule SymphonyElixir.LocalTracker.Context do
         comment
         |> Ecto.Changeset.change(%{body: body, kind: Workpad.classify(body)})
         |> Repo.update()
+    end
+  end
+
+  @spec fetch_issue_comment(String.t(), String.t(), integer()) ::
+          {:ok, Comment.t()} | {:error, :comment_not_found | missing_error()}
+  def fetch_issue_comment(project_slug, identifier, comment_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(comment_id) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      case Repo.get_by(Comment, id: comment_id, issue_id: issue.id) do
+        %Comment{} = comment -> {:ok, comment}
+        nil -> {:error, :comment_not_found}
+      end
+    end
+  end
+
+  @spec update_issue_comment(String.t(), String.t(), integer(), String.t()) ::
+          {:ok, Comment.t()} | {:error, :comment_not_found | :not_found | Ecto.Changeset.t() | missing_error()}
+  def update_issue_comment(project_slug, identifier, comment_id, body)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(comment_id) and is_binary(body) do
+    with {:ok, comment} <- fetch_issue_comment(project_slug, identifier, comment_id),
+         {:ok, updated} <- update_comment(comment.id, body) do
+      {:ok, updated}
+    else
+      {:error, :not_found} -> {:error, :comment_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec delete_issue_comment(String.t(), String.t(), integer()) ::
+          {:ok, Comment.t()} | {:error, :comment_not_found | missing_error()}
+  def delete_issue_comment(project_slug, identifier, comment_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(comment_id) do
+    with {:ok, comment} <- fetch_issue_comment(project_slug, identifier, comment_id),
+         {:ok, deleted} <- Repo.delete(comment) do
+      {:ok, deleted}
     end
   end
 
@@ -1478,12 +1553,17 @@ defmodule SymphonyElixir.LocalTracker.Context do
     LabelResolver.resolve_names(project, names)
   end
 
-  defp maybe_replace_user_labels(issue, _project_id, nil), do: {:ok, issue}
+  # nil means the caller did not touch labels at all (no-op). A list — even an
+  # empty one — is treated as the authoritative full label set for the issue,
+  # so the inline label editor can also remove symphony:* labels. The agent
+  # routing label is reapplied afterwards by sync_agent_routing_label_result/3
+  # whenever the request explicitly carries an "agent" attribute.
+  defp maybe_replace_labels(issue, _project_id, nil), do: {:ok, issue}
 
-  defp maybe_replace_user_labels(%IssueRecord{} = issue, project_id, label_names)
+  defp maybe_replace_labels(%IssueRecord{} = issue, project_id, label_names)
        when is_integer(project_id) and is_list(label_names) do
-    with :ok <- delete_user_labels(issue.id),
-         :ok <- attach_user_labels(issue.id, project_id, label_names),
+    with :ok <- delete_all_issue_labels(issue.id),
+         :ok <- attach_labels(issue.id, project_id, label_names),
          {:ok, reloaded} <- fetch_issue_by_id(issue.id) do
       {:ok, reloaded}
     end
@@ -1496,28 +1576,12 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
-  defp delete_user_labels(issue_id) do
-    label_ids_to_delete =
-      IssueLabel
-      |> join(:inner, [issue_label], label in Label, on: issue_label.label_id == label.id)
-      |> where([issue_label], issue_label.issue_id == ^issue_id)
-      |> select([issue_label, label], {issue_label.label_id, label.name})
-      |> Repo.all()
-      |> Enum.reject(fn {_id, name} -> system_label?(name) end)
-      |> Enum.map(fn {label_id, _name} -> label_id end)
-
-    if label_ids_to_delete != [] do
-      Repo.delete_all(
-        from(issue_label in IssueLabel,
-          where: issue_label.issue_id == ^issue_id and issue_label.label_id in ^label_ids_to_delete
-        )
-      )
-    end
-
+  defp delete_all_issue_labels(issue_id) do
+    Repo.delete_all(from(issue_label in IssueLabel, where: issue_label.issue_id == ^issue_id))
     :ok
   end
 
-  defp attach_user_labels(issue_id, project_id, label_names) do
+  defp attach_labels(issue_id, project_id, label_names) do
     Enum.reduce_while(label_names, :ok, fn label_name, :ok ->
       with {:ok, label} <- ensure_label(project_id, label_name),
            {:ok, _issue_label} <- ensure_issue_label_idempotent(issue_id, label.id) do
@@ -1527,12 +1591,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
       end
     end)
   end
-
-  defp system_label?(name) when is_binary(name) do
-    String.match?(String.downcase(String.trim(name)), ~r/^symphony(?::.*)?$/)
-  end
-
-  defp system_label?(_name), do: false
 
   defp preload_relation_result({:ok, %IssueRelation{} = relation}) do
     {:ok, Repo.preload(relation, [:source_issue, :target_issue])}

@@ -1,7 +1,8 @@
-import { FileText, GitBranch, ScrollText, type LucideIcon } from "lucide-react";
+import { FileText, GitBranch, ScrollText, TerminalSquare, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { DevEnvPanel } from "@/components/devenv/DevEnvPanel";
 import { LoadDefaultMenu } from "@/components/projects/LoadDefaultMenu";
 import { ProjectAgentSelect } from "@/components/projects/ProjectAgentSelect";
 import { RepositoriesSection } from "@/components/projects/config/RepositoriesSection";
@@ -12,11 +13,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { orderStepsByRepository } from "@/lib/devEnvGroups";
 import { initialWorkflowMarkdown } from "@/lib/workflowMarkdown";
 import { readAgentKind, writeAgentKind } from "@/lib/workflowFrontMatter";
 import { DEFAULT_PROJECT_SETTINGS_TAB, type ProjectSettingsTab } from "@/lib/workspaceRoutes";
+import { listDevEnvSteps, saveDevEnvSteps } from "@/services/devEnv";
 import { fetchSettings } from "@/services/settings";
 import { updateProject, updateProjectRepositories, updateProjectSetup } from "@/services/projects";
+import type { DevEnvStep } from "@/types/devEnv";
 import type { AgentKind } from "@/types/issue";
 import type { Project, TrackerKind } from "@/types/project";
 import type { WorkspaceRepository } from "@/types/repository";
@@ -50,6 +54,13 @@ const SECTIONS: readonly SectionMeta[] = [
     icon: ScrollText,
     title: "Workflow",
     description: "Per-project behavior: board states, agent limits, hooks, Codex/Claude, dev server, and the agent prompt.",
+  },
+  {
+    id: "dev",
+    label: "Dev environment",
+    icon: TerminalSquare,
+    title: "Dev environment",
+    description: "Setup and serve steps grouped by repository. Serve steps power each issue's Preview tab.",
   },
 ] as const;
 
@@ -92,9 +103,25 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
   );
   const [repositories, setRepositories] = useState<WorkspaceRepository[]>(() => project.repositories ?? []);
   const initialRepositoriesKey = useMemo(() => JSON.stringify(project.repositories ?? []), [project]);
+  const [devSteps, setDevSteps] = useState<DevEnvStep[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [userDefaultAgent, setUserDefaultAgent] = useState<AgentKind>("codex");
+
+  useEffect(() => {
+    let cancelled = false;
+    void listDevEnvSteps(project.slug)
+      .then((loaded) => {
+        // Don't clobber unsaved edits made before the initial load resolved.
+        if (!cancelled) setDevSteps((current) => current ?? loaded);
+      })
+      .catch((cause) => {
+        if (!cancelled) toast.error(cause instanceof Error ? cause.message : "Failed to load dev-env steps");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.slug]);
   useEffect(() => {
     let cancelled = false;
     void fetchSettings()
@@ -132,6 +159,10 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
           .map((line) => line.trim())
           .filter(Boolean),
       });
+      if (devSteps !== null) {
+        const persisted = await saveDevEnvSteps(project.slug, orderStepsByRepository(devSteps, repositories));
+        setDevSteps(persisted);
+      }
       onSaved(saved);
       toast.success("Project configuration saved");
     } catch (cause) {
@@ -243,6 +274,20 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
                   onChange={(kind) => setWorkflowMarkdown((current) => writeAgentKind(current, kind))}
                 />
                 <WorkflowMarkdownEditor value={workflowMarkdown} onChange={setWorkflowMarkdown} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="dev" className="mt-0 space-y-6">
+            <SectionHeading id="dev" />
+            <Card>
+              <CardContent className="pt-6">
+                <DevEnvPanel
+                  projectSlug={project.slug}
+                  repositories={repositories}
+                  steps={devSteps ?? []}
+                  onStepsChange={setDevSteps}
+                />
               </CardContent>
             </Card>
           </TabsContent>

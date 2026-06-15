@@ -17,8 +17,10 @@ import {
   serializeAttachments,
   validateAttachmentFile,
 } from "@/components/assistant/assistantAttachments";
+import { ModelMenu } from "@/components/assistant/ModelMenu";
 import { matchingSlashCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
 import { uploadAssistantAttachment } from "@/services/assistant";
+import { isVideoMediaType } from "@/services/attachments";
 import { extractFilesFromClipboard } from "@/lib/clipboardImages";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,7 +40,6 @@ import {
   effortLabel,
   effortsForModel,
   loadComposerState,
-  modelLabel,
   normalizeEffort,
   saveComposerState,
   type AssistantAgentCatalog,
@@ -472,6 +473,30 @@ export function AssistantComposer({
                 );
               }
 
+              if (attachment.type === "file" && attachment.previewUrl && isVideoMediaType(attachment.mediaType)) {
+                return (
+                  <div key={attachment.id} className="group relative">
+                    {/* eslint-disable-next-line jsx-a11y/media-has-caption -- composer preview has no captions */}
+                    <video
+                      src={attachment.previewUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      aria-label={attachment.name}
+                      className="h-24 w-40 rounded-lg border bg-black/5 object-contain"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove ${attachment.name}`}
+                      onClick={() => removeAttachment(attachment.id)}
+                      className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              }
+
               const Icon = attachment.type === "audio" ? AudioLines : FileText;
               return (
                 <div
@@ -639,40 +664,6 @@ function AgentMenu({
           {bundle.agents.map((catalog) => (
             <DropdownMenuRadioItem key={catalog.agent} value={catalog.agent}>
               {catalog.agentLabel}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function ModelMenu({
-  catalog,
-  model,
-  disabled,
-  onChange,
-}: {
-  catalog: AssistantAgentCatalog;
-  model: string;
-  disabled?: boolean;
-  onChange: (model: string) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {modelLabel(catalog, model)}
-          <ChevronDown className="h-3 w-3 opacity-60" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{catalog.agentLabel} · Model</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={model} onValueChange={onChange}>
-          {catalog.models.map((option) => (
-            <DropdownMenuRadioItem key={option.id} value={option.model}>
-              {option.label}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

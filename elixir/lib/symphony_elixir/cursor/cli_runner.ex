@@ -228,7 +228,7 @@ defmodule SymphonyElixir.Cursor.CliRunner do
 
   defp capture_cli_stream_error(line, state) do
     state
-    |> maybe_flag_invalid_resume(line)
+    |> then(&maybe_flag_invalid_resume(line, &1))
     |> maybe_flag_auth_error(line)
   end
 
@@ -363,8 +363,12 @@ defmodule SymphonyElixir.Cursor.CliRunner do
 
   defp process_event(%{"type" => "result"} = payload, _on_event, state) do
     new_cli_session_id = Map.get(payload, "session_id") || state.cli_session_id
+    new_usage = Map.get(payload, "usage") || state.usage
 
-    new_state = %{state | cli_session_id: new_cli_session_id}
+    new_cost =
+      Map.get(payload, "total_cost_usd") || Map.get(payload, "cost_usd") || state.cost_usd
+
+    new_state = %{state | cli_session_id: new_cli_session_id, usage: new_usage, cost_usd: new_cost}
 
     if Map.get(payload, "is_error", false) or Map.get(payload, "subtype") == "error" do
       %{new_state | error: Map.get(payload, "error") || Map.get(payload, "result") || "unknown error"}

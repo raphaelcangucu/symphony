@@ -1,22 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
-import { DEFAULT_ISSUE_TAB, isIssueTab, issuePath, workspaceBasePath, type IssueTab } from "@/lib/workspaceRoutes";
+import {
+  DEFAULT_ISSUE_TAB,
+  isIssueTab,
+  issueAgentTabPath,
+  issuePath,
+  workspaceBasePath,
+  type IssueTab,
+} from "@/lib/workspaceRoutes";
 import { archiveIssue, deleteIssue, forceSyncIssue, getIssue } from "@/services/issues";
 import type { Issue } from "@/types/issue";
 
 export function IssueDetailRoute() {
   const { identifier = "", tab: tabParam } = useParams();
-  const { projectSlug, view, issues, setIssues, agentExecutions, loading, trackerKind } = useWorkspace();
+  const { projectSlug, view, issues, setIssues, agentExecutions, loading, trackerKind, project } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
 
   const tab: IssueTab = isIssueTab(tabParam) ? tabParam : DEFAULT_ISSUE_TAB;
   const issueFromList = issues.find((candidate) => candidate.identifier === identifier) ?? null;
   const [fetchedIssue, setFetchedIssue] = useState<Issue | null>(null);
+  // Tracks the (project, issue) we've already requested so unrelated board churn
+  // (realtime upserts, polling refreshes, agent-execution updates) can't re-fire
+  // the full fetch before the first request resolves.
+  const requestedKeyRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
   const matchedFetched = fetchedIssue?.identifier === identifier ? fetchedIssue : null;
   // Prefer the freshly fetched issue: it carries remote-only data (e.g. Jira
   // attachments) that the board list endpoint omits. Fall back to the cached
@@ -76,16 +88,32 @@ export function IssueDetailRoute() {
   }
 
   useEffect(() => {
-    if (!identifier || loading) return;
-    if (fetchedIssue?.identifier === identifier) return;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-    let active = true;
+  useEffect(() => {
+    if (!identifier || loading) return;
+
+    const requestKey = `${projectSlug}::${identifier}`;
+    // Fetch the full issue exactly once per open issue. Live changes flow back in
+    // through the board list and handleIssueUpdated, so re-running this effect for
+    // other reasons must not trigger another GET request.
+    if (requestedKeyRef.current === requestKey) return;
+    requestedKeyRef.current = requestKey;
+
     void getIssue(projectSlug, identifier)
       .then((loaded) => {
-        if (active) setFetchedIssue(loaded);
+        // Ignore stale results from an issue the user already navigated away from.
+        if (!mountedRef.current || requestedKeyRef.current !== requestKey) return;
+        setFetchedIssue(loaded);
       })
       .catch(() => {
-        if (!active) return;
+        if (!mountedRef.current || requestedKeyRef.current !== requestKey) return;
+        // Allow a later render to retry this issue (e.g. once the board loads).
+        requestedKeyRef.current = null;
         // Keep showing the cached list entry if we have one; only bounce back to
         // the board when there is nothing at all to display.
         if (!issueFromList) {
@@ -93,11 +121,7 @@ export function IssueDetailRoute() {
           navigate({ pathname: basePath, search: location.search }, { replace: true });
         }
       });
-
-    return () => {
-      active = false;
-    };
-  }, [identifier, issueFromList, loading, fetchedIssue, projectSlug, basePath, location.search, navigate]);
+  }, [identifier, issueFromList, loading, projectSlug, basePath, location.search, navigate]);
 
   return (
     <IssueDrawer
@@ -105,6 +129,7 @@ export function IssueDetailRoute() {
       view={view}
       issue={issue}
       execution={issue ? agentExecutions.get(issue.identifier) : undefined}
+      workflowMarkdown={project?.setup?.workflowMarkdown ?? null}
       open
       onOpenChange={(open) => {
         if (!open) goToBase();
@@ -112,6 +137,15 @@ export function IssueDetailRoute() {
       tab={tab}
       onTabChange={(nextTab) => {
         navigate({ pathname: issuePath(projectSlug, view, identifier, nextTab), search: location.search }, { replace: true });
+      }}
+      onOpenAgentExecution={() => {
+        navigate(
+          {
+            pathname: issueAgentTabPath(projectSlug, view, identifier, "execution"),
+            search: location.search,
+          },
+          { replace: true },
+        );
       }}
       onArchive={handleArchive}
       onDelete={handleDelete}

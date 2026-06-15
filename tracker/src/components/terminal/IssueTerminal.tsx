@@ -40,6 +40,7 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
     socket.connect();
     let channel: ReturnType<typeof socket.channel> | null = null;
     let cancelled = false;
+    let lastSnapshot = "";
 
     openTerminalSession(project, identifier)
       .then((session) => {
@@ -49,7 +50,7 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
 
         channel.on("output", (payload) => {
           const data = payloadValue(payload, "data");
-          if (typeof data === "string") renderSnapshot(terminal, data);
+          if (typeof data === "string") lastSnapshot = renderSnapshot(terminal, data, lastSnapshot);
         });
         channel.on("error", (payload) => {
           const message = payloadValue(payload, "message");
@@ -68,7 +69,9 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
           .receive("ok", (payload) => {
             const session = payloadValue(payload, "session");
             const output = payloadValue(session, "output");
-            if (typeof output === "string" && output.length > 0) renderSnapshot(terminal, output);
+            if (typeof output === "string" && output.length > 0) {
+              lastSnapshot = renderSnapshot(terminal, output, lastSnapshot);
+            }
             // The first fitAddon.fit() runs before this channel exists, so its
             // resize event is lost and tmux stays at its 80x24 default. Push the
             // current size explicitly so the detached pane matches the viewport.
@@ -123,7 +126,10 @@ function payloadValue(payload: unknown, key: string): unknown {
   return (payload as Record<string, unknown>)[key];
 }
 
-function renderSnapshot(terminal: Terminal, output: string): void {
+function renderSnapshot(terminal: Terminal, output: string, previous: string): string {
+  if (output === previous) return previous;
+
   terminal.reset();
   terminal.write(output);
+  return output;
 }

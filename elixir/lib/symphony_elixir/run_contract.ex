@@ -11,6 +11,8 @@ defmodule SymphonyElixir.RunContract do
 
   require Logger
 
+  alias SymphonyElixir.GitHub.IssueMarker
+
   defmodule RepoState do
     @moduledoc false
     @enforce_keys [:path, :name]
@@ -30,9 +32,13 @@ defmodule SymphonyElixir.RunContract do
   @type violation :: %{repo: String.t(), kind: atom(), detail: String.t()}
   @type pr_checker :: (RepoState.t() -> {:ok, map()} | :none | {:error, term()})
 
-  @spec repo_states(Path.t()) :: [RepoState.t()]
-  def repo_states(workspace) when is_binary(workspace) do
-    workspace |> repo_dirs() |> Enum.map(&inspect_repo/1)
+  @spec repo_states(Path.t(), keyword()) :: [RepoState.t()]
+  def repo_states(workspace, opts \\ []) when is_binary(workspace) do
+    default_branches = Keyword.get(opts, :default_branches, %{})
+
+    workspace
+    |> repo_dirs()
+    |> Enum.map(&inspect_repo(&1, default_branches))
   end
 
   @spec work_present?([RepoState.t()]) :: boolean()
@@ -73,11 +79,15 @@ defmodule SymphonyElixir.RunContract do
   @doc """
   Default PR checker backed by the `gh` CLI, querying by head branch in the
   repo's own directory so it works for any GitHub repo regardless of the
-  project's tracker kind. Closed PRs do not satisfy the gate; merged ones do.
+  project's tracker kind. Only **open** PRs satisfy the gate; closed and merged
+  PRs are ignored. When `issue_identifier` is passed, the PR body must contain
+  the `Symphony-Issue:` marker for that identifier.
   """
   @spec gh_pr_checker(keyword()) :: pr_checker()
   def gh_pr_checker(opts \\ []) do
     runner = Keyword.get(opts, :runner, &System.cmd/3)
+    issue_identifier = Keyword.get(opts, :issue_identifier)
+    marker_key = Keyword.get(opts, :marker_key, IssueMarker.default_key())
 
     fn %RepoState{} = repo ->
       args = [
@@ -86,15 +96,15 @@ defmodule SymphonyElixir.RunContract do
         "--head",
         repo.branch || "",
         "--state",
-        "all",
+        "open",
         "--json",
-        "url,state,number,title",
+        "url,state,number,title,body",
         "--limit",
-        "1"
+        "5"
       ]
 
       case runner.("gh", args, cd: repo.path, stderr_to_stdout: true) do
-        {output, 0} -> decode_pr_list(output)
+        {output, 0} -> decode_pr_list(output, issue_identifier, marker_key)
         {output, status} -> {:error, {status, String.trim(output)}}
       end
     end
@@ -141,25 +151,40 @@ defmodule SymphonyElixir.RunContract do
     end
   end
 
-  defp decode_pr_list(output) do
+  defp decode_pr_list(output, issue_identifier, marker_key) do
     case Jason.decode(String.trim(output)) do
-      {:ok, [%{"url" => url, "state" => state} = pr | _rest]} when state != "CLOSED" ->
-        {:ok, %{url: url, state: state, number: pr["number"], title: pr["title"]}}
+      {:ok, prs} when is_list(prs) ->
+        prs
+        |> Enum.find(fn pr -> pr_matches_issue?(pr, issue_identifier, marker_key) end)
+        |> case do
+          %{"url" => url, "state" => state} = pr when state == "OPEN" ->
+            {:ok, %{url: url, state: state, number: pr["number"], title: pr["title"], body: pr["body"]}}
 
-      {:ok, _closed_or_empty} ->
-        :none
+          _ ->
+            :none
+        end
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
+  defp pr_matches_issue?(_pr, nil, _marker_key), do: true
+
+  defp pr_matches_issue?(%{"body" => body}, issue_identifier, marker_key)
+       when is_binary(issue_identifier) and is_binary(body) do
+    issue_identifier in IssueMarker.extract(body, marker_key)
+  end
+
+  defp pr_matches_issue?(_pr, _issue_identifier, _marker_key), do: false
+
   defp published_repo?(repo) do
     repo.upstream? and (repo.ahead_count > 0 or feature_branch?(repo))
   end
 
-  defp feature_branch?(%RepoState{branch: branch, default_branch: default}) do
-    is_binary(branch) and branch != "" and branch != default
+  defp feature_branch?(%RepoState{branch: branch, default_branch: default})
+       when is_binary(default) and is_binary(branch) and branch != "" do
+    branch != default
   end
 
   defp feature_branch?(_repo), do: false
@@ -169,7 +194,7 @@ defmodule SymphonyElixir.RunContract do
 
   defp repo_dirs(workspace) do
     cond do
-      File.dir?(Path.join(workspace, ".git")) ->
+      git_worktree_root?(workspace) ->
         [workspace]
 
       File.dir?(workspace) ->
@@ -177,16 +202,29 @@ defmodule SymphonyElixir.RunContract do
         |> File.ls!()
         |> Enum.sort()
         |> Enum.map(&Path.join(workspace, &1))
-        |> Enum.filter(&File.dir?(Path.join(&1, ".git")))
+        |> Enum.filter(&File.dir?/1)
+        |> Enum.filter(&git_worktree_root?/1)
 
       true ->
         []
     end
   end
 
-  defp inspect_repo(path) do
+  # A directory is a repo root only when git resolves its own top level back to
+  # that same directory. This deliberately ignores an orphan or partial `.git`
+  # at the workspace root (git fails, or resolves to an ancestor) so the genuine
+  # sub-repos are still discovered instead of being masked by a bogus root entry.
+  defp git_worktree_root?(dir) do
+    case git(dir, ["rev-parse", "--show-toplevel"]) do
+      {:ok, toplevel} -> toplevel != "" and Path.expand(toplevel) == Path.expand(dir)
+      {:error, _reason} -> false
+    end
+  end
+
+  defp inspect_repo(path, default_branches) do
+    name = Path.basename(path)
     branch = git_value(path, ["branch", "--show-current"])
-    default_branch = default_branch(path)
+    default_branch = default_branch(path) || Map.get(default_branches, name)
     branch = presence(branch)
     upstream? = tracking_upstream?(path) or remote_contains_head?(path, branch)
 

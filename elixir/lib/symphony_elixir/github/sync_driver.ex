@@ -54,6 +54,20 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
     end
   end
 
+  def push(%Project{} = project, %OutboxEntry{entity_type: "comment", operation: "delete", payload: payload}) do
+    case payload["remote_id"] do
+      remote_id when is_binary(remote_id) and remote_id != "" ->
+        case adapter().delete_comment(project, payload["identifier"], remote_id) do
+          {:ok, %{id: id}} -> {:ok, id}
+          {:ok, _other} -> {:ok, remote_id}
+          error -> error
+        end
+
+      _missing ->
+        {:ok, nil}
+    end
+  end
+
   def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "create", payload: payload}) do
     case adapter().create_issue(project, payload) do
       {:ok, dto} -> {:ok, dto.id}

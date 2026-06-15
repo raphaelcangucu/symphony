@@ -43,6 +43,32 @@ defmodule SymphonyElixir.Codex.Session do
   def write(_workspace, _thread_id), do: :ok
 
   @doc """
+  Remove the Codex session sidecar for a workspace.
+
+  Best-effort: used by the hard-reset control so the next run does not resolve
+  and resume the previous thread. Returns `:ok` even when no sidecar exists.
+  """
+  @spec clear(Path.t()) :: :ok
+  def clear(workspace) when is_binary(workspace) do
+    workspace
+    |> sidecar_path()
+    |> File.rm()
+    |> case do
+      :ok ->
+        :ok
+
+      {:error, :enoent} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("codex session sidecar clear failed workspace=#{workspace} reason=#{inspect(reason)}")
+        :ok
+    end
+  end
+
+  def clear(_workspace), do: :ok
+
+  @doc """
   Resolve the Codex thread id for a workspace, checking the sidecar first and
   falling back to scanning the rollout store by `cwd`.
   """

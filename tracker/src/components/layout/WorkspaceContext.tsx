@@ -41,7 +41,11 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
 
   const [project, setProject] = useState<Project | null>(null);
   const statusNames = useMemo(
-    () => project?.workflowStatuses?.map((status) => status.name),
+    () =>
+      project?.workflowStatuses
+        ?.slice()
+        .sort((left, right) => left.position - right.position || left.name.localeCompare(right.name))
+        .map((status) => status.name),
     [project],
   );
 

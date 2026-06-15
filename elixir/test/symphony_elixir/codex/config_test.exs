@@ -43,6 +43,17 @@ defmodule SymphonyElixir.Codex.ConfigTest do
       assert {:ok, %{approval_policy: "never", thread_sandbox: "workspace-write"}} =
                SymphonyElixir.Codex.Config.runtime_settings(section, nil)
     end
+
+    test "defaults turn sandbox to dangerFullAccess when thread sandbox is danger-full-access" do
+      section = %{"approval_policy" => "never", "thread_sandbox" => "danger-full-access"}
+
+      assert {:ok,
+              %{
+                approval_policy: "never",
+                thread_sandbox: "danger-full-access",
+                turn_sandbox_policy: %{"type" => "dangerFullAccess"}
+              }} = SymphonyElixir.Codex.Config.runtime_settings(section, nil)
+    end
   end
 
   defp load_workflow_with_front_matter(front_matter) do

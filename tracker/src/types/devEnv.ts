@@ -1,5 +1,9 @@
 export type DevEnvStepSource = "convention" | "readme" | "heuristic" | "manual";
 
+export type DevEnvStepRole = "setup" | "serve";
+
+export type DevEnvReadyProbe = "tcp" | "http";
+
 export interface DevEnvStep {
   id?: string;
   description: string;
@@ -8,6 +12,12 @@ export interface DevEnvStep {
   position?: number;
   source: DevEnvStepSource;
   optional: boolean;
+  role: DevEnvStepRole;
+  primary: boolean;
+  portEnv: string | null;
+  urlPath: string;
+  readyProbe: DevEnvReadyProbe;
+  readyPath: string;
 }
 
 export type DevEnvRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";

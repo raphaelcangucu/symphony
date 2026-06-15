@@ -1,7 +1,8 @@
 export interface EvidenceRunSummary {
-  total: number;
-  passed: number;
-  failed: number;
+  total?: number;
+  passed?: number;
+  failed?: number;
+  reason?: string;
 }
 
 export interface EvidenceRun {

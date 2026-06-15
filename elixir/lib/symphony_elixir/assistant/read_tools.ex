@@ -37,7 +37,7 @@ defmodule SymphonyElixir.Assistant.ReadTools do
       ),
       tool_spec(
         "get_project",
-        "Fetch project metadata: workflow statuses, repositories, and setup (not the full issue list).",
+        "Fetch project metadata: board status names and categories (unstarted/started/completed), repositories, and setup summary. Status categories are UI metadata — they do NOT define orchestrator dispatch. For dispatch_states, active_states, and terminal_states use get_workflow.",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -80,7 +80,7 @@ defmodule SymphonyElixir.Assistant.ReadTools do
       ),
       tool_spec(
         "get_workflow",
-        "Fetch this project's workflow markdown (YAML front matter + prompt body) from project settings. This is the source of truth — not a WORKFLOW.md file in the workspace.",
+        "Fetch workflow markdown from project settings (YAML front matter + body). Source of truth for orchestrator: tracker.dispatch_states (queue for NEW auto-runs), tracker.active_states (polled candidates), tracker.wait_states, tracker.terminal_states. Parsed config is in data.config. Body prose guides agents only; orchestrator reads YAML keys.",
         %{
           "type" => "object",
           "additionalProperties" => false,

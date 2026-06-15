@@ -231,6 +231,77 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     end
   end
 
+  describe "write reduction (change-detection + batching)" do
+    @fixed_dt ~U[2026-01-01 00:00:00.000000Z]
+
+    test "an identical pull does not rewrite the issue row", %{project: project} do
+      remote = remote_issue(%{remote_updated_at: @fixed_dt})
+      {:ok, issue} = LocalStore.upsert_remote_issue(project, remote)
+      stored = Repo.get(IssueRecord, issue.id)
+
+      {:ok, _} = LocalStore.upsert_remote_issue(project, remote)
+      reloaded = Repo.get(IssueRecord, issue.id)
+
+      assert reloaded.updated_at == stored.updated_at
+      assert reloaded.last_synced_at == stored.last_synced_at
+    end
+
+    test "a changed remote still rewrites the issue row", %{project: project} do
+      {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{remote_updated_at: @fixed_dt}))
+      stored = Repo.get(IssueRecord, issue.id)
+
+      {:ok, _} =
+        LocalStore.upsert_remote_issue(
+          project,
+          remote_issue(%{title: "Changed", remote_updated_at: DateTime.add(@fixed_dt, 60, :second)})
+        )
+
+      reloaded = Repo.get(IssueRecord, issue.id)
+      assert reloaded.title == "Changed"
+      assert reloaded.updated_at != stored.updated_at
+    end
+
+    test "an identical comment pull does not rewrite the comment", %{project: project} do
+      comments = [
+        %{remote_id: "IC_1", body: "hello", author: "octocat", kind: "comment", remote_updated_at: @fixed_dt}
+      ]
+
+      remote = remote_issue(%{remote_updated_at: @fixed_dt, comments: comments})
+      {:ok, _issue} = LocalStore.upsert_remote_issue(project, remote)
+      stored = Repo.one(SymphonyElixir.LocalTracker.Comment)
+
+      {:ok, _} = LocalStore.upsert_remote_issue(project, remote)
+      reloaded = Repo.get(SymphonyElixir.LocalTracker.Comment, stored.id)
+
+      assert reloaded.updated_at == stored.updated_at
+      assert reloaded.last_synced_at == stored.last_synced_at
+    end
+
+    test "re-pulling an identical label set keeps it without duplicating links", %{project: project} do
+      labels = [%{remote_id: "LA_1", name: "bug", color: "ff0000"}]
+      remote = remote_issue(%{remote_updated_at: @fixed_dt, labels: labels})
+
+      {:ok, issue} = LocalStore.upsert_remote_issue(project, remote)
+      {:ok, _} = LocalStore.upsert_remote_issue(project, remote)
+
+      loaded = Repo.get(IssueRecord, issue.id) |> Repo.preload(:labels)
+      assert Enum.map(loaded.labels, & &1.name) == ["bug"]
+    end
+
+    test "upsert_remote_issues upserts many issues in one transaction and is idempotent", %{project: project} do
+      remotes = [
+        remote_issue(%{remote_id: "I_1", identifier: "1", title: "One"}),
+        remote_issue(%{remote_id: "I_2", identifier: "2", title: "Two"})
+      ]
+
+      assert {:ok, 2} = LocalStore.upsert_remote_issues(project, remotes)
+      assert length(Repo.all(IssueRecord)) == 2
+
+      assert {:ok, 2} = LocalStore.upsert_remote_issues(project, remotes)
+      assert length(Repo.all(IssueRecord)) == 2
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

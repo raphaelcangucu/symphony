@@ -114,6 +114,49 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
     end
   end
 
+  @impl true
+  def update_comment(%Project{} = project, identifier, comment_id, body) do
+    with {:ok, comment} <- IssueAdapter.update_comment(project, identifier, comment_id, body),
+         {:ok, comment} <- LocalStore.mark_comment_sync_status(comment.id, "pending") do
+      payload = %{
+        "identifier" => identifier,
+        "body" => body,
+        "comment_id" => comment.id,
+        "remote_id" => comment.remote_id
+      }
+
+      enqueue(
+        project,
+        identifier,
+        "comment",
+        "update",
+        payload,
+        "comment:update:#{project.id}:#{comment.id}"
+      )
+
+      {:ok, comment}
+    end
+  end
+
+  @impl true
+  def delete_comment(%Project{} = project, identifier, comment_id) do
+    with {:ok, comment} <- IssueAdapter.delete_comment(project, identifier, comment_id) do
+      if is_binary(comment.remote_id) and comment.remote_id != "" do
+        payload = %{
+          "identifier" => identifier,
+          "comment_id" => comment.id,
+          "remote_id" => comment.remote_id
+        }
+
+        enqueue(project, identifier, "comment", "delete", payload, nil)
+      else
+        Outbox.discard_comment_entries(project.id, comment.id)
+      end
+
+      {:ok, comment}
+    end
+  end
+
   # Attachments are remote-only metadata that the local mirror does not persist,
   # so we fetch them live for the single-issue detail read. Best-effort: a remote
   # hiccup must not break rendering the locally-cached issue.

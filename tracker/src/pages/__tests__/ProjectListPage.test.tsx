@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NewProjectRoute } from "@/components/projects/NewProjectRoute";
 import { ProjectFiltersRoute } from "@/components/projects/ProjectFiltersRoute";
-import { ProjectDevEnvRoute } from "@/components/projects/ProjectDevEnvRoute";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { archiveProject, createWorkspaceProject, deleteProject, listProjects, restoreProject } from "@/services/projects";
 import { listGitHubOwners, listGitHubRepositories, scanRepositories, suggestWorkspaceSetup } from "@/services/projectSetup";
@@ -24,10 +23,6 @@ vi.mock("@/services/projectSetup", () => ({
   listGitHubRepositories: vi.fn(),
   scanRepositories: vi.fn(),
   suggestWorkspaceSetup: vi.fn(),
-}));
-
-vi.mock("@/components/devenv/DevEnvPanel", () => ({
-  DevEnvPanel: ({ projectSlug }: { projectSlug: string }) => <div>Dev env panel for {projectSlug}</div>,
 }));
 
 vi.mock("sonner", () => ({
@@ -72,7 +67,6 @@ function ProjectsIndexRoute() {
     <Route path="/projects" element={<ProjectListPage />}>
       <Route path="new" element={<NewProjectRoute />} />
       <Route path="filters" element={<ProjectFiltersRoute />} />
-      <Route path=":projectSlug/dev-env" element={<ProjectDevEnvRoute />} />
     </Route>
   );
 }
@@ -159,18 +153,6 @@ describe("ProjectListPage", () => {
     expect(screen.getByText("Project focus")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close filters" }));
     expect(screen.queryByText("Project focus")).toBeNull();
-  });
-
-  it("opens dev environment setup from the projects list", async () => {
-    vi.mocked(listProjects).mockResolvedValueOnce([activeProject]);
-
-    renderProjectsIndex();
-
-    await screen.findByText("Active Project");
-    fireEvent.click(screen.getByRole("button", { name: "Dev environment setup for Active Project" }));
-
-    expect(await screen.findByRole("dialog", { name: "Dev environment setup" })).toBeTruthy();
-    expect(screen.getByText("Dev env panel for active-project")).toBeTruthy();
   });
 
   it("filters projects by keyword across name slug and description", async () => {

@@ -42,21 +42,35 @@ tracker:
     # drags in its subtasks/links), so raise the cap above the 500 default to
     # avoid clipping linked work. Sized with headroom over the current ~760.
     max_results: 1500
+    # Optional: Jira board id for column order during first sync (before YAML import).
+    # board_id: <CDE board id from GET /rest/agile/1.0/board?projectKeyOrId=CDE>
     # If "Product" is not directly queryable by name, drop `fields` above and use:
     # jql: 'cf[<PRODUCT_FIELD_ID>] = "Inspire"'
     # order_by: "created DESC"   # optional
 repositories:
+  # default_branch / selected_branch: Symphony publish gate uses these when the clone
+  # lacks origin/HEAD (common in ephemeral workspaces). Must match the PR base branch.
   - github_full_name: civitaslearning/advising
-    clone_url: https://github.com/civitaslearning/advising.git
+    clone_url: git@github.com:civitaslearning/advising.git
     default_branch: pre-release
     selected_branch: pre-release
     role: primary
     workspace_path: advising
 workflow_statuses:
-  # TODO(setup): replace with the REAL CDE statuses (GET /rest/api/3/project/CDE/statuses).
-  - { name: "To Do", category: "unstarted", position: 0, is_terminal: false }
-  - { name: "Em andamento", category: "started", position: 1, is_terminal: false }
-  - { name: "Done", category: "completed", position: 2, is_terminal: true }
+  # Column order matches the CDE Jira board (left -> right).
+  # Backlog is the intake column; Selected for Development is the orchestrator dispatch queue.
+  - { name: "Backlog", category: "unstarted", position: 0, is_terminal: false }
+  - { name: "BLOCKED BY CUSTOMER", category: "started", position: 1, is_terminal: false }
+  - { name: "Selected for Development", category: "unstarted", position: 2, is_terminal: false }
+  - { name: "Em andamento", category: "started", position: 3, is_terminal: false }
+  - { name: "READY FOR QA", category: "started", position: 4, is_terminal: false }
+  - { name: "IN QA", category: "started", position: 5, is_terminal: false }
+  - { name: "Revisão de pares", category: "started", position: 6, is_terminal: false }
+  - { name: "Ready for Deploy", category: "started", position: 7, is_terminal: false }
+  - { name: "CUSTOMER APPROVAL", category: "started", position: 8, is_terminal: false }
+  - { name: "Done", category: "completed", position: 9, is_terminal: true }
+  - { name: "Concluído", category: "completed", position: 10, is_terminal: true }
+  - { name: "Won't Do", category: "completed", position: 11, is_terminal: true }
 dev_env_steps:
   - command: "test -f docker/.env || cp docker/.env.example docker/.env"
     description: "Ensure docker/.env exists"
@@ -94,16 +108,24 @@ setup:
     ---
     evidence:
       required: true
-      ui_paths:
-        - "advising/advisestream/web/**"
-        - "advising/accessible-ui/**"
-        - "advising/kiosk/**"
-      test_command:
-        advising: "cd advising && ./vibe test"
-      e2e_command:
-        advising: "cd advising/automation/playwright && npx playwright test"
+      repos:
+        # Single git clone (`advising/`). Manifest `repo` values must use this key,
+        # not subfolder names like `graphql` or `accessible-ui`.
+        advising:
+          unit_command: "./vibe test"
+          ui_paths:
+            - "advisestream/web/**"
+            - "accessible-ui/**"
+            - "kiosk/**"
+          e2e:
+            command: "cd automation/playwright && npx playwright test"
     agent:
       max_turns: 20
+    codex:
+      approval_policy: never
+      thread_sandbox: danger-full-access
+      turn_sandbox_policy:
+        type: dangerFullAccess
     dev_server:
       enabled: true
       port_range:
@@ -116,6 +138,7 @@ setup:
       enabled: true
     hooks:
       after_create: |
+        # Prefer gh (SSH per `gh config`) or git+SSH — not the Codex GitHub app connector.
         gh repo clone civitaslearning/advising advising -- --depth 1 -b pre-release
 
         if [ -f advising/docker/.env.example ] && [ ! -f advising/docker/.env ]; then
@@ -123,13 +146,28 @@ setup:
         fi
     tracker:
       field_states:
-        - To Do
+        - Backlog
+        - BLOCKED BY CUSTOMER
+        - Selected for Development
         - Em andamento
+        - READY FOR QA
+        - IN QA
+        - Revisão de pares
+        - Ready for Deploy
+        - CUSTOMER APPROVAL
         - Done
+        - Concluído
+        - Won't Do
       active_states:
-        - To Do
+        - Selected for Development
         - Em andamento
+      dispatch_states:
+        - Selected for Development
+      wait_states:
+        - Revisão de pares
       terminal_states:
+        - Concluído
+        - Won't Do
         - Done
     source_control:
       branch_pattern: "symphony/{issue}"
@@ -148,6 +186,34 @@ setup:
     Read `docs/SAIL.md`, `docs/VIBE.md`, `docs/TESTS.md`, and `docs/INSTALL.md` in
     the repo before running commands. This is **PHP 7.4 Symfony 1.x** (legacy Inspire)
     running in Docker — never run bare `php` on the host for app code.
+
+    ## Execution order (Symphony)
+
+    Work in this order unless the ticket is a legitimate no-op:
+
+    1. **Plan** — create/update the `## Codex Workpad` (plan + acceptance criteria).
+    2. **Implement** — code changes, commits, push, open/update the PR (`push` skill).
+    3. **Validate** — only when implementation is ready for handoff: run tests, capture
+       artifacts, write `.symphony/evidence/manifest.json` (`evidence` skill).
+
+    Do **not** start a fresh run by reading the `evidence` skill or running the full
+    validation matrix. Targeted tests while coding are fine; the VALIDATE gate runs at
+    run completion, not at dispatch.
+
+    On **resume**, finish missing implementation/PR work first. Retry blocked validation
+    commands from the workpad only after the ticket change set is complete.
+
+    ## Git / GitHub
+
+    Use **shell `git` and `gh`** for clone, fetch, push, and PRs. This machine has
+    GitHub SSH (`git@github.com`) and `gh auth` configured (`gh` uses SSH for git ops).
+
+    - Clone/fetch/push: `git` / `gh repo clone` / `gh pr view` / `gh pr create`
+    - **Do not** use the Codex GitHub app connector (`codex_apps`, `github_search_*`,
+      `github_get_pr_info`, etc.) for `civitaslearning/*` — that integration is not
+      installed on the private org and returns 404/422. Use `gh` and `git` instead.
+    - Symphony tracker API tools (`github_graphql`, etc.) use the server `GITHUB_TOKEN`
+      (same token as `gh auth token`).
 
     ## Runtime (Docker + Sail + Vibe)
 
@@ -177,33 +243,28 @@ setup:
     First-time setup may also need AWS ECR login (`./sail aws:login`) and
     `docker/.env` credentials — see `docs/INSTALL.md`.
 
-    ### Running tests (mandatory before Human Review)
+    ### Tests by touched area (run from `advising/` unless noted)
 
-    PHPUnit (primary unit/functional suite):
+    | Area changed | Command |
+    |--------------|---------|
+    | PHP / Symfony (`advisestream/`) | `./vibe test` or `./vibe test --filter=ClassName` |
+    | Go GraphQL API (`graphql/`) | `cd graphql && go test ./...` |
+    | Accessible UI (`accessible-ui/`) | `cd accessible-ui && yarn test --runInBand --watchAll=false` |
+    | Kiosk (`kiosk/`) | `cd kiosk && yarn test` |
 
-    ```bash
-    cd advising
-    ./vibe test                                    # all tests
-    ./vibe test --filter=MyTestClass               # targeted
-    ./vibe phpunit advisestream/test/phpunit/unit/ # directory
-    ```
+    During implementation, run **targeted** tests for the files you touched. Do not
+    run the full matrix until handoff.
 
-    Accessible UI (when `accessible-ui/` changed):
+    ### VALIDATE handoff (mandatory before Human Review)
 
-    ```bash
-    cd advising/accessible-ui && yarn test
-    ```
+    When the PR is ready, start Docker if needed (`./vibe shared up`, `./vibe up`), then
+    follow the `evidence` skill:
 
-    E2E Playwright (when UI paths changed — requires `./vibe up` first):
-
-    ```bash
-    cd advising/automation/playwright
-    npm install
-    npx playwright test
-    ```
-
-    During VALIDATE, follow the `evidence` skill: run real commands, copy artifacts
-    to `.symphony/evidence/artifacts/`, write `.symphony/evidence/manifest.json`.
+    - Run every applicable command from the table above for paths you changed.
+    - When UI paths changed, also run Playwright (`cd automation/playwright && npx playwright test`).
+    - Copy outputs to `.symphony/evidence/artifacts/`.
+    - Write `.symphony/evidence/manifest.json` with `"repo": "advising"` on every run row
+      (this monorepo is one git repo; do not use subfolder names as `repo`).
 
     ## Issue preview (Symphony Preview tab)
 
@@ -230,6 +291,14 @@ setup:
 
     ## Workflow
 
+    Status contract (orchestrator + agent):
+
+    - **Selected for Development**: queue; Symphony auto-dispatches here. On your first turn, call `set_issue_status` to move to **Em andamento** before coding.
+    - **Em andamento**: active implementation.
+    - **Revisão de pares**: PR ready for human review (move here when handoff is complete).
+    - **READY FOR QA** / **IN QA** / **Ready for Deploy**: post-review pipeline (humans or QA move these).
+    - **Concluído**: done.
+
     - Sync before handoff: `cd advising && git fetch origin && git merge origin/pre-release`.
     - Open the PR against `pre-release`:
       `cd advising && gh pr create --base pre-release --title "{{ issue.identifier }}: ..."`.
@@ -237,7 +306,8 @@ setup:
       links the PR to this issue deterministically: `Symphony-Issue: {{ issue.identifier }}`.
     - Use a single `## Codex Workpad` comment for progress and the machine-readable
       `symphony:prs` registry block.
-    - Record validation in the workpad: `targeted tests: <command>` and outcome.
+    - Record validation in the workpad under **Validation**, after implementation is done:
+      `targeted tests: <command>` and outcome.
 
-    Follow the repository's own test, lint, and PR-template conventions; validate before
-    moving the card to Human Review.
+    Follow the repository's own test, lint, and PR-template conventions. Move the card
+    to **Revisão de pares** only after implementation, PR, and VALIDATE evidence are complete.

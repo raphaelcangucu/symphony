@@ -362,7 +362,9 @@ export function normalizeProject(dto: BackendProjectDto): Project {
     name: dto.name,
     description: dto.description ?? null,
     issueCount: dto.issueCount ?? dto.issue_count ?? undefined,
-    workflowStatuses: (dto.workflowStatuses ?? dto.statuses ?? []).map(normalizeWorkflowStatus),
+    workflowStatuses: (dto.workflowStatuses ?? dto.statuses ?? [])
+      .map(normalizeWorkflowStatus)
+      .sort((left, right) => left.position - right.position || left.name.localeCompare(right.name)),
     repositories: (dto.repositories ?? []).map(normalizeRepository),
     setup: dto.setup ? normalizeProjectSetup(dto.setup) : null,
     tracker: {

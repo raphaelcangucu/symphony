@@ -34,12 +34,22 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   test "happy turn captures the chat id and emits translated events" do
     {result, events} = run("happy")
 
-    assert {:ok, %{cli_session_id: "chat-123", status: :completed}} = result
+    assert {:ok, %{cli_session_id: "chat-123", status: :completed, usage: usage}} = result
+    assert usage["inputTokens"] == 1200
+    assert usage["outputTokens"] == 340
 
     methods = Enum.map(events, & &1["method"])
     assert "item/progress" in methods
     assert "item/created" in methods
     assert "turn/completed" in methods
+
+    completed =
+      Enum.find(events, fn
+        %{"method" => "turn/completed", "params" => %{"usage" => %{"inputTokens" => 1200}}} -> true
+        _ -> false
+      end)
+
+    assert completed
 
     tool_item =
       Enum.find_value(events, fn

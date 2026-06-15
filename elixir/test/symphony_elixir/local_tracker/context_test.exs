@@ -664,7 +664,7 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     refute "LA_kwDOJHngx88AAAACmEYycw" in label_names
   end
 
-  test "update_issue replaces user labels while preserving system labels" do
+  test "update_issue replaces all labels with the provided set, including symphony labels" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Label edit", status: "Todo"})
 
@@ -679,6 +679,49 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     label_names = Enum.map(updated.labels, & &1.name)
     assert "bug" in label_names
     assert "frontend" in label_names
+    refute "symphony:codex" in label_names
+    refute "old-label" in label_names
+  end
+
+  test "update_issue can remove a symphony label while keeping the remaining labels" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Symphony labels", status: "Todo"})
+
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "symphony")
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "symphony:codex")
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "symphony:incomplete")
+
+    assert {:ok, updated} =
+             Context.update_issue("macro-markets", "MAC-1", %{
+               "label_ids" => ["symphony", "symphony:codex"]
+             })
+
+    label_names = Enum.map(updated.labels, & &1.name)
+    assert "symphony" in label_names
+    assert "symphony:codex" in label_names
+    refute "symphony:incomplete" in label_names
+
+    assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
+    reloaded_names = Enum.map(reloaded.labels, & &1.name)
+    assert "symphony" in reloaded_names
+    assert "symphony:codex" in reloaded_names
+    refute "symphony:incomplete" in reloaded_names
+  end
+
+  test "update_issue keeps the agent routing label when the agent attr is provided" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Routing", status: "Todo"})
+
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "old-label")
+
+    assert {:ok, updated} =
+             Context.update_issue("macro-markets", "MAC-1", %{
+               "label_ids" => ["bug"],
+               "agent" => "codex"
+             })
+
+    label_names = Enum.map(updated.labels, & &1.name)
+    assert "bug" in label_names
     assert "symphony:codex" in label_names
     refute "old-label" in label_names
   end

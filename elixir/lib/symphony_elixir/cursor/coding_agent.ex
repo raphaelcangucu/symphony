@@ -246,20 +246,62 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   end
 
   defp normalize_usage(event) do
-    raw = event[:usage] || Map.get(event, "usage")
+    payloads = [
+      event[:usage],
+      Map.get(event, "usage"),
+      event[:payload],
+      Map.get(event, "payload"),
+      event[:result] && Map.get(event[:result], :usage),
+      event
+    ]
 
     usage =
-      if is_map(raw) do
-        input = token_value(raw, ~w(input_tokens prompt_tokens)a ++ ~w(input_tokens prompt_tokens))
-        output = token_value(raw, ~w(output_tokens completion_tokens)a ++ ~w(output_tokens completion_tokens))
-        total = token_value(raw, ~w(total_tokens total)a ++ ~w(total_tokens total))
-
-        if input || output || total do
-          %{input_tokens: input || 0, output_tokens: output || 0, total_tokens: total || 0}
-        end
-      end
+      Enum.find_value(payloads, &canonicalize_usage/1) ||
+        Enum.find_value(payloads, &turn_completed_usage/1)
 
     Map.put(event, :usage, usage)
+  end
+
+  defp turn_completed_usage(payload) when is_map(payload) do
+    method = Map.get(payload, "method") || Map.get(payload, :method)
+
+    if method in ["turn/completed", :turn_completed] do
+      usage =
+        Map.get(payload, "usage") || Map.get(payload, :usage) ||
+          get_in(payload, ["params", "usage"]) || get_in(payload, [:params, :usage])
+
+      canonicalize_usage(usage)
+    end
+  end
+
+  defp turn_completed_usage(_), do: nil
+
+  defp canonicalize_usage(nil), do: nil
+
+  defp canonicalize_usage(raw) when is_map(raw) do
+    input =
+      token_value(
+        raw,
+        ~w(input_tokens prompt_tokens inputTokens promptTokens cacheReadTokens cacheWriteTokens)a ++
+          ~w(input_tokens prompt_tokens inputTokens promptTokens cacheReadTokens cacheWriteTokens)
+      )
+
+    output =
+      token_value(
+        raw,
+        ~w(output_tokens completion_tokens outputTokens completionTokens reasoningTokens)a ++
+          ~w(output_tokens completion_tokens outputTokens completionTokens reasoningTokens)
+      )
+
+    total = token_value(raw, ~w(total_tokens total totalTokens)a ++ ~w(total_tokens total totalTokens))
+
+    input = input || 0
+    output = output || 0
+    total = total || input + output
+
+    if input > 0 or output > 0 or total > 0 do
+      %{input_tokens: input, output_tokens: output, total_tokens: total}
+    end
   end
 
   defp token_value(map, keys) do

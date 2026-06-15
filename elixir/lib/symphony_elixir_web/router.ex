@@ -90,13 +90,25 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/:identifier/documents", IssueDocumentController, :index)
     get("/projects/:project_slug/issues/:identifier/documents/*path", IssueDocumentController, :show)
     post("/projects/:project_slug/issues/:identifier/move", IssueController, :move)
+    post("/projects/:project_slug/issues/:identifier/dispatch", IssueController, :dispatch_agent)
     post("/projects/:project_slug/issues/:identifier/sync", IssueController, :sync)
     post("/projects/:project_slug/issues/:identifier/archive", IssueController, :archive)
     post("/projects/:project_slug/issues/:identifier/restore", IssueController, :restore)
     delete("/projects/:project_slug/issues/:identifier", IssueController, :delete)
     get("/projects/:project_slug/issues/:identifier/comments", CommentController, :index)
     post("/projects/:project_slug/issues/:identifier/comments", CommentController, :create)
+    patch("/projects/:project_slug/issues/:identifier/comments/:comment_id", CommentController, :update)
+    delete("/projects/:project_slug/issues/:identifier/comments/:comment_id", CommentController, :delete)
+    post("/projects/:project_slug/evidence/propose", EvidenceConfigController, :propose)
+    put("/projects/:project_slug/evidence", EvidenceConfigController, :save)
     get("/projects/:project_slug/issues/:identifier/evidence", EvidenceController, :index)
+    get("/projects/:project_slug/issues/:identifier/commit_evidence", CommitEvidenceController, :index)
+
+    get(
+      "/projects/:project_slug/issues/:identifier/commit_evidence/:repo/:sha",
+      CommitEvidenceController,
+      :show
+    )
 
     get(
       "/projects/:project_slug/issues/:identifier/evidence/:run_id/artifacts/*path",

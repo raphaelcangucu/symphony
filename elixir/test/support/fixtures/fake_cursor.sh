@@ -10,7 +10,7 @@ case "${FAKE_CURSOR_MODE:-happy}" in
     echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello from fake cursor"}]},"session_id":"chat-123"}'
     echo '{"type":"tool_call","subtype":"started","call_id":"tc1","tool_call":{"function":{"name":"mcp__symphony__list_issues","arguments":"{\"limit\":1}"}},"session_id":"chat-123"}'
     echo '{"type":"tool_call","subtype":"completed","call_id":"tc1","tool_call":{"function":{"name":"mcp__symphony__list_issues","arguments":"{\"limit\":1}","result":"ok"}},"session_id":"chat-123"}'
-    echo '{"type":"result","subtype":"success","duration_ms":12,"duration_api_ms":12,"is_error":false,"result":"Hello from fake cursor","session_id":"chat-123"}'
+    echo '{"type":"result","subtype":"success","duration_ms":12,"duration_api_ms":12,"is_error":false,"result":"Hello from fake cursor","session_id":"chat-123","usage":{"inputTokens":1200,"outputTokens":340,"totalTokens":1540}}'
     ;;
   error)
     echo '{"type":"result","subtype":"error","is_error":true,"result":"boom","session_id":"chat-err"}'
@@ -27,7 +27,7 @@ case "${FAKE_CURSOR_MODE:-happy}" in
     echo '{"type":"tool_call","subtype":"started","call_id":"tc1","tool_call":{"readToolCall":{"args":{"path":"file.txt"}}},"session_id":"chat-multi"}'
     echo '{"type":"tool_call","subtype":"completed","call_id":"tc1","tool_call":{"readToolCall":{"args":{"path":"file.txt"},"result":{"success":{"content":"hi","totalLines":1}}}},"session_id":"chat-multi"}'
     echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello world"}]},"session_id":"chat-multi"}'
-    echo '{"type":"result","subtype":"success","is_error":false,"result":"Hello world","session_id":"chat-multi"}'
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"Hello world","session_id":"chat-multi","usage":{"inputTokens":50,"outputTokens":25,"totalTokens":75}}'
     ;;
   silent)
     # Turn completes successfully but emits no assistant text (exercises the empty-reply fallback).

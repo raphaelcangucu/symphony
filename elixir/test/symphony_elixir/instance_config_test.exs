@@ -29,7 +29,10 @@ defmodule SymphonyElixir.InstanceConfigTest do
   end
 
   test "falls back to module defaults when env is unset" do
-    assert InstanceConfig.poll_interval_ms() == 5_000
+    # Mirrors @default_poll_interval_ms in SymphonyElixir.InstanceConfig (60s, the
+    # intentional default that keeps the orchestrator poll loop off GitHub's rate
+    # limit). Update both together if the module default changes.
+    assert InstanceConfig.poll_interval_ms() == 60_000
     assert InstanceConfig.max_concurrent_agents() == 10
     assert InstanceConfig.default_max_turns() == 20
     assert InstanceConfig.server_port() == 4_000

@@ -33,6 +33,11 @@ defmodule SymphonyElixir.AgentRunner do
   # falls back to the mechanical finalizer.
   @max_corrective_turns 2
 
+  # Small pause between continuation turns. Defends against tight zero-work loops
+  # (e.g. a turn that completes almost instantly) by keeping the agent from
+  # hammering the model/API back-to-back. Overridable via opts for tests.
+  @continuation_delay_ms 2_000
+
   @type run_outcome ::
           :completed
           | {:error, term()}
@@ -281,7 +286,7 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp evidence_config(%ProjectConfig{evidence: %{} = evidence}), do: evidence
-  defp evidence_config(_project_config), do: %{required: false, ui_paths: []}
+  defp evidence_config(_project_config), do: %{required: false, repos: %{}}
 
   defp corrective_validate_prompt(violations) do
     """
@@ -291,9 +296,13 @@ defmodule SymphonyElixir.AgentRunner do
 
     #{Enum.map_join(violations, "\n", &validate_violation_line/1)}
 
-    Read and follow the `evidence` skill now: run the project's unit tests (and
-    e2e with screenshot/video capture if UI files changed), then write
-    `.symphony/evidence/manifest.json` referencing the real artifacts. Do
+    Read and follow the `evidence` skill now. For every repo you changed: run its
+    unit tests. For each UI repo whose e2e is required (listed above), run e2e
+    with screenshot/video capture. For a changed back-end/service repo that the
+    config says may impact a UI repo but where you judge there is NO impact on
+    that UI surface, declare it in the manifest `impact` list with
+    `impacts_ui: false` and a concrete rationale instead of running its e2e. Then
+    write `.symphony/evidence/manifest.json` referencing the real artifacts. Do
     nothing else in this turn.
     """
   end
@@ -458,6 +467,8 @@ defmodule SymphonyElixir.AgentRunner do
       turn_number < max_turns ->
         Logger.info("Continuing agent run for #{issue_context(refreshed_issue)} after normal turn completion turn=#{turn_number}/#{max_turns}")
 
+        pause_between_turns(opts)
+
         do_run_codex_turns(
           app_session,
           workspace,
@@ -502,9 +513,14 @@ defmodule SymphonyElixir.AgentRunner do
 
     #{RunContract.summary_text(repo_states)}
 
-    Do NOT restart from scratch. Review the existing work, finish what is missing,
-    and ensure every repo with commits ends with a pushed branch and an open pull
-    request (follow the `push` skill).
+    Do NOT restart from scratch. Resume in this order:
+
+    1. Finish remaining ticket work (implementation, commits, push, PR) — follow the
+       `push` skill if publishing is missing.
+    2. Run VALIDATE/evidence only when the change set is ready for handoff — not before
+       deliverables above are in place.
+
+    Workpad validation notes from earlier runs are context, not the first action item.
     """
   end
 
@@ -519,12 +535,13 @@ defmodule SymphonyElixir.AgentRunner do
     - Resume from the current workspace and workpad state instead of restarting from scratch.
     - The original task instructions and prior turn context are already present in this thread, so do not restate them before acting.
     - Focus on the remaining ticket work and do not end the turn while the issue stays active unless you are truly blocked.
+    - Do not front-load the full VALIDATE/evidence matrix while implementation or PR work is still missing.
 
     Deliverable state (computed by the orchestrator from the workspace):
 
     #{RunContract.summary_text(repo_states)}
 
-    Any repo with commits ahead must end with a pushed branch and an open pull request (follow the `push` skill).
+    Any repo with commits ahead must end with a pushed branch and an open pull request (follow the `push` skill). Run the `evidence` skill only when handoff is ready.
     """
   end
 
@@ -557,6 +574,13 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp continue_with_issue?(issue, _issue_state_fetcher, _project_config), do: {:done, issue}
+
+  defp pause_between_turns(opts) do
+    case Keyword.get(opts, :continuation_delay_ms, @continuation_delay_ms) do
+      ms when is_integer(ms) and ms > 0 -> Process.sleep(ms)
+      _ -> :ok
+    end
+  end
 
   defp goal_mode?(opts) do
     case Keyword.get(opts, :goal) do

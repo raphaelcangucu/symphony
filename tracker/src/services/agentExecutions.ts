@@ -6,6 +6,7 @@ import type {
   AgentExecutionStatus,
 } from "@/types/agent-execution";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { reconcileExecutionStatus } from "@/lib/agentExecutionDisplay";
 
 import { http, trackerPath, unwrapData } from "./http";
 
@@ -48,7 +49,7 @@ export interface BackendAgentExecutionDto {
   tokens?: BackendAgentExecutionTokensDto | null;
 }
 
-const KNOWN_STATUSES: readonly AgentExecutionStatus[] = ["live", "idle", "waiting", "retrying"];
+const KNOWN_STATUSES: readonly AgentExecutionStatus[] = ["live", "idle", "waiting", "retrying", "error", "aborted"];
 
 function normalizeStatus(status: string | null | undefined): AgentExecutionStatus {
   return KNOWN_STATUSES.includes(status as AgentExecutionStatus) ? (status as AgentExecutionStatus) : "idle";
@@ -110,7 +111,7 @@ export function normalizeAgentExecution(dto: BackendAgentExecutionDto): AgentExe
   const goal = normalizeGoal(dto.goal);
   const longRunningKind = normalizeGoalKind(dto.longRunningKind ?? dto.long_running_kind);
 
-  return {
+  return reconcileExecutionStatus({
     issueIdentifier: normalizeIssueIdentifier(dto.issueIdentifier ?? dto.issue_identifier ?? ""),
     status: normalizeStatus(dto.status),
     agentKind: normalizeAgentKind(dto.agentKind ?? dto.agent_kind),
@@ -128,7 +129,7 @@ export function normalizeAgentExecution(dto: BackendAgentExecutionDto): AgentExe
     longRunningKind,
     longRunningLabel: dto.longRunningLabel ?? dto.long_running_label ?? null,
     tokens,
-  };
+  });
 }
 
 export async function listAgentExecutions(): Promise<AgentExecution[]> {

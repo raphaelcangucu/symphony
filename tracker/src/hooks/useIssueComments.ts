@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createComment, listComments } from "@/services/comments";
-import type { Comment, CreateCommentInput } from "@/types/comment";
+import { createComment, deleteComment, listComments, updateComment } from "@/services/comments";
+import type { Comment, CreateCommentInput, UpdateCommentInput } from "@/types/comment";
 
 interface UseIssueCommentsArgs {
   projectSlug: string;
@@ -16,6 +16,8 @@ export interface UseIssueCommentsResult {
   error: string | null;
   refetch: () => Promise<void>;
   addComment: (input: CreateCommentInput) => Promise<Comment>;
+  updateComment: (commentId: string, input: UpdateCommentInput) => Promise<Comment>;
+  deleteComment: (commentId: string) => Promise<void>;
 }
 
 function sortByCreatedAt(comments: Comment[]): Comment[] {
@@ -81,5 +83,33 @@ export function useIssueComments({
     [identifier, projectSlug],
   );
 
-  return { comments, workpad: latestWorkpad(comments), loading, error, refetch, addComment };
+  const updateCommentById = useCallback(
+    async (commentId: string, input: UpdateCommentInput) => {
+      if (!identifier || !projectSlug) throw new Error("issue is required");
+      const updated = await updateComment(projectSlug, identifier, commentId, input);
+      setComments((current) => sortByCreatedAt(current.map((comment) => (comment.id === commentId ? updated : comment))));
+      return updated;
+    },
+    [identifier, projectSlug],
+  );
+
+  const deleteCommentById = useCallback(
+    async (commentId: string) => {
+      if (!identifier || !projectSlug) throw new Error("issue is required");
+      await deleteComment(projectSlug, identifier, commentId);
+      setComments((current) => current.filter((comment) => comment.id !== commentId));
+    },
+    [identifier, projectSlug],
+  );
+
+  return {
+    comments,
+    workpad: latestWorkpad(comments),
+    loading,
+    error,
+    refetch,
+    addComment,
+    updateComment: updateCommentById,
+    deleteComment: deleteCommentById,
+  };
 }

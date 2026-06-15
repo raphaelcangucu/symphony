@@ -277,7 +277,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   defp seed_statuses(project) do
     case remote_list_statuses(project) do
-      {:ok, statuses} -> LocalStore.upsert_statuses(project, statuses)
+      {:ok, statuses} -> LocalStore.merge_remote_statuses(project, statuses)
       {:error, _reason} -> :ok
     end
   rescue
@@ -632,21 +632,20 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     case driver.pull(project, []) do
       {:ok, issues} ->
         active = active_state_set(project)
-        enriched = Enum.reduce(issues, 0, fn remote, acc -> acc + upsert_one(project, remote, pr_driver, active) end)
+        {enrich_due, plain} = Enum.split_with(issues, fn remote -> enrich?(project, remote, active) end)
+
+        # Bulk-upsert the issues that need no remote enrichment in a single
+        # transaction — one commit for the whole batch, no network involved.
+        LocalStore.upsert_remote_issues(project, plain)
+
+        # Enrich-due issues each pre-fetch comments/PRs (network) before writing,
+        # so they stay per-issue to keep that I/O out of any write transaction.
+        enriched = Enum.reduce(enrich_due, 0, fn remote, acc -> acc + enrich_issue(project, remote, pr_driver) end)
+
         {:ok, %{pulled: length(issues), enriched: enriched}}
 
       {:error, _reason} = error ->
         error
-    end
-  end
-
-  # Returns 1 when the issue was enriched (comments + PRs), 0 otherwise.
-  defp upsert_one(project, remote, pr_driver, active) do
-    if enrich?(project, remote, active) do
-      enrich_issue(project, remote, pr_driver)
-    else
-      LocalStore.upsert_remote_issue(project, remote)
-      0
     end
   end
 

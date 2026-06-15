@@ -14,7 +14,8 @@ defmodule SymphonyElixir.Assistant.AttachmentStore do
     .pl .swift .scala .clj .cljs .edn .ex .exs .erl .heex .eex .leex .vue .svelte .astro .dart .m .mm .proto .tf
     .tfvars)
   @document_extensions ~w(.pdf)
-  @file_extensions @image_extensions ++ @text_extensions ++ @document_extensions
+  @media_extensions ~w(.webm .mp4)
+  @file_extensions @image_extensions ++ @text_extensions ++ @document_extensions ++ @media_extensions
   @text_content_types ~w(application/json application/xml application/x-yaml application/yaml application/toml)
   @inline_text_limit 256 * 1024
 
@@ -187,6 +188,12 @@ defmodule SymphonyElixir.Assistant.AttachmentStore do
       is_binary(content_type) and (String.starts_with?(content_type, "text/") or content_type in @text_content_types) ->
         {:ok, if(extension == "", do: ".txt", else: extension)}
 
+      is_binary(content_type) and content_type in ["video/webm", "audio/webm"] ->
+        {:ok, ".webm"}
+
+      is_binary(content_type) and content_type in ["video/mp4", "audio/mp4"] ->
+        {:ok, ".mp4"}
+
       true ->
         {:error, :unsupported_file_type}
     end
@@ -254,6 +261,10 @@ defmodule SymphonyElixir.Assistant.AttachmentStore do
   defp mime_to_extension("image/jpeg"), do: ".jpg"
   defp mime_to_extension("image/gif"), do: ".gif"
   defp mime_to_extension("image/webp"), do: ".webp"
+  defp mime_to_extension("video/webm"), do: ".webm"
+  defp mime_to_extension("audio/webm"), do: ".webm"
+  defp mime_to_extension("video/mp4"), do: ".mp4"
+  defp mime_to_extension("audio/mp4"), do: ".mp4"
   defp mime_to_extension(_), do: ".png"
 
   defp extension_to_mime(".png"), do: "image/png"
@@ -277,6 +288,8 @@ defmodule SymphonyElixir.Assistant.AttachmentStore do
   defp extension_to_mime(".htm"), do: "text/html"
   defp extension_to_mime(".css"), do: "text/css"
   defp extension_to_mime(".pdf"), do: "application/pdf"
+  defp extension_to_mime(".webm"), do: "video/webm"
+  defp extension_to_mime(".mp4"), do: "video/mp4"
 
   defp extension_to_mime(extension) do
     if extension in @text_extensions, do: "text/plain", else: "application/octet-stream"

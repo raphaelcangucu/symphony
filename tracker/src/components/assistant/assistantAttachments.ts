@@ -1,3 +1,5 @@
+import { isVideoAttachmentSource, isVideoMediaType } from "@/services/attachments";
+
 export type AssistantAttachment =
   | {
       id: string;
@@ -13,6 +15,7 @@ export type AssistantAttachment =
       name: string;
       mediaType: string;
       path: string;
+      previewUrl?: string;
       sizeBytes?: number;
     }
   | {
@@ -73,12 +76,16 @@ export function createImageAttachmentPreview(file: File, uploaded: UploadedAttac
 }
 
 export function createFileAttachment(file: File, uploaded: UploadedAttachmentLike): AssistantAttachment {
+  const mediaType = uploaded.mediaType || uploaded.media_type || file.type || "application/octet-stream";
+
   return {
     id: cryptoRandomId(),
     type: "file",
     name: uploaded.name || file.name,
-    mediaType: uploaded.mediaType || uploaded.media_type || file.type || "application/octet-stream",
+    mediaType,
     path: uploaded.path,
+    previewUrl:
+      isVideoMediaType(mediaType) || isVideoAttachmentSource(file.name) ? URL.createObjectURL(file) : undefined,
     sizeBytes: uploaded.sizeBytes ?? (file.size > 0 ? file.size : undefined),
   };
 }
@@ -137,6 +144,11 @@ export function serializeAttachments(attachments: AssistantAttachment[]): Assist
 export function revokeAttachmentPreviews(attachments: AssistantAttachment[]): void {
   for (const attachment of attachments) {
     if (attachment.type === "image" && attachment.previewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(attachment.previewUrl);
+      continue;
+    }
+
+    if (attachment.type === "file" && attachment.previewUrl?.startsWith("blob:")) {
       URL.revokeObjectURL(attachment.previewUrl);
     }
   }

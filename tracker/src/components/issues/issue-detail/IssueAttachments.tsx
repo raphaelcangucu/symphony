@@ -1,6 +1,7 @@
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
-import { jiraAttachmentUrl } from "@/services/attachments";
+import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
+import { isVideoAttachmentSource, isVideoMediaType, jiraAttachmentUrl } from "@/services/attachments";
 import { cn } from "@/lib/utils";
 import type { IssueAttachment } from "@/types/issue";
 
@@ -37,6 +38,21 @@ function AttachmentItem({ attachment, projectSlug }: { attachment: IssueAttachme
     return (
       <figure className="w-32 space-y-1">
         <AttachmentImage src={src} alt={attachment.filename} className="h-24 w-32 rounded-lg border object-cover" />
+        <figcaption className="truncate text-[11px] text-muted-foreground" title={attachment.filename}>
+          {attachment.filename}
+        </figcaption>
+      </figure>
+    );
+  }
+
+  if (isVideoMediaType(attachment.mimeType) || isVideoAttachmentSource(attachment.filename)) {
+    return (
+      <figure className="w-48 max-w-full space-y-1">
+        <AttachmentVideo
+          src={src}
+          label={attachment.filename}
+          className="max-h-40 w-full rounded-lg border object-contain"
+        />
         <figcaption className="truncate text-[11px] text-muted-foreground" title={attachment.filename}>
           {attachment.filename}
         </figcaption>

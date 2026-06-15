@@ -10,37 +10,41 @@ workflow_statuses:
     category: backlog
     position: 0
     is_terminal: false
-  - name: Todo
-    category: active
+  - name: Planning
+    category: unstarted
     position: 1
     is_terminal: false
-  - name: In Progress
+  - name: Todo
     category: active
     position: 2
     is_terminal: false
+  - name: In Progress
+    category: active
+    position: 3
+    is_terminal: false
   - name: Human Review
     category: wait
-    position: 3
+    position: 4
     is_terminal: false
   - name: Rework
     category: active
-    position: 4
+    position: 5
     is_terminal: false
   - name: Merging
     category: active
-    position: 5
+    position: 6
     is_terminal: false
   - name: Done
     category: terminal
-    position: 6
+    position: 7
     is_terminal: true
   - name: Cancelled
     category: terminal
-    position: 7
+    position: 8
     is_terminal: true
   - name: Duplicate
     category: terminal
-    position: 8
+    position: 9
     is_terminal: true
 repositories:
   - github_full_name: clouapp/front

@@ -35,6 +35,22 @@ defmodule SymphonyElixir.Evidence.GitDiff do
     end)
   end
 
+  @doc """
+  True when any repo-relative file path matches one of the repo-relative globs.
+
+  Used by the per-repo gate for both `ui_paths` (own-UI changes) and
+  `contract_paths` (cross-repo contract surface), where globs and file paths are
+  both relative to the repo root (no repo prefix).
+  """
+  @spec paths_match?([String.t()], [String.t()]) :: boolean()
+  def paths_match?(_files, []), do: false
+  def paths_match?([], _globs), do: false
+
+  def paths_match?(files, globs) do
+    patterns = Enum.map(globs, &glob_to_regex/1)
+    Enum.any?(files, fn file -> Enum.any?(patterns, &Regex.match?(&1, file)) end)
+  end
+
   defp repo_changed_files(%RepoState{} = repo) do
     committed = git_lines(repo.path, ["diff", "--name-only", diff_base(repo)])
 

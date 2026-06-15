@@ -110,6 +110,22 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
     assert File.read!(path) == original
   end
 
+  test "normalize_event canonicalizes cursor turn usage payloads" do
+    event =
+      CodingAgent.normalize_event(%{
+        event: :turn_completed,
+        payload: %{
+          "method" => "turn/completed",
+          "params" => %{
+            "usage" => %{"inputTokens" => 90, "outputTokens" => 10, "totalTokens" => 100}
+          }
+        },
+        timestamp: DateTime.utc_now()
+      })
+
+    assert event.usage == %{input_tokens: 90, output_tokens: 10, total_tokens: 100}
+  end
+
   test "implements CodingAgent behaviour and is routed by adapter_for/1" do
     behaviours =
       CodingAgent.__info__(:attributes)

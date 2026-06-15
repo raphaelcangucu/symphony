@@ -5,6 +5,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
+import { consumeReturnToAgentHandoff, type ReturnToAgentTemplate } from "@/lib/returnToAgent";
+import { assessEvidenceAttention } from "@/lib/evidenceStatus";
 import {
   agentSectionFromSearchParams,
   type AgentSection,
@@ -22,14 +24,25 @@ interface AgentTabsProps {
   projectSlug: string;
   execution?: AgentExecution;
   view: WorkspaceView;
+  workflowMarkdown?: string | null;
+  evidenceRecords?: import("@/types/evidence").EvidenceRecord[];
   onIssueUpdated?: (updated: Issue) => void;
 }
 
-export function AgentTabs({ issue, projectSlug, execution, view, onIssueUpdated }: AgentTabsProps) {
+export function AgentTabs({
+  issue,
+  projectSlug,
+  execution,
+  view,
+  workflowMarkdown = null,
+  evidenceRecords = [],
+  onIssueUpdated,
+}: AgentTabsProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const section = agentSectionFromSearchParams(new URLSearchParams(location.search));
   const [steerSeedMessage, setSteerSeedMessage] = useState<string | null>(null);
+  const [returnToAgentTemplate, setReturnToAgentTemplate] = useState<ReturnToAgentTemplate | null>(null);
 
   const setSection = useCallback(
     (nextSection: AgentSection) => {
@@ -40,9 +53,16 @@ export function AgentTabs({ issue, projectSlug, execution, view, onIssueUpdated 
 
   useEffect(() => {
     const handoff = consumePreviewAssistantHandoff(projectSlug, issue.identifier);
-    if (!handoff || handoff.target !== "execution-steer") return;
+    if (handoff?.target === "execution-steer") {
+      setSteerSeedMessage(composerSeedFromHandoff(handoff));
+      setSection("execution");
+      return;
+    }
 
-    setSteerSeedMessage(composerSeedFromHandoff(handoff));
+    const returnHandoff = consumeReturnToAgentHandoff(projectSlug, issue.identifier);
+    if (!returnHandoff) return;
+
+    setReturnToAgentTemplate(returnHandoff.template);
     setSection("execution");
   }, [issue.identifier, projectSlug, setSection]);
 
@@ -57,8 +77,8 @@ export function AgentTabs({ issue, projectSlug, execution, view, onIssueUpdated 
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
           {section === "authoring"
-            ? "Shape the brief and plan before dispatching the agent."
-            : "Live execution status, session log, and steering."}
+            ? "Draft the brief and plan, then dispatch the agent."
+            : "Watch the live run, steer with /infer, and pause or resume."}
         </p>
         <TabsList
           aria-label="Agent sections"
@@ -92,6 +112,9 @@ export function AgentTabs({ issue, projectSlug, execution, view, onIssueUpdated 
           issue={issue}
           execution={execution}
           projectSlug={projectSlug}
+          workflowMarkdown={workflowMarkdown}
+          evidenceAttention={assessEvidenceAttention(evidenceRecords)}
+          returnToAgentTemplate={returnToAgentTemplate}
           steerSeedMessage={steerSeedMessage}
           onIssueUpdated={onIssueUpdated}
         />

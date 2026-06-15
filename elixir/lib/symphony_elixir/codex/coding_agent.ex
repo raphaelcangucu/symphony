@@ -187,7 +187,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           turn_id: turn_id,
           next_id: @steer_base_id,
           pending: %{},
-          interactive_user_input: Keyword.get(opts, :interactive_user_input, false)
+          interactive_user_input: Keyword.get(opts, :interactive_user_input, false),
+          turn_error: nil,
+          agent_message?: false
         }
 
         case await_turn_completion(port, on_message, tool_executor, auto_approve_requests, turn_ctx) do
@@ -585,8 +587,54 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
     case Jason.decode(payload_string) do
       {:ok, %{"method" => "turn/completed"} = payload} ->
-        emit_turn_event(on_message, :turn_completed, payload, payload_string, port, payload)
-        {:ok, payload}
+        case turn_completion_result(payload, turn_ctx) do
+          {:ok, payload} ->
+            emit_turn_event(on_message, :turn_completed, payload, payload_string, port, payload)
+            {:ok, payload}
+
+          {:error, {:turn_failed, reason}} ->
+            Logger.warning(
+              "Codex turn reported completed after an error event with no agent output; " <>
+                "treating as failed reason=#{inspect(reason)}"
+            )
+
+            emit_turn_event(
+              on_message,
+              :turn_failed,
+              payload,
+              payload_string,
+              port,
+              %{"error" => %{"message" => reason}}
+            )
+
+            {:error, {:turn_failed, reason}}
+        end
+
+      {:ok, %{"method" => "error"} = payload} ->
+        emit_message(
+          on_message,
+          :notification,
+          %{payload: payload, raw: payload_string},
+          metadata_from_message(port, payload)
+        )
+
+        turn_ctx = record_turn_error(turn_ctx, payload)
+        receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests, turn_ctx)
+
+      {:ok, %{"method" => "item/agentMessage/delta"} = payload} ->
+        turn_ctx = mark_agent_message(turn_ctx, payload)
+
+        handle_turn_method(
+          port,
+          on_message,
+          payload,
+          payload_string,
+          "item/agentMessage/delta",
+          timeout_ms,
+          tool_executor,
+          auto_approve_requests,
+          turn_ctx
+        )
 
       {:ok, %{"method" => "turn/failed", "params" => _} = payload} ->
         emit_turn_event(
@@ -673,6 +721,70 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
     %{turn_ctx | pending: rest}
   end
+
+  # A Codex turn can emit a top-level `error` notification (transient model/API
+  # failure) and still report `turn/completed` with no agent output. Without this
+  # guard the orchestrator treats the empty turn as success and immediately fires
+  # the next continuation turn, producing a tight zero-token loop. We only fail
+  # the turn when an error was seen AND the turn produced no agent message, so a
+  # turn that recovered and answered is still treated as completed.
+  defp turn_completion_result(_payload, %{turn_error: error, agent_message?: false})
+       when is_binary(error) and error != "" do
+    {:error, {:turn_failed, error}}
+  end
+
+  defp turn_completion_result(payload, _turn_ctx), do: {:ok, payload}
+
+  defp record_turn_error(turn_ctx, payload) do
+    message = extract_error_message(payload) || Map.get(turn_ctx, :turn_error) || "codex error"
+    Map.put(turn_ctx, :turn_error, message)
+  end
+
+  defp extract_error_message(payload) when is_map(payload) do
+    [
+      ["params", "error", "message"],
+      [:params, :error, :message],
+      ["params", "message"],
+      [:params, :message],
+      ["error", "message"],
+      [:error, :message],
+      ["params", "msg", "message"],
+      [:params, :msg, :message]
+    ]
+    |> Enum.find_value(fn path ->
+      case dig(payload, path) do
+        value when is_binary(value) and value != "" -> value
+        _ -> nil
+      end
+    end)
+  end
+
+  defp extract_error_message(_payload), do: nil
+
+  defp mark_agent_message(turn_ctx, payload) do
+    if agent_message_delta_present?(payload) do
+      Map.put(turn_ctx, :agent_message?, true)
+    else
+      turn_ctx
+    end
+  end
+
+  defp agent_message_delta_present?(payload) when is_map(payload) do
+    [
+      ["params", "delta"],
+      [:params, :delta],
+      ["params", "text"],
+      [:params, :text]
+    ]
+    |> Enum.find_value(false, fn path ->
+      case dig(payload, path) do
+        value when is_binary(value) and value != "" -> true
+        _ -> nil
+      end
+    end)
+  end
+
+  defp agent_message_delta_present?(_payload), do: false
 
   defp emit_turn_event(on_message, event, payload, payload_string, port, payload_details) do
     emit_message(
@@ -1251,6 +1363,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       [:params, :msg, :info, :total_token_usage],
       ["params", "tokenUsage", "total"],
       [:params, :tokenUsage, :total],
+      ["params", "usage"],
+      [:params, :usage],
       ["tokenUsage", "total"],
       [:tokenUsage, :total]
     ]

@@ -50,28 +50,67 @@ defmodule SymphonyElixir.ConfigTest do
   end
 
   describe "evidence workflow section" do
-    test "validate_front_matter accepts and defaults the evidence block" do
+    test "validate_front_matter parses the per-repo evidence block" do
       validated =
         SymphonyElixir.Config.validate_front_matter(%{
           "evidence" => %{
-            "test_command" => %{"frontend" => "npm test"},
+            "required" => true,
+            "repos" => %{
+              "frontend" => %{
+                "unit_command" => "yarn test --run",
+                "ui_paths" => ["src/**", "components/**"],
+                "e2e" => %{"command" => "npx playwright test"}
+              },
+              "backend" => %{
+                "unit_command" => "./vibe test",
+                "impacts" => ["frontend"],
+                "contract_paths" => ["app/Http/**", "routes/**"]
+              }
+            }
+          }
+        })
+
+      assert get_in(validated, [:evidence, :required]) == true
+
+      assert get_in(validated, [:evidence, :repos, "frontend"]) == %{
+               unit_command: "yarn test --run",
+               ui_paths: ["src/**", "components/**"],
+               e2e: %{command: "npx playwright test"}
+             }
+
+      assert get_in(validated, [:evidence, :repos, "backend"]) == %{
+               unit_command: "./vibe test",
+               impacts: ["frontend"],
+               contract_paths: ["app/Http/**", "routes/**"]
+             }
+    end
+
+    test "validate_front_matter converts the legacy flat evidence format" do
+      validated =
+        SymphonyElixir.Config.validate_front_matter(%{
+          "evidence" => %{
+            "test_command" => %{"frontend" => "npm test", "backend" => "./vibe test"},
             "e2e_command" => %{"frontend" => "npx playwright test"},
             "ui_paths" => ["frontend/src/**"],
             "required" => true
           }
         })
 
-      assert get_in(validated, [:evidence, :test_command]) == %{"frontend" => "npm test"}
-      assert get_in(validated, [:evidence, :e2e_command]) == %{"frontend" => "npx playwright test"}
-      assert get_in(validated, [:evidence, :ui_paths]) == ["frontend/src/**"]
       assert get_in(validated, [:evidence, :required]) == true
+
+      assert get_in(validated, [:evidence, :repos, "frontend"]) == %{
+               unit_command: "npm test",
+               ui_paths: ["src/**"],
+               e2e: %{command: "npx playwright test"}
+             }
+
+      assert get_in(validated, [:evidence, :repos, "backend"]) == %{unit_command: "./vibe test"}
     end
 
-    test "omitted evidence block defaults to disabled" do
+    test "omitted evidence block defaults to disabled with no repos" do
       validated = SymphonyElixir.Config.validate_front_matter(%{})
       assert get_in(validated, [:evidence, :required]) == false
-      assert get_in(validated, [:evidence, :ui_paths]) == []
-      assert get_in(validated, [:evidence, :test_command]) == %{}
+      assert get_in(validated, [:evidence, :repos]) == %{}
     end
   end
 

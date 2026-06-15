@@ -3,19 +3,21 @@ defmodule SymphonyElixir.LocalTracker.WorkflowSuggester do
 
   @workflow_statuses [
     %{name: "Backlog", category: "backlog", position: 0, is_terminal: false},
-    %{name: "Todo", category: "active", position: 1, is_terminal: false},
-    %{name: "In Progress", category: "active", position: 2, is_terminal: false},
-    %{name: "Human Review", category: "wait", position: 3, is_terminal: false},
-    %{name: "Rework", category: "active", position: 4, is_terminal: false},
-    %{name: "Merging", category: "active", position: 5, is_terminal: false},
-    %{name: "Done", category: "terminal", position: 6, is_terminal: true},
-    %{name: "Cancelled", category: "terminal", position: 7, is_terminal: true},
-    %{name: "Duplicate", category: "terminal", position: 8, is_terminal: true}
+    %{name: "Planning", category: "unstarted", position: 1, is_terminal: false},
+    %{name: "Todo", category: "active", position: 2, is_terminal: false},
+    %{name: "In Progress", category: "active", position: 3, is_terminal: false},
+    %{name: "Human Review", category: "wait", position: 4, is_terminal: false},
+    %{name: "Rework", category: "active", position: 5, is_terminal: false},
+    %{name: "Merging", category: "active", position: 6, is_terminal: false},
+    %{name: "Done", category: "terminal", position: 7, is_terminal: true},
+    %{name: "Cancelled", category: "terminal", position: 8, is_terminal: true},
+    %{name: "Duplicate", category: "terminal", position: 9, is_terminal: true}
   ]
 
   @workflow_front_matter %{
     "tracker" => %{
-      "field_states" => ["Backlog", "Todo", "In Progress", "Human Review", "Rework", "Merging", "Done", "Cancelled", "Duplicate"],
+      "field_states" => ["Backlog", "Planning", "Todo", "In Progress", "Human Review", "Rework", "Merging", "Done", "Cancelled", "Duplicate"],
+      "dispatch_states" => ["Todo"],
       "active_states" => ["Todo", "In Progress", "Rework", "Merging"],
       "wait_states" => ["Human Review"],
       "terminal_states" => ["Done", "Cancelled", "Duplicate"]

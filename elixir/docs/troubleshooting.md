@@ -279,6 +279,33 @@ SYMPHONY_TRACKER_PR_SYNC_TTL_MS=300000
 Watch the structured `tracker_sync ...` log lines to confirm the cadence: a coalesced
 sync logs `skipped_pull=true`, and a pull reports how many issues it `enriched`.
 
+## `Database busy` (SQLite write contention)
+
+Symptoms: background sync or an assistant turn crashes with
+`%Exqlite.Error{message: "Database busy", ...}` on an `INSERT`/`UPDATE`
+(e.g. `local_tracker_issues.last_synced_at` or `assistant_messages`).
+
+Cause: SQLite allows **one writer at a time**. The whole BEAM shares a single
+database file, and the connection pool (`SYMPHONY_LOCAL_TRACKER_POOL_SIZE`, default
+`5`) lets several writers compete — background sync (one task per project),
+orchestrator-triggered force-syncs, and UI/assistant writes can all collide.
+
+Mitigations already in place:
+
+- Transactions run in **IMMEDIATE** mode (`default_transaction_mode: :immediate`), so
+  a writer takes the lock up front and concurrent writers **queue** instead of
+  failing with an immediate `SQLITE_BUSY` lock-upgrade deadlock.
+- `busy_timeout` is **5s** (`SYMPHONY_LOCAL_TRACKER_BUSY_TIMEOUT_MS`), so a queued
+  writer waits before giving up.
+
+If it still happens under heavy load:
+
+1. Raise `SYMPHONY_LOCAL_TRACKER_BUSY_TIMEOUT_MS` (e.g. `10000`) in `elixir/.env`
+   and restart (`make stop && make serve`).
+2. Lengthen `SYMPHONY_TRACKER_SYNC_MIN_PULL_MS` so fewer projects pull at once.
+3. Confirm nothing else holds the file open (a second Symphony instance, a manual
+   `mix symphony.backup`, or an external SQLite client on `.symphony/tracker.sqlite3`).
+
 ## Creating Issues From the Tracker UI
 
 The tracker "Create issue" modal creates issues for **local, GitHub, and Linear**

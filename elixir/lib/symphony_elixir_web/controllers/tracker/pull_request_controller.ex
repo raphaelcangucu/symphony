@@ -71,13 +71,11 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   def unlink(conn, _params), do: error(conn, 422, "A pull request URL is required.")
 
   defp respond(conn, project, identifier, refresh?) do
-    case PullRequests.resolve_repo(project) do
-      {:ok, _repo} ->
-        respond_github(conn, project, identifier, refresh?)
-
-      {:error, _reason} ->
-        data = persisted(project.slug, identifier) |> MonitorState.attach(project.slug, identifier)
-        json(conn, %{data: data, supported: false, available: false})
+    if PullRequests.supported?(project) do
+      respond_github(conn, project, identifier, refresh?)
+    else
+      data = persisted(project.slug, identifier) |> MonitorState.attach(project.slug, identifier)
+      json(conn, %{data: data, supported: false, available: false})
     end
   end
 

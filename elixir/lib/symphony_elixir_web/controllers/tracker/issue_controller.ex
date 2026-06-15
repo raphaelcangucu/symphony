@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.{AgentPreference, Orchestrator, ProjectConfig, Repo}
+  alias SymphonyElixir.{AgentPreference, IssueDispatch, Orchestrator, ProjectConfig, Repo}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.{IssueAdapter, LabelResolver}
@@ -92,7 +92,9 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
             end
 
             json(conn, %{data: TrackerPresenter.issue(issue)})
-          {:error, reason} -> TrackerErrors.render(conn, reason)
+
+          {:error, reason} ->
+            TrackerErrors.render(conn, reason)
         end
       end
     else
@@ -138,6 +140,47 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   @spec delete(Conn.t(), map()) :: Conn.t()
   def delete(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
     dispatch_issue_action(conn, project_slug, :delete_issue, [identifier])
+  end
+
+  @spec dispatch_agent(Conn.t(), map()) :: Conn.t()
+  def dispatch_agent(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
+    action = Map.get(params, "action", "resume")
+    opts = dispatch_opts(params)
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, result} <- run_dispatch_action(project, identifier, action, opts) do
+      json(conn, %{data: result})
+    else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, :invalid_action} -> TrackerErrors.validation(conn, "action must be resume, restart, hard_reset, stop, or continue_work")
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  defp run_dispatch_action(project, identifier, "resume", opts),
+    do: IssueDispatch.resume(project, identifier, opts)
+
+  defp run_dispatch_action(project, identifier, "restart", opts),
+    do: IssueDispatch.restart(project, identifier, opts)
+
+  defp run_dispatch_action(project, identifier, "hard_reset", opts),
+    do: IssueDispatch.hard_reset(project, identifier, opts)
+
+  defp run_dispatch_action(project, identifier, "stop", opts),
+    do: IssueDispatch.stop(project, identifier, opts)
+
+  defp run_dispatch_action(project, identifier, "continue_work", opts),
+    do: IssueDispatch.continue_work(project, identifier, opts)
+
+  defp run_dispatch_action(_project, _identifier, _action, _opts), do: {:error, :invalid_action}
+
+  defp dispatch_opts(params) do
+    %{
+      agent: Map.get(params, "agent"),
+      goal: Map.get(params, "goal"),
+      instructions: Map.get(params, "instructions"),
+      target_status: Map.get(params, "target_status")
+    }
   end
 
   defp dispatch_issue_action(conn, project_slug, action, args) do

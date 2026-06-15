@@ -21,7 +21,8 @@ defmodule SymphonyElixir.Orchestrator do
   }
 
   alias SymphonyElixir.Evidence
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.GitHub.IssueMarker
+  alias SymphonyElixir.LocalTracker.{Context, Repository}
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -303,6 +304,12 @@ defmodule SymphonyElixir.Orchestrator do
 
   def reconcile_issue_states_for_test(issues, state) when is_list(issues) do
     reconcile_running_issue_states(issues, state)
+  end
+
+  @doc false
+  @spec should_manual_dispatch_issue_for_test(Issue.t()) :: boolean()
+  def should_manual_dispatch_issue_for_test(%Issue{} = issue) do
+    manual_dispatch_candidate?(issue)
   end
 
   @doc false
@@ -827,7 +834,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp apply_successful_completion(%State{} = state, running_entry, issue_id) do
     issue = running_entry.issue
     workspace = Workspace.path_for_issue(issue)
-    deps = state.publish_contract_deps || default_publish_contract_deps()
+    deps = publish_contract_deps_for(issue, state.publish_contract_deps)
 
     case run_publish_contract(issue, workspace, deps) do
       {:ok, prs} ->
@@ -900,6 +907,62 @@ defmodule SymphonyElixir.Orchestrator do
     }
   end
 
+  defp publish_contract_deps_for(%Issue{} = issue, nil), do: publish_contract_deps_for(issue, default_publish_contract_deps())
+
+  defp publish_contract_deps_for(%Issue{} = issue, base) when is_map(base) do
+    default_branches = project_repo_default_branches(issue.project_slug)
+    marker_key = publish_marker_key(issue)
+    identifier = issue.identifier
+
+    Map.merge(base, %{
+      repo_states: fn workspace -> RunContract.repo_states(workspace, default_branches: default_branches) end,
+      pr_checker: RunContract.gh_pr_checker(issue_identifier: identifier, marker_key: marker_key),
+      finalize: fn workspace, iss ->
+        Finalizer.finalize(workspace, iss, default_branches: default_branches)
+      end
+    })
+  end
+
+  defp project_repo_default_branches(slug) when is_binary(slug) and slug != "" do
+    import Ecto.Query
+
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        Repository
+        |> where([repo], repo.project_id == ^project.id)
+        |> Repo.all()
+        |> Enum.reduce(%{}, fn repo, acc ->
+          branch = repo.default_branch || repo.selected_branch
+          key = repo.workspace_path || repo.github_full_name
+
+          if is_binary(key) and is_binary(branch) and branch != "" do
+            Map.put(acc, key, branch)
+          else
+            acc
+          end
+        end)
+
+      {:error, _} ->
+        %{}
+    end
+  end
+
+  defp project_repo_default_branches(_slug), do: %{}
+
+  defp publish_marker_key(%Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        ProjectConfig.source_control_issue_marker_key(ProjectConfig.resolve(project))
+
+      _ ->
+        IssueMarker.default_key()
+    end
+  rescue
+    _ -> IssueMarker.default_key()
+  end
+
+  defp publish_marker_key(_issue), do: IssueMarker.default_key()
+
   @doc false
   @spec blocked_comment_body([map()]) :: String.t()
   def blocked_comment_body(violations) do
@@ -917,17 +980,42 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp record_run_pull_requests(%Issue{project_slug: slug, identifier: identifier}, prs)
-       when is_binary(slug) and slug != "" and is_list(prs) and prs != [] do
-    case Context.get_project(slug) do
-      {:ok, project} ->
-        Enum.each(prs, &persist_run_pull_request(project.id, identifier, &1))
+       when is_binary(slug) and slug != "" and is_binary(identifier) and is_list(prs) and prs != [] do
+    marker_key = publish_marker_key(%Issue{project_slug: slug, identifier: identifier})
+    verified_prs = Enum.filter(prs, &run_pull_request_matches_issue?(&1, identifier, marker_key))
 
-      {:error, error} ->
-        Logger.warning("Cannot persist run PR links issue=#{identifier}: project lookup failed #{inspect(error)}")
+    case verified_prs do
+      [] ->
+        if prs != [] do
+          Logger.warning(
+            "Skipping run PR links issue=#{identifier}: no PR matched Symphony-Issue marker #{marker_key}"
+          )
+        end
+
+        :ok
+
+      linked ->
+        case Context.get_project(slug) do
+          {:ok, project} ->
+            Enum.each(linked, &persist_run_pull_request(project.id, identifier, &1))
+
+          {:error, error} ->
+            Logger.warning("Cannot persist run PR links issue=#{identifier}: project lookup failed #{inspect(error)}")
+        end
     end
   end
 
   defp record_run_pull_requests(_issue, _prs), do: :ok
+
+  defp run_pull_request_matches_issue?(pr, identifier, marker_key) do
+    case Map.get(pr, :body) do
+      body when is_binary(body) ->
+        identifier in IssueMarker.extract(body, marker_key)
+
+      _ ->
+        false
+    end
+  end
 
   defp persist_run_pull_request(project_id, identifier, pr) do
     case LocalStore.upsert_run_pull_request(project_id, identifier, pr) do
@@ -1486,6 +1574,28 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
+  @doc """
+  Stops an in-flight agent run for `identifier` if one is active.
+
+  Used by the hard-reset control: terminates the running task, demonitors it, and
+  clears the in-memory running/claimed/retry state (turn and token counters) so a
+  subsequent dispatch starts from a clean slate. The on-disk workspace is left
+  intact. Returns `:not_found` when no run is active for the issue.
+  """
+  @spec stop_issue(String.t()) :: :ok | :not_found | :unavailable
+  def stop_issue(identifier) when is_binary(identifier) do
+    stop_issue(__MODULE__, identifier)
+  end
+
+  @spec stop_issue(GenServer.server(), String.t()) :: :ok | :not_found | :unavailable
+  def stop_issue(server, identifier) when is_binary(identifier) do
+    if Process.whereis(server) do
+      GenServer.call(server, {:stop_issue, identifier})
+    else
+      :unavailable
+    end
+  end
+
   @spec request_refresh() :: map() | :unavailable
   def request_refresh do
     request_refresh(__MODULE__)
@@ -1495,6 +1605,27 @@ defmodule SymphonyElixir.Orchestrator do
   def request_refresh(server) do
     if Process.whereis(server) do
       GenServer.call(server, :request_refresh)
+    else
+      :unavailable
+    end
+  end
+
+  @doc """
+  Dispatches a specific issue immediately for manual resume/restart controls.
+
+  Unlike the poll loop, this accepts issues in `active_states` (not only
+  `dispatch_states`), which covers workflows where work moves to an in-progress
+  column after the first dispatch.
+  """
+  @spec request_dispatch(String.t()) :: {:ok, map()} | {:error, term()} | :unavailable
+  def request_dispatch(identifier) when is_binary(identifier) do
+    request_dispatch(__MODULE__, identifier)
+  end
+
+  @spec request_dispatch(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()} | :unavailable
+  def request_dispatch(server, identifier) when is_binary(identifier) do
+    if Process.whereis(server) do
+      GenServer.call(server, {:request_dispatch, identifier})
     else
       :unavailable
     end
@@ -1601,6 +1732,20 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
+  def handle_call({:stop_issue, identifier}, _from, state) do
+    case find_running_id_by_identifier(state, identifier) do
+      nil ->
+        {:reply, :not_found, state}
+
+      issue_id ->
+        Logger.info("Stopping agent run for issue_identifier=#{String.trim(identifier)} issue_id=#{issue_id} (hard reset)")
+
+        state = terminate_running_issue(state, issue_id, false)
+        notify_dashboard()
+        {:reply, :ok, state}
+    end
+  end
+
   def handle_call(:request_refresh, _from, state) do
     now_ms = System.monotonic_time(:millisecond)
     already_due? = is_integer(state.next_poll_due_at_ms) and state.next_poll_due_at_ms <= now_ms
@@ -1617,6 +1762,41 @@ defmodule SymphonyElixir.Orchestrator do
        requested_at: DateTime.utc_now(),
        operations: ["poll", "reconcile"]
      }, state}
+  end
+
+  def handle_call({:request_dispatch, identifier}, _from, state) do
+    normalized = String.trim(identifier)
+
+    case fetch_issue_by_identifier(normalized) do
+      {:ok, %Issue{} = issue} ->
+        cond do
+          Map.has_key?(state.running, issue.id) ->
+            {:reply, {:error, :already_running}, state}
+
+          manual_dispatch_candidate?(issue) ->
+            state =
+              state
+              |> cancel_retry_in_state(normalized)
+              |> release_issue_claim(issue.id)
+
+            if dispatch_slots_available?(issue, state) do
+              state = dispatch_issue_for_manual_resume(state, issue)
+              notify_dashboard()
+              {:reply, {:ok, %{dispatched: true, issue_identifier: issue.identifier}}, state}
+            else
+              {:reply, {:error, :no_slots}, state}
+            end
+
+          true ->
+            {:reply, {:error, :not_dispatchable}, state}
+        end
+
+      {:error, :not_found} ->
+        {:reply, {:error, :issue_not_found}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   def handle_call({:steer, identifier, message, reply_to}, _from, state) do
@@ -1646,6 +1826,20 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp find_running_by_identifier(_state, _identifier), do: nil
+
+  defp find_running_id_by_identifier(%State{running: running}, identifier) when is_binary(identifier) do
+    normalized = String.trim(identifier)
+
+    Enum.find_value(running, fn {issue_id, metadata} ->
+      if is_binary(metadata.identifier) and String.trim(metadata.identifier) == normalized do
+        issue_id
+      else
+        nil
+      end
+    end)
+  end
+
+  defp find_running_id_by_identifier(_state, _identifier), do: nil
 
   defp cancel_retry_for_identifier(%State{} = state, identifier) when is_binary(identifier) do
     normalized = String.trim(identifier)
@@ -1864,6 +2058,52 @@ defmodule SymphonyElixir.Orchestrator do
 
     candidate_issue?(issue, dispatch_set(sets), terminal_set(sets)) and
       !issue_blocked_by_non_terminal?(issue, terminal_set(sets))
+  end
+
+  defp manual_dispatch_candidate?(%Issue{} = issue) do
+    sets = project_state_sets(issue)
+
+    candidate_issue?(issue, active_set(sets), terminal_set(sets)) and
+      !issue_blocked_by_non_terminal?(issue, terminal_set(sets))
+  end
+
+  defp fetch_issue_by_identifier(identifier) when is_binary(identifier) do
+    case Tracker.fetch_issue_states_by_ids([identifier]) do
+      {:ok, [%Issue{} = issue | _]} -> {:ok, issue}
+      {:ok, []} -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp dispatch_issue_for_manual_resume(%State{} = state, issue) do
+    case manual_revalidate_issue(issue) do
+      {:ok, refreshed_issue} -> do_dispatch_issue(state, refreshed_issue, nil)
+      _other -> state
+    end
+  end
+
+  defp manual_revalidate_issue(%Issue{id: issue_id}) when is_binary(issue_id) do
+    case Tracker.fetch_issue_states_by_ids([issue_id]) do
+      {:ok, [%Issue{} = refreshed_issue | _]} ->
+        if manual_dispatch_candidate?(refreshed_issue) do
+          {:ok, refreshed_issue}
+        else
+          {:skip, refreshed_issue}
+        end
+
+      {:ok, []} ->
+        {:skip, :missing}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp cancel_retry_in_state(%State{} = state, identifier) when is_binary(identifier) do
+    case cancel_retry_for_identifier(state, identifier) do
+      {:ok, updated_state} -> updated_state
+      :not_found -> state
+    end
   end
 
   defp dispatch_slots_available?(%Issue{} = issue, %State{} = state) do

@@ -5,6 +5,7 @@ import { AlertTriangle, ExternalLink, GitBranch, MessageSquare } from "lucide-re
 import { AgentLongRunningBadge, AgentStatusDot, agentStatusLabel } from "@/components/issues/AgentStatusBadge";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { PriorityIndicator } from "@/components/issues/PriorityIndicator";
+import { executionNeedsAttention, resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { cn } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -32,6 +33,9 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
   } satisfies React.CSSProperties;
 
   const isBlocked = issue.blockedBy.length > 0;
+  const displayStatus = agent ? resolveDisplayStatus(agent) : null;
+  const agentNeedsAttention = agent ? executionNeedsAttention(agent) : false;
+  const agentStatusTitle = agent?.error ?? (displayStatus ? `Agent: ${agentStatusLabel(displayStatus)}` : undefined);
 
   return (
     <article
@@ -40,6 +44,7 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
       className={cn(
         "group cursor-pointer rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-all",
         "hover:-translate-y-px hover:border-primary/40 hover:shadow-md",
+        agentNeedsAttention && "border-rose-500/40 ring-1 ring-rose-500/20",
         isDragging && "opacity-40",
         dragOverlay && "w-72 rotate-2 shadow-xl ring-2 ring-primary/20",
       )}
@@ -117,9 +122,15 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/50 pt-2.5">
         <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
           {agent ? (
-            <span className="inline-flex items-center gap-1 font-medium">
-              <AgentStatusDot status={agent.status} />
-              {agentStatusLabel(agent.status)}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 font-medium",
+                agentNeedsAttention && "text-rose-600 dark:text-rose-300",
+              )}
+              title={agentStatusTitle}
+            >
+              <AgentStatusDot status={displayStatus!} />
+              {agentStatusLabel(displayStatus!)}
             </span>
           ) : null}
           {isBlocked ? (

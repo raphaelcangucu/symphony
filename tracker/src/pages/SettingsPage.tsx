@@ -66,13 +66,14 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6">
-      <div>
-        <h1 className="text-xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted-foreground">Operator-level defaults for this Symphony instance.</p>
-      </div>
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-2xl space-y-6 p-6">
+        <div>
+          <h1 className="text-xl font-semibold">Settings</h1>
+          <p className="text-sm text-muted-foreground">Operator-level defaults for this Symphony instance.</p>
+        </div>
 
-      <Card>
+        <Card>
         <CardHeader>
           <CardTitle>Coding agent</CardTitle>
           <CardDescription>
@@ -129,6 +130,7 @@ export function SettingsPage() {
       <ConnectedIdentitiesCard />
 
       <ProviderCredentialsCard />
+      </div>
     </div>
   );
 }
