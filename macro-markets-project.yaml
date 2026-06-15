@@ -112,24 +112,15 @@ setup:
     - "cd back && ./vibe test"
   workflow_markdown: |
     ---
-    github:
-      repo: clouapp/front
-      project:
-        mode: existing
-        id: "PVT_kwDOCpPais4BY509"
-      comment_context_limit: 30
-      # Base label; issues with symphony, symphony:codex, or symphony:claude are admitted.
-      admission_label: symphony
-    # The tracker UI can create issues directly on this GitHub board (the "New issue"
-    # modal supports labels, assignees, and a Codex/Claude agent selector).
-    #
-    # To dogfood the local tracker UI/API against this workflow instead of GitHub,
-    # remove the `github:` section and uncomment:
-    #
-    # local:
-    #   database_path: .symphony/tracker.sqlite3
-    #   project_slug: macro-markets
-    #   api_token_env: SYMPHONY_TRACKER_TOKEN
+    repositories:
+      - github_full_name: clouapp/front
+        role: frontend
+        selected_branch: homolog
+        workspace_path: front
+      - github_full_name: clouapp/back
+        role: backend
+        selected_branch: dev
+        workspace_path: back
     tracker:
       field_states:
         - Backlog
@@ -155,8 +146,6 @@ setup:
         - Done
         - Cancelled
         - Duplicate
-    polling:
-      interval_ms: 5000
     assistant:
       # Draft issues created by the New issue assistant start here. Default is
       # Triage; this board uses Planning for assistant spec/plan/handoff work.
@@ -170,15 +159,6 @@ setup:
     #   # runtime_id: macro-markets-1       # optional stable id; defaults to the workflow file path
     # Browser VS Code (code-server) for task workspaces. Disabled by default.
     # Requires code-server installed on the host. auth: none is only safe on localhost.
-    # Set enabled: true after `make install-code-server`.
-    editor:
-      enabled: true
-      binary: code-server   # binary name on PATH, or an absolute path
-      host: 127.0.0.1
-      port: 4002
-      auth: none            # "none" (localhost only) or "password"
-      # password: your-password               # required when auth: password
-      # base_url: https://editor.example.com  # browser-facing URL override (remote/proxy)
     # Issue preview dev servers. Requires at least one `.symphony/devenv.yaml`
     # step with `role: serve` in a workspace repository.
     dev_server:
