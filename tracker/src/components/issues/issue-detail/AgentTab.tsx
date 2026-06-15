@@ -210,7 +210,7 @@ export function AgentTab({
         entries={sessionLog.entries}
         error={sessionLog.error}
         logAgentKind={sessionLog.logAgentKind}
-        preferredAgentKind={issue.agentKind}
+        preferredAgentKind={sessionLog.preferredAgentKind ?? execution?.agentKind ?? issue.agentKind}
       />
 
       {showReturnPanel ? (

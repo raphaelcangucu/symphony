@@ -2,6 +2,7 @@ import { Eraser, Pause, Play, RotateCcw, Send, X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { ModelMenu } from "@/components/assistant/ModelMenu";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
 import { AGENT_LABELS } from "@/components/shared/AgentChip";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,6 @@ import {
   effortsForModel,
   fallbackCatalogBundle,
   loadComposerState,
-  modelLabel,
   normalizeEffort,
   saveComposerState,
   type AssistantAgentCatalog,
@@ -40,7 +40,6 @@ import {
   type AssistantComposerState,
   type AssistantEffort,
 } from "@/lib/assistantSettings";
-import { cn } from "@/lib/utils";
 import { agentEnterHintLabel, deriveAgentControl } from "@/lib/agentExecutionDisplay";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
@@ -298,7 +297,14 @@ export function ExecutionControlComposer({
         </div>
         <div className="flex flex-wrap items-center gap-1">
           <AgentMenu bundle={bundle} agent={agent} disabled={controlsDisabled || agentRunActive} onChange={setAgent} />
-          <ModelMenu catalog={catalog} model={settings.model} disabled={controlsDisabled} onChange={setModel} />
+          <ModelMenu
+            catalog={catalog}
+            model={settings.model}
+            disabled={controlsDisabled}
+            onChange={setModel}
+            triggerVariant="outline"
+            showChevron={false}
+          />
           <EffortMenu
             catalog={catalog}
             model={settings.model}
@@ -515,39 +521,6 @@ function AgentMenu({
           {bundle.agents.map((entry) => (
             <DropdownMenuRadioItem key={entry.agent} value={entry.agent}>
               {entry.agentLabel}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function ModelMenu({
-  catalog,
-  model,
-  disabled,
-  onChange,
-}: {
-  catalog: AssistantAgentCatalog;
-  model: string;
-  disabled?: boolean;
-  onChange: (model: string) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className={cn("h-8 gap-1 px-2 text-xs")} disabled={disabled}>
-          {modelLabel(catalog, model)}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{catalog.agentLabel} · Model</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={model} onValueChange={onChange}>
-          {catalog.models.map((option) => (
-            <DropdownMenuRadioItem key={option.id} value={option.model}>
-              {option.label}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

@@ -17,6 +17,7 @@ import {
   serializeAttachments,
   validateAttachmentFile,
 } from "@/components/assistant/assistantAttachments";
+import { ModelMenu } from "@/components/assistant/ModelMenu";
 import { matchingSlashCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { isVideoMediaType } from "@/services/attachments";
@@ -39,7 +40,6 @@ import {
   effortLabel,
   effortsForModel,
   loadComposerState,
-  modelLabel,
   normalizeEffort,
   saveComposerState,
   type AssistantAgentCatalog,
@@ -664,40 +664,6 @@ function AgentMenu({
           {bundle.agents.map((catalog) => (
             <DropdownMenuRadioItem key={catalog.agent} value={catalog.agent}>
               {catalog.agentLabel}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function ModelMenu({
-  catalog,
-  model,
-  disabled,
-  onChange,
-}: {
-  catalog: AssistantAgentCatalog;
-  model: string;
-  disabled?: boolean;
-  onChange: (model: string) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {modelLabel(catalog, model)}
-          <ChevronDown className="h-3 w-3 opacity-60" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{catalog.agentLabel} · Model</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={model} onValueChange={onChange}>
-          {catalog.models.map((option) => (
-            <DropdownMenuRadioItem key={option.id} value={option.model}>
-              {option.label}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

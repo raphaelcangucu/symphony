@@ -14,11 +14,11 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   @poll_ms 500
 
   @impl true
-  def join("session_log:" <> topic_rest, %{"project_slug" => project_slug}, socket)
+  def join("session_log:" <> topic_rest, %{"project_slug" => project_slug} = params, socket)
       when is_binary(project_slug) and project_slug != "" do
     with :ok <- authorize(socket),
          {:ok, issue_identifier} <- parse_topic(topic_rest, project_slug),
-         preferred_agent_kind <- resolve_agent_kind(project_slug, issue_identifier),
+         preferred_agent_kind <- preferred_agent_kind(params, project_slug, issue_identifier),
          workspace <- Workspace.path_for_issue(issue_identifier),
          {:ok, log_agent_kind, path} <- SessionLog.resolve_log_source(preferred_agent_kind, workspace) do
       {:ok, lines, offset} = SessionLog.tail(log_agent_kind, path, SessionLog.join_tail_opts())
@@ -101,6 +101,19 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     Process.send_after(self(), :poll, @poll_ms)
     {:noreply, socket}
   end
+
+  @known_agent_kinds ["codex", "claude", "cursor"]
+
+  # The client tells us which agent the operator is actually viewing (the
+  # selected/running agent in the UI). Honor it so the session log shows that
+  # agent's live transcript instead of a stale log from a previously-used agent.
+  # Fall back to the issue's persisted agent kind when the client omits it.
+  defp preferred_agent_kind(%{"agent_kind" => kind}, _project_slug, _issue_identifier)
+       when kind in @known_agent_kinds,
+       do: kind
+
+  defp preferred_agent_kind(_params, project_slug, issue_identifier),
+    do: resolve_agent_kind(project_slug, issue_identifier)
 
   defp resolve_agent_kind(project_slug, issue_identifier) do
     case Context.get_issue(project_slug, issue_identifier) do
