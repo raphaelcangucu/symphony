@@ -102,6 +102,13 @@ defmodule SymphonyElixir.IssueDispatch do
           ## Resume agent run (tracker)
 
           A previous agent run was interrupted or stalled. Resume from the current workspace and session log — do not restart from scratch unless the workspace is empty.
+
+          **Priority on resume:**
+          1. Finish remaining **implementation** first (code, commits, push, PR).
+          2. Do **not** front-load full test/evidence runs unless implementation is already complete and only validation was blocked.
+          3. Run VALIDATE/evidence (`evidence` skill) when handoff is ready — after deliverables exist and before moving to review.
+
+          Stale `targeted tests:` lines in the workpad describe a previous attempt; retry them only after the ticket work itself is done.
           """
 
         :restart ->

@@ -513,9 +513,14 @@ defmodule SymphonyElixir.AgentRunner do
 
     #{RunContract.summary_text(repo_states)}
 
-    Do NOT restart from scratch. Review the existing work, finish what is missing,
-    and ensure every repo with commits ends with a pushed branch and an open pull
-    request (follow the `push` skill).
+    Do NOT restart from scratch. Resume in this order:
+
+    1. Finish remaining ticket work (implementation, commits, push, PR) — follow the
+       `push` skill if publishing is missing.
+    2. Run VALIDATE/evidence only when the change set is ready for handoff — not before
+       deliverables above are in place.
+
+    Workpad validation notes from earlier runs are context, not the first action item.
     """
   end
 
@@ -530,12 +535,13 @@ defmodule SymphonyElixir.AgentRunner do
     - Resume from the current workspace and workpad state instead of restarting from scratch.
     - The original task instructions and prior turn context are already present in this thread, so do not restate them before acting.
     - Focus on the remaining ticket work and do not end the turn while the issue stays active unless you are truly blocked.
+    - Do not front-load the full VALIDATE/evidence matrix while implementation or PR work is still missing.
 
     Deliverable state (computed by the orchestrator from the workspace):
 
     #{RunContract.summary_text(repo_states)}
 
-    Any repo with commits ahead must end with a pushed branch and an open pull request (follow the `push` skill).
+    Any repo with commits ahead must end with a pushed branch and an open pull request (follow the `push` skill). Run the `evidence` skill only when handoff is ready.
     """
   end
 

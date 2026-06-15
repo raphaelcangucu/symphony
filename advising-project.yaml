@@ -109,14 +109,16 @@ setup:
     evidence:
       required: true
       repos:
+        # Single git clone (`advising/`). Manifest `repo` values must use this key,
+        # not subfolder names like `graphql` or `accessible-ui`.
         advising:
-          unit_command: "cd advising && ./vibe test"
+          unit_command: "./vibe test"
           ui_paths:
             - "advisestream/web/**"
             - "accessible-ui/**"
             - "kiosk/**"
           e2e:
-            command: "cd advising/automation/playwright && npx playwright test"
+            command: "cd automation/playwright && npx playwright test"
     agent:
       max_turns: 20
     codex:
@@ -185,6 +187,22 @@ setup:
     the repo before running commands. This is **PHP 7.4 Symfony 1.x** (legacy Inspire)
     running in Docker — never run bare `php` on the host for app code.
 
+    ## Execution order (Symphony)
+
+    Work in this order unless the ticket is a legitimate no-op:
+
+    1. **Plan** — create/update the `## Codex Workpad` (plan + acceptance criteria).
+    2. **Implement** — code changes, commits, push, open/update the PR (`push` skill).
+    3. **Validate** — only when implementation is ready for handoff: run tests, capture
+       artifacts, write `.symphony/evidence/manifest.json` (`evidence` skill).
+
+    Do **not** start a fresh run by reading the `evidence` skill or running the full
+    validation matrix. Targeted tests while coding are fine; the VALIDATE gate runs at
+    run completion, not at dispatch.
+
+    On **resume**, finish missing implementation/PR work first. Retry blocked validation
+    commands from the workpad only after the ticket change set is complete.
+
     ## Git / GitHub
 
     Use **shell `git` and `gh`** for clone, fetch, push, and PRs. This machine has
@@ -225,33 +243,28 @@ setup:
     First-time setup may also need AWS ECR login (`./sail aws:login`) and
     `docker/.env` credentials — see `docs/INSTALL.md`.
 
-    ### Running tests (mandatory before Human Review)
+    ### Tests by touched area (run from `advising/` unless noted)
 
-    PHPUnit (primary unit/functional suite):
+    | Area changed | Command |
+    |--------------|---------|
+    | PHP / Symfony (`advisestream/`) | `./vibe test` or `./vibe test --filter=ClassName` |
+    | Go GraphQL API (`graphql/`) | `cd graphql && go test ./...` |
+    | Accessible UI (`accessible-ui/`) | `cd accessible-ui && yarn test --runInBand --watchAll=false` |
+    | Kiosk (`kiosk/`) | `cd kiosk && yarn test` |
 
-    ```bash
-    cd advising
-    ./vibe test                                    # all tests
-    ./vibe test --filter=MyTestClass               # targeted
-    ./vibe phpunit advisestream/test/phpunit/unit/ # directory
-    ```
+    During implementation, run **targeted** tests for the files you touched. Do not
+    run the full matrix until handoff.
 
-    Accessible UI (when `accessible-ui/` changed):
+    ### VALIDATE handoff (mandatory before Human Review)
 
-    ```bash
-    cd advising/accessible-ui && yarn test
-    ```
+    When the PR is ready, start Docker if needed (`./vibe shared up`, `./vibe up`), then
+    follow the `evidence` skill:
 
-    E2E Playwright (when UI paths changed — requires `./vibe up` first):
-
-    ```bash
-    cd advising/automation/playwright
-    npm install
-    npx playwright test
-    ```
-
-    During VALIDATE, follow the `evidence` skill: run real commands, copy artifacts
-    to `.symphony/evidence/artifacts/`, write `.symphony/evidence/manifest.json`.
+    - Run every applicable command from the table above for paths you changed.
+    - When UI paths changed, also run Playwright (`cd automation/playwright && npx playwright test`).
+    - Copy outputs to `.symphony/evidence/artifacts/`.
+    - Write `.symphony/evidence/manifest.json` with `"repo": "advising"` on every run row
+      (this monorepo is one git repo; do not use subfolder names as `repo`).
 
     ## Issue preview (Symphony Preview tab)
 
@@ -293,7 +306,8 @@ setup:
       links the PR to this issue deterministically: `Symphony-Issue: {{ issue.identifier }}`.
     - Use a single `## Codex Workpad` comment for progress and the machine-readable
       `symphony:prs` registry block.
-    - Record validation in the workpad: `targeted tests: <command>` and outcome.
+    - Record validation in the workpad under **Validation**, after implementation is done:
+      `targeted tests: <command>` and outcome.
 
-    Follow the repository's own test, lint, and PR-template conventions; validate before
-    moving the card to Human Review.
+    Follow the repository's own test, lint, and PR-template conventions. Move the card
+    to **Revisão de pares** only after implementation, PR, and VALIDATE evidence are complete.

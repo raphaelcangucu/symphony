@@ -13,6 +13,7 @@ defmodule SymphonyElixir.AgentRunnerPromptTest do
     assert text =~ "Resume notice"
     assert text =~ "docs/gam-3"
     assert text =~ "Do NOT restart from scratch"
+    assert text =~ "VALIDATE/evidence only when"
   end
 
   test "continuation_prompt embeds deliverable state" do
