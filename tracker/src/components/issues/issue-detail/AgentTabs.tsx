@@ -77,8 +77,8 @@ export function AgentTabs({
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
           {section === "authoring"
-            ? "Shape the brief and plan before dispatching the agent."
-            : "Live execution status, session log, and steering."}
+            ? "Draft the brief and plan, then dispatch the agent."
+            : "Watch the live run, steer with /infer, and pause or resume."}
         </p>
         <TabsList
           aria-label="Agent sections"

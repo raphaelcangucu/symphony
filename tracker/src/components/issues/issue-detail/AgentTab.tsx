@@ -84,7 +84,14 @@ export function AgentTab({
     <div className="space-y-4 text-sm">
       <section className="rounded-xl border border-border/70 bg-card/40 p-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Execution</div>
+          <div className="flex items-center gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Run status</div>
+            {execution?.agentKind ? (
+              <span className="rounded-full border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground">
+                {AGENT_LABELS[execution.agentKind]}
+              </span>
+            ) : null}
+          </div>
           {execution ? (
             <div className="flex flex-wrap items-center justify-end gap-1.5">
               <AgentStatusBadge status={displayStatus!} />
@@ -197,6 +204,15 @@ export function AgentTab({
         />
       ) : null}
 
+      <IssueSessionLog
+        issueIdentifier={issue.identifier}
+        connected={sessionLog.connected}
+        entries={sessionLog.entries}
+        error={sessionLog.error}
+        logAgentKind={sessionLog.logAgentKind}
+        preferredAgentKind={issue.agentKind}
+      />
+
       {showReturnPanel ? (
         <details className="rounded-xl border border-border/70 bg-card/20 p-3">
           <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Controles avançados</summary>
@@ -229,15 +245,6 @@ export function AgentTab({
           onIssueUpdated={onIssueUpdated}
         />
       )}
-
-      <IssueSessionLog
-        issueIdentifier={issue.identifier}
-        connected={sessionLog.connected}
-        entries={sessionLog.entries}
-        error={sessionLog.error}
-        logAgentKind={sessionLog.logAgentKind}
-        preferredAgentKind={issue.agentKind}
-      />
 
       <Separator />
       <section>

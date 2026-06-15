@@ -33,6 +33,7 @@ import { useIssueComments } from "@/hooks/useIssueComments";
 import { useIssueEditor } from "@/hooks/useIssueEditor";
 import { useIssueUpdater } from "@/hooks/useIssueUpdater";
 import type { EditorReason } from "@/services/editor";
+import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
 import { useIssueEvidence } from "@/hooks/useIssueEvidence";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
@@ -121,6 +122,12 @@ export function IssueDrawer({
   });
 
   const evidence = useIssueEvidence({
+    projectSlug,
+    identifier: issue?.identifier ?? null,
+    enabled: open && Boolean(issue),
+  });
+
+  const commitEvidence = useIssueCommitEvidence({
     projectSlug,
     identifier: issue?.identifier ?? null,
     enabled: open && Boolean(issue),
@@ -432,12 +439,17 @@ export function IssueDrawer({
                 </TabsContent>
                 <TabsContent value="evidence">
                   <EvidenceTab
+                    commitWorkspace={commitEvidence.workspace}
+                    commits={commitEvidence.commits}
+                    commitsError={commitEvidence.error}
+                    commitsLoading={commitEvidence.loading}
                     error={evidence.error}
                     identifier={issue.identifier}
                     issue={issue}
                     loading={evidence.loading}
                     onIssueUpdated={onIssueUpdated}
                     onRefresh={() => void evidence.refetch()}
+                    onRefreshCommits={() => void commitEvidence.refetch()}
                     projectSlug={projectSlug}
                     records={evidence.records}
                     showContinueWork={showEvidenceContinueWork}

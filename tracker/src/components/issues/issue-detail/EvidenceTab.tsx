@@ -1,5 +1,6 @@
 import { ClipboardCheck, RefreshCw } from "lucide-react";
 
+import { CommitEvidenceSection } from "@/components/issues/issue-detail/CommitEvidenceSection";
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import {
 import { evidenceArtifactUrl } from "@/services/evidence";
 import { cn } from "@/lib/utils";
 import type { WorkflowTrackerConfig } from "@/lib/workflowTracker";
+import type { CommitEvidenceSummary, CommitEvidenceWorkspace } from "@/types/commitEvidence";
 import type { EvidenceRecord, EvidenceRun } from "@/types/evidence";
 import type { Issue } from "@/types/issue";
 
@@ -21,6 +23,11 @@ interface EvidenceTabProps {
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  commits?: CommitEvidenceSummary[];
+  commitWorkspace?: CommitEvidenceWorkspace | null;
+  commitsLoading?: boolean;
+  commitsError?: string | null;
+  onRefreshCommits?: () => void;
   showContinueWork?: boolean;
   issue?: Issue;
   trackerConfig?: WorkflowTrackerConfig;
@@ -34,6 +41,11 @@ export function EvidenceTab({
   loading,
   error,
   onRefresh,
+  commits = [],
+  commitWorkspace = null,
+  commitsLoading = false,
+  commitsError = null,
+  onRefreshCommits,
   showContinueWork = false,
   issue,
   trackerConfig,
@@ -88,6 +100,16 @@ export function EvidenceTab({
           record={record}
         />
       ))}
+
+      <CommitEvidenceSection
+        commits={commits}
+        error={commitsError}
+        identifier={identifier}
+        loading={commitsLoading}
+        onRefresh={() => onRefreshCommits?.()}
+        projectSlug={projectSlug}
+        workspace={commitWorkspace}
+      />
     </div>
   );
 }

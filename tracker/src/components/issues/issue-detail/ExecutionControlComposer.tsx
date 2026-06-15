@@ -1,4 +1,4 @@
-import { Eraser, Pause, Play, RotateCcw, Send } from "lucide-react";
+import { Eraser, Pause, Play, RotateCcw, Send, X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -41,7 +41,7 @@ import {
   type AssistantEffort,
 } from "@/lib/assistantSettings";
 import { cn } from "@/lib/utils";
-import { canResumeExecution } from "@/lib/agentExecutionDisplay";
+import { agentEnterHintLabel, deriveAgentControl } from "@/lib/agentExecutionDisplay";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -73,6 +73,7 @@ export function ExecutionControlComposer({
   onIssueUpdated,
 }: ExecutionControlComposerProps) {
   const [input, setInput] = useState("");
+  const [queued, setQueued] = useState<string[]>([]);
   const [bundle, setBundle] = useState<AssistantCatalogBundle>(fallbackCatalogBundle());
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(fallbackCatalogBundle()));
   const [goalMode, setGoalMode] = useState(() => execution?.goal?.kind === "goal");
@@ -87,14 +88,27 @@ export function ExecutionControlComposer({
     composerState.byAgent[agent] ?? defaultComposerSettings(catalog);
   const effortOptions = effortsForModel(catalog, settings.model);
 
-  const goalObjective = useMemo(() => {
-    if (execution?.goal?.objective?.trim()) return execution.goal.objective.trim();
-    return null;
-  }, [execution?.goal?.objective]);
+  const trimmedGoalObjective = execution?.goal?.objective?.trim();
+  const goalObjective = trimmedGoalObjective ? trimmedGoalObjective : null;
 
-  const agentRunActive = execution ? !canResumeExecution(execution) : false;
-  const canResume = canResumeExecution(execution);
-  const canRestart = canResumeExecution(execution);
+  const control = deriveAgentControl(execution);
+  const agentRunActive = control.isActive;
+  const canResume = control.canResume;
+  const canRestart = control.canResume;
+  // `canSteer` (prop) is the authoritative steer gate from the parent; the rest
+  // of the lifecycle (pause/resume/start, labels) comes from the execution.
+  const enterIntent = canSteer
+    ? "steer"
+    : control.isActive
+      ? "queue"
+      : control.hasRun
+        ? "resume"
+        : "start";
+  const primaryLabel = control.primaryLabel;
+  const queuedGuidance = useMemo(
+    () => queued.filter((entry) => entry.trim().length > 0),
+    [queued],
+  );
 
   useEffect(() => {
     if (!seedMessage?.trim()) return;
@@ -176,24 +190,47 @@ export function ExecutionControlComposer({
     stop: "Pausing agent…",
   };
 
+  // Guidance the agent should receive on the next resume/restart: anything the
+  // user queued while the run was busy, plus whatever is currently typed.
+  function combinedGuidance(): string {
+    const parsed = parseSlashCommand(input);
+    const typed = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
+    return [...queuedGuidance, typed].filter((entry) => entry.length > 0).join("\n\n");
+  }
+
+  function enqueueGuidance() {
+    const parsed = parseSlashCommand(input);
+    const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
+    if (!text) return;
+    setQueued((current) => [...current, text]);
+    setInput("");
+  }
+
+  function removeQueued(index: number) {
+    setQueued((current) => current.filter((_, i) => i !== index));
+  }
+
   async function runDispatch(action: "resume" | "restart" | "hard_reset" | "stop") {
     setDispatchPending(action);
     setDispatchError(null);
     setDispatchStatus(dispatchProgressLabel[action]);
 
-    const parsed = parseSlashCommand(input);
-    const steerText = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
+    // Pausing keeps the typed/queued guidance around for the next resume.
+    const guidance = action === "stop" ? "" : combinedGuidance();
 
     try {
       const result = await dispatchIssueAgent(projectSlug, issue.identifier, {
         action,
         agent,
         goal: goalMode ? goalObjective : null,
-        instructions: steerText || null,
+        instructions: guidance || null,
       });
       onIssueUpdated?.(result.issue);
       setDispatchStatus(result.message);
-      if (steerText) setInput("");
+      if (action !== "stop") {
+        setInput("");
+        setQueued([]);
+      }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Dispatch failed";
       setDispatchError(message);
@@ -206,31 +243,43 @@ export function ExecutionControlComposer({
 
   function submitSteer() {
     const parsed = parseSlashCommand(input);
-    if (parsed.kind !== "infer" || !parsed.argument.trim()) return;
-    onSteer(parsed.argument);
+    const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
+    if (!text) return;
+    onSteer(text);
     setInput("");
   }
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  // Single entry point for Enter / the send button: steer a live turn, queue
+  // guidance for a busy-but-not-steerable run, or resume/start when stopped.
+  function submitComposer() {
     if (canSteer) {
       submitSteer();
       return;
     }
-    if (canResume) void runDispatch("resume");
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== "Enter" || event.shiftKey) return;
-    event.preventDefault();
-    if (canSteer) {
-      submitSteer();
+    if (control.isActive) {
+      enqueueGuidance();
       return;
     }
     if (canResume && !dispatchPending) void runDispatch("resume");
   }
 
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    submitComposer();
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    submitComposer();
+  }
+
   const controlsDisabled = dispatchPending !== null;
+  const sendDisabled =
+    controlsDisabled ||
+    !input.trim() ||
+    (canSteer && (!sessionConnected || steerPending));
+  const primaryDisabled = controlsDisabled || (!agentRunActive && !canResume);
 
   return (
     <section className="rounded-xl border border-border/70 bg-card/40 p-4">
@@ -239,10 +288,12 @@ export function ExecutionControlComposer({
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agent control</div>
           <p className="mt-1 text-xs text-muted-foreground">
             {canSteer
-              ? "Steer the live run with /infer, pause to stop safely, or queue guidance for the next resume."
+              ? "Steer the live run with /infer, or pause to stop safely."
               : agentRunActive
-                ? "Pause the active run, or steer with /infer while the agent is live."
-                : "Resume where the run stopped, restart fresh, or add guidance for the next dispatch."}
+                ? "Agent is busy — queue guidance for the next resume, or pause to stop safely."
+                : control.hasRun
+                  ? "Resume where the run stopped, restart fresh, or add guidance before resuming."
+                  : "Start the agent on this issue. Add optional guidance before you do."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1">
@@ -282,6 +333,34 @@ export function ExecutionControlComposer({
         </div>
       ) : null}
 
+      {queuedGuidance.length > 0 ? (
+        <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Queued guidance · sent on next resume
+          </div>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {queuedGuidance.map((entry, index) => (
+              <li
+                key={`${index}-${entry}`}
+                className="flex items-start justify-between gap-2 rounded-md bg-background/70 px-2 py-1.5 text-xs"
+              >
+                <span className="min-w-0 whitespace-pre-wrap break-words text-foreground/90">{entry}</span>
+                <button
+                  type="button"
+                  aria-label="Remove queued guidance"
+                  title="Remove"
+                  disabled={controlsDisabled}
+                  onClick={() => removeQueued(index)}
+                  className="mt-0.5 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <form className="mt-3 space-y-3" onSubmit={handleSubmit}>
         <Textarea
           value={input}
@@ -290,7 +369,11 @@ export function ExecutionControlComposer({
           placeholder={
             canSteer
               ? "/infer focus on the failing test first"
-              : "Optional guidance for resume/restart, or /infer while the agent is live"
+              : agentRunActive
+                ? "Add guidance to queue for the next resume…"
+                : control.hasRun
+                  ? "Optional guidance, then Resume…"
+                  : "Optional guidance, then Start…"
           }
           disabled={controlsDisabled || (canSteer && (!sessionConnected || steerPending))}
           rows={3}
@@ -303,40 +386,11 @@ export function ExecutionControlComposer({
               type="button"
               size="sm"
               variant="outline"
-              disabled={!agentRunActive || controlsDisabled}
-              title={
-                agentRunActive
-                  ? "Pause the run (keeps the session to resume later)"
-                  : "No active run to pause"
-              }
-              onClick={() => void runDispatch("stop")}
-            >
-              <Pause className="mr-1.5 h-3.5 w-3.5" />
-              {dispatchPending === "stop" ? "Pausing…" : "Pause"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!canResume || controlsDisabled}
-              title={
-                canResume
-                  ? "Resume from the current workspace and session log"
-                  : "Stop the active run before resuming"
-              }
-              onClick={() => void runDispatch("resume")}
-            >
-              <Play className="mr-1.5 h-3.5 w-3.5" />
-              {dispatchPending === "resume" ? "Resuming…" : "Resume"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
               disabled={!canRestart || controlsDisabled}
               title={
                 canRestart
                   ? "Start a fresh agent pass on this issue"
-                  : "Stop the active run before restarting"
+                  : "Pause the active run before restarting"
               }
               onClick={() => void runDispatch("restart")}
             >
@@ -359,30 +413,36 @@ export function ExecutionControlComposer({
 
           <div className="flex items-center gap-2">
             <span className="hidden text-xs text-muted-foreground sm:inline">
-              {steerPending ? "Sending steer…" : canSteer ? "Enter to steer" : "Enter to resume"}
+              {steerPending ? "Sending steer…" : agentEnterHintLabel(enterIntent)}
             </span>
-            <Button
-              type="submit"
-              size="sm"
-              variant={canSteer ? "default" : "secondary"}
-              disabled={
-                controlsDisabled ||
-                (canSteer && (!sessionConnected || steerPending || !input.trim())) ||
-                (!canSteer && !canResume)
-              }
-            >
-              {canSteer ? (
-                <>
-                  <Send className="mr-1.5 h-3.5 w-3.5" />
-                  Steer
-                </>
-              ) : (
-                <>
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
-                  Resume
-                </>
-              )}
-            </Button>
+            {agentRunActive ? (
+              <Button type="submit" size="sm" variant="default" disabled={sendDisabled}>
+                <Send className="mr-1.5 h-3.5 w-3.5" />
+                {canSteer ? "Steer" : "Queue"}
+              </Button>
+            ) : null}
+            {agentRunActive ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={controlsDisabled}
+                title="Pause the run (keeps the session to resume later)"
+                onClick={() => void runDispatch("stop")}
+              >
+                <Pause className="mr-1.5 h-3.5 w-3.5" />
+                {dispatchPending === "stop" ? "Pausing…" : "Pause"}
+              </Button>
+            ) : (
+              <Button type="submit" size="sm" variant="secondary" disabled={primaryDisabled}>
+                <Play className="mr-1.5 h-3.5 w-3.5" />
+                {dispatchPending === "resume"
+                  ? primaryLabel === "Start"
+                    ? "Starting…"
+                    : "Resuming…"
+                  : primaryLabel}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -390,7 +450,7 @@ export function ExecutionControlComposer({
         {dispatchStatus ? <p className="text-xs text-muted-foreground">{dispatchStatus}</p> : null}
         {steerError ? <p className="text-xs text-destructive">{formatSteerError(steerError)}</p> : null}
         <p className="text-[11px] text-muted-foreground">
-          Models from {catalog.command}. Agent selection applies on resume/restart; steer uses the live {AGENT_LABELS[agent]} session.
+          Models from {catalog.command}. Agent and model apply on resume/restart; /infer steers the live {AGENT_LABELS[agent]} session.
         </p>
       </form>
 

@@ -20,6 +20,7 @@ github:
 tracker:
   field_states:
     - Backlog
+    - Planning
     - Todo
     - In Progress
     - Human Review
@@ -33,6 +34,8 @@ tracker:
     - In Progress
     - Rework
     - Merging
+  dispatch_states:
+    - Todo
   wait_states:
     - Human Review
   terminal_states:
@@ -43,8 +46,8 @@ polling:
   interval_ms: 5000
 assistant:
   # Draft issues created by the New issue assistant start here. Default is
-  # Triage; this board uses Backlog as its non-actionable intake status.
-  draft_status: Backlog
+  # Triage; this board uses Planning for assistant spec/plan/handoff work.
+  draft_status: Planning
 # Report this process's orchestrator snapshot to a central observability hub.
 # observability:
 #   hub_url: http://localhost:4000      # where this process reports to; OMIT on the hub process itself (it self-registers in-process)
@@ -226,8 +229,9 @@ Symphony reads and updates the GitHub Project **Status** field when moving cards
 
 | State | Role |
 |-------|------|
-| Backlog | Out of scope; do not modify; wait for human to move to Todo |
-| Todo | Queue; move to In Progress before work |
+| Backlog | Intake; not ready for planning |
+| Planning | Human planning with the issue assistant — create spec, plan, and handoff docs; do not dispatch agent runs |
+| Todo | Orchestrator queue; move to In Progress before work |
 | In Progress | Active implementation |
 | Human Review | PR ready; poll for human decision — **no further coding turns** |
 | Rework | Address review feedback (see **Rework flow** below) |
@@ -241,10 +245,13 @@ Raw GitHub GraphQL: `github_graphql` (same shape as `linear_graphql`).
 ## Assistant authoring handoff
 
 The tracker **New issue** button opens the issue authoring assistant by default. It
-creates a draft in `assistant.draft_status`, then continues at
+creates a draft in `assistant.draft_status` (**Planning**), then continues at
 `/projects/:slug/assistant/issue/:id`. Simple mode enriches the issue body; Complex
 mode writes read-only review artifacts under `docs/superpowers/specs/`,
 `docs/superpowers/plans/`, and `docs/superpowers/handoff.md` in this workspace.
+
+Use **Planning** to discuss the task and produce spec, plan, and handoff artifacts
+when needed. Move to **Todo** only when the issue is ready for agent execution.
 
 Before execution, read those documents when present. The Agent tab separates
 **Authoring** (assistant chat and docs) from **Execution** (orchestrator run). For

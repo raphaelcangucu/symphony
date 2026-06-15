@@ -10,6 +10,7 @@ github:
 tracker:
   field_states:
     - Backlog
+    - Planning
     - Todo
     - In Progress
     - Human Review
@@ -23,6 +24,8 @@ tracker:
     - In Progress
     - Rework
     - Merging
+  dispatch_states:
+    - Todo
   wait_states:
     - Human Review
   terminal_states:
@@ -33,7 +36,7 @@ polling:
   interval_ms: 5000
 assistant:
   # Draft issues created by the New issue assistant start here.
-  draft_status: Backlog
+  draft_status: Planning
 editor:
   enabled: true
   binary: code-server
@@ -124,8 +127,9 @@ Symphony reads and updates the GitHub Project **Status** field when moving cards
 
 | State | Role |
 |-------|------|
-| Backlog | Out of scope; do not modify; wait for human to move to Todo |
-| Todo | Queue; move to In Progress before work |
+| Backlog | Intake; not ready for planning |
+| Planning | Human planning with the issue assistant — create spec, plan, and handoff docs; do not dispatch agent runs |
+| Todo | Orchestrator queue; move to In Progress before work |
 | In Progress | Active implementation |
 | Human Review | PR ready; poll for human decision; no further coding turns |
 | Rework | Address review feedback |
@@ -136,7 +140,9 @@ Use a single `## Codex Workpad` comment for progress. Blockers: `Blocked by #N` 
 
 ## Assistant authoring handoff
 
-The tracker **New issue** button opens the issue authoring assistant by default. It creates a draft in `assistant.draft_status`, then continues at `/projects/:slug/assistant/issue/:id`.
+The tracker **New issue** button opens the issue authoring assistant by default. It creates a draft in `assistant.draft_status` (**Planning**), then continues at `/projects/:slug/assistant/issue/:id`.
+
+Use **Planning** to discuss the task and produce spec, plan, and handoff artifacts when needed. Move to **Todo** only when the issue is ready for agent execution.
 
 Before execution, read any generated specs, plans, handoff notes, issue comments, and linked PR comments when present. The Agent tab separates **Authoring** from **Execution**.
 

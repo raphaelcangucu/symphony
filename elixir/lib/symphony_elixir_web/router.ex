@@ -102,6 +102,13 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/evidence/propose", EvidenceConfigController, :propose)
     put("/projects/:project_slug/evidence", EvidenceConfigController, :save)
     get("/projects/:project_slug/issues/:identifier/evidence", EvidenceController, :index)
+    get("/projects/:project_slug/issues/:identifier/commit_evidence", CommitEvidenceController, :index)
+
+    get(
+      "/projects/:project_slug/issues/:identifier/commit_evidence/:repo/:sha",
+      CommitEvidenceController,
+      :show
+    )
 
     get(
       "/projects/:project_slug/issues/:identifier/evidence/:run_id/artifacts/*path",

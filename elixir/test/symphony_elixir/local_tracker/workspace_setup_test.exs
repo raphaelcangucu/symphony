@@ -64,6 +64,7 @@ defmodule SymphonyElixir.LocalTracker.WorkspaceSetupTest do
 
     assert Enum.map(suggestion.workflow_statuses, & &1.name) == [
              "Backlog",
+             "Planning",
              "Todo",
              "In Progress",
              "Human Review",
@@ -76,6 +77,7 @@ defmodule SymphonyElixir.LocalTracker.WorkspaceSetupTest do
 
     assert {:ok, parsed} = SymphonyElixir.Workflow.parse_string(suggestion.workflow_markdown)
     assert parsed.config["tracker"]["active_states"] == ["Todo", "In Progress", "Rework", "Merging"]
+    assert parsed.config["tracker"]["dispatch_states"] == ["Todo"]
     assert suggestion.validation_commands == ["pnpm test", "mix test"]
     assert suggestion.after_create_hook =~ "git clone --branch homolog https://github.com/clouapp/front.git frontend"
     assert suggestion.after_create_hook =~ "git clone --branch main https://github.com/clouapp/api.git backend"

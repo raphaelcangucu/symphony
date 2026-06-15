@@ -41,3 +41,94 @@ export function executionNeedsAttention(execution?: AgentExecution): boolean {
   const status = resolveDisplayStatus(execution);
   return status === "aborted" || status === "error";
 }
+
+/**
+ * High-level control state for the unified Agent Control surface. `live` is
+ * renamed to `running` so the UI reads naturally ("Running"); every other
+ * display status is preserved. `no-run` means there is no execution to act on
+ * yet (the agent has never been dispatched, or finished and dropped out of the
+ * orchestrator snapshot).
+ */
+export type AgentControlState =
+  | "no-run"
+  | "running"
+  | "idle"
+  | "waiting"
+  | "retrying"
+  | "error"
+  | "aborted";
+
+/** Lifecycle action the primary control button performs in a given state. */
+export type AgentPrimaryAction = "start" | "resume" | "pause";
+
+/** What pressing Enter in the composer does in a given state. */
+export type AgentEnterIntent = "steer" | "queue" | "resume" | "start";
+
+export interface AgentControlModel {
+  /** Normalized control state (`live` -> `running`). */
+  state: AgentControlState;
+  /** Whether an execution exists to act on. */
+  hasRun: boolean;
+  /** Run is in progress (live/waiting/idle). */
+  isActive: boolean;
+  /** Live turn can accept `/infer` steering right now (live/waiting). */
+  canSteer: boolean;
+  /** Run can be resumed/restarted (not currently active). */
+  canResume: boolean;
+  /** Run can be paused (currently active). */
+  canPause: boolean;
+  /** Lifecycle action for the primary control button. */
+  primaryAction: AgentPrimaryAction;
+  /** Human label for the primary control button. */
+  primaryLabel: string;
+  /** What Enter does in the composer for this state. */
+  enterIntent: AgentEnterIntent;
+}
+
+/** Derives the full Agent Control model from an execution snapshot. */
+export function deriveAgentControl(execution?: AgentExecution): AgentControlModel {
+  if (!execution) {
+    return {
+      state: "no-run",
+      hasRun: false,
+      isActive: false,
+      canSteer: false,
+      canResume: true,
+      canPause: false,
+      primaryAction: "start",
+      primaryLabel: "Start",
+      enterIntent: "start",
+    };
+  }
+
+  const status = resolveDisplayStatus(execution);
+  const isActive = status === "live" || status === "waiting" || status === "idle";
+  const canSteer = status === "live" || status === "waiting";
+  const state: AgentControlState = status === "live" ? "running" : status;
+
+  return {
+    state,
+    hasRun: true,
+    isActive,
+    canSteer,
+    canResume: !isActive,
+    canPause: isActive,
+    primaryAction: isActive ? "pause" : "resume",
+    primaryLabel: isActive ? "Pause" : "Resume",
+    enterIntent: canSteer ? "steer" : isActive ? "queue" : "resume",
+  };
+}
+
+/** Short hint shown next to the composer describing the Enter action. */
+export function agentEnterHintLabel(intent: AgentEnterIntent): string {
+  switch (intent) {
+    case "steer":
+      return "Enter to steer";
+    case "queue":
+      return "Enter to queue";
+    case "resume":
+      return "Enter to resume";
+    case "start":
+      return "Enter to start";
+  }
+}

@@ -30,6 +30,38 @@ const issue = {
   agentKind: "codex",
 } as unknown as Issue;
 
+function makeExecution(overrides: Partial<AgentExecution> = {}): AgentExecution {
+  return {
+    issueIdentifier: "CDE-1132",
+    status: "live",
+    agentKind: "codex",
+    sessionId: "sess-1",
+    lastEvent: "turn_started",
+    lastMessage: "working",
+    lastEventAt: null,
+    turnCount: 2,
+    runtimeSeconds: 120,
+    startedAt: null,
+    retryAttempt: 0,
+    error: null,
+    goal: null,
+    longRunning: false,
+    longRunningKind: null,
+    longRunningLabel: null,
+    tokens: null,
+    ...overrides,
+  };
+}
+
+const interruptedExecution = makeExecution({
+  status: "idle",
+  lastEvent: "turn_aborted",
+  lastMessage: "Agent run interrupted — resume from the session log",
+  turnCount: 0,
+  runtimeSeconds: null,
+  error: "Agent run interrupted — use Resume in the execution panel",
+});
+
 describe("ExecutionControlComposer", () => {
   beforeEach(() => {
     dispatchIssueAgentMock.mockReset();
@@ -52,6 +84,7 @@ describe("ExecutionControlComposer", () => {
       <ExecutionControlComposer
         projectSlug="advising"
         issue={issue}
+        execution={makeExecution({ status: "live" })}
         sessionConnected
         canSteer
         onSteer={onSteer}
@@ -79,13 +112,14 @@ describe("ExecutionControlComposer", () => {
       <ExecutionControlComposer
         projectSlug="advising"
         issue={issue}
+        execution={interruptedExecution}
         sessionConnected
         onSteer={vi.fn()}
         onIssueUpdated={onIssueUpdated}
       />,
     );
 
-    await user.click(screen.getAllByRole("button", { name: /^resume$/i })[0]!);
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
 
     await waitFor(() =>
       expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
@@ -101,37 +135,101 @@ describe("ExecutionControlComposer", () => {
     expect(onIssueUpdated).toHaveBeenCalledWith(issue);
   });
 
-  it("enables resume when the run was interrupted but reported as idle", async () => {
-    const interrupted = {
-      issueIdentifier: "CDE-1132",
-      status: "idle",
-      agentKind: "codex",
-      sessionId: "sess-1",
-      lastEvent: "turn_aborted",
-      lastMessage: "Agent run interrupted — resume from the session log",
-      lastEventAt: null,
-      turnCount: 0,
-      runtimeSeconds: null,
-      startedAt: null,
-      retryAttempt: 0,
-      error: "Agent run interrupted — use Resume in the execution panel",
-      goal: null,
-      longRunning: false,
-      longRunningKind: null,
-      longRunningLabel: null,
-      tokens: null,
-    } satisfies AgentExecution;
-
+  it("enables resume when the run was interrupted but reported as idle", () => {
     render(
       <ExecutionControlComposer
         projectSlug="advising"
         issue={issue}
-        execution={interrupted}
+        execution={interruptedExecution}
         onSteer={vi.fn()}
       />,
     );
 
-    expect(screen.getAllByRole("button", { name: /^resume$/i })[0]).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /^resume$/i })).not.toBeDisabled();
+  });
+
+  it("sends typed guidance as instructions on resume", async () => {
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resuming agent work on CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await user.type(
+      screen.getByPlaceholderText(/optional guidance, then resume/i),
+      "double-check the migration",
+    );
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({
+          action: "resume",
+          instructions: "double-check the migration",
+        }),
+      ),
+    );
+  });
+
+  it("offers Start and no Pause when there is no run", () => {
+    render(<ExecutionControlComposer projectSlug="advising" issue={issue} onSteer={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: /^pause$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^start$/i })).toBeInTheDocument();
+  });
+
+  it("queues guidance for a busy, non-steerable run", async () => {
+    const onSteer = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "idle" })}
+        onSteer={onSteer}
+      />,
+    );
+
+    await user.type(
+      screen.getByPlaceholderText(/queue for the next resume/i),
+      "rebase before continuing",
+    );
+    await user.click(screen.getByRole("button", { name: /^queue$/i }));
+
+    expect(screen.getByText("rebase before continuing")).toBeInTheDocument();
+    expect(onSteer).not.toHaveBeenCalled();
+    expect(dispatchIssueAgentMock).not.toHaveBeenCalled();
+  });
+
+  it("removes queued guidance", async () => {
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "idle" })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByPlaceholderText(/queue for the next resume/i), "queued note");
+    await user.click(screen.getByRole("button", { name: /^queue$/i }));
+    expect(screen.getByText("queued note")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /remove queued guidance/i }));
+    expect(screen.queryByText("queued note")).not.toBeInTheDocument();
   });
 
   it("pauses an active run", async () => {
@@ -142,32 +240,12 @@ describe("ExecutionControlComposer", () => {
       issue,
     });
 
-    const active = {
-      issueIdentifier: "CDE-1132",
-      status: "live",
-      agentKind: "codex",
-      sessionId: "sess-1",
-      lastEvent: "turn_started",
-      lastMessage: "working",
-      lastEventAt: null,
-      turnCount: 2,
-      runtimeSeconds: 120,
-      startedAt: null,
-      retryAttempt: 0,
-      error: null,
-      goal: null,
-      longRunning: false,
-      longRunningKind: null,
-      longRunningLabel: null,
-      tokens: null,
-    } satisfies AgentExecution;
-
     const user = userEvent.setup();
     render(
       <ExecutionControlComposer
         projectSlug="advising"
         issue={issue}
-        execution={active}
+        execution={makeExecution({ status: "live" })}
         onSteer={vi.fn()}
         onIssueUpdated={onIssueUpdated}
       />,
@@ -188,18 +266,6 @@ describe("ExecutionControlComposer", () => {
     expect(onIssueUpdated).toHaveBeenCalledWith(issue);
   });
 
-  it("disables pause when no run is active", () => {
-    render(
-      <ExecutionControlComposer
-        projectSlug="advising"
-        issue={issue}
-        onSteer={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: /^pause$/i })).toBeDisabled();
-  });
-
   it("hard resets the session after confirmation", async () => {
     const onIssueUpdated = vi.fn();
     dispatchIssueAgentMock.mockResolvedValue({
@@ -208,32 +274,12 @@ describe("ExecutionControlComposer", () => {
       issue,
     });
 
-    const active = {
-      issueIdentifier: "CDE-1132",
-      status: "live",
-      agentKind: "codex",
-      sessionId: "sess-1",
-      lastEvent: "turn_completed",
-      lastMessage: "turn completed (failed)",
-      lastEventAt: null,
-      turnCount: 4,
-      runtimeSeconds: null,
-      startedAt: null,
-      retryAttempt: 0,
-      error: null,
-      goal: null,
-      longRunning: false,
-      longRunningKind: null,
-      longRunningLabel: null,
-      tokens: null,
-    } satisfies AgentExecution;
-
     const user = userEvent.setup();
     render(
       <ExecutionControlComposer
         projectSlug="advising"
         issue={issue}
-        execution={active}
+        execution={makeExecution({ status: "live", lastEvent: "turn_completed", turnCount: 4 })}
         onSteer={vi.fn()}
         onIssueUpdated={onIssueUpdated}
       />,
@@ -262,7 +308,9 @@ describe("ExecutionControlComposer", () => {
       <ExecutionControlComposer
         projectSlug="advising"
         issue={issue}
+        execution={makeExecution({ status: "live" })}
         sessionConnected
+        canSteer
         steerError="ActiveTurnNotSteerable"
         onSteer={vi.fn()}
       />,

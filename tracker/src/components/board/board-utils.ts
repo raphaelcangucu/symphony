@@ -3,6 +3,7 @@ import type { WorkflowStatusName } from "@/types/workflow-status";
 
 export const DEFAULT_WORKFLOW_STATUSES = [
   "Backlog",
+  "Planning",
   "Todo",
   "In Progress",
   "Human Review",

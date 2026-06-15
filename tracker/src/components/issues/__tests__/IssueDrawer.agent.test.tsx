@@ -55,6 +55,16 @@ vi.mock("@/hooks/useIssueEvidence", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useIssueCommitEvidence", () => ({
+  useIssueCommitEvidence: () => ({
+    commits: [],
+    workspace: null,
+    error: null,
+    loading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
 vi.mock("@/hooks/useIssueEditor", () => ({
   useIssueEditor: () => ({
     browser: { available: false, url: null, reason: "workspace_missing" },

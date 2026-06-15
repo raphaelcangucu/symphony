@@ -7,9 +7,14 @@ import type { EvidenceRecord } from "@/types/evidence";
 import type { Issue } from "@/types/issue";
 
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
+const getCommitEvidenceMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issueDispatch", () => ({
   dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
+}));
+
+vi.mock("@/services/commitEvidence", () => ({
+  getCommitEvidence: (...args: unknown[]) => getCommitEvidenceMock(...args),
 }));
 
 const baseProps = {
@@ -183,5 +188,48 @@ describe("EvidenceTab", () => {
 
     const traceLink = screen.getByRole("link", { name: "e2e trace (frontend)" });
     expect(traceLink.getAttribute("href")).toContain("artifacts/trace.zip");
+  });
+
+  it("renders agent commits and opens the diff sheet on click", async () => {
+    getCommitEvidenceMock.mockResolvedValue({
+      repo: "advising",
+      sha: "abc123def456",
+      shortSha: "abc123d",
+      message: "feat: agent work",
+      author: "Symphony Agent",
+      authoredAt: "2026-06-10T12:00:00Z",
+      filesChanged: 1,
+      insertions: 2,
+      deletions: 0,
+      files: [{ path: "work.txt", oldPath: null, status: "added", patch: "+work\n" }],
+    });
+
+    const user = userEvent.setup();
+    render(
+      <EvidenceTab
+        {...baseProps}
+        commits={[
+          {
+            repo: "advising",
+            sha: "abc123def456",
+            shortSha: "abc123d",
+            message: "feat: agent work",
+            author: "Symphony Agent",
+            authoredAt: "2026-06-10T12:00:00Z",
+            filesChanged: 1,
+            insertions: 2,
+            deletions: 0,
+          },
+        ]}
+        commitWorkspace={{ path: "/tmp/ws", available: true }}
+        onRefreshCommits={vi.fn()}
+        records={[]}
+      />,
+    );
+
+    expect(screen.getByText("Agent commits")).toBeInTheDocument();
+    await user.click(screen.getByTestId("commit-evidence-abc123d"));
+    expect(getCommitEvidenceMock).toHaveBeenCalledWith("advising", "CDE-1131", "advising", "abc123def456");
+    expect(await screen.findByText("work.txt")).toBeInTheDocument();
   });
 });
