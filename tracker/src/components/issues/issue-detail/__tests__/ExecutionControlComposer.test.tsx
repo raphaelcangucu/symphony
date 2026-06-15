@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -132,6 +132,63 @@ describe("ExecutionControlComposer", () => {
     );
 
     expect(screen.getAllByRole("button", { name: /^resume$/i })[0]).not.toBeDisabled();
+  });
+
+  it("hard resets the session after confirmation", async () => {
+    const onIssueUpdated = vi.fn();
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "hard_reset",
+      message: "Hard reset session for CDE-1132",
+      issue,
+    });
+
+    const active = {
+      issueIdentifier: "CDE-1132",
+      status: "live",
+      agentKind: "codex",
+      sessionId: "sess-1",
+      lastEvent: "turn_completed",
+      lastMessage: "turn completed (failed)",
+      lastEventAt: null,
+      turnCount: 4,
+      runtimeSeconds: null,
+      startedAt: null,
+      retryAttempt: 0,
+      error: null,
+      goal: null,
+      longRunning: false,
+      longRunningKind: null,
+      longRunningLabel: null,
+      tokens: null,
+    } satisfies AgentExecution;
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={active}
+        onSteer={vi.fn()}
+        onIssueUpdated={onIssueUpdated}
+      />,
+    );
+
+    const hardResetTrigger = screen.getByRole("button", { name: /hard reset/i });
+    expect(hardResetTrigger).not.toBeDisabled();
+
+    await user.click(hardResetTrigger);
+
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /^hard reset$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({ action: "hard_reset" }),
+      ),
+    );
+    expect(onIssueUpdated).toHaveBeenCalledWith(issue);
   });
 
   it("shows a friendly steer error when no turn is steerable", () => {

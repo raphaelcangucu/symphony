@@ -33,6 +33,11 @@ defmodule SymphonyElixir.AgentRunner do
   # falls back to the mechanical finalizer.
   @max_corrective_turns 2
 
+  # Small pause between continuation turns. Defends against tight zero-work loops
+  # (e.g. a turn that completes almost instantly) by keeping the agent from
+  # hammering the model/API back-to-back. Overridable via opts for tests.
+  @continuation_delay_ms 2_000
+
   @type run_outcome ::
           :completed
           | {:error, term()}
@@ -462,6 +467,8 @@ defmodule SymphonyElixir.AgentRunner do
       turn_number < max_turns ->
         Logger.info("Continuing agent run for #{issue_context(refreshed_issue)} after normal turn completion turn=#{turn_number}/#{max_turns}")
 
+        pause_between_turns(opts)
+
         do_run_codex_turns(
           app_session,
           workspace,
@@ -561,6 +568,13 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp continue_with_issue?(issue, _issue_state_fetcher, _project_config), do: {:done, issue}
+
+  defp pause_between_turns(opts) do
+    case Keyword.get(opts, :continuation_delay_ms, @continuation_delay_ms) do
+      ms when is_integer(ms) and ms > 0 -> Process.sleep(ms)
+      _ -> :ok
+    end
+  end
 
   defp goal_mode?(opts) do
     case Keyword.get(opts, :goal) do

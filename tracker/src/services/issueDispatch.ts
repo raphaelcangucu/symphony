@@ -3,7 +3,7 @@ import type { AgentKind, Issue } from "@/types/issue";
 import { http, trackerPath, unwrapData } from "./http";
 import { type BackendIssueDto, normalizeIssue } from "./mappers";
 
-export type IssueDispatchAction = "resume" | "restart";
+export type IssueDispatchAction = "resume" | "restart" | "hard_reset" | "stop";
 
 export interface IssueDispatchInput {
   action: IssueDispatchAction;
@@ -46,8 +46,13 @@ export async function dispatchIssueAgent(
   if (!dto.issue) throw new Error("dispatch response missing issue");
 
   return {
-    action: dto.action === "restart" ? "restart" : "resume",
+    action: normalizeDispatchAction(dto.action),
     message: dto.message ?? "",
     issue: normalizeIssue(dto.issue),
   };
+}
+
+function normalizeDispatchAction(action: string | undefined): IssueDispatchAction {
+  if (action === "restart" || action === "hard_reset" || action === "stop") return action;
+  return "resume";
 }

@@ -394,6 +394,25 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @doc """
+  Clears the persisted agent session id for an issue.
+
+  Used by the hard-reset control so the issue starts a fresh agent session
+  instead of resolving the previous Codex thread.
+  """
+  @spec clear_agent_session_id(String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def clear_agent_session_id(project_slug, identifier)
+      when is_binary(project_slug) and is_binary(identifier) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      issue
+      |> IssueRecord.changeset(%{agent_session_id: nil})
+      |> Repo.update()
+      |> preload_issue_result()
+    end
+  end
+
   @spec move_issue(String.t(), String.t(), map()) ::
           {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
   def move_issue(project_slug, identifier, attrs)

@@ -3,6 +3,7 @@ defmodule SymphonyElixir.IssueDispatchTest do
 
   alias SymphonyElixir.IssueDispatch
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.IssueRecord
   alias SymphonyElixir.Repo
 
   setup do
@@ -49,6 +50,23 @@ defmodule SymphonyElixir.IssueDispatchTest do
 
     assert {:ok, result} = IssueDispatch.restart(project, issue.identifier, %{})
     assert result.action == "restart"
+
+    {:ok, updated} = Context.get_issue("pref", issue.identifier)
+    assert updated.status.name == "In Progress"
+  end
+
+  test "hard reset clears the persisted agent session and keeps the issue dispatchable", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, record} = Context.set_agent_session_id("pref", issue.identifier, "thread-123")
+    assert record.agent_session_id == "thread-123"
+
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, result} = IssueDispatch.hard_reset(project, issue.identifier, %{})
+    assert result.action == "hard_reset"
+    assert result.message =~ issue.identifier
+
+    assert Repo.get!(IssueRecord, record.id).agent_session_id == nil
 
     {:ok, updated} = Context.get_issue("pref", issue.identifier)
     assert updated.status.name == "In Progress"

@@ -10,43 +10,27 @@ defmodule SymphonyElixir.Assistant.PullRequestLookup do
   def list_for_issue(%Project{} = project, identifier, opts \\ []) when is_binary(identifier) do
     identifier = normalize_identifier(identifier)
 
-    case PullRequests.resolve_repo(project) do
-      {:ok, _repo} ->
-        {:ok,
-         %{
-           supported: true,
-           available: PullRequests.available?(),
-           pull_requests: list_github(project, identifier, opts)
-         }}
-
-      {:error, _reason} ->
-        {:ok,
-         %{
-           supported: false,
-           available: false,
-           pull_requests: list_persisted(project.slug, identifier)
-         }}
+    if PullRequests.supported?(project) do
+      {:ok,
+       %{
+         supported: true,
+         available: PullRequests.available?(),
+         pull_requests: list_github(project, identifier, opts)
+       }}
+    else
+      {:ok,
+       %{
+         supported: false,
+         available: false,
+         pull_requests: list_persisted(project.slug, identifier)
+       }}
     end
   end
 
   defp list_github(project, identifier, opts) do
-    pull_requests =
-      case PullRequests.for_project_issue(project, identifier, opts) do
-        {:ok, prs} ->
-          persist_discovered(project, identifier, prs)
-          Enum.map(prs, &summarize_live/1)
-
-        {:error, {:invalid_issue_identifier, _}} ->
-          []
-
-        {:error, :issue_not_found} ->
-          []
-
-        {:error, _reason} ->
-          []
-      end
-
-    merge(pull_requests, list_persisted(project.slug, identifier))
+    {:ok, pull_requests} = PullRequests.for_project_issue(project, identifier, opts)
+    persist_discovered(project, identifier, pull_requests)
+    merge(Enum.map(pull_requests, &summarize_live/1), list_persisted(project.slug, identifier))
   end
 
   defp persist_discovered(project, identifier, prs) do

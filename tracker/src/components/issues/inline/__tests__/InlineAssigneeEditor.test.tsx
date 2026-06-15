@@ -43,4 +43,23 @@ describe("InlineAssigneeEditor", () => {
     expect(screen.getByRole("button", { name: /bob/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /alice/i })).not.toBeInTheDocument();
   });
+
+  it("autosaves the selected assignee when clicking outside", async () => {
+    const onSave = vi.fn(async () => true);
+    const user = userEvent.setup();
+    render(
+      <>
+        <InlineAssigneeEditor assignee={null} options={options} onSave={onSave} />
+        <button type="button">Outside</button>
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /unassigned/i }));
+    await user.click(await screen.findByRole("button", { name: /bob/i }));
+    expect(screen.queryByRole("button", { name: /^save$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^close$/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^outside$/i }));
+
+    expect(onSave).toHaveBeenCalledWith(["U2"]);
+  });
 });

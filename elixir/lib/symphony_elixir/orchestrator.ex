@@ -1492,6 +1492,28 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
+  @doc """
+  Stops an in-flight agent run for `identifier` if one is active.
+
+  Used by the hard-reset control: terminates the running task, demonitors it, and
+  clears the in-memory running/claimed/retry state (turn and token counters) so a
+  subsequent dispatch starts from a clean slate. The on-disk workspace is left
+  intact. Returns `:not_found` when no run is active for the issue.
+  """
+  @spec stop_issue(String.t()) :: :ok | :not_found | :unavailable
+  def stop_issue(identifier) when is_binary(identifier) do
+    stop_issue(__MODULE__, identifier)
+  end
+
+  @spec stop_issue(GenServer.server(), String.t()) :: :ok | :not_found | :unavailable
+  def stop_issue(server, identifier) when is_binary(identifier) do
+    if Process.whereis(server) do
+      GenServer.call(server, {:stop_issue, identifier})
+    else
+      :unavailable
+    end
+  end
+
   @spec request_refresh() :: map() | :unavailable
   def request_refresh do
     request_refresh(__MODULE__)
@@ -1628,6 +1650,20 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
+  def handle_call({:stop_issue, identifier}, _from, state) do
+    case find_running_id_by_identifier(state, identifier) do
+      nil ->
+        {:reply, :not_found, state}
+
+      issue_id ->
+        Logger.info("Stopping agent run for issue_identifier=#{String.trim(identifier)} issue_id=#{issue_id} (hard reset)")
+
+        state = terminate_running_issue(state, issue_id, false)
+        notify_dashboard()
+        {:reply, :ok, state}
+    end
+  end
+
   def handle_call(:request_refresh, _from, state) do
     now_ms = System.monotonic_time(:millisecond)
     already_due? = is_integer(state.next_poll_due_at_ms) and state.next_poll_due_at_ms <= now_ms
@@ -1708,6 +1744,20 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp find_running_by_identifier(_state, _identifier), do: nil
+
+  defp find_running_id_by_identifier(%State{running: running}, identifier) when is_binary(identifier) do
+    normalized = String.trim(identifier)
+
+    Enum.find_value(running, fn {issue_id, metadata} ->
+      if is_binary(metadata.identifier) and String.trim(metadata.identifier) == normalized do
+        issue_id
+      else
+        nil
+      end
+    end)
+  end
+
+  defp find_running_id_by_identifier(_state, _identifier), do: nil
 
   defp cancel_retry_for_identifier(%State{} = state, identifier) when is_binary(identifier) do
     normalized = String.trim(identifier)

@@ -22,6 +22,27 @@ defmodule SymphonyElixir.Codex.SessionTest do
   end
 
   @tag :tmp_dir
+  test "clear removes the sidecar so resolve no longer finds the thread", %{tmp_dir: tmp_dir} do
+    workspace = Path.join(tmp_dir, "workspace")
+    File.mkdir_p!(workspace)
+
+    assert :ok = Session.write(workspace, @thread_id)
+    assert File.exists?(Path.join(workspace, ".symphony/codex-session.json"))
+
+    assert :ok = Session.clear(workspace)
+    refute File.exists?(Path.join(workspace, ".symphony/codex-session.json"))
+    assert :error = Session.resolve(workspace, sessions_dir: Path.join(tmp_dir, "missing"))
+  end
+
+  @tag :tmp_dir
+  test "clear is a no-op when no sidecar exists", %{tmp_dir: tmp_dir} do
+    workspace = Path.join(tmp_dir, "empty-workspace")
+    File.mkdir_p!(workspace)
+
+    assert :ok = Session.clear(workspace)
+  end
+
+  @tag :tmp_dir
   test "resolves by scanning rollout cwd and backfills the sidecar", %{tmp_dir: tmp_dir} do
     workspace = Path.join(tmp_dir, "code/clouapp/front/501")
     File.mkdir_p!(workspace)

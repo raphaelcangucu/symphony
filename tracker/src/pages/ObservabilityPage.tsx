@@ -1,9 +1,22 @@
+import { Eraser, Pause, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useObservability } from "@/hooks/useObservability";
 import { usePrMonitorObservability } from "@/hooks/usePrMonitorObservability";
 import { issuePath, withAgentSection } from "@/lib/workspaceRoutes";
+import { dispatchIssueAgent, type IssueDispatchAction } from "@/services/issueDispatch";
 import { listProjects } from "@/services/projects";
 import type {
   GlobalRunningRow,
@@ -237,6 +250,7 @@ export function ObservabilityPage() {
                   <th className="p-2">Runtime / turns</th>
                   <th className="p-2">Agent update</th>
                   <th className="p-2">Tokens</th>
+                  <th className="p-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -266,6 +280,9 @@ export function ObservabilityPage() {
                     </td>
                     <td className="p-2">{row.lastMessage ?? row.lastEvent ?? "--"}</td>
                     <td className="p-2 tabular-nums">{row.tokens.totalTokens.toLocaleString()}</td>
+                    <td className="p-2">
+                      <SessionRowActions projectSlug={row.resolvedProjectSlug} identifier={row.issueIdentifier} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -275,6 +292,119 @@ export function ObservabilityPage() {
       </section>
 
       <PrMonitorSection heartbeat={prMonitor?.heartbeat ?? null} evaluations={prMonitorEvaluations} nowMs={nowMs} />
+    </div>
+  );
+}
+
+type ConfirmAction = "restart" | "hard_reset";
+
+const CONFIRM_COPY: Record<ConfirmAction, { title: string; description: string; cta: string }> = {
+  restart: {
+    title: "Restart agent run?",
+    description:
+      "Stops the current run and starts a fresh agent pass on this issue. The workspace and git state are preserved.",
+    cta: "Restart",
+  },
+  hard_reset: {
+    title: "Hard reset session?",
+    description:
+      "Stops the run, discards the agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and git state are preserved.",
+    cta: "Hard reset",
+  },
+};
+
+function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | null; identifier: string }) {
+  const [pending, setPending] = useState<IssueDispatchAction | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
+
+  const disabled = !projectSlug || !identifier.trim();
+
+  async function run(action: IssueDispatchAction) {
+    if (!projectSlug) return;
+    setPending(action);
+    try {
+      const result = await dispatchIssueAgent(projectSlug, identifier, { action });
+      toast.success(result.message || `${identifier}: ${action}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Failed to ${action} ${identifier}`);
+    } finally {
+      setPending(null);
+      setConfirm(null);
+    }
+  }
+
+  const busy = pending !== null;
+
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 px-2"
+        disabled={disabled || busy}
+        title={disabled ? "No project mapping for this runtime" : "Pause the run (keeps the session to resume later)"}
+        onClick={() => void run("stop")}
+      >
+        <Pause className="mr-1 h-3.5 w-3.5" />
+        {pending === "stop" ? "Pausing…" : "Pause"}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 px-2"
+        disabled={disabled || busy}
+        title={disabled ? "No project mapping for this runtime" : "Restart with a fresh agent pass"}
+        onClick={() => setConfirm("restart")}
+      >
+        <RotateCcw className="mr-1 h-3.5 w-3.5" />
+        {pending === "restart" ? "Restarting…" : "Restart"}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 px-2 text-destructive hover:text-destructive"
+        disabled={disabled || busy}
+        title={disabled ? "No project mapping for this runtime" : "Hard reset: clear the session and start fresh"}
+        onClick={() => setConfirm("hard_reset")}
+      >
+        <Eraser className="mr-1 h-3.5 w-3.5" />
+        {pending === "hard_reset" ? "Resetting…" : "Hard reset"}
+      </Button>
+
+      <Dialog open={confirm !== null} onOpenChange={(open) => (open ? null : setConfirm(null))}>
+        <DialogContent>
+          {confirm ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{CONFIRM_COPY[confirm].title}</DialogTitle>
+                <DialogDescription>
+                  {identifier}: {CONFIRM_COPY[confirm].description}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline" size="sm">
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={() => void run(confirm)}
+                >
+                  {confirm === "hard_reset" ? <Eraser className="mr-1.5 h-3.5 w-3.5" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />}
+                  {CONFIRM_COPY[confirm].cta}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

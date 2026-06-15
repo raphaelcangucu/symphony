@@ -7,12 +7,15 @@ defmodule SymphonyElixir.IssueDispatch do
   pick the issue up again.
   """
 
-  alias SymphonyElixir.{Orchestrator, ProjectConfig, Repo}
-  alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.{Orchestrator, ProjectConfig, Repo, Workspace}
+  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
   alias SymphonyElixirWeb.TrackerPresenter
 
-  @type action :: :resume | :restart
+  require Logger
+
+  @type action :: :resume | :restart | :hard_reset | :stop
   @type opts :: %{
           optional(:agent) => String.t() | nil,
           optional(:goal) => String.t() | nil,
@@ -29,10 +32,44 @@ defmodule SymphonyElixir.IssueDispatch do
     dispatch(project, identifier, :restart, opts)
   end
 
-  defp dispatch(%Project{} = project, identifier, action, opts) when action in [:resume, :restart] do
+  @doc """
+  Hard reset: stop any active run, clear the agent session (sidecar + stored
+  session id) and the in-memory turn/token counters, then dispatch a fresh run.
+  The on-disk workspace and its git state are left intact.
+  """
+  @spec hard_reset(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
+  def hard_reset(%Project{} = project, identifier, opts \\ %{}) when is_binary(identifier) do
+    dispatch(project, identifier, :hard_reset, opts)
+  end
+
+  @doc """
+  Pause an active run: stop the running agent and cancel any pending retry,
+  leaving the agent session (sidecar + stored session id) and the workspace
+  intact so the issue can be resumed later. Does not move the issue or
+  re-dispatch.
+  """
+  @spec stop(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
+  def stop(%Project{} = project, identifier, _opts \\ %{}) when is_binary(identifier) do
+    with {:ok, _issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
+         :ok <- stop_active_run(identifier),
+         :ok <- cancel_retry(identifier) do
+      {:ok, reloaded} = IssueAdapter.dispatch(project, :get_issue, [identifier])
+
+      {:ok,
+       %{
+         action: "stop",
+         message: dispatch_message(:stop, reloaded),
+         issue: TrackerPresenter.issue(reloaded)
+       }}
+    end
+  end
+
+  defp dispatch(%Project{} = project, identifier, action, opts)
+       when action in [:resume, :restart, :hard_reset] do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
          {:ok, _comment} <- maybe_add_comment(project, identifier, action, opts),
          {:ok, _} <- maybe_update_agent(project, identifier, opts),
+         :ok <- maybe_hard_reset(project, identifier, issue, action),
          {:ok, _} <- maybe_move_for_dispatch(project, issue),
          :ok <- cancel_retry(identifier),
          :ok <- nudge_manual_dispatch(identifier) do
@@ -73,6 +110,13 @@ defmodule SymphonyElixir.IssueDispatch do
 
           Start a fresh agent pass on this issue. Review the ticket, workspace, and session log before continuing.
           """
+
+        :hard_reset ->
+          """
+          ## Hard reset agent run (tracker)
+
+          The previous agent session was discarded (turns and token counters cleared) and a brand-new session is starting. The workspace is preserved — review the existing workspace and git state, then continue the ticket.
+          """
       end
 
     trimmed = instructions |> normalize_optional_string()
@@ -97,6 +141,45 @@ defmodule SymphonyElixir.IssueDispatch do
     else
       IssueAdapter.dispatch(project, :update_issue, [identifier, attrs])
     end
+  end
+
+  defp maybe_hard_reset(%Project{} = project, identifier, %IssueDTO{} = issue, :hard_reset) do
+    stop_active_run(identifier)
+    clear_agent_session(project, identifier, issue)
+    :ok
+  end
+
+  defp maybe_hard_reset(_project, _identifier, _issue, _action), do: :ok
+
+  defp stop_active_run(identifier) do
+    case Orchestrator.stop_issue(identifier) do
+      :ok -> :ok
+      :not_found -> :ok
+      :unavailable -> :ok
+    end
+  end
+
+  defp clear_agent_session(%Project{} = project, identifier, %IssueDTO{} = issue) do
+    clear_codex_session_sidecar(project, identifier, issue)
+
+    case Context.clear_agent_session_id(project.slug, identifier) do
+      {:ok, _record} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Hard reset could not clear agent session id identifier=#{identifier} reason=#{inspect(reason)}")
+        :ok
+    end
+  end
+
+  defp clear_codex_session_sidecar(%Project{} = project, identifier, %IssueDTO{} = issue) do
+    %{
+      id: issue.id,
+      identifier: identifier,
+      project_slug: issue.project_slug || project.slug
+    }
+    |> Workspace.path_for_issue()
+    |> CodexSession.clear()
   end
 
   defp maybe_move_for_dispatch(%Project{} = project, %IssueDTO{} = issue) do
@@ -177,6 +260,12 @@ defmodule SymphonyElixir.IssueDispatch do
 
   defp dispatch_message(:restart, %IssueDTO{identifier: identifier}),
     do: "Restarting agent work on #{identifier}"
+
+  defp dispatch_message(:hard_reset, %IssueDTO{identifier: identifier}),
+    do: "Hard reset — starting a fresh agent session for #{identifier}"
+
+  defp dispatch_message(:stop, %IssueDTO{identifier: identifier}),
+    do: "Paused agent run for #{identifier} — resume when ready"
 
   defp normalize_agent(agent) when agent in ["codex", "claude", "cursor"], do: agent
   defp normalize_agent(_agent), do: nil

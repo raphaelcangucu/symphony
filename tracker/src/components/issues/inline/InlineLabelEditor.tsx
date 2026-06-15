@@ -1,5 +1,5 @@
-import { Check, Plus, Search, Tag, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Search, Tag } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { labelDotClass } from "@/components/board/label-colors";
 import { resolveLabelColor, resolveLabelDisplay } from "@/lib/labelDisplay";
@@ -23,11 +23,13 @@ function labelValue(label: IssueLabelOption): string {
 function canonicalizeDraftLabels(draft: string[], options: IssueLabelOption[]): string[] {
   const byId = new Map(options.map((option) => [labelValue(option), labelValue(option)]));
   const byName = new Map(options.map((option) => [option.name.trim().toLowerCase(), labelValue(option)]));
+  const seen = new Set<string>();
 
-  return draft.map((label) => {
-    if (byId.has(label)) return label;
-    const canonical = byName.get(label.trim().toLowerCase());
-    return canonical ?? label;
+  return draft.flatMap((label) => {
+    const value = byId.get(label) ?? byName.get(label.trim().toLowerCase()) ?? label;
+    if (seen.has(value)) return [];
+    seen.add(value);
+    return value;
   });
 }
 
@@ -50,18 +52,29 @@ export function InlineLabelEditor({
     () => labels.filter((label) => label.trim() !== ""),
     [labels],
   );
-  // Stable value-key so the sync effect below only runs when label content changes.
-  const selectedLabelsKey = selectedLabels.join("\u0000");
+  const selectedLabelValues = useMemo(
+    () => canonicalizeDraftLabels(selectedLabels, options),
+    [options, selectedLabels],
+  );
+  // Stable value-key so the sync effect below only runs when canonical label content changes.
+  const selectedLabelsKey = selectedLabelValues.join("\u0000");
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<string[]>(selectedLabels);
+  const [draft, setDraft] = useState<string[]>(selectedLabelValues);
   const [searchQuery, setSearchQuery] = useState("");
   const [customLabel, setCustomLabel] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const draftRef = useRef(draft);
+
+  const setDraftValue = useCallback((next: string[] | ((current: string[]) => string[])) => {
+    const value = typeof next === "function" ? next(draftRef.current) : next;
+    draftRef.current = value;
+    setDraft(value);
+  }, []);
 
   useEffect(() => {
     if (!open) {
-      setDraft(selectedLabels);
+      setDraftValue(selectedLabelValues);
       setSearchQuery("");
       setCustomLabel("");
     }
@@ -69,18 +82,36 @@ export function InlineLabelEditor({
   }, [open, selectedLabelsKey]);
 
   useEffect(() => {
+    if (open) {
+      setDraftValue((current) => canonicalizeDraftLabels(current, options));
+    }
+  }, [open, options, setDraftValue]);
+
+  const commit = useCallback(async () => {
+    const next = canonicalizeDraftLabels([...draftRef.current], options);
+    const current = selectedLabelValues;
+    const unchanged = next.length === current.length && next.every((label) => current.includes(label));
+    if (unchanged) {
+      setOpen(false);
+      return;
+    }
+    const saved = await onSave(next);
+    if (saved) setOpen(false);
+  }, [onSave, options, selectedLabelValues]);
+
+  useEffect(() => {
     if (!open) return undefined;
 
     function handlePointerDown(event: MouseEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        void commit();
       }
     }
 
     window.addEventListener("mousedown", handlePointerDown);
     requestAnimationFrame(() => searchRef.current?.focus());
     return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [open]);
+  }, [commit, open]);
 
   const optionItems = useMemo(() => {
     const seen = new Set<string>();
@@ -104,28 +135,17 @@ export function InlineLabelEditor({
     () => optionItems.filter((item) => matchesPickerSearch(searchQuery, item.label, item.value)),
     [optionItems, searchQuery],
   );
+  const visibleLabels = open ? draft : selectedLabelValues;
 
   function toggle(value: string) {
-    setDraft((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
+    setDraftValue((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
   }
 
   function addCustomLabel() {
     const trimmed = customLabel.trim();
     if (!trimmed) return;
-    setDraft((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+    setDraftValue((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
     setCustomLabel("");
-  }
-
-  async function commit() {
-    const next = canonicalizeDraftLabels([...draft], options);
-    const current = canonicalizeDraftLabels(selectedLabels, options);
-    const unchanged = next.length === current.length && next.every((label) => current.includes(label));
-    if (unchanged) {
-      setOpen(false);
-      return;
-    }
-    const saved = await onSave(next);
-    if (saved) setOpen(false);
   }
 
   return (
@@ -133,7 +153,13 @@ export function InlineLabelEditor({
       <button
         type="button"
         disabled={disabled || saving}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (open) {
+            void commit();
+          } else {
+            setOpen(true);
+          }
+        }}
         className={cn(
           "group w-full rounded-lg border border-transparent px-1 py-1 text-left transition-colors",
           "hover:border-border/60 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
@@ -142,13 +168,13 @@ export function InlineLabelEditor({
         )}
       >
         <div className="flex flex-wrap items-center gap-1.5">
-          {selectedLabels.length === 0 ? (
+          {visibleLabels.length === 0 ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <Tag className="h-3.5 w-3.5" />
               Add labels
             </span>
           ) : (
-            selectedLabels.map((label) => {
+            visibleLabels.map((label) => {
               const displayName = resolveLabelDisplay(label, options);
               const hex = normalizeHexColor(resolveLabelColor(label, options));
               const symphony = isSymphonyLabelName(displayName) || isSymphonyLabelName(label);
@@ -252,26 +278,6 @@ export function InlineLabelEditor({
             >
               <Plus className="h-3.5 w-3.5" />
               Add
-            </button>
-          </div>
-          <div className="mt-3 flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void commit()}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              <Check className="h-3.5 w-3.5" />
-              Save
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => setOpen(false)}
-              className="inline-flex items-center gap-1 rounded-md border border-border/70 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-            >
-              <X className="h-3.5 w-3.5" />
-              Close
             </button>
           </div>
         </div>

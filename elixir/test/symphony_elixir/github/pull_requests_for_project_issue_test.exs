@@ -238,6 +238,74 @@ defmodule SymphonyElixir.GitHub.PullRequestsForProjectIssueTest do
     assert {"GambaLabs/frontend", 1866} in pairs
   end
 
+  test "for_project_issue returns workpad and marker PRs for external tracker identifiers" do
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Advising",
+        slug: "advising-ext",
+        tracker_kind: "jira",
+        tracker_config: %{"project_key" => "CDE"}
+      })
+
+    {:ok, _repos} =
+      Context.replace_repositories(project.slug, [
+        %{
+          github_full_name: "civitaslearning/advising",
+          role: "primary",
+          workspace_path: "advising",
+          selected_branch: "main"
+        }
+      ])
+
+    {:ok, issue} = Context.create_issue(project.slug, %{title: "Advising notes", status: "Human Review"})
+
+    issue
+    |> IssueRecord.changeset(%{identifier: "CDE-1132", branch_name: "cde-1132-advising-notes"})
+    |> Repo.update!()
+
+    workpad =
+      SymphonyElixir.Workpad.PullRequestBlock.upsert_block(nil, [
+        %{
+          repo: "civitaslearning/advising",
+          number: 9540,
+          branch: "cde-1132-advising-notes",
+          url: "https://github.com/civitaslearning/advising/pull/9540"
+        }
+      ])
+
+    {:ok, _comment} = Context.add_comment(project.slug, "CDE-1132", workpad)
+
+    assert {:ok, prs} =
+             PullRequests.for_project_issue(project, "CDE-1132", client_module: MarkerClientStub)
+
+    assert Enum.any?(prs, &(&1.number == 9540 and &1.repo == "civitaslearning/advising"))
+  end
+
+  test "supported? is true when workspace repositories are configured" do
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Advising",
+        slug: "advising-supported",
+        tracker_kind: "jira",
+        tracker_config: %{"project_key" => "CDE"}
+      })
+
+    refute PullRequests.supported?(project)
+
+    {:ok, _repos} =
+      Context.replace_repositories(project.slug, [
+        %{
+          github_full_name: "civitaslearning/advising",
+          role: "primary",
+          workspace_path: "advising",
+          selected_branch: "main"
+        }
+      ])
+
+    {:ok, refreshed} = Context.get_project("advising-supported")
+    assert PullRequests.supported?(refreshed)
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

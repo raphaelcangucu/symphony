@@ -176,23 +176,49 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   The DB cache is a caller concern (see `PullRequestController`); this function
   reads only live sources.
   """
-  @spec for_project_issue(Project.t(), String.t(), keyword()) ::
-          {:ok, [pull_request()]} | {:error, term()}
+  @spec for_project_issue(Project.t(), String.t(), keyword()) :: {:ok, [pull_request()]}
   def for_project_issue(%Project{} = project, identifier, opts \\ []) when is_binary(identifier) do
+    merged =
+      (declared_pull_requests(project, identifier, opts) ++
+         native_issue_pull_requests(project, identifier, opts) ++
+         branch_linked_pull_requests(project, identifier, opts))
+      |> dedupe_by_url()
+      |> sort_prs()
+      |> annotate_branch_status_per_repo(opts)
+
+    {:ok, merged}
+  end
+
+  defp declared_pull_requests(%Project{} = project, identifier, opts) do
+    workpad_pull_requests(project, identifier, opts) ++ marker_pull_requests(project, identifier, opts)
+  end
+
+  defp native_issue_pull_requests(%Project{} = project, identifier, opts) do
     with {:ok, issue_repo} <- IssueRepo.resolve(project, identifier, opts),
          {:ok, number} <- resolve_issue_number(project, identifier),
          {:ok, issue_prs} <-
            for_issue(issue_repo, issue_number_identifier(number), Keyword.put(opts, :annotate, false)) do
-      workpad_prs = workpad_pull_requests(project, identifier, opts)
-      marker_prs = marker_pull_requests(project, identifier, opts)
+      issue_prs
+    else
+      _ -> []
+    end
+  end
 
-      merged =
-        (workpad_prs ++ marker_prs ++ issue_prs)
-        |> dedupe_by_url()
-        |> sort_prs()
-        |> annotate_branch_status_per_repo(opts)
-
-      {:ok, merged}
+  defp branch_linked_pull_requests(%Project{slug: slug} = project, identifier, opts) do
+    with {:ok, %{branch_name: branch}} <- Context.get_issue(slug, identifier),
+         true <- is_binary(branch) and branch != "" do
+      project
+      |> configured_repos()
+      |> Enum.flat_map(fn repo ->
+        with {:ok, {owner, name}} <- RepoSpec.split(repo),
+             {:ok, prs} <- fetch_by_branch(branch, owner, name, Keyword.put(opts, :annotate, false)) do
+          prs
+        else
+          _ -> []
+        end
+      end)
+    else
+      _ -> []
     end
   end
 
@@ -766,6 +792,14 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       module when is_atom(module) -> module
     end
   end
+
+  @doc """
+  Returns true when the project can surface GitHub pull requests — either because
+  the tracker is GitHub-backed or because workspace repositories are configured
+  (Jira, Linear, and other external trackers still link code via GitHub).
+  """
+  @spec supported?(Project.t()) :: boolean()
+  def supported?(%Project{} = project), do: configured_repos(project) != []
 
   @doc false
   @spec resolve_repo(SymphonyElixir.LocalTracker.Project.t()) :: {:ok, String.t()} | {:error, term()}

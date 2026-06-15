@@ -156,6 +156,29 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     end
   end
 
+  describe "transient error handling" do
+    test "fails the turn when an error event precedes completion with no agent message" do
+      with_fake_error_server([emit_agent_message: false], fn workspace, issue ->
+        log =
+          capture_log(fn ->
+            assert {:error, {:turn_failed, reason}} =
+                     AppServer.run(workspace, "Build the feature", issue)
+
+            assert reason == "stream disconnected"
+          end)
+
+        assert log =~ "treating as failed"
+      end)
+    end
+
+    test "still completes when the turn recovers and produces an agent message" do
+      with_fake_error_server([emit_agent_message: true], fn workspace, issue ->
+        assert {:ok, result} = AppServer.run(workspace, "Build the feature", issue)
+        assert result[:result] == :turn_completed
+      end)
+    end
+  end
+
   defp with_fake_goal_server(response_mode \\ :goal_ok, fun) when is_function(fun, 3) do
     test_root =
       Path.join(
@@ -191,6 +214,80 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     after
       File.rm_rf(test_root)
     end
+  end
+
+  defp with_fake_error_server(opts, fun) when is_function(fun, 2) do
+    emit_agent_message = Keyword.get(opts, :emit_agent_message, false)
+
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-coding-agent-error-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-ERR")
+      codex_binary = Path.join(test_root, "fake-codex")
+
+      File.mkdir_p!(workspace)
+      write_error_fake_codex!(codex_binary, emit_agent_message)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-error",
+        identifier: "MT-ERR",
+        title: "Transient error",
+        description: "Exercise Codex transient error handling",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-ERR",
+        labels: ["backend"]
+      }
+
+      fun.(workspace, issue)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  defp write_error_fake_codex!(codex_binary, emit_agent_message) do
+    agent_message_line =
+      if emit_agent_message do
+        ~s(      printf '%s\\n' '{"method":"item/agentMessage/delta","params":{"delta":"working on it"}}')
+      else
+        "      :"
+      end
+
+    File.write!(codex_binary, """
+    #!/bin/sh
+    while IFS= read -r line; do
+      case "$line" in
+        *'"method":"initialize"'*)
+          printf '%s\\n' '{"id":1,"result":{}}'
+          ;;
+        *'"method":"initialized"'*)
+          ;;
+        *'"method":"thread/start"'*)
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-error"}}}'
+          ;;
+        *'"method":"turn/start"'*)
+          printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-error"}}}'
+          printf '%s\\n' '{"method":"error","params":{"message":"stream disconnected"}}'
+    #{agent_message_line}
+          printf '%s\\n' '{"method":"turn/completed"}'
+          exit 0
+          ;;
+        *)
+          ;;
+      esac
+    done
+    """)
+
+    File.chmod!(codex_binary, 0o755)
   end
 
   defp write_goal_fake_codex!(codex_binary, trace_file, response_mode) do

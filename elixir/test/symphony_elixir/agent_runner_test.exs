@@ -443,10 +443,83 @@ defmodule SymphonyElixir.AgentRunnerTest do
       assert :ok =
                AgentRunner.run(issue, self(),
                  max_turns: 2,
+                 continuation_delay_ms: 0,
                  issue_state_fetcher: issue_state_fetcher
                )
 
       assert_received {:agent_outcome, "issue-incomplete", {:incomplete, :max_turns}}
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  test "run/3 pauses for continuation_delay_ms between continuation turns" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-agent-runner-delay-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      codex_binary = Path.join(test_root, "fake-codex")
+
+      File.mkdir_p!(test_root)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      while IFS= read -r line; do
+        case "$line" in
+          *'"method":"initialize"'*)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          *'"method":"initialized"'*)
+            ;;
+          *'"method":"thread/start"'*)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-delay"}}}'
+            ;;
+          *'"method":"turn/start"'*)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-delay"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "local",
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server",
+        prompt: "Ticket {{ issue.identifier }}"
+      )
+
+      issue = %Issue{
+        id: "issue-delay",
+        identifier: "MAC-DELAY",
+        project_slug: "mac",
+        title: "Loops with delay",
+        state: "In Progress"
+      }
+
+      issue_state_fetcher = fn ["issue-delay"] -> {:ok, [%{issue | state: "In Progress"}]} end
+
+      delay_ms = 100
+
+      {elapsed_us, :ok} =
+        :timer.tc(fn ->
+          AgentRunner.run(issue, self(),
+            max_turns: 3,
+            continuation_delay_ms: delay_ms,
+            issue_state_fetcher: issue_state_fetcher
+          )
+        end)
+
+      assert_received {:agent_outcome, "issue-delay", {:incomplete, :max_turns}}
+
+      # 3 turns means 2 continuation pauses of delay_ms each.
+      assert elapsed_us >= 2 * delay_ms * 1000 * 0.75
     after
       File.rm_rf(test_root)
     end

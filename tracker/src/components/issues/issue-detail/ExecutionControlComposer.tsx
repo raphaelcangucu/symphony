@@ -1,10 +1,19 @@
-import { Play, RotateCcw, Send } from "lucide-react";
+import { Eraser, Play, RotateCcw, Send } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
 import { AGENT_LABELS } from "@/components/shared/AgentChip";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,9 +76,10 @@ export function ExecutionControlComposer({
   const [bundle, setBundle] = useState<AssistantCatalogBundle>(fallbackCatalogBundle());
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(fallbackCatalogBundle()));
   const [goalMode, setGoalMode] = useState(() => execution?.goal?.kind === "goal");
-  const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | null>(null);
+  const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | "hard_reset" | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [hardResetOpen, setHardResetOpen] = useState(false);
 
   const agent: AgentKind = composerState.agent;
   const catalog = catalogFor(bundle, agent);
@@ -159,10 +169,16 @@ export function ExecutionControlComposer({
     [agent, composerState, persistComposer, settings],
   );
 
-  async function runDispatch(action: "resume" | "restart") {
+  const dispatchProgressLabel: Record<"resume" | "restart" | "hard_reset", string> = {
+    resume: "Resuming agent…",
+    restart: "Restarting agent…",
+    hard_reset: "Hard resetting session…",
+  };
+
+  async function runDispatch(action: "resume" | "restart" | "hard_reset") {
     setDispatchPending(action);
     setDispatchError(null);
-    setDispatchStatus(action === "resume" ? "Resuming agent…" : "Restarting agent…");
+    setDispatchStatus(dispatchProgressLabel[action]);
 
     const parsed = parseSlashCommand(input);
     const steerText = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
@@ -309,6 +325,18 @@ export function ExecutionControlComposer({
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
               {dispatchPending === "restart" ? "Restarting…" : "Restart"}
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              disabled={controlsDisabled}
+              title="Stop the run, clear the session (turns and tokens), and start fresh. Keeps the workspace."
+              onClick={() => setHardResetOpen(true)}
+            >
+              <Eraser className="mr-1.5 h-3.5 w-3.5" />
+              {dispatchPending === "hard_reset" ? "Resetting…" : "Hard reset"}
+            </Button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -347,6 +375,38 @@ export function ExecutionControlComposer({
           Models from {catalog.command}. Agent selection applies on resume/restart; steer uses the live {AGENT_LABELS[agent]} session.
         </p>
       </form>
+
+      <Dialog open={hardResetOpen} onOpenChange={setHardResetOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Hard reset session?</DialogTitle>
+            <DialogDescription>
+              This stops any active run, discards the current agent session, and clears the turn and token counters,
+              then starts a brand-new session. The workspace and its git state are preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline" size="sm">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={dispatchPending !== null}
+              onClick={() => {
+                setHardResetOpen(false);
+                void runDispatch("hard_reset");
+              }}
+            >
+              <Eraser className="mr-1.5 h-3.5 w-3.5" />
+              Hard reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

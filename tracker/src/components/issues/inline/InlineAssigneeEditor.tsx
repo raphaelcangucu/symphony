@@ -1,5 +1,5 @@
-import { Check, Search, UserRound, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, UserRound } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { useMeIdentities } from "@/hooks/useMeIdentities";
@@ -58,19 +58,32 @@ export function InlineAssigneeEditor({
     }
   }, [open, currentValue]);
 
+  const commit = useCallback(async () => {
+    const nextIds = draft ? [draft] : [];
+    const currentIds = currentValue ? [currentValue] : [];
+    const unchanged =
+      nextIds.length === currentIds.length && nextIds.every((id) => currentIds.includes(id));
+    if (unchanged) {
+      setOpen(false);
+      return;
+    }
+    const saved = await onSave(nextIds);
+    if (saved) setOpen(false);
+  }, [currentValue, draft, onSave]);
+
   useEffect(() => {
     if (!open) return undefined;
 
     function handlePointerDown(event: MouseEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        void commit();
       }
     }
 
     window.addEventListener("mousedown", handlePointerDown);
     requestAnimationFrame(() => searchRef.current?.focus());
     return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [open]);
+  }, [commit, open]);
 
   const optionItems = useMemo(() => {
     type AssigneeItem = {
@@ -108,25 +121,18 @@ export function InlineAssigneeEditor({
     [optionItems, searchQuery],
   );
 
-  async function commit() {
-    const nextIds = draft ? [draft] : [];
-    const currentIds = currentValue ? [currentValue] : [];
-    const unchanged =
-      nextIds.length === currentIds.length && nextIds.every((id) => currentIds.includes(id));
-    if (unchanged) {
-      setOpen(false);
-      return;
-    }
-    const saved = await onSave(nextIds);
-    if (saved) setOpen(false);
-  }
-
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
         disabled={disabled || saving}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (open) {
+            void commit();
+          } else {
+            setOpen(true);
+          }
+        }}
         className={cn(
           "group inline-flex w-full items-center gap-1.5 rounded-lg border border-transparent px-1 py-1 text-left transition-colors",
           "hover:border-border/60 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
@@ -198,26 +204,6 @@ export function InlineAssigneeEditor({
               )}
             </div>
           )}
-          <div className="mt-2 flex items-center gap-1.5 border-t border-border/60 pt-2">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void commit()}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              <Check className="h-3.5 w-3.5" />
-              Save
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => setOpen(false)}
-              className="inline-flex items-center gap-1 rounded-md border border-border/70 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-            >
-              <X className="h-3.5 w-3.5" />
-              Close
-            </button>
-          </div>
         </div>
       ) : null}
     </div>
