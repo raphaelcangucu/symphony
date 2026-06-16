@@ -1,7 +1,18 @@
+defmodule SymphonyElixir.DevServer.ManagerTest.MissingPaneTmux do
+  @moduledoc false
+  def capture_pane(session_name), do: {:error, "can't find pane: #{session_name}"}
+end
+
+defmodule SymphonyElixir.DevServer.ManagerTest.BrokenTmux do
+  @moduledoc false
+  def capture_pane(_session_name), do: {:error, "tmux server exited unexpectedly"}
+end
+
 defmodule SymphonyElixir.DevServer.ManagerTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.DevServer.Manager
+  alias SymphonyElixir.DevServer.ManagerTest.{BrokenTmux, MissingPaneTmux}
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.TestSupport
@@ -215,6 +226,52 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert [%{id: row_id, slug: "front"}] = Manager.list_for_issue(project.slug, "#1")
     assert Manager.list_for_issue(project.slug, "#1") == Manager.list_for_issue(project.slug, "1")
     assert row_id == row.id
+  end
+
+  describe "capture_server_output/3" do
+    setup do
+      previous = Application.get_env(:symphony_elixir, :terminal_tmux)
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:symphony_elixir, :terminal_tmux, previous),
+          else: Application.delete_env(:symphony_elixir, :terminal_tmux)
+      end)
+
+      :ok
+    end
+
+    test "returns empty output when the tmux pane no longer exists", %{project: project} do
+      {:ok, record} =
+        DevServerRecord.upsert(project.id, "1878", "goapi", %{
+          working_dir: "goapi",
+          port: 6363,
+          status: "ready",
+          primary: false,
+          session_name: "sym-dev-gamba-1878-goapi"
+        })
+
+      Application.put_env(:symphony_elixir, :terminal_tmux, MissingPaneTmux)
+
+      assert {:ok, %{output: "", session_name: "sym-dev-gamba-1878-goapi"}} =
+               Manager.capture_server_output(project.slug, "1878", record.id)
+    end
+
+    test "propagates unexpected tmux errors", %{project: project} do
+      {:ok, record} =
+        DevServerRecord.upsert(project.id, "1878", "goapi", %{
+          working_dir: "goapi",
+          port: 6363,
+          status: "ready",
+          primary: false,
+          session_name: "sym-dev-gamba-1878-goapi"
+        })
+
+      Application.put_env(:symphony_elixir, :terminal_tmux, BrokenTmux)
+
+      assert {:error, "tmux server exited unexpectedly"} =
+               Manager.capture_server_output(project.slug, "1878", record.id)
+    end
   end
 
   test "instance child specs are temporary so manual stops do not restart" do

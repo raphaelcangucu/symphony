@@ -209,13 +209,9 @@ defmodule SymphonyElixir.DevServer.Manager do
          true <- is_binary(slug) do
       session_name = session_name || TerminalRegistry.dev_session_name(project_slug, identifier, slug)
 
-      case TerminalRegistry.capture_dev_session(project_slug, identifier, slug) do
-        {:ok, output} ->
-          {:ok, %{output: output, session_name: session_name}}
-
-        {:error, message} when is_binary(message) ->
-          {:error, message}
-      end
+      project_slug
+      |> TerminalRegistry.capture_dev_session(identifier, slug)
+      |> normalize_dev_session_capture(session_name)
     else
       nil -> {:error, :not_found}
       {:error, _reason} -> {:error, :not_found}
@@ -1225,6 +1221,35 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp canonical_identifier(identifier) when is_binary(identifier) do
     String.trim_leading(identifier, "#")
   end
+
+  defp normalize_dev_session_capture({:ok, output}, session_name) do
+    {:ok, %{output: output, session_name: session_name}}
+  end
+
+  # A missing tmux pane just means the server is not running (e.g. it crashed,
+  # idled out, or the daemon restarted). Surface an empty buffer instead of
+  # leaking the raw tmux error to the preview UI.
+  defp normalize_dev_session_capture({:error, message}, session_name) when is_binary(message) do
+    if missing_dev_session?(message) do
+      {:ok, %{output: "", session_name: session_name}}
+    else
+      {:error, message}
+    end
+  end
+
+  @missing_session_markers [
+    "can't find pane",
+    "can't find session",
+    "no server running",
+    "session not found"
+  ]
+
+  defp missing_dev_session?(message) when is_binary(message) do
+    normalized = String.downcase(message)
+    Enum.any?(@missing_session_markers, &String.contains?(normalized, &1))
+  end
+
+  defp missing_dev_session?(_message), do: false
 
   defp mark_all_stopped_safely do
     DevServerRecord.mark_all_stopped()
