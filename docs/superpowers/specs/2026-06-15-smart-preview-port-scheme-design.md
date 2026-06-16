@@ -1,7 +1,7 @@
 # Smart Preview Port Scheme (hierarchical leased ports) — Design
 
 - **Date:** 2026-06-15
-- **Status:** Draft (pending spec review)
+- **Status:** Accepted
 - **Author:** Symphony agent + raphaelcangucu
 - **Related:** `docs/superpowers/specs/2026-05-30-issue-dev-server-preview-design.md`, `docs/superpowers/specs/2026-05-31-public-preview-tunnel-design.md`
 

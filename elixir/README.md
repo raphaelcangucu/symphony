@@ -847,12 +847,12 @@ tracker. Enable the feature in a project's `workflow_markdown` front matter:
 ```yaml
 dev_server:
   enabled: true
-  port_range: [4100, 4199]
+  # port_range: [4100, 4199]   # optional — omit to auto-lease from the pool
   idle_timeout_ms: 1800000
   auto_start_on: pull_request,human_review
 ```
 
-Defaults are `enabled: false`, `port_range: [4100, 4199]`,
+Defaults are `enabled: false`, `port_range: nil` (auto-lease, see below),
 `idle_timeout_ms: 1800000`, and `auto_start_on: [pull_request, human_review]`.
 When `base_url` is omitted, each preview URL is built as
 `http://127.0.0.1:<allocated-port><url_path>`.
@@ -866,6 +866,33 @@ dev_server:
 
 When set, `base_url` is used as the origin/base before `url_path`; it is not where
 Symphony injects the allocated port unless your proxy is configured to route previews that way.
+
+### Preview port scheme
+
+Local preview ports are assigned from a node-level pool so multiple projects and
+issues never collide and the same project+issue+service keeps a stable port while
+it runs. The pool is configured instance-wide (not per project):
+
+| Env var | Default | Meaning |
+| --- | --- | --- |
+| `SYMPHONY_PREVIEW_POOL` | `10000-30000` | Inclusive global port range. |
+| `SYMPHONY_PREVIEW_SLOTS_PER_PROJECT` | `32` | Issue slots per project band. |
+| `SYMPHONY_PREVIEW_PORTS_PER_SLOT` | `8` | Ports (serve steps) per issue slot. |
+
+The pool is carved into fixed bands of `SLOTS_PER_PROJECT * PORTS_PER_SLOT` ports.
+Each project leases one band (auto, persisted in the tracker DB); each running
+issue leases a slot inside that band; each serve step occupies a fixed offset, so
+`port = band_start + slot_index * PORTS_PER_SLOT + service_offset`. Slots are
+released when an issue's previews stop and garbage-collected if they leak.
+
+Omitting `dev_server.port_range` auto-leases a band from the pool. Setting it
+**pins** the project to exactly that range (still carved into slots/offsets),
+which is useful for proxy setups that expect fixed ports.
+
+**Migration note:** projects that previously relied on the old `[4100, 4199]`
+default now auto-lease from `10000-30000`, so local `127.0.0.1:<port>` URLs move
+into that range. Public preview tunnel hostnames are unchanged. To keep the old
+neighborhood, set `dev_server.port_range: [4100, 4199]` explicitly.
 
 Each workspace repo can declare setup and serve steps in `.symphony/devenv.yaml` for
 DevEnv proposal/discovery:
