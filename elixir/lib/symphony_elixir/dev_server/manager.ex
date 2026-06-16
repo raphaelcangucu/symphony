@@ -97,6 +97,8 @@ defmodule SymphonyElixir.DevServer.Manager do
     |> reservation_keys_for_issue(identifier)
     |> release_reservations()
 
+    release_issue_slot(project_slug, identifier)
+
     :ok
   end
 
@@ -233,6 +235,14 @@ defmodule SymphonyElixir.DevServer.Manager do
     Enum.uniq(reserved_ports() ++ registry_ports)
   end
 
+  @spec running_issue_keys() :: MapSet.t({String.t(), String.t()})
+  def running_issue_keys do
+    @registry
+    |> all_registry_entries()
+    |> Enum.map(fn {{project_slug, identifier, _step_slug}, _pid} -> {project_slug, identifier} end)
+    |> MapSet.new()
+  end
+
   @doc false
   @spec normalize_lock_result(:aborted | term()) :: {:error, :lock_unavailable} | term()
   def normalize_lock_result(:aborted), do: {:error, :lock_unavailable}
@@ -281,6 +291,11 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
 
     release_reservations([key])
+
+    if registered_instance_pids(project_slug, identifier) == [] do
+      release_issue_slot(project_slug, identifier)
+    end
+
     :ok
   end
 
@@ -789,6 +804,13 @@ defmodule SymphonyElixir.DevServer.Manager do
       _entry -> false
     end)
     |> Enum.map(fn {key, _port, _pid} -> key end)
+  end
+
+  defp release_issue_slot(project_slug, identifier) do
+    case Context.get_project(project_slug) do
+      {:ok, project} -> LeaseStore.release_slot(project.id, identifier)
+      {:error, _reason} -> :ok
+    end
   end
 
   defp all_registered_pids(registry) do

@@ -421,6 +421,30 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert {:ok, 0} = LeaseStore.slot_for_issue(project.id, "1")
   end
 
+  test "stop_for_issue releases the issue slot lease", %{project: project} do
+    alias SymphonyElixir.DevServer.LeaseStore
+
+    enable_project_dev_server_auto!(project)
+    prepare_workspace!("1")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Broken", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert {:ok, 0} = LeaseStore.slot_for_issue(project.id, "1")
+
+    assert :ok = Manager.stop_for_issue(project.slug, "#1")
+    assert :error = LeaseStore.slot_for_issue(project.id, "1")
+  end
+
+  test "running_issue_keys is empty with no live instances" do
+    ensure_manager_started!()
+    assert Manager.running_issue_keys() == MapSet.new()
+  end
+
   test "stop_instance_for_server returns not_found for an unknown server id", %{project: project} do
     assert Manager.stop_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
   end
