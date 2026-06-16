@@ -14,7 +14,7 @@ dev_env_steps:
   - command: "bash .symphony/serve.sh"
     description: "Backend Laravel API (vibe up + bootstrap + /health verify)"
     optional: false
-    port_env: "APP_PORT"
+    port_env: "PORT"
     primary: false
     ready_path: "/health"
     ready_probe: "http"
@@ -292,8 +292,8 @@ setup:
     cd backend
     bash .symphony/setup.sh
     bash .symphony/serve.sh
-    # GraphiQL: http://127.0.0.1:<APP_PORT>/graphiql
-    # Health:   http://127.0.0.1:<APP_PORT>/health
+    # GraphiQL: http://127.0.0.1:<PORT>/graphiql
+    # Health:   http://127.0.0.1:<PORT>/health
     ```
 
     **GoAPI — Go (`goapi/`)** — after backend is healthy
