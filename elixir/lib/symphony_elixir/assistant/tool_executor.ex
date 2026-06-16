@@ -11,6 +11,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.ProjectConfig
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
   alias SymphonyElixirWeb.TrackerPresenter
 
@@ -64,8 +65,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "properties" => %{
           "title" => string_schema("Issue title."),
           "description" => string_schema("Optional issue description."),
-          "status" => string_schema("Optional workflow status. Omit to create in Backlog (intake)."),
-          "priority" => %{"type" => ["integer", "null"], "description" => "Optional numeric priority."}
+          "status" => string_schema("Optional workflow status. Omit to create in Backlog (intake). Do not use orchestrator queue statuses (e.g. Todo) on create — move_issue after intake when ready."),
+          "priority" => %{"type" => ["integer", "null"], "description" => "Optional numeric priority."},
+          "assignee_ids" => string_list_schema("Optional assignee logins or remote ids. Call get_issue_form_options first.")
         }
       }),
       tool_spec("create_draft_issue", "Create a draft tracker issue (non-actionable status) to anchor the authoring chat.", %{
@@ -85,7 +87,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "identifier" => string_schema("Issue identifier, for example MAC-1."),
           "title" => string_schema("Optional new title."),
           "description" => string_schema("Optional new description."),
-          "status" => string_schema("Optional workflow status.")
+          "status" => string_schema("Optional workflow status."),
+          "assignee_ids" => string_list_schema("Optional assignee logins or remote ids. Call get_issue_form_options first.")
         }
       }),
       tool_spec("move_issue", "Move an issue to a workflow status.", %{
@@ -427,7 +430,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp do_execute(project, "update_issue", arguments, _opts) do
     with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
-         attrs <- Map.drop(arguments, ["identifier"]),
+         attrs <- arguments |> Map.drop(["identifier"]) |> normalize_assignee_arguments(),
          {:ok, issue} <- IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
       presented = TrackerPresenter.issue(issue)
 
@@ -588,6 +591,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   defp do_execute(project, "dispatch_coding_agent", arguments, _opts) do
     with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
          {:ok, instructions} <- normalize_required_string(Map.get(arguments, "instructions"), :instructions),
+         {:ok, current} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
+         :ok <- ensure_in_dispatch_queue(project, current),
          :ok <- ensure_status_available(project, @in_progress_state),
          {:ok, agent} <- resolve_dispatch_agent(project, identifier, Map.get(arguments, "agent")),
          {:ok, _comment} <- IssueAdapter.dispatch(project, :add_comment, [identifier, codex_comment(instructions), %{"author" => "assistant"}]),
@@ -709,6 +714,72 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp string_schema(description), do: %{"type" => ["string", "null"], "description" => description}
+
+  defp string_list_schema(description) do
+    %{
+      "type" => ["array", "null"],
+      "items" => %{"type" => "string"},
+      "description" => description
+    }
+  end
+
+  defp normalize_assignee_arguments(arguments) when is_map(arguments) do
+    cond do
+      Map.has_key?(arguments, "assignee_ids") ->
+        arguments
+
+      Map.has_key?(arguments, "assignee_id") ->
+        case normalize_optional_string(Map.get(arguments, "assignee_id")) do
+          nil -> Map.delete(arguments, "assignee_id")
+          login -> arguments |> Map.delete("assignee_id") |> Map.put("assignee_ids", [login])
+        end
+
+      true ->
+        arguments
+    end
+  end
+
+  defp maybe_put_assignee_ids(attrs, arguments) do
+    ids =
+      arguments
+      |> normalize_assignee_arguments()
+      |> Map.get("assignee_ids")
+      |> normalize_string_list()
+
+    maybe_put_attr(attrs, "assignee_ids", ids)
+  end
+
+  defp ensure_in_dispatch_queue(project, issue) do
+    dispatch_states = project_dispatch_states(project)
+    current = issue_status_name(issue)
+
+    if Enum.any?(dispatch_states, &(normalize_status_name(&1) == normalize_status_name(current))) do
+      :ok
+    else
+      {:error,
+       "Issue must be in orchestrator queue #{inspect(dispatch_states)} before dispatch. Current status: #{current}. Use move_issue first."}
+    end
+  end
+
+  defp dispatch_queue_status?(project, status) do
+    normalized = normalize_status_name(status)
+
+    project_dispatch_states(project)
+    |> Enum.any?(&(normalize_status_name(&1) == normalized))
+  end
+
+  defp project_dispatch_states(project) do
+    project
+    |> Repo.preload(:setup)
+    |> ProjectConfig.resolve()
+    |> Map.get(:dispatch_states, Config.dispatch_states())
+    |> List.wrap()
+  end
+
+  defp issue_status_name(%{status: %{name: name}}) when is_binary(name), do: name
+  defp issue_status_name(%{status: %{"name" => name}}) when is_binary(name), do: name
+  defp issue_status_name(%IssueDTO{status: %{name: name}}) when is_binary(name), do: name
+  defp issue_status_name(_issue), do: ""
 
   defp repository_list_schema do
     %{
@@ -865,7 +936,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   defp resolve_create_status(project, status) when is_binary(status) do
     case normalize_optional_string(status) do
       nil -> resolve_create_status(project, nil)
-      explicit -> {:ok, explicit}
+      explicit ->
+        if dispatch_queue_status?(project, explicit) do
+          {:error,
+           "Cannot create issues directly in #{explicit}. Omit status to use Backlog (intake), then move_issue to #{explicit} when ready for agent execution."}
+        else
+          {:ok, explicit}
+        end
     end
   end
 
@@ -898,7 +975,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     |> maybe_put_attr("priority", Map.get(arguments, "priority"))
     |> maybe_put_attr("agent", normalize_optional_string(Map.get(arguments, "agent")))
     |> maybe_put_attr("label_ids", normalize_string_list(Map.get(arguments, "label_ids")))
-    |> maybe_put_attr("assignee_ids", normalize_string_list(Map.get(arguments, "assignee_ids")))
+    |> maybe_put_assignee_ids(arguments)
   end
 
   defp build_draft_attrs(arguments, title, status) do

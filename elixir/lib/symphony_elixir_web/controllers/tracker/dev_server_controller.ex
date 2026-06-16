@@ -145,7 +145,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
           view
           |> apply_action_error(action_error_reason)
           |> DevServerPresenter.view()
-          |> Map.put(:tunnel, Tunnel.summary())
+          |> Map.put(:tunnel, Tunnel.summary_for_project(project_slug))
 
         json(conn, %{data: data})
 

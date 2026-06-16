@@ -97,10 +97,10 @@ describe("PreviewTab", () => {
     for (const link of publicLinks) {
       expect(link).toHaveAttribute("href", "https://macro-markets-510-back.example.tracker.cods.dev/admin");
     }
-    const localLinks = screen.getAllByRole("link", { name: "http://127.0.0.1:4102/admin" });
+    const localLinks = screen.getAllByRole("link", { name: "http://localhost:4102/admin" });
     expect(localLinks.length).toBeGreaterThan(0);
     for (const link of localLinks) {
-      expect(link).toHaveAttribute("href", "http://127.0.0.1:4102/admin");
+      expect(link).toHaveAttribute("href", "http://localhost:4102/admin");
     }
   });
 
@@ -232,11 +232,11 @@ describe("PreviewTab", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^open preview$/i })).toHaveAttribute(
       "href",
-      "http://127.0.0.1:4102/admin",
+      "http://localhost:4102/admin",
     );
     expect(screen.getByRole("link", { name: /^open back preview$/i })).toHaveAttribute(
       "href",
-      "http://127.0.0.1:4102/admin",
+      "http://localhost:4102/admin",
     );
   });
 

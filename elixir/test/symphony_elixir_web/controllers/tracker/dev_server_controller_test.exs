@@ -22,6 +22,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
 
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
+    Application.put_env(:symphony_elixir, :cloudflare_tunnel_checker, fn -> false end)
 
     workflow_root = Path.join(System.tmp_dir!(), "symphony-dev-server-controller-workflow-#{System.unique_integer([:positive])}")
     workspace_root = Path.join(System.tmp_dir!(), "symphony-dev-server-controller-workspaces-#{System.unique_integer([:positive])}")
@@ -52,6 +53,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
 
     on_exit(fn ->
       restore_env(@token_env, previous_token)
+      Application.delete_env(:symphony_elixir, :cloudflare_tunnel_checker)
       Application.delete_env(:symphony_elixir, :workflow_file_path)
       File.rm_rf(workflow_root)
       File.rm_rf(workspace_root)
@@ -223,6 +225,27 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
                "tunnel" => %{"enabled" => false, "running" => false}
              }
            }
+  end
+
+  test "index reports project-level public tunnel as enabled even when process WORKFLOW disables it", %{
+    identifier: identifier
+  } do
+    {:ok, _setup} =
+      Context.upsert_project_setup("p", %{
+        "workflow_markdown" => """
+        ---
+        dev_server:
+          enabled: true
+        public_tunnel:
+          enabled: true
+          base_domain: tracker.cods.dev
+        ---
+        """
+      })
+
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers")
+
+    assert json_response(conn, 200)["data"]["tunnel"] == %{"enabled" => true, "running" => false}
   end
 
   defp authorized_conn do

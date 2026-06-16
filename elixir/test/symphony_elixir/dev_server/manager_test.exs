@@ -543,6 +543,38 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.restart_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
   end
 
+  test "start_instance_for_server resolves the serve step for a configured server (regression: unique_serve_steps arg order)",
+       %{project: project} do
+    enable_project_dev_server!(project, port_range: [4100, 4199], max_concurrent: 2)
+    prepare_workspace!("1")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Missing", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1", "missing", %{
+        working_dir: "missing",
+        port: 4100,
+        url: "http://127.0.0.1:4100/",
+        status: "stopped",
+        primary: true,
+        session_name: "sym-dev-missing"
+      })
+
+    result = Manager.start_instance_for_server(project.slug, "#1", record.id)
+
+    # Before the fix, serve_step_for_slug piped the step list into
+    # unique_serve_steps/3 with swapped args, so the is_binary guards failed
+    # and it always returned []. Every per-server Start/Restart control then
+    # failed with {:error, :no_serve_step}. The serve step must resolve now;
+    # the start only fails because the configured working dir does not exist.
+    refute result == {:error, :no_serve_step}
+    assert result == {:error, :crashed}
+  end
+
   test "stop_instance_for_server stops a persisted server by id", %{project: project} do
     {:ok, record} =
       DevServerRecord.upsert(project.id, "1", "front", %{

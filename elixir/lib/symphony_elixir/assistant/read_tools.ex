@@ -8,7 +8,7 @@ defmodule SymphonyElixir.Assistant.ReadTools do
   alias SymphonyElixir.Workspace
   alias SymphonyElixirWeb.{TemplatePresenter, TrackerPresenter}
 
-  @tools ~w(get_issue get_project list_project_repositories get_template list_templates get_workflow read_workspace_file)
+  @tools ~w(get_issue get_project get_issue_form_options list_project_repositories get_template list_templates get_workflow read_workspace_file)
   @max_read_bytes 65_536
   @default_list_limit 20
   @max_list_limit 100
@@ -38,6 +38,15 @@ defmodule SymphonyElixir.Assistant.ReadTools do
       tool_spec(
         "get_project",
         "Fetch project metadata: board status names and categories (unstarted/started/completed), repositories, and setup summary. Status categories are UI metadata — they do NOT define orchestrator dispatch. For dispatch_states, active_states, and terminal_states use get_workflow.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "properties" => %{}
+        }
+      ),
+      tool_spec(
+        "get_issue_form_options",
+        "Fetch assignees, labels, and statuses for creating or updating issues in this project. Use this instead of linear_graphql or shell commands to resolve assignee logins/ids.",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -137,6 +146,25 @@ defmodule SymphonyElixir.Assistant.ReadTools do
          tool: "get_project",
          message: "Loaded project #{slug}.",
          data: data
+       }}
+    end
+  end
+
+  def execute(project, "get_issue_form_options", _arguments, _opts) do
+    slug = project_slug(project)
+
+    with {:ok, labels} <- IssueAdapter.dispatch(project, :list_labels, []),
+         {:ok, users} <- IssueAdapter.dispatch(project, :list_assignable_users, []),
+         {:ok, statuses} <- IssueAdapter.dispatch(project, :list_statuses, []) do
+      assignees = Enum.map(users, &form_option_user/1)
+      labels = Enum.map(labels, &form_option_label/1)
+      statuses = Enum.map(statuses, &TrackerPresenter.status/1)
+
+      {:ok,
+       %{
+         tool: "get_issue_form_options",
+         message: "Loaded issue form options for #{slug}.",
+         data: %{assignees: assignees, labels: labels, statuses: statuses}
        }}
     end
   end
@@ -458,6 +486,18 @@ defmodule SymphonyElixir.Assistant.ReadTools do
   end
 
   defp string_schema(description), do: %{"type" => ["string", "null"], "description" => description}
+
+  defp form_option_label(label) when is_map(label) do
+    %{id: Map.get(label, :id) || Map.get(label, "id"), name: Map.get(label, :name) || Map.get(label, "name")}
+  end
+
+  defp form_option_user(user) when is_map(user) do
+    %{
+      id: Map.get(user, :id) || Map.get(user, "id"),
+      login: Map.get(user, :login) || Map.get(user, "login"),
+      name: Map.get(user, :name) || Map.get(user, "name")
+    }
+  end
 
   defp normalize_required_string(value, field) when is_binary(value) do
     case String.trim(value) do

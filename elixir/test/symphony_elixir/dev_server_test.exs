@@ -153,6 +153,110 @@ defmodule SymphonyElixir.DevServerTest do
              DevServer.issue_targets(project.slug, "#1")
   end
 
+  test "issue_targets self-heals a stale 'stopped' record when the instance is live and serving",
+       %{project: project} do
+    enable_dev_server!(project)
+    create_issue_workspace!(project.slug, "1")
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front"}
+      ])
+
+    {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, ip: {127, 0, 0, 1}])
+    {:ok, port} = :inet.port(listen)
+
+    {:ok, _row} =
+      DevServerRecord.upsert(project.id, "1", "front", %{
+        working_dir: "front",
+        port: port,
+        url: "http://127.0.0.1:#{port}/",
+        status: "stopped",
+        primary: true,
+        session_name: "sym-dev-front"
+      })
+
+    registry = Module.concat(SymphonyElixir.DevServer.Manager, Registry)
+    fake = start_fake_instance!(registry, {project.slug, "1", "front"}, :ready)
+
+    on_exit(fn ->
+      if Process.alive?(fake), do: send(fake, :stop)
+      :gen_tcp.close(listen)
+    end)
+
+    assert {:ok, %{servers: [%{slug: "front", status: "ready"}]}} =
+             DevServer.issue_targets(project.slug, "#1")
+
+    assert [%DevServerRecord{status: "ready"}] = DevServerRecord.list_for_issue(project.id, "1")
+  end
+
+  test "issue_targets keeps a live serving instance 'ready' even when its status call would time out",
+       %{project: project} do
+    enable_dev_server!(project)
+    create_issue_workspace!(project.slug, "1")
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front"}
+      ])
+
+    {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, ip: {127, 0, 0, 1}])
+    {:ok, port} = :inet.port(listen)
+
+    {:ok, _row} =
+      DevServerRecord.upsert(project.id, "1", "front", %{
+        working_dir: "front",
+        port: port,
+        url: "http://127.0.0.1:#{port}/",
+        status: "stopped",
+        primary: true,
+        session_name: "sym-dev-front"
+      })
+
+    registry = Module.concat(SymphonyElixir.DevServer.Manager, Registry)
+    # Alive but never answers :status. The listening port is the source of truth,
+    # so reconcile must report "ready" without downgrading to "stopped".
+    fake = start_fake_instance!(registry, {project.slug, "1", "front"}, :never_reply)
+
+    on_exit(fn ->
+      if Process.alive?(fake), do: send(fake, :stop)
+      :gen_tcp.close(listen)
+    end)
+
+    assert {:ok, %{servers: [%{slug: "front", status: "ready"}]}} =
+             DevServer.issue_targets(project.slug, "#1")
+  end
+
+  defp start_fake_instance!(registry, key, mode) do
+    test_pid = self()
+
+    pid =
+      spawn_link(fn ->
+        {:ok, _} = Registry.register(registry, key, nil)
+        send(test_pid, {:registered, self()})
+        fake_instance_loop(mode)
+      end)
+
+    receive do
+      {:registered, ^pid} -> :ok
+    after
+      2_000 -> flunk("fake instance did not register")
+    end
+
+    pid
+  end
+
+  defp fake_instance_loop(mode) do
+    receive do
+      {:"$gen_call", from, :status} ->
+        unless mode == :never_reply, do: GenServer.reply(from, mode)
+        fake_instance_loop(mode)
+
+      :stop ->
+        :ok
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

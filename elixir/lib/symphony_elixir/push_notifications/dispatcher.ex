@@ -8,9 +8,10 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   alias SymphonyElixir.Evidence.Record, as: EvidenceRecord
   alias SymphonyElixir.Issue
   alias SymphonyElixir.LocalTracker.IssueRecord
+  alias SymphonyElixir.LocalTracker.Project
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.PushNotifications.{Config, Sender}
-  alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.Tracker.Identity
 
   require Logger
 
@@ -22,6 +23,7 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   @pr_limit_reached_kind "pr_limit_reached"
   @pr_needs_human_kind "pr_needs_human"
   @pr_ci_unrelated_kind "pr_ci_unrelated"
+  @issue_assigned_kind "issue_assigned"
 
   @spec human_review_needed(IssueRecord.t(), String.t()) :: :ok
   def human_review_needed(%IssueRecord{} = issue, status_name) when is_binary(status_name) do
@@ -149,6 +151,32 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
 
   def pr_monitor_attention(_project, _identifier, _action), do: :ok
 
+  @type assignee_snapshot :: %{
+          optional(:assignee_id) => String.t() | nil,
+          optional(:assignee_remote_id) => String.t() | nil
+        }
+
+  @spec issue_assigned(IssueRecord.t(), assignee_snapshot() | nil) :: :ok
+  def issue_assigned(%IssueRecord{} = issue, previous) do
+    with true <- assignee_changed?(previous, issue),
+         true <- assignee_matches_operator?(issue),
+         slug when is_binary(slug) <- project_slug(issue),
+         identifier when is_binary(identifier) <- issue.identifier do
+      title = issue.title || identifier
+
+      notify(@issue_assigned_kind, %{
+        title: "Tarefa associada a você",
+        body: "#{identifier}: #{title} — clique para visualizar",
+        url: issue_url(slug, identifier),
+        tag: "issue_assigned:#{slug}:#{identifier}"
+      })
+    else
+      _ -> :ok
+    end
+  end
+
+  def issue_assigned(_issue, _previous), do: :ok
+
   @spec notify(String.t(), map()) :: :ok
   def notify(kind, payload) when is_binary(kind) and is_map(payload) do
     if Config.enabled?() do
@@ -206,4 +234,46 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   end
 
   defp blocked_summary(_), do: "publish gate blocked"
+
+  defp assignee_changed?(previous, %IssueRecord{} = issue) do
+    previous_value = canonical_assignee(previous)
+    next_value = canonical_assignee(issue)
+
+    is_binary(next_value) and next_value != "" and next_value != previous_value
+  end
+
+  defp canonical_assignee(%IssueRecord{} = issue) do
+    canonical_assignee(%{
+      assignee_id: issue.assignee_id,
+      assignee_remote_id: issue.assignee_remote_id
+    })
+  end
+
+  defp canonical_assignee(snapshot) when is_map(snapshot) do
+    (Map.get(snapshot, :assignee_remote_id) || Map.get(snapshot, "assignee_remote_id") ||
+       Map.get(snapshot, :assignee_id) || Map.get(snapshot, "assignee_id"))
+    |> normalize_assignee_value()
+  end
+
+  defp canonical_assignee(_snapshot), do: nil
+
+  defp normalize_assignee_value(value) when is_binary(value) do
+    trimmed = String.trim(value)
+    if trimmed == "", do: nil, else: String.downcase(trimmed)
+  end
+
+  defp normalize_assignee_value(_value), do: nil
+
+  defp assignee_matches_operator?(%IssueRecord{project: %Project{tracker_kind: kind}} = issue)
+       when is_binary(kind) do
+    case Identity.match_value(kind) do
+      value when is_binary(value) ->
+        canonical_assignee(issue) == normalize_assignee_value(value)
+
+      _ ->
+        false
+    end
+  end
+
+  defp assignee_matches_operator?(_issue), do: false
 end

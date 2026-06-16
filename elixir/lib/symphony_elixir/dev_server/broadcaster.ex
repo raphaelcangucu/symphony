@@ -33,7 +33,7 @@ defmodule SymphonyElixir.DevServer.Broadcaster do
       data =
         view
         |> DevServerPresenter.view()
-        |> Map.put(:tunnel, Tunnel.summary())
+        |> Map.put(:tunnel, Tunnel.summary_for_project(project_slug))
 
       {:ok, %{data: data}}
     else

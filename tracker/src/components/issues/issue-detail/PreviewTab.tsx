@@ -543,7 +543,12 @@ function localPreviewUrl(server: IssueDevServer | null): string | null {
     return null;
   }
 
-  return `http://127.0.0.1:${server.port}${pathFromUrl(server.url)}`;
+  // Use `localhost` (not `127.0.0.1`): the browser may run on a different host
+  // than the dev server (e.g. Windows browser + WSL2 dev servers). `localhost`
+  // resolves to both ::1 and 127.0.0.1, so it reaches IPv6-bound listeners
+  // (Go's default `[::]` bind, e.g. goapi) as well as IPv4 `0.0.0.0` listeners,
+  // whereas a hardcoded `127.0.0.1` fails for IPv6-only forwarded listeners.
+  return `http://localhost:${server.port}${pathFromUrl(server.url)}`;
 }
 
 function pathFromUrl(url: string | null): string {

@@ -195,20 +195,23 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   @spec build_prompt(String.t(), String.t(), map(), [map()]) :: String.t()
   def build_prompt(project_slug, message, context, history) do
+    tracker_summary = project_tracker_summary(project_slug)
+
     """
     You are the Symphony Project assistant for `#{project_slug}`.
 
     Behave like a real conversational coding assistant inside the tracker.
     Answer naturally in the user's language. Use tracker tools only when the user asks for tracker data or a concrete tracker action.
-    Prefer get_issue, get_project, list_project_repositories, get_template, list_templates, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
+    Prefer get_issue, get_project, get_issue_form_options, list_project_repositories, get_template, list_templates, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
     Project workflow markdown lives in the database (use get_workflow). Do not expect WORKFLOW.md in the workspace; read_workspace_file redirects that path to project settings.
     For orchestrator/dispatch questions: call get_workflow and read tracker.dispatch_states (queue for new auto-runs), active_states (polled), terminal_states, wait_states in data.config — not board status categories from get_project. Follow the workflow skill when editing workflow YAML.
-    For GitHub Projects use list_github_projects, provision_github_project, or create_github_tracker_project — or github_graphql — with Symphony's server GITHUB_TOKEN. Do not run gh/curl in the shell for tracker setup.
+    #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
-    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_pull_requests, manage_preview (start/stop/restart/status), update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_project, list_project_repositories, get_workflow, read_workspace_file.
-    If the user asks for coding work, create or update tracker context and dispatch Codex through the tracker workflow instead of editing files directly from this chat.
+    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_pull_requests, manage_preview (start/stop/restart/status), update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
     When the user attaches an image or file, it is already saved in this project. If they want it on a task (e.g. in the description), embed it using the exact Markdown URL given in the attachment note (`![alt](URL)` for images) when you call create_issue/update_issue/add_comment — never just describe it in words.
-    create_issue places new work in Backlog (intake) by default — omit status unless the user wants a different column (e.g. Todo for the orchestrator queue).
+    create_issue places new work in Backlog (intake) by default — omit status. Do not create directly in orchestrator queue statuses (e.g. Todo); use move_issue when the issue is ready for execution.
+    To assign someone, call get_issue_form_options and pass assignee_ids (GitHub login or remote id) on create_issue/update_issue — never use linear_graphql on non-Linear projects.
     If a request is ambiguous, ask one concise clarifying question before taking action.
 
     Recent conversation:
@@ -424,6 +427,42 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
+  defp project_tracker_summary(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        project = Repo.preload(project, :setup)
+        config = ProjectConfig.resolve(project)
+        kind = project.tracker_kind || "local"
+        dispatch_states = config.dispatch_states || []
+
+        tracker_tools =
+          case kind do
+            "github" ->
+              "This project uses GitHub Projects (tracker_kind: github). Use github_graphql, get_issue_form_options, and Symphony board tools — never linear_graphql or list_linear_projects for this project's issues."
+
+            "linear" ->
+              "This project uses Linear (tracker_kind: linear). Use linear_graphql and Symphony board tools for issue operations."
+
+            "jira" ->
+              "This project uses Jira (tracker_kind: jira). Use Symphony board tools for issue operations."
+
+            _ ->
+              "This project uses the local tracker (tracker_kind: #{kind})."
+          end
+
+        """
+        Project tracker:
+        - tracker_kind: #{kind}
+        - orchestrator queue (dispatch_states): #{inspect(dispatch_states)}
+        #{tracker_tools}
+        For GitHub/Jira project setup (not this board's issues), use list_github_projects / provision_github_project with Symphony's server token — do not run gh/curl in the shell.
+        """
+
+      _ ->
+        ""
+    end
+  end
+
   defp build_freeform_prompt(message, context, history) do
     """
     You are the Symphony freeform assistant. There is no existing project or repository context.
@@ -462,7 +501,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     You are running inside the issue's working tree (the project repositories are cloned here).
     Answer in the user's language. Use tracker tools to update the bound issue. Do not dispatch Codex unless asked.
     Do not post issue comments - your replies are shown to the user directly in this chat. Author the issue via the update_issue tool instead of commenting.
-    New issues belong in Backlog (intake) unless the user asks for a different status — omit status on create_issue or set status to Backlog; do not default to Todo.
+    New issues belong in Backlog (intake) unless the user asks for a different status — omit status on create_issue or set status to Backlog; do not default to Todo or dispatch Codex unless the user explicitly asks.
+    Assignees: call get_issue_form_options and use assignee_ids on update_issue — never linear_graphql on non-Linear projects.
 
     Recent conversation:
     #{format_history(history)}

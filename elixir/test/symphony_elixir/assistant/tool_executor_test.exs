@@ -30,7 +30,6 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
              ToolExecutor.execute("macro-markets", "create_issue", %{
                "title" => "Add assistant panel",
                "description" => "Global project assistant",
-               "status" => "Todo",
                "priority" => 2
              })
 
@@ -38,6 +37,35 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert result.message == "Created issue MAC-1: Add assistant panel"
     assert result.data.identifier == "MAC-1"
     assert result.data.title == "Add assistant panel"
+    assert result.data.status.name == "Backlog"
+  end
+
+  test "create_issue rejects orchestrator queue statuses such as Todo" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:error, message} =
+             ToolExecutor.execute("macro-markets", "create_issue", %{
+               "title" => "Skip intake",
+               "status" => "Todo"
+             })
+
+    assert is_binary(message)
+    assert message =~ "Backlog"
+    assert message =~ "Todo"
+  end
+
+  test "dispatch_codex rejects issues outside orchestrator queue" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Still in intake", "status" => "Backlog"})
+
+    assert {:error, message} =
+             ToolExecutor.execute("macro-markets", "dispatch_codex", %{
+               "identifier" => "MAC-1",
+               "instructions" => "Start work."
+             })
+
+    assert message =~ "orchestrator queue"
+    assert message =~ "Backlog"
   end
 
   test "create_issue defaults to Backlog when status is omitted" do

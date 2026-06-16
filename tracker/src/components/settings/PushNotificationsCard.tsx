@@ -17,8 +17,8 @@ export function PushNotificationsCard() {
         </CardTitle>
         <CardDescription>
           Get notified when an issue needs human review, validation evidence is ready, an agent run
-          fails or stalls, or the PR monitor flags something for you — even when this tab is in the
-          background.
+          fails or stalls, the PR monitor flags something for you, or a task is assigned to you —
+          even when this tab is in the background.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

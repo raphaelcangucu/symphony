@@ -305,7 +305,7 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp serve_step_for_slug(project_slug, identifier, slug) do
     project_slug
     |> DevEnv.list_serve_steps()
-    |> unique_serve_steps(project_slug, identifier)
+    |> then(&unique_serve_steps(project_slug, identifier, &1))
     |> Enum.find(fn step -> Map.fetch!(step_to_map(step), :slug) == slug end)
     |> case do
       nil -> {:error, :no_serve_step}
@@ -599,7 +599,9 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp safe_instance_status(pid) do
     Instance.status(pid)
   catch
-    :exit, _reason -> :stopped
+    # A live process whose status call timed out (e.g. busy probing during a
+    # sequential boot) must NOT be treated as stopped — only a dead process is.
+    :exit, _reason -> if Process.alive?(pid), do: :starting, else: :stopped
   end
 
   defp start_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
@@ -888,29 +890,24 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
+  # A live, registered instance whose port is actually serving is "ready" — even
+  # if a transient status call timed out. Treat the listening port as the source
+  # of truth so the periodic reconciler never stamps a serving instance "stopped",
+  # and so a record left stale (e.g. by an earlier transient blip) self-heals
+  # back to "ready".
   defp reconcile_with_live_instance(record, project, project_slug, identifier, pid) do
     step = serve_step_map(project_slug, identifier, record.slug)
 
-    case safe_instance_status(pid) do
-      :ready ->
-        if stale_ready_port?(record, step) do
-          persist_reconciled_status(record, project, project_slug, identifier, "crashed")
-        else
+    if port_ready?(record.port, step) do
+      persist_reconciled_status(record, project, project_slug, identifier, "ready")
+    else
+      case safe_instance_status(pid) do
+        status when status in [:crashed, :stopped] ->
+          persist_reconciled_status(record, project, project_slug, identifier, Atom.to_string(status))
+
+        _ ->
           record
-        end
-
-      status when status in [:crashed, :stopped] ->
-        persist_reconciled_status(record, project, project_slug, identifier, Atom.to_string(status))
-
-      status when status in [:starting, :provisioning] ->
-        if port_ready?(record.port, step) do
-          persist_reconciled_status(record, project, project_slug, identifier, "ready")
-        else
-          record
-        end
-
-      _ ->
-        record
+      end
     end
   end
 
@@ -926,10 +923,6 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   defp reconcile_stale_active_record(record, project, project_slug, identifier, _step) do
     persist_reconciled_status(record, project, project_slug, identifier, "crashed")
-  end
-
-  defp stale_ready_port?(record, step) do
-    not port_ready?(record.port, step)
   end
 
   defp serve_step_map(project_slug, identifier, slug) do
@@ -1020,6 +1013,21 @@ defmodule SymphonyElixir.DevServer.Manager do
         end
       end
     end)
+  end
+
+  @doc false
+  @spec project_public_tunnel_enabled?(String.t()) :: boolean()
+  def project_public_tunnel_enabled?(project_slug) when is_binary(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        project
+        |> project_runtime_options()
+        |> Map.get(:public_tunnel, [])
+        |> Keyword.get(:enabled) == true
+
+      {:error, _} ->
+        false
+    end
   end
 
   defp project_runtime_options(project) do

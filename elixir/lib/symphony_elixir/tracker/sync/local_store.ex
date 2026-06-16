@@ -11,6 +11,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   import Ecto.Query
 
   alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, Label, Project, WorkflowStatus}
+  alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.{Merge, PullRequestRecord, UserRecord}
 
@@ -421,29 +422,34 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   # -- issue insert/update -----------------------------------------------------
 
   defp insert_issue!(project, remote, status_id) do
-    %IssueRecord{}
-    |> IssueRecord.changeset(%{
-      project_id: project.id,
-      status_id: status_id,
-      identifier: to_string(remote[:identifier]),
-      title: remote[:title],
-      description: remote[:description],
-      priority: remote[:priority],
-      position: remote[:position] || 0,
-      assignee_id: remote[:assignee_id],
-      assignee_remote_id: remote[:assignee_remote_id],
-      creator: remote[:creator],
-      branch_name: remote[:branch_name],
-      url: remote[:remote_url],
-      remote_id: remote[:remote_id],
-      remote_number: remote[:remote_number],
-      remote_url: remote[:remote_url],
-      sync_status: "synced",
-      remote_updated_at: remote[:remote_updated_at],
-      last_synced_at: DateTime.utc_now(),
-      dirty_fields: %{}
-    })
-    |> Repo.insert!()
+    issue =
+      %IssueRecord{}
+      |> IssueRecord.changeset(%{
+        project_id: project.id,
+        status_id: status_id,
+        identifier: to_string(remote[:identifier]),
+        title: remote[:title],
+        description: remote[:description],
+        priority: remote[:priority],
+        position: remote[:position] || 0,
+        assignee_id: remote[:assignee_id],
+        assignee_remote_id: remote[:assignee_remote_id],
+        creator: remote[:creator],
+        branch_name: remote[:branch_name],
+        url: remote[:remote_url],
+        remote_id: remote[:remote_id],
+        remote_number: remote[:remote_number],
+        remote_url: remote[:remote_url],
+        sync_status: "synced",
+        remote_updated_at: remote[:remote_updated_at],
+        last_synced_at: DateTime.utc_now(),
+        dirty_fields: %{}
+      })
+      |> Repo.insert!()
+      |> Repo.preload(:project)
+
+    PushDispatcher.issue_assigned(issue, nil)
+    issue
   end
 
   defp update_issue!(%IssueRecord{} = current, remote, status_id) do
@@ -481,9 +487,19 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     if issue_unchanged?(current, desired) do
       current
     else
-      current
-      |> IssueRecord.changeset(Map.put(desired, :last_synced_at, DateTime.utc_now()))
-      |> Repo.update!()
+      previous_assignee = %{
+        assignee_id: current.assignee_id,
+        assignee_remote_id: current.assignee_remote_id
+      }
+
+      updated =
+        current
+        |> IssueRecord.changeset(Map.put(desired, :last_synced_at, DateTime.utc_now()))
+        |> Repo.update!()
+        |> Repo.preload(:project)
+
+      PushDispatcher.issue_assigned(updated, previous_assignee)
+      updated
     end
   end
 

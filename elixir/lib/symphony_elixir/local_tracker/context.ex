@@ -360,6 +360,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
          label_names = resolve_label_names(project, label_names_from_attrs(attrs)),
          {:ok, issue} <- fetch_project_issue(project.id, identifier),
          {:ok, status} <- fetch_move_status(project.id, attrs, issue.status_id) do
+      previous_assignee = assignee_snapshot(issue)
+
       changes =
         attrs
         |> normalize_assignee_attrs(project.id)
@@ -376,7 +378,10 @@ defmodule SymphonyElixir.LocalTracker.Context do
            {:ok, _routed} <-
              sync_agent_routing_label_result({:ok, updated}, project.id, fetch_agent_attr(attrs)),
            {:ok, issue} <- fetch_issue_by_id(updated.id) do
-        tap_issue_event({:ok, issue}, "issue_updated", %{status: status.name})
+        tap_issue_event({:ok, issue}, "issue_updated", %{
+          status: status.name,
+          previous_assignee: previous_assignee
+        })
       end
     end
   end
@@ -1611,7 +1616,19 @@ defmodule SymphonyElixir.LocalTracker.Context do
     PushDispatcher.human_review_needed(issue, status_name)
   end
 
+  defp maybe_push_on_issue_event("issue_created", issue, _metadata) do
+    PushDispatcher.issue_assigned(issue, nil)
+  end
+
+  defp maybe_push_on_issue_event("issue_updated", issue, metadata) do
+    PushDispatcher.issue_assigned(issue, Map.get(metadata, :previous_assignee))
+  end
+
   defp maybe_push_on_issue_event(_event_type, _issue, _metadata), do: :ok
+
+  defp assignee_snapshot(%IssueRecord{} = issue) do
+    %{assignee_id: issue.assignee_id, assignee_remote_id: issue.assignee_remote_id}
+  end
 
   defp tap_comment_event({:ok, %Comment{} = comment} = result, issue) do
     insert_event(issue.id, "comment_created", %{comment_id: comment.id})
