@@ -2,12 +2,12 @@ import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { fetchDevServerOutput } from "@/services/issueDevServers";
+import { fetchDevServerOutput, subscribeDevServerOutput } from "@/services/issueDevServers";
 import type { IssueDevServerStatus } from "@/types/issue";
 import { cn } from "@/lib/utils";
 
-const POLL_INTERVAL_MS = 1_500;
-const LIVE_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting", "ready", "crashed"]);
+const STREAM_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
+const AUTO_OPEN_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting", "crashed"]);
 
 interface DevServerOutputPanelProps {
   projectSlug: string;
@@ -35,6 +35,15 @@ export function DevServerOutputPanel({
   const preRef = useRef<HTMLPreElement | null>(null);
   const stickToBottomRef = useRef(true);
 
+  const applyOutput = useCallback((nextOutput: string) => {
+    setOutput(nextOutput);
+    setError(null);
+
+    if (stickToBottomRef.current && preRef.current) {
+      preRef.current.scrollTop = preRef.current.scrollHeight;
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!open) {
       return;
@@ -44,39 +53,48 @@ export function DevServerOutputPanel({
 
     try {
       const response = await fetchDevServerOutput(projectSlug, issueIdentifier, serverId);
-      setOutput(response.output);
-      setError(null);
-
-      if (stickToBottomRef.current && preRef.current) {
-        preRef.current.scrollTop = preRef.current.scrollHeight;
-      }
+      applyOutput(response.output);
     } catch {
       setError("Could not load server output.");
     } finally {
       setLoading(false);
     }
-  }, [issueIdentifier, open, projectSlug, serverId]);
+  }, [applyOutput, issueIdentifier, open, projectSlug, serverId]);
 
   useEffect(() => {
     if (!open) {
       return undefined;
     }
 
-    void refresh();
-
-    if (!LIVE_STATUSES.has(status)) {
+    if (!STREAM_STATUSES.has(status)) {
+      void refresh();
       return undefined;
     }
 
-    const timer = setInterval(() => {
-      void refresh();
-    }, POLL_INTERVAL_MS);
+    setLoading(true);
 
-    return () => clearInterval(timer);
-  }, [open, refresh, status]);
+    const unsubscribe = subscribeDevServerOutput(projectSlug, issueIdentifier, serverId, {
+      onSnapshot: (payload) => {
+        applyOutput(payload.output);
+        setLoading(false);
+      },
+      onUpdate: (payload) => {
+        applyOutput(payload.output);
+      },
+      onDone: () => {
+        setLoading(false);
+      },
+      onError: () => {
+        setLoading(false);
+        void refresh();
+      },
+    });
+
+    return unsubscribe;
+  }, [applyOutput, issueIdentifier, open, projectSlug, refresh, serverId, status]);
 
   useEffect(() => {
-    if (LIVE_STATUSES.has(status)) {
+    if (AUTO_OPEN_STATUSES.has(status)) {
       setOpen(true);
     }
   }, [status]);

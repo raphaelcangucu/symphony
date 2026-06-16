@@ -881,15 +881,10 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp reconcile_port_truth(record, project, project_slug, identifier) do
     step = serve_step_map(project_slug, identifier, record.slug)
 
-    cond do
-      port_ready?(record.port, step) and record.status != "ready" ->
-        persist_reconciled_status(record, project, project_slug, identifier, "ready")
-
-      record.status == "ready" and not port_ready?(record.port, step) ->
-        persist_reconciled_status(record, project, project_slug, identifier, "crashed")
-
-      true ->
-        record
+    if record.status == "ready" and not port_ready?(record.port, step) do
+      persist_reconciled_status(record, project, project_slug, identifier, "crashed")
+    else
+      record
     end
   end
 
@@ -905,42 +900,32 @@ defmodule SymphonyElixir.DevServer.Manager do
         end
 
       status when status in [:crashed, :stopped] ->
-        if port_ready?(record.port, step) do
-          persist_reconciled_status(record, project, project_slug, identifier, "ready")
-        else
-          persist_reconciled_status(record, project, project_slug, identifier, Atom.to_string(status))
-        end
+        persist_reconciled_status(record, project, project_slug, identifier, Atom.to_string(status))
 
-      _ ->
+      status when status in [:starting, :provisioning] ->
         if port_ready?(record.port, step) do
           persist_reconciled_status(record, project, project_slug, identifier, "ready")
         else
           record
         end
+
+      _ ->
+        record
     end
   end
 
   defp reconcile_without_live_instance(record, project, project_slug, identifier) do
     step = serve_step_map(project_slug, identifier, record.slug)
 
-    cond do
-      record.status in @tracked_live_statuses ->
-        reconcile_stale_active_record(record, project, project_slug, identifier, step)
-
-      record.status in ["stopped", "crashed"] and port_ready?(record.port, step) ->
-        persist_reconciled_status(record, project, project_slug, identifier, "ready")
-
-      true ->
-        record
+    if record.status in @tracked_live_statuses do
+      reconcile_stale_active_record(record, project, project_slug, identifier, step)
+    else
+      record
     end
   end
 
-  defp reconcile_stale_active_record(record, project, project_slug, identifier, step) do
-    if record.status == "ready" and port_ready?(record.port, step) do
-      record
-    else
-      persist_reconciled_status(record, project, project_slug, identifier, "crashed")
-    end
+  defp reconcile_stale_active_record(record, project, project_slug, identifier, _step) do
+    persist_reconciled_status(record, project, project_slug, identifier, "crashed")
   end
 
   defp stale_ready_port?(record, step) do

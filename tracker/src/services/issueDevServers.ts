@@ -110,6 +110,104 @@ export async function fetchDevServerOutput(
   };
 }
 
+export interface DevServerOutputPayload {
+  output: string;
+  session_name: string;
+  status?: string;
+}
+
+export interface DevServerOutputStreamHandlers {
+  onSnapshot: (payload: DevServerOutputPayload) => void;
+  onUpdate: (payload: DevServerOutputPayload) => void;
+  onDone?: (payload: { status: string }) => void;
+  onError?: () => void;
+}
+
+export function subscribeDevServerOutput(
+  projectSlug: string,
+  issueIdentifier: string,
+  serverId: number,
+  handlers: DevServerOutputStreamHandlers,
+): () => void {
+  if (!Number.isInteger(serverId) || serverId <= 0) {
+    handlers.onError?.();
+    return () => undefined;
+  }
+
+  if (typeof EventSource === "undefined") {
+    handlers.onError?.();
+    return () => undefined;
+  }
+
+  const url = new URL(
+    `${issueDevServersPath(projectSlug, issueIdentifier)}/${encodeURIComponent(String(serverId))}/output/events`,
+    window.location.origin,
+  );
+  const token = getTrackerToken();
+
+  if (token) {
+    url.searchParams.set("token", token);
+  }
+
+  const source = new EventSource(url.toString());
+  let closed = false;
+
+  const handlePayload = (
+    event: MessageEvent<string>,
+    handler: (payload: DevServerOutputPayload) => void,
+  ) => {
+    try {
+      const payload = JSON.parse(event.data) as { data?: DevServerOutputPayload };
+      if (payload.data) {
+        handler(payload.data);
+      }
+    } catch {
+      handlers.onError?.();
+    }
+  };
+
+  source.addEventListener("snapshot", (event) => {
+    handlePayload(event as MessageEvent<string>, handlers.onSnapshot);
+  });
+
+  source.addEventListener("update", (event) => {
+    handlePayload(event as MessageEvent<string>, handlers.onUpdate);
+  });
+
+  source.addEventListener("done", (event) => {
+    closed = true;
+
+    try {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as { data?: { status?: string } };
+      if (payload.data?.status) {
+        handlers.onDone?.({ status: payload.data.status });
+      }
+    } catch {
+      handlers.onError?.();
+    }
+
+    source.close();
+  });
+
+  source.addEventListener("failure", () => {
+    closed = true;
+    handlers.onError?.();
+    source.close();
+  });
+
+  source.onerror = () => {
+    if (closed) {
+      return;
+    }
+
+    handlers.onError?.();
+  };
+
+  return () => {
+    source.close();
+  };
+}
+
 export async function startPublicTunnel(): Promise<IssueDevServerTunnel> {
   const response = await http.post(trackerPath("/tunnel/start"));
 

@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/config")>();
+  return {
+    ...actual,
+    getTrackerToken: vi.fn(() => "secret"),
+  };
+});
+
 import {
   fetchIssueDevServers,
   restartIssueDevServer,
@@ -8,12 +16,16 @@ import {
   startIssueDevServers,
   stopIssueDevServer,
   stopIssueDevServers,
+  subscribeDevServerOutput,
 } from "@/services/issueDevServers";
 import { http } from "@/services/http";
 import type { IssueDevServersResponse } from "@/types/issue";
 
 describe("issue dev-server service", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   const response: IssueDevServersResponse = {
     available: true,
@@ -113,5 +125,42 @@ describe("issue dev-server service", () => {
     await expect(fetchIssueDevServers(" ", "508")).rejects.toThrow(/projectSlug/);
     await expect(fetchIssueDevServers("macro-markets", " ")).rejects.toThrow(/issueIdentifier/);
     await expect(fetchIssueDevServers("macro-markets", " # ")).rejects.toThrow(/issueIdentifier/);
+  });
+
+  it("subscribes to dev-server output events", () => {
+    const listeners = new Map<string, (event: MessageEvent<string>) => void>();
+    const close = vi.fn();
+    let createdUrl = "";
+
+    class MockEventSource {
+      addEventListener = vi.fn((event: string, handler: (event: MessageEvent<string>) => void) => {
+        listeners.set(event, handler);
+      });
+
+      close = close;
+
+      onerror: (() => void) | null = null;
+
+      constructor(url: string) {
+        createdUrl = url;
+      }
+    }
+
+    vi.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+
+    const onSnapshot = vi.fn();
+    const unsubscribe = subscribeDevServerOutput("gamba", "1878", 42, { onSnapshot, onUpdate: vi.fn() });
+
+    expect(listeners.has("snapshot")).toBe(true);
+    expect(new URL(createdUrl).pathname).toBe(
+      "/api/tracker/v1/projects/gamba/issues/1878/dev_servers/42/output/events",
+    );
+    expect(new URL(createdUrl).searchParams.get("token")).toBe("secret");
+
+    listeners.get("snapshot")?.({ data: JSON.stringify({ data: { output: "boot\n", session_name: "sym-dev" } }) } as MessageEvent<string>);
+    expect(onSnapshot).toHaveBeenCalledWith({ output: "boot\n", session_name: "sym-dev" });
+
+    unsubscribe();
+    expect(close).toHaveBeenCalled();
   });
 });

@@ -40,6 +40,12 @@ defmodule SymphonyElixirWeb.Router do
     pipe_through(:tracker_sse)
 
     get("/projects/:project_slug/issues/:identifier/dev_servers/events", DevServerController, :events)
+
+    get(
+      "/projects/:project_slug/issues/:identifier/dev_servers/:server_id/output/events",
+      DevServerController,
+      :output_events
+    )
   end
 
   scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do

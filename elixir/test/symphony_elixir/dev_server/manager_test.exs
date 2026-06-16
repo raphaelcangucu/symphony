@@ -151,37 +151,66 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert secondary_id == secondary.id
   end
 
-  test "list_for_issue promotes stopped servers back to ready when the port is healthy", %{project: project} do
+  test "list_for_issue keeps stopped servers stopped when the port responds without a live instance", %{
+    project: project
+  } do
+    port = start_probe_server!()
+
     {:ok, _steps} =
       DevEnv.save_steps(project.slug, [
         %{
-          description: "Back",
-          command: "docker compose up",
+          description: "GoAPI",
+          command: "bash .symphony/serve.sh",
           role: "serve",
-          working_dir: "backend",
+          working_dir: "goapi",
           ready_probe: "http",
-          ready_path: "/health"
+          ready_path: "/graphiql"
         }
       ])
 
     {:ok, record} =
-      DevServerRecord.upsert(project.id, "1878", "backend", %{
-        working_dir: "backend",
-        port: 4100,
-        url: "http://127.0.0.1:4100/graphiql",
+      DevServerRecord.upsert(project.id, "1878", "goapi", %{
+        working_dir: "goapi",
+        port: port,
+        url: "http://127.0.0.1:#{port}/graphiql",
         status: "stopped",
         primary: false,
-        session_name: "sym-dev-backend"
+        session_name: "sym-dev-gamba-1878-goapi"
       })
 
-    case Manager.list_for_issue(project.slug, "1878") do
-      [%{id: id, status: "ready"}] ->
-        assert id == record.id
-        assert %DevServerRecord{status: "ready"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
+    assert [%{id: id, status: "stopped"}] = Manager.list_for_issue(project.slug, "1878")
+    assert id == record.id
+    assert %DevServerRecord{status: "stopped"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
+  end
 
-      [%{id: id, status: "stopped"}] ->
-        assert id == record.id
-    end
+  test "list_for_issue marks ready servers as crashed when no live instance owns the port", %{project: project} do
+    port = start_probe_server!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "GoAPI",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "goapi",
+          ready_probe: "http",
+          ready_path: "/graphiql"
+        }
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1878", "goapi", %{
+        working_dir: "goapi",
+        port: port,
+        url: "http://127.0.0.1:#{port}/graphiql",
+        status: "ready",
+        primary: false,
+        session_name: "sym-dev-gamba-1878-goapi"
+      })
+
+    assert [%{id: id, status: "crashed"}] = Manager.list_for_issue(project.slug, "1878")
+    assert id == record.id
+    assert %DevServerRecord{status: "crashed"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
   end
 
   test "list_for_issue marks stale ready servers as crashed when the port is down", %{project: project} do
@@ -630,5 +659,31 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     File.mkdir_p!(workspace)
     on_exit(fn -> File.rm_rf(workspace) end)
     workspace
+  end
+
+  defp start_probe_server! do
+    {:ok, listen_socket} =
+      :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, ip: {127, 0, 0, 1}])
+
+    {:ok, port} = :inet.port(listen_socket)
+
+    Task.start_link(fn ->
+      probe_server_loop(listen_socket)
+    end)
+
+    on_exit(fn -> :gen_tcp.close(listen_socket) end)
+    port
+  end
+
+  defp probe_server_loop(listen_socket) do
+    case :gen_tcp.accept(listen_socket) do
+      {:ok, client} ->
+        _ = :gen_tcp.send(client, "HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok")
+        :gen_tcp.close(client)
+        probe_server_loop(listen_socket)
+
+      {:error, _} ->
+        :ok
+    end
   end
 end
