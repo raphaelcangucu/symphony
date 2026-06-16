@@ -40,6 +40,19 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert result.data.title == "Add assistant panel"
   end
 
+  test "create_issue defaults to Backlog when status is omitted" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:ok, result} =
+             ToolExecutor.execute("macro-markets", "create_issue", %{
+               "title" => "Intake from assistant",
+               "description" => "VIP bonus adjustment"
+             })
+
+    assert result.data.status.name == "Backlog"
+    assert result.data.title == "Intake from assistant"
+  end
+
   test "dispatches Codex work by adding a comment and moving the issue into progress" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Fix tests", "status" => "Todo"})

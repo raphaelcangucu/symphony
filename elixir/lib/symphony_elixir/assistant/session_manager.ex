@@ -33,7 +33,7 @@ defmodule SymphonyElixir.Assistant.SessionManager do
   end
 
   defp infer_intent("create issue:" <> title, _context) do
-    {:ok, %{tool: "create_issue", arguments: %{"title" => title |> String.trim(), "status" => "Todo"}}}
+    {:ok, %{tool: "create_issue", arguments: %{"title" => title |> String.trim()}}}
   end
 
   defp infer_intent("agent executions", _context) do

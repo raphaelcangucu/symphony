@@ -208,6 +208,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_pull_requests, manage_preview (start/stop/restart/status), update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_project, list_project_repositories, get_workflow, read_workspace_file.
     If the user asks for coding work, create or update tracker context and dispatch Codex through the tracker workflow instead of editing files directly from this chat.
     When the user attaches an image or file, it is already saved in this project. If they want it on a task (e.g. in the description), embed it using the exact Markdown URL given in the attachment note (`![alt](URL)` for images) when you call create_issue/update_issue/add_comment — never just describe it in words.
+    create_issue places new work in Backlog (intake) by default — omit status unless the user wants a different column (e.g. Todo for the orchestrator queue).
     If a request is ambiguous, ask one concise clarifying question before taking action.
 
     Recent conversation:
@@ -461,6 +462,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     You are running inside the issue's working tree (the project repositories are cloned here).
     Answer in the user's language. Use tracker tools to update the bound issue. Do not dispatch Codex unless asked.
     Do not post issue comments - your replies are shown to the user directly in this chat. Author the issue via the update_issue tool instead of commenting.
+    New issues belong in Backlog (intake) unless the user asks for a different status — omit status on create_issue or set status to Backlog; do not default to Todo.
 
     Recent conversation:
     #{format_history(history)}

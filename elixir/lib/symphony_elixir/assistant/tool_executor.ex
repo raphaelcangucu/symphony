@@ -64,7 +64,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "properties" => %{
           "title" => string_schema("Issue title."),
           "description" => string_schema("Optional issue description."),
-          "status" => string_schema("Optional workflow status. Defaults to Todo."),
+          "status" => string_schema("Optional workflow status. Omit to create in Backlog (intake)."),
           "priority" => %{"type" => ["integer", "null"], "description" => "Optional numeric priority."}
         }
       }),
@@ -395,7 +395,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp do_execute(project, "create_issue", arguments, _opts) do
     with {:ok, title} <- normalize_required_string(Map.get(arguments, "title"), :title),
-         attrs <- build_create_attrs(arguments, title),
+         {:ok, status} <- resolve_create_status(project, Map.get(arguments, "status")),
+         attrs <- build_create_attrs(arguments, title, status),
          {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]) do
       presented = TrackerPresenter.issue(issue)
 
@@ -861,11 +862,38 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp build_create_attrs(arguments, title) do
+  defp resolve_create_status(project, status) when is_binary(status) do
+    case normalize_optional_string(status) do
+      nil -> resolve_create_status(project, nil)
+      explicit -> {:ok, explicit}
+    end
+  end
+
+  defp resolve_create_status(project, _status) do
+    case IssueAdapter.dispatch(project, :list_statuses, []) do
+      {:ok, statuses} when is_list(statuses) and statuses != [] ->
+        {:ok, pick_create_status(statuses)}
+
+      _ ->
+        {:ok, "Backlog"}
+    end
+  end
+
+  defp pick_create_status(statuses) do
+    case Enum.find(statuses, &(normalize_status_name(status_field(&1, :name)) == "backlog" && !terminal_status?(&1))) do
+      match when is_map(match) ->
+        status_field(match, :name) || "Backlog"
+
+      _ ->
+        non_dispatchable_draft_status(statuses) || "Backlog"
+    end
+  end
+
+  defp build_create_attrs(arguments, title, status) do
     %{
       "title" => title,
       "description" => Map.get(arguments, "description"),
-      "status" => normalize_optional_string(Map.get(arguments, "status")) || "Todo"
+      "status" => status
     }
     |> maybe_put_attr("priority", Map.get(arguments, "priority"))
     |> maybe_put_attr("agent", normalize_optional_string(Map.get(arguments, "agent")))
