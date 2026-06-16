@@ -254,7 +254,10 @@ defmodule SymphonyElixir.Config do
                                default: %{},
                                keys: [
                                  enabled: [type: :boolean, default: @default_dev_server_enabled],
-                                 port_range: [type: {:list, :pos_integer}, default: @default_dev_server_port_range],
+                                 port_range: [
+                                   type: {:or, [{:list, :pos_integer}, nil]},
+                                   default: nil
+                                 ],
                                  max_concurrent: [type: :pos_integer, default: @default_dev_server_max_concurrent],
                                  idle_timeout_ms: [type: :pos_integer, default: @default_dev_server_idle_timeout_ms],
                                  auto_start_on: [
@@ -839,7 +842,8 @@ defmodule SymphonyElixir.Config do
 
   @spec dev_server_port_range() :: [pos_integer()]
   def dev_server_port_range do
-    get_in(validated_workflow_options(), [:dev_server, :port_range])
+    get_in(validated_workflow_options(), [:dev_server, :port_range]) ||
+      @default_dev_server_port_range
   end
 
   @spec dev_server_max_concurrent() :: pos_integer()

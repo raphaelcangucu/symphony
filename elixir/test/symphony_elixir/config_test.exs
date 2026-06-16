@@ -47,6 +47,20 @@ defmodule SymphonyElixir.ConfigTest do
     test "workflow_front_matter/0 returns the normalized global front matter map" do
       assert is_map(SymphonyElixir.Config.workflow_front_matter())
     end
+
+    test "per-project dev_server port_range defaults to nil (auto pool)" do
+      opts = SymphonyElixir.Config.validate_front_matter(%{"dev_server" => %{"enabled" => true}})
+      assert get_in(opts, [:dev_server, :port_range]) == nil
+    end
+
+    test "per-project dev_server port_range keeps an explicit pin" do
+      opts =
+        SymphonyElixir.Config.validate_front_matter(%{
+          "dev_server" => %{"enabled" => true, "port_range" => [4100, 4199]}
+        })
+
+      assert get_in(opts, [:dev_server, :port_range]) == [4100, 4199]
+    end
   end
 
   describe "evidence workflow section" do
