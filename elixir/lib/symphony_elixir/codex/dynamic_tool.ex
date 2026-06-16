@@ -7,6 +7,9 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   alias SymphonyElixir.Issue
   alias SymphonyElixir.Linear.Client, as: LinearClient
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.AgentHandoffGate
+  alias SymphonyElixir.ProjectConfig
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueAdapter
 
   @linear_graphql_tool "linear_graphql"
@@ -56,7 +59,9 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @set_issue_status_description """
   Move the issue you are currently working on to a workflow status on Symphony's local-first board.
 
-  The change is written to Symphony's local tracker immediately and synced to GitHub/Linear in the background, so it never blocks on their API rate limits. Use this to follow the workflow instructions, e.g. move from "Todo" to "In Progress" when you start work, or to "Human Review" when a PR is ready.
+  The change is written to Symphony's local tracker immediately and synced to GitHub/Linear in the background, so it never blocks on their API rate limits. Use this to follow the workflow instructions, e.g. move from "Todo" to "In Progress" when you start work.
+
+  Symphony blocks moves to **Human Review** (and other handoff/wait states) until the validate and publish gates pass — run evidence and open PRs first; the orchestrator will move the issue automatically when the run completes successfully.
   """
 
   @add_comment_input_schema %{
@@ -218,11 +223,30 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     with {:ok, issue} <- fetch_bound_issue(opts),
          {:ok, status} <- normalize_status(arguments),
          {:ok, project} <- Context.get_project(issue.project_slug),
+         config <- project |> Repo.preload(:setup) |> ProjectConfig.resolve(),
+         :ok <- assert_handoff_allowed(status, config, issue),
          {:ok, _moved} <-
            IssueAdapter.dispatch(project, :move_issue, [issue.identifier, %{"status" => status}]) do
       set_issue_status_success(issue.identifier, status)
     else
       {:error, reason} -> failure_response(set_issue_status_error_payload(reason, opts))
+    end
+  end
+
+  defp assert_handoff_allowed(status, config, issue) do
+    if AgentHandoffGate.handoff_status?(status, config) do
+      case AgentHandoffGate.check(issue, config) do
+        :ok ->
+          :ok
+
+        {:error, :validate_gate, violations} ->
+          {:error, {:validate_gate, violations}}
+
+        {:error, :publish_gate, violations} ->
+          {:error, {:publish_gate, violations}}
+      end
+    else
+      :ok
     end
   end
 
@@ -576,6 +600,35 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       "error" => %{
         "message" => "GitHub GraphQL tool execution failed.",
         "reason" => inspect(reason)
+      }
+    }
+  end
+
+  defp set_issue_status_error_payload({:validate_gate, violations}, _opts) do
+    lines =
+      Enum.map_join(violations, "\n", fn v ->
+        "- #{v.kind}: #{v.detail}"
+      end)
+
+    %{
+      "error" => %{
+        "message" =>
+          "Cannot move to a handoff status yet — the validate gate is not satisfied. " <>
+            "Run tests, write `.symphony/evidence/manifest.json`, then let Symphony move the issue when the run completes.\n\n#{lines}"
+      }
+    }
+  end
+
+  defp set_issue_status_error_payload({:publish_gate, violations}, _opts) do
+    lines =
+      Enum.map_join(violations, "\n", fn v ->
+        "- #{v.repo}: #{v.detail}"
+      end)
+
+    %{
+      "error" => %{
+        "message" =>
+          "Cannot move to a handoff status yet — the publish gate is not satisfied (open PRs / pushed branches required).\n\n#{lines}"
       }
     }
   end

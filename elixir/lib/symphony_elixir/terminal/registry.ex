@@ -189,6 +189,14 @@ defmodule SymphonyElixir.Terminal.Registry do
     tmux.resize(session_name(project_slug, issue_identifier), cols, rows)
   end
 
+  @spec capture_dev_session(String.t(), String.t(), String.t(), keyword()) ::
+          {:ok, String.t()} | {:error, String.t()}
+  def capture_dev_session(project_slug, issue_identifier, slug, opts \\ [])
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(slug) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.capture_pane(dev_session_name(project_slug, issue_identifier, slug))
+  end
+
   @spec capture(String.t(), String.t(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
   def capture(project_slug, issue_identifier, opts \\ []) when is_binary(project_slug) and is_binary(issue_identifier) do
     tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)

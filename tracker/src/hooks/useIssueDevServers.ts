@@ -10,11 +10,9 @@ import {
   startPublicTunnel,
   stopIssueDevServer,
   stopIssueDevServers,
+  subscribeIssueDevServers,
 } from "@/services/issueDevServers";
-import type { IssueDevServersResponse, IssueDevServerStatus } from "@/types/issue";
-
-const POLL_INTERVAL_MS = 2_000;
-const TRANSIENT_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
+import type { IssueDevServersResponse } from "@/types/issue";
 
 export interface UseIssueDevServersResult {
   data: IssueDevServersResponse | null;
@@ -53,6 +51,7 @@ export function useIssueDevServers(
   const actionInFlightRef = useRef(false);
   const actionGenerationRef = useRef(0);
   const hasLoadedRef = useRef(false);
+  const streamFailedRef = useRef(false);
   const focused = useWindowFocus();
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
@@ -239,35 +238,46 @@ export function useIssueDevServers(
     inFlightRef.current = false;
     actionGenerationRef.current += 1;
     actionInFlightRef.current = false;
+    streamFailedRef.current = false;
 
-    if (!hasIdentifiers) {
+    if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
       setData(null);
       setError(null);
       setLoading(false);
       return undefined;
     }
 
-    void refresh();
+    setLoading(true);
+
+    const unsubscribe = subscribeIssueDevServers(projectSlug, issueIdentifier, {
+      onSnapshot: (response) => {
+        setData(response);
+        setError(null);
+        hasLoadedRef.current = true;
+        setLoading(false);
+      },
+      onUpdate: (response) => {
+        setData(response);
+        setError(null);
+      },
+      onError: () => {
+        if (streamFailedRef.current) {
+          return;
+        }
+
+        streamFailedRef.current = true;
+        void refresh();
+      },
+    });
 
     return () => {
       requestIdRef.current += 1;
       inFlightRef.current = false;
       actionGenerationRef.current += 1;
       actionInFlightRef.current = false;
+      unsubscribe();
     };
-  }, [hasIdentifiers, refresh]);
-
-  useEffect(() => {
-    if (!hasIdentifiers || !shouldPoll(data)) {
-      return undefined;
-    }
-
-    const timer = setInterval(() => {
-      if (focusedRef.current) void refresh();
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(timer);
-  }, [data, hasIdentifiers, refresh]);
+  }, [hasIdentifiers, issueIdentifier, projectSlug, refresh]);
 
   useEffect(() => {
     if (!hasIdentifiers || !focused) return;
@@ -279,12 +289,4 @@ export function useIssueDevServers(
 
 function hasRequiredIdentifier(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function shouldPoll(data: IssueDevServersResponse | null): boolean {
-  if (!data) {
-    return false;
-  }
-
-  return data.servers.some((server) => TRANSIENT_STATUSES.has(server.status));
 }

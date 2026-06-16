@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DevServerOutputPanel } from "@/components/issues/issue-detail/DevServerOutputPanel";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
 import {
   buildPreviewFailurePrompt,
@@ -247,6 +248,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                   <ServerRow
                     key={server.id}
                     controlsDisabled={controlsDisabled}
+                    issueIdentifier={issueIdentifier}
                     onAskAssistant={
                       isPreviewFailureServerStatus(server.status)
                         ? () => askAssistantToFix(data, server)
@@ -255,6 +257,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                     onRestart={(serverId) => void restartServer(serverId)}
                     onStart={(serverId) => void startServer(serverId)}
                     onStop={(serverId) => void stopServer(serverId)}
+                    projectSlug={projectSlug}
                     server={server}
                     tunnelRunning={tunnelRunning}
                   />
@@ -386,6 +389,8 @@ function AskAssistantButton({ onClick }: { onClick: () => void }) {
 
 function ServerRow({
   server,
+  projectSlug,
+  issueIdentifier,
   controlsDisabled,
   onAskAssistant,
   onRestart,
@@ -394,6 +399,8 @@ function ServerRow({
   tunnelRunning,
 }: {
   server: IssueDevServer;
+  projectSlug: string;
+  issueIdentifier: string;
   controlsDisabled: boolean;
   onAskAssistant?: () => void;
   onRestart: (serverId: number) => void;
@@ -458,6 +465,15 @@ function ServerRow({
           )}
         </div>
       </div>
+      <DevServerOutputPanel
+        defaultOpen={ACTIVE_PROVISIONING_STATUSES.has(server.status) || server.status === "crashed"}
+        issueIdentifier={issueIdentifier}
+        projectSlug={projectSlug}
+        serverId={server.id}
+        sessionName={server.session_name}
+        slug={server.slug}
+        status={server.status}
+      />
     </div>
   );
 }

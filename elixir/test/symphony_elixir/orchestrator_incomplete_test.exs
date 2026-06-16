@@ -8,7 +8,14 @@ defmodule SymphonyElixir.OrchestratorIncompleteTest do
 
     assert body =~ "## Codex Workpad"
     assert body =~ "max turns"
-    assert body =~ "No pull request"
+    assert body =~ "moved to its review state"
+  end
+
+  test "incomplete_workpad_comment_body explains validate gate blocks review transition" do
+    body = Orchestrator.incomplete_workpad_comment_body({:validate_gate, []})
+
+    assert body =~ "not** moved to review"
+    assert body =~ "evidence"
   end
 
   test "stores the reported agent outcome on the matching running entry" do

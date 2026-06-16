@@ -71,6 +71,27 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.start_for_issue(project.slug, "#missing-workspace") == {:error, :workspace_missing}
   end
 
+  test "list_for_issue ensures stopped placeholders for configured serve steps", %{project: project} do
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Back", command: "docker compose up", role: "serve", working_dir: "backend"},
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "frontend", primary: true}
+      ])
+
+    assert DevServerRecord.list_for_issue(project.id, "1") == []
+
+    servers = Manager.list_for_issue(project.slug, "#1")
+
+    assert length(servers) == 2
+    assert length(DevServerRecord.list_for_issue(project.id, "1")) == 2
+
+    assert %{slug: "frontend", status: "stopped", primary: true} =
+             Enum.find(servers, &(&1.slug == "frontend"))
+
+    assert %{slug: "backend", status: "stopped", primary: false} =
+             Enum.find(servers, &(&1.slug == "backend"))
+  end
+
   test "list_for_issue returns persisted record maps ordered primary first", %{project: project} do
     {:ok, primary} =
       DevServerRecord.upsert(project.id, "1", "front", %{

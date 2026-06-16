@@ -130,14 +130,10 @@ export function InlineEditableMarkdown({
   }
 
   return (
-    <button
-      type="button"
-      disabled={disabled || saving}
-      onClick={() => setEditing(true)}
+    <div
       className={cn(
-        "group relative w-full rounded-xl border border-transparent px-3 py-2 text-left transition-colors",
-        "hover:border-border/60 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
-        disabled ? "cursor-default opacity-70" : "cursor-text",
+        "group relative w-full rounded-xl border border-transparent px-3 py-2 text-left",
+        disabled && "opacity-70",
       )}
     >
       {value.trim() ? (
@@ -148,9 +144,17 @@ export function InlineEditableMarkdown({
         <p className="pr-8 text-sm text-muted-foreground">{placeholder}</p>
       )}
       {!disabled ? (
-        <Pencil className="pointer-events-none absolute right-3 top-3 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+        <button
+          type="button"
+          disabled={saving}
+          aria-label="Edit description"
+          onClick={() => setEditing(true)}
+          className="absolute right-3 top-3 rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 group-hover:opacity-100"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
       ) : null}
-    </button>
+    </div>
   );
 }
 

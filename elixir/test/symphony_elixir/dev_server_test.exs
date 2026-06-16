@@ -110,8 +110,34 @@ defmodule SymphonyElixir.DevServerTest do
         %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front"}
       ])
 
-    assert {:ok, %{available: true, reason: nil, servers: []}} =
+    assert {:ok, %{available: true, reason: nil, servers: [%{slug: "front", status: "stopped"}]}} =
              DevServer.issue_targets(project.slug, "#1")
+  end
+
+  test "issue_targets returns a stopped placeholder for each configured serve step", %{project: project} do
+    enable_dev_server!(project)
+    create_issue_workspace!(project.slug, "1")
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Back", command: "docker compose up", role: "serve", working_dir: "backend"},
+        %{description: "Go", command: "go run .", role: "serve", working_dir: "goapi"},
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "frontend", primary: true}
+      ])
+
+    assert {:ok, %{available: true, reason: nil, servers: servers}} =
+             DevServer.issue_targets(project.slug, "#1")
+
+    assert length(servers) == 3
+
+    assert %{slug: "backend", working_dir: "backend", status: "stopped", primary: false} =
+             Enum.find(servers, &(&1.slug == "backend"))
+
+    assert %{slug: "goapi", working_dir: "goapi", status: "stopped", primary: false} =
+             Enum.find(servers, &(&1.slug == "goapi"))
+
+    assert %{slug: "frontend", working_dir: "frontend", status: "stopped", primary: true} =
+             Enum.find(servers, &(&1.slug == "frontend"))
   end
 
   test "issue_targets is available when enabled workspace exists and serve steps are configured", %{project: project} do
@@ -123,7 +149,7 @@ defmodule SymphonyElixir.DevServerTest do
         %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front"}
       ])
 
-    assert {:ok, %{available: true, reason: nil, servers: []}} =
+    assert {:ok, %{available: true, reason: nil, servers: [%{slug: "front", status: "stopped"}]}} =
              DevServer.issue_targets(project.slug, "#1")
   end
 

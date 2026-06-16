@@ -832,6 +832,29 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp apply_successful_completion(%State{} = state, running_entry, issue_id) do
+    case Map.get(running_entry, :agent_outcome) do
+      {:incomplete, {:validate_gate, _violations}} ->
+        Logger.warning(
+          "Validate gate incomplete for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier}; skipping completion transition"
+        )
+
+        maybe_annotate_incomplete(running_entry, issue_id)
+        complete_issue(state, issue_id)
+
+      {:incomplete, {:publish_gate, _violations}} ->
+        Logger.warning(
+          "Publish gate incomplete for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier}; skipping completion transition"
+        )
+
+        maybe_annotate_incomplete(running_entry, issue_id)
+        complete_issue(state, issue_id)
+
+      _other ->
+        apply_gated_successful_completion(state, running_entry, issue_id)
+    end
+  end
+
+  defp apply_gated_successful_completion(%State{} = state, running_entry, issue_id) do
     issue = running_entry.issue
     workspace = Workspace.path_for_issue(issue)
     deps = publish_contract_deps_for(issue, state.publish_contract_deps)
@@ -1269,16 +1292,26 @@ defmodule SymphonyElixir.Orchestrator do
   @doc false
   @spec incomplete_workpad_comment_body(term()) :: String.t()
   def incomplete_workpad_comment_body(reason) do
+    handoff_note = incomplete_handoff_note(reason)
+
     """
     ## Codex Workpad
 
     > ⚠️ Symphony auto-note: this agent run ended **incomplete** (#{incomplete_reason_text(reason)}).
     >
-    > - No pull request was confirmed for this issue at handoff.
-    > - The issue was moved to its review state automatically by the orchestrator, not by the agent finishing the work.
+    > #{handoff_note}
     > - Please review the workspace state and move the issue back to Rework (or re-dispatch) if the task is not actually done.
     """
   end
+
+  defp incomplete_handoff_note({:validate_gate, _}),
+    do: "- The issue was **not** moved to review — evidence/validation is missing or failing."
+
+  defp incomplete_handoff_note({:publish_gate, _}),
+    do: "- The issue was **not** moved to review — publish requirements (PRs / pushed branches) are unsatisfied."
+
+  defp incomplete_handoff_note(_),
+    do: "- No pull request was confirmed for this issue at handoff.\n    > - The issue was moved to its review state automatically by the orchestrator, not by the agent finishing the work."
 
   defp incomplete_reason_text(:max_turns), do: "reached the configured max turns with the issue still active"
 

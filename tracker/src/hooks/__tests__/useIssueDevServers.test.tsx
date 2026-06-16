@@ -11,6 +11,7 @@ vi.mock("@/services/issueDevServers", () => ({
   startIssueDevServers: vi.fn(),
   stopIssueDevServers: vi.fn(),
   startPublicTunnel: vi.fn(),
+  subscribeIssueDevServers: vi.fn(),
 }));
 
 const readyResponse: IssueDevServersResponse = {
@@ -61,10 +62,15 @@ const startingResponse: IssueDevServersResponse = {
 describe("useIssueDevServers", () => {
   const fetchIssueDevServers = vi.mocked(issueDevServersService.fetchIssueDevServers);
   const startIssueDevServers = vi.mocked(issueDevServersService.startIssueDevServers);
+  const subscribeIssueDevServers = vi.mocked(issueDevServersService.subscribeIssueDevServers);
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    subscribeIssueDevServers.mockImplementation((_projectSlug, _issueIdentifier, handlers) => {
+      handlers.onSnapshot(readyResponse);
+      return () => undefined;
+    });
   });
 
   afterEach(() => {
@@ -72,33 +78,30 @@ describe("useIssueDevServers", () => {
     vi.restoreAllMocks();
   });
 
-  it("fetches issue dev servers on mount", async () => {
-    fetchIssueDevServers.mockResolvedValueOnce(readyResponse);
-
+  it("receives the initial snapshot from the SSE stream", async () => {
     const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
 
     await waitFor(() => expect(result.current.data).toEqual(readyResponse));
-    expect(fetchIssueDevServers).toHaveBeenCalledWith("macro-markets", "MAC-1");
+    expect(subscribeIssueDevServers).toHaveBeenCalledWith("macro-markets", "MAC-1", expect.any(Object));
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
   });
 
-  it("does not fetch when identifiers are missing", () => {
+  it("does not subscribe when identifiers are missing", () => {
     const { result } = renderHook(() => useIssueDevServers(null, "MAC-1"));
 
-    expect(fetchIssueDevServers).not.toHaveBeenCalled();
+    expect(subscribeIssueDevServers).not.toHaveBeenCalled();
     expect(result.current.data).toBeNull();
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
   });
 
   it("updates data after starting issue dev servers", async () => {
-    fetchIssueDevServers.mockResolvedValueOnce(stoppedResponse);
     startIssueDevServers.mockResolvedValueOnce(startingResponse);
 
     const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
 
-    await waitFor(() => expect(result.current.data).toEqual(stoppedResponse));
+    await waitFor(() => expect(result.current.data).toEqual(readyResponse));
 
     await act(async () => {
       await result.current.start();
@@ -111,12 +114,11 @@ describe("useIssueDevServers", () => {
 
   it("does not start another action while one is already in flight", async () => {
     const startDeferred = createDeferred<IssueDevServersResponse>();
-    fetchIssueDevServers.mockResolvedValueOnce(stoppedResponse);
     startIssueDevServers.mockReturnValue(startDeferred.promise);
 
     const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
 
-    await waitFor(() => expect(result.current.data).toEqual(stoppedResponse));
+    await waitFor(() => expect(result.current.data).toEqual(readyResponse));
 
     let firstStart: Promise<void>;
     let secondStart: Promise<void>;
@@ -137,7 +139,6 @@ describe("useIssueDevServers", () => {
   it("does not let a stale action clear the current issue action guard", async () => {
     const issueAStart = createDeferred<IssueDevServersResponse>();
     const issueBStart = createDeferred<IssueDevServersResponse>();
-    fetchIssueDevServers.mockResolvedValue(stoppedResponse);
     startIssueDevServers.mockReturnValueOnce(issueAStart.promise).mockReturnValueOnce(issueBStart.promise);
 
     const { rerender, result } = renderHook(
@@ -145,7 +146,7 @@ describe("useIssueDevServers", () => {
       { initialProps: { issueIdentifier: "MAC-1" } },
     );
 
-    await waitFor(() => expect(result.current.data).toEqual(stoppedResponse));
+    await waitFor(() => expect(result.current.data).toEqual(readyResponse));
 
     let issueAStartPromise: Promise<void>;
     act(() => {
@@ -154,7 +155,7 @@ describe("useIssueDevServers", () => {
     expect(startIssueDevServers).toHaveBeenCalledWith("macro-markets", "MAC-1");
 
     rerender({ issueIdentifier: "MAC-2" });
-    await waitFor(() => expect(fetchIssueDevServers).toHaveBeenCalledWith("macro-markets", "MAC-2"));
+    await waitFor(() => expect(subscribeIssueDevServers).toHaveBeenCalledWith("macro-markets", "MAC-2", expect.any(Object)));
 
     let issueBStartPromise: Promise<void>;
     act(() => {
@@ -180,44 +181,44 @@ describe("useIssueDevServers", () => {
     });
   });
 
-  it("polls while a server is starting", async () => {
-    vi.useFakeTimers();
-    fetchIssueDevServers.mockResolvedValueOnce(startingResponse).mockResolvedValueOnce(readyResponse);
+  it("applies live SSE updates", async () => {
+    let emitUpdate: (() => void) | undefined;
+    subscribeIssueDevServers.mockImplementation((_projectSlug, _issueIdentifier, handlers) => {
+      handlers.onSnapshot(stoppedResponse);
+      emitUpdate = () => handlers.onUpdate(startingResponse);
+      return () => undefined;
+    });
 
     const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
 
-    await act(async () => {});
+    await waitFor(() => expect(result.current.data).toEqual(stoppedResponse));
+
+    act(() => {
+      emitUpdate?.();
+    });
 
     expect(result.current.data).toEqual(startingResponse);
-    expect(fetchIssueDevServers).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
-    });
-
-    expect(result.current.data).toEqual(readyResponse);
-    expect(fetchIssueDevServers).toHaveBeenCalledTimes(2);
   });
 
-  it("does not poll while dev servers are stopped", async () => {
-    vi.useFakeTimers();
-    fetchIssueDevServers.mockResolvedValue(stoppedResponse);
-
-    renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
-
-    await act(async () => {});
-
-    expect(fetchIssueDevServers).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
+  it("falls back to REST when the SSE stream fails", async () => {
+    fetchIssueDevServers.mockResolvedValueOnce(stoppedResponse);
+    subscribeIssueDevServers.mockImplementation((_projectSlug, _issueIdentifier, handlers) => {
+      handlers.onError?.();
+      return () => undefined;
     });
 
-    expect(fetchIssueDevServers).toHaveBeenCalledTimes(1);
+    const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
+
+    await waitFor(() => expect(result.current.data).toEqual(stoppedResponse));
+    expect(fetchIssueDevServers).toHaveBeenCalledWith("macro-markets", "MAC-1");
   });
 
-  it("sets error when fetching fails", async () => {
+  it("sets error when fetching fails after SSE fallback", async () => {
     fetchIssueDevServers.mockRejectedValueOnce(new Error("boom"));
+    subscribeIssueDevServers.mockImplementation((_projectSlug, _issueIdentifier, handlers) => {
+      handlers.onError?.();
+      return () => undefined;
+    });
 
     const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
 

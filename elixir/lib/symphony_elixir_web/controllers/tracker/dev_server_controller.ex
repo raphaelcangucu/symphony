@@ -9,7 +9,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
   alias SymphonyElixir.DevServer.Manager
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Tracker.IssueAdapter
-  alias SymphonyElixirWeb.{DevServerPresenter, TrackerErrors}
+  alias SymphonyElixirWeb.{DevServerEventStream, DevServerPresenter, TrackerErrors}
 
   @availability_action_error_reasons ~w(disabled workspace_missing no_serve_step no_free_port lock_unavailable crashed)a
 
@@ -87,6 +87,33 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
       else
         {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
         {:error, :not_found} -> TrackerErrors.render(conn, :dev_server_not_found)
+      end
+    end)
+  end
+
+  @spec events(Conn.t(), map()) :: Conn.t()
+  def events(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    with_valid_issue(conn, project_slug, identifier, fn ->
+      DevServerEventStream.stream(conn, project_slug, identifier)
+    end)
+  end
+
+  @spec output(Conn.t(), map()) :: Conn.t()
+  def output(conn, %{"project_slug" => project_slug, "identifier" => identifier, "server_id" => server_id}) do
+    with_valid_issue(conn, project_slug, identifier, fn ->
+      with {:ok, id} <- parse_server_id(server_id) do
+        case Manager.capture_server_output(project_slug, identifier, id) do
+          {:ok, payload} ->
+            json(conn, %{data: payload})
+
+          {:error, :not_found} ->
+            TrackerErrors.render(conn, :dev_server_not_found)
+
+          {:error, message} when is_binary(message) ->
+            TrackerErrors.render(conn, message)
+        end
+      else
+        {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
       end
     end)
   end

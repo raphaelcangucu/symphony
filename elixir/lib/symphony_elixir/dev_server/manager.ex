@@ -17,7 +17,8 @@ defmodule SymphonyElixir.DevServer.Manager do
   @registry Module.concat(__MODULE__, Registry)
   @instance_supervisor Module.concat(__MODULE__, InstanceSupervisor)
   @reservation_table Module.concat(__MODULE__, PortReservations)
-  @initial_boot_timeout_ms 250
+  @prior_instance_ready_timeout_ms 600_000
+  @prior_instance_ready_poll_ms 2_000
   @serve_with_setup_probe_interval_ms 2_000
   @serve_with_setup_max_probe_attempts 300
 
@@ -175,6 +176,8 @@ defmodule SymphonyElixir.DevServer.Manager do
 
     case Context.get_project(project_slug) do
       {:ok, project} ->
+        ensure_serve_records(project, project_slug, identifier)
+
         project.id
         |> DevServerRecord.list_for_issue(identifier)
         |> Enum.map(&record_to_map/1)
@@ -185,6 +188,34 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   def list_for_issue(_project_slug, _identifier), do: []
+
+  @spec capture_server_output(String.t(), String.t(), pos_integer()) ::
+          {:ok, %{output: String.t(), session_name: String.t()}} | {:error, :not_found | String.t()}
+  def capture_server_output(project_slug, identifier, server_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 do
+    identifier = canonical_identifier(identifier)
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         %DevServerRecord{slug: slug, session_name: session_name} <-
+           DevServerRecord.get_for_issue(project.id, identifier, server_id),
+         true <- is_binary(slug) do
+      session_name = session_name || TerminalRegistry.dev_session_name(project_slug, identifier, slug)
+
+      case TerminalRegistry.capture_dev_session(project_slug, identifier, slug) do
+        {:ok, output} ->
+          {:ok, %{output: output, session_name: session_name}}
+
+        {:error, message} when is_binary(message) ->
+          {:error, message}
+      end
+    else
+      nil -> {:error, :not_found}
+      {:error, _reason} -> {:error, :not_found}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  def capture_server_output(_project_slug, _identifier, _server_id), do: {:error, :not_found}
 
   @spec live_ports() :: [pos_integer()]
   def live_ports do
@@ -417,14 +448,50 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp await_reserved_instance_boot(pid, key) do
-    case await_initial_boot(pid) do
+    case await_instance_ready(pid) do
       :ok ->
         {:ok, {pid, key}}
 
-      {:error, reason} ->
+      {:error, :crashed} ->
         stop_instance(pid)
-        {:error, reason}
+        {:error, :crashed}
+
+      :timeout ->
+        Logger.warning("Dev server prior instance not ready before next slug; proceeding slug=#{inspect(key)}")
+        {:ok, {pid, key}}
     end
+  end
+
+  defp await_instance_ready(pid) when is_pid(pid) do
+    deadline = System.monotonic_time(:millisecond) + @prior_instance_ready_timeout_ms
+    await_instance_ready(pid, deadline)
+  end
+
+  defp await_instance_ready(pid, deadline) when is_pid(pid) do
+    case safe_instance_status(pid) do
+      :ready ->
+        :ok
+
+      :crashed ->
+        {:error, :crashed}
+
+      :stopped ->
+        {:error, :crashed}
+
+      _status ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          :timeout
+        else
+          Process.sleep(@prior_instance_ready_poll_ms)
+          await_instance_ready(pid, deadline)
+        end
+    end
+  end
+
+  defp safe_instance_status(pid) do
+    Instance.status(pid)
+  catch
+    :exit, _reason -> :stopped
   end
 
   defp start_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
@@ -658,17 +725,6 @@ defmodule SymphonyElixir.DevServer.Manager do
     |> release_reservations()
   end
 
-  defp await_initial_boot(pid) when is_pid(pid) do
-    task = Task.async(fn -> Instance.status(pid) end)
-
-    case Task.yield(task, @initial_boot_timeout_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, :crashed} -> {:error, :crashed}
-      {:ok, _status} -> :ok
-      {:exit, reason} -> {:error, reason}
-      nil -> :ok
-    end
-  end
-
   defp instance_port(pid) when is_pid(pid) do
     case :sys.get_state(pid, 100) do
       %{port: port} when is_integer(port) and port > 0 -> [port]
@@ -689,6 +745,36 @@ defmodule SymphonyElixir.DevServer.Manager do
       primary: record.primary,
       session_name: record.session_name
     }
+  end
+
+  defp ensure_serve_records(project, project_slug, identifier) do
+    configured = DevEnv.list_serve_steps(project_slug)
+    serve_steps = unique_serve_steps(project_slug, identifier, configured)
+
+    existing_slugs =
+      project.id
+      |> DevServerRecord.list_for_issue(identifier)
+      |> MapSet.new(& &1.slug)
+
+    Enum.each(serve_steps, fn step ->
+      slug = Map.fetch!(step, :slug)
+
+      unless MapSet.member?(existing_slugs, slug) do
+        case DevServerRecord.upsert(project.id, identifier, slug, %{
+               working_dir: Map.get(step, :working_dir),
+               status: "stopped",
+               primary: Map.get(step, :primary, false)
+             }) do
+          {:ok, _record} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning(
+              "dev server placeholder upsert failed slug=#{slug} issue=#{identifier} reason=#{inspect(reason)}"
+            )
+        end
+      end
+    end)
   end
 
   defp project_runtime_options(project) do

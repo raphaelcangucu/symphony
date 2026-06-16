@@ -17,6 +17,10 @@ defmodule SymphonyElixirWeb.Router do
     plug(SymphonyElixirWeb.TrackerAuth)
   end
 
+  pipeline :tracker_sse do
+    plug(SymphonyElixirWeb.TrackerAuth)
+  end
+
   scope "/", SymphonyElixirWeb do
     get("/dashboard.css", StaticAssetController, :dashboard_css)
     get("/vendor/phoenix_html/phoenix_html.js", StaticAssetController, :phoenix_html_js)
@@ -30,6 +34,12 @@ defmodule SymphonyElixirWeb.Router do
     pipe_through(:browser)
 
     get("/", RootRedirectController, :index)
+  end
+
+  scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
+    pipe_through(:tracker_sse)
+
+    get("/projects/:project_slug/issues/:identifier/dev_servers/events", DevServerController, :events)
   end
 
   scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
@@ -145,6 +155,7 @@ defmodule SymphonyElixirWeb.Router do
     delete("/projects/:project_slug/issues/:identifier/blockers/:blocker_identifier", BlockerController, :delete)
     post("/projects/:project_slug/issues/:identifier/terminal", TerminalController, :create)
     get("/projects/:project_slug/issues/:identifier/dev_servers", DevServerController, :index)
+    get("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/output", DevServerController, :output)
     post("/projects/:project_slug/issues/:identifier/dev_servers/start", DevServerController, :start)
     post("/projects/:project_slug/issues/:identifier/dev_servers/stop", DevServerController, :stop)
     post("/projects/:project_slug/issues/:identifier/dev_servers/restart", DevServerController, :restart)

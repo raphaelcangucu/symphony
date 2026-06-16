@@ -37,10 +37,13 @@ defmodule SymphonyElixirWeb.TrackerAuth do
   def valid_token?(_provided_token, _expected_token), do: false
 
   defp bearer_token(conn) do
-    conn
-    |> get_req_header("authorization")
-    |> List.first()
-    |> parse_bearer_token()
+    header_token =
+      conn
+      |> get_req_header("authorization")
+      |> List.first()
+      |> parse_bearer_token()
+
+    header_token || conn.query_params["token"] || conn.params["token"]
   end
 
   defp parse_bearer_token("Bearer " <> token), do: token

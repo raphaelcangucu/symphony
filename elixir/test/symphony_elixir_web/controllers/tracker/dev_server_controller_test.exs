@@ -137,6 +137,31 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
            }
   end
 
+  test "output returns 404 for an unknown server", %{identifier: identifier} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers/999/output"
+      )
+
+    assert json_response(conn, 404) == %{
+             "error" => %{"code" => "dev_server_not_found", "message" => "Dev server not found"}
+           }
+  end
+
+  test "index accepts token query param for EventSource auth", %{identifier: identifier} do
+    conn = get(build_conn(), "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers?token=secret")
+
+    assert json_response(conn, 200) == %{
+             "data" => %{
+               "available" => false,
+               "reason" => "disabled",
+               "servers" => [],
+               "tunnel" => %{"enabled" => false, "running" => false}
+             }
+           }
+  end
+
   defp authorized_conn do
     build_conn()
     |> put_req_header("authorization", "Bearer secret")
