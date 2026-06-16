@@ -8,6 +8,7 @@ defmodule SymphonyElixir.DevServer.Manager do
   require Logger
 
   alias SymphonyElixir.Config
+  alias SymphonyElixir.DevServer.Broadcaster
   alias SymphonyElixir.DevServer.Instance
   alias SymphonyElixir.DevServer.PortAllocator
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord, ProjectSetup}
@@ -21,6 +22,9 @@ defmodule SymphonyElixir.DevServer.Manager do
   @prior_instance_ready_poll_ms 2_000
   @serve_with_setup_probe_interval_ms 2_000
   @serve_with_setup_max_probe_attempts 300
+  @probe_connect_timeout_ms 1_000
+  @probe_loopback_host "127.0.0.1"
+  @tracked_live_statuses ~w(pending provisioning starting ready)
 
   @type start_error ::
           :disabled
@@ -180,6 +184,7 @@ defmodule SymphonyElixir.DevServer.Manager do
 
         project.id
         |> DevServerRecord.list_for_issue(identifier)
+        |> Enum.map(&reconcile_record_status(&1, project, project_slug, identifier))
         |> Enum.map(&record_to_map/1)
 
       {:error, _reason} ->
@@ -745,6 +750,155 @@ defmodule SymphonyElixir.DevServer.Manager do
       primary: record.primary,
       session_name: record.session_name
     }
+  end
+
+  defp reconcile_record_status(%DevServerRecord{} = record, project, project_slug, identifier) do
+    record
+    |> reconcile_live_instance_state(project, project_slug, identifier)
+    |> reconcile_port_truth(project, project_slug, identifier)
+  end
+
+  defp reconcile_live_instance_state(record, project, project_slug, identifier) do
+    case running_instance_pid(project_slug, identifier, record.slug) do
+      {:ok, pid} ->
+        reconcile_with_live_instance(record, project, project_slug, identifier, pid)
+
+      {:error, :not_running} ->
+        reconcile_without_live_instance(record, project, project_slug, identifier)
+    end
+  end
+
+  defp reconcile_port_truth(record, project, project_slug, identifier) do
+    step = serve_step_map(project_slug, identifier, record.slug)
+
+    cond do
+      port_ready?(record.port, step) and record.status != "ready" ->
+        persist_reconciled_status(record, project, project_slug, identifier, "ready")
+
+      record.status == "ready" and not port_ready?(record.port, step) ->
+        persist_reconciled_status(record, project, project_slug, identifier, "crashed")
+
+      true ->
+        record
+    end
+  end
+
+  defp reconcile_with_live_instance(record, project, project_slug, identifier, pid) do
+    step = serve_step_map(project_slug, identifier, record.slug)
+
+    case safe_instance_status(pid) do
+      :ready ->
+        if stale_ready_port?(record, step) do
+          persist_reconciled_status(record, project, project_slug, identifier, "crashed")
+        else
+          record
+        end
+
+      status when status in [:crashed, :stopped] ->
+        if port_ready?(record.port, step) do
+          persist_reconciled_status(record, project, project_slug, identifier, "ready")
+        else
+          persist_reconciled_status(record, project, project_slug, identifier, Atom.to_string(status))
+        end
+
+      _ ->
+        if port_ready?(record.port, step) do
+          persist_reconciled_status(record, project, project_slug, identifier, "ready")
+        else
+          record
+        end
+    end
+  end
+
+  defp reconcile_without_live_instance(record, project, project_slug, identifier) do
+    step = serve_step_map(project_slug, identifier, record.slug)
+
+    cond do
+      record.status in @tracked_live_statuses ->
+        reconcile_stale_active_record(record, project, project_slug, identifier, step)
+
+      record.status in ["stopped", "crashed"] and port_ready?(record.port, step) ->
+        persist_reconciled_status(record, project, project_slug, identifier, "ready")
+
+      true ->
+        record
+    end
+  end
+
+  defp reconcile_stale_active_record(record, project, project_slug, identifier, step) do
+    if record.status == "ready" and port_ready?(record.port, step) do
+      record
+    else
+      persist_reconciled_status(record, project, project_slug, identifier, "crashed")
+    end
+  end
+
+  defp stale_ready_port?(record, step) do
+    not port_ready?(record.port, step)
+  end
+
+  defp serve_step_map(project_slug, identifier, slug) do
+    case serve_step_for_slug(project_slug, identifier, slug) do
+      {:ok, step} -> step_to_map(step)
+      {:error, _reason} -> %{ready_probe: "tcp", ready_path: "/"}
+    end
+  end
+
+  defp port_ready?(port, step) when is_integer(port) and port > 0 do
+    ready_probe = Map.get(step, :ready_probe) || Map.get(step, "ready_probe") || "tcp"
+    ready_path = Map.get(step, :ready_path) || Map.get(step, "ready_path") || "/"
+    probe_port(@probe_loopback_host, port, ready_probe, ready_path) == :ok
+  end
+
+  defp port_ready?(_port, _step), do: false
+
+  defp probe_port(host, port, "http", ready_path) do
+    url = "http://#{host}:#{port}#{normalize_probe_path(ready_path)}"
+
+    case Req.get(url, retry: false, receive_timeout: @probe_connect_timeout_ms) do
+      {:ok, %{status: status}} when status in 200..499 -> :ok
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp probe_port(host, port, _ready_probe, _ready_path) do
+    case :gen_tcp.connect(String.to_charlist(host), port, [:binary, active: false], @probe_connect_timeout_ms) do
+      {:ok, socket} ->
+        :gen_tcp.close(socket)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp normalize_probe_path(path) when is_binary(path) do
+    case String.trim(path) do
+      "" -> "/"
+      "/" <> _rest = normalized -> normalized
+      normalized -> "/" <> normalized
+    end
+  end
+
+  defp persist_reconciled_status(record, project, project_slug, identifier, status)
+       when is_binary(status) do
+    if record.status == status do
+      record
+    else
+      case DevServerRecord.upsert(project.id, identifier, record.slug, %{status: status}) do
+        {:ok, updated} ->
+          Broadcaster.notify(project_slug, identifier)
+          updated
+
+        {:error, reason} ->
+          Logger.warning(
+            "dev server status reconciliation failed slug=#{record.slug} issue=#{identifier} reason=#{inspect(reason)}"
+          )
+
+          record
+      end
+    end
   end
 
   defp ensure_serve_records(project, project_slug, identifier) do

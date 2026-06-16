@@ -98,7 +98,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
         working_dir: "front",
         port: 4101,
         url: "http://127.0.0.1:4101/",
-        status: "ready",
+        status: "stopped",
         primary: true,
         session_name: "sym-dev-front"
       })
@@ -108,7 +108,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
         working_dir: "api",
         port: 4102,
         url: "http://127.0.0.1:4102/",
-        status: "starting",
+        status: "stopped",
         primary: false,
         session_name: "sym-dev-api"
       })
@@ -120,7 +120,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
                working_dir: "front",
                port: 4101,
                url: "http://127.0.0.1:4101/",
-               status: "ready",
+               status: "stopped",
                primary: true,
                session_name: "sym-dev-front"
              },
@@ -130,7 +130,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
                working_dir: "api",
                port: 4102,
                url: "http://127.0.0.1:4102/",
-               status: "starting",
+               status: "stopped",
                primary: false,
                session_name: "sym-dev-api"
              }
@@ -140,13 +140,74 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert secondary_id == secondary.id
   end
 
+  test "list_for_issue promotes stopped servers back to ready when the port is healthy", %{project: project} do
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Back",
+          command: "docker compose up",
+          role: "serve",
+          working_dir: "backend",
+          ready_probe: "http",
+          ready_path: "/health"
+        }
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1878", "backend", %{
+        working_dir: "backend",
+        port: 4100,
+        url: "http://127.0.0.1:4100/graphiql",
+        status: "stopped",
+        primary: false,
+        session_name: "sym-dev-backend"
+      })
+
+    case Manager.list_for_issue(project.slug, "1878") do
+      [%{id: id, status: "ready"}] ->
+        assert id == record.id
+        assert %DevServerRecord{status: "ready"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
+
+      [%{id: id, status: "stopped"}] ->
+        assert id == record.id
+    end
+  end
+
+  test "list_for_issue marks stale ready servers as crashed when the port is down", %{project: project} do
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Front",
+          command: "npm run dev",
+          role: "serve",
+          working_dir: "front",
+          ready_probe: "http",
+          ready_path: "/"
+        }
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1878", "front", %{
+        working_dir: "front",
+        port: 41_099,
+        url: "http://127.0.0.1:41099/",
+        status: "ready",
+        primary: true,
+        session_name: "sym-dev-front"
+      })
+
+    assert [%{id: id, status: "crashed"}] = Manager.list_for_issue(project.slug, "1878")
+    assert id == record.id
+    assert %DevServerRecord{status: "crashed"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
+  end
+
   test "list_for_issue canonicalizes identifiers", %{project: project} do
     {:ok, row} =
       DevServerRecord.upsert(project.id, "1", "front", %{
         working_dir: "front",
         port: 4101,
         url: "http://127.0.0.1:4101/",
-        status: "ready",
+        status: "stopped",
         primary: true,
         session_name: "sym-dev-front"
       })
