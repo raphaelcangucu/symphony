@@ -823,6 +823,15 @@ defmodule SymphonyElixir.Config do
   @spec editor_base_url() :: String.t()
   def editor_base_url, do: InstanceConfig.editor_base_url()
 
+  @spec preview_pool_range() :: [pos_integer()]
+  def preview_pool_range, do: InstanceConfig.preview_pool_range()
+
+  @spec preview_slots_per_project() :: pos_integer()
+  def preview_slots_per_project, do: InstanceConfig.preview_slots_per_project()
+
+  @spec preview_ports_per_slot() :: pos_integer()
+  def preview_ports_per_slot, do: InstanceConfig.preview_ports_per_slot()
+
   @spec dev_server_enabled?() :: boolean()
   def dev_server_enabled? do
     get_in(validated_workflow_options(), [:dev_server, :enabled])
