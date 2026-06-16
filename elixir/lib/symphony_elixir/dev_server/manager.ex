@@ -10,7 +10,8 @@ defmodule SymphonyElixir.DevServer.Manager do
   alias SymphonyElixir.Config
   alias SymphonyElixir.DevServer.Broadcaster
   alias SymphonyElixir.DevServer.Instance
-  alias SymphonyElixir.DevServer.PortAllocator
+  alias SymphonyElixir.DevServer.LeaseStore
+  alias SymphonyElixir.DevServer.PortPlan
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord, ProjectSetup}
   alias SymphonyElixir.Terminal.Registry, as: TerminalRegistry
   alias SymphonyElixir.Workspace
@@ -240,7 +241,8 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp do_start_for_issue(project, identifier, runtime_options) do
     with {:ok, workspace_path} <- issue_workspace_path(identifier),
          {:ok, serve_steps} <- serve_steps(project.slug, identifier),
-         {:ok, reserved_steps} <- reserve_ports(project.slug, identifier, serve_steps, runtime_options.dev_server_port_range) do
+         {:ok, reserved_steps} <-
+           reserve_ports(project, identifier, serve_steps, runtime_options.dev_server_port_range) do
       setup_issue_session(project.slug, identifier, workspace_path)
       start_instances(project, identifier, workspace_path, reserved_steps, runtime_options)
     end
@@ -256,7 +258,7 @@ defmodule SymphonyElixir.DevServer.Manager do
           with {:ok, workspace_path} <- issue_workspace_path(identifier),
                {:ok, step} <- serve_step_for_slug(project.slug, identifier, slug),
                {:ok, reserved_steps} <-
-                 reserve_ports(project.slug, identifier, [step], runtime_options.dev_server_port_range),
+                 reserve_ports(project, identifier, [step], runtime_options.dev_server_port_range),
                [{step, port, key}] <- reserved_steps do
             setup_issue_session(project.slug, identifier, workspace_path)
 
@@ -331,12 +333,18 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp reserve_ports(project_slug, identifier, serve_steps, port_range) do
-    serve_steps
-    |> Enum.reduce_while({:ok, []}, fn step, {:ok, reserved_steps} ->
-      claimed_ports = live_ports() ++ Enum.map(reserved_steps, fn {_step, port, _key} -> port end)
+  defp reserve_ports(project, identifier, serve_steps, port_range) do
+    ctx = allocation_context(project, identifier, port_range)
+    reserve_with_context(project.slug, identifier, serve_steps, ctx)
+  end
 
-      case PortAllocator.allocate(port_range, claimed_ports) do
+  defp reserve_with_context(project_slug, identifier, serve_steps, ctx) do
+    serve_steps
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {step, offset}, {:ok, reserved_steps} ->
+      claimed = live_ports() ++ Enum.map(reserved_steps, fn {_step, port, _key} -> port end)
+
+      case PortPlan.choose_port(ctx, offset, claimed) do
         {:ok, port} ->
           key = {project_slug, identifier, Map.fetch!(step, :slug)}
           reserve_port_for_key(key, port)
@@ -351,6 +359,90 @@ defmodule SymphonyElixir.DevServer.Manager do
       {:ok, reserved_steps} -> {:ok, Enum.reverse(reserved_steps)}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp allocation_context(project, identifier, port_range) do
+    pool = preview_pool_config()
+
+    case pinned_band(port_range, pool.ports_per_slot) do
+      {:ok, band_start, band_end, slots} ->
+        slot_index = lease_slot(project.id, identifier, slots)
+
+        %{
+          band: {band_start, band_end},
+          slot_index: slot_index,
+          ports_per_slot: pool.ports_per_slot,
+          pool_range: pool.pool_range,
+          auto?: false
+        }
+
+      :auto ->
+        auto_context(project, identifier, pool)
+    end
+  end
+
+  defp auto_context(project, identifier, pool) do
+    band_size = PortPlan.band_size(pool.slots_per_project, pool.ports_per_slot)
+    max_bands = PortPlan.max_bands(pool.pool_range, band_size)
+
+    case LeaseStore.ensure_band(project.id, max_bands) do
+      {:ok, band_index} ->
+        band_start = PortPlan.band_start(pool.pool_range, band_index, band_size)
+        slot_index = lease_slot(project.id, identifier, pool.slots_per_project)
+
+        %{
+          band: {band_start, band_start + band_size - 1},
+          slot_index: slot_index,
+          ports_per_slot: pool.ports_per_slot,
+          pool_range: pool.pool_range,
+          auto?: true
+        }
+
+      {:error, :no_free_band} ->
+        Logger.warning("Dev server preview bands exhausted; scanning pool project=#{project.slug}")
+        [pool_min, pool_max] = pool.pool_range
+
+        %{
+          band: {pool_min, pool_max},
+          slot_index: nil,
+          ports_per_slot: pool.ports_per_slot,
+          pool_range: pool.pool_range,
+          auto?: true
+        }
+    end
+  end
+
+  defp pinned_band(port_range, ports_per_slot) do
+    case port_range do
+      [a, b] when is_integer(a) and is_integer(b) and a > 0 and b > 0 ->
+        band_min = min(a, b)
+        band_max = max(a, b)
+        slots = div(band_max - band_min + 1, ports_per_slot)
+        {:ok, band_min, band_max, slots}
+
+      _auto ->
+        :auto
+    end
+  end
+
+  defp lease_slot(project_id, identifier, slots) do
+    case LeaseStore.ensure_slot(project_id, identifier, slots) do
+      {:ok, slot_index} ->
+        slot_index
+
+      {:error, :no_free_slot} ->
+        Logger.warning("Dev server preview slots exhausted; scanning band project_id=#{project_id} issue=#{identifier}")
+
+        nil
+    end
+  end
+
+  defp preview_pool_config do
+    %{
+      pool_range: Config.preview_pool_range(),
+      slots_per_project: Config.preview_slots_per_project(),
+      ports_per_slot: Config.preview_ports_per_slot()
+    }
   end
 
   defp setup_issue_session(project_slug, identifier, workspace_path) do
@@ -892,9 +984,7 @@ defmodule SymphonyElixir.DevServer.Manager do
           updated
 
         {:error, reason} ->
-          Logger.warning(
-            "dev server status reconciliation failed slug=#{record.slug} issue=#{identifier} reason=#{inspect(reason)}"
-          )
+          Logger.warning("dev server status reconciliation failed slug=#{record.slug} issue=#{identifier} reason=#{inspect(reason)}")
 
           record
       end
@@ -923,9 +1013,7 @@ defmodule SymphonyElixir.DevServer.Manager do
             :ok
 
           {:error, reason} ->
-            Logger.warning(
-              "dev server placeholder upsert failed slug=#{slug} issue=#{identifier} reason=#{inspect(reason)}"
-            )
+            Logger.warning("dev server placeholder upsert failed slug=#{slug} issue=#{identifier} reason=#{inspect(reason)}")
         end
       end
     end)

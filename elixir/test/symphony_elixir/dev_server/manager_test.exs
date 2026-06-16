@@ -366,6 +366,61 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.live_ports() == []
   end
 
+  test "auto-mode start leases a band and a per-issue slot", %{project: project} do
+    alias SymphonyElixir.DevServer.LeaseStore
+
+    enable_project_dev_server_auto!(project)
+    prepare_workspace!("1")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Broken", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert {:ok, 0} = LeaseStore.ensure_band(project.id, 78)
+    assert {:ok, 0} = LeaseStore.slot_for_issue(project.id, "1")
+    assert Manager.live_ports() == []
+  end
+
+  test "auto-mode gives distinct slots to distinct issues", %{project: project} do
+    alias SymphonyElixir.DevServer.LeaseStore
+
+    enable_project_dev_server_auto!(project)
+    prepare_workspace!("1")
+    prepare_workspace!("2")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Broken", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert Manager.start_for_issue(project.slug, "#2") == {:error, :crashed}
+
+    assert {:ok, 0} = LeaseStore.slot_for_issue(project.id, "1")
+    assert {:ok, 1} = LeaseStore.slot_for_issue(project.id, "2")
+  end
+
+  test "pinned port_range still leases a slot inside the pinned band", %{project: project} do
+    alias SymphonyElixir.DevServer.LeaseStore
+
+    enable_project_dev_server!(project, port_range: [4100, 4199], max_concurrent: 2)
+    prepare_workspace!("1")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Broken", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert [] = SymphonyElixir.Repo.all(SymphonyElixir.LocalTracker.PreviewBand)
+    assert {:ok, 0} = LeaseStore.slot_for_issue(project.id, "1")
+  end
+
   test "stop_instance_for_server returns not_found for an unknown server id", %{project: project} do
     assert Manager.stop_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
   end
@@ -473,5 +528,26 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
       Context.upsert_project_setup(project.slug, %{"workflow_markdown" => workflow_markdown})
 
     :ok
+  end
+
+  defp enable_project_dev_server_auto!(project) do
+    workflow_markdown =
+      SymphonyElixir.Workflow.to_markdown(
+        %{"dev_server" => %{"enabled" => true, "idle_timeout_ms" => 60_000}},
+        ""
+      )
+
+    {:ok, _setup} =
+      Context.upsert_project_setup(project.slug, %{"workflow_markdown" => workflow_markdown})
+
+    :ok
+  end
+
+  defp prepare_workspace!(identifier) do
+    workspace = SymphonyElixir.Workspace.path_for_issue(identifier)
+    File.rm_rf!(workspace)
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf(workspace) end)
+    workspace
   end
 end
