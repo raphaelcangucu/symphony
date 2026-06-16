@@ -143,53 +143,61 @@ defmodule SymphonyElixir.DevServer.Reconciler do
   end
 
   defp gc_preview_slots(wait_state_issues) do
-    leased = LeaseStore.leased_issue_slots()
-
-    if leased != [] do
-      slugs_by_id = Map.new(Context.list_projects(), &{&1.id, &1.slug})
-
-      leased_with_slug =
-        Enum.flat_map(leased, fn {project_id, identifier, inserted_at} ->
-          case Map.get(slugs_by_id, project_id) do
-            nil -> [{nil, project_id, identifier}]
-            slug -> [{slug, identifier, inserted_at, project_id}]
-          end
-        end)
-
-      {orphaned, resolvable} =
-        Enum.split_with(leased_with_slug, fn
-          {nil, _project_id, _identifier} -> true
-          _resolved -> false
-        end)
-
-      # Slots whose project no longer exists are always released.
-      Enum.each(orphaned, fn {nil, project_id, identifier} ->
-        LeaseStore.release_slot(project_id, identifier)
-      end)
-
-      alive = alive_issue_keys(wait_state_issues)
-      now = DateTime.utc_now()
-
-      ids_by_slug_identifier =
-        Map.new(resolvable, fn {slug, identifier, _inserted_at, project_id} ->
-          {{slug, identifier}, project_id}
-        end)
-
-      resolvable
-      |> Enum.map(fn {slug, identifier, inserted_at, _project_id} ->
-        {slug, identifier, inserted_at}
-      end)
-      |> slots_to_release(alive, now)
-      |> Enum.each(fn {_slug, identifier} = key ->
-        project_id = Map.fetch!(ids_by_slug_identifier, key)
-        LeaseStore.release_slot(project_id, identifier)
-      end)
+    case LeaseStore.leased_issue_slots() do
+      [] -> :ok
+      leased -> sweep_leased_slots(leased, wait_state_issues)
     end
   rescue
     exception -> Logger.debug("Dev server preview slot GC skipped reason=#{inspect(exception)}")
   catch
     kind, reason ->
       Logger.debug("Dev server preview slot GC skipped reason=#{inspect({kind, reason})}")
+  end
+
+  defp sweep_leased_slots(leased, wait_state_issues) do
+    slugs_by_id = Map.new(Context.list_projects(), &{&1.id, &1.slug})
+    {orphaned, resolvable} = split_leases_by_project(leased, slugs_by_id)
+
+    # Slots whose project no longer exists are always released.
+    Enum.each(orphaned, fn {project_id, identifier} ->
+      LeaseStore.release_slot(project_id, identifier)
+    end)
+
+    release_stale_slots(resolvable, wait_state_issues)
+  end
+
+  defp split_leases_by_project(leased, slugs_by_id) do
+    {orphaned, resolvable} =
+      Enum.reduce(leased, {[], []}, fn {project_id, identifier, inserted_at}, {orphaned, resolvable} ->
+        case Map.get(slugs_by_id, project_id) do
+          nil -> {[{project_id, identifier} | orphaned], resolvable}
+          slug -> {orphaned, [{slug, identifier, inserted_at, project_id} | resolvable]}
+        end
+      end)
+
+    {Enum.reverse(orphaned), Enum.reverse(resolvable)}
+  end
+
+  defp release_stale_slots(resolvable, wait_state_issues) do
+    alive = alive_issue_keys(wait_state_issues)
+    now = DateTime.utc_now()
+    ids_by_slug_identifier = ids_by_slug_identifier(resolvable)
+
+    resolvable
+    |> Enum.map(fn {slug, identifier, inserted_at, _project_id} ->
+      {slug, identifier, inserted_at}
+    end)
+    |> slots_to_release(alive, now)
+    |> Enum.each(fn {_slug, identifier} = key ->
+      project_id = Map.fetch!(ids_by_slug_identifier, key)
+      LeaseStore.release_slot(project_id, identifier)
+    end)
+  end
+
+  defp ids_by_slug_identifier(resolvable) do
+    Map.new(resolvable, fn {slug, identifier, _inserted_at, project_id} ->
+      {{slug, identifier}, project_id}
+    end)
   end
 
   defp alive_issue_keys(wait_state_issues) do
