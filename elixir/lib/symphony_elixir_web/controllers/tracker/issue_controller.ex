@@ -82,7 +82,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
         |> normalize_update_attrs(project)
 
       if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", "cursor", nil] do
-        TrackerErrors.validation(conn, "agent must be codex, claude, cursor, or null")
+        TrackerErrors.validation_msg(conn, "agent must be codex, claude, cursor, or null")
       else
         case IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
           {:ok, issue} ->
@@ -152,7 +152,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       json(conn, %{data: result})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
-      {:error, :invalid_action} -> TrackerErrors.validation(conn, "action must be resume, restart, hard_reset, stop, or continue_work")
+      {:error, :invalid_action} ->
+        TrackerErrors.validation_msg(conn, "action must be resume, restart, hard_reset, stop, or continue_work")
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end

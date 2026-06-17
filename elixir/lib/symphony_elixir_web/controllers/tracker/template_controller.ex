@@ -50,7 +50,7 @@ defmodule SymphonyElixirWeb.Tracker.TemplateController do
   def import(conn, %{"yaml" => yaml}) when is_binary(yaml) do
     case Templates.import_yaml(yaml) do
       {:ok, template} -> conn |> put_status(:created) |> json(%{data: TemplatePresenter.template(template)})
-      {:error, :invalid_yaml} -> TrackerErrors.validation(conn, "Invalid YAML")
+      {:error, :invalid_yaml} -> TrackerErrors.validation_msg(conn, "Invalid YAML")
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end

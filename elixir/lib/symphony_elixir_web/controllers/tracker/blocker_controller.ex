@@ -41,7 +41,7 @@ defmodule SymphonyElixirWeb.Tracker.BlockerController do
     end
   end
 
-  def create(conn, _params), do: TrackerErrors.validation(conn, "target_identifier is required")
+  def create(conn, _params), do: TrackerErrors.validation_msg(conn, "target_identifier is required")
 
   @spec delete(Conn.t(), map()) :: Conn.t()
   def delete(conn, %{

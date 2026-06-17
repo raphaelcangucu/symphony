@@ -190,7 +190,14 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/clone_jobs/:id/retry", CloneJobController, :retry)
   end
 
+  pipeline :observability_api do
+    plug(:accepts, ["json"])
+    plug(SymphonyElixirWeb.Plugs.SetLocale)
+  end
+
   scope "/", SymphonyElixirWeb do
+    pipe_through(:observability_api)
+
     get("/api/v1/state", ObservabilityApiController, :state)
 
     match(:*, "/api/v1/state", ObservabilityApiController, :method_not_allowed)

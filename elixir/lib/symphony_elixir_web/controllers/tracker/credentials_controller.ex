@@ -46,7 +46,7 @@ defmodule SymphonyElixirWeb.Tracker.CredentialsController do
   end
 
   def update(conn, _params) do
-    TrackerErrors.validation(conn, "provider and key are required")
+    TrackerErrors.validation_msg(conn, "provider and key are required")
   end
 
   @spec delete(Conn.t(), map()) :: Conn.t()

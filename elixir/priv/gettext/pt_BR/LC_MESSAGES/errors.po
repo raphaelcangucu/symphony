@@ -161,3 +161,105 @@ msgstr "Commit não encontrado no repositório do workspace."
 
 msgid "Repository not found in workspace."
 msgstr "Repositório não encontrado no workspace."
+
+msgid "Snapshot timed out"
+msgstr "Snapshot expirou"
+
+msgid "Snapshot unavailable"
+msgstr "Snapshot indisponível"
+
+msgid "Attachment not found"
+msgstr "Anexo não encontrado"
+
+msgid "Web Push is not configured"
+msgstr "Web Push não está configurado"
+
+msgid "Web Push is not configured (missing VAPID keys)"
+msgstr "Web Push não está configurado (chaves VAPID ausentes)"
+
+msgid "endpoint is required"
+msgstr "endpoint é obrigatório"
+
+msgid "This file type is not supported."
+msgstr "Este tipo de arquivo não é suportado."
+
+msgid "Only PNG, JPEG, GIF, and WebP images are supported."
+msgstr "Apenas imagens PNG, JPEG, GIF e WebP são suportadas."
+
+msgid "Files must be 5 MB or smaller."
+msgstr "Arquivos devem ter no máximo 5 MB."
+
+msgid "Images must be 4 MB or smaller."
+msgstr "Imagens devem ter no máximo 4 MB."
+
+msgid "Invalid upload."
+msgstr "Upload inválido."
+
+msgid "file is required"
+msgstr "file é obrigatório"
+
+msgid "Invalid attachment path."
+msgstr "Caminho de anexo inválido."
+
+msgid "attachment path is required"
+msgstr "caminho do anexo é obrigatório"
+
+msgid "message is required"
+msgstr "message é obrigatório"
+
+msgid "%{field} is required"
+msgstr "%{field} é obrigatório"
+
+msgid "unsupported assistant tool: %{tool}"
+msgstr "ferramenta de assistente não suportada: %{tool}"
+
+msgid "only scope=freeform is supported"
+msgstr "apenas scope=freeform é suportado"
+
+msgid "thread id is required"
+msgstr "id da thread é obrigatório"
+
+msgid "agent must be codex, claude, cursor, or null"
+msgstr "agent deve ser codex, claude, cursor ou null"
+
+msgid "action must be resume, restart, hard_reset, stop, or continue_work"
+msgstr "action deve ser resume, restart, hard_reset, stop ou continue_work"
+
+msgid "server_id must be a positive integer"
+msgstr "server_id deve ser um inteiro positivo"
+
+msgid "body is required"
+msgstr "body é obrigatório"
+
+msgid "target_identifier is required"
+msgstr "target_identifier é obrigatório"
+
+msgid "provider and key are required"
+msgstr "provider e key são obrigatórios"
+
+msgid "setup is required"
+msgstr "setup é obrigatório"
+
+msgid "repositories must be a list"
+msgstr "repositories deve ser uma lista"
+
+msgid "workflow_markdown must be a string"
+msgstr "workflow_markdown deve ser uma string"
+
+msgid "invalid workflow_markdown: %{reason}"
+msgstr "workflow_markdown inválido: %{reason}"
+
+msgid "Project must be archived before permanent deletion"
+msgstr "O projeto deve estar arquivado antes da exclusão permanente"
+
+msgid "Invalid YAML"
+msgstr "YAML inválido"
+
+msgid "yaml is required"
+msgstr "yaml é obrigatório"
+
+msgid "repositories is required"
+msgstr "repositories é obrigatório"
+
+msgid "invalid setting %{name}: %{reason}"
+msgstr "configuração inválida %{name}: %{reason}"

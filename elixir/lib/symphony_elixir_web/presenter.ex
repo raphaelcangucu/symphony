@@ -3,6 +3,8 @@ defmodule SymphonyElixirWeb.Presenter do
   Shared projections for the observability API and dashboard.
   """
 
+  use Gettext, backend: SymphonyElixirWeb.Gettext
+
   alias SymphonyElixir.{Config, Orchestrator, StatusDashboard}
 
   @empty_agent_totals %{
@@ -26,10 +28,16 @@ defmodule SymphonyElixirWeb.Presenter do
         build_state_payload(snapshot, generated_at, project_slug)
 
       :timeout ->
-        %{generated_at: generated_at, error: %{code: "snapshot_timeout", message: "Snapshot timed out"}}
+        %{
+          generated_at: generated_at,
+          error: %{code: "snapshot_timeout", message: dgettext("errors", "Snapshot timed out")}
+        }
 
       :unavailable ->
-        %{generated_at: generated_at, error: %{code: "snapshot_unavailable", message: "Snapshot unavailable"}}
+        %{
+          generated_at: generated_at,
+          error: %{code: "snapshot_unavailable", message: dgettext("errors", "Snapshot unavailable")}
+        }
     end
   end
 

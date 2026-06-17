@@ -62,3 +62,9 @@ msgstr "publish gate bloqueado"
 
 msgid "%{count} publish gate violation(s)"
 msgstr "%{count} violação(ões) de publish gate"
+
+msgid "Symphony test"
+msgstr "Teste Symphony"
+
+msgid "Push notification test — tap to open Settings"
+msgstr "Teste de notificação push — toque para abrir Configurações"

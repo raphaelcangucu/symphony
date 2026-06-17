@@ -32,7 +32,10 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
         TrackerErrors.render(conn, changeset)
 
       {:error, name, reason} ->
-        TrackerErrors.validation(conn, "invalid setting #{name}: #{format_reason(reason)}")
+        TrackerErrors.validation_msg(conn, "invalid setting %{name}: %{reason}", %{
+          name: name,
+          reason: format_reason(reason)
+        })
     end
   end
 

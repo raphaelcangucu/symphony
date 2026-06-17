@@ -314,6 +314,21 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :too_large),
     do: error(conn, 413, "issue_document_too_large", dgettext("errors", "Issue document is too large."))
 
+  def render(conn, :attachment_not_found),
+    do: not_found(conn, "attachment_not_found", dgettext("errors", "Attachment not found"))
+
+  def render(conn, :push_not_configured),
+    do: error(conn, 503, "push_not_configured", dgettext("errors", "Web Push is not configured"))
+
+  def render(conn, :push_not_configured_vapid),
+    do:
+      error(
+        conn,
+        503,
+        "push_not_configured",
+        dgettext("errors", "Web Push is not configured (missing VAPID keys)")
+      )
+
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
 
@@ -322,6 +337,11 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{error: %{code: "validation_failed", message: message, details: %{}}})
+  end
+
+  @spec validation_msg(Conn.t(), String.t(), map()) :: Conn.t()
+  def validation_msg(conn, msgid, bindings \\ %{}) when is_binary(msgid) and is_map(bindings) do
+    validation(conn, dgettext("errors", msgid, bindings))
   end
 
   defp error(conn, status, code, message, details \\ nil) do

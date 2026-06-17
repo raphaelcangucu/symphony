@@ -2,10 +2,13 @@ defmodule SymphonyElixirWeb.Tracker.PushController do
   @moduledoc "Browser Web Push subscription management."
 
   use Phoenix.Controller, formats: [:json]
+  use Gettext, backend: SymphonyElixirWeb.Gettext
 
+  alias Gettext, as: GettextCore
   alias Plug.Conn
   alias SymphonyElixir.PushNotifications.{Config, Subscription, Subscriptions}
-  alias SymphonyElixirWeb.TrackerErrors
+  alias SymphonyElixir.Settings.Ui
+  alias SymphonyElixirWeb.{Gettext, as: GettextBackend, TrackerErrors}
 
   @spec config(Conn.t(), map()) :: Conn.t()
   def config(conn, _params) do
@@ -37,14 +40,7 @@ defmodule SymphonyElixirWeb.Tracker.PushController do
           TrackerErrors.render(conn, changeset)
       end
     else
-      conn
-      |> put_status(:service_unavailable)
-      |> json(%{
-        error: %{
-          code: "push_not_configured",
-          message: "Web Push is not configured (missing VAPID keys)"
-        }
-      })
+      TrackerErrors.render(conn, :push_not_configured_vapid)
     end
   end
 
@@ -55,25 +51,25 @@ defmodule SymphonyElixirWeb.Tracker.PushController do
   end
 
   def delete(conn, _params) do
-    TrackerErrors.validation(conn, "endpoint is required")
+    TrackerErrors.validation_msg(conn, "endpoint is required")
   end
 
   @spec test(Conn.t(), map()) :: Conn.t()
   def test(conn, _params) do
     if Config.enabled?() do
-      :ok =
-        SymphonyElixir.PushNotifications.Dispatcher.notify("test", %{
-          title: "Symphony test",
-          body: "Push notification test — tap to open Settings",
-          url: "/tracker/settings",
-          tag: "symphony-test"
-        })
+      GettextCore.with_locale(GettextBackend, Ui.effective_gettext_locale(), fn ->
+        :ok =
+          SymphonyElixir.PushNotifications.Dispatcher.notify("test", %{
+            title: dgettext("push", "Symphony test"),
+            body: dgettext("push", "Push notification test — tap to open Settings"),
+            url: "/tracker/settings",
+            tag: "symphony-test"
+          })
+      end)
 
       json(conn, %{data: %{sent: true, subscription_count: Subscriptions.count()}})
     else
-      conn
-      |> put_status(:service_unavailable)
-      |> json(%{error: %{code: "push_not_configured", message: "Web Push is not configured"}})
+      TrackerErrors.render(conn, :push_not_configured)
     end
   end
 

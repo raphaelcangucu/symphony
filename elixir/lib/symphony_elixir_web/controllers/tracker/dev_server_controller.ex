@@ -56,7 +56,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
         |> Manager.start_instance_for_server(identifier, id)
         |> instance_action_result(conn, project_slug, identifier, "start_failed")
       else
-        {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
+        {:error, :invalid_server_id} -> TrackerErrors.validation_msg(conn, "server_id must be a positive integer")
         {:error, :not_found} -> TrackerErrors.render(conn, :dev_server_not_found)
       end
     end)
@@ -72,7 +72,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
           {:error, _reason} -> render_targets(conn, project_slug, identifier)
         end
       else
-        {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
+        {:error, :invalid_server_id} -> TrackerErrors.validation_msg(conn, "server_id must be a positive integer")
       end
     end)
   end
@@ -85,7 +85,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
         |> Manager.restart_instance_for_server(identifier, id)
         |> instance_action_result(conn, project_slug, identifier, "restart_failed")
       else
-        {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
+        {:error, :invalid_server_id} -> TrackerErrors.validation_msg(conn, "server_id must be a positive integer")
         {:error, :not_found} -> TrackerErrors.render(conn, :dev_server_not_found)
       end
     end)
@@ -113,7 +113,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
             TrackerErrors.render(conn, message)
         end
       else
-        {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
+        {:error, :invalid_server_id} -> TrackerErrors.validation_msg(conn, "server_id must be a positive integer")
       end
     end)
   end
@@ -124,7 +124,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
       with {:ok, id} <- parse_server_id(server_id) do
         DevServerOutputEventStream.stream(conn, project_slug, identifier, id)
       else
-        {:error, :invalid_server_id} -> TrackerErrors.validation(conn, "server_id must be a positive integer")
+        {:error, :invalid_server_id} -> TrackerErrors.validation_msg(conn, "server_id must be a positive integer")
       end
     end)
   end

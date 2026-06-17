@@ -20,7 +20,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectSetupController do
     json(conn, %{data: %{scans: scans}})
   end
 
-  def scan(conn, _params), do: TrackerErrors.validation(conn, "repositories is required")
+  def scan(conn, _params), do: TrackerErrors.validation_msg(conn, "repositories is required")
 
   @spec suggest(Conn.t(), map()) :: Conn.t()
   def suggest(conn, params) do

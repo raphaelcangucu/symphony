@@ -11,3 +11,9 @@ msgstr "%{identifier}: %{title} — click to view"
 
 msgid "Human review needed"
 msgstr "Human review needed"
+
+msgid "Symphony test"
+msgstr "Symphony test"
+
+msgid "Push notification test — tap to open Settings"
+msgstr "Push notification test — tap to open Settings"
