@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { modelLabel, type AssistantAgentCatalog } from "@/lib/assistantSettings";
 import { cn } from "@/lib/utils";
 
@@ -72,7 +73,7 @@ export function ModelMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel>
-          {catalog.agentLabel} · {t("assistant.modelMenu.modelSuffix")}
+          {agentKindLabel(catalog.agent, t)} · {t("assistant.modelMenu.modelSuffix")}
         </DropdownMenuLabel>
         <div className="px-1 pb-1">
           <div className="relative">

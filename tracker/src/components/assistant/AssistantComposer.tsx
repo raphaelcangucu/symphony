@@ -20,6 +20,7 @@ import {
 } from "@/components/assistant/assistantAttachments";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
 import { matchingSlashCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { isVideoMediaType } from "@/services/attachments";
 import { extractFilesFromClipboard } from "@/lib/clipboardImages";
@@ -171,7 +172,7 @@ export function AssistantComposer({
 
   const canSend = !recording && !uploadingImage && (input.trim().length > 0 || attachments.length > 0);
 
-  const paletteCommands = matchingSlashCommands(input);
+  const paletteCommands = matchingSlashCommands(input, t);
   const showPalette = paletteCommands.length > 0 && input.trim().split(" ").length === 1;
 
   function updateAgent(agent: AgentKind) {
@@ -356,7 +357,7 @@ export function AssistantComposer({
   function submitCurrent() {
     if (!canSend) return;
 
-    const parsed = parseSlashCommand(input);
+    const parsed = parseSlashCommand(input, t);
     if (parsed.kind !== "message" && parsed.argument.length === 0) return;
 
     onSubmit({
@@ -656,7 +657,7 @@ function AgentMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {current.agentLabel}
+          {agentKindLabel(current.agent, t)}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
@@ -666,7 +667,7 @@ function AgentMenu({
         <DropdownMenuRadioGroup value={agent} onValueChange={(v) => onChange(v as AgentKind)}>
           {bundle.agents.map((catalog) => (
             <DropdownMenuRadioItem key={catalog.agent} value={catalog.agent}>
-              {catalog.agentLabel}
+              {agentKindLabel(catalog.agent, t)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

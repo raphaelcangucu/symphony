@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { matchingSlashCommands, parseSlashCommand, SLASH_COMMANDS } from "../slashCommands";
+import { matchingSlashCommands, parseSlashCommand, SLASH_COMMAND_NAMES } from "../slashCommands";
 
 describe("parseSlashCommand", () => {
   it("parses /infer with its argument", () => {
@@ -26,7 +26,7 @@ describe("parseSlashCommand", () => {
 
 describe("matchingSlashCommands", () => {
   it("lists all commands when input is just a slash", () => {
-    expect(matchingSlashCommands("/").map((c) => c.name)).toEqual(SLASH_COMMANDS.map((c) => c.name));
+    expect(matchingSlashCommands("/").map((c) => c.name)).toEqual(SLASH_COMMAND_NAMES);
   });
 
   it("filters by prefix", () => {

@@ -1,3 +1,6 @@
+import type { TFunction } from "i18next";
+
+import { i18n } from "@/i18n";
 import type { AgentKind } from "@/types/issue";
 
 export type AssistantEffort = string;
@@ -53,23 +56,21 @@ export interface AssistantComposerState {
 const COMPOSER_STATE_KEY = "symphony.assistant.composer.v2";
 const CATALOGS_STORAGE_KEY = "symphony.assistant.catalogs";
 
-const FALLBACK_EFFORTS: AssistantEffortOption[] = [
-  { id: "low", label: "Low" },
-  { id: "medium", label: "Medium" },
-  { id: "high", label: "High" },
-  { id: "xhigh", label: "Extra high" },
-];
+type Translate = TFunction;
 
-const EFFORT_LABELS: Record<string, string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra high",
-  max: "Max",
-};
+function effortLabelForId(id: string, t: Translate = i18n.t.bind(i18n) as Translate): string {
+  if (!id) return "";
+  const key = `assistant.effort.${id}`;
+  const translated = t(key);
+  return translated === key ? id : translated;
+}
 
 function efforts(...ids: string[]): AssistantEffortOption[] {
-  return ids.map((id) => ({ id, label: EFFORT_LABELS[id] ?? id }));
+  return ids.map((id) => ({ id, label: effortLabelForId(id) }));
+}
+
+function fallbackEfforts(): AssistantEffortOption[] {
+  return efforts("low", "medium", "high", "xhigh");
 }
 
 export function fallbackCodexCatalog(command = "codex app-server"): AssistantAgentCatalog {
@@ -81,9 +82,9 @@ export function fallbackCodexCatalog(command = "codex app-server"): AssistantAge
     command,
     defaultModel,
     models: [
-      fallbackModel("gpt-5.5", "GPT-5.5", true, "medium", FALLBACK_EFFORTS),
-      fallbackModel("gpt-5.4", "GPT-5.4", false, "medium", FALLBACK_EFFORTS),
-      fallbackModel("gpt-5.3-codex", "GPT-5.3 Codex", false, "medium", FALLBACK_EFFORTS),
+      fallbackModel("gpt-5.5", "GPT-5.5", true, "medium", fallbackEfforts()),
+      fallbackModel("gpt-5.4", "GPT-5.4", false, "medium", fallbackEfforts()),
+      fallbackModel("gpt-5.3-codex", "GPT-5.3 Codex", false, "medium", fallbackEfforts()),
     ],
   };
 }
@@ -269,7 +270,15 @@ export function modelLabel(catalog: AssistantAgentCatalog, modelId: string): str
   return findModelOption(catalog, modelId)?.label ?? modelId;
 }
 
-export function effortLabel(catalog: AssistantAgentCatalog, modelId: string, effort: AssistantEffort): string {
+export function effortLabel(
+  catalog: AssistantAgentCatalog,
+  modelId: string,
+  effort: AssistantEffort,
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): string {
+  const translated = effortLabelForId(effort, t);
+  if (effort && translated !== effort) return translated;
+
   const model = findModelOption(catalog, modelId);
   return model?.efforts.find((option) => option.id === effort)?.label ?? effort;
 }

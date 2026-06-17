@@ -991,6 +991,12 @@
         "archiveFailed": "Unable to archive project",
         "restoreFailed": "Unable to restore project",
         "deleteFailed": "Unable to delete project"
+      },
+      "trackerLink": {
+        "local": "Open tracker",
+        "github": "Open GitHub project",
+        "linear": "Open Linear project",
+        "jira": "Open Jira project"
       }
     },
     "filters": {
@@ -1426,6 +1432,17 @@
       "modelSuffix": "Model",
       "searchPlaceholder": "Search models…",
       "noMatch": "No models match."
+    },
+    "slash": {
+      "infer": "Steer the running agent without waiting",
+      "btw": "Ask a quick side question (read-only, not saved)"
+    },
+    "effort": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Max"
     },
     "speech": {
       "errors": {

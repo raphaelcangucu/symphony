@@ -991,6 +991,12 @@
         "archiveFailed": "Não foi possível arquivar projeto",
         "restoreFailed": "Não foi possível restaurar projeto",
         "deleteFailed": "Não foi possível excluir projeto"
+      },
+      "trackerLink": {
+        "local": "Abrir tracker",
+        "github": "Abrir projeto no GitHub",
+        "linear": "Abrir projeto no Linear",
+        "jira": "Abrir projeto no Jira"
       }
     },
     "filters": {
@@ -1451,6 +1457,17 @@
       "modelSuffix": "Modelo",
       "searchPlaceholder": "Buscar modelos…",
       "noMatch": "Nenhum modelo corresponde."
+    },
+    "slash": {
+      "infer": "Direcione o agente em execução sem esperar",
+      "btw": "Faça uma pergunta rápida (somente leitura, não salva)"
+    },
+    "effort": {
+      "low": "Baixo",
+      "medium": "Médio",
+      "high": "Alto",
+      "xhigh": "Extra alto",
+      "max": "Máximo"
     },
     "composer": {
       "placeholder": "Escreva uma mensagem...",

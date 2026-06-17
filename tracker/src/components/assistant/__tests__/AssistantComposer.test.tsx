@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantComposer } from "@/components/assistant/AssistantComposer";
 import { uploadAssistantAttachment } from "@/services/assistant";
+import { i18n } from "@/i18n";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 import { fallbackCatalogBundle } from "@/lib/assistantSettings";
 
@@ -60,9 +61,9 @@ describe("AssistantComposer", () => {
       <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
     );
 
-    expect(screen.getByText("Codex CLI")).toBeTruthy();
+    expect(screen.getByText(i18n.t("issue.sessionLog.agentLabels.codex"))).toBeTruthy();
     expect(screen.getByText("GPT-5.3 Codex")).toBeTruthy();
-    expect(screen.getByText("Low")).toBeTruthy();
+    expect(screen.getByText(i18n.t("assistant.effort.low"))).toBeTruthy();
 
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "Hello assistant" } });

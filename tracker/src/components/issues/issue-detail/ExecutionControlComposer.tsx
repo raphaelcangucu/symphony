@@ -194,13 +194,13 @@ export function ExecutionControlComposer({
   // Guidance the agent should receive on the next resume/restart: anything the
   // user queued while the run was busy, plus whatever is currently typed.
   function combinedGuidance(): string {
-    const parsed = parseSlashCommand(input);
+    const parsed = parseSlashCommand(input, t);
     const typed = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
     return [...queuedGuidance, typed].filter((entry) => entry.length > 0).join("\n\n");
   }
 
   function enqueueGuidance() {
-    const parsed = parseSlashCommand(input);
+    const parsed = parseSlashCommand(input, t);
     const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
     if (!text) return;
     setQueued((current) => [...current, text]);
@@ -243,7 +243,7 @@ export function ExecutionControlComposer({
   }
 
   function submitSteer() {
-    const parsed = parseSlashCommand(input);
+    const parsed = parseSlashCommand(input, t);
     const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
     if (!text) return;
     onSteer(text);
@@ -515,7 +515,7 @@ function AgentMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {current.agentLabel}
+          {agentKindLabel(current.agent, t)}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -524,7 +524,7 @@ function AgentMenu({
         <DropdownMenuRadioGroup value={agent} onValueChange={(value) => onChange(value as AgentKind)}>
           {bundle.agents.map((entry) => (
             <DropdownMenuRadioItem key={entry.agent} value={entry.agent}>
-              {entry.agentLabel}
+              {agentKindLabel(entry.agent, t)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

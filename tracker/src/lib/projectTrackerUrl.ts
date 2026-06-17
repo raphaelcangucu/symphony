@@ -1,15 +1,16 @@
+import type { TFunction } from "i18next";
+
+import { i18n } from "@/i18n";
 import type { GitHubProjectSummary } from "@/services/remoteTrackers";
 import type { Project, TrackerKind } from "@/types/project";
 
-const TRACKER_LINK_LABELS: Record<Exclude<TrackerKind, "local">, string> = {
-  github: "Open GitHub project",
-  linear: "Open Linear project",
-  jira: "Open Jira project",
-};
+type Translate = TFunction;
 
-export function projectTrackerLinkLabel(kind: TrackerKind): string {
-  if (kind === "local") return "Open tracker";
-  return TRACKER_LINK_LABELS[kind];
+export function projectTrackerLinkLabel(
+  kind: TrackerKind,
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): string {
+  return t(`project.list.trackerLink.${kind}`);
 }
 
 export function githubProjectBoardUrl(board: GitHubProjectSummary): string {
