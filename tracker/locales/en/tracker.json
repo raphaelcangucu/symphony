@@ -330,6 +330,27 @@
           "body": ""
         }
       }
+    },
+    "board": {
+      "loadFailed": "Failed to load issues",
+      "moveFailed": "Failed to move issue"
+    },
+    "updater": {
+      "saveFailed": "Failed to save changes",
+      "statusFailed": "Failed to update status"
+    },
+    "route": {
+      "notFound": "Issue {{identifier}} was not found",
+      "archived": "{{identifier}} archived",
+      "archiveFailed": "Failed to archive issue",
+      "deleted": "{{identifier}} deleted",
+      "deleteFailed": "Failed to delete issue",
+      "synced": "{{identifier}} synced from remote",
+      "syncFailed": "Failed to sync issue from remote"
+    },
+    "attachments": {
+      "imageUnavailable": "Image uploads are not available here.",
+      "imageUploadFailed": "Failed to upload image."
     }
   },
   "project": {
@@ -657,12 +678,14 @@
       "backToConversations": "Conversations",
       "filesAria": "Assistant chat files",
       "filesTitle": "Conversation files",
-      "filesHint": "Open markdown drafts on the right. Click a filename in the chat to jump to it here."
+      "filesHint": "Open markdown drafts on the right. Click a filename in the chat to jump to it here.",
+      "createFailed": "Unable to start a new chat"
     },
     "archive": {
       "label": "Archive",
       "ariaLabel": "Archive conversation",
-      "title": "Archive conversation"
+      "title": "Archive conversation",
+      "failed": "Unable to archive chat"
     },
     "threadDocuments": {
       "ariaLabel": "Chat files",

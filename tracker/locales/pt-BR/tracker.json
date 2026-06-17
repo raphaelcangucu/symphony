@@ -330,6 +330,27 @@
           "body": ""
         }
       }
+    },
+    "board": {
+      "loadFailed": "Falha ao carregar issues",
+      "moveFailed": "Falha ao mover issue"
+    },
+    "updater": {
+      "saveFailed": "Falha ao salvar alterações",
+      "statusFailed": "Falha ao atualizar status"
+    },
+    "route": {
+      "notFound": "Issue {{identifier}} não encontrada",
+      "archived": "{{identifier}} arquivada",
+      "archiveFailed": "Falha ao arquivar issue",
+      "deleted": "{{identifier}} excluída",
+      "deleteFailed": "Falha ao excluir issue",
+      "synced": "{{identifier}} sincronizada do remoto",
+      "syncFailed": "Falha ao sincronizar issue do remoto"
+    },
+    "attachments": {
+      "imageUnavailable": "Upload de imagens não está disponível aqui.",
+      "imageUploadFailed": "Falha ao enviar imagem."
     }
   },
   "project": {
@@ -657,12 +678,14 @@
       "backToConversations": "Conversas",
       "filesAria": "Arquivos do chat",
       "filesTitle": "Arquivos da conversa",
-      "filesHint": "Abra rascunhos markdown à direita. Clique em um nome no chat para abrir aqui."
+      "filesHint": "Abra rascunhos markdown à direita. Clique em um nome no chat para abrir aqui.",
+      "createFailed": "Não foi possível iniciar um novo chat"
     },
     "archive": {
       "label": "Arquivar",
       "ariaLabel": "Arquivar conversa",
-      "title": "Arquivar conversa"
+      "title": "Arquivar conversa",
+      "failed": "Não foi possível arquivar o chat"
     },
     "threadDocuments": {
       "ariaLabel": "Arquivos do chat",

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -16,6 +17,7 @@ import { archiveIssue, deleteIssue, forceSyncIssue, getIssue } from "@/services/
 import type { Issue } from "@/types/issue";
 
 export function IssueDetailRoute() {
+  const { t } = useTranslation();
   const { identifier = "", tab: tabParam } = useParams();
   const { projectSlug, view, issues, setIssues, agentExecutions, loading, trackerKind, project } = useWorkspace();
   const navigate = useNavigate();
@@ -49,10 +51,10 @@ export function IssueDetailRoute() {
     try {
       await archiveIssue(projectSlug, target.identifier);
       removeFromBoard(target);
-      toast.success(`${target.identifier} archived`);
+      toast.success(t("issue.route.archived", { identifier: target.identifier }));
       goToBase();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to archive issue");
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.archiveFailed"));
     }
   }
 
@@ -60,10 +62,10 @@ export function IssueDetailRoute() {
     try {
       await deleteIssue(projectSlug, target.identifier);
       removeFromBoard(target);
-      toast.success(`${target.identifier} deleted`);
+      toast.success(t("issue.route.deleted", { identifier: target.identifier }));
       goToBase();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to delete issue");
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.deleteFailed"));
     }
   }
 
@@ -81,9 +83,9 @@ export function IssueDetailRoute() {
         current.map((candidate) => (candidate.identifier === refreshed.identifier ? refreshed : candidate)),
       );
       if (fetchedIssue?.identifier === refreshed.identifier) setFetchedIssue(refreshed);
-      toast.success(`${target.identifier} synced from remote`);
+      toast.success(t("issue.route.synced", { identifier: target.identifier }));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to sync issue from remote");
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.syncFailed"));
     }
   }
 
@@ -117,7 +119,7 @@ export function IssueDetailRoute() {
         // Keep showing the cached list entry if we have one; only bounce back to
         // the board when there is nothing at all to display.
         if (!issueFromList) {
-          toast.error(`Issue ${identifier} was not found`);
+          toast.error(t("issue.route.notFound", { identifier }));
           navigate({ pathname: basePath, search: location.search }, { replace: true });
         }
       });

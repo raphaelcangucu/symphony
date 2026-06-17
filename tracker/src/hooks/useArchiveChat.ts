@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
+import { i18n } from "@/i18n";
 import { archiveAssistantThread } from "@/services/assistantThreads";
 
 export interface UseArchiveChatResult {
@@ -25,7 +26,7 @@ export function useArchiveChat(onArchived?: () => void): UseArchiveChatResult {
         onArchived?.();
         return true;
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Unable to archive chat");
+        toast.error(error instanceof Error ? error.message : i18n.t("assistant.archive.failed"));
         return false;
       } finally {
         setArchiving(false);

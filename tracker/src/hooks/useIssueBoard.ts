@@ -10,6 +10,7 @@ import {
 } from "@/components/board/board-utils";
 import type { IssueFilters } from "@/lib/issueFilters";
 import { applyIssueFilters, emptyFilters } from "@/lib/issueFilters";
+import { i18n } from "@/i18n";
 import { listIssues, moveIssue } from "@/services/issues";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
@@ -55,7 +56,7 @@ export function useIssueBoard(
       hasLoadedRef.current = true;
       toast.dismiss(loadErrorToastId);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Failed to load issues";
+      const message = cause instanceof Error ? cause.message : i18n.t("issue.board.loadFailed");
       toast.error(message, { id: loadErrorToastId });
     } finally {
       setLoading(false);
@@ -93,7 +94,7 @@ export function useIssueBoard(
         setIssues((current) => upsertIssue(current, persisted));
       } catch (cause) {
         setIssues(flattenBoardState(previousBoard));
-        const message = cause instanceof Error ? cause.message : "Failed to move issue";
+        const message = cause instanceof Error ? cause.message : i18n.t("issue.board.moveFailed");
         toast.error(message);
       }
     },
