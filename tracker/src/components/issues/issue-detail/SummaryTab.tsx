@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { getStatusMeta } from "@/components/board/status-meta";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
-import { AGENT_LABELS } from "@/components/shared/AgentChip";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { InlineAgentEditor } from "@/components/issues/inline/InlineAgentEditor";
 import { InlineAssigneeEditor } from "@/components/issues/inline/InlineAssigneeEditor";
 import { InlineEditableMarkdown } from "@/components/issues/inline/InlineEditableMarkdown";
@@ -276,8 +276,8 @@ export function SummaryTab({
             ) : (
               <span className="inline-flex items-center gap-1.5">
                 {issue.agentKind
-                  ? AGENT_LABELS[issue.agentKind]
-                  : t("issue.create.inherit", { agent: AGENT_LABELS[effectiveAgent] })}
+                  ? agentKindLabel(issue.agentKind, t)
+                  : t("issue.create.inherit", { agent: agentKindLabel(effectiveAgent, t) })}
               </span>
             )}
           </Field>

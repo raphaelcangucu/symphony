@@ -186,6 +186,64 @@ Use `blocked` ONLY for a true environment limitation you actually hit. A test
 that fails on an assertion is `"failed"` — fix the code and re-run. Do not use
 `blocked` to skip work you could have done.
 
+## Continuation turns — agent responsibility
+
+Symphony may schedule **continuation turns** when the issue stays active after a
+turn completes. **You** must decide what to do next — do not assume the
+orchestrator will stop you from wasting turns.
+
+### Detect VALIDATE-only mode
+
+When **every** repo in the deliverable summary shows `commits_ahead=0`,
+`uncommitted=no`, and `pushed=yes`, implementation and publish are done. The
+only remaining work is **VALIDATE/evidence** (unless the ticket explicitly asks
+for code changes).
+
+In VALIDATE-only mode:
+
+1. Read this skill and run **focused** checks from the git diff (see above).
+2. Write a **fresh** `.symphony/evidence/manifest.json` for **this session only**.
+3. Update the workpad **Validation** section with commands and outcomes.
+
+**Do not** treat a continuation turn as a status-check loop:
+- Do not only run `git status`, parse an old manifest, and append "Continuação
+  #N" notes to the workpad.
+- Do not re-validate a prior session's manifest as a substitute for executing
+  tests in this turn.
+- Do not run the full lint or unit suite when scoped paths suffice.
+
+If rework or the human asked for **fresh evidence**, delete
+`.symphony/evidence/manifest.json` and artifacts from prior attempts **before**
+running checks — stale `blocked` entries are not evidence for this session.
+
+### When to retry vs when to stop
+
+| Situation | Action |
+|-----------|--------|
+| First turn in this session; required command not tried yet | Run it; record `passed`, `failed`, or `blocked` |
+| Continuation turn; prior manifest has `blocked` for that command **from an earlier turn in this same session** | Retry **once** — sandbox capabilities may differ |
+| Same command still `blocked` after one retry in this session | Stop retrying; keep the `blocked` entry with `blocked_reason` |
+| All required runs are `passed`, or remaining gaps are only `blocked` after real attempts | **End the turn** — do not burn further turns re-checking git/manifest |
+| Manifest satisfied from this session's executed commands | End the turn; do not append more workpad continuation notes |
+
+A `blocked` run after a genuine attempt is a valid handoff state: the code may
+be fine but the environment cannot prove it. Say so once in the workpad
+**Validation** section and **stop** — humans fix the environment and re-dispatch.
+
+### Anti-patterns (never do these on continuation turns)
+
+```text
+❌  git status → node -e 'parse manifest' → workpad "Continuação #9" → Task Complete
+❌  npm run test:unit (full suite) + record unrelated failure alongside scoped pass
+❌  Copy prior manifest.json without re-running commands this session
+❌  Assume "no commits ahead" means "nothing to do" while e2e/backend tests were never run
+```
+
+```text
+✅  git diff → scoped lint/unit → ./vibe up → scoped backend test → cypress --spec … → fresh manifest
+✅  blocked after real attempt → one-sentence Validation summary → end turn
+```
+
 ## Definition of done (Symphony validate gate)
 
 Symphony verifies ALL of the following per repo; the run cannot finish until

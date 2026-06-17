@@ -1132,6 +1132,7 @@
         "serveCount_other": "{{count}} serve",
         "addStep": "Adicionar passo",
         "addStepTo": "Adicionar passo em {{label}}",
+        "generalGroup": "Geral",
         "noStepsProposed": "Nenhum passo proposto; adicione manualmente ou um .symphony/devenv.yaml",
         "proposeFailed": "Falha ao propor passos",
         "running": "Executando: {{command}}",
@@ -1429,7 +1430,21 @@
         "noSpeech": "Nenhuma fala foi detectada.",
         "audioCapture": "Não foi possível capturar áudio para reconhecimento de voz.",
         "aborted": "O reconhecimento de voz foi interrompido.",
-        "unavailable": "O reconhecimento de voz não está disponível neste navegador."
+        "unavailable": "O reconhecimento de voz não está disponível neste navegador.",
+        "captionsUnsupported": "Legendas ao vivo não são suportadas neste navegador.",
+        "startFailed": "Não foi possível iniciar o reconhecimento de voz."
+      }
+    },
+    "audio": {
+      "errors": {
+        "notAllowed": "Permissão do microfone negada. Permita o acesso ao microfone nas configurações do navegador e tente novamente.",
+        "notFound": "Nenhum microfone foi encontrado neste dispositivo.",
+        "notReadable": "O microfone está em uso por outro aplicativo.",
+        "security": "O acesso ao microfone requer HTTPS ou localhost.",
+        "accessFailed": "Não foi possível acessar o microfone.",
+        "unsupported": "Gravação por microfone não está disponível. Use HTTPS em um navegador compatível.",
+        "recordingFailed": "Falha na gravação de áudio.",
+        "tooShort": "Gravação muito curta. Segure o botão do microfone um pouco mais."
       }
     },
     "modelMenu": {
@@ -1593,8 +1608,25 @@
       "loading": "Carregando…",
       "empty": "Nenhuma sessão recente ainda.",
       "newChatAria": "Novo chat",
-      "newChatTitle": "Novo chat"
+      "newChatTitle": "Novo chat",
+      "status": {
+        "running": "Em execução",
+        "waiting": "Aguardando",
+        "retrying": "Repetindo",
+        "idle": "Ocioso",
+        "active": "Ativo",
+        "in_progress": "Em andamento",
+        "todo": "A fazer",
+        "done": "Concluído",
+        "closed": "Fechado",
+        "error": "Erro"
+      }
     },
+    "assistantMenu": {
+      "optionsAria": "Opções do assistente",
+      "createIssue": "Criar issue"
+    },
+    "editProject": "Editar projeto",
     "sessionSubtitle": {
       "freeform": "Chat livre",
       "explore": "Explorar projeto",
@@ -1626,6 +1658,7 @@
     "recentlyUpdated7d": "Atualizadas recentemente (7d)",
     "list": {
       "empty": "Nenhuma issue ainda.",
+      "open": "Abrir",
       "columns": {
         "id": "ID",
         "title": "Título",
@@ -1684,7 +1717,13 @@
     "boards": "Boards",
     "noProjects": "Nenhum projeto local ainda.",
     "resetToken": "Resetar token",
-    "brandIconAlt": "Ícone do Symphony Tracker"
+    "brandIconAlt": "Ícone do Symphony Tracker",
+    "theme": {
+      "toggleAria": "Alternar tema",
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema"
+    }
   },
   "auth": {
     "title": "Conectar Tracker Local",

@@ -74,11 +74,13 @@ export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories }:
           if (group.key === GENERAL_GROUP_KEY && group.items.length === 0 && repos.length > 0) {
             return null;
           }
+          const groupLabel =
+            group.key === GENERAL_GROUP_KEY ? t("project.config.devenv.generalGroup") : group.label;
           const serveCount = group.items.filter(({ step }) => step.role === "serve").length;
           return (
             <div key={group.key} className="space-y-2 rounded-lg border bg-muted/20 p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-medium">{group.label}</h3>
+                <h3 className="text-sm font-medium">{groupLabel}</h3>
                 {group.repoRole ? (
                   <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
                     {group.repoRole}
@@ -109,7 +111,7 @@ export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories }:
 
               <Button type="button" size="sm" variant="ghost" onClick={() => handleAddStep(group.workingDir)}>
                 {group.workingDir
-                  ? t("project.config.devenv.addStepTo", { label: group.label })
+                  ? t("project.config.devenv.addStepTo", { label: groupLabel })
                   : t("project.config.devenv.addStep")}
               </Button>
             </div>

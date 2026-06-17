@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { SessionLogEntryCard } from "@/components/issues/issue-detail/SessionLogEntryCard";
 import { pairSessionLogItems, sessionPairToView } from "@/components/issues/issue-detail/sessionToolCall";
-import { AGENT_LABELS } from "@/components/shared/AgentChip";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { SessionLogEntry } from "@/types/session-log";
@@ -19,8 +19,9 @@ interface IssueSessionLogProps {
   preferredAgentKind?: string | null;
 }
 
-function agentLabel(kind: string): string {
-  return AGENT_LABELS[kind as keyof typeof AGENT_LABELS] ?? kind;
+function resolveAgentLabel(kind: string, t: ReturnType<typeof useTranslation>["t"]): string {
+  if (kind === "codex" || kind === "claude" || kind === "cursor") return agentKindLabel(kind, t);
+  return kind;
 }
 
 export function IssueSessionLog({
@@ -69,13 +70,13 @@ export function IssueSessionLog({
       {logAgentKind && preferredAgentKind && logAgentKind !== preferredAgentKind ? (
         <p className="mt-2 text-xs text-muted-foreground">
           {t("issue.sessionLog.agentHistory", {
-            shown: agentLabel(logAgentKind),
-            preferred: agentLabel(preferredAgentKind),
+            shown: resolveAgentLabel(logAgentKind, t),
+            preferred: resolveAgentLabel(preferredAgentKind, t),
           })}
         </p>
       ) : logAgentKind ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          {t("issue.sessionLog.source", { agent: agentLabel(logAgentKind) })}
+          {t("issue.sessionLog.source", { agent: resolveAgentLabel(logAgentKind, t) })}
         </p>
       ) : null}
       {error ? (

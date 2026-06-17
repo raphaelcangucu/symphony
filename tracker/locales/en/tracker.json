@@ -1131,8 +1131,9 @@
         "serveCount_one": "{{count}} serve",
         "serveCount_other": "{{count}} serve",
         "addStep": "Add step",
-        "addStepTo": "Add step to {{label}}",
-        "noStepsProposed": "No steps proposed; add steps manually or a .symphony/devenv.yaml",
+      "addStepTo": "Add step to {{label}}",
+      "generalGroup": "General",
+      "noStepsProposed": "No steps proposed; add steps manually or a .symphony/devenv.yaml",
         "proposeFailed": "Failed to propose steps",
         "running": "Running: {{command}}",
         "runFailed": "Failed to run step",
@@ -1434,7 +1435,21 @@
         "noSpeech": "No speech was detected.",
         "audioCapture": "Could not capture audio for speech recognition.",
         "aborted": "Speech recognition was interrupted.",
-        "unavailable": "Speech recognition is unavailable in this browser."
+        "unavailable": "Speech recognition is unavailable in this browser.",
+        "captionsUnsupported": "Live captions are not supported in this browser.",
+        "startFailed": "Could not start speech recognition."
+      }
+    },
+    "audio": {
+      "errors": {
+        "notAllowed": "Microphone permission denied. Allow microphone access in your browser settings and try again.",
+        "notFound": "No microphone was found on this device.",
+        "notReadable": "The microphone is in use by another application.",
+        "security": "Microphone access requires HTTPS or localhost.",
+        "accessFailed": "Could not access the microphone.",
+        "unsupported": "Microphone recording is not available. Use HTTPS in a supported browser.",
+        "recordingFailed": "Audio recording failed.",
+        "tooShort": "Recording was too short. Hold the microphone button a little longer."
       }
     },
     "composer": {
@@ -1593,8 +1608,25 @@
       "loading": "Loading…",
       "empty": "No recent sessions yet.",
       "newChatAria": "New chat",
-      "newChatTitle": "New chat"
+      "newChatTitle": "New chat",
+      "status": {
+        "running": "Running",
+        "waiting": "Waiting",
+        "retrying": "Retrying",
+        "idle": "Idle",
+        "active": "Active",
+        "in_progress": "In progress",
+        "todo": "To do",
+        "done": "Done",
+        "closed": "Closed",
+        "error": "Error"
+      }
     },
+    "assistantMenu": {
+      "optionsAria": "Assistant options",
+      "createIssue": "Create issue"
+    },
+    "editProject": "Edit project",
     "sessionSubtitle": {
       "freeform": "Freeform chat",
       "explore": "Explore project",
@@ -1626,6 +1658,7 @@
     "recentlyUpdated7d": "Recently updated (7d)",
     "list": {
       "empty": "No issues yet.",
+      "open": "Open",
       "columns": {
         "id": "ID",
         "title": "Title",
@@ -1684,7 +1717,13 @@
     "boards": "Boards",
     "noProjects": "No local projects yet.",
     "resetToken": "Reset token",
-    "brandIconAlt": "Symphony Tracker icon"
+    "brandIconAlt": "Symphony Tracker icon",
+    "theme": {
+      "toggleAria": "Toggle theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    }
   },
   "auth": {
     "title": "Connect Local Tracker",

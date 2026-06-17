@@ -100,7 +100,7 @@ export function useSpeechRecognition(lang = "pt-BR") {
     (onTranscript: (text: string, isFinal: boolean) => void) => {
       const Recognition = getSpeechRecognitionConstructor();
       if (!Recognition) {
-        setError("Live captions are not supported in this browser.");
+        setError(i18n.t("assistant.speech.errors.captionsUnsupported"));
         return;
       }
 
@@ -158,7 +158,7 @@ export function useSpeechRecognition(lang = "pt-BR") {
         recognition.start();
         setListening(true);
       } catch {
-        setError("Could not start speech recognition.");
+        setError(i18n.t("assistant.speech.errors.startFailed"));
         stop();
       }
     },

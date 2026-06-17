@@ -2,7 +2,7 @@ import { Bot, Check, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AGENT_LABELS } from "@/components/shared/AgentChip";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { cn } from "@/lib/utils";
 import type { AgentKind, AgentOption } from "@/types/issue";
 
@@ -34,13 +34,13 @@ export function InlineAgentEditor({
     if (options.length > 0) return options;
     return (["codex", "claude", "cursor"] as AgentKind[]).map((value) => ({
       value,
-      label: AGENT_LABELS[value],
+      label: agentKindLabel(value, t),
       default: false,
     }));
   }, [options]);
 
-  const inheritLabel = t("issue.create.inherit", { agent: AGENT_LABELS[effectiveAgent] });
-  const currentLabel = agent ? AGENT_LABELS[agent] : inheritLabel;
+  const inheritLabel = t("issue.create.inherit", { agent: agentKindLabel(effectiveAgent, t) });
+  const currentLabel = agent ? agentKindLabel(agent, t) : inheritLabel;
 
   useEffect(() => {
     if (!open) setDraft(agent ?? "inherit");

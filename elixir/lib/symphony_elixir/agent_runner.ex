@@ -470,11 +470,22 @@ defmodule SymphonyElixir.AgentRunner do
          turn_number,
          max_turns
        ) do
+    handoff_outcome = handoff_ready_outcome(workspace, opts)
+
     cond do
       goal_mode?(opts) ->
         Logger.info("Stopping outer agent turn loop for #{issue_context(refreshed_issue)} because Codex goal mode handles continuation internally")
 
         :completed
+
+      match?({:stop, _outcome}, handoff_outcome) ->
+        {:stop, outcome} = handoff_outcome
+
+        Logger.info(
+          "Stopping outer agent turn loop for #{issue_context(refreshed_issue)} after turn #{turn_number}/#{max_turns}; deliverables ready outcome=#{inspect(outcome)}"
+        )
+
+        outcome
 
       turn_number < max_turns ->
         Logger.info("Continuing agent run for #{issue_context(refreshed_issue)} after normal turn completion turn=#{turn_number}/#{max_turns}")
@@ -497,6 +508,42 @@ defmodule SymphonyElixir.AgentRunner do
         Logger.info("Reached agent.max_turns for #{issue_context(refreshed_issue)} with issue still active; returning control to orchestrator")
 
         {:incomplete, :max_turns}
+    end
+  end
+
+  # When publish deliverables are already satisfied (clean trees, nothing to push),
+  # further continuation turns cannot advance implementation — only VALIDATE/evidence
+  # work remains. Stop the outer loop once the validate gate is satisfied or only
+  # reports environment blockers, so the agent does not burn max_turns re-checking
+  # an unchanged manifest.
+  @doc false
+  @spec handoff_ready_outcome(Path.t(), keyword()) :: :continue | {:stop, run_outcome()}
+  def handoff_ready_outcome(workspace, opts) do
+    repo_states = RunContract.repo_states(workspace)
+
+    if RunContract.work_present?(repo_states) do
+      :continue
+    else
+      validate_gate_outcome(workspace, opts)
+    end
+  end
+
+  defp validate_gate_outcome(workspace, opts) do
+    evaluator =
+      Keyword.get(opts, :validate_gate_evaluator, fn ws ->
+        Evidence.Gate.evaluate(ws, evidence_config(Keyword.get(opts, :project_config)))
+      end)
+
+    case evaluator.(workspace) do
+      :satisfied ->
+        {:stop, :completed}
+
+      {:violations, violations} ->
+        if Evidence.Gate.environment_blocked_only?(violations) do
+          {:stop, {:incomplete, {:validate_gate, violations}}}
+        else
+          :continue
+        end
     end
   end
 
@@ -548,6 +595,10 @@ defmodule SymphonyElixir.AgentRunner do
     - The original task instructions and prior turn context are already present in this thread, so do not restate them before acting.
     - Focus on the remaining ticket work and do not end the turn while the issue stays active unless you are truly blocked.
     - Do not front-load the full VALIDATE/evidence matrix while implementation or PR work is still missing.
+    - When deliverables below show no commits ahead and no uncommitted changes, you are in **VALIDATE-only** mode: read and follow the `evidence` skill now. Run focused tests from the git diff and write a fresh `.symphony/evidence/manifest.json` for this session. Updating the workpad alone is not progress.
+    - On continuation turns, do **not** loop on `git status` + manifest parse + "Continuação #N" workpad notes. Either execute missing evidence commands or end the turn if this session already recorded the outcome (including `blocked` after a real retry).
+    - If rework asked for fresh evidence, delete the old manifest and artifacts before re-running checks.
+    - If a prior manifest marks runs as `blocked`, retry each required command **once** in this turn before recording `blocked` again. After one retry still blocked, stop — document in Validation and end the turn.
 
     Deliverable state (computed by the orchestrator from the workspace):
 

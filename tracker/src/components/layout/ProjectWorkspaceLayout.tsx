@@ -1,4 +1,5 @@
 import { Settings } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { upsertIssue } from "@/components/board/board-utils";
@@ -25,6 +26,7 @@ export function ProjectWorkspaceLayout() {
 }
 
 function WorkspaceChrome() {
+  const { t } = useTranslation();
   const { projectSlug, project, trackerKind, reloadProject, refreshing, setIssues } = useWorkspace();
   const pollingActive = useWindowFocus();
   const navigate = useNavigate();
@@ -44,8 +46,8 @@ function WorkspaceChrome() {
               size="sm"
               onClick={() => navigate(projectSettingsPath(projectSlug))}
               disabled={!project}
-              aria-label="Edit project"
-              title="Edit project"
+              aria-label={t("layout.editProject")}
+              title={t("layout.editProject")}
             >
               <Settings className="h-4 w-4" />
             </Button>

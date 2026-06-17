@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
+import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
 import type { AgentKind } from "@/types/issue";
 
 export function ProjectAgentSelect({
@@ -21,17 +21,17 @@ export function ProjectAgentSelect({
       <span className="text-xs font-medium text-muted-foreground">{t("project.wizard.agent.label")}</span>
       <div className="flex flex-wrap gap-1.5">
         <AgentChip
-          label={t("project.wizard.agent.inherit", { agent: AGENT_LABELS[effectiveDefault] })}
+          label={t("project.wizard.agent.inherit", { agent: agentKindLabel(effectiveDefault, t) })}
           active={value === null}
           disabled={disabled}
           onClick={() => onChange(null)}
         />
-        {(Object.keys(AGENT_LABELS) as AgentKind[]).map((kind) => {
+        {AGENT_KINDS.map((kind) => {
           const Icon = AGENT_ICONS[kind];
           return (
             <AgentChip
               key={kind}
-              label={AGENT_LABELS[kind]}
+              label={agentKindLabel(kind, t)}
               icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
               active={value === kind}
               disabled={disabled}

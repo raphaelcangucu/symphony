@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { ModelMenu } from "@/components/assistant/ModelMenu";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
-import { AGENT_LABELS } from "@/components/shared/AgentChip";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -462,7 +462,7 @@ export function ExecutionControlComposer({
           <p className="text-xs text-destructive">{formatSteerError(steerError, t)}</p>
         ) : null}
         <p className="text-[11px] text-muted-foreground">
-          {t("issue.agent.modelsHint", { command: catalog.command, agent: AGENT_LABELS[agent] })}
+          {t("issue.agent.modelsHint", { command: catalog.command, agent: agentKindLabel(agent, t) })}
         </p>
       </form>
 

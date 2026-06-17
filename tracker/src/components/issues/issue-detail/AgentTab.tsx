@@ -7,7 +7,7 @@ import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/Age
 import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
-import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
+import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
 import { Separator } from "@/components/ui/separator";
 import { useSessionLogChannel } from "@/hooks/useSessionLogChannel";
 import { formatDateTime } from "@/lib/utils";
@@ -92,7 +92,7 @@ export function AgentTab({
             </div>
             {execution?.agentKind ? (
               <span className="rounded-full border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground">
-                {AGENT_LABELS[execution.agentKind]}
+                {agentKindLabel(execution.agentKind, t)}
               </span>
             ) : null}
           </div>
@@ -287,12 +287,12 @@ export function AgentTab({
             disabled={agentRunActive || agentPending}
             onClick={() => void changeAgent(null)}
           />
-          {(["codex", "claude", "cursor"] as AgentKind[]).map((kind) => {
+          {AGENT_KINDS.map((kind) => {
             const Icon = AGENT_ICONS[kind];
             return (
               <AgentChip
                 key={kind}
-                label={AGENT_LABELS[kind]}
+                label={agentKindLabel(kind, t)}
                 icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
                 active={issue.agentKind === kind}
                 disabled={agentRunActive || agentPending}

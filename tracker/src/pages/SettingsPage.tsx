@@ -7,7 +7,7 @@ import { LanguageCard } from "@/components/settings/LanguageCard";
 import { OrchestrationRulesCard } from "@/components/settings/OrchestrationRulesCard";
 import { ProviderCredentialsCard } from "@/components/settings/ProviderCredentialsCard";
 import { PushNotificationsCard } from "@/components/settings/PushNotificationsCard";
-import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
+import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   type AgentAvailability,
@@ -62,7 +62,7 @@ export function SettingsPage() {
     setDefaultAgent(kind);
     try {
       await updateAgentSettings({ default_agent_kind: kind });
-      toast.success(t("settings.codingAgent.saved", { agent: AGENT_LABELS[kind] }));
+      toast.success(t("settings.codingAgent.saved", { agent: agentKindLabel(kind, t) }));
     } catch {
       setDefaultAgent(previous);
       toast.error(t("settings.codingAgent.saveFailed"));
@@ -94,12 +94,12 @@ export function SettingsPage() {
               {defaultAgent === null && (
                 <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
               )}
-              {(Object.keys(AGENT_LABELS) as AgentKind[]).map((kind) => {
+              {AGENT_KINDS.map((kind) => {
                 const Icon = AGENT_ICONS[kind];
                 return (
                   <AgentChip
                     key={kind}
-                    label={AGENT_LABELS[kind]}
+                    label={agentKindLabel(kind, t)}
                     icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
                     active={defaultAgent === kind}
                     disabled={saving || defaultAgent === null}
@@ -114,7 +114,7 @@ export function SettingsPage() {
             <p className="text-xs text-muted-foreground">{t("settings.codingAgent.availabilityFailed")}</p>
           ) : availability ? (
             <ul className="space-y-1 text-xs text-muted-foreground">
-              {(Object.keys(AGENT_LABELS) as AgentKind[]).map((kind) => {
+              {AGENT_KINDS.map((kind) => {
                 const entry = availability[kind];
                 return (
                   <li key={kind}>

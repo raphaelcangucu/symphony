@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
+
 export type MicrophonePermission = "unknown" | "prompt" | "granted" | "denied" | "unsupported";
 
 const RECORDING_TIMESLICE_MS = 250;
@@ -33,20 +35,20 @@ function mapPermissionState(state: PermissionState): MicrophonePermission {
 function microphoneErrorMessage(error: unknown): string {
   if (error instanceof DOMException) {
     if (error.name === "NotAllowedError") {
-      return "Microphone permission denied. Allow microphone access in your browser settings and try again.";
+      return i18n.t("assistant.audio.errors.notAllowed");
     }
     if (error.name === "NotFoundError") {
-      return "No microphone was found on this device.";
+      return i18n.t("assistant.audio.errors.notFound");
     }
     if (error.name === "NotReadableError") {
-      return "The microphone is in use by another application.";
+      return i18n.t("assistant.audio.errors.notReadable");
     }
     if (error.name === "SecurityError") {
-      return "Microphone access requires HTTPS or localhost.";
+      return i18n.t("assistant.audio.errors.security");
     }
   }
 
-  return "Could not access the microphone.";
+  return i18n.t("assistant.audio.errors.accessFailed");
 }
 
 export function useAudioRecorder() {
@@ -121,7 +123,7 @@ export function useAudioRecorder() {
   const start = useCallback(
     async (onComplete: (blob: Blob, durationMs: number) => void): Promise<boolean> => {
       if (!isMicrophoneSupported()) {
-        const message = "Microphone recording is not available. Use HTTPS in a supported browser.";
+        const message = i18n.t("assistant.audio.errors.unsupported");
         setError(message);
         setPermission("unsupported");
         return false;
@@ -154,7 +156,7 @@ export function useAudioRecorder() {
         };
 
         recorder.onerror = () => {
-          setError("Audio recording failed.");
+          setError(i18n.t("assistant.audio.errors.recordingFailed"));
           setRecording(false);
           cleanupStream();
         };
@@ -171,7 +173,7 @@ export function useAudioRecorder() {
           if (!callback) return;
 
           if (chunks.length === 0 || durationMs < MIN_RECORDING_MS) {
-            setError("Recording was too short. Hold the microphone button a little longer.");
+            setError(i18n.t("assistant.audio.errors.tooShort"));
             return;
           }
 

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
+import { AGENT_ICONS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
 import { cn } from "@/lib/utils";
 import { createIssue, getIssueFormOptions } from "@/services/issues";
 import type {
@@ -302,7 +302,7 @@ export function IssueCreateDialog({
               <span className="text-xs font-medium text-muted-foreground">{t("issue.create.agent")}</span>
               <div className="flex flex-wrap gap-1.5">
                 <AgentChip
-                  label={t("issue.create.inherit", { agent: AGENT_LABELS[options?.effectiveAgent ?? "codex"] })}
+                  label={t("issue.create.inherit", { agent: agentKindLabel(options?.effectiveAgent ?? "codex", t) })}
                   active={agent === ""}
                   onClick={() => setAgent("")}
                 />
