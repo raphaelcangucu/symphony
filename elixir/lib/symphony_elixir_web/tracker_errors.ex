@@ -338,6 +338,18 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :missing_runtime_id),
     do: error(conn, 422, "invalid_report", dgettext("errors", "runtime_id is required"))
 
+  def render(conn, :tmux_unavailable),
+    do: error(conn, 503, "tmux_unavailable", dgettext("errors", "tmux is not available"))
+
+  def render(conn, {:workspace_setup_failed, reason}),
+    do:
+      error(
+        conn,
+        500,
+        "workspace_setup_failed",
+        dgettext("errors", "workspace setup failed: %{reason}", reason: format_terminal_reason(reason))
+      )
+
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
 
@@ -387,4 +399,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     |> put_status(:internal_server_error)
     |> json(%{error: %{code: "request_failed", message: message}})
   end
+
+  defp format_terminal_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_terminal_reason(reason), do: inspect(reason)
 end

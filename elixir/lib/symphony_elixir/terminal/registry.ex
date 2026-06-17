@@ -6,6 +6,7 @@ defmodule SymphonyElixir.Terminal.Registry do
   alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Terminal.Tmux
+  alias SymphonyElixir.Terminal.ErrorMessages
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixir.Workspace
 
@@ -243,7 +244,7 @@ defmodule SymphonyElixir.Terminal.Registry do
   end
 
   defp ensure_tmux_available(tmux) do
-    if tmux.available?(), do: :ok, else: {:error, "tmux is not available"}
+    if tmux.available?(), do: :ok, else: {:error, :tmux_unavailable}
   end
 
   defp create_workspace(workspace, issue) do
@@ -251,7 +252,7 @@ defmodule SymphonyElixir.Terminal.Registry do
 
     case workspace.create_for_issue(issue_workspace_key) do
       {:ok, cwd} -> {:ok, cwd}
-      {:error, reason} -> {:error, "workspace setup failed: #{inspect(reason)}"}
+      {:error, reason} -> {:error, {:workspace_setup_failed, reason}}
     end
   end
 

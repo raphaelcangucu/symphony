@@ -8,7 +8,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Runner do
 
   alias SymphonyElixir.LocalTracker.DevEnv
   alias SymphonyElixir.LocalTracker.DevEnv.{Run, Step}
-  alias SymphonyElixir.Terminal.Registry
+  alias SymphonyElixir.Terminal.{ErrorMessages, Registry}
 
   @spec run_step(String.t(), Run.t(), Step.t(), keyword()) :: {:ok, DevEnv.StepRun.t()} | {:error, term()}
   def run_step(project_slug, %Run{} = run, %Step{} = step, opts \\ []) do
@@ -27,7 +27,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Runner do
       {:error, reason} ->
         DevEnv.record_step_result(run, step, %{
           status: "failed",
-          output: reason,
+          output: ErrorMessages.localize(reason),
           started_at: started_at,
           completed_at: DateTime.utc_now()
         })

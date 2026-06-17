@@ -281,3 +281,9 @@ msgstr "dados de entrada do terminal são obrigatórios"
 
 msgid "terminal resize cols and rows are required"
 msgstr "cols e rows do redimensionamento do terminal são obrigatórios"
+
+msgid "tmux is not available"
+msgstr "tmux não está disponível"
+
+msgid "workspace setup failed: %{reason}"
+msgstr "falha na configuração do workspace: %{reason}"

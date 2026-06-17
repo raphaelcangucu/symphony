@@ -1228,7 +1228,8 @@
         "documentPathInvalid": "O caminho do documento não pode incluir segmentos . ou ..",
         "uploadPathMissing": "A resposta do upload não incluiu um caminho de arquivo.",
         "projectAndIdentifierRequired": "projectSlug e identifier são obrigatórios",
-        "evidenceDeleteRequired": "projectSlug, identifier e runId são obrigatórios"
+        "evidenceDeleteRequired": "projectSlug, identifier e runId são obrigatórios",
+        "dispatchResponseMissingIssue": "A resposta do dispatch não incluiu a issue."
       }
     },
     "templates": {
@@ -1825,6 +1826,7 @@
     "storedAs": "Armazenado localmente como {{key}}.",
     "validating": "Validando...",
     "continue": "Continuar",
+    "tokenRequired": "O token do tracker é obrigatório.",
     "invalidToken": "Token do tracker inválido.",
     "serverUnreachable": "Não foi possível alcançar o servidor Symphony. Confirme que está rodando e tente novamente.",
     "viewerLoadFailed": "Symphony aceitou o token mas não carregou os detalhes do operador. Verifique os logs do servidor e tente novamente.",

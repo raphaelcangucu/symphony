@@ -1228,7 +1228,8 @@
         "documentPathInvalid": "Document path cannot include . or .. segments",
         "uploadPathMissing": "Upload response did not include a file path.",
         "projectAndIdentifierRequired": "projectSlug and identifier are required",
-        "evidenceDeleteRequired": "projectSlug, identifier, and runId are required"
+        "evidenceDeleteRequired": "projectSlug, identifier, and runId are required",
+        "dispatchResponseMissingIssue": "Dispatch response is missing the issue payload."
       }
     },
     "templates": {
@@ -1825,6 +1826,7 @@
     "storedAs": "Stored locally as {{key}}.",
     "validating": "Validating...",
     "continue": "Continue",
+    "tokenRequired": "Tracker token is required.",
     "invalidToken": "Invalid tracker token.",
     "serverUnreachable": "Could not reach the Symphony server. Confirm it is running and retry.",
     "viewerLoadFailed": "Symphony accepted the token but could not load operator details. Check server logs and retry.",

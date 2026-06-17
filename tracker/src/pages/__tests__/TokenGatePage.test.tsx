@@ -44,7 +44,7 @@ describe("TokenGatePage", () => {
 
   it("revalidates a stored token instead of redirecting immediately", async () => {
     window.localStorage.setItem(TRACKER_TOKEN_KEY, "stale-token");
-    vi.mocked(authService.validateTrackerToken).mockRejectedValue(new Error("invalid tracker token"));
+    vi.mocked(authService.validateTrackerToken).mockRejectedValue(new Error(i18n.t("auth.invalidToken")));
     renderTokenGate();
 
     await waitFor(() => expect(authService.validateTrackerToken).toHaveBeenCalledWith("stale-token"));
@@ -70,7 +70,7 @@ describe("TokenGatePage", () => {
   });
 
   it("stays on token page and does not save invalid tokens", async () => {
-    vi.mocked(authService.validateTrackerToken).mockRejectedValue(new Error("invalid tracker token"));
+    vi.mocked(authService.validateTrackerToken).mockRejectedValue(new Error(i18n.t("auth.invalidToken")));
     renderTokenGate();
 
     fireEvent.change(screen.getByPlaceholderText("Tracker token"), { target: { value: "bad-token" } });

@@ -97,13 +97,7 @@ export function TokenGatePage() {
       await completeLogin(value);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "";
-      if (message === "invalid tracker token") {
-        setError(t("auth.invalidToken"));
-      } else if (message === "unable to validate tracker token") {
-        setError(t("auth.serverUnreachable"));
-      } else {
-        setError(t("auth.invalidToken"));
-      }
+      setError(message || t("auth.invalidToken"));
     } finally {
       setValidating(false);
     }

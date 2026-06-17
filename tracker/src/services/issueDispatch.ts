@@ -1,4 +1,5 @@
 import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
+import { i18n } from "@/i18n";
 import type { AgentKind, Issue } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -46,7 +47,7 @@ export async function dispatchIssueAgent(
   );
 
   const dto = unwrapData<BackendIssueDispatchDto>(response);
-  if (!dto.issue) throw new Error("dispatch response missing issue");
+  if (!dto.issue) throw new Error(i18n.t("project.services.validation.dispatchResponseMissingIssue"));
 
   return {
     action: normalizeDispatchAction(dto.action),
