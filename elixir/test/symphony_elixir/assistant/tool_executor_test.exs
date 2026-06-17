@@ -318,8 +318,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
            end)
 
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "add_comment"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_comments"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "update_comment"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_pull_requests"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_preview"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "check_handoff_gate"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "get_evidence_status"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_dev_env"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "scan_project_setup"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "suggest_project_setup"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_project_repositories"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "update_project_repositories"))
 
@@ -363,6 +370,30 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
                })
 
       assert [%{body: "Note", author: "human"}] = result.data.comments
+    end
+
+    test "list_comments returns issue comments" do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "list_comments", %{"identifier" => "MAC-1"})
+
+      assert result.tool == "list_comments"
+      assert [%{body: "Note", author: "human"}] = result.data.comments
+    end
+
+    test "update_comment edits an existing comment" do
+      assert {:ok, listed} =
+               ToolExecutor.execute("macro-markets", "list_comments", %{"identifier" => "MAC-1"})
+
+      comment_id = hd(listed.data.comments).id
+
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "update_comment", %{
+                 "identifier" => "MAC-1",
+                 "comment_id" => comment_id,
+                 "body" => "Updated workpad"
+               })
+
+      assert result.data.comment.body == "Updated workpad"
     end
 
     test "get_project returns setup and statuses without listing issues" do

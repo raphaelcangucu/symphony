@@ -5,9 +5,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.AgentPreference
-  alias SymphonyElixir.Assistant.{DiscoveryTools, GitHubTools, ProjectBoardTools, PullRequestLookup, ReadTools}
-  alias SymphonyElixir.{Config, DevServer}
-  alias SymphonyElixir.DevServer.Manager
+  alias SymphonyElixir.Assistant.{DiscoveryTools, DevEnvTools, EvidenceTools, GitHubTools, HandoffTools, PreviewTools, ProjectBoardTools, PullRequestLookup, ReadTools, SetupTools}
+  alias SymphonyElixir.Config
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.ProjectConfig
@@ -22,6 +21,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     update_issue
     move_issue
     add_comment
+    list_comments
+    update_comment
     list_pull_requests
     manage_preview
     update_project_workflow
@@ -29,6 +30,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     get_agent_executions
     dispatch_coding_agent
     dispatch_codex
+    check_handoff_gate
+    get_evidence_status
+    manage_dev_env
+    scan_project_setup
+    suggest_project_setup
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
@@ -114,8 +120,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         }
       ),
       tool_spec(
-        "list_pull_requests",
-        "List pull requests linked to an issue (GitHub discovery + persisted links).",
+        "list_comments",
+        "List comments on a tracker issue (use to find workpad comment ids before update_comment).",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -126,19 +132,31 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         }
       ),
       tool_spec(
-        "manage_preview",
-        "Inspect or control the issue dev-server preview (start, stop, restart, or status).",
+        "update_comment",
+        "Edit an existing issue comment in place (for workpad updates).",
         %{
           "type" => "object",
           "additionalProperties" => false,
-          "required" => ["identifier", "action"],
+          "required" => ["identifier", "comment_id", "body"],
           "properties" => %{
             "identifier" => string_schema("Issue identifier, for example MAC-1."),
-            "action" => %{
-              "type" => "string",
-              "enum" => ["status", "start", "stop", "restart"],
-              "description" => "Preview action."
-            }
+            "comment_id" => %{
+              "type" => ["string", "integer"],
+              "description" => "Comment id from list_comments."
+            },
+            "body" => string_schema("Replacement comment body markdown/text.")
+          }
+        }
+      ),
+      tool_spec(
+        "list_pull_requests",
+        "List pull requests linked to an issue (GitHub discovery + persisted links).",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["identifier"],
+          "properties" => %{
+            "identifier" => string_schema("Issue identifier, for example MAC-1.")
           }
         }
       ),
@@ -195,7 +213,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "goal" => string_schema("Optional long-running Codex goal to persist for the orchestrator.")
         }
       })
-    ] ++ ReadTools.tool_specs() ++ GitHubTools.tool_specs()
+    ] ++
+      [HandoffTools.assistant_tool_spec(), EvidenceTools.assistant_tool_spec(), PreviewTools.assistant_tool_spec()] ++
+      SetupTools.tool_specs() ++
+      [DevEnvTools.assistant_tool_spec()] ++
+      ReadTools.tool_specs() ++ GitHubTools.tool_specs()
   end
 
   @spec combined_tool_specs() :: [map()]
@@ -473,6 +495,79 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
+  defp do_execute(project, "check_handoff_gate", arguments, opts) do
+    slug = project_slug(project)
+
+    case HandoffTools.execute(slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "get_evidence_status", arguments, opts) do
+    slug = project_slug(project)
+
+    case EvidenceTools.execute(slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "manage_dev_env", arguments, opts) do
+    slug = project_slug(project)
+
+    case DevEnvTools.execute(slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "scan_project_setup", arguments, opts) do
+    slug = project_slug(project)
+
+    case SetupTools.execute("scan_project_setup", slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "suggest_project_setup", arguments, opts) do
+    slug = project_slug(project)
+
+    case SetupTools.execute("suggest_project_setup", slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "list_comments", arguments, _opts) do
+    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
+         {:ok, comments} <- IssueAdapter.dispatch(project, :list_comments, [identifier]) do
+      presented = Enum.map(comments, &TrackerPresenter.comment/1)
+
+      {:ok,
+       %{
+         tool: "list_comments",
+         message: "Found #{length(presented)} comment(s) for #{identifier}.",
+         data: %{comments: presented}
+       }}
+    end
+  end
+
+  defp do_execute(project, "update_comment", arguments, _opts) do
+    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
+         {:ok, comment_id} <- normalize_comment_id(Map.get(arguments, "comment_id")),
+         {:ok, body} <- normalize_required_string(Map.get(arguments, "body"), :body),
+         {:ok, comment} <- IssueAdapter.dispatch(project, :update_comment, [identifier, comment_id, body]) do
+      {:ok,
+       %{
+         tool: "update_comment",
+         message: "Updated comment on #{identifier}.",
+         data: %{comment: TrackerPresenter.comment(comment)}
+       }}
+    end
+  end
+
   defp do_execute(project, "list_pull_requests", arguments, opts) do
     with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
          {:ok, payload} <- PullRequestLookup.list_for_issue(project, identifier, opts) do
@@ -487,44 +582,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp do_execute(project, "manage_preview", arguments, _opts) do
+  defp do_execute(project, "manage_preview", arguments, opts) do
     slug = project_slug(project)
 
-    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
-         {:ok, action} <- normalize_preview_action(Map.get(arguments, "action")) do
-      case action do
-        :status ->
-          with {:ok, view} <- DevServer.issue_targets(slug, identifier) do
-            {:ok,
-             %{
-               tool: "manage_preview",
-               message: "Preview status for #{identifier}.",
-               data: view
-             }}
-          end
-
-        :start ->
-          case Manager.start_for_issue(slug, identifier) do
-            {:ok, _} ->
-              {:ok, preview_action_result("Started preview for #{identifier}.", slug, identifier)}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        :stop ->
-          Manager.stop_for_issue(slug, identifier)
-          {:ok, preview_action_result("Stopped preview for #{identifier}.", slug, identifier)}
-
-        :restart ->
-          case Manager.restart_for_issue(slug, identifier) do
-            {:ok, _} ->
-              {:ok, preview_action_result("Restarted preview for #{identifier}.", slug, identifier)}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-      end
+    case PreviewTools.execute(slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -756,8 +819,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     if Enum.any?(dispatch_states, &(normalize_status_name(&1) == normalize_status_name(current))) do
       :ok
     else
-      {:error,
-       "Issue must be in orchestrator queue #{inspect(dispatch_states)} before dispatch. Current status: #{current}. Use move_issue first."}
+      {:error, "Issue must be in orchestrator queue #{inspect(dispatch_states)} before dispatch. Current status: #{current}. Use move_issue first."}
     end
   end
 
@@ -935,11 +997,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp resolve_create_status(project, status) when is_binary(status) do
     case normalize_optional_string(status) do
-      nil -> resolve_create_status(project, nil)
+      nil ->
+        resolve_create_status(project, nil)
+
       explicit ->
         if dispatch_queue_status?(project, explicit) do
-          {:error,
-           "Cannot create issues directly in #{explicit}. Omit status to use Backlog (intake), then move_issue to #{explicit} when ready for agent execution."}
+          {:error, "Cannot create issues directly in #{explicit}. Omit status to use Backlog (intake), then move_issue to #{explicit} when ready for agent execution."}
         else
           {:ok, explicit}
         end
@@ -1109,6 +1172,17 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp normalize_required_string(_value, field), do: {:error, {:missing_required_field, field}}
 
+  defp normalize_comment_id(id) when is_integer(id), do: {:ok, id}
+
+  defp normalize_comment_id(id) when is_binary(id) do
+    case String.trim(id) do
+      "" -> {:error, :missing_comment_id}
+      trimmed -> {:ok, trimmed}
+    end
+  end
+
+  defp normalize_comment_id(_id), do: {:error, :missing_comment_id}
+
   defp normalize_issue_identifier!(issue_identifier) do
     case normalize_required_string(issue_identifier, :issue_identifier) do
       {:ok, identifier} -> identifier
@@ -1146,28 +1220,6 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp project_slug(%{slug: slug}) when is_binary(slug), do: slug
   defp project_slug(%{"slug" => slug}) when is_binary(slug), do: slug
-
-  defp preview_action_result(message, project_slug, identifier) do
-    {:ok, view} = DevServer.issue_targets(project_slug, identifier)
-
-    %{
-      tool: "manage_preview",
-      message: message,
-      data: view
-    }
-  end
-
-  defp normalize_preview_action(action) when is_binary(action) do
-    case String.trim(action) |> String.downcase() do
-      "status" -> {:ok, :status}
-      "start" -> {:ok, :start}
-      "stop" -> {:ok, :stop}
-      "restart" -> {:ok, :restart}
-      other -> {:error, {:invalid_preview_action, other}}
-    end
-  end
-
-  defp normalize_preview_action(action), do: {:error, {:invalid_preview_action, action}}
 
   defp validate_workflow_markdown(markdown) when is_binary(markdown) do
     case Config.parse_workflow_markdown(markdown) do

@@ -23,22 +23,42 @@ defmodule SymphonyElixir.AgentHandoffGate do
   @spec check(map(), ProjectConfig.t(), keyword()) ::
           :ok | {:error, :validate_gate, [violation()]} | {:error, :publish_gate, [violation()]}
   def check(issue, %ProjectConfig{} = config, opts \\ []) do
-    workspace = Keyword.get(opts, :workspace, Workspace.path_for_issue(issue))
+    workspace = workspace_path(issue, opts)
 
-    with :ok <- check_validate(workspace, config),
-         :ok <- check_publish(workspace) do
+    with :ok <- check_validate_workspace(workspace, config),
+         :ok <- check_publish_workspace(workspace, config) do
       :ok
     end
   end
 
-  defp check_validate(workspace, config) do
+  @spec check_validate(map(), ProjectConfig.t(), keyword()) ::
+          :ok | {:error, :validate_gate, [violation()]}
+  def check_validate(issue, %ProjectConfig{} = config, opts \\ []) do
+    issue
+    |> workspace_path(opts)
+    |> check_validate_workspace(config)
+  end
+
+  @spec check_publish(map(), ProjectConfig.t(), keyword()) ::
+          :ok | {:error, :publish_gate, [violation()]}
+  def check_publish(issue, %ProjectConfig{} = config, opts \\ []) do
+    issue
+    |> workspace_path(opts)
+    |> check_publish_workspace(config)
+  end
+
+  defp workspace_path(issue, opts) do
+    Keyword.get(opts, :workspace, Workspace.path_for_issue(issue))
+  end
+
+  defp check_validate_workspace(workspace, config) do
     case Gate.evaluate(workspace, evidence_config(config)) do
       :satisfied -> :ok
       {:violations, violations} -> {:error, :validate_gate, violations}
     end
   end
 
-  defp check_publish(workspace) do
+  defp check_publish_workspace(workspace, _config) do
     states = RunContract.repo_states(workspace)
 
     case RunContract.evaluate_publish(states, RunContract.gh_pr_checker()) do

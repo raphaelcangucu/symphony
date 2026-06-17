@@ -67,6 +67,10 @@ regardless of which tracker backs the project. Do NOT reach for
   `## Codex Workpad` comment's `id`, then `update_comment` with that `id`.
   Only `add_comment` when no workpad exists yet — never post a second one.
 
+In the **tracker project assistant** chat (not the coding agent session), the same
+workpad flow uses `list_comments` / `update_comment` with an explicit issue
+`identifier` instead of issue-bound tools.
+
 `linear_graphql` (Linear) and `gh issue comment` (GitHub) remain available as
 tracker-specific escape hatches, but the `add_comment` / `list_comments` /
 `update_comment` tools are the correct default for every project.

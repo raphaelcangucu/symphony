@@ -17,6 +17,11 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     read_workspace_file
     list_pull_requests
     manage_preview
+    check_handoff_gate
+    get_evidence_status
+    manage_dev_env
+    scan_project_setup
+    suggest_project_setup
     update_project_workflow
     update_project_repositories
     dispatch_codex

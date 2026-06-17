@@ -96,6 +96,18 @@ Use `update_project_workflow` with the **full** markdown string:
 
 `get_project` returns board statuses and categories — use it for column names, then `get_workflow` for orchestrator config.
 
+## Project setup & dev environment (assistants)
+
+For new or incomplete projects, use the setup wizard tools (require `project_slug` in freeform chat):
+
+1. **`scan_project_setup`** — scan linked repositories for stack hints (package manager, test/lint scripts).
+2. **`suggest_project_setup`** — generate workflow markdown, hooks, and validation command suggestions from scans.
+3. **`update_project_workflow`** / **`update_project_repositories`** — persist the chosen setup.
+4. **`manage_dev_env`** — `propose_steps` → review → `save_steps` → `run` (setup + serve steps).
+5. **`manage_preview`** — after serve steps exist, `start` / `status` for preview URLs used in e2e.
+
+Coding agents get a subset of **`manage_dev_env`** (`list_steps`, `run`, `run_step`, `list_runs`) bound to the current issue — they cannot `propose_steps` or `save_steps`.
+
 ## Examples
 
 ### GitHub / Gamba-style

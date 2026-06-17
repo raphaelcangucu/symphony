@@ -5,6 +5,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
 
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.Issue
+  alias SymphonyElixir.Assistant.{EvidenceTools, HandoffTools, DevEnvTools, PreviewTools}
   alias SymphonyElixir.Linear.Client, as: LinearClient
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.AgentHandoffGate
@@ -18,6 +19,10 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @add_comment_tool "add_comment"
   @list_comments_tool "list_comments"
   @update_comment_tool "update_comment"
+  @check_handoff_gate_tool "check_handoff_gate"
+  @get_evidence_status_tool "get_evidence_status"
+  @manage_preview_tool "manage_preview"
+  @manage_dev_env_tool "manage_dev_env"
 
   @graphql_input_schema %{
     "type" => "object",
@@ -137,6 +142,18 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       @update_comment_tool ->
         execute_update_comment(arguments, opts)
 
+      @check_handoff_gate_tool ->
+        execute_bound_assistant_tool(HandoffTools, arguments, opts)
+
+      @get_evidence_status_tool ->
+        execute_bound_assistant_tool(EvidenceTools, arguments, opts)
+
+      @manage_preview_tool ->
+        execute_bound_assistant_tool(PreviewTools, arguments, opts)
+
+      @manage_dev_env_tool ->
+        execute_bound_assistant_tool(DevEnvTools, arguments, opts, coding_agent: true)
+
       other ->
         failure_response(%{
           "error" => %{
@@ -191,9 +208,55 @@ defmodule SymphonyElixir.Codex.DynamicTool do
           "name" => @update_comment_tool,
           "description" => @update_comment_description,
           "inputSchema" => @update_comment_input_schema
-        }
+        },
+        HandoffTools.issue_bound_tool_spec(),
+        EvidenceTools.issue_bound_tool_spec(),
+        PreviewTools.issue_bound_tool_spec(),
+        DevEnvTools.issue_bound_tool_spec()
       ]
   end
+
+  defp execute_bound_assistant_tool(module, arguments, opts, extra \\ []) do
+    with {:ok, issue} <- fetch_bound_issue(opts),
+         arguments <- normalize_tool_arguments(arguments),
+         executor_opts <- Keyword.merge([issue: issue], extra ++ opts),
+         {:ok, result} <- module.execute(issue.project_slug, arguments, executor_opts) do
+      bound_assistant_tool_success(result)
+    else
+      {:error, reason} -> failure_response(bound_assistant_tool_error_payload(reason))
+    end
+  end
+
+  defp normalize_tool_arguments(arguments) when is_map(arguments), do: stringify_keys(arguments)
+  defp normalize_tool_arguments(_arguments), do: %{}
+
+  defp bound_assistant_tool_success(%{tool: tool, message: message, data: data}) do
+    payload = stringify_keys(%{tool: tool, message: message, data: data})
+
+    %{
+      "success" => true,
+      "contentItems" => [%{"type" => "inputText", "text" => encode_payload(payload)}],
+      "toolResult" => payload
+    }
+  end
+
+  defp bound_assistant_tool_error_payload(reason) do
+    %{
+      "error" => %{
+        "message" => inspect(reason)
+      }
+    }
+  end
+
+  defp stringify_keys(value) when is_map(value) do
+    Map.new(value, fn
+      {key, nested} when is_atom(key) -> {Atom.to_string(key), stringify_keys(nested)}
+      {key, nested} when is_binary(key) -> {key, stringify_keys(nested)}
+    end)
+  end
+
+  defp stringify_keys(value) when is_list(value), do: Enum.map(value, &stringify_keys/1)
+  defp stringify_keys(value), do: value
 
   defp execute_linear_graphql(arguments, opts) do
     linear_client = Keyword.get(opts, :linear_client, &LinearClient.graphql/3)
@@ -627,8 +690,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
 
     %{
       "error" => %{
-        "message" =>
-          "Cannot move to a handoff status yet — the publish gate is not satisfied (open PRs / pushed branches required).\n\n#{lines}"
+        "message" => "Cannot move to a handoff status yet — the publish gate is not satisfied (open PRs / pushed branches required).\n\n#{lines}"
       }
     }
   end

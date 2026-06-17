@@ -58,4 +58,38 @@ defmodule SymphonyElixir.AgentHandoffGateTest do
     assert {:error, :validate_gate, violations} = AgentHandoffGate.check(issue, cfg, workspace: ws)
     assert Enum.any?(violations, &(&1.kind == :manifest_missing))
   end
+
+  test "check_validate and check_publish can be evaluated independently", %{tmp_dir: tmp_dir} do
+    ws = Path.join(tmp_dir, "GAM-10")
+    File.mkdir_p!(ws)
+    repo = make_repo!(tmp_dir, ws, "frontend")
+
+    sh!(repo, """
+    git checkout -b feat/x && mkdir -p src &&
+    echo a > src/App.tsx &&
+    git add -A && git commit -m work
+    """)
+
+    issue = %Issue{id: "1", identifier: "GAM-10", project_slug: "gam"}
+    cfg = config()
+
+    assert {:error, :validate_gate, validate_violations} =
+             AgentHandoffGate.check_validate(issue, cfg, workspace: ws)
+
+    assert Enum.any?(validate_violations, &(&1.kind == :manifest_missing))
+
+    assert {:error, :publish_gate, publish_violations} =
+             AgentHandoffGate.check_publish(issue, cfg, workspace: ws)
+
+    assert Enum.any?(publish_violations, &(&1.kind == :unpublished_branch))
+  end
+
+  test "check_publish passes on an empty workspace", %{tmp_dir: tmp_dir} do
+    ws = Path.join(tmp_dir, "empty")
+    File.mkdir_p!(ws)
+    issue = %Issue{id: "1", identifier: "GAM-11", project_slug: "gam"}
+    cfg = config(evidence: %{required: false, repos: %{}})
+
+    assert :ok = AgentHandoffGate.check_publish(issue, cfg, workspace: ws)
+  end
 end

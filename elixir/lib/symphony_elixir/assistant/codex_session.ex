@@ -207,7 +207,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     For orchestrator/dispatch questions: call get_workflow and read tracker.dispatch_states (queue for new auto-runs), active_states (polled), terminal_states, wait_states in data.config — not board status categories from get_project. Follow the workflow skill when editing workflow YAML.
     #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
-    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_pull_requests, manage_preview (start/stop/restart/status), update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, check_handoff_gate, get_evidence_status, manage_preview (start/stop/restart/status), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview URLs, configure serve steps with manage_dev_env then manage_preview (start|status).
     If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
     When the user attaches an image or file, it is already saved in this project. If they want it on a task (e.g. in the description), embed it using the exact Markdown URL given in the attachment note (`![alt](URL)` for images) when you call create_issue/update_issue/add_comment — never just describe it in words.
     create_issue places new work in Backlog (intake) by default — omit status. Do not create directly in orchestrator queue statuses (e.g. Todo); use move_issue when the issue is ready for execution.
@@ -474,8 +475,13 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Create projects: create_tracker_project (local only), create_github_tracker_project, provision_github_project.
 
     Board / issues (require project_slug): list_issues, create_issue, get_issue, update_issue, move_issue, add_comment,
-    list_pull_requests, manage_preview (action: status|start|stop|restart), dispatch_codex, get_agent_executions,
-    get_project, list_project_repositories, get_workflow, read_workspace_file, update_project_workflow, update_project_repositories.
+    list_comments, update_comment, list_pull_requests, check_handoff_gate, get_evidence_status,
+    manage_preview (action: status|start|stop|restart), manage_dev_env, scan_project_setup, suggest_project_setup,
+    dispatch_codex, get_agent_executions, get_project, list_project_repositories, get_workflow, read_workspace_file,
+    update_project_workflow, update_project_repositories.
+
+    Project setup flow: scan_project_setup → suggest_project_setup → update_project_workflow / update_project_repositories,
+    then manage_dev_env (propose_steps|save_steps|run) before manage_preview for serve URLs.
 
     Templates: list_templates, get_template (use exact slugs from list_templates, e.g. multi-repo-fullstack). GraphQL escape hatches: github_graphql, linear_graphql.
     Use these structured tools instead of shell commands (gh, curl, ps) for tracker setup, discovery, and board actions.

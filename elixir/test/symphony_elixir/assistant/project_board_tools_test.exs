@@ -56,6 +56,16 @@ defmodule SymphonyElixir.Assistant.ProjectBoardToolsTest do
     assert "project_slug" in spec["inputSchema"]["required"]
   end
 
+  test "freeform specs include setup and dev_env with project_slug" do
+    names = ToolExecutor.freeform_tool_specs() |> Enum.map(& &1["name"])
+    assert "manage_dev_env" in names
+    assert "scan_project_setup" in names
+    assert "suggest_project_setup" in names
+
+    dev_env = Enum.find(ToolExecutor.freeform_tool_specs(), &(&1["name"] == "manage_dev_env"))
+    assert "project_slug" in dev_env["inputSchema"]["required"]
+  end
+
   test "tool_specs builds schemas for tools without a required list (e.g. get_project)" do
     assert Enum.all?(ProjectBoardTools.tool_specs(), &is_map/1)
 

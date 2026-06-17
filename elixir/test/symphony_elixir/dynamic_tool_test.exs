@@ -25,10 +25,44 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert "linear_graphql" in names
     assert "github_graphql" in names
     assert "set_issue_status" in names
+    assert "check_handoff_gate" in names
+    assert "get_evidence_status" in names
+    assert "manage_preview" in names
+    assert "manage_dev_env" in names
+    refute "scan_project_setup" in names
 
     spec = Enum.find(DynamicTool.coding_agent_tool_specs(), &(&1["name"] == "set_issue_status"))
     assert spec["inputSchema"]["required"] == ["status"]
     assert spec["description"] =~ "local-first"
+  end
+
+  test "manage_dev_env rejects save_steps for coding agent" do
+    issue = %Issue{identifier: "GAM-1", project_slug: "gam"}
+
+    response =
+      DynamicTool.execute("manage_dev_env", %{"action" => "save_steps", "steps" => []}, issue: issue)
+
+    assert response["success"] == false
+    text = hd(response["contentItems"])["text"]
+    assert Jason.decode!(text)["error"]["message"] =~ "action_not_allowed"
+  end
+
+  @tag :tmp_dir
+  test "check_handoff_gate uses bound issue context", %{tmp_dir: tmp_dir} do
+    ws = Path.join(tmp_dir, "GAM-1")
+    File.mkdir_p!(ws)
+    issue = %Issue{id: "1", identifier: "GAM-1", project_slug: "gam"}
+
+    response =
+      DynamicTool.execute("check_handoff_gate", %{},
+        issue: issue,
+        project_config: evidence_disabled_config(),
+        workspace: ws
+      )
+
+    assert response["success"] == true
+    assert response["toolResult"]["tool"] == "check_handoff_gate"
+    assert is_boolean(response["toolResult"]["data"]["ready"])
   end
 
   test "set_issue_status fails when no issue is bound to the session" do
@@ -178,7 +212,11 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
                  "set_issue_status",
                  "add_comment",
                  "list_comments",
-                 "update_comment"
+                 "update_comment",
+                 "check_handoff_gate",
+                 "get_evidence_status",
+                 "manage_preview",
+                 "manage_dev_env"
                ]
              }
            }
@@ -563,5 +601,16 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert response["success"] == false
     text = hd(response["contentItems"])["text"]
     assert Jason.decode!(text)["error"]["message"] =~ "500"
+  end
+
+  defp evidence_disabled_config do
+    struct!(SymphonyElixir.ProjectConfig,
+      project_id: "proj-1",
+      project_slug: "gam",
+      tracker_kind: "github",
+      wait_states: ["Human Review"],
+      completion_transitions: %{"In Progress" => "Human Review"},
+      evidence: %{required: false, repos: %{}}
+    )
   end
 end

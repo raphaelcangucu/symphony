@@ -267,3 +267,13 @@ If tests fail: fix the code, re-run, and only then update the manifest. If a
 required test cannot run because of the environment (not the code), record it as
 `blocked` with a `blocked_reason` (see above) rather than retrying forever.
 Never declare a run you did not execute — the gate will reject it.
+
+## Symphony tracker tools (coding agent)
+
+When working inside Symphony (MCP / dynamic tools), prefer structured probes over guessing gate state:
+
+- **`get_evidence_status`** — after writing `.symphony/evidence/manifest.json`, confirm gate state and missing artifacts.
+- **`check_handoff_gate`** — before calling `set_issue_status` to a handoff/wait status (e.g. Human Review), verify validate + publish gates.
+- **`manage_dev_env`** + **`manage_preview`** — before UI e2e, run configured serve steps (`category_filter: serve`) then start/check preview URLs.
+
+These tools read the same backend as the orchestrator; use them instead of re-parsing manifests by hand on continuation turns.
