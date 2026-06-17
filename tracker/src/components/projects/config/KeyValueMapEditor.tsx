@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ export function KeyValueMapEditor({
   value,
   onChange,
 }: KeyValueMapEditorProps) {
+  const { t } = useTranslation();
   const [draftKey, setDraftKey] = useState("");
   const [draftValue, setDraftValue] = useState("");
 
@@ -62,11 +64,11 @@ export function KeyValueMapEditor({
             <span className="text-muted-foreground">&rarr; {String(entryValue)}</span>
             <button
               type="button"
-              aria-label={`remove ${key}`}
+              aria-label={t("project.config.mapEditor.removeAria", { key })}
               className="ml-auto text-xs text-muted-foreground hover:text-foreground"
               onClick={() => remove(key)}
             >
-              Remove
+              {t("project.config.mapEditor.remove")}
             </button>
           </div>
         ))}
@@ -74,14 +76,14 @@ export function KeyValueMapEditor({
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 text-xs">
-          <span>Add key</span>
+          <span>{t("project.config.mapEditor.addKey")}</span>
           <select
-            aria-label="add key"
+            aria-label={t("project.config.mapEditor.addKeyAria")}
             className="h-9 rounded-md border bg-background px-2 text-sm"
             value={draftKey}
             onChange={(event) => setDraftKey(event.target.value)}
           >
-            <option value="">Select state&hellip;</option>
+            <option value="">{t("project.config.mapEditor.selectState")}</option>
             {availableKeys.map((key) => (
               <option key={key} value={key}>
                 {key}
@@ -92,14 +94,14 @@ export function KeyValueMapEditor({
 
         {valueKind === "state" ? (
           <label className="flex flex-col gap-1 text-xs">
-            <span>New value</span>
+            <span>{t("project.config.mapEditor.newValue")}</span>
             <select
-              aria-label="new value"
+              aria-label={t("project.config.mapEditor.newValueAria")}
               className="h-9 rounded-md border bg-background px-2 text-sm"
               value={draftValue}
               onChange={(event) => setDraftValue(event.target.value)}
             >
-              <option value="">Select state&hellip;</option>
+              <option value="">{t("project.config.mapEditor.selectState")}</option>
               {valueOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -109,9 +111,9 @@ export function KeyValueMapEditor({
           </label>
         ) : (
           <label className="flex flex-col gap-1 text-xs">
-            <span>New value</span>
+            <span>{t("project.config.mapEditor.newValue")}</span>
             <Input
-              aria-label="new value"
+              aria-label={t("project.config.mapEditor.newValueAria")}
               type="number"
               min={1}
               value={draftValue}
@@ -122,7 +124,7 @@ export function KeyValueMapEditor({
         )}
 
         <Button type="button" variant="secondary" size="sm" onClick={add}>
-          Add entry
+          {t("project.config.mapEditor.addEntry")}
         </Button>
       </div>
     </div>

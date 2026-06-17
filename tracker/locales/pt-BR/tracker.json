@@ -397,8 +397,8 @@
       "empty": "Nenhum pull request vinculado a esta issue ainda. Quando um agente abrir um PR que referencia {{identifier}} (ou usar o branch vinculado), ele aparecerá aqui. Você também pode vincular manualmente abaixo (ex.: PR em outro repositório).",
       "limitedAccessTitle": "Acesso GitHub limitado.",
       "limitedAccessBody": "Pull requests vinculados são exibidos, mas detalhes de CI e ações de merge precisam de GITHUB_TOKEN configurado.",
-      "relatedCount": "{{count}} pull request relacionado",
-      "relatedCount_plural": "{{count}} pull requests relacionados",
+      "relatedCount_one": "{{count}} pull request relacionado",
+      "relatedCount_other": "{{count}} pull requests relacionados",
       "rerunning": "Reexecutando…",
       "rerunFailedJobs": "Reexecutar jobs com falha",
       "sending": "Enviando…",
@@ -462,7 +462,373 @@
       "reloadRepositories": "Recarregar repositórios",
       "createWorkspaceProject": "Criar projeto workspace",
       "connecting": "Conectando...",
-      "connectProject": "Conectar projeto"
+      "connectProject": "Conectar projeto",
+      "templateRepoCount_one": "{{count}} repositório",
+      "templateRepoCount_other": "{{count}} repositórios",
+      "organization": {
+        "title": "Organização GitHub",
+        "description": "Escolha um owner que este token pode acessar.",
+        "kindOrganization": "organização",
+        "kindUser": "usuário",
+        "selected": "Selecionado"
+      },
+      "repositories": {
+        "title": "Repositórios",
+        "description": "Caminhos do workspace são derivados do slug do projeto. Caminhos de scan local ficam ocultos até serem editados.",
+        "private": "Privado",
+        "workspacePath": "Caminho do workspace",
+        "scanPathLabel": "Caminho de scan local para {{repo}}",
+        "scanPathPlaceholder": "Caminho de scan local opcional para {{path}}",
+        "scanPathHint": "Checkout local opcional. O scan só lê arquivos deste caminho.",
+        "editScanPath": "Editar caminho de scan",
+        "editScanPathAria": "Editar caminho de scan para {{repo}}"
+      },
+      "scanCount_one": "{{count}} scan de repositório",
+      "scanCount_other": "{{count}} scans de repositório",
+      "suggestedSetup": "Setup sugerido",
+      "agent": {
+        "label": "Agente de código",
+        "inherit": "Herdar ({{agent}})",
+        "hint": "Herdar segue o padrão do usuário em Configurações; escolhas explícitas gravam agent.kind no front matter do workflow."
+      }
+    },
+    "tracker": {
+      "fields": {
+        "slugHint": "O slug {{slug}} é fixo. Trocar a fonte muda de onde as issues são lidas.",
+        "localBoard": "Issues ficarão no board local do Symphony. Configuração remota é limpa."
+      },
+      "source": {
+        "aria": "Fonte do tracker",
+        "local": {
+          "title": "Tracker local Symphony",
+          "description": "Issues ficam no board local do Symphony (padrão)."
+        },
+        "github": {
+          "title": "GitHub Project v2",
+          "description": "Lê e move issues em um board GitHub conectado."
+        },
+        "linear": {
+          "title": "Projeto Linear",
+          "description": "Lê e move issues de um board Linear conectado."
+        },
+        "jira": {
+          "title": "Projeto Jira",
+          "description": "Lê e move issues de um board Jira conectado."
+        }
+      },
+      "github": {
+        "title": "Board GitHub Project v2",
+        "descriptionWizard": "Escolha um board que este token pode acessar. Issues ficam no GitHub.",
+        "descriptionEditor": "Escolha um board que este token pode acessar (usuário ou organização).",
+        "loading": "Carregando projetos GitHub…",
+        "empty": "Nenhum board GitHub Projects v2 encontrado.",
+        "loadFailed": "Falha ao carregar projetos GitHub",
+        "availableBoards": "Boards disponíveis",
+        "issuesRepository": "Repositório de issues",
+        "issuesRepositoryPlaceholder": "owner/name (ex. clouapp/front)",
+        "statusField": "Campo de status",
+        "noBoardSelected": "Nenhum board selecionado ainda.",
+        "connectedBoard": "Board conectado",
+        "resolvingBoard": "Resolvendo board…",
+        "connectedBoardFallback": "Board GitHub conectado",
+        "orgSuffix": " · org",
+        "orgLabel": " (org)",
+        "repoLine": "repo {{repo}}",
+        "openOnGitHub": "Abrir no GitHub"
+      },
+      "linear": {
+        "title": "Projeto Linear",
+        "description": "Escolha um projeto que este token pode acessar. Issues ficam no Linear.",
+        "loading": "Carregando projetos Linear…",
+        "empty": "Nenhum projeto Linear encontrado.",
+        "loadFailed": "Falha ao carregar projetos Linear",
+        "connectedProject": "Projeto conectado",
+        "noProjectSelected": "Nenhum projeto selecionado ainda."
+      },
+      "jira": {
+        "title": "Projeto Jira",
+        "description": "Issues ficam no Jira. O board lê tudo que corresponde a project = KEY mais os filtros de campo abaixo.",
+        "projectKey": "Chave do projeto",
+        "projectKeyPlaceholder": "ex. CDE",
+        "projectKeyRequired": "Obrigatório — o projeto Jira que o board lê.",
+        "boardFilters": "Filtros do board",
+        "addFilter": "Adicionar filtro",
+        "filtersHint": "Cláusulas campo = valor, unidas por AND na query do board — ex. Product = Inspire.",
+        "noFilters": "Sem filtros de campo — o board mostra o projeto inteiro.",
+        "filterFieldAria": "Campo do filtro",
+        "filterFieldPlaceholder": "Campo (ex. Product)",
+        "filterValueAria": "Valor do filtro",
+        "filterValuePlaceholder": "Valor (ex. Inspire)",
+        "removeFilterAria": "Remover filtro",
+        "advancedSummary": "Avançado (JQL bruto, ordenação, limite)",
+        "extraJql": "JQL extra",
+        "extraJqlPlaceholder": "cf[10042] = \"Inspire\" OR labels = inspire",
+        "extraJqlHint": "Fragmento bruto unido por AND após os filtros acima. Use para ids de custom field (cf[id]) ou grupos OR.",
+        "orderBy": "Ordenar por",
+        "orderByPlaceholder": "created DESC",
+        "maxResults": "Máximo de resultados",
+        "maxResultsPlaceholder": "500"
+      }
+    },
+    "list": {
+      "title": "Projetos",
+      "subtitle": "Escolha um projeto do tracker local.",
+      "import": "Importar",
+      "filters": "Filtros",
+      "newWorkspace": "Novo projeto workspace",
+      "emptyApi": "Nenhum projeto retornado pela API do tracker.",
+      "emptyFiltered": "Nenhum projeto corresponde aos filtros.",
+      "archived": "Arquivado",
+      "issueCount_one": "{{count}} issue",
+      "issueCount_other": "{{count}} issues",
+      "editProject": "Editar projeto",
+      "editProjectAria": "Editar {{name}}",
+      "restoreProject": "Restaurar projeto",
+      "restoreProjectAria": "Restaurar {{name}}",
+      "deletePermanently": "Excluir projeto permanentemente",
+      "deletePermanentlyAria": "Excluir {{name}} permanentemente",
+      "archiveProject": "Arquivar projeto",
+      "archiveProjectAria": "Arquivar {{name}}",
+      "deleteConfirm": "Excluir projeto \"{{name}}\" permanentemente? Isso não pode ser desfeito.",
+      "toasts": {
+        "loadFailed": "Não foi possível carregar projetos",
+        "imported": "Projeto \"{{name}}\" importado (projetos existentes são sobrescritos)",
+        "importFailed": "Não foi possível importar projeto",
+        "archiveFailed": "Não foi possível arquivar projeto",
+        "restoreFailed": "Não foi possível restaurar projeto",
+        "deleteFailed": "Não foi possível excluir projeto"
+      }
+    },
+    "filters": {
+      "dismissAria": "Fechar filtros",
+      "title": "Filtros",
+      "heading": "Foco do projeto",
+      "closeAria": "Fechar filtros",
+      "keyword": "Palavra-chave",
+      "searchPlaceholder": "Buscar projetos...",
+      "status": "Status",
+      "total": "{{count}} no total",
+      "ongoing": "Em andamento",
+      "ongoingDescription": "Workspaces ativos",
+      "archived": "Arquivados",
+      "archivedDescription": "Guardados com segurança",
+      "all": "Todos",
+      "allDescription": "Tudo local",
+      "summaryOngoing": "{{count}} em andamento",
+      "summaryArchived": "{{count}} arquivados",
+      "hint": "Filtros são locais e instantâneos; workspaces arquivados ficam disponíveis até exclusão permanente.",
+      "clear": "Limpar filtros"
+    },
+    "config": {
+      "sections": {
+        "general": {
+          "label": "Geral",
+          "title": "Geral",
+          "description": "Identidade do projeto, repositórios vinculados e comandos de validação."
+        },
+        "tracker": {
+          "label": "Tracker",
+          "title": "Fonte do tracker",
+          "description": "De onde as issues são lidas — board local, GitHub Projects, Linear ou Jira."
+        },
+        "workflow": {
+          "label": "Workflow",
+          "title": "Workflow",
+          "description": "Comportamento por projeto: estados do board, limites de agente, hooks, Codex/Claude, dev server e prompt do agente."
+        },
+        "dev": {
+          "label": "Dev environment",
+          "title": "Dev environment",
+          "description": "Passos de setup e serve agrupados por repositório. Passos serve alimentam a aba Preview de cada issue."
+        }
+      },
+      "name": "Nome",
+      "description": "Descrição",
+      "validationCommands": "Comandos de validação (um por linha)",
+      "validationCommandsAria": "Comandos de validação",
+      "repositories": "Repositórios",
+      "repositoriesHint": "Repositórios vinculados a este projeto. Remover só desvincula no Symphony — arquivos no disco permanecem.",
+      "templateSeedHint": "Templates só preenchem comandos de validação; edite o workflow YAML aqui.",
+      "footerHint": "Alterações aplicam somente a este projeto.",
+      "cancel": "Cancelar",
+      "saving": "Salvando...",
+      "save": "Salvar configuração",
+      "repoEditor": {
+        "empty": "Nenhum repositório vinculado ainda. Adicione um abaixo.",
+        "private": "Privado",
+        "removeAria": "Remover {{repo}}",
+        "workspacePath": "Caminho do workspace",
+        "workspacePathAria": "Caminho do workspace para {{repo}}",
+        "role": "Papel",
+        "roleAria": "Papel para {{repo}}",
+        "branch": "Branch",
+        "branchAria": "Branch para {{repo}}",
+        "addRepository": "Adicionar repositório",
+        "githubOwner": "Owner GitHub",
+        "githubOwnerAria": "Owner GitHub",
+        "loadingOwners": "Carregando owners…",
+        "selectOwner": "Selecione um owner",
+        "loadingRepositories": "Carregando repositórios…",
+        "noRepositories": "Nenhum repositório encontrado para este owner.",
+        "addRepoAria": "Adicionar {{repo}}",
+        "linked": "Vinculado",
+        "toasts": {
+          "loadOwnersFailed": "Falha ao carregar owners GitHub",
+          "loadReposFailed": "Falha ao carregar repositórios"
+        }
+      },
+      "loadDefault": {
+        "trigger": "Carregar padrão",
+        "empty": "Nenhum template.",
+        "loadFailed": "Falha ao carregar templates"
+      },
+      "workflowEditor": {
+        "hint": "YAML front matter (estados do tracker, agente, hooks, codex/claude, dev_server) mais o corpo do prompt do agente abaixo do --- final. Configurações de conexão ficam na aba Tracker.",
+        "edit": "Editar",
+        "preview": "Pré-visualizar",
+        "aria": "Markdown de workflow do projeto",
+        "frontMatter": "Front matter",
+        "noFrontMatter": "Sem YAML front matter.",
+        "promptBody": "Corpo do prompt",
+        "noPromptBody": "Sem corpo de prompt."
+      },
+      "mapEditor": {
+        "remove": "Remover",
+        "removeAria": "remover {{key}}",
+        "addKey": "Adicionar chave",
+        "addKeyAria": "adicionar chave",
+        "selectState": "Selecionar estado…",
+        "newValue": "Novo valor",
+        "newValueAria": "novo valor",
+        "addEntry": "Adicionar entrada"
+      },
+      "stateSelect": {
+        "empty": "Nenhum status definido para este projeto ainda."
+      },
+      "devenv": {
+        "hint": "Passos são agrupados por repositório. Passos Serve alimentam a aba Preview da issue. Alterações são persistidas com Salvar configuração.",
+        "serve": "Serve",
+        "saveConfiguration": "Salvar configuração",
+        "proposeSteps": "Propor passos",
+        "noStepsYet": "Nenhum passo ainda",
+        "serveCount_one": "{{count}} serve",
+        "serveCount_other": "{{count}} serve",
+        "addStep": "Adicionar passo",
+        "addStepTo": "Adicionar passo em {{label}}",
+        "noStepsProposed": "Nenhum passo proposto; adicione manualmente ou um .symphony/devenv.yaml",
+        "proposeFailed": "Falha ao propor passos",
+        "running": "Executando: {{command}}",
+        "runFailed": "Falha ao executar passo",
+        "stepLabel": "passo {{index}}",
+        "descriptionAria": "Descrição do passo",
+        "descriptionPlaceholder": "Descrição",
+        "commandAria": "Comando do passo",
+        "commandPlaceholder": "comando",
+        "run": "Executar",
+        "remove": "Remover",
+        "role": "Papel",
+        "roleAria": "Papel para {{label}}",
+        "roleSetup": "Setup",
+        "roleServe": "Serve",
+        "optional": "Opcional",
+        "optionalAria": "Opcional para {{label}}",
+        "primaryPreview": "Preview principal",
+        "primaryPreviewAria": "Preview principal para {{label}}",
+        "portEnv": "Env de porta",
+        "portEnvAria": "Env de porta para {{label}}",
+        "portEnvPlaceholder": "PORT",
+        "ready": "Ready",
+        "readyAria": "Probe ready para {{label}}",
+        "readyTcp": "TCP",
+        "readyHttp": "HTTP",
+        "path": "Caminho",
+        "readyPathAria": "Caminho ready para {{label}}",
+        "readyPathPlaceholder": "/"
+      },
+      "toasts": {
+        "devEnvLoadFailed": "Falha ao carregar passos de dev-env",
+        "nameRequired": "Nome do projeto é obrigatório",
+        "saved": "Configuração do projeto salva",
+        "saveFailed": "Falha ao salvar configuração do projeto"
+      },
+      "importExport": {
+        "export": "Exportar",
+        "import": "Importar",
+        "exportSuccess": "Configuração do projeto exportada",
+        "exportFailed": "Falha ao exportar configuração do projeto",
+        "importConfirm": "Importar configuração de \"{{fileName}}\" para \"{{projectName}}\"? Isso substitui as configurações atuais.",
+        "importSuccess": "Configuração do projeto importada",
+        "importFailed": "Falha ao importar configuração do projeto"
+      }
+    },
+    "settings": {
+      "eyebrow": "Configurações do projeto",
+      "subtitle": "Configuração por projeto. Configurações de processo ficam no ambiente do servidor.",
+      "loadFailed": "Não foi possível carregar projeto",
+      "saved": "Salvo"
+    },
+    "templates": {
+      "back": "Templates",
+      "editTitle": "Editar template",
+      "notFound": "Template não encontrado.",
+      "loadFailed": "Não foi possível carregar template",
+      "saveAsTemplate": "Salvar como template",
+      "saveAsTitle": "Salvar projeto como template",
+      "slugPlaceholder": "template-slug",
+      "list": {
+        "title": "Templates",
+        "subtitle": "Modelos reutilizáveis de workspace.",
+        "import": "Importar",
+        "empty": "Nenhum template ainda.",
+        "delete": "Excluir",
+        "repoCount_one": "{{count}} repositório",
+        "repoCount_other": "{{count}} repositórios",
+        "deleteConfirm": "Excluir template \"{{slug}}\" permanentemente? Isso não pode ser desfeito.",
+        "toasts": {
+          "loadFailed": "Não foi possível carregar templates",
+          "deleted": "Template excluído",
+          "deleteFailed": "Não foi possível excluir template",
+          "imported": "Template importado",
+          "importFailed": "Não foi possível importar template"
+        }
+      },
+      "clone": {
+        "failed": "Alguns repositórios falharam ao clonar",
+        "inProgress": "Clonando repositórios ({{count}} em progresso)",
+        "retry": "Tentar novamente"
+      },
+      "form": {
+        "name": "Nome",
+        "namePlaceholder": "Nome do template",
+        "description": "Descrição",
+        "descriptionPlaceholder": "Descrição opcional",
+        "repositories": "Repositórios",
+        "addRepository": "Adicionar repositório",
+        "noRepositories": "Nenhum repositório.",
+        "githubFullName": "Nome completo no GitHub",
+        "githubFullNamePlaceholder": "owner/repo",
+        "cloneUrl": "URL de clone",
+        "cloneUrlPlaceholder": "URL de clone",
+        "workspacePath": "Caminho do workspace",
+        "defaultBranch": "Branch padrão",
+        "role": "Papel",
+        "rolePlaceholder": "Papel (opcional)",
+        "remove": "Remover",
+        "validationCommands": "Comandos de validação",
+        "validationCommandsHint": "Um comando por linha.",
+        "validationCommandsPlaceholder": "npm test",
+        "afterCreateHook": "Hook pós-criação",
+        "promptTemplate": "Template de prompt",
+        "devEnvMarkdown": "Dev environment (markdown)",
+        "export": "Exportar",
+        "saving": "Salvando…",
+        "save": "Salvar template"
+      },
+      "toasts": {
+        "saved": "Template salvo",
+        "saveFailed": "Falha ao salvar template",
+        "exportFailed": "Falha ao exportar template"
+      }
     }
   },
   "observability": {
@@ -824,7 +1190,16 @@
     "reset": "Resetar filtros",
     "clearAllFilters": "Limpar todos os filtros",
     "done": "Concluir",
-    "recentlyUpdated7d": "Atualizadas recentemente (7d)"
+    "recentlyUpdated7d": "Atualizadas recentemente (7d)",
+    "list": {
+      "empty": "Nenhuma issue ainda.",
+      "columns": {
+        "id": "ID",
+        "title": "Título",
+        "status": "Status",
+        "updated": "Atualizada"
+      }
+    }
   },
   "nav": {
     "brandTitle": "Symphony Tracker",

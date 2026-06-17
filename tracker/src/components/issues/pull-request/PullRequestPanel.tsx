@@ -10,7 +10,7 @@ import { cn, formatDateTime } from "@/lib/utils";
 import { mergePullRequest, updatePullRequestBranch } from "@/services/pullRequests";
 import type { PullRequest, PullRequestMergeMethod, PullRequestPipeline } from "@/types/pull-request";
 
-import { jobMeta, prStateMeta, rollupMeta, statusStateMeta } from "./pr-meta";
+import { MERGE_CONFLICT_META, hasMergeConflicts, jobMeta, prStateMeta, rollupMeta, statusStateMeta } from "./pr-meta";
 
 interface PullRequestPanelProps {
   pullRequest: PullRequest;
@@ -68,6 +68,8 @@ export function PullRequestPanel({
   const rollup = rollupMeta(pr.checksState);
   const RollupIcon = rollup.Icon;
   const hasChecks = pr.pipelines.length > 0 || pr.statuses.length > 0;
+  const conflicting = hasMergeConflicts(pr);
+  const ConflictIcon = MERGE_CONFLICT_META.Icon;
 
   return (
     <article className="rounded-xl border bg-card">
@@ -97,6 +99,18 @@ export function PullRequestPanel({
             {pr.origin === "auto" ? (
               <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                 agent
+              </span>
+            ) : null}
+            {conflicting ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold",
+                  MERGE_CONFLICT_META.className,
+                )}
+                title="This branch has conflicts that must be resolved before it can merge."
+              >
+                <ConflictIcon className="h-3 w-3" />
+                {MERGE_CONFLICT_META.label}
               </span>
             ) : null}
           </div>

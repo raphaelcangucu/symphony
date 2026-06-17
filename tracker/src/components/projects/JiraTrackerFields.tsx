@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Input } from "@/components/ui/input";
 
@@ -15,6 +16,7 @@ interface FilterRow {
 }
 
 export function JiraTrackerFields({ config, onConfigChange }: JiraTrackerFieldsProps) {
+  const { t } = useTranslation();
   const projectKey = configString(config, "project_key");
   const jql = configString(config, "jql");
   const orderBy = configString(config, "order_by");
@@ -44,63 +46,59 @@ export function JiraTrackerFields({ config, onConfigChange }: JiraTrackerFieldsP
   return (
     <div className="space-y-4 rounded-lg border p-3">
       <div>
-        <p className="text-sm font-medium">Jira project</p>
-        <p className="text-xs text-muted-foreground">
-          Issues stay in Jira. The board reads everything matching <code>project = KEY</code> plus the field filters below.
-        </p>
+        <p className="text-sm font-medium">{t("project.tracker.jira.title")}</p>
+        <p className="text-xs text-muted-foreground">{t("project.tracker.jira.description")}</p>
       </div>
 
       <div className="space-y-1">
         <label className="text-xs font-medium" htmlFor="edit-jira-project-key">
-          Project key
+          {t("project.tracker.jira.projectKey")}
         </label>
         <Input
           id="edit-jira-project-key"
           value={projectKey}
           onChange={(event) => onConfigChange({ project_key: event.target.value })}
-          placeholder="e.g. CDE"
+          placeholder={t("project.tracker.jira.projectKeyPlaceholder")}
         />
         {projectKey ? null : (
-          <p className="text-xs text-amber-600 dark:text-amber-400">Required — the Jira project the board reads.</p>
+          <p className="text-xs text-amber-600 dark:text-amber-400">{t("project.tracker.jira.projectKeyRequired")}</p>
         )}
       </div>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium">Board filters</p>
+          <p className="text-xs font-medium">{t("project.tracker.jira.boardFilters")}</p>
           <button
             type="button"
             onClick={addRow}
             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
           >
-            <Plus className="h-3 w-3" /> Add filter
+            <Plus className="h-3 w-3" /> {t("project.tracker.jira.addFilter")}
           </button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Field = value clauses, AND-joined into the board query — e.g. <code>Product</code> = <code>Inspire</code>.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("project.tracker.jira.filtersHint")}</p>
         {rows.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No field filters — the board shows the whole project.</p>
+          <p className="text-xs text-muted-foreground">{t("project.tracker.jira.noFilters")}</p>
         ) : (
           <div className="space-y-2">
             {rows.map((row) => (
               <div key={row.id} className="flex items-center gap-2">
                 <Input
-                  aria-label="Filter field"
+                  aria-label={t("project.tracker.jira.filterFieldAria")}
                   value={row.name}
                   onChange={(event) => updateRow(row.id, { name: event.target.value })}
-                  placeholder="Field (e.g. Product)"
+                  placeholder={t("project.tracker.jira.filterFieldPlaceholder")}
                 />
                 <span className="text-xs text-muted-foreground">=</span>
                 <Input
-                  aria-label="Filter value"
+                  aria-label={t("project.tracker.jira.filterValueAria")}
                   value={row.value}
                   onChange={(event) => updateRow(row.id, { value: event.target.value })}
-                  placeholder="Value (e.g. Inspire)"
+                  placeholder={t("project.tracker.jira.filterValuePlaceholder")}
                 />
                 <button
                   type="button"
-                  aria-label="Remove filter"
+                  aria-label={t("project.tracker.jira.removeFilterAria")}
                   onClick={() => removeRow(row.id)}
                   className="rounded-md p-2 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
                 >
@@ -114,38 +112,36 @@ export function JiraTrackerFields({ config, onConfigChange }: JiraTrackerFieldsP
 
       <details className="rounded-md bg-muted/30 p-3">
         <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-          Advanced (raw JQL, ordering, cap)
+          {t("project.tracker.jira.advancedSummary")}
         </summary>
         <div className="mt-3 space-y-3">
           <div className="space-y-1">
             <label className="text-xs font-medium" htmlFor="edit-jira-jql">
-              Extra JQL
+              {t("project.tracker.jira.extraJql")}
             </label>
             <Input
               id="edit-jira-jql"
               value={jql}
               onChange={(event) => onConfigChange({ jql: emptyToUndefined(event.target.value) })}
-              placeholder={'cf[10042] = "Inspire" OR labels = inspire'}
+              placeholder={t("project.tracker.jira.extraJqlPlaceholder")}
             />
-            <p className="text-xs text-muted-foreground">
-              Raw fragment ANDed after the filters above. Use for custom-field ids (<code>cf[id]</code>) or OR-groups.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("project.tracker.jira.extraJqlHint")}</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-medium" htmlFor="edit-jira-order-by">
-                Order by
+                {t("project.tracker.jira.orderBy")}
               </label>
               <Input
                 id="edit-jira-order-by"
                 value={orderBy}
                 onChange={(event) => onConfigChange({ order_by: emptyToUndefined(event.target.value) })}
-                placeholder="created DESC"
+                placeholder={t("project.tracker.jira.orderByPlaceholder")}
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium" htmlFor="edit-jira-max-results">
-                Max results
+                {t("project.tracker.jira.maxResults")}
               </label>
               <Input
                 id="edit-jira-max-results"
@@ -153,7 +149,7 @@ export function JiraTrackerFields({ config, onConfigChange }: JiraTrackerFieldsP
                 min={1}
                 value={maxResults}
                 onChange={(event) => onConfigChange({ max_results: parseMaxResults(event.target.value) })}
-                placeholder="500"
+                placeholder={t("project.tracker.jira.maxResultsPlaceholder")}
               />
             </div>
           </div>

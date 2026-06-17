@@ -1,5 +1,6 @@
 import { Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -16,6 +17,7 @@ import { getProject } from "@/services/projects";
 import type { Project } from "@/types/project";
 
 export function ProjectSettingsPage() {
+  const { t } = useTranslation();
   const { projectSlug = "", tab } = useParams();
   const navigate = useNavigate();
   const slug = projectSlug.trim();
@@ -36,13 +38,13 @@ export function ProjectSettingsPage() {
       .then((loaded) => active && setProject(loaded))
       .catch((cause) => {
         if (!active) return;
-        toast.error(cause instanceof Error ? cause.message : "Unable to load project");
+        toast.error(cause instanceof Error ? cause.message : t("project.settings.loadFailed"));
         navigate(PROJECTS_PATH, { replace: true });
       });
     return () => {
       active = false;
     };
-  }, [slug, navigate, tab, activeTab]);
+  }, [slug, navigate, tab, activeTab, t]);
 
   if (!project) return null;
 
@@ -55,11 +57,9 @@ export function ProjectSettingsPage() {
               <Settings2 className="h-5 w-5 text-muted-foreground" aria-hidden />
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Project settings</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("project.settings.eyebrow")}</p>
               <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
-              <p className="text-sm text-muted-foreground">
-                Per-project configuration. Process-level settings live in the server environment.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("project.settings.subtitle")}</p>
             </div>
           </div>
           <ProjectImportExportActions
@@ -71,16 +71,16 @@ export function ProjectSettingsPage() {
             }}
           />
         </header>
-      <ProjectConfigEditor
-        key={`${project.slug}-${editorRevision}`}
-        project={project}
-        activeTab={activeTab}
-        onTabChange={(next) => navigate(projectSettingsPath(project.slug, next))}
-        onCancel={() => navigate(workspaceBasePath(project.slug, "board"))}
+        <ProjectConfigEditor
+          key={`${project.slug}-${editorRevision}`}
+          project={project}
+          activeTab={activeTab}
+          onTabChange={(next) => navigate(projectSettingsPath(project.slug, next))}
+          onCancel={() => navigate(workspaceBasePath(project.slug, "board"))}
           onSaved={(updated) => {
             setProject(updated);
             notifyTrackerProjectsChanged();
-            toast.success("Saved");
+            toast.success(t("project.settings.saved"));
           }}
         />
       </div>

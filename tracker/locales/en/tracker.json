@@ -397,8 +397,8 @@
       "empty": "No pull request linked to this issue yet. Once an agent opens a PR that references {{identifier}} (or uses its linked branch), it will appear here. You can also link one manually below (e.g. a PR in another repository).",
       "limitedAccessTitle": "Limited GitHub access.",
       "limitedAccessBody": "Linked pull requests are shown, but CI details and merge actions need GITHUB_TOKEN configured.",
-      "relatedCount": "{{count}} related pull request",
-      "relatedCount_plural": "{{count}} related pull requests",
+      "relatedCount_one": "{{count}} related pull request",
+      "relatedCount_other": "{{count}} related pull requests",
       "rerunning": "Re-running…",
       "rerunFailedJobs": "Re-run failed jobs",
       "sending": "Sending…",
@@ -462,7 +462,373 @@
       "reloadRepositories": "Reload repositories",
       "createWorkspaceProject": "Create workspace project",
       "connecting": "Connecting...",
-      "connectProject": "Connect project"
+      "connectProject": "Connect project",
+      "templateRepoCount_one": "{{count}} repository",
+      "templateRepoCount_other": "{{count}} repositories",
+      "organization": {
+        "title": "GitHub organization",
+        "description": "Choose one owner that this token can access.",
+        "kindOrganization": "organization",
+        "kindUser": "user",
+        "selected": "Selected"
+      },
+      "repositories": {
+        "title": "Repositories",
+        "description": "Workspace paths are derived from the project slug. Local scan paths stay hidden unless edited.",
+        "private": "Private",
+        "workspacePath": "Workspace path",
+        "scanPathLabel": "Local scan path for {{repo}}",
+        "scanPathPlaceholder": "Optional local scan path for {{path}}",
+        "scanPathHint": "Optional existing checkout. The scan only reads files from this path.",
+        "editScanPath": "Edit scan path",
+        "editScanPathAria": "Edit scan path for {{repo}}"
+      },
+      "scanCount_one": "{{count}} repository scan",
+      "scanCount_other": "{{count}} repository scans",
+      "suggestedSetup": "Suggested setup",
+      "agent": {
+        "label": "Coding agent",
+        "inherit": "Inherit ({{agent}})",
+        "hint": "Inherit follows the user default from Settings; explicit choices write agent.kind into the workflow front matter."
+      }
+    },
+    "tracker": {
+      "fields": {
+        "slugHint": "The slug {{slug}} is fixed. Switching the source changes where issues are read from.",
+        "localBoard": "Issues will be stored in Symphony's local board. Remote configuration is cleared."
+      },
+      "source": {
+        "aria": "Tracker source",
+        "local": {
+          "title": "Symphony local tracker",
+          "description": "Issues live in Symphony's local board (default)."
+        },
+        "github": {
+          "title": "GitHub Project v2",
+          "description": "Read and move issues on a connected GitHub board."
+        },
+        "linear": {
+          "title": "Linear project",
+          "description": "Read and move issues from a connected Linear board."
+        },
+        "jira": {
+          "title": "Jira project",
+          "description": "Read and move issues from a connected Jira board."
+        }
+      },
+      "github": {
+        "title": "GitHub Project v2 board",
+        "descriptionWizard": "Pick a board this token can access. Issues stay in GitHub.",
+        "descriptionEditor": "Pick a board this token can access (user or organization).",
+        "loading": "Loading GitHub projects…",
+        "empty": "No GitHub Projects v2 boards found.",
+        "loadFailed": "Failed to load GitHub projects",
+        "availableBoards": "Available boards",
+        "issuesRepository": "Issues repository",
+        "issuesRepositoryPlaceholder": "owner/name (e.g. clouapp/front)",
+        "statusField": "Status field",
+        "noBoardSelected": "No board selected yet.",
+        "connectedBoard": "Connected board",
+        "resolvingBoard": "Resolving board…",
+        "connectedBoardFallback": "Connected GitHub board",
+        "orgSuffix": " · org",
+        "orgLabel": " (org)",
+        "repoLine": "repo {{repo}}",
+        "openOnGitHub": "Open on GitHub"
+      },
+      "linear": {
+        "title": "Linear project",
+        "description": "Pick a project this token can access. Issues stay in Linear.",
+        "loading": "Loading Linear projects…",
+        "empty": "No Linear projects found.",
+        "loadFailed": "Failed to load Linear projects",
+        "connectedProject": "Connected project",
+        "noProjectSelected": "No project selected yet."
+      },
+      "jira": {
+        "title": "Jira project",
+        "description": "Issues stay in Jira. The board reads everything matching project = KEY plus the field filters below.",
+        "projectKey": "Project key",
+        "projectKeyPlaceholder": "e.g. CDE",
+        "projectKeyRequired": "Required — the Jira project the board reads.",
+        "boardFilters": "Board filters",
+        "addFilter": "Add filter",
+        "filtersHint": "Field = value clauses, AND-joined into the board query — e.g. Product = Inspire.",
+        "noFilters": "No field filters — the board shows the whole project.",
+        "filterFieldAria": "Filter field",
+        "filterFieldPlaceholder": "Field (e.g. Product)",
+        "filterValueAria": "Filter value",
+        "filterValuePlaceholder": "Value (e.g. Inspire)",
+        "removeFilterAria": "Remove filter",
+        "advancedSummary": "Advanced (raw JQL, ordering, cap)",
+        "extraJql": "Extra JQL",
+        "extraJqlPlaceholder": "cf[10042] = \"Inspire\" OR labels = inspire",
+        "extraJqlHint": "Raw fragment ANDed after the filters above. Use for custom-field ids (cf[id]) or OR-groups.",
+        "orderBy": "Order by",
+        "orderByPlaceholder": "created DESC",
+        "maxResults": "Max results",
+        "maxResultsPlaceholder": "500"
+      }
+    },
+    "list": {
+      "title": "Projects",
+      "subtitle": "Choose a local tracker project.",
+      "import": "Import",
+      "filters": "Filters",
+      "newWorkspace": "New workspace project",
+      "emptyApi": "No projects returned by the tracker API.",
+      "emptyFiltered": "No projects match your filters.",
+      "archived": "Archived",
+      "issueCount_one": "{{count}} issue",
+      "issueCount_other": "{{count}} issues",
+      "editProject": "Edit project",
+      "editProjectAria": "Edit {{name}}",
+      "restoreProject": "Restore project",
+      "restoreProjectAria": "Restore {{name}}",
+      "deletePermanently": "Delete project permanently",
+      "deletePermanentlyAria": "Delete {{name}} permanently",
+      "archiveProject": "Archive project",
+      "archiveProjectAria": "Archive {{name}}",
+      "deleteConfirm": "Delete project \"{{name}}\" permanently? This cannot be undone.",
+      "toasts": {
+        "loadFailed": "Unable to load projects",
+        "imported": "Imported project \"{{name}}\" (existing projects are overwritten)",
+        "importFailed": "Unable to import project",
+        "archiveFailed": "Unable to archive project",
+        "restoreFailed": "Unable to restore project",
+        "deleteFailed": "Unable to delete project"
+      }
+    },
+    "filters": {
+      "dismissAria": "Dismiss filters",
+      "title": "Filters",
+      "heading": "Project focus",
+      "closeAria": "Close filters",
+      "keyword": "Keyword",
+      "searchPlaceholder": "Search projects...",
+      "status": "Status",
+      "total": "{{count}} total",
+      "ongoing": "Ongoing",
+      "ongoingDescription": "Active workspaces",
+      "archived": "Archived",
+      "archivedDescription": "Stored safely",
+      "all": "All",
+      "allDescription": "Everything local",
+      "summaryOngoing": "{{count}} ongoing",
+      "summaryArchived": "{{count}} archived",
+      "hint": "Filters are local and instant; archived workspaces stay available until permanently deleted.",
+      "clear": "Clear filters"
+    },
+    "config": {
+      "sections": {
+        "general": {
+          "label": "General",
+          "title": "General",
+          "description": "Project identity, linked repositories, and validation commands."
+        },
+        "tracker": {
+          "label": "Tracker",
+          "title": "Tracker source",
+          "description": "Where issues are read from — the local board, GitHub Projects, Linear, or Jira."
+        },
+        "workflow": {
+          "label": "Workflow",
+          "title": "Workflow",
+          "description": "Per-project behavior: board states, agent limits, hooks, Codex/Claude, dev server, and the agent prompt."
+        },
+        "dev": {
+          "label": "Dev environment",
+          "title": "Dev environment",
+          "description": "Setup and serve steps grouped by repository. Serve steps power each issue's Preview tab."
+        }
+      },
+      "name": "Name",
+      "description": "Description",
+      "validationCommands": "Validation commands (one per line)",
+      "validationCommandsAria": "Validation commands",
+      "repositories": "Repositories",
+      "repositoriesHint": "Repositories linked to this project. Removing one only unlinks it in Symphony — files on disk are left untouched.",
+      "templateSeedHint": "Templates only seed validation commands; edit workflow YAML here.",
+      "footerHint": "Changes apply to this project only.",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "save": "Save configuration",
+      "repoEditor": {
+        "empty": "No repositories linked yet. Add one below.",
+        "private": "Private",
+        "removeAria": "Remove {{repo}}",
+        "workspacePath": "Workspace path",
+        "workspacePathAria": "Workspace path for {{repo}}",
+        "role": "Role",
+        "roleAria": "Role for {{repo}}",
+        "branch": "Branch",
+        "branchAria": "Branch for {{repo}}",
+        "addRepository": "Add repository",
+        "githubOwner": "GitHub owner",
+        "githubOwnerAria": "GitHub owner",
+        "loadingOwners": "Loading owners…",
+        "selectOwner": "Select an owner",
+        "loadingRepositories": "Loading repositories…",
+        "noRepositories": "No repositories found for this owner.",
+        "addRepoAria": "Add {{repo}}",
+        "linked": "Linked",
+        "toasts": {
+          "loadOwnersFailed": "Failed to load GitHub owners",
+          "loadReposFailed": "Failed to load repositories"
+        }
+      },
+      "loadDefault": {
+        "trigger": "Load default",
+        "empty": "No templates.",
+        "loadFailed": "Failed to load templates"
+      },
+      "workflowEditor": {
+        "hint": "YAML front matter (tracker states, agent, hooks, codex/claude, dev_server) plus the agent prompt body below the closing ---. Connection settings stay in the Tracker tab.",
+        "edit": "Edit",
+        "preview": "Preview",
+        "aria": "Project workflow markdown",
+        "frontMatter": "Front matter",
+        "noFrontMatter": "No YAML front matter.",
+        "promptBody": "Prompt body",
+        "noPromptBody": "No prompt body."
+      },
+      "mapEditor": {
+        "remove": "Remove",
+        "removeAria": "remove {{key}}",
+        "addKey": "Add key",
+        "addKeyAria": "add key",
+        "selectState": "Select state…",
+        "newValue": "New value",
+        "newValueAria": "new value",
+        "addEntry": "Add entry"
+      },
+      "stateSelect": {
+        "empty": "No statuses defined for this project yet."
+      },
+      "devenv": {
+        "hint": "Steps are grouped by repository. Serve steps power the issue Preview tab. Changes are persisted with Save configuration.",
+        "serve": "Serve",
+        "saveConfiguration": "Save configuration",
+        "proposeSteps": "Propose steps",
+        "noStepsYet": "No steps yet",
+        "serveCount_one": "{{count}} serve",
+        "serveCount_other": "{{count}} serve",
+        "addStep": "Add step",
+        "addStepTo": "Add step to {{label}}",
+        "noStepsProposed": "No steps proposed; add steps manually or a .symphony/devenv.yaml",
+        "proposeFailed": "Failed to propose steps",
+        "running": "Running: {{command}}",
+        "runFailed": "Failed to run step",
+        "stepLabel": "step {{index}}",
+        "descriptionAria": "Step description",
+        "descriptionPlaceholder": "Description",
+        "commandAria": "Step command",
+        "commandPlaceholder": "command",
+        "run": "Run",
+        "remove": "Remove",
+        "role": "Role",
+        "roleAria": "Role for {{label}}",
+        "roleSetup": "Setup",
+        "roleServe": "Serve",
+        "optional": "Optional",
+        "optionalAria": "Optional for {{label}}",
+        "primaryPreview": "Primary preview",
+        "primaryPreviewAria": "Primary preview for {{label}}",
+        "portEnv": "Port env",
+        "portEnvAria": "Port env for {{label}}",
+        "portEnvPlaceholder": "PORT",
+        "ready": "Ready",
+        "readyAria": "Ready probe for {{label}}",
+        "readyTcp": "TCP",
+        "readyHttp": "HTTP",
+        "path": "Path",
+        "readyPathAria": "Ready path for {{label}}",
+        "readyPathPlaceholder": "/"
+      },
+      "toasts": {
+        "devEnvLoadFailed": "Failed to load dev-env steps",
+        "nameRequired": "Project name is required",
+        "saved": "Project configuration saved",
+        "saveFailed": "Failed to save project configuration"
+      },
+      "importExport": {
+        "export": "Export",
+        "import": "Import",
+        "exportSuccess": "Project configuration exported",
+        "exportFailed": "Failed to export project configuration",
+        "importConfirm": "Import configuration from \"{{fileName}}\" into \"{{projectName}}\"? This replaces the current settings.",
+        "importSuccess": "Project configuration imported",
+        "importFailed": "Failed to import project configuration"
+      }
+    },
+    "settings": {
+      "eyebrow": "Project settings",
+      "subtitle": "Per-project configuration. Process-level settings live in the server environment.",
+      "loadFailed": "Unable to load project",
+      "saved": "Saved"
+    },
+    "templates": {
+      "back": "Templates",
+      "editTitle": "Edit template",
+      "notFound": "Template not found.",
+      "loadFailed": "Unable to load template",
+      "saveAsTemplate": "Save as template",
+      "saveAsTitle": "Save project as template",
+      "slugPlaceholder": "template-slug",
+      "list": {
+        "title": "Templates",
+        "subtitle": "Reusable workspace blueprints.",
+        "import": "Import",
+        "empty": "No templates yet.",
+        "delete": "Delete",
+        "repoCount_one": "{{count}} repo",
+        "repoCount_other": "{{count}} repos",
+        "deleteConfirm": "Delete template \"{{slug}}\" permanently? This cannot be undone.",
+        "toasts": {
+          "loadFailed": "Unable to load templates",
+          "deleted": "Template deleted",
+          "deleteFailed": "Unable to delete template",
+          "imported": "Template imported",
+          "importFailed": "Unable to import template"
+        }
+      },
+      "clone": {
+        "failed": "Some repositories failed to clone",
+        "inProgress": "Cloning repositories ({{count}} in progress)",
+        "retry": "Retry"
+      },
+      "form": {
+        "name": "Name",
+        "namePlaceholder": "Template name",
+        "description": "Description",
+        "descriptionPlaceholder": "Optional description",
+        "repositories": "Repositories",
+        "addRepository": "Add repository",
+        "noRepositories": "No repositories.",
+        "githubFullName": "GitHub full name",
+        "githubFullNamePlaceholder": "owner/repo",
+        "cloneUrl": "Clone URL",
+        "cloneUrlPlaceholder": "Clone URL",
+        "workspacePath": "Workspace path",
+        "defaultBranch": "Default branch",
+        "role": "Role",
+        "rolePlaceholder": "Role (optional)",
+        "remove": "Remove",
+        "validationCommands": "Validation commands",
+        "validationCommandsHint": "One command per line.",
+        "validationCommandsPlaceholder": "npm test",
+        "afterCreateHook": "After-create hook",
+        "promptTemplate": "Prompt template",
+        "devEnvMarkdown": "Dev environment (markdown)",
+        "export": "Export",
+        "saving": "Saving…",
+        "save": "Save template"
+      },
+      "toasts": {
+        "saved": "Template saved",
+        "saveFailed": "Failed to save template",
+        "exportFailed": "Failed to export template"
+      }
     }
   },
   "observability": {
@@ -824,7 +1190,16 @@
     "reset": "Reset filters",
     "clearAllFilters": "Clear all filters",
     "done": "Done",
-    "recentlyUpdated7d": "Recently updated (7d)"
+    "recentlyUpdated7d": "Recently updated (7d)",
+    "list": {
+      "empty": "No issues yet.",
+      "columns": {
+        "id": "ID",
+        "title": "Title",
+        "status": "Status",
+        "updated": "Updated"
+      }
+    }
   },
   "nav": {
     "brandTitle": "Symphony Tracker",

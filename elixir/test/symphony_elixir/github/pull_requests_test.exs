@@ -41,6 +41,7 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
         "title" => "Fix locale bug",
         "url" => "https://github.com/acme/app/pull/503",
         "state" => "OPEN",
+        "mergeable" => "CONFLICTING",
         "isDraft" => false,
         "merged" => false,
         "mergedAt" => nil,
@@ -135,6 +136,7 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
       assert result.head_ref == "mac-1-fix-locale"
       assert result.base_ref == "main"
       assert result.author == "codex-bot"
+      assert result.mergeable == "CONFLICTING"
       assert result.checks_state == "FAILURE"
 
       assert [%{name: "CI", jobs: jobs, url: "https://github.com/acme/app/actions/runs/100"}] =
@@ -153,6 +155,13 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
 
       assert PullRequests.parse_pr_node(pr_node(%{"isDraft" => true, "state" => "OPEN"})).state ==
                "draft"
+    end
+
+    test "passes through mergeable, defaulting to nil when absent" do
+      assert PullRequests.parse_pr_node(pr_node(%{"mergeable" => "MERGEABLE"})).mergeable ==
+               "MERGEABLE"
+
+      assert PullRequests.parse_pr_node(%{"number" => 7}).mergeable == nil
     end
 
     test "groups orphan check runs under Checks" do

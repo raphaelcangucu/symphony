@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   CircleSlash,
   Clock,
@@ -107,4 +108,17 @@ export function hasFailingChecks(pr: PullRequest): boolean {
   return pr.pipelines.some((pipeline) =>
     pipeline.jobs.some((job) => job.conclusion != null && FAILING_CONCLUSIONS.has(job.conclusion.toUpperCase())),
   );
+}
+
+export const MERGE_CONFLICT_META: VisualMeta = {
+  Icon: AlertTriangle,
+  label: "Conflicts",
+  className: "text-rose-600 dark:text-rose-400",
+};
+
+// True when GitHub reports the branch conflicts with its base. Only meaningful
+// for live PRs (open/draft); merged/closed PRs report a stale mergeable value.
+export function hasMergeConflicts(pr: PullRequest): boolean {
+  if (pr.state !== "open" && pr.state !== "draft") return false;
+  return (pr.mergeable ?? "").toUpperCase() === "CONFLICTING";
 }

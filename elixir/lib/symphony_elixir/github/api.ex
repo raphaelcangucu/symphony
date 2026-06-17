@@ -631,12 +631,25 @@ defmodule SymphonyElixir.GitHub.Api do
       url: pull["html_url"],
       title: pull["title"],
       state: rest_pr_state(pull),
+      mergeable: rest_mergeable(pull),
       checks_state: rest_checks_state(check_runs, statuses),
       pipelines: rest_pipelines(check_runs),
       statuses: rest_status_contexts(statuses),
       conversation: [],
       base_behind_by: nil
     }
+  end
+
+  # GitHub's REST `mergeable_state` is "dirty" when the branch conflicts with its
+  # base. Normalize to the same enum the GraphQL path returns (`mergeable`), so the
+  # frontend can render conflicts uniformly regardless of which transport resolved.
+  defp rest_mergeable(pull) do
+    case pull["mergeable_state"] do
+      "dirty" -> "CONFLICTING"
+      "unknown" -> "UNKNOWN"
+      state when is_binary(state) and state != "" -> "MERGEABLE"
+      _ -> nil
+    end
   end
 
   defp rest_pr_state(pull) do

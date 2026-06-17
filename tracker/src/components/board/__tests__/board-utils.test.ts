@@ -6,6 +6,7 @@ import {
   buildBoardState,
   moveIssueLocally,
   parseDragIssueId,
+  resolveBoardMove,
   upsertIssue,
 } from "../board-utils";
 
@@ -81,6 +82,26 @@ describe("board-utils", () => {
 
     expect(next.Todo.map((item) => item.identifier)).toEqual(["MAC-2", "MAC-1"]);
     expect(next.Todo.map((item) => item.position)).toEqual([0, 1]);
+  });
+
+  it("resolveBoardMove returns null when the card stays in the same slot", () => {
+    const board = buildBoardState([issue({ identifier: "MAC-1", status: "Todo", position: 0 })]);
+
+    expect(resolveBoardMove(board, "MAC-1", "issue:MAC-1")).toBeNull();
+  });
+
+  it("resolveBoardMove reorders cards within a column", () => {
+    const board = buildBoardState([
+      issue({ identifier: "MAC-1", status: "Todo", position: 0 }),
+      issue({ identifier: "MAC-2", status: "Todo", position: 1 }),
+      issue({ identifier: "MAC-3", status: "Todo", position: 2 }),
+    ]);
+
+    const resolved = resolveBoardMove(board, "MAC-1", "issue:MAC-3");
+
+    expect(resolved?.targetStatus).toBe("Todo");
+    expect(resolved?.targetIndex).toBe(2);
+    expect(resolved?.board.Todo.map((item) => item.identifier)).toEqual(["MAC-2", "MAC-3", "MAC-1"]);
   });
 
   it("returns the same board object when the issue is not present", () => {

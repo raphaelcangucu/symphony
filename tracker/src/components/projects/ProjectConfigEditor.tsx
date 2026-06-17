@@ -1,5 +1,6 @@
 import { FileText, GitBranch, ScrollText, TerminalSquare, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { DevEnvPanel } from "@/components/devenv/DevEnvPanel";
@@ -25,52 +26,24 @@ import type { AgentKind } from "@/types/issue";
 import type { Project, TrackerKind } from "@/types/project";
 import type { WorkspaceRepository } from "@/types/repository";
 
-interface SectionMeta {
+interface SectionDef {
   id: ProjectSettingsTab;
-  label: string;
   icon: LucideIcon;
-  title: string;
-  description: string;
 }
 
-const SECTIONS: readonly SectionMeta[] = [
-  {
-    id: "general",
-    label: "General",
-    icon: FileText,
-    title: "General",
-    description: "Project identity, linked repositories, and validation commands.",
-  },
-  {
-    id: "tracker",
-    label: "Tracker",
-    icon: GitBranch,
-    title: "Tracker source",
-    description: "Where issues are read from — the local board, GitHub Projects, Linear, or Jira.",
-  },
-  {
-    id: "workflow",
-    label: "Workflow",
-    icon: ScrollText,
-    title: "Workflow",
-    description: "Per-project behavior: board states, agent limits, hooks, Codex/Claude, dev server, and the agent prompt.",
-  },
-  {
-    id: "dev",
-    label: "Dev environment",
-    icon: TerminalSquare,
-    title: "Dev environment",
-    description: "Setup and serve steps grouped by repository. Serve steps power each issue's Preview tab.",
-  },
+const SECTION_DEFS: readonly SectionDef[] = [
+  { id: "general", icon: FileText },
+  { id: "tracker", icon: GitBranch },
+  { id: "workflow", icon: ScrollText },
+  { id: "dev", icon: TerminalSquare },
 ] as const;
 
 function SectionHeading({ id }: { id: ProjectSettingsTab }) {
-  const meta = SECTIONS.find((section) => section.id === id);
-  if (!meta) return null;
+  const { t } = useTranslation();
   return (
     <div className="space-y-1">
-      <h2 className="text-lg font-semibold tracking-tight">{meta.title}</h2>
-      <p className="text-sm text-muted-foreground">{meta.description}</p>
+      <h2 className="text-lg font-semibold tracking-tight">{t(`project.config.sections.${id}.title`)}</h2>
+      <p className="text-sm text-muted-foreground">{t(`project.config.sections.${id}.description`)}</p>
     </div>
   );
 }
@@ -84,6 +57,7 @@ interface ProjectConfigEditorProps {
 }
 
 export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onTabChange }: ProjectConfigEditorProps) {
+  const { t } = useTranslation();
   const [internalTab, setInternalTab] = useState<ProjectSettingsTab>(activeTab ?? DEFAULT_PROJECT_SETTINGS_TAB);
   const currentTab = activeTab ?? internalTab;
 
@@ -116,12 +90,12 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
         if (!cancelled) setDevSteps((current) => current ?? loaded);
       })
       .catch((cause) => {
-        if (!cancelled) toast.error(cause instanceof Error ? cause.message : "Failed to load dev-env steps");
+        if (!cancelled) toast.error(cause instanceof Error ? cause.message : t("project.config.toasts.devEnvLoadFailed"));
       });
     return () => {
       cancelled = true;
     };
-  }, [project.slug]);
+  }, [project.slug, t]);
   useEffect(() => {
     let cancelled = false;
     void fetchSettings()
@@ -137,7 +111,7 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
   async function handleSave() {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      toast.error("Project name is required");
+      toast.error(t("project.config.toasts.nameRequired"));
       return;
     }
 
@@ -164,9 +138,9 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
         setDevSteps(persisted);
       }
       onSaved(saved);
-      toast.success("Project configuration saved");
+      toast.success(t("project.config.toasts.saved"));
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Failed to save project configuration";
+      const message = cause instanceof Error ? cause.message : t("project.config.toasts.saveFailed");
       setError(message);
       toast.error(message);
     } finally {
@@ -189,14 +163,14 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
         className="grid gap-6 md:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10"
       >
         <TabsList className="flex h-auto flex-col items-stretch gap-1 self-start bg-transparent p-0 md:sticky md:top-6">
-          {SECTIONS.map(({ id, label, icon: Icon }) => (
+          {SECTION_DEFS.map(({ id, icon: Icon }) => (
             <TabsTrigger
               key={id}
               value={id}
               className="w-full justify-start gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none"
             >
               <Icon className="h-4 w-4 shrink-0" aria-hidden />
-              {label}
+              {t(`project.config.sections.${id}.label`)}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -207,32 +181,29 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
             <Card>
               <CardContent className="space-y-5 pt-6">
                 <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">Name</span>
-                  <Input value={name} onChange={(event) => setName(event.target.value)} aria-label="Name" />
+                  <span className="font-medium">{t("project.config.name")}</span>
+                  <Input value={name} onChange={(event) => setName(event.target.value)} aria-label={t("project.config.name")} />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">Description</span>
-                  <Textarea value={description} onChange={(event) => setDescription(event.target.value)} aria-label="Description" />
+                  <span className="font-medium">{t("project.config.description")}</span>
+                  <Textarea value={description} onChange={(event) => setDescription(event.target.value)} aria-label={t("project.config.description")} />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">Validation commands (one per line)</span>
+                  <span className="font-medium">{t("project.config.validationCommands")}</span>
                   <Textarea
                     value={validationCommands}
                     onChange={(event) => setValidationCommands(event.target.value)}
-                    aria-label="Validation commands"
+                    aria-label={t("project.config.validationCommandsAria")}
                   />
                 </label>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Repositories</CardTitle>
+                <CardTitle className="text-sm">{t("project.config.repositories")}</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="mb-4 text-sm text-muted-foreground">
-                  Repositories linked to this project. Removing one only unlinks it in Symphony — files on disk are left
-                  untouched.
-                </p>
+                <p className="mb-4 text-sm text-muted-foreground">{t("project.config.repositoriesHint")}</p>
                 <RepositoriesSection value={repositories} onChange={setRepositories} />
               </CardContent>
             </Card>
@@ -262,7 +233,7 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
               <LoadDefaultMenu
                 onLoad={({ validationCommands: commands }) => {
                   if (commands.length > 0) setValidationCommands(commands.join("\n"));
-                  toast.message("Templates only seed validation commands; edit workflow YAML here.");
+                  toast.message(t("project.config.templateSeedHint"));
                 }}
               />
             </div>
@@ -295,15 +266,15 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
       </Tabs>
 
       <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-between gap-3 border-t border-border/60 bg-background/85 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/65 sm:-mx-6 sm:px-6">
-        <p className="hidden text-xs text-muted-foreground sm:block">Changes apply to this project only.</p>
+        <p className="hidden text-xs text-muted-foreground sm:block">{t("project.config.footerHint")}</p>
         <div className="flex items-center gap-2">
           {onCancel ? (
             <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>
-              Cancel
+              {t("project.config.cancel")}
             </Button>
           ) : null}
           <Button type="button" onClick={() => void handleSave()} disabled={submitting}>
-            {submitting ? "Saving..." : "Save configuration"}
+            {submitting ? t("project.config.saving") : t("project.config.save")}
           </Button>
         </div>
       </div>

@@ -188,6 +188,14 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
     assert Outbox.pending_count(project.id) == 1
   end
 
+  test "move_issue with same status only reorders locally and skips remote outbox", %{project: project} do
+    assert {:ok, _dto} = LocalFirstAdapter.move_issue(project, "1", %{"status" => "Todo", "position" => 0})
+
+    reloaded = Repo.get_by(IssueRecord, project_id: project.id, identifier: "1")
+    assert reloaded.sync_status == "synced"
+    assert Outbox.pending_count(project.id) == 0
+  end
+
   test "add_comment stores locally and enqueues", %{project: project} do
     assert {:ok, _comment} = LocalFirstAdapter.add_comment(project, "1", "hello", %{})
     assert Outbox.pending_count(project.id) == 1

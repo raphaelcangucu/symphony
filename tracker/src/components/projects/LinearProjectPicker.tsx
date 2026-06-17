@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { discoverLinearProjects, type LinearProjectSummary } from "@/services/remoteTrackers";
 
 interface LinearProjectPickerProps {
@@ -7,6 +9,7 @@ interface LinearProjectPickerProps {
 }
 
 export function LinearProjectPicker({ onSelect }: LinearProjectPickerProps) {
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<LinearProjectSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -15,15 +18,17 @@ export function LinearProjectPicker({ onSelect }: LinearProjectPickerProps) {
     setLoading(true);
     discoverLinearProjects()
       .then((items) => active && setProjects(items))
-      .catch((cause) => toast.error(cause instanceof Error ? cause.message : "Failed to load Linear projects"))
+      .catch((cause) =>
+        toast.error(cause instanceof Error ? cause.message : t("project.tracker.linear.loadFailed")),
+      )
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading Linear projects…</p>;
-  if (projects.length === 0) return <p className="text-sm text-muted-foreground">No Linear projects found.</p>;
+  if (loading) return <p className="text-sm text-muted-foreground">{t("project.tracker.linear.loading")}</p>;
+  if (projects.length === 0) return <p className="text-sm text-muted-foreground">{t("project.tracker.linear.empty")}</p>;
 
   return (
     <div className="grid gap-2">

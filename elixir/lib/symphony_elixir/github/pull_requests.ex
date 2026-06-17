@@ -34,6 +34,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   url
   body
   state
+  mergeable
   repository { nameWithOwner }
   isDraft
   merged
@@ -412,6 +413,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       body: nil,
       url: url,
       state: "unknown",
+      mergeable: nil,
       repo: repo,
       head_ref: branch,
       base_ref: nil,
@@ -494,6 +496,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       url: string_or_nil(Map.get(node, "url")),
       state: derive_state(node),
       raw_state: string_or_nil(Map.get(node, "state")),
+      mergeable: string_or_nil(Map.get(node, "mergeable")),
       is_draft: Map.get(node, "isDraft") == true,
       merged: Map.get(node, "merged") == true,
       head_sha: extract_head_sha(node),

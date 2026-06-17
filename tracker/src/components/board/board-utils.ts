@@ -1,3 +1,5 @@
+import { arrayMove } from "@dnd-kit/sortable";
+
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
@@ -63,6 +65,67 @@ export function findIssueStatus(board: BoardState, identifier: string, statuses?
     if (board[status].some((issue) => issue.identifier === identifier)) return status;
   }
   return null;
+}
+
+export interface BoardMoveResult {
+  board: BoardState;
+  targetStatus: WorkflowStatusName;
+  targetIndex: number;
+}
+
+export function resolveBoardMove(
+  board: BoardState,
+  activeIdentifier: string,
+  overId: string,
+  statuses?: readonly WorkflowStatusName[],
+): BoardMoveResult | null {
+  if (!activeIdentifier.trim()) return null;
+
+  const statusNames = workflowStatusNames(statuses ?? Object.keys(board));
+  const currentStatus = findIssueStatus(board, activeIdentifier, statusNames);
+  if (!currentStatus) return null;
+
+  const targetStatus = isWorkflowStatusName(overId, statusNames)
+    ? overId
+    : findIssueStatus(board, parseDragIssueId(overId) ?? "", statusNames);
+  if (!targetStatus) return null;
+
+  if (currentStatus === targetStatus) {
+    const columnIssues = board[currentStatus];
+    const oldIndex = columnIssues.findIndex((issue) => issue.identifier === activeIdentifier);
+    if (oldIndex === -1) return null;
+
+    const overIdentifier = isWorkflowStatusName(overId, statusNames) ? null : parseDragIssueId(overId);
+    const newIndex = overIdentifier
+      ? columnIssues.findIndex((issue) => issue.identifier === overIdentifier)
+      : columnIssues.length - 1;
+
+    if (newIndex === -1 || oldIndex === newIndex) return null;
+
+    const reordered = arrayMove(columnIssues, oldIndex, newIndex);
+    const next = emptyBoardState(statusNames);
+    for (const status of statusNames) {
+      next[status] =
+        status === currentStatus
+          ? reordered.map((issue, position) => ({ ...issue, position }))
+          : [...board[status]];
+    }
+
+    const targetIndex = reordered.findIndex((issue) => issue.identifier === activeIdentifier);
+    return { board: next, targetStatus: currentStatus, targetIndex };
+  }
+
+  const overIdentifier = parseDragIssueId(overId);
+  const overIndex = overIdentifier
+    ? board[targetStatus].findIndex((issue) => issue.identifier === overIdentifier)
+    : board[targetStatus].length;
+  const targetIndex = overIndex >= 0 ? overIndex : board[targetStatus].length;
+
+  return {
+    board: moveIssueLocally(board, activeIdentifier, targetStatus, targetIndex, statusNames),
+    targetStatus,
+    targetIndex,
+  };
 }
 
 export function moveIssueLocally(

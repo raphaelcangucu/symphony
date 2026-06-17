@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DevEnvStepRow } from "@/components/devenv/DevEnvStepRow";
@@ -16,6 +18,7 @@ interface DevEnvPanelProps {
 }
 
 export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories }: DevEnvPanelProps) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const repos = repositories ?? [];
   const groups = buildDevEnvGroups(steps, repos);
@@ -37,11 +40,11 @@ export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories }:
     try {
       const proposed = await proposeDevEnvSteps(projectSlug);
       if (proposed.length === 0) {
-        toast.info("No steps proposed; add steps manually or a .symphony/devenv.yaml");
+        toast.info(t("project.config.devenv.noStepsProposed"));
       }
       onStepsChange([...steps, ...proposed]);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to propose steps");
+      toast.error(cause instanceof Error ? cause.message : t("project.config.devenv.proposeFailed"));
     } finally {
       setBusy(false);
     }
@@ -51,21 +54,18 @@ export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories }:
     if (!step.id) return;
     try {
       await runDevEnvStep(projectSlug, step.id);
-      toast.success(`Running: ${step.command}`);
+      toast.success(t("project.config.devenv.running", { command: step.command }));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to run step");
+      toast.error(cause instanceof Error ? cause.message : t("project.config.devenv.runFailed"));
     }
   }
 
   return (
     <section className="space-y-4">
       <header className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          Steps are grouped by repository. <span className="font-medium">Serve</span> steps power the issue Preview tab.
-          Changes are persisted with <span className="font-medium">Save configuration</span>.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("project.config.devenv.hint")}</p>
         <Button type="button" size="sm" variant="secondary" onClick={handlePropose} disabled={busy}>
-          Propose steps
+          {t("project.config.devenv.proposeSteps")}
         </Button>
       </header>
 
@@ -86,11 +86,11 @@ export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories }:
                 ) : null}
                 {serveCount > 0 ? (
                   <Badge variant="secondary" className="text-[10px]">
-                    {serveCount} serve
+                    {t("project.config.devenv.serveCount", { count: serveCount })}
                   </Badge>
                 ) : null}
                 {group.items.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">No steps yet</span>
+                  <span className="text-xs text-muted-foreground">{t("project.config.devenv.noStepsYet")}</span>
                 ) : null}
               </div>
 
@@ -108,7 +108,9 @@ export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories }:
               </div>
 
               <Button type="button" size="sm" variant="ghost" onClick={() => handleAddStep(group.workingDir)}>
-                Add step{group.workingDir ? ` to ${group.label}` : ""}
+                {group.workingDir
+                  ? t("project.config.devenv.addStepTo", { label: group.label })
+                  : t("project.config.devenv.addStep")}
               </Button>
             </div>
           );

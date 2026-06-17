@@ -142,6 +142,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
       title: pr.title,
       url: pr.url,
       state: pr.state,
+      mergeable: nil,
       repo: pr.repo,
       origin: pr.origin,
       pipelines: [],
@@ -175,6 +176,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
         Map.merge(pr, %{
           title: live_pr[:title] || pr.title,
           state: live_pr[:state] || pr.state,
+          mergeable: live_pr[:mergeable],
           checks_state: live_pr[:checks_state],
           pipelines: live_pr[:pipelines] || [],
           statuses: live_pr[:statuses] || [],

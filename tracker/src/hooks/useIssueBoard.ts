@@ -90,8 +90,7 @@ export function useIssueBoard(
       setIssues(flattenBoardState(nextBoard));
 
       try {
-        const persisted = await moveIssue(projectSlug, identifier, { status, position });
-        setIssues((current) => upsertIssue(current, persisted));
+        await moveIssue(projectSlug, identifier, { status, position });
       } catch (cause) {
         setIssues(flattenBoardState(previousBoard));
         const message = cause instanceof Error ? cause.message : i18n.t("issue.board.moveFailed");

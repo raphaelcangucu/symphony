@@ -426,9 +426,11 @@ defmodule SymphonyElixir.LocalTracker.Context do
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, issue} <- fetch_project_issue(project.id, identifier),
          {:ok, status} <- fetch_move_status(project.id, attrs, issue.status_id) do
+      position_only = issue.status_id == status.id
+
       project.id
       |> persist_moved_issue(issue, status, attrs)
-      |> tap_issue_event("issue_moved", %{status: status.name})
+      |> tap_issue_event("issue_moved", %{status: status.name, position_only: position_only})
     end
   end
 
@@ -1611,6 +1613,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   defp tap_issue_event(result, _event_type, _metadata), do: result
+
+  defp maybe_push_on_issue_event("issue_moved", _issue, %{position_only: true}), do: :ok
 
   defp maybe_push_on_issue_event("issue_moved", issue, %{status: status_name}) when is_binary(status_name) do
     PushDispatcher.human_review_needed(issue, status_name)

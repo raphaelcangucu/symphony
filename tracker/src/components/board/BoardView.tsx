@@ -1,9 +1,8 @@
 import {
   DndContext,
   DragOverlay,
-  MouseSensor,
+  PointerSensor,
   TouchSensor,
-  closestCorners,
   type DragCancelEvent,
   type DragEndEvent,
   type DragOverEvent,
@@ -18,6 +17,7 @@ import type { Issue } from "@/types/issue";
 import type { WorkflowStatus, WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflow-status";
 
 import { BoardColumn } from "./BoardColumn";
+import { boardCollisionDetection } from "./board-collision";
 import { parseDragIssueId, resolveBoardMove, workflowStatusNames, type BoardState } from "./board-utils";
 import { IssueCard } from "./IssueCard";
 
@@ -54,7 +54,10 @@ export function BoardView({
   const [previewBoard, setPreviewBoard] = useState<typeof board | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const displayBoard = previewBoard ?? board;
-  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 8 } }), useSensor(TouchSensor));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+  );
   const statusNames = useMemo(() => workflowStatusNames(statuses ?? Object.keys(board)), [board, statuses]);
 
   const categoryByName = useMemo(() => {
@@ -128,7 +131,7 @@ export function BoardView({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={boardCollisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}

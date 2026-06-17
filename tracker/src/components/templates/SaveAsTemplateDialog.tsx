@@ -1,5 +1,7 @@
 import { FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -12,6 +14,7 @@ interface SaveAsTemplateDialogProps {
 }
 
 export function SaveAsTemplateDialog({ projectSlug, onSaved }: SaveAsTemplateDialogProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -24,9 +27,9 @@ export function SaveAsTemplateDialog({ projectSlug, onSaved }: SaveAsTemplateDia
       const template = await saveProjectAsTemplate(projectSlug, { name: name || undefined, slug: slug || undefined });
       onSaved?.(template);
       setOpen(false);
-      toast.success("Template saved");
+      toast.success(t("project.templates.toasts.saved"));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to save template");
+      toast.error(cause instanceof Error ? cause.message : t("project.templates.toasts.saveFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -35,18 +38,30 @@ export function SaveAsTemplateDialog({ projectSlug, onSaved }: SaveAsTemplateDia
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="secondary">Save as template</Button>
+        <Button size="sm" variant="secondary">{t("project.templates.saveAsTemplate")}</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Save project as template</DialogTitle>
+          <DialogTitle>{t("project.templates.saveAsTitle")}</DialogTitle>
         </DialogHeader>
         <form className="space-y-3" onSubmit={handleSubmit}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Template name" />
-          <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="template-slug" />
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("project.templates.form.namePlaceholder")}
+          />
+          <Input
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            placeholder={t("project.templates.slugPlaceholder")}
+          />
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={submitting}>{submitting ? "Saving…" : "Save template"}</Button>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              {t("project.config.cancel")}
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? t("project.templates.form.saving") : t("project.templates.form.save")}
+            </Button>
           </div>
         </form>
       </DialogContent>

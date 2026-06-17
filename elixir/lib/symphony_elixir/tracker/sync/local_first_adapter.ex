@@ -65,14 +65,9 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
 
   @impl true
   def move_issue(%Project{} = project, identifier, attrs) do
-    with {:ok, dto} <- IssueAdapter.move_issue(project, identifier, attrs) do
-      LocalStore.mark_dirty(identifier, project.slug, [:state])
-      state = attrs["status"] || attrs["state"] || attrs[:status]
-      payload = %{"identifier" => identifier, "state" => state}
-      enqueue(project, identifier, "state", "move", payload, "state:move:#{project.id}:#{identifier}")
-      # Flush this project's outbox immediately (targeted, non-blocking) so a
-      # status move reaches the remote board without waiting for the next poll.
-      Engine.request_sync_project(project.slug, force: true)
+    with {:ok, before} <- Context.get_issue(project.slug, identifier),
+         {:ok, dto} <- IssueAdapter.move_issue(project, identifier, attrs),
+         :ok <- maybe_enqueue_status_move(project, identifier, before, attrs) do
       {:ok, dto}
     end
   end
@@ -154,6 +149,42 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
       end
 
       {:ok, comment}
+    end
+  end
+
+  defp maybe_enqueue_status_move(project, identifier, before, attrs) do
+    case requested_status_name(attrs) do
+      nil ->
+        :ok
+
+      status_name when status_name == before.status.name ->
+        :ok
+
+      status_name ->
+        enqueue_status_move(project, identifier, status_name)
+    end
+  end
+
+  defp enqueue_status_move(project, identifier, status_name) do
+    LocalStore.mark_dirty(identifier, project.slug, [:state])
+    payload = %{"identifier" => identifier, "state" => status_name}
+    enqueue(project, identifier, "state", "move", payload, "state:move:#{project.id}:#{identifier}")
+    # Flush this project's outbox immediately (targeted, non-blocking) so a
+    # status move reaches the remote board without waiting for the next poll.
+    Engine.request_sync_project(project.slug, force: true)
+    :ok
+  end
+
+  defp requested_status_name(attrs) do
+    attrs
+    |> Map.get("status", Map.get(attrs, "state", Map.get(attrs, :status, Map.get(attrs, :state))))
+    |> case do
+      status when is_binary(status) ->
+        trimmed = String.trim(status)
+        if trimmed == "", do: nil, else: trimmed
+
+      _ ->
+        nil
     end
   end
 

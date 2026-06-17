@@ -1,5 +1,6 @@
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ interface RepositoriesSectionProps {
 }
 
 export function RepositoriesSection({ value, onChange }: RepositoriesSectionProps) {
+  const { t } = useTranslation();
   const linkedFullNames = new Set(value.map((repository) => repository.fullName));
 
   function updateRepository(fullName: string, changes: Partial<WorkspaceRepository>) {
@@ -39,7 +41,7 @@ export function RepositoriesSection({ value, onChange }: RepositoriesSectionProp
     <div className="space-y-4">
       {value.length === 0 ? (
         <p className="rounded-md border border-dashed bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
-          No repositories linked yet. Add one below.
+          {t("project.config.repoEditor.empty")}
         </p>
       ) : (
         <ul className="space-y-3">
@@ -50,7 +52,7 @@ export function RepositoriesSection({ value, onChange }: RepositoriesSectionProp
                   <p className="truncate text-sm font-medium">{repository.fullName}</p>
                   {repository.private ? (
                     <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                      Private
+                      {t("project.config.repoEditor.private")}
                     </Badge>
                   ) : null}
                 </div>
@@ -60,7 +62,7 @@ export function RepositoriesSection({ value, onChange }: RepositoriesSectionProp
                   size="sm"
                   className="shrink-0 text-muted-foreground hover:text-destructive"
                   onClick={() => removeRepository(repository.fullName)}
-                  aria-label={`Remove ${repository.fullName}`}
+                  aria-label={t("project.config.repoEditor.removeAria", { repo: repository.fullName })}
                 >
                   <Trash2 className="h-4 w-4" aria-hidden />
                 </Button>
@@ -68,28 +70,28 @@ export function RepositoriesSection({ value, onChange }: RepositoriesSectionProp
 
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <label className="flex flex-col gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">Workspace path</span>
+                  <span className="font-medium text-muted-foreground">{t("project.config.repoEditor.workspacePath")}</span>
                   <Input
                     value={repository.workspacePath}
                     onChange={(event) => updateRepository(repository.fullName, { workspacePath: event.target.value })}
-                    aria-label={`Workspace path for ${repository.fullName}`}
+                    aria-label={t("project.config.repoEditor.workspacePathAria", { repo: repository.fullName })}
                     className="font-mono text-xs"
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">Role</span>
+                  <span className="font-medium text-muted-foreground">{t("project.config.repoEditor.role")}</span>
                   <Input
                     value={repository.role}
                     onChange={(event) => updateRepository(repository.fullName, { role: event.target.value })}
-                    aria-label={`Role for ${repository.fullName}`}
+                    aria-label={t("project.config.repoEditor.roleAria", { repo: repository.fullName })}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">Branch</span>
+                  <span className="font-medium text-muted-foreground">{t("project.config.repoEditor.branch")}</span>
                   <Input
                     value={repository.selectedBranch ?? ""}
                     onChange={(event) => updateRepository(repository.fullName, { selectedBranch: event.target.value })}
-                    aria-label={`Branch for ${repository.fullName}`}
+                    aria-label={t("project.config.repoEditor.branchAria", { repo: repository.fullName })}
                     placeholder={repository.defaultBranch ?? DEFAULT_REPOSITORY_BRANCH}
                   />
                 </label>
@@ -110,6 +112,7 @@ interface AddRepositoryProps {
 }
 
 function AddRepository({ linkedFullNames, onAdd }: AddRepositoryProps) {
+  const { t } = useTranslation();
   const [owners, setOwners] = useState<GitHubOwner[]>([]);
   const [owner, setOwner] = useState("");
   const [repositories, setRepositories] = useState<WorkspaceRepository[]>([]);
@@ -121,12 +124,16 @@ function AddRepository({ linkedFullNames, onAdd }: AddRepositoryProps) {
     setLoadingOwners(true);
     listGitHubOwners()
       .then((items) => active && setOwners(items))
-      .catch((cause) => active && toast.error(cause instanceof Error ? cause.message : "Failed to load GitHub owners"))
+      .catch(
+        (cause) =>
+          active &&
+          toast.error(cause instanceof Error ? cause.message : t("project.config.repoEditor.toasts.loadOwnersFailed")),
+      )
       .finally(() => active && setLoadingOwners(false));
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const trimmedOwner = owner.trim();
@@ -139,30 +146,36 @@ function AddRepository({ linkedFullNames, onAdd }: AddRepositoryProps) {
     setLoadingRepositories(true);
     listGitHubRepositories(trimmedOwner)
       .then((items) => active && setRepositories(items))
-      .catch((cause) => active && toast.error(cause instanceof Error ? cause.message : "Failed to load repositories"))
+      .catch(
+        (cause) =>
+          active &&
+          toast.error(cause instanceof Error ? cause.message : t("project.config.repoEditor.toasts.loadReposFailed")),
+      )
       .finally(() => active && setLoadingRepositories(false));
     return () => {
       active = false;
     };
-  }, [owner]);
+  }, [owner, t]);
 
   return (
     <div className="space-y-3 rounded-lg border border-dashed p-3">
       <div className="flex items-center gap-2">
         <Plus className="h-4 w-4 text-muted-foreground" aria-hidden />
-        <p className="text-sm font-medium">Add repository</p>
+        <p className="text-sm font-medium">{t("project.config.repoEditor.addRepository")}</p>
       </div>
 
       <label className="flex flex-col gap-1 text-xs">
-        <span className="font-medium text-muted-foreground">GitHub owner</span>
+        <span className="font-medium text-muted-foreground">{t("project.config.repoEditor.githubOwner")}</span>
         <select
           value={owner}
           onChange={(event) => setOwner(event.target.value)}
-          aria-label="GitHub owner"
+          aria-label={t("project.config.repoEditor.githubOwnerAria")}
           disabled={loadingOwners}
           className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <option value="">{loadingOwners ? "Loading owners…" : "Select an owner"}</option>
+          <option value="">
+            {loadingOwners ? t("project.config.repoEditor.loadingOwners") : t("project.config.repoEditor.selectOwner")}
+          </option>
           {owners.map((item) => (
             <option key={item.login} value={item.login}>
               {item.name ? `${item.name} (${item.login})` : item.login}
@@ -175,10 +188,10 @@ function AddRepository({ linkedFullNames, onAdd }: AddRepositoryProps) {
         loadingRepositories ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            Loading repositories…
+            {t("project.config.repoEditor.loadingRepositories")}
           </p>
         ) : repositories.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No repositories found for this owner.</p>
+          <p className="text-sm text-muted-foreground">{t("project.config.repoEditor.noRepositories")}</p>
         ) : (
           <div className="grid max-h-56 gap-2 overflow-y-auto">
             {repositories.map((repository) => {
@@ -189,7 +202,7 @@ function AddRepository({ linkedFullNames, onAdd }: AddRepositoryProps) {
                   type="button"
                   disabled={alreadyLinked}
                   onClick={() => onAdd(repository)}
-                  aria-label={`Add ${repository.fullName}`}
+                  aria-label={t("project.config.repoEditor.addRepoAria", { repo: repository.fullName })}
                   className="flex items-center justify-between gap-2 rounded-md border p-2.5 text-left transition hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span className="min-w-0">
@@ -200,7 +213,7 @@ function AddRepository({ linkedFullNames, onAdd }: AddRepositoryProps) {
                   </span>
                   {alreadyLinked ? (
                     <Badge variant="secondary" className="shrink-0 text-[10px] uppercase">
-                      Linked
+                      {t("project.config.repoEditor.linked")}
                     </Badge>
                   ) : (
                     <Plus className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />

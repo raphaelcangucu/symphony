@@ -1,5 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -10,6 +11,7 @@ import { getTemplate } from "@/services/templates";
 import type { WorkspaceTemplate } from "@/types/template";
 
 export function TemplateEditPage() {
+  const { t } = useTranslation();
   const { slug } = useParams();
   const [template, setTemplate] = useState<WorkspaceTemplate | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,7 +27,7 @@ export function TemplateEditPage() {
         if (active) setTemplate(item);
       })
       .catch((cause: unknown) => {
-        if (active) toast.error(cause instanceof Error ? cause.message : "Unable to load template");
+        if (active) toast.error(cause instanceof Error ? cause.message : t("project.templates.loadFailed"));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -34,7 +36,7 @@ export function TemplateEditPage() {
     return () => {
       active = false;
     };
-  }, [slug]);
+  }, [slug, t]);
 
   return (
     <div className="min-h-screen p-6">
@@ -42,10 +44,10 @@ export function TemplateEditPage() {
         <Button asChild type="button" variant="ghost" size="sm">
           <Link to="/templates">
             <ArrowLeft className="h-4 w-4" />
-            Templates
+            {t("project.templates.back")}
           </Link>
         </Button>
-        <h1 className="text-xl font-semibold">{template ? template.name : "Edit template"}</h1>
+        <h1 className="text-xl font-semibold">{template ? template.name : t("project.templates.editTitle")}</h1>
       </div>
 
       <main className="min-w-0 max-w-3xl">
@@ -54,7 +56,7 @@ export function TemplateEditPage() {
         ) : template ? (
           <TemplateForm template={template} onSaved={setTemplate} />
         ) : (
-          <p className="text-sm text-muted-foreground">Template not found.</p>
+          <p className="text-sm text-muted-foreground">{t("project.templates.notFound")}</p>
         )}
       </main>
     </div>

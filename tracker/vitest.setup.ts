@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import { afterEach } from "vitest";
 
 import { initTestI18n } from "@/i18n/testUtils";
 
@@ -33,3 +34,7 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 }
 
 await initTestI18n("en");
+
+afterEach(async () => {
+  await initTestI18n("en");
+});

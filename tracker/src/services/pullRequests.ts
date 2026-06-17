@@ -81,6 +81,7 @@ interface BackendPullRequestDto {
   updatedAt?: string | null;
   merged_at?: string | null;
   mergedAt?: string | null;
+  mergeable?: string | null;
   checks_state?: string | null;
   checksState?: string | null;
   base_behind_by?: number | null;
@@ -174,6 +175,7 @@ export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
     createdAt: dto.created_at ?? dto.createdAt ?? null,
     updatedAt: dto.updated_at ?? dto.updatedAt ?? null,
     mergedAt: dto.merged_at ?? dto.mergedAt ?? null,
+    mergeable: dto.mergeable ?? null,
     checksState: dto.checks_state ?? dto.checksState ?? null,
     pipelines: (dto.pipelines ?? []).map(normalizePipeline),
     statuses: (dto.statuses ?? []).map(normalizeStatus),

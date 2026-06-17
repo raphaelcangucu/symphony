@@ -42,7 +42,7 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group cursor-pointer rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-all",
+        "group cursor-grab cursor-pointer rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-all active:cursor-grabbing",
         "hover:-translate-y-px hover:border-primary/40 hover:shadow-md",
         agentNeedsAttention && "border-rose-500/40 ring-1 ring-rose-500/20",
         isDragging && "opacity-40",
