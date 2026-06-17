@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
 import { createComment, deleteComment, listComments, updateComment } from "@/services/comments";
 import type { Comment, CreateCommentInput, UpdateCommentInput } from "@/types/comment";
 
@@ -56,7 +57,7 @@ export function useIssueComments({
       setComments(sortByCreatedAt(items));
       setError(null);
     } catch {
-      setError("Could not load comments.");
+      setError(i18n.t("issue.comments.errors.loadFailed"));
     } finally {
       inFlightRef.current = false;
       setLoading(false);

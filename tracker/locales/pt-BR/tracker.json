@@ -57,7 +57,15 @@
       "prompt": "Ative notificações para Human Review, evidência, falhas do agente e alertas do monitor de PR.",
       "disable": "Desativar notificações",
       "sendTest": "Enviar notificação de teste",
-      "enable": "Ativar notificações"
+      "enable": "Ativar notificações",
+      "errors": {
+        "loadFailed": "Falha ao carregar configurações de notificação push",
+        "permissionDenied": "Permissão de notificação negada",
+        "enableFailed": "Falha ao ativar notificações do navegador",
+        "disableFailed": "Falha ao desativar notificações do navegador",
+        "noSubscriptions": "Nenhuma inscrição push no servidor — desative e reative as notificações",
+        "testFailed": "Falha ao enviar notificação de teste"
+      }
     },
     "identities": {
       "title": "Identidades conectadas",
@@ -249,6 +257,11 @@
       "nothingToPreview": "Nada para pré-visualizar ainda.",
       "hint": "⌘↵ para salvar · Markdown suportado · cole imagens"
     },
+    "inlineText": {
+      "placeholder": "Clique para editar",
+      "editAria": "Editar",
+      "saveHint": "⌘↵ para salvar"
+    },
     "comments": {
       "write": "Escrever",
       "preview": "Pré-visualizar",
@@ -277,6 +290,9 @@
       "cancel": "Cancelar",
       "saving": "Salvando…",
       "save": "Salvar",
+      "errors": {
+        "loadFailed": "Não foi possível carregar os comentários."
+      },
       "editAria": "Editar comentário",
       "deleteAria": "Excluir comentário",
       "linkPlaceholder": "texto",
@@ -339,6 +355,9 @@
         "loadingDiff": "Carregando diff…",
         "noFiles": "Nenhuma alteração de arquivo neste commit.",
         "selectFile": "Selecione um arquivo para ver o diff."
+      },
+      "errors": {
+        "loadFailed": "Não foi possível carregar a evidência de commits."
       }
     },
     "preview": {
@@ -456,6 +475,9 @@
         "reportLink": "relatório {{kind}} ({{repo}})",
         "traceLink": "trace {{kind}} ({{repo}})",
         "runSummary": "{{passed}}/{{total}} passou, {{failed}} falhou"
+      },
+      "errors": {
+        "loadFailed": "Não foi possível carregar a evidência."
       }
     },
     "summary": {
@@ -494,7 +516,18 @@
       "refresh": "Atualizar",
       "loadFailed": "Não foi possível carregar a saída do servidor.",
       "outputAria": "saída do comando {{slug}}",
-      "empty": "Nenhuma saída capturada ainda. A saída aparece aqui enquanto os comandos de setup e serve rodam."
+      "empty": "Nenhuma saída capturada ainda. A saída aparece aqui enquanto os comandos de setup e serve rodam.",
+      "errors": {
+        "loadFailed": "Não foi possível carregar os dev servers da issue.",
+        "identifiersRequired": "Identificadores de projeto e issue são obrigatórios.",
+        "startAllFailed": "Não foi possível iniciar os dev servers da issue.",
+        "stopAllFailed": "Não foi possível parar os dev servers da issue.",
+        "restartAllFailed": "Não foi possível reiniciar os dev servers da issue.",
+        "startFailed": "Não foi possível iniciar o dev server.",
+        "stopFailed": "Não foi possível parar o dev server.",
+        "restartFailed": "Não foi possível reiniciar o dev server.",
+        "tunnelFailed": "Não foi possível iniciar o túnel Cloudflare."
+      }
     },
     "sessionLog": {
       "title": "Log da sessão",
@@ -510,6 +543,17 @@
         "system": "Sistema",
         "session": "Sessão",
         "event": "Evento"
+      },
+      "agentLabels": {
+        "codex": "Codex",
+        "claude": "Claude Code",
+        "cursor": "Cursor Agent"
+      },
+      "errors": {
+        "joinTimeout": "Tempo esgotado ao entrar no canal de log da sessão",
+        "streamFailed": "Falha ao abrir o stream de log da sessão",
+        "noLogForAgent": "Nenhum log de sessão do {{agent}} encontrado para esta issue ainda.",
+        "noLog": "Nenhum log de sessão encontrado para esta issue ainda."
       }
     },
     "blockedBanner": {
@@ -545,7 +589,8 @@
       "addFailed": "Falha ao adicionar bloqueio",
       "blockedBy": "Bloqueada por",
       "empty": "Nenhum registro de bloqueio.",
-      "externalBlocker": "Bloqueio externo"
+      "externalBlocker": "Bloqueio externo",
+      "identifierPlaceholder": "MAC-123"
     },
     "attachmentsSection": {
       "title": "Anexos"
@@ -636,7 +681,12 @@
       "goalModeRequired": "Modo {{termCapitalized}} exige um {{term}}.",
       "created": "Issue criada",
       "createFailed": "Falha ao criar issue",
-      "unknownAssignee": "desconhecido"
+      "unknownAssignee": "desconhecido",
+      "add": "Adicionar issue",
+      "addToStatus": "Adicionar issue em {{status}}",
+      "optionsAria": "Opções de nova issue",
+      "withAssistant": "Nova issue com assistente",
+      "quickCreate": "Criação rápida"
     },
     "pullRequest": {
       "refresh": "Atualizar",
@@ -673,6 +723,9 @@
         "linkFailed": "Não foi possível vincular o pull request.",
         "unlinked": "Pull request desvinculado.",
         "unlinkFailed": "Não foi possível desvincular o pull request."
+      },
+      "errors": {
+        "loadFailed": "Não foi possível carregar os detalhes do pull request."
       },
       "panel": {
         "branchUpdateStarted": "Atualização do branch iniciada — acompanhando CI…",
@@ -1366,6 +1419,17 @@
         "image": "Imagem: {{name}}",
         "audio": "Áudio: {{name}}",
         "default": "anexo"
+      }
+    },
+    "speech": {
+      "errors": {
+        "notAllowed": "O reconhecimento de voz precisa de permissão do microfone.",
+        "serviceNotAllowed": "O reconhecimento de voz está bloqueado neste navegador.",
+        "network": "O reconhecimento de voz precisa de conexão com a internet.",
+        "noSpeech": "Nenhuma fala foi detectada.",
+        "audioCapture": "Não foi possível capturar áudio para reconhecimento de voz.",
+        "aborted": "O reconhecimento de voz foi interrompido.",
+        "unavailable": "O reconhecimento de voz não está disponível neste navegador."
       }
     },
     "modelMenu": {

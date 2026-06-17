@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { i18n } from "@/i18n";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
 import * as issueDevServersService from "@/services/issueDevServers";
 import type { IssueDevServersResponse } from "@/types/issue";
@@ -222,7 +223,7 @@ describe("useIssueDevServers", () => {
 
     const { result } = renderHook(() => useIssueDevServers("macro-markets", "MAC-1"));
 
-    await waitFor(() => expect(result.current.error).toBe("Could not load issue dev servers."));
+    await waitFor(() => expect(result.current.error).toBe(i18n.t("issue.devServer.errors.loadFailed")));
     expect(result.current.data).toBeNull();
     expect(result.current.loading).toBe(false);
   });

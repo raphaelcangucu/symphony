@@ -49,7 +49,7 @@ export function BlockersTab({ projectSlug, issue }: BlockersTabProps) {
           <Input
             aria-label={t("issue.blockers.blockingAria")}
             onChange={(event) => setBlockingIssueIdentifier(event.target.value)}
-            placeholder="MAC-123"
+            placeholder={t("issue.blockers.identifierPlaceholder")}
             value={blockingIssueIdentifier}
           />
           <Button onClick={addBlocker} type="button">

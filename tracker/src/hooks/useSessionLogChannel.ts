@@ -1,6 +1,7 @@
 import type { Channel } from "phoenix";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import { sessionLogTopic } from "@/services/session-log";
 import { payloadEntries, type SessionLogEntry } from "@/types/session-log";
@@ -25,10 +26,10 @@ interface UseSessionLogChannelResult {
   steerPending: boolean;
 }
 
-const AGENT_LOG_LABELS: Record<string, string> = {
-  codex: "Codex",
-  claude: "Claude Code",
-  cursor: "Cursor Agent",
+const AGENT_LOG_LABEL_KEYS: Record<string, string> = {
+  codex: "issue.sessionLog.agentLabels.codex",
+  claude: "issue.sessionLog.agentLabels.claude",
+  cursor: "issue.sessionLog.agentLabels.cursor",
 };
 
 export function useSessionLogChannel({
@@ -115,7 +116,7 @@ export function useSessionLogChannel({
       .receive("timeout", () => {
         if (cancelled) return;
         setConnected(false);
-        setError("Timed out joining session log channel");
+        setError(i18n.t("issue.sessionLog.errors.joinTimeout"));
       });
 
     return () => {
@@ -160,13 +161,14 @@ function formatJoinError(reason: unknown, agentKind?: string | null): string {
     const record = reason as Record<string, unknown>;
     if (typeof record.reason === "string") {
       if (record.reason === "session_log_unavailable") {
-        const label = agentKind ? (AGENT_LOG_LABELS[agentKind] ?? agentKind) : null;
+        const labelKey = agentKind ? AGENT_LOG_LABEL_KEYS[agentKind] : null;
+        const label = labelKey ? i18n.t(labelKey) : agentKind;
         return label
-          ? `No ${label} session log found for this issue yet.`
-          : "No session log found for this issue yet.";
+          ? i18n.t("issue.sessionLog.errors.noLogForAgent", { agent: label })
+          : i18n.t("issue.sessionLog.errors.noLog");
       }
       return record.reason;
     }
   }
-  return "Failed to open session log stream";
+  return i18n.t("issue.sessionLog.errors.streamFailed");
 }

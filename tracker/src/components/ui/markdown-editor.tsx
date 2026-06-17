@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Markdown } from "@/components/ui/markdown";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,16 +15,17 @@ interface MarkdownEditorProps {
 }
 
 export function MarkdownEditor({ value, onChange, placeholder, rows = 12, id }: MarkdownEditorProps) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<"write" | "preview">("write");
 
   return (
     <div className="rounded-md border">
       <div className="flex gap-1 border-b bg-muted/30 p-1">
         <TabButton active={tab === "write"} onClick={() => setTab("write")}>
-          Write
+          {t("issue.comments.write")}
         </TabButton>
         <TabButton active={tab === "preview"} onClick={() => setTab("preview")}>
-          Preview
+          {t("issue.comments.preview")}
         </TabButton>
       </div>
       {tab === "write" ? (
@@ -40,7 +42,7 @@ export function MarkdownEditor({ value, onChange, placeholder, rows = 12, id }: 
           {value.trim() ? (
             <Markdown>{value}</Markdown>
           ) : (
-            <p className="text-sm text-muted-foreground">Nothing to preview.</p>
+            <p className="text-sm text-muted-foreground">{t("issue.comments.nothingToPreview")}</p>
           )}
         </div>
       )}

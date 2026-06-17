@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
 import {
   fetchIssueDevServers,
@@ -89,7 +90,7 @@ export function useIssueDevServers(
         return;
       }
 
-      setError("Could not load issue dev servers.");
+      setError(i18n.t("issue.devServer.errors.loadFailed"));
     } finally {
       if (requestId === requestIdRef.current) {
         inFlightRef.current = false;
@@ -101,7 +102,7 @@ export function useIssueDevServers(
   const runAction = useCallback(
     async (action: IssueDevServerAction, failureMessage: string) => {
       if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
-        setError("Project and issue identifiers are required.");
+        setError(i18n.t("issue.devServer.errors.identifiersRequired"));
         return;
       }
 
@@ -148,7 +149,7 @@ export function useIssueDevServers(
   const runInstanceAction = useCallback(
     async (action: IssueDevServerInstanceAction, serverId: number, failureMessage: string) => {
       if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
-        setError("Project and issue identifiers are required.");
+        setError(i18n.t("issue.devServer.errors.identifiersRequired"));
         return;
       }
 
@@ -193,30 +194,30 @@ export function useIssueDevServers(
   );
 
   const start = useCallback(
-    () => runAction(startIssueDevServers, "Could not start issue dev servers."),
+    () => runAction(startIssueDevServers, i18n.t("issue.devServer.errors.startAllFailed")),
     [runAction],
   );
   const stop = useCallback(
-    () => runAction(stopIssueDevServers, "Could not stop issue dev servers."),
+    () => runAction(stopIssueDevServers, i18n.t("issue.devServer.errors.stopAllFailed")),
     [runAction],
   );
   const restart = useCallback(
-    () => runAction(restartIssueDevServers, "Could not restart issue dev servers."),
+    () => runAction(restartIssueDevServers, i18n.t("issue.devServer.errors.restartAllFailed")),
     [runAction],
   );
   const startServer = useCallback(
     (serverId: number) =>
-      runInstanceAction(startIssueDevServer, serverId, "Could not start the dev server."),
+      runInstanceAction(startIssueDevServer, serverId, i18n.t("issue.devServer.errors.startFailed")),
     [runInstanceAction],
   );
   const stopServer = useCallback(
     (serverId: number) =>
-      runInstanceAction(stopIssueDevServer, serverId, "Could not stop the dev server."),
+      runInstanceAction(stopIssueDevServer, serverId, i18n.t("issue.devServer.errors.stopFailed")),
     [runInstanceAction],
   );
   const restartServer = useCallback(
     (serverId: number) =>
-      runInstanceAction(restartIssueDevServer, serverId, "Could not restart the dev server."),
+      runInstanceAction(restartIssueDevServer, serverId, i18n.t("issue.devServer.errors.restartFailed")),
     [runInstanceAction],
   );
 
@@ -226,7 +227,7 @@ export function useIssueDevServers(
       setData((current) => (current ? { ...current, tunnel } : current));
       setError(null);
     } catch {
-      setError("Could not start the Cloudflare tunnel.");
+      setError(i18n.t("issue.devServer.errors.tunnelFailed"));
     } finally {
       void refresh();
     }

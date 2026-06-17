@@ -1,5 +1,6 @@
 import { Check, Pencil, X } from "lucide-react";
 import { type KeyboardEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,7 @@ interface InlineEditableTextProps {
 export function InlineEditableText({
   value,
   onSave,
-  placeholder = "Click to edit",
+  placeholder,
   disabled = false,
   saving = false,
   multiline = false,
@@ -26,6 +27,8 @@ export function InlineEditableText({
   inputClassName,
   "aria-label": ariaLabel,
 }: InlineEditableTextProps) {
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? t("issue.inlineText.placeholder");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -118,7 +121,7 @@ export function InlineEditableText({
             className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Check className="h-3.5 w-3.5" />
-            Save
+            {t("issue.comments.save")}
           </button>
           <button
             type="button"
@@ -127,10 +130,10 @@ export function InlineEditableText({
             className="inline-flex items-center gap-1 rounded-md border border-border/70 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" />
-            Cancel
+            {t("issue.comments.cancel")}
           </button>
           {multiline ? (
-            <span className="text-[11px] text-muted-foreground">⌘↵ to save</span>
+            <span className="text-[11px] text-muted-foreground">{t("issue.inlineText.saveHint")}</span>
           ) : null}
         </div>
       </div>
@@ -141,7 +144,7 @@ export function InlineEditableText({
     <button
       type="button"
       disabled={disabled || saving}
-      aria-label={ariaLabel ?? "Edit"}
+      aria-label={ariaLabel ?? t("issue.inlineText.editAria")}
       onClick={() => setEditing(true)}
       className={cn(
         "group relative w-full rounded-lg text-left transition-colors",
@@ -151,7 +154,7 @@ export function InlineEditableText({
       )}
     >
       <span className={cn("block pr-8", !value.trim() && "text-muted-foreground")}>
-        {value.trim() || placeholder}
+        {value.trim() || resolvedPlaceholder}
       </span>
       {!disabled ? (
         <Pencil className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />

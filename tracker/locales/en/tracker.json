@@ -57,7 +57,15 @@
       "prompt": "Enable notifications for Human Review, evidence, agent failures, and PR monitor alerts.",
       "disable": "Disable notifications",
       "sendTest": "Send test notification",
-      "enable": "Enable notifications"
+      "enable": "Enable notifications",
+      "errors": {
+        "loadFailed": "Failed to load push notification settings",
+        "permissionDenied": "Notification permission was denied",
+        "enableFailed": "Failed to enable browser notifications",
+        "disableFailed": "Failed to disable browser notifications",
+        "noSubscriptions": "No push subscriptions on the server — disable and re-enable notifications",
+        "testFailed": "Failed to send test notification"
+      }
     },
     "identities": {
       "title": "Connected identities",
@@ -249,6 +257,11 @@
       "nothingToPreview": "Nothing to preview yet.",
       "hint": "⌘↵ to save · Markdown supported · paste images"
     },
+    "inlineText": {
+      "placeholder": "Click to edit",
+      "editAria": "Edit",
+      "saveHint": "⌘↵ to save"
+    },
     "comments": {
       "write": "Write",
       "preview": "Preview",
@@ -277,6 +290,9 @@
       "cancel": "Cancel",
       "saving": "Saving…",
       "save": "Save",
+      "errors": {
+        "loadFailed": "Could not load comments."
+      },
       "editAria": "Edit comment",
       "deleteAria": "Delete comment",
       "linkPlaceholder": "text",
@@ -339,6 +355,9 @@
         "loadingDiff": "Loading diff…",
         "noFiles": "No file changes in this commit.",
         "selectFile": "Select a file to view its diff."
+      },
+      "errors": {
+        "loadFailed": "Could not load commit evidence."
       }
     },
     "preview": {
@@ -456,6 +475,9 @@
         "reportLink": "{{kind}} report ({{repo}})",
         "traceLink": "{{kind}} trace ({{repo}})",
         "runSummary": "{{passed}}/{{total}} passed, {{failed}} failed"
+      },
+      "errors": {
+        "loadFailed": "Could not load evidence."
       }
     },
     "summary": {
@@ -494,7 +516,18 @@
       "refresh": "Refresh",
       "loadFailed": "Could not load server output.",
       "outputAria": "{{slug}} command output",
-      "empty": "No output captured yet. Output appears here while setup and serve commands run."
+      "empty": "No output captured yet. Output appears here while setup and serve commands run.",
+      "errors": {
+        "loadFailed": "Could not load issue dev servers.",
+        "identifiersRequired": "Project and issue identifiers are required.",
+        "startAllFailed": "Could not start issue dev servers.",
+        "stopAllFailed": "Could not stop issue dev servers.",
+        "restartAllFailed": "Could not restart issue dev servers.",
+        "startFailed": "Could not start the dev server.",
+        "stopFailed": "Could not stop the dev server.",
+        "restartFailed": "Could not restart the dev server.",
+        "tunnelFailed": "Could not start the Cloudflare tunnel."
+      }
     },
     "sessionLog": {
       "title": "Session log",
@@ -510,6 +543,17 @@
         "system": "System",
         "session": "Session",
         "event": "Event"
+      },
+      "agentLabels": {
+        "codex": "Codex",
+        "claude": "Claude Code",
+        "cursor": "Cursor Agent"
+      },
+      "errors": {
+        "joinTimeout": "Timed out joining session log channel",
+        "streamFailed": "Failed to open session log stream",
+        "noLogForAgent": "No {{agent}} session log found for this issue yet.",
+        "noLog": "No session log found for this issue yet."
       }
     },
     "blockedBanner": {
@@ -545,7 +589,8 @@
       "addFailed": "Failed to add blocker",
       "blockedBy": "Blocked by",
       "empty": "No blocker records.",
-      "externalBlocker": "External blocker"
+      "externalBlocker": "External blocker",
+      "identifierPlaceholder": "MAC-123"
     },
     "attachmentsSection": {
       "title": "Attachments"
@@ -636,7 +681,12 @@
       "goalModeRequired": "{{termCapitalized}} mode requires a {{term}}.",
       "created": "Issue created",
       "createFailed": "Failed to create issue",
-      "unknownAssignee": "unknown"
+      "unknownAssignee": "unknown",
+      "add": "Add issue",
+      "addToStatus": "Add issue to {{status}}",
+      "optionsAria": "New issue options",
+      "withAssistant": "New issue with assistant",
+      "quickCreate": "Quick create"
     },
     "pullRequest": {
       "refresh": "Refresh",
@@ -673,6 +723,9 @@
         "linkFailed": "Could not link the pull request.",
         "unlinked": "Pull request unlinked.",
         "unlinkFailed": "Could not unlink the pull request."
+      },
+      "errors": {
+        "loadFailed": "Could not load pull request details."
       },
       "panel": {
         "branchUpdateStarted": "Branch update started — following CI…",
@@ -1372,6 +1425,17 @@
       "modelSuffix": "Model",
       "searchPlaceholder": "Search models…",
       "noMatch": "No models match."
+    },
+    "speech": {
+      "errors": {
+        "notAllowed": "Speech recognition needs microphone permission.",
+        "serviceNotAllowed": "Speech recognition is blocked in this browser.",
+        "network": "Speech recognition needs an internet connection.",
+        "noSpeech": "No speech was detected.",
+        "audioCapture": "Could not capture audio for speech recognition.",
+        "aborted": "Speech recognition was interrupted.",
+        "unavailable": "Speech recognition is unavailable in this browser."
+      }
     },
     "composer": {
       "placeholder": "Write a message...",
