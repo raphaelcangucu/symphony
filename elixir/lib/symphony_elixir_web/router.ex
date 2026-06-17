@@ -14,13 +14,13 @@ defmodule SymphonyElixirWeb.Router do
 
   pipeline :tracker_api do
     plug(:accepts, ["json"])
-    plug(SymphonyElixirWeb.TrackerAuth)
     plug(SymphonyElixirWeb.Plugs.SetLocale)
+    plug(SymphonyElixirWeb.TrackerAuth)
   end
 
   pipeline :tracker_sse do
-    plug(SymphonyElixirWeb.TrackerAuth)
     plug(SymphonyElixirWeb.Plugs.SetLocale)
+    plug(SymphonyElixirWeb.TrackerAuth)
   end
 
   scope "/", SymphonyElixirWeb do

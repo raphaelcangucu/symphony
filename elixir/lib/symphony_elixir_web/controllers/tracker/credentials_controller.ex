@@ -36,9 +36,7 @@ defmodule SymphonyElixirWeb.Tracker.CredentialsController do
         json(conn, %{data: provider_summary(provider)})
 
       {:error, :unknown_credential} ->
-        conn
-        |> Conn.put_status(:not_found)
-        |> json(%{error: %{code: "unknown_credential", message: "unknown provider/credential"}})
+        TrackerErrors.render(conn, :unknown_credential)
 
       {:error, %Ecto.Changeset{} = changeset} ->
         TrackerErrors.render(conn, changeset)
@@ -56,9 +54,7 @@ defmodule SymphonyElixirWeb.Tracker.CredentialsController do
       Identity.invalidate(provider)
       json(conn, %{data: provider_summary(provider)})
     else
-      conn
-      |> Conn.put_status(:not_found)
-      |> json(%{error: %{code: "unknown_credential", message: "unknown provider/credential"}})
+      TrackerErrors.render(conn, :unknown_credential)
     end
   end
 

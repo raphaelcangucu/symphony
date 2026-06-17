@@ -329,6 +329,15 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         dgettext("errors", "Web Push is not configured (missing VAPID keys)")
       )
 
+  def render(conn, :unknown_credential),
+    do: not_found(conn, "unknown_credential", dgettext("errors", "unknown provider/credential"))
+
+  def render(conn, :unknown_settings_group),
+    do: not_found(conn, "not_found", dgettext("errors", "unknown settings group"))
+
+  def render(conn, :missing_runtime_id),
+    do: error(conn, 422, "invalid_report", dgettext("errors", "runtime_id is required"))
+
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
 

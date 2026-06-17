@@ -137,3 +137,15 @@ msgstr "repositories is required"
 
 msgid "invalid setting %{name}: %{reason}"
 msgstr "invalid setting %{name}: %{reason}"
+
+msgid "invalid tracker token"
+msgstr "invalid tracker token"
+
+msgid "unknown provider/credential"
+msgstr "unknown provider/credential"
+
+msgid "unknown settings group"
+msgstr "unknown settings group"
+
+msgid "runtime_id is required"
+msgstr "runtime_id is required"

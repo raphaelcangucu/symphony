@@ -1,13 +1,13 @@
 defmodule SymphonyElixirWeb.TrackerAuth do
   @moduledoc "Bearer-token authentication for the local tracker API."
 
+  use Gettext, backend: SymphonyElixirWeb.Gettext
+
   import Plug.Conn
 
   alias Phoenix.Controller
   alias Plug.Conn
   alias SymphonyElixir.Config
-
-  @unauthorized_payload %{error: %{code: "unauthorized", message: "invalid tracker token"}}
 
   @spec init(keyword()) :: keyword()
   def init(opts), do: opts
@@ -22,7 +22,7 @@ defmodule SymphonyElixirWeb.TrackerAuth do
     else
       conn
       |> Conn.put_status(:unauthorized)
-      |> Controller.json(@unauthorized_payload)
+      |> Controller.json(%{error: %{code: "unauthorized", message: dgettext("errors", "invalid tracker token")}})
       |> halt()
     end
   end

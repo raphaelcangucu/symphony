@@ -7,6 +7,7 @@ defmodule SymphonyElixirWeb.Tracker.ObservabilityController do
   alias SymphonyElixir.Observability.Registry
   alias SymphonyElixir.PullRequestMonitor.MonitorState
   alias SymphonyElixir.PullRequestMonitor.Reconciler
+  alias SymphonyElixirWeb.TrackerErrors
 
   @pr_monitor_recent_limit 50
 
@@ -32,9 +33,7 @@ defmodule SymphonyElixirWeb.Tracker.ObservabilityController do
         conn |> put_status(202) |> json(%{data: %{accepted: true}})
 
       {:error, :missing_runtime_id} ->
-        conn
-        |> put_status(422)
-        |> json(%{error: %{code: "invalid_report", message: "runtime_id is required"}})
+        TrackerErrors.render(conn, :missing_runtime_id)
     end
   end
 end

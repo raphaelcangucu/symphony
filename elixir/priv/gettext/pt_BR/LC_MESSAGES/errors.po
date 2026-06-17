@@ -263,3 +263,15 @@ msgstr "repositories é obrigatório"
 
 msgid "invalid setting %{name}: %{reason}"
 msgstr "configuração inválida %{name}: %{reason}"
+
+msgid "invalid tracker token"
+msgstr "token do tracker inválido"
+
+msgid "unknown provider/credential"
+msgstr "provider/credential desconhecido"
+
+msgid "unknown settings group"
+msgstr "grupo de configurações desconhecido"
+
+msgid "runtime_id is required"
+msgstr "runtime_id é obrigatório"
