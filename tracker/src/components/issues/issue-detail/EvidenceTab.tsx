@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { CommitEvidenceSection } from "@/components/issues/issue-detail/CommitEvidenceSection";
+import { EvidenceStatusPill } from "@/components/issues/issue-detail/EvidenceStatusPill";
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -215,7 +216,7 @@ function EvidenceCard({
   return (
     <div className="space-y-3 rounded-lg border p-3" data-testid={`evidence-${record.runId}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <StatusPill status={record.status} />
+        <EvidenceStatusPill status={record.status} />
         <span className="font-mono text-xs text-muted-foreground">{record.runId}</span>
         {record.uiChange ? <Badge variant="outline">{t("issue.evidence.tab.uiChange")}</Badge> : null}
         {record.insertedAt ? (
@@ -256,7 +257,7 @@ function EvidenceCard({
                   <code className="rounded bg-muted px-1 py-0.5">{run.command}</code>
                 </td>
                 <td className="py-1.5 pr-2">
-                  <StatusPill status={run.status} />
+                  <EvidenceStatusPill status={run.status} />
                 </td>
                 <td className="py-1.5">{summaryText(run, t)}</td>
               </tr>
@@ -367,22 +368,6 @@ function summaryText(run: EvidenceRun, t: TFunction): string {
   }
 
   return "-";
-}
-
-function StatusPill({ status }: { status: string }) {
-  const passed = status === "passed";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
-        passed
-          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-          : "bg-red-500/15 text-red-600 dark:text-red-400",
-      )}
-    >
-      {status}
-    </span>
-  );
 }
 
 export type { EvidenceAttention };

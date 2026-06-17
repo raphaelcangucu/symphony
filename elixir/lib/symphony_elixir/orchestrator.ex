@@ -1115,7 +1115,7 @@ defmodule SymphonyElixir.Orchestrator do
       |> Enum.flat_map(&List.wrap(&1["screenshots"]))
       |> Enum.take(4)
       |> Enum.map_join("\n", fn rel ->
-        "![#{Path.basename(rel)}](#{evidence_artifact_url(record, issue, rel, base_url)})"
+        "![#{markdown_image_alt(rel)}](#{evidence_artifact_url(record, issue, rel, base_url)})"
       end)
 
     ui_note = if record.ui_change, do: " (UI change: e2e + visual capture required)", else: ""
@@ -1141,7 +1141,23 @@ defmodule SymphonyElixir.Orchestrator do
   defp summary_cell(_summary), do: "-"
 
   defp evidence_artifact_url(record, issue, rel, base_url) do
-    "#{base_url}/api/tracker/v1/projects/#{issue.project_slug}/issues/#{issue.identifier}/evidence/#{record.run_id}/artifacts/#{rel}"
+    encoded_rel =
+      rel
+      |> String.split("/")
+      |> Enum.map(&URI.encode/1)
+      |> Enum.join("/")
+
+    "#{base_url}/api/tracker/v1/projects/#{issue.project_slug}/issues/#{issue.identifier}/evidence/#{record.run_id}/artifacts/#{encoded_rel}"
+  end
+
+  defp markdown_image_alt(rel) do
+    rel
+    |> Path.basename()
+    |> String.replace("\\", "\\\\")
+    |> String.replace("[", "\\[")
+    |> String.replace("]", "\\]")
+    |> String.replace("(", "\\(")
+    |> String.replace(")", "\\)")
   end
 
   # Prefer the publicly reachable tunnel URL so remote renderers (GitHub, Linear,

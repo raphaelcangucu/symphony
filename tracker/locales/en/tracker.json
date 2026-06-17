@@ -306,7 +306,9 @@
           "conflict": "Sync conflict",
           "error": "Sync failed"
         },
-        "workpad": "Workpad"
+        "workpad": "Workpad",
+        "evidence": "Evidence",
+        "evidenceArtifactsHint": "Full artifacts (videos, reports, traces): open the Evidence tab."
       }
     },
     "priority": {
@@ -442,6 +444,18 @@
           "title": "Preview unavailable",
           "body": "Availability is blocked right now. Resolve the issue above, then use Start Preview when you are ready."
         }
+      },
+      "failurePrompt": {
+        "intro": "The issue preview dev server failed. Diagnose the workspace, fix the root cause, and tell me when Start Preview should work again.",
+        "availability": "Availability: {{status}}",
+        "availabilityReason": "Availability reason: {{reason}}",
+        "failedServer": "Failed server: {{slug}}",
+        "status": "Status: {{status}}",
+        "workingDirectory": "Working directory: {{dir}}",
+        "port": "Port: {{port}}",
+        "tmuxSession": "Tmux session: {{session}}",
+        "inspectLogs": "Inspect logs: tmux capture-pane -t {{session}} -p -S -80",
+        "footer": "Check setup/serve DevEnv steps, run missing installs (for example npm ci in front/), then confirm npm run dev or the configured serve command works in the issue workspace."
       }
     },
     "evidence": {
@@ -648,7 +662,9 @@
       "popupBlocked": "Allow pop-ups to open this file.",
       "openFailed": "Failed to open file.",
       "openTitle": "Open {{name}}",
-      "openAria": "Open {{name}}"
+      "openAria": "Open {{name}}",
+      "loading": "Loading {{name}}",
+      "loadFailed": "Failed to load {{name}}"
     },
     "create": {
       "trigger": "New issue",
@@ -663,6 +679,12 @@
       "inherit": "Inherit ({{agent}})",
       "longRunningMode": "{{termCapitalized}} mode (long-running)",
       "goalAria": "{{agent}} {{term}}",
+      "goal": {
+        "defaultObjective": "Complete this issue",
+        "objective": "Objective: {{objective}}",
+        "context": "Context: {{details}}",
+        "constraints": "Constraints: follow existing issue artifacts, specs, and plans when present; verify changes before reporting completion; stop when complete or blocked."
+      },
       "terms": { "goal": "goal", "workflow": "workflow" },
       "labels": "Labels",
       "assignees": "Assignees",

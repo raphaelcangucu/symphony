@@ -10,7 +10,7 @@ import { useMarkdownImagePaste } from "@/hooks/useMarkdownImagePaste";
 import { cn } from "@/lib/utils";
 import type { Comment, CreateCommentInput, UpdateCommentInput } from "@/types/comment";
 
-import { CommentCard, SyncBadge, WorkpadBadge } from "./CommentCard";
+import { CommentCard, EvidenceBadge, SyncBadge, WorkpadBadge } from "./CommentCard";
 
 interface CommentsTabProps {
   comments: Comment[];
@@ -337,10 +337,12 @@ function CommentItem({ comment, projectSlug, onUpdateComment, onDeleteComment }:
       body={comment.body}
       createdAt={comment.createdAt}
       url={comment.url}
-      highlight={comment.kind === "workpad"}
+      kind={comment.kind}
+      highlight={comment.kind === "workpad" || comment.kind === "evidence"}
       badge={
         <>
           {comment.kind === "workpad" ? <WorkpadBadge /> : null}
+          {comment.kind === "evidence" ? <EvidenceBadge /> : null}
           <SyncBadge syncStatus={comment.syncStatus} />
         </>
       }

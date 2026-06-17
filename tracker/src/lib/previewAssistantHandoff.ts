@@ -1,3 +1,6 @@
+import type { TFunction } from "i18next";
+
+import { i18n } from "@/i18n";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { IssueDevServer, IssueDevServerReason, IssueDevServersResponse } from "@/types/issue";
 
@@ -16,33 +19,34 @@ const STORAGE_KEY = "symphony:preview-assistant-handoff";
 export function buildPreviewFailurePrompt(
   snapshot: IssueDevServersResponse,
   server?: IssueDevServer | null,
+  t: TFunction = i18n.t.bind(i18n),
 ): string {
-  const lines = [
-    "The issue preview dev server failed. Diagnose the workspace, fix the root cause, and tell me when Start Preview should work again.",
-    "",
-    `Availability: ${snapshot.available ? "available" : "unavailable"}`,
-  ];
+  const availabilityStatus = snapshot.available
+    ? t("issue.preview.available")
+    : t("issue.preview.unavailable");
+
+  const lines = [t("issue.preview.failurePrompt.intro"), "", t("issue.preview.failurePrompt.availability", { status: availabilityStatus })];
 
   if (snapshot.reason) {
-    lines.push(`Availability reason: ${snapshot.reason}`);
+    lines.push(t("issue.preview.failurePrompt.availabilityReason", { reason: snapshot.reason }));
   }
 
   if (server) {
     lines.push("");
-    lines.push(`Failed server: ${server.slug}`);
-    lines.push(`Status: ${server.status}`);
-    if (server.working_dir) lines.push(`Working directory: ${server.working_dir}`);
-    if (server.port != null) lines.push(`Port: ${server.port}`);
+    lines.push(t("issue.preview.failurePrompt.failedServer", { slug: server.slug }));
+    lines.push(t("issue.preview.failurePrompt.status", { status: server.status }));
+    if (server.working_dir) {
+      lines.push(t("issue.preview.failurePrompt.workingDirectory", { dir: server.working_dir }));
+    }
+    if (server.port != null) lines.push(t("issue.preview.failurePrompt.port", { port: server.port }));
     if (server.session_name) {
-      lines.push(`Tmux session: ${server.session_name}`);
-      lines.push(`Inspect logs: tmux capture-pane -t ${server.session_name} -p -S -80`);
+      lines.push(t("issue.preview.failurePrompt.tmuxSession", { session: server.session_name }));
+      lines.push(t("issue.preview.failurePrompt.inspectLogs", { session: server.session_name }));
     }
   }
 
   lines.push("");
-  lines.push(
-    "Check setup/serve DevEnv steps, run missing installs (for example npm ci in front/), then confirm npm run dev or the configured serve command works in the issue workspace.",
-  );
+  lines.push(t("issue.preview.failurePrompt.footer"));
 
   return lines.join("\n");
 }

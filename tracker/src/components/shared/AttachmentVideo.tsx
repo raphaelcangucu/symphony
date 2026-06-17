@@ -1,5 +1,6 @@
 import { VideoOff } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { fetchAttachmentObjectUrl, isTrackerAuthenticatedMediaUrl } from "@/services/attachments";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ function needsAuthenticatedFetch(src: string): boolean {
 }
 
 export function AttachmentVideo({ src, label, className }: AttachmentVideoProps) {
+  const { t } = useTranslation();
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export function AttachmentVideo({ src, label, className }: AttachmentVideoProps)
     return (
       <div
         className={cn("animate-pulse rounded-lg border bg-muted", className)}
-        aria-label={`Loading ${label}`}
+        aria-label={t("issue.attachments.loading", { name: label })}
       />
     );
   }
@@ -62,7 +64,7 @@ export function AttachmentVideo({ src, label, className }: AttachmentVideoProps)
           className,
         )}
         role="img"
-        aria-label={`Failed to load ${label}`}
+        aria-label={t("issue.attachments.loadFailed", { name: label })}
       >
         <VideoOff className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{label}</span>

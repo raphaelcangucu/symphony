@@ -306,7 +306,9 @@
           "conflict": "Conflito de sync",
           "error": "Falha no sync"
         },
-        "workpad": "Workpad"
+        "workpad": "Workpad",
+        "evidence": "Evidência",
+        "evidenceArtifactsHint": "Artefatos completos (vídeos, relatórios, traces): abra a aba Evidência."
       }
     },
     "priority": {
@@ -442,6 +444,18 @@
           "title": "Preview indisponível",
           "body": "Disponibilidade bloqueada no momento. Resolva o problema acima e use Iniciar preview quando estiver pronto."
         }
+      },
+      "failurePrompt": {
+        "intro": "O servidor de preview da issue falhou. Diagnostique o workspace, corrija a causa raiz e me avise quando Iniciar preview voltar a funcionar.",
+        "availability": "Disponibilidade: {{status}}",
+        "availabilityReason": "Motivo da indisponibilidade: {{reason}}",
+        "failedServer": "Servidor com falha: {{slug}}",
+        "status": "Status: {{status}}",
+        "workingDirectory": "Diretório de trabalho: {{dir}}",
+        "port": "Porta: {{port}}",
+        "tmuxSession": "Sessão tmux: {{session}}",
+        "inspectLogs": "Inspecionar logs: tmux capture-pane -t {{session}} -p -S -80",
+        "footer": "Verifique os passos setup/serve do DevEnv, execute instalações faltantes (por exemplo npm ci em front/) e confirme que npm run dev ou o comando serve configurado funciona no workspace da issue."
       }
     },
     "evidence": {
@@ -648,7 +662,9 @@
       "popupBlocked": "Permita pop-ups para abrir este arquivo.",
       "openFailed": "Falha ao abrir arquivo.",
       "openTitle": "Abrir {{name}}",
-      "openAria": "Abrir {{name}}"
+      "openAria": "Abrir {{name}}",
+      "loading": "Carregando {{name}}",
+      "loadFailed": "Falha ao carregar {{name}}"
     },
     "create": {
       "trigger": "Nova issue",
@@ -663,6 +679,12 @@
       "inherit": "Herdar ({{agent}})",
       "longRunningMode": "Modo {{termCapitalized}} (long-running)",
       "goalAria": "{{agent}} {{term}}",
+      "goal": {
+        "defaultObjective": "Concluir esta issue",
+        "objective": "Objetivo: {{objective}}",
+        "context": "Contexto: {{details}}",
+        "constraints": "Restrições: siga artefatos, specs e planos existentes da issue quando houver; verifique as mudanças antes de reportar conclusão; pare quando concluir ou ficar bloqueado."
+      },
       "terms": { "goal": "goal", "workflow": "workflow" },
       "labels": "Labels",
       "assignees": "Assignees",

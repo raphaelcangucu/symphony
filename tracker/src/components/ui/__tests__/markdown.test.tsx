@@ -29,6 +29,17 @@ describe("Markdown", () => {
     expect(preview).toHaveAttribute("alt", "home.png");
   });
 
+  it("renders evidence artifact images when alt text contains parentheses", () => {
+    const href =
+      "http://localhost:4000/api/tracker/v1/projects/gamba/issues/1878/evidence/20260610-1/artifacts/artifacts/screens/home%20(failed).png";
+
+    render(<Markdown>{`![home \\(failed\\).png](${href})`}</Markdown>);
+
+    const preview = screen.getByTestId("attachment-image");
+    expect(preview).toHaveAttribute("src", href);
+    expect(preview).toHaveAttribute("alt", "home (failed).png");
+  });
+
   it("renders internal video attachment links as previews", () => {
     const href = "/api/tracker/v1/projects/gamba/assistant/attachments/uploads/demo.webm";
 

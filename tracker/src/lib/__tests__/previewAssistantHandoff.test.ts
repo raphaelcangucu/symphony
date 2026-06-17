@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 
+import { i18n } from "@/i18n";
 import {
   buildPreviewFailurePrompt,
   consumePreviewAssistantHandoff,
@@ -30,7 +31,7 @@ describe("previewAssistantHandoff", () => {
       server,
     );
 
-    expect(prompt).toContain("preview dev server failed");
+    expect(prompt).toContain(i18n.t("issue.preview.failurePrompt.intro"));
     expect(prompt).toContain("web");
     expect(prompt).toContain("crashed");
     expect(prompt).toContain("sym-issue-macro-markets-510-web");

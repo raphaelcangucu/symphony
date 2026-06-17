@@ -51,8 +51,14 @@ export function evidenceArtifactUrl(
   runId: string,
   relative: string,
 ): string {
+  const encodedRelative = relative
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
   return trackerPath(
-    `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/evidence/${encodeURIComponent(runId)}/artifacts/${relative}`,
+    `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/evidence/${encodeURIComponent(runId)}/artifacts/${encodedRelative}`,
   );
 }
 

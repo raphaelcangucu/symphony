@@ -65,24 +65,16 @@ function toggle(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
 
-function buildAgentGoal(title: string, description: string): string {
-  const objective = title.trim() || "Complete this issue";
+function buildAgentGoal(title: string, description: string, t: TFunction): string {
+  const objective = title.trim() || t("issue.create.goal.defaultObjective");
   const details = description.trim();
-  const lines = [`Objective: ${objective}`];
+  const lines = [t("issue.create.goal.objective", { objective })];
 
-  if (details) lines.push(`Context: ${details}`);
+  if (details) lines.push(t("issue.create.goal.context", { details }));
 
-  lines.push(
-    "Constraints: follow existing issue artifacts, specs, and plans when present; verify changes before reporting completion; stop when complete or blocked.",
-  );
+  lines.push(t("issue.create.goal.constraints"));
 
   return lines.join("\n");
-}
-
-function agentDisplayName(agent: AgentKind): string {
-  if (agent === "claude") return "Claude";
-  if (agent === "cursor") return "Cursor";
-  return "Codex";
 }
 
 // Codex calls the long-running mode a "goal"; Claude Code and Cursor call it a "workflow".
@@ -152,9 +144,9 @@ export function IssueCreateDialog({
 
   useEffect(() => {
     if (concreteAgent(agent) !== null && codexGoalMode && !codexGoalEdited) {
-      setCodexGoal(buildAgentGoal(title, description));
+      setCodexGoal(buildAgentGoal(title, description, t));
     }
-  }, [agent, codexGoalEdited, codexGoalMode, description, title]);
+  }, [agent, codexGoalEdited, codexGoalMode, description, t, title]);
 
   useEffect(() => {
     if (!open || !projectSlug.trim()) return;
@@ -200,7 +192,7 @@ export function IssueCreateDialog({
   function handleGoalModeChange(checked: boolean) {
     setCodexGoalMode(checked);
     setCodexGoalEdited(false);
-    setCodexGoal(checked ? buildAgentGoal(title, description) : "");
+    setCodexGoal(checked ? buildAgentGoal(title, description, t) : "");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -338,7 +330,7 @@ export function IssueCreateDialog({
               {codexGoalMode ? (
                 <label className="block space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">
-                    {agentDisplayName(concreteAgent(agent) as AgentKind)}{" "}
+                    {agentKindLabel(concreteAgent(agent) as AgentKind, t)}{" "}
                     {longRunningModeTerm(concreteAgent(agent) as AgentKind, t)}
                   </span>
                   <Textarea
@@ -349,7 +341,7 @@ export function IssueCreateDialog({
                     }}
                     className="min-h-28"
                     aria-label={t("issue.create.goalAria", {
-                      agent: agentDisplayName(concreteAgent(agent) as AgentKind),
+                      agent: agentKindLabel(concreteAgent(agent) as AgentKind, t),
                       term: longRunningModeTerm(concreteAgent(agent) as AgentKind, t),
                     })}
                   />

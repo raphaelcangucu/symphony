@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
-import { ExternalLink, NotebookPen } from "lucide-react";
+import { ClipboardCheck, ExternalLink, NotebookPen } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
+import { EvidenceCommentBody } from "@/components/issues/issue-detail/EvidenceCommentBody";
 import { Markdown } from "@/components/ui/markdown";
 import { i18n } from "@/i18n";
+import { isEvidenceComment } from "@/lib/evidenceComment";
 import { cn, formatDateTime } from "@/lib/utils";
 
 interface CommentCardProps {
@@ -13,12 +15,13 @@ interface CommentCardProps {
   body: string;
   createdAt?: string | null;
   url?: string | null;
+  kind?: string | null;
   badge?: ReactNode;
   highlight?: boolean;
   actions?: ReactNode;
 }
 
-export function CommentCard({ author, body, createdAt, url, badge, highlight, actions }: CommentCardProps) {
+export function CommentCard({ author, body, createdAt, url, kind, badge, highlight, actions }: CommentCardProps) {
   const { t } = useTranslation();
 
   return (
@@ -53,7 +56,11 @@ export function CommentCard({ author, body, createdAt, url, badge, highlight, ac
       </header>
       <div className="px-3 py-3">
         {body.trim() ? (
-          <Markdown>{body}</Markdown>
+          isEvidenceComment(body, kind) ? (
+            <EvidenceCommentBody body={body} />
+          ) : (
+            <Markdown>{body}</Markdown>
+          )
         ) : (
           <p className="text-sm text-muted-foreground">{t("issue.comments.card.empty")}</p>
         )}
@@ -106,6 +113,17 @@ export function WorkpadBadge() {
     <span className="inline-flex items-center gap-1 rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-medium text-primary">
       <NotebookPen className="h-3 w-3" />
       {t("issue.comments.card.workpad")}
+    </span>
+  );
+}
+
+export function EvidenceBadge() {
+  const { t } = useTranslation();
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/12 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+      <ClipboardCheck className="h-3 w-3" />
+      {t("issue.comments.card.evidence")}
     </span>
   );
 }

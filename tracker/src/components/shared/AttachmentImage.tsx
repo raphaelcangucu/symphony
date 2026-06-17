@@ -1,5 +1,6 @@
 import { ImageOff, ZoomIn } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fetchAttachmentObjectUrl, isTrackerAuthenticatedMediaUrl } from "@/services/attachments";
@@ -34,6 +35,7 @@ export function AttachmentImage({
   layout = "inline",
   showCaption = false,
 }: AttachmentImageProps) {
+  const { t } = useTranslation();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
@@ -67,7 +69,7 @@ export function AttachmentImage({
             "animate-pulse rounded-lg border bg-muted",
             layout === "thumbnail" ? "aspect-video w-full" : className,
           )}
-          aria-label={`Loading ${alt}`}
+          aria-label={t("issue.attachments.loading", { name: alt })}
         />
         {showCaption ? <figcaption className="sr-only">{alt}</figcaption> : null}
       </figure>
@@ -83,7 +85,7 @@ export function AttachmentImage({
             layout === "thumbnail" ? "aspect-video w-full" : className,
           )}
           role="img"
-          aria-label={`Failed to load ${alt}`}
+          aria-label={t("issue.attachments.loadFailed", { name: alt })}
         >
           <ImageOff className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{alt}</span>
@@ -134,7 +136,7 @@ export function AttachmentImage({
         type="button"
         onClick={() => setLightboxOpen(true)}
         className="group relative flex aspect-video w-full cursor-zoom-in items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-muted/40 p-2 transition hover:border-primary/30 hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-        aria-label={`Open ${alt}`}
+        aria-label={t("issue.attachments.openAria", { name: alt })}
       >
         {image}
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 transition group-hover:bg-black/20">
@@ -146,7 +148,7 @@ export function AttachmentImage({
         type="button"
         onClick={() => setLightboxOpen(true)}
         className="my-2 inline-flex max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-border/60 bg-muted/20 transition hover:border-primary/30 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-        aria-label={`Open ${alt}`}
+        aria-label={t("issue.attachments.openAria", { name: alt })}
       >
         {image}
       </button>
