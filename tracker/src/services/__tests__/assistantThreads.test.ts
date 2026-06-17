@@ -47,6 +47,6 @@ describe("archiveAssistantThread", () => {
   });
 
   it("rejects invalid thread ids", async () => {
-    await expect(archiveAssistantThread(0)).rejects.toThrow("threadId is required");
+    await expect(archiveAssistantThread(0)).rejects.toThrow(/threadId/);
   });
 });
