@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 import { getStatusMeta } from "@/components/board/status-meta";
 import { Button } from "@/components/ui/button";
@@ -59,16 +60,16 @@ import { rollupMeta } from "./pull-request/pr-meta";
 import { SummaryTab } from "./issue-detail/SummaryTab";
 import { TerminalTab } from "./issue-detail/TerminalTab";
 
-const TABS = [
-  { value: "summary", label: "Summary", Icon: FileText },
-  { value: "pr", label: "Pull request", Icon: GitPullRequest },
-  { value: "comments", label: "Comments", Icon: MessageSquare },
-  { value: "evidence", label: "Evidence", Icon: ClipboardCheck },
-  { value: "blockers", label: "Blockers", Icon: ShieldAlert },
-  { value: "agent", label: "Agent", Icon: Bot },
-  { value: "preview", label: "Preview", Icon: Server },
-  { value: "activity", label: "Activity", Icon: Activity },
-  { value: "terminal", label: "Terminal", Icon: TerminalSquare },
+const TAB_DEFS = [
+  { value: "summary", labelKey: "issue.drawer.tabs.summary", Icon: FileText },
+  { value: "pr", labelKey: "issue.drawer.tabs.pr", Icon: GitPullRequest },
+  { value: "comments", labelKey: "issue.drawer.tabs.comments", Icon: MessageSquare },
+  { value: "evidence", labelKey: "issue.drawer.tabs.evidence", Icon: ClipboardCheck },
+  { value: "blockers", labelKey: "issue.drawer.tabs.blockers", Icon: ShieldAlert },
+  { value: "agent", labelKey: "issue.drawer.tabs.agent", Icon: Bot },
+  { value: "preview", labelKey: "issue.drawer.tabs.preview", Icon: Server },
+  { value: "activity", labelKey: "issue.drawer.tabs.activity", Icon: Activity },
+  { value: "terminal", labelKey: "issue.drawer.tabs.terminal", Icon: TerminalSquare },
 ] as const;
 
 interface IssueDrawerProps {
@@ -104,6 +105,7 @@ export function IssueDrawer({
   onForceSync,
   onIssueUpdated,
 }: IssueDrawerProps) {
+  const { t } = useTranslation();
   const meta = issue ? getStatusMeta(issue.status) : null;
   const StatusIcon = meta?.Icon;
 
@@ -200,8 +202,8 @@ export function IssueDrawer({
   const blockersCount = issue?.blockedBy.length ?? 0;
   const anyEditorAvailable = editor.browser.available || editor.cursorDesktop.available;
   const editorMenuTitle = editor.browser.available
-    ? "Open this task's workspace in Code (.)"
-    : editorUnavailableTitle(editor.browser.reason ?? editor.cursorDesktop.reason, editor.loading);
+    ? t("issue.drawer.openWorkspaceCode")
+    : editorUnavailableTitle(editor.browser.reason ?? editor.cursorDesktop.reason, editor.loading, t);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -217,7 +219,7 @@ export function IssueDrawer({
                   {issue.blockedBy.length > 0 ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-300">
                       <AlertTriangle className="h-3 w-3" />
-                      Blocked
+                      {t("issue.drawer.blocked")}
                     </span>
                   ) : null}
                   {execution ? <AgentStatusBadge status={resolveDisplayStatus(execution)} /> : null}
@@ -232,10 +234,10 @@ export function IssueDrawer({
                           size="sm"
                           disabled={!anyEditorAvailable && !editor.loading}
                           title={editorMenuTitle}
-                          aria-label="Open in Code"
+                          aria-label={t("issue.drawer.openInCode")}
                         >
                           <Code2 className="h-4 w-4" />
-                          <span className="hidden sm:inline">Code</span>
+                          <span className="hidden sm:inline">{t("issue.drawer.code")}</span>
                           <ChevronDown className="h-4 w-4 opacity-60" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -244,8 +246,8 @@ export function IssueDrawer({
                           disabled={!editor.browser.available}
                           title={
                             editor.browser.available
-                              ? "Open in VS Code (browser)"
-                              : editorUnavailableTitle(editor.browser.reason, editor.loading)
+                              ? t("issue.drawer.openInCodeBrowser")
+                              : editorUnavailableTitle(editor.browser.reason, editor.loading, t)
                           }
                           onSelect={() => openBrowserEditor()}
                         >
@@ -256,8 +258,8 @@ export function IssueDrawer({
                           disabled={!editor.cursorDesktop.available}
                           title={
                             editor.cursorDesktop.available
-                              ? "Open in Cursor (local app)"
-                              : editorUnavailableTitle(editor.cursorDesktop.reason, editor.loading)
+                              ? t("issue.drawer.openInCursor")
+                              : editorUnavailableTitle(editor.cursorDesktop.reason, editor.loading, t)
                           }
                           onSelect={() => openCursorDesktop()}
                         >
@@ -273,8 +275,8 @@ export function IssueDrawer({
                           type="button"
                           variant="outline"
                           size="sm"
-                          aria-label="Issue actions"
-                          title="Issue actions"
+                          aria-label={t("issue.drawer.issueActions")}
+                          title={t("issue.drawer.issueActions")}
                           className="w-8 px-0 text-muted-foreground"
                         >
                           <MoreHorizontal className="h-4 w-4" />
@@ -284,13 +286,13 @@ export function IssueDrawer({
                         {onForceSync ? (
                           <DropdownMenuItem onSelect={() => void handleForceSync(issue)}>
                             <RefreshCw className="mr-2 h-4 w-4" />
-                            Sync from remote
+                            {t("issue.drawer.syncFromRemote")}
                           </DropdownMenuItem>
                         ) : null}
                         {onArchive ? (
                           <DropdownMenuItem onSelect={() => void onArchive(issue)}>
                             <Archive className="mr-2 h-4 w-4" />
-                            Archive
+                            {t("issue.drawer.archive")}
                           </DropdownMenuItem>
                         ) : null}
                         {onDelete ? (
@@ -299,7 +301,7 @@ export function IssueDrawer({
                             onSelect={() => {
                               if (
                                 window.confirm(
-                                  `Delete ${issue.identifier} permanently? This removes it from the board and cannot be undone.`,
+                                  t("issue.drawer.deleteConfirm", { identifier: issue.identifier }),
                                 )
                               ) {
                                 void onDelete(issue);
@@ -307,7 +309,7 @@ export function IssueDrawer({
                             }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
+                            {t("issue.drawer.delete")}
                           </DropdownMenuItem>
                         ) : null}
                       </DropdownMenuContent>
@@ -318,8 +320,8 @@ export function IssueDrawer({
               <SheetTitle className="mt-3 text-[1.35rem] font-semibold leading-snug tracking-tight text-foreground" asChild>
                 <InlineEditableText
                   value={issue.title}
-                  aria-label="Issue title"
-                  placeholder="Untitled issue"
+                  aria-label={t("issue.drawer.issueTitleAria")}
+                  placeholder={t("issue.drawer.untitledIssue")}
                   saving={issueUpdater.saving}
                   displayClassName="px-1 py-0.5 text-[1.35rem] font-semibold leading-snug tracking-tight"
                   inputClassName="text-[1.35rem] font-semibold leading-snug tracking-tight"
@@ -342,7 +344,7 @@ export function IssueDrawer({
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-1 text-muted-foreground">
                     <AssigneeAvatar login={issue.assignee} />
-                    {issue.assignee ?? "Unassigned"}
+                    {issue.assignee ?? t("issue.drawer.unassigned")}
                   </span>
                 </div>
               </SheetDescription>
@@ -358,7 +360,7 @@ export function IssueDrawer({
                   "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
                 )}
               >
-                {TABS.map(({ value, label, Icon }) => (
+                {TAB_DEFS.map(({ value, labelKey, Icon }) => (
                   <TabsTrigger
                     key={value}
                     value={value}
@@ -369,7 +371,7 @@ export function IssueDrawer({
                     )}
                   >
                     <Icon className="h-3.5 w-3.5 opacity-80 group-data-[state=active]:opacity-100" />
-                    {label}
+                    {t(labelKey)}
                     {value === "pr" && prRollup ? (
                       <prRollup.Icon className={cn("h-3 w-3", prRollup.className, prRollup.spin && "animate-spin")} />
                     ) : null}
@@ -513,18 +515,22 @@ function openDesktopProtocolUrl(url: string) {
   anchor.remove();
 }
 
-function editorUnavailableTitle(reason: EditorReason | null, loading: boolean): string {
-  if (loading) return "Checking editor…";
+function editorUnavailableTitle(
+  reason: EditorReason | null,
+  loading: boolean,
+  t: (key: string) => string,
+): string {
+  if (loading) return t("issue.drawer.editor.checking");
   switch (reason) {
     case "starting":
-      return "Editor is starting…";
+      return t("issue.drawer.editor.starting");
     case "workspace_missing":
-      return "Workspace not created yet — run the agent or open the terminal first";
+      return t("issue.drawer.editor.workspaceMissing");
     case "workspace_skills_unavailable":
-      return "Workspace is still preparing — try again in a moment";
+      return t("issue.drawer.editor.workspacePreparing");
     case "unavailable":
-      return "Editor unavailable — restart Symphony after upgrading (make build && make update)";
+      return t("issue.drawer.editor.unavailableUpgrade");
     default:
-      return "Editor unavailable";
+      return t("issue.drawer.editor.unavailable");
   }
 }

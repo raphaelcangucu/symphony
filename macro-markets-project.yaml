@@ -12,11 +12,11 @@ dev_env_steps:
     url_path: "/"
     working_dir: "back"
   - command: "bash .symphony/serve.sh"
-    description: "Backend Laravel API (docker compose up on $PORT + migrate + /health)"
+    description: "Backend Laravel API (docker compose up on $PORT + restore dumps + migrate + /api/symphony-health)"
     optional: false
     port_env: "PORT"
     primary: false
-    ready_path: "/health"
+    ready_path: "/api/symphony-health"
     ready_probe: "http"
     role: "serve"
     source: "manual"
@@ -182,6 +182,14 @@ setup:
         CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-85869ee1df284e998701dafe6e734c5d}
         CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
         ENV
+    pr_monitor:
+      done_on_merge: true
+      enabled: true
+      max_auto_rework: 2
+    source_control:
+      branch_pattern: "symphony/{issue}"
+      issue_marker_key: "Symphony-Issue"
+      pr_title_pattern: "{issue}: {title}"
     public_tunnel:
       base_domain: tracker.cods.dev
       enabled: true
@@ -236,6 +244,20 @@ setup:
     - Open PRs **per repo against that repo's base**:
       - frontend: `cd front && gh pr create --base homolog --title "…"`
       - backend: `cd back && gh pr create --base dev --title "…"`
+    - **Every PR body MUST include the association marker on its own line** so Symphony links the PR to this issue deterministically (this is what populates the issue's **PR** tab): `Symphony-Issue: {{ issue.identifier }}`
+    - Keep the machine-readable PR registry updated in the `## Codex Workpad` comment — one entry per PR you open (front and back), so the PR tab still resolves even before GitHub indexes the marker:
+      ```
+      <!-- symphony:prs
+      - repo: clouapp/front
+        number: <front-pr-number>
+        branch: symphony/{{ issue.identifier }}
+        url: https://github.com/clouapp/front/pull/<front-pr-number>
+      - repo: clouapp/back
+        number: <back-pr-number>
+        branch: symphony/{{ issue.identifier }}
+        url: https://github.com/clouapp/back/pull/<back-pr-number>
+      -->
+      ```
     - On **Rework**, sync with the right integration branch per repo and address feedback. Do not target `master`/`main`.
     - Backend conventions: prefer `sail`/`vibe` over bare `php`; follow `back/`'s own `AGENTS`/`.cursorrules` and PR template; commit messages in English.
     
@@ -247,14 +269,17 @@ setup:
 
     ### Preview flow
 
-    Symphony starts the **backend** first, then the **frontend**. The frontend
-    `serve.sh` waits for backend `/health`, writes the local API + Pusher targets into
+    Symphony starts the **backend** first, then the **frontend** (serve steps boot in
+    declared order; each waits for the previous to be ready). The backend `serve.sh`
+    restores the committed DB dumps (Postgres + DynamoDB), runs migrations, and waits on
+    the lightweight readiness route `/api/symphony-health`. The frontend `serve.sh` then
+    waits for backend `/api/symphony-health`, writes the local API + Pusher targets into
     `front/.env.local` (local-only — it fails if the backend is unhealthy), then starts
     Next.js.
 
     | Step order | Service | API target |
     |------------|---------|------------|
-    | 1–2 | Backend setup + serve | Local Laravel (`/health`, GraphQL `/@`, GraphiQL `/graphiql`) |
+    | 1–2 | Backend setup + serve | Local Laravel (readiness `/api/symphony-health`, GraphQL `/@`, GraphiQL `/graphiql`) |
     | 3–4 | Frontend setup + serve | Wired to the backend on `127.0.0.1` (browser proxied via `/api`) |
 
     ### How to run each service (manual or Preview tab)
@@ -265,9 +290,9 @@ setup:
     cd back
     bash .symphony/setup.sh
     PORT=9100 bash .symphony/serve.sh
-    # Health:   http://127.0.0.1:9100/health
-    # GraphQL:  http://127.0.0.1:9100/@
-    # GraphiQL: http://127.0.0.1:9100/graphiql (auth)
+    # Readiness: http://127.0.0.1:9100/api/symphony-health
+    # GraphQL:   http://127.0.0.1:9100/@
+    # GraphiQL:  http://127.0.0.1:9100/graphiql (auth)
     ```
 
     **Frontend — Next.js (`front/`)** — after the backend is healthy
@@ -282,6 +307,11 @@ setup:
     - Scripts ship under `back/.symphony/` and `front/.symphony/`.
     - The backend uses `docker compose` directly (not `./vibe`) so a restart never
       stops another project's shared containers; `PORT` is mapped to `APP_PORT:80`.
+    - The backend seeds from committed dumps via `back/.symphony/db-dev.sh bootstrap`
+      (Postgres `database/dump/postgresql.sql.gz` + DynamoDB `database/dump/dynamo.gz`);
+      restore is idempotent (skipped when data already exists), then migrations run.
+      Readiness is the lightweight `GET /api/symphony-health` route (returns
+      `{ "status": "ok" }`) — not Spatie's `/health`.
     - The frontend routes browser API calls through the Next proxy
       (`NEXT_PUBLIC_USE_API_PROXY=true` → `/api/[...path]` → `NEXT_PUBLIC_API_URL`),
       so the preview also works behind a tunnel.

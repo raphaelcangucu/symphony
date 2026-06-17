@@ -23,11 +23,237 @@
       "saved": "Language preference saved",
       "saveFailed": "Failed to save language preference",
       "loadFailed": "Failed to load language settings — refresh to retry."
+    },
+    "orchestration": {
+      "title": "Orchestration rules",
+      "description": "What the orchestrator is allowed to start on its own. Defaults are conservative so it never grabs unlabeled or unassigned work.",
+      "loadFailed": "Failed to load rules — refresh to retry.",
+      "saveFailed": "Failed to save orchestration rule",
+      "rules": {
+        "requireSymphonyLabel": {
+          "title": "Require a Symphony label",
+          "description": "Only auto-start issues tagged symphony, symphony:codex, or symphony:claude. Manual dispatch from the board is never affected."
+        },
+        "requireAssigneeMatch": {
+          "title": "Require assignment to me",
+          "description": "Only auto-start issues assigned to the connected provider identity (GitHub login, Jira account, or Linear user)."
+        }
+      }
+    },
+    "push": {
+      "title": "Browser notifications",
+      "description": "Get notified when an issue needs human review, validation evidence is ready, an agent run fails or stalls, the PR monitor flags something for you, or a task is assigned to you — even when this tab is in the background.",
+      "unsupported": "Web Push is not supported in this browser.",
+      "notConfigured": "Push is not configured on the server. Set SYMPHONY_VAPID_PUBLIC_KEY and SYMPHONY_VAPID_PRIVATE_KEY, then restart Symphony.",
+      "enabled": "Notifications are enabled for this browser.",
+      "prompt": "Enable notifications for Human Review, evidence, agent failures, and PR monitor alerts.",
+      "disable": "Disable notifications",
+      "sendTest": "Send test notification",
+      "enable": "Enable notifications"
     }
   },
   "issue": {
     "agent": {
-      "advancedControls": "Advanced controls"
+      "advancedControls": "Advanced controls",
+      "controlTitle": "Agent control",
+      "hintSteer": "Steer the live run with /infer, or pause to stop safely.",
+      "hintBusy": "Agent is busy — queue guidance for the next resume, or pause to stop safely.",
+      "hintResume": "Resume where the run stopped, restart fresh, or add guidance before resuming.",
+      "hintStart": "Start the agent on this issue. Add optional guidance before you do.",
+      "workflowObjective": "Workflow objective",
+      "goalObjective": "Goal objective",
+      "sendGoalAria": "Send goal on resume or restart",
+      "queuedGuidance": "Queued guidance · sent on next resume",
+      "removeQueuedAria": "Remove queued guidance",
+      "remove": "Remove",
+      "placeholderSteer": "/infer focus on the failing test first",
+      "placeholderQueue": "Add guidance to queue for the next resume…",
+      "placeholderResume": "Optional guidance, then Resume…",
+      "placeholderStart": "Optional guidance, then Start…",
+      "restartTitle": "Start a fresh agent pass on this issue",
+      "restartPauseFirst": "Pause the active run before restarting",
+      "restart": "Restart",
+      "restarting": "Restarting…",
+      "hardResetTitle": "Stop the run, clear the session (turns and tokens), and start fresh. Keeps the workspace.",
+      "hardReset": "Hard reset",
+      "resetting": "Resetting…",
+      "sendingSteer": "Sending steer…",
+      "pauseTitle": "Pause the run (keeps the session to resume later)",
+      "starting": "Starting…",
+      "resuming": "Resuming…",
+      "dispatchResume": "Resuming agent…",
+      "dispatchRestart": "Restarting agent…",
+      "dispatchHardReset": "Hard resetting session…",
+      "dispatchStop": "Pausing agent…",
+      "dispatchFailed": "Dispatch failed",
+      "hardResetDialogTitle": "Hard reset session?",
+      "hardResetDialogDescription": "This stops any active run, discards the current agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and its git state are preserved.",
+      "cancel": "Cancel",
+      "modelsHint": "Models from {{command}}. Agent and model apply on resume/restart; /infer steers the live {{agent}} session.",
+      "steerNotAvailable": "No steerable agent turn is running — use Resume to pick the run back up.",
+      "orchestratorUnavailable": "The orchestrator is unavailable; try again in a moment.",
+      "primaryStart": "Start",
+      "primaryPause": "Pause",
+      "primaryResume": "Resume",
+      "enterSteer": "Enter to steer",
+      "enterQueue": "Enter to queue",
+      "enterResume": "Enter to resume",
+      "enterStart": "Enter to start",
+      "agentMenu": "Agent",
+      "steer": "Steer",
+      "queue": "Queue",
+      "pausing": "Pausing…"
+    },
+    "drawer": {
+      "tabs": {
+        "summary": "Summary",
+        "pr": "Pull request",
+        "comments": "Comments",
+        "evidence": "Evidence",
+        "blockers": "Blockers",
+        "agent": "Agent",
+        "preview": "Preview",
+        "activity": "Activity",
+        "terminal": "Terminal"
+      },
+      "openInCode": "Open in Code",
+      "openInCodeBrowser": "Open in VS Code (browser)",
+      "openInCursor": "Open in Cursor (local app)",
+      "issueActions": "Issue actions",
+      "openWorkspaceCode": "Open this task's workspace in Code (.)",
+      "blocked": "Blocked",
+      "syncFromRemote": "Sync from remote",
+      "archive": "Archive",
+      "delete": "Delete",
+      "deleteConfirm": "Delete {{identifier}} permanently? This removes it from the board and cannot be undone.",
+      "issueTitleAria": "Issue title",
+      "untitledIssue": "Untitled issue",
+      "unassigned": "Unassigned",
+      "code": "Code",
+      "editor": {
+        "checking": "Checking editor…",
+        "starting": "Editor is starting…",
+        "workspaceMissing": "Workspace not created yet — run the agent or open the terminal first",
+        "workspacePreparing": "Workspace is still preparing — try again in a moment",
+        "unavailableUpgrade": "Editor unavailable — restart Symphony after upgrading (make build && make update)",
+        "unavailable": "Editor unavailable"
+      }
+    },
+    "comments": {
+      "write": "Write",
+      "preview": "Preview",
+      "toolbar": {
+        "heading": "Heading",
+        "bold": "Bold",
+        "italic": "Italic",
+        "code": "Code",
+        "link": "Link",
+        "bulletedList": "Bulleted list",
+        "numberedList": "Numbered list",
+        "taskList": "Task list"
+      },
+      "placeholder": "Use Markdown to format your comment · paste images to attach",
+      "nothingToPreview": "Nothing to preview.",
+      "uploadingImage": "Uploading image…",
+      "markdownHint": "Markdown supported · paste images · ⌘/Ctrl+Enter to send",
+      "posting": "Posting…",
+      "comment": "Comment",
+      "loading": "Loading comments…",
+      "empty": "No comments yet.",
+      "addFailed": "Failed to add comment",
+      "updateFailed": "Failed to update comment",
+      "deleteConfirm": "Delete this comment? This cannot be undone.",
+      "deleteFailed": "Failed to delete comment",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "save": "Save",
+      "editAria": "Edit comment",
+      "deleteAria": "Delete comment",
+      "linkPlaceholder": "text"
+    },
+    "preview": {
+      "cannotLoadTitle": "Preview cannot load",
+      "cannotLoadBody": "Project and issue identifiers are required to load preview status.",
+      "loadingTitle": "Loading preview status...",
+      "loadingBody": "Checking dev-server availability for this issue.",
+      "loadErrorTitle": "Could not load preview status",
+      "unavailableTitle": "Preview status unavailable",
+      "unavailableBody": "No preview status has been loaded for this issue yet.",
+      "refreshErrorTitle": "Could not refresh preview status",
+      "cardTitle": "Issue Preview",
+      "availability": "Availability: {{status}}",
+      "available": "available",
+      "unavailable": "unavailable",
+      "refreshing": " · refreshing status",
+      "readyFrom": "Preview is ready from {{slug}}.",
+      "ready": "Preview is ready.",
+      "publicTunnel": "Public (Cloudflare tunnel):",
+      "local": "Local:",
+      "openPreview": "Open Preview",
+      "provisioningTitle": "Preview is being provisioned...",
+      "devServers": "Dev Servers",
+      "noServers": "No dev servers are running yet. Use Start Preview when you want to provision one.",
+      "startPreview": "Start Preview",
+      "stopPreview": "Stop Preview",
+      "restartPreview": "Restart Preview",
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Restart",
+      "startServerAria": "Start {{slug}} preview",
+      "stopServerAria": "Stop {{slug}} preview",
+      "restartServerAria": "Restart {{slug}} preview",
+      "tunnelRunningTitle": "Public preview URLs",
+      "tunnelRunningBody": "The Cloudflare tunnel is running, so the public *.tracker.cods.dev links below reach this machine and can be shared with teammates.",
+      "tunnelStoppedTitle": "Cloudflare tunnel is not running",
+      "tunnelStoppedBody": "Public preview links won't work until the tunnel is running. Only the localhost URLs are shown below. Start the tunnel to expose the public *.tracker.cods.dev hosts.",
+      "startingTunnel": "Starting tunnel...",
+      "startTunnel": "Start tunnel",
+      "askAssistant": "Ask assistant to fix",
+      "primaryBadge": "primary",
+      "workingDir": "Working directory: {{dir}}",
+      "noWorkingDir": "No working directory reported",
+      "port": " · Port {{port}}",
+      "openServerPreview": "Open {{slug}} preview",
+      "noUrlYet": "No URL yet",
+      "provisioningStatus": "The {{slug}} dev server is {{status}} and has not published a URL yet.",
+      "availabilityReason": {
+        "disabled": {
+          "title": "Dev-server previews are disabled",
+          "body": "Availability is disabled for this project. Enable dev-server previews in the project workflow before using Start Preview."
+        },
+        "workspace_missing": {
+          "title": "Preview workspace is missing",
+          "body": "Availability is blocked because the issue workspace could not be found. Create or restore the workspace before starting a preview."
+        },
+        "no_serve_step": {
+          "title": "No serve step configured",
+          "body": "Availability is blocked because this project does not have a dev-server serve step configured."
+        },
+        "no_free_port": {
+          "title": "No free preview port",
+          "body": "Availability is blocked because the system could not reserve a free port for the dev server."
+        },
+        "lock_unavailable": {
+          "title": "Preview is already being changed",
+          "body": "Another preview action is holding the lock. Manual controls remain available so you can retry after the current action finishes."
+        },
+        "start_failed": {
+          "title": "Preview start failed",
+          "body": "The last start request failed. Manual controls remain available so you can retry or restart after checking the server output."
+        },
+        "restart_failed": {
+          "title": "Preview restart failed",
+          "body": "The last restart request failed. Manual controls remain available so you can retry once the underlying issue is resolved."
+        },
+        "crashed": {
+          "title": "Preview crashed",
+          "body": "Availability is blocked because the preview process crashed. Manual controls remain available so you can restart after checking the server logs."
+        },
+        "default": {
+          "title": "Preview unavailable",
+          "body": "Availability is blocked right now. Resolve the issue above, then use Start Preview when you are ready."
+        }
+      }
     },
     "evidence": {
       "missing": "No evidence recorded in the tracker.",
@@ -65,6 +291,48 @@
           "body": ""
         }
       }
+    }
+  },
+  "project": {
+    "wizard": {
+      "trigger": "New workspace project",
+      "title": "Create workspace project",
+      "description": "Discover GitHub repositories, scan local paths, and create a multi-repo tracker workspace.",
+      "tabTemplate": "Start from a template",
+      "tabScratch": "Build from scratch",
+      "templateLabel": "Template",
+      "templateHint": "Pick a saved workspace template to clone its repositories and setup.",
+      "loadingTemplates": "Loading templates...",
+      "noTemplates": "No templates saved yet.",
+      "projectNamePlaceholder": "Project name",
+      "projectSlugPlaceholder": "project-slug",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "createFromTemplate": "Create from template",
+      "trackerSource": "Tracker source",
+      "connected": "Project connected",
+      "connectFailed": "Failed to connect project",
+      "created": "Workspace project created",
+      "createFailed": "Failed to create workspace project",
+      "selectTemplate": "Select a template first",
+      "nameSlugRequired": "Project name and slug are required",
+      "createdFromTemplate": "Project created from template",
+      "createFromTemplateFailed": "Failed to create project from template",
+      "loadTemplatesFailed": "Failed to load templates",
+      "loadOrgsFailed": "Failed to load GitHub organizations",
+      "loadReposFailed": "Failed to load repositories",
+      "suggestFailed": "Failed to suggest workspace setup",
+      "selectRemoteFirst": "Select a remote project first",
+      "scanning": "Scanning...",
+      "scanAndSuggest": "Scan and suggest",
+      "loading": "Loading...",
+      "refresh": "Refresh",
+      "loadingOrganizations": "Loading organizations...",
+      "noOrganizations": "No GitHub organizations returned for this token yet.",
+      "reloadRepositories": "Reload repositories",
+      "createWorkspaceProject": "Create workspace project",
+      "connecting": "Connecting...",
+      "connectProject": "Connect project"
     }
   }
 }

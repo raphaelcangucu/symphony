@@ -23,11 +23,237 @@
       "saved": "Preferência de idioma salva",
       "saveFailed": "Falha ao salvar preferência de idioma",
       "loadFailed": "Falha ao carregar configurações de idioma — atualize para tentar novamente."
+    },
+    "orchestration": {
+      "title": "Regras de orquestração",
+      "description": "O que o orquestrador pode iniciar sozinho. Os padrões são conservadores para não pegar trabalho sem label ou sem assignee.",
+      "loadFailed": "Falha ao carregar regras — atualize para tentar novamente.",
+      "saveFailed": "Falha ao salvar regra de orquestração",
+      "rules": {
+        "requireSymphonyLabel": {
+          "title": "Exigir label Symphony",
+          "description": "Só auto-iniciar issues com label symphony, symphony:codex ou symphony:claude. Dispatch manual do board nunca é afetado."
+        },
+        "requireAssigneeMatch": {
+          "title": "Exigir assignee para mim",
+          "description": "Só auto-iniciar issues atribuídas à identidade conectada (login GitHub, conta Jira ou usuário Linear)."
+        }
+      }
+    },
+    "push": {
+      "title": "Notificações do navegador",
+      "description": "Receba avisos quando uma issue precisar de revisão humana, evidência estiver pronta, uma execução do agente falhar ou travar, o monitor de PR sinalizar algo, ou uma tarefa for atribuída a você — mesmo com a aba em segundo plano.",
+      "unsupported": "Web Push não é suportado neste navegador.",
+      "notConfigured": "Push não está configurado no servidor. Defina SYMPHONY_VAPID_PUBLIC_KEY e SYMPHONY_VAPID_PRIVATE_KEY e reinicie o Symphony.",
+      "enabled": "Notificações ativadas neste navegador.",
+      "prompt": "Ative notificações para Human Review, evidência, falhas do agente e alertas do monitor de PR.",
+      "disable": "Desativar notificações",
+      "sendTest": "Enviar notificação de teste",
+      "enable": "Ativar notificações"
     }
   },
   "issue": {
     "agent": {
-      "advancedControls": "Controles avançados"
+      "advancedControls": "Controles avançados",
+      "controlTitle": "Controle do agente",
+      "hintSteer": "Direcione a execução ao vivo com /infer, ou pause para parar com segurança.",
+      "hintBusy": "Agente ocupado — enfileire orientação para o próximo resume, ou pause para parar com segurança.",
+      "hintResume": "Retome de onde parou, reinicie do zero ou adicione orientação antes de retomar.",
+      "hintStart": "Inicie o agente nesta issue. Adicione orientação opcional antes.",
+      "workflowObjective": "Objetivo do workflow",
+      "goalObjective": "Objetivo da meta",
+      "sendGoalAria": "Enviar meta no resume ou restart",
+      "queuedGuidance": "Orientação enfileirada · enviada no próximo resume",
+      "removeQueuedAria": "Remover orientação enfileirada",
+      "remove": "Remover",
+      "placeholderSteer": "/infer foque no teste que falhou primeiro",
+      "placeholderQueue": "Adicione orientação para enfileirar no próximo resume…",
+      "placeholderResume": "Orientação opcional, depois Resume…",
+      "placeholderStart": "Orientação opcional, depois Start…",
+      "restartTitle": "Iniciar uma nova passagem do agente nesta issue",
+      "restartPauseFirst": "Pause a execução ativa antes de reiniciar",
+      "restart": "Reiniciar",
+      "restarting": "Reiniciando…",
+      "hardResetTitle": "Parar a execução, limpar a sessão (turnos e tokens) e começar do zero. Mantém o workspace.",
+      "hardReset": "Reset completo",
+      "resetting": "Resetando…",
+      "sendingSteer": "Enviando steer…",
+      "pauseTitle": "Pausar a execução (mantém a sessão para retomar depois)",
+      "starting": "Iniciando…",
+      "resuming": "Retomando…",
+      "dispatchResume": "Retomando agente…",
+      "dispatchRestart": "Reiniciando agente…",
+      "dispatchHardReset": "Resetando sessão…",
+      "dispatchStop": "Pausando agente…",
+      "dispatchFailed": "Falha no dispatch",
+      "hardResetDialogTitle": "Reset completo da sessão?",
+      "hardResetDialogDescription": "Isso para qualquer execução ativa, descarta a sessão atual do agente e limpa contadores de turnos e tokens, depois inicia uma sessão nova. O workspace e o estado git são preservados.",
+      "cancel": "Cancelar",
+      "modelsHint": "Modelos de {{command}}. Agente e modelo aplicam no resume/restart; /infer direciona a sessão {{agent}} ao vivo.",
+      "steerNotAvailable": "Nenhum turno direcionável em execução — use Resume para retomar.",
+      "orchestratorUnavailable": "O orquestrador está indisponível; tente novamente em instantes.",
+      "primaryStart": "Iniciar",
+      "primaryPause": "Pausar",
+      "primaryResume": "Retomar",
+      "enterSteer": "Enter para direcionar",
+      "enterQueue": "Enter para enfileirar",
+      "enterResume": "Enter para retomar",
+      "enterStart": "Enter para iniciar",
+      "agentMenu": "Agente",
+      "steer": "Direcionar",
+      "queue": "Enfileirar",
+      "pausing": "Pausando…"
+    },
+    "drawer": {
+      "tabs": {
+        "summary": "Resumo",
+        "pr": "Pull request",
+        "comments": "Comentários",
+        "evidence": "Evidência",
+        "blockers": "Bloqueios",
+        "agent": "Agente",
+        "preview": "Preview",
+        "activity": "Atividade",
+        "terminal": "Terminal"
+      },
+      "openInCode": "Abrir no Code",
+      "openInCodeBrowser": "Abrir no VS Code (navegador)",
+      "openInCursor": "Abrir no Cursor (app local)",
+      "issueActions": "Ações da issue",
+      "openWorkspaceCode": "Abrir o workspace desta tarefa no Code (.)",
+      "blocked": "Bloqueada",
+      "syncFromRemote": "Sincronizar do remoto",
+      "archive": "Arquivar",
+      "delete": "Excluir",
+      "deleteConfirm": "Excluir {{identifier}} permanentemente? Isso remove do board e não pode ser desfeito.",
+      "issueTitleAria": "Título da issue",
+      "untitledIssue": "Issue sem título",
+      "unassigned": "Sem assignee",
+      "code": "Code",
+      "editor": {
+        "checking": "Verificando editor…",
+        "starting": "Editor iniciando…",
+        "workspaceMissing": "Workspace ainda não criado — execute o agente ou abra o terminal primeiro",
+        "workspacePreparing": "Workspace ainda preparando — tente novamente em instantes",
+        "unavailableUpgrade": "Editor indisponível — reinicie o Symphony após atualizar (make build && make update)",
+        "unavailable": "Editor indisponível"
+      }
+    },
+    "comments": {
+      "write": "Escrever",
+      "preview": "Pré-visualizar",
+      "toolbar": {
+        "heading": "Título",
+        "bold": "Negrito",
+        "italic": "Itálico",
+        "code": "Código",
+        "link": "Link",
+        "bulletedList": "Lista com marcadores",
+        "numberedList": "Lista numerada",
+        "taskList": "Lista de tarefas"
+      },
+      "placeholder": "Use Markdown para formatar · cole imagens para anexar",
+      "nothingToPreview": "Nada para pré-visualizar.",
+      "uploadingImage": "Enviando imagem…",
+      "markdownHint": "Markdown suportado · cole imagens · ⌘/Ctrl+Enter para enviar",
+      "posting": "Publicando…",
+      "comment": "Comentar",
+      "loading": "Carregando comentários…",
+      "empty": "Nenhum comentário ainda.",
+      "addFailed": "Falha ao adicionar comentário",
+      "updateFailed": "Falha ao atualizar comentário",
+      "deleteConfirm": "Excluir este comentário? Isso não pode ser desfeito.",
+      "deleteFailed": "Falha ao excluir comentário",
+      "cancel": "Cancelar",
+      "saving": "Salvando…",
+      "save": "Salvar",
+      "editAria": "Editar comentário",
+      "deleteAria": "Excluir comentário",
+      "linkPlaceholder": "texto"
+    },
+    "preview": {
+      "cannotLoadTitle": "Preview não pode carregar",
+      "cannotLoadBody": "Identificadores de projeto e issue são necessários para carregar o status do preview.",
+      "loadingTitle": "Carregando status do preview...",
+      "loadingBody": "Verificando disponibilidade do dev-server para esta issue.",
+      "loadErrorTitle": "Não foi possível carregar o status do preview",
+      "unavailableTitle": "Status do preview indisponível",
+      "unavailableBody": "Nenhum status de preview foi carregado para esta issue ainda.",
+      "refreshErrorTitle": "Não foi possível atualizar o status do preview",
+      "cardTitle": "Preview da issue",
+      "availability": "Disponibilidade: {{status}}",
+      "available": "disponível",
+      "unavailable": "indisponível",
+      "refreshing": " · atualizando status",
+      "readyFrom": "Preview pronto a partir de {{slug}}.",
+      "ready": "Preview pronto.",
+      "publicTunnel": "Público (túnel Cloudflare):",
+      "local": "Local:",
+      "openPreview": "Abrir preview",
+      "provisioningTitle": "Preview sendo provisionado...",
+      "devServers": "Dev Servers",
+      "noServers": "Nenhum dev server em execução. Use Iniciar preview quando quiser provisionar um.",
+      "startPreview": "Iniciar preview",
+      "stopPreview": "Parar preview",
+      "restartPreview": "Reiniciar preview",
+      "start": "Iniciar",
+      "stop": "Parar",
+      "restart": "Reiniciar",
+      "startServerAria": "Iniciar preview {{slug}}",
+      "stopServerAria": "Parar preview {{slug}}",
+      "restartServerAria": "Reiniciar preview {{slug}}",
+      "tunnelRunningTitle": "URLs públicas de preview",
+      "tunnelRunningBody": "O túnel Cloudflare está ativo; os links públicos *.tracker.cods.dev abaixo alcançam esta máquina e podem ser compartilhados com o time.",
+      "tunnelStoppedTitle": "Túnel Cloudflare não está ativo",
+      "tunnelStoppedBody": "Links públicos de preview não funcionam até o túnel estar ativo. Apenas URLs localhost são mostradas abaixo. Inicie o túnel para expor os hosts públicos *.tracker.cods.dev.",
+      "startingTunnel": "Iniciando túnel...",
+      "startTunnel": "Iniciar túnel",
+      "askAssistant": "Pedir ao assistente para corrigir",
+      "primaryBadge": "principal",
+      "workingDir": "Diretório de trabalho: {{dir}}",
+      "noWorkingDir": "Nenhum diretório de trabalho informado",
+      "port": " · Porta {{port}}",
+      "openServerPreview": "Abrir preview {{slug}}",
+      "noUrlYet": "Sem URL ainda",
+      "provisioningStatus": "O dev server {{slug}} está {{status}} e ainda não publicou uma URL.",
+      "availabilityReason": {
+        "disabled": {
+          "title": "Previews de dev-server desativados",
+          "body": "Disponibilidade desativada para este projeto. Ative previews de dev-server no workflow do projeto antes de usar Iniciar preview."
+        },
+        "workspace_missing": {
+          "title": "Workspace do preview ausente",
+          "body": "Disponibilidade bloqueada porque o workspace da issue não foi encontrado. Crie ou restaure o workspace antes de iniciar um preview."
+        },
+        "no_serve_step": {
+          "title": "Nenhum passo serve configurado",
+          "body": "Disponibilidade bloqueada porque este projeto não tem um passo serve de dev-server configurado."
+        },
+        "no_free_port": {
+          "title": "Sem porta livre para preview",
+          "body": "Disponibilidade bloqueada porque o sistema não conseguiu reservar uma porta livre para o dev server."
+        },
+        "lock_unavailable": {
+          "title": "Preview já está sendo alterado",
+          "body": "Outra ação de preview está segurando o lock. Controles manuais permanecem disponíveis para tentar novamente após a ação atual terminar."
+        },
+        "start_failed": {
+          "title": "Falha ao iniciar preview",
+          "body": "A última solicitação de start falhou. Controles manuais permanecem disponíveis para tentar novamente ou reiniciar após verificar a saída do servidor."
+        },
+        "restart_failed": {
+          "title": "Falha ao reiniciar preview",
+          "body": "A última solicitação de restart falhou. Controles manuais permanecem disponíveis para tentar novamente quando o problema subjacente for resolvido."
+        },
+        "crashed": {
+          "title": "Preview travou",
+          "body": "Disponibilidade bloqueada porque o processo de preview travou. Controles manuais permanecem disponíveis para reiniciar após verificar os logs do servidor."
+        },
+        "default": {
+          "title": "Preview indisponível",
+          "body": "Disponibilidade bloqueada no momento. Resolva o problema acima e use Iniciar preview quando estiver pronto."
+        }
+      }
     },
     "evidence": {
       "missing": "Nenhuma evidência registrada no tracker.",
@@ -65,6 +291,48 @@
           "body": ""
         }
       }
+    }
+  },
+  "project": {
+    "wizard": {
+      "trigger": "Novo projeto workspace",
+      "title": "Criar projeto workspace",
+      "description": "Descubra repositórios GitHub, escaneie caminhos locais e crie um workspace tracker multi-repo.",
+      "tabTemplate": "Começar de um template",
+      "tabScratch": "Construir do zero",
+      "templateLabel": "Template",
+      "templateHint": "Escolha um template salvo para clonar repositórios e setup.",
+      "loadingTemplates": "Carregando templates...",
+      "noTemplates": "Nenhum template salvo ainda.",
+      "projectNamePlaceholder": "Nome do projeto",
+      "projectSlugPlaceholder": "slug-do-projeto",
+      "cancel": "Cancelar",
+      "creating": "Criando...",
+      "createFromTemplate": "Criar a partir do template",
+      "trackerSource": "Fonte do tracker",
+      "connected": "Projeto conectado",
+      "connectFailed": "Falha ao conectar projeto",
+      "created": "Projeto workspace criado",
+      "createFailed": "Falha ao criar projeto workspace",
+      "selectTemplate": "Selecione um template primeiro",
+      "nameSlugRequired": "Nome e slug do projeto são obrigatórios",
+      "createdFromTemplate": "Projeto criado a partir do template",
+      "createFromTemplateFailed": "Falha ao criar projeto a partir do template",
+      "loadTemplatesFailed": "Falha ao carregar templates",
+      "loadOrgsFailed": "Falha ao carregar organizações GitHub",
+      "loadReposFailed": "Falha ao carregar repositórios",
+      "suggestFailed": "Falha ao sugerir setup do workspace",
+      "selectRemoteFirst": "Selecione um projeto remoto primeiro",
+      "scanning": "Escaneando...",
+      "scanAndSuggest": "Escanear e sugerir",
+      "loading": "Carregando...",
+      "refresh": "Atualizar",
+      "loadingOrganizations": "Carregando organizações...",
+      "noOrganizations": "Nenhuma organização GitHub retornada para este token ainda.",
+      "reloadRepositories": "Recarregar repositórios",
+      "createWorkspaceProject": "Criar projeto workspace",
+      "connecting": "Conectando...",
+      "connectProject": "Conectar projeto"
     }
   }
 }

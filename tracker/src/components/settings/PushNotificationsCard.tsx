@@ -1,10 +1,12 @@
 import { Bell, BellOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export function PushNotificationsCard() {
+  const { t } = useTranslation();
   const { supported, config, subscribed, loading, busy, error, enable, disable, sendTest } =
     usePushNotifications();
 
@@ -13,46 +15,35 @@ export function PushNotificationsCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {subscribed ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-          Browser notifications
+          {t("settings.push.title")}
         </CardTitle>
-        <CardDescription>
-          Get notified when an issue needs human review, validation evidence is ready, an agent run
-          fails or stalls, the PR monitor flags something for you, or a task is assigned to you —
-          even when this tab is in the background.
-        </CardDescription>
+        <CardDescription>{t("settings.push.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!supported ? (
-          <p className="text-xs text-muted-foreground">Web Push is not supported in this browser.</p>
+          <p className="text-xs text-muted-foreground">{t("settings.push.unsupported")}</p>
         ) : loading ? (
-          <p className="text-xs text-muted-foreground">Loading…</p>
+          <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
         ) : !config?.enabled ? (
-          <p className="text-xs text-muted-foreground">
-            Push is not configured on the server. Set{" "}
-            <code className="rounded bg-muted px-1 py-0.5">SYMPHONY_VAPID_PUBLIC_KEY</code> and{" "}
-            <code className="rounded bg-muted px-1 py-0.5">SYMPHONY_VAPID_PRIVATE_KEY</code>, then restart
-            Symphony.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("settings.push.notConfigured")}</p>
         ) : (
           <>
             <p className="text-xs text-muted-foreground">
-              {subscribed
-                ? "Notifications are enabled for this browser."
-                : "Enable notifications for Human Review, evidence, agent failures, and PR monitor alerts."}
+              {subscribed ? t("settings.push.enabled") : t("settings.push.prompt")}
             </p>
             <div className="flex flex-wrap gap-2">
               {subscribed ? (
                 <>
                   <Button variant="outline" disabled={busy} onClick={() => void disable()}>
-                    Disable notifications
+                    {t("settings.push.disable")}
                   </Button>
                   <Button variant="secondary" disabled={busy} onClick={() => void sendTest()}>
-                    Send test notification
+                    {t("settings.push.sendTest")}
                   </Button>
                 </>
               ) : (
                 <Button disabled={busy} onClick={() => void enable()}>
-                  Enable notifications
+                  {t("settings.push.enable")}
                 </Button>
               )}
             </div>

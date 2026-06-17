@@ -1,5 +1,6 @@
 import { Plus, RefreshCw } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -36,6 +37,7 @@ interface ProjectWorkspaceWizardProps {
 }
 
 export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpenChange }: ProjectWorkspaceWizardProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const isControlled = controlledOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
@@ -104,7 +106,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
       setActiveTab(items.length > 0 ? "template" : "scratch");
     } catch (cause) {
       setActiveTab("scratch");
-      toast.error(cause instanceof Error ? cause.message : "Failed to load templates");
+      toast.error(cause instanceof Error ? cause.message : t("project.wizard.loadTemplatesFailed"));
     } finally {
       setLoadingTemplates(false);
     }
@@ -115,7 +117,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
     try {
       setOwners(await listGitHubOwners());
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to load GitHub organizations");
+      toast.error(cause instanceof Error ? cause.message : t("project.wizard.loadOrgsFailed"));
     } finally {
       setLoadingOwners(false);
     }
@@ -140,7 +142,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
       const items = await listGitHubRepositories(trimmedOwner);
       setRepositories(items.map(withRepositoryDefaults));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to load repositories");
+      toast.error(cause instanceof Error ? cause.message : t("project.wizard.loadReposFailed"));
     } finally {
       setLoadingRepositories(false);
     }
@@ -203,7 +205,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
       setScans(nextScans);
       setSuggestion(nextSuggestion);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to suggest workspace setup");
+      toast.error(cause instanceof Error ? cause.message : t("project.wizard.suggestFailed"));
     } finally {
       setBuildingSuggestion(false);
     }
@@ -214,7 +216,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
 
     if (trackerKind !== "local") {
       if (!remoteConfig) {
-        toast.error("Select a remote project first");
+        toast.error(t("project.wizard.selectRemoteFirst"));
         return;
       }
 
@@ -233,10 +235,10 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
         onCreated?.(project);
         reset();
         setOpen(false);
-        toast.success("Project connected");
+        toast.success(t("project.wizard.connected"));
         navigate(projectSettingsPath(project.slug));
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Failed to connect project");
+        toast.error(cause instanceof Error ? cause.message : t("project.wizard.connectFailed"));
       } finally {
         setSubmitting(false);
       }
@@ -267,10 +269,10 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
       onCreated?.(project);
       reset();
       setOpen(false);
-      toast.success("Workspace project created");
+      toast.success(t("project.wizard.created"));
       navigate(projectSettingsPath(project.slug));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to create workspace project");
+      toast.error(cause instanceof Error ? cause.message : t("project.wizard.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -280,14 +282,14 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
     event.preventDefault();
 
     if (!selectedTemplate) {
-      toast.error("Select a template first");
+      toast.error(t("project.wizard.selectTemplate"));
       return;
     }
 
     const trimmedName = name.trim();
     const trimmedSlug = slug.trim();
     if (!trimmedName || !trimmedSlug) {
-      toast.error("Project name and slug are required");
+      toast.error(t("project.wizard.nameSlugRequired"));
       return;
     }
 
@@ -302,10 +304,10 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
       onCreated?.(project);
       reset();
       setOpen(false);
-      toast.success("Project created from template");
+      toast.success(t("project.wizard.createdFromTemplate"));
       navigate(projectSettingsPath(project.slug));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to create project from template");
+      toast.error(cause instanceof Error ? cause.message : t("project.wizard.createFromTemplateFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -332,26 +334,26 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
         <DialogTrigger asChild>
           <Button size="sm">
             <Plus className="h-4 w-4" />
-            New workspace project
+            {t("project.wizard.trigger")}
           </Button>
         </DialogTrigger>
       )}
       <DialogContent className="max-h-[calc(100vh-2rem)] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create workspace project</DialogTitle>
-          <DialogDescription>Discover GitHub repositories, scan local paths, and create a multi-repo tracker workspace.</DialogDescription>
+          <DialogTitle>{t("project.wizard.title")}</DialogTitle>
+          <DialogDescription>{t("project.wizard.description")}</DialogDescription>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WizardTab)}>
           <TabsList>
-            <TabsTrigger value="template">Start from a template</TabsTrigger>
-            <TabsTrigger value="scratch">Build from scratch</TabsTrigger>
+            <TabsTrigger value="template">{t("project.wizard.tabTemplate")}</TabsTrigger>
+            <TabsTrigger value="scratch">{t("project.wizard.tabScratch")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="template">
             <form className="space-y-5" onSubmit={handleInstantiateTemplate}>
               <div className="space-y-2">
-                <p className="text-sm font-medium">Template</p>
-                <p className="text-xs text-muted-foreground">Pick a saved workspace template to clone its repositories and setup.</p>
+                <p className="text-sm font-medium">{t("project.wizard.templateLabel")}</p>
+                <p className="text-xs text-muted-foreground">{t("project.wizard.templateHint")}</p>
                 {templates.length > 0 ? (
                   <div className="grid gap-2 md:grid-cols-2">
                     {templates.map((template) => (
@@ -374,22 +376,22 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
                   </div>
                 ) : (
                   <p className="rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">
-                    {loadingTemplates ? "Loading templates..." : "No templates saved yet."}
+                    {loadingTemplates ? t("project.wizard.loadingTemplates") : t("project.wizard.noTemplates")}
                   </p>
                 )}
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" />
-                <Input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="project-slug" />
+                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("project.wizard.projectNamePlaceholder")} />
+                <Input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder={t("project.wizard.projectSlugPlaceholder")} />
               </div>
 
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-                  Cancel
+                  {t("project.wizard.cancel")}
                 </Button>
                 <Button type="submit" disabled={submitting || !selectedTemplate || !name.trim() || !slug.trim()}>
-                  {submitting ? "Creating..." : "Create from template"}
+                  {submitting ? t("project.wizard.creating") : t("project.wizard.createFromTemplate")}
                 </Button>
               </div>
             </form>
@@ -398,7 +400,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
           <TabsContent value="scratch">
         <form className="space-y-5" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <p className="text-sm font-medium">Tracker source</p>
+            <p className="text-sm font-medium">{t("project.wizard.trackerSource")}</p>
             <TrackerSourcePicker
               value={trackerKind}
               onChange={(kind) => {
@@ -409,8 +411,8 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" autoFocus />
-            <Input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="project-slug" />
+            <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("project.wizard.projectNamePlaceholder")} autoFocus />
+            <Input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder={t("project.wizard.projectSlugPlaceholder")} />
           </div>
 
           {trackerKind === "github" ? (
@@ -469,7 +471,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
               </div>
               <Button type="button" variant="ghost" size="sm" onClick={handleLoadOwners} disabled={loadingOwners}>
                 <RefreshCw className="h-4 w-4" />
-                {loadingOwners ? "Loading..." : "Refresh"}
+                {loadingOwners ? t("project.wizard.loading") : t("project.wizard.refresh")}
               </Button>
             </div>
 
@@ -499,7 +501,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
               </div>
             ) : (
               <p className="rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">
-                {loadingOwners ? "Loading organizations..." : "No GitHub organizations returned for this token yet."}
+                {loadingOwners ? t("project.wizard.loadingOrganizations") : t("project.wizard.noOrganizations")}
               </p>
             )}
 
@@ -509,7 +511,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
                   Selected: <strong>{owner}</strong>
                 </span>
                 <Button type="button" variant="secondary" size="sm" onClick={() => handleLoadRepositories()} disabled={loadingRepositories}>
-                  {loadingRepositories ? "Loading..." : "Reload repositories"}
+                  {loadingRepositories ? t("project.wizard.loading") : t("project.wizard.reloadRepositories")}
                 </Button>
               </div>
             ) : null}
@@ -588,7 +590,7 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
 
           <div className="flex items-center justify-between gap-3">
             <Button type="button" variant="secondary" onClick={handleScanAndSuggest} disabled={buildingSuggestion || selectedRepositories.length === 0}>
-              {buildingSuggestion ? "Scanning..." : "Scan and suggest"}
+              {buildingSuggestion ? t("project.wizard.scanning") : t("project.wizard.scanAndSuggest")}
             </Button>
             {scans.length > 0 ? <span className="text-sm text-muted-foreground">{scans.length} repository scan(s)</span> : null}
           </div>
@@ -612,13 +614,13 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+              {t("project.wizard.cancel")}
             </Button>
             <Button
               type="submit"
               disabled={submitting || (trackerKind === "local" ? !suggestion : !remoteConfig)}
             >
-              {submitButtonLabel(trackerKind, submitting)}
+              {submitButtonLabel(trackerKind, submitting, t)}
             </Button>
           </div>
         </form>
@@ -629,9 +631,11 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
   );
 }
 
-function submitButtonLabel(trackerKind: TrackerKind, submitting: boolean): string {
-  if (trackerKind === "local") return submitting ? "Creating..." : "Create workspace project";
-  return submitting ? "Connecting..." : "Connect project";
+function submitButtonLabel(trackerKind: TrackerKind, submitting: boolean, t: (key: string) => string): string {
+  if (trackerKind === "local") {
+    return submitting ? t("project.wizard.creating") : t("project.wizard.createWorkspaceProject");
+  }
+  return submitting ? t("project.wizard.connecting") : t("project.wizard.connectProject");
 }
 
 function withRepositoryDefaults(repository: WorkspaceRepository): WorkspaceRepository {

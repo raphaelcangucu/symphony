@@ -1,3 +1,6 @@
+import type { TFunction } from "i18next";
+
+import { i18n } from "@/i18n";
 import type { AgentExecution, AgentExecutionStatus } from "@/types/agent-execution";
 
 function hasInterruptedSignals(execution: AgentExecution): boolean {
@@ -86,7 +89,10 @@ export interface AgentControlModel {
 }
 
 /** Derives the full Agent Control model from an execution snapshot. */
-export function deriveAgentControl(execution?: AgentExecution): AgentControlModel {
+export function deriveAgentControl(
+  execution?: AgentExecution,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): AgentControlModel {
   if (!execution) {
     return {
       state: "no-run",
@@ -96,7 +102,7 @@ export function deriveAgentControl(execution?: AgentExecution): AgentControlMode
       canResume: true,
       canPause: false,
       primaryAction: "start",
-      primaryLabel: "Start",
+      primaryLabel: t("issue.agent.primaryStart"),
       enterIntent: "start",
     };
   }
@@ -114,21 +120,24 @@ export function deriveAgentControl(execution?: AgentExecution): AgentControlMode
     canResume: !isActive,
     canPause: isActive,
     primaryAction: isActive ? "pause" : "resume",
-    primaryLabel: isActive ? "Pause" : "Resume",
+    primaryLabel: isActive ? t("issue.agent.primaryPause") : t("issue.agent.primaryResume"),
     enterIntent: canSteer ? "steer" : isActive ? "queue" : "resume",
   };
 }
 
 /** Short hint shown next to the composer describing the Enter action. */
-export function agentEnterHintLabel(intent: AgentEnterIntent): string {
+export function agentEnterHintLabel(
+  intent: AgentEnterIntent,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): string {
   switch (intent) {
     case "steer":
-      return "Enter to steer";
+      return t("issue.agent.enterSteer");
     case "queue":
-      return "Enter to queue";
+      return t("issue.agent.enterQueue");
     case "resume":
-      return "Enter to resume";
+      return t("issue.agent.enterResume");
     case "start":
-      return "Enter to start";
+      return t("issue.agent.enterStart");
   }
 }

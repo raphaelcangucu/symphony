@@ -1,5 +1,6 @@
 import { Eraser, Pause, Play, RotateCcw, Send, X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ModelMenu } from "@/components/assistant/ModelMenu";
@@ -71,6 +72,7 @@ export function ExecutionControlComposer({
   onSteer,
   onIssueUpdated,
 }: ExecutionControlComposerProps) {
+  const { t } = useTranslation();
   const [input, setInput] = useState("");
   const [queued, setQueued] = useState<string[]>([]);
   const [bundle, setBundle] = useState<AssistantCatalogBundle>(fallbackCatalogBundle());
@@ -90,7 +92,7 @@ export function ExecutionControlComposer({
   const trimmedGoalObjective = execution?.goal?.objective?.trim();
   const goalObjective = trimmedGoalObjective ? trimmedGoalObjective : null;
 
-  const control = deriveAgentControl(execution);
+  const control = deriveAgentControl(execution, t);
   const agentRunActive = control.isActive;
   const canResume = control.canResume;
   const canRestart = control.canResume;
@@ -183,10 +185,10 @@ export function ExecutionControlComposer({
   );
 
   const dispatchProgressLabel: Record<"resume" | "restart" | "hard_reset" | "stop", string> = {
-    resume: "Resuming agent…",
-    restart: "Restarting agent…",
-    hard_reset: "Hard resetting session…",
-    stop: "Pausing agent…",
+    resume: t("issue.agent.dispatchResume"),
+    restart: t("issue.agent.dispatchRestart"),
+    hard_reset: t("issue.agent.dispatchHardReset"),
+    stop: t("issue.agent.dispatchStop"),
   };
 
   // Guidance the agent should receive on the next resume/restart: anything the
@@ -231,7 +233,7 @@ export function ExecutionControlComposer({
         setQueued([]);
       }
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Dispatch failed";
+      const message = cause instanceof Error ? cause.message : t("issue.agent.dispatchFailed");
       setDispatchError(message);
       setDispatchStatus(null);
       toast.error(message);
@@ -284,15 +286,17 @@ export function ExecutionControlComposer({
     <section className="rounded-xl border border-border/70 bg-card/40 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agent control</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {t("issue.agent.controlTitle")}
+          </div>
           <p className="mt-1 text-xs text-muted-foreground">
             {canSteer
-              ? "Steer the live run with /infer, or pause to stop safely."
+              ? t("issue.agent.hintSteer")
               : agentRunActive
-                ? "Agent is busy — queue guidance for the next resume, or pause to stop safely."
+                ? t("issue.agent.hintBusy")
                 : control.hasRun
-                  ? "Resume where the run stopped, restart fresh, or add guidance before resuming."
-                  : "Start the agent on this issue. Add optional guidance before you do."}
+                  ? t("issue.agent.hintResume")
+                  : t("issue.agent.hintStart")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1">
@@ -321,7 +325,9 @@ export function ExecutionControlComposer({
           <label className="flex cursor-pointer items-start justify-between gap-3">
             <span className="min-w-0">
               <span className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {execution?.goal?.kind === "workflow" ? "Workflow objective" : "Goal objective"}
+                {execution?.goal?.kind === "workflow"
+                  ? t("issue.agent.workflowObjective")
+                  : t("issue.agent.goalObjective")}
               </span>
               <span className="mt-1 block whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">
                 {goalObjective}
@@ -331,7 +337,7 @@ export function ExecutionControlComposer({
               type="checkbox"
               checked={goalMode}
               disabled={controlsDisabled}
-              aria-label="Send goal on resume or restart"
+              aria-label={t("issue.agent.sendGoalAria")}
               onChange={(event) => setGoalMode(event.target.checked)}
               className="mt-1 h-4 w-4 shrink-0 accent-primary"
             />
@@ -342,7 +348,7 @@ export function ExecutionControlComposer({
       {queuedGuidance.length > 0 ? (
         <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Queued guidance · sent on next resume
+            {t("issue.agent.queuedGuidance")}
           </div>
           <ul className="mt-2 flex flex-col gap-1.5">
             {queuedGuidance.map((entry, index) => (
@@ -353,8 +359,8 @@ export function ExecutionControlComposer({
                 <span className="min-w-0 whitespace-pre-wrap break-words text-foreground/90">{entry}</span>
                 <button
                   type="button"
-                  aria-label="Remove queued guidance"
-                  title="Remove"
+                  aria-label={t("issue.agent.removeQueuedAria")}
+                  title={t("issue.agent.remove")}
                   disabled={controlsDisabled}
                   onClick={() => removeQueued(index)}
                   className="mt-0.5 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
@@ -374,12 +380,12 @@ export function ExecutionControlComposer({
           onKeyDown={handleKeyDown}
           placeholder={
             canSteer
-              ? "/infer focus on the failing test first"
+              ? t("issue.agent.placeholderSteer")
               : agentRunActive
-                ? "Add guidance to queue for the next resume…"
+                ? t("issue.agent.placeholderQueue")
                 : control.hasRun
-                  ? "Optional guidance, then Resume…"
-                  : "Optional guidance, then Start…"
+                  ? t("issue.agent.placeholderResume")
+                  : t("issue.agent.placeholderStart")
           }
           disabled={controlsDisabled || (canSteer && (!sessionConnected || steerPending))}
           rows={3}
@@ -394,14 +400,12 @@ export function ExecutionControlComposer({
               variant="outline"
               disabled={!canRestart || controlsDisabled}
               title={
-                canRestart
-                  ? "Start a fresh agent pass on this issue"
-                  : "Pause the active run before restarting"
+                canRestart ? t("issue.agent.restartTitle") : t("issue.agent.restartPauseFirst")
               }
               onClick={() => void runDispatch("restart")}
             >
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-              {dispatchPending === "restart" ? "Restarting…" : "Restart"}
+              {dispatchPending === "restart" ? t("issue.agent.restarting") : t("issue.agent.restart")}
             </Button>
             <Button
               type="button"
@@ -409,22 +413,22 @@ export function ExecutionControlComposer({
               variant="outline"
               className="text-destructive hover:text-destructive"
               disabled={controlsDisabled}
-              title="Stop the run, clear the session (turns and tokens), and start fresh. Keeps the workspace."
+              title={t("issue.agent.hardResetTitle")}
               onClick={() => setHardResetOpen(true)}
             >
               <Eraser className="mr-1.5 h-3.5 w-3.5" />
-              {dispatchPending === "hard_reset" ? "Resetting…" : "Hard reset"}
+              {dispatchPending === "hard_reset" ? t("issue.agent.resetting") : t("issue.agent.hardReset")}
             </Button>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="hidden text-xs text-muted-foreground sm:inline">
-              {steerPending ? "Sending steer…" : agentEnterHintLabel(enterIntent)}
+              {steerPending ? t("issue.agent.sendingSteer") : agentEnterHintLabel(enterIntent, t)}
             </span>
             {agentRunActive ? (
               <Button type="submit" size="sm" variant="default" disabled={sendDisabled}>
                 <Send className="mr-1.5 h-3.5 w-3.5" />
-                {canSteer ? "Steer" : "Queue"}
+                {canSteer ? t("issue.agent.steer") : t("issue.agent.queue")}
               </Button>
             ) : null}
             {agentRunActive ? (
@@ -433,19 +437,19 @@ export function ExecutionControlComposer({
                 size="sm"
                 variant="outline"
                 disabled={controlsDisabled}
-                title="Pause the run (keeps the session to resume later)"
+                title={t("issue.agent.pauseTitle")}
                 onClick={() => void runDispatch("stop")}
               >
                 <Pause className="mr-1.5 h-3.5 w-3.5" />
-                {dispatchPending === "stop" ? "Pausing…" : "Pause"}
+                {dispatchPending === "stop" ? t("issue.agent.dispatchStop") : t("issue.agent.primaryPause")}
               </Button>
             ) : (
               <Button type="submit" size="sm" variant="secondary" disabled={primaryDisabled}>
                 <Play className="mr-1.5 h-3.5 w-3.5" />
                 {dispatchPending === "resume"
-                  ? primaryLabel === "Start"
-                    ? "Starting…"
-                    : "Resuming…"
+                  ? control.primaryAction === "start"
+                    ? t("issue.agent.starting")
+                    : t("issue.agent.resuming")
                   : primaryLabel}
               </Button>
             )}
@@ -454,25 +458,24 @@ export function ExecutionControlComposer({
 
         {dispatchError ? <p className="text-xs text-destructive">{dispatchError}</p> : null}
         {dispatchStatus ? <p className="text-xs text-muted-foreground">{dispatchStatus}</p> : null}
-        {steerError ? <p className="text-xs text-destructive">{formatSteerError(steerError)}</p> : null}
+        {steerError ? (
+          <p className="text-xs text-destructive">{formatSteerError(steerError, t)}</p>
+        ) : null}
         <p className="text-[11px] text-muted-foreground">
-          Models from {catalog.command}. Agent and model apply on resume/restart; /infer steers the live {AGENT_LABELS[agent]} session.
+          {t("issue.agent.modelsHint", { command: catalog.command, agent: AGENT_LABELS[agent] })}
         </p>
       </form>
 
       <Dialog open={hardResetOpen} onOpenChange={setHardResetOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Hard reset session?</DialogTitle>
-            <DialogDescription>
-              This stops any active run, discards the current agent session, and clears the turn and token counters,
-              then starts a brand-new session. The workspace and its git state are preserved.
-            </DialogDescription>
+            <DialogTitle>{t("issue.agent.hardResetDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("issue.agent.hardResetDialogDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline" size="sm">
-                Cancel
+                {t("issue.agent.cancel")}
               </Button>
             </DialogClose>
             <Button
@@ -486,7 +489,7 @@ export function ExecutionControlComposer({
               }}
             >
               <Eraser className="mr-1.5 h-3.5 w-3.5" />
-              Hard reset
+              {t("issue.agent.hardReset")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -506,6 +509,7 @@ function AgentMenu({
   disabled?: boolean;
   onChange: (agent: AgentKind) => void;
 }) {
+  const { t } = useTranslation();
   const current = catalogFor(bundle, agent);
   return (
     <DropdownMenu>
@@ -515,7 +519,7 @@ function AgentMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Agent</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("issue.agent.agentMenu")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={agent} onValueChange={(value) => onChange(value as AgentKind)}>
           {bundle.agents.map((entry) => (
@@ -568,12 +572,12 @@ function EffortMenu({
   );
 }
 
-function formatSteerError(reason: string): string {
+function formatSteerError(reason: string, t: (key: string) => string): string {
   if (reason === "ActiveTurnNotSteerable") {
-    return "No steerable agent turn is running — use Resume to pick the run back up.";
+    return t("issue.agent.steerNotAvailable");
   }
   if (reason === "orchestrator_unavailable") {
-    return "The orchestrator is unavailable; try again in a moment.";
+    return t("issue.agent.orchestratorUnavailable");
   }
   return reason;
 }
