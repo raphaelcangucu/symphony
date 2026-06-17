@@ -6,7 +6,10 @@ import {
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
 import { AudioLines, Bot, Clock, FileText, ImageIcon, SendHorizontal, X } from "lucide-react";
+import type { TFunction } from "i18next";
+import { i18n } from "@/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
@@ -126,6 +129,7 @@ export function ProjectAssistantPanel({
   onOpenDocumentPath,
   composerSeedMessage = null,
 }: ProjectAssistantPanelProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
@@ -193,7 +197,7 @@ export function ProjectAssistantPanel({
       })
       .catch((cause) => {
         if (!cancelled) {
-          setCatalogError(cause instanceof Error ? cause.message : "Failed to load assistant models.");
+          setCatalogError(cause instanceof Error ? cause.message : t("assistant.panel.catalogLoadFailed"));
         }
       });
 
@@ -205,7 +209,7 @@ export function ProjectAssistantPanel({
   useEffect(() => {
     if (!active) return;
     if (threadId == null && !projectSlug) {
-      setConnectionError("Assistant has no thread or project to connect to.");
+      setConnectionError(t("assistant.panel.noConnectionTarget"));
       return;
     }
 
@@ -342,7 +346,7 @@ export function ProjectAssistantPanel({
     });
     pushResult.receive("timeout", () => {
       pendingIssueModeRef.current = null;
-      onIssueModeError?.("Assistant mode update timed out");
+      onIssueModeError?.(t("assistant.panel.modeUpdateTimeout"));
     });
   }, [active, channelReady, issueIdentifier, issueMode, issueModeRequestId, onIssueModeChanged, onIssueModeError]);
 
@@ -371,7 +375,7 @@ export function ProjectAssistantPanel({
     });
     pushResult.receive("timeout", () => {
       pendingGoalModeRef.current = null;
-      onIssueGoalModeError?.("Assistant goal mode update timed out");
+      onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout"));
     });
   }, [active, channelReady, issueIdentifier, issueGoalMode, issueGoalModeRequestId, onIssueGoalModeChanged, onIssueGoalModeError]);
 
@@ -389,13 +393,13 @@ export function ProjectAssistantPanel({
     const agentName = agentDisplayName(agent);
     const pushResult = dispatchCodingAgent(channel, { goalMode: issueGoalMode === true, agent });
     pushResult.receive("ok", (response) => {
-      onDispatchSucceeded?.(messageFromResponse(response) ?? `Dispatched to ${agentName}.`);
+      onDispatchSucceeded?.(messageFromResponse(response) ?? t("assistant.panel.dispatchedTo", { agent: agentName }));
     });
     pushResult.receive("error", (reason) => {
       onDispatchError?.(errorMessage(reason));
     });
     pushResult.receive("timeout", () => {
-      onDispatchError?.(`${agentName} dispatch timed out`);
+      onDispatchError?.(t("assistant.panel.dispatchTimeout", { agent: agentName }));
     });
   }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError]);
 
@@ -407,12 +411,12 @@ export function ProjectAssistantPanel({
 
       const channel = channelRef.current;
       if (!channel) {
-        setConnectionError("Assistant channel is not connected yet.");
+        setConnectionError(t("assistant.panel.channelNotConnected"));
         return;
       }
 
       const payload = {
-        message: trimmed || fallbackAttachmentMessage(submit.attachments),
+        message: trimmed || fallbackAttachmentMessage(submit.attachments, t),
         context: {
           view,
           agent: submit.agent,
@@ -429,7 +433,7 @@ export function ProjectAssistantPanel({
         setIsRunning(false);
       });
     },
-    [view],
+    [view, t],
   );
 
   const steerTurn = useCallback((submit: AssistantComposerSubmit) => {
@@ -468,7 +472,7 @@ export function ProjectAssistantPanel({
           })
           .receive("error", () => {
             setBtw((current) =>
-              current ? { ...current, status: "error", answer: "Failed to start side question." } : current,
+              current ? { ...current, status: "error", answer: t("assistant.panel.btwFailed") } : current,
             );
           });
         return;
@@ -481,7 +485,7 @@ export function ProjectAssistantPanel({
 
       dispatchSend(submit);
     },
-    [dispatchSend, isRunning, steerTurn],
+    [dispatchSend, isRunning, steerTurn, t],
   );
 
   const wasRunningRef = useRef(false);
@@ -543,7 +547,7 @@ export function ProjectAssistantPanel({
     [sendMessage],
   );
 
-  const visibleMessages = displayMessages(messages);
+  const visibleMessages = useMemo(() => displayMessages(messages, t), [messages, t]);
 
   useEffect(() => {
     if (!isFullPageProjectAssistant) return;
@@ -611,8 +615,8 @@ export function ProjectAssistantPanel({
             <span className="min-w-0 flex-1 truncate">{item.payload.message.trim()}</span>
             <button
               type="button"
-              aria-label="Send queued message now"
-              title="Send now"
+              aria-label={t("assistant.panel.sendQueuedNow")}
+              title={t("assistant.panel.sendNow")}
               onClick={() => forceSendQueued(item.id)}
               className="rounded p-0.5 hover:text-foreground"
             >
@@ -620,8 +624,8 @@ export function ProjectAssistantPanel({
             </button>
             <button
               type="button"
-              aria-label="Remove queued message"
-              title="Remove"
+              aria-label={t("assistant.panel.removeQueued")}
+              title={t("assistant.panel.remove")}
               onClick={() => setQueued((current) => current.filter((entry) => entry.id !== item.id))}
               className="rounded p-0.5 hover:text-foreground"
             >
@@ -674,22 +678,28 @@ export function ProjectAssistantPanel({
             isPageMode && (isFullPageProjectAssistant ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
             isEmbeddedMode && "h-full min-h-0",
           )}
-          aria-label="Project assistant"
+          aria-label={t("assistant.panel.ariaLabel")}
         >
           <div
             className={cn("border-b", isPageMode ? "px-6 py-3.5" : isEmbeddedMode ? "px-4 py-2" : "px-4 py-3")}
           >
             <h2 className={cn("font-semibold leading-tight", isEmbeddedMode ? "text-sm" : "text-base")}>
-              {isExploreMode ? "Explore project" : projectSlug ? "Project assistant" : "Freeform assistant"}
+              {isExploreMode
+                ? t("assistant.panel.exploreTitle")
+                : projectSlug
+                  ? t("assistant.panel.projectTitle")
+                  : t("assistant.panel.freeformTitle")}
             </h2>
             {isEmbeddedMode ? null : (
               <p className="text-xs text-muted-foreground">
                 {isExploreMode
-                  ? `Ask questions about the codebase in \`${projectSlug}\` (default branches).`
+                  ? t("assistant.panel.exploreDescription", { slug: projectSlug })
                   : projectSlug
-                    ? `AI coding assistant for \`${projectSlug}\`.`
-                    : "AI coding assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
-                {bundle ? ` Models from \`${catalogFor(bundle, bundle.defaultAgent).command}\`.` : null}
+                    ? t("assistant.panel.projectDescription", { slug: projectSlug })
+                    : t("assistant.panel.freeformDescription")}
+                {bundle
+                  ? t("assistant.panel.modelsFrom", { command: catalogFor(bundle, bundle.defaultAgent).command })
+                  : null}
               </p>
             )}
           </div>
@@ -715,7 +725,7 @@ export function ProjectAssistantPanel({
                   {questionsNode}
                   {composerNode ?? (
                     <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
-                      Loading assistant models...
+                      {t("assistant.panel.loadingModels")}
                     </div>
                   )}
                   {catalogError ? (
@@ -731,7 +741,7 @@ export function ProjectAssistantPanel({
                 {questionsNode}
                 {composerNode ?? (
                   <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
-                    Loading assistant models...
+                    {t("assistant.panel.loadingModels")}
                   </div>
                 )}
                 {catalogError ? (
@@ -744,7 +754,7 @@ export function ProjectAssistantPanel({
               {queuedChips}
               {questionsNode}
               {composerNode ?? (
-                <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading assistant models...</div>
+                <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
               )}
               {catalogError ? (
                 <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
@@ -763,18 +773,20 @@ export function ProjectAssistantPanel({
     <AssistantRuntimeProvider runtime={runtime}>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
-          <Button type="button" variant="outline" size="sm" aria-label="Open project assistant">
+          <Button type="button" variant="outline" size="sm" aria-label={t("assistant.panel.openAria")}>
             <Bot className="h-4 w-4" />
-            Assistant
+            {t("assistant.panel.openButton")}
           </Button>
         </SheetTrigger>
         <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
           <SheetHeader className="border-b px-6 py-4">
-            <SheetTitle>{projectSlug ? "Project assistant" : "Freeform assistant"}</SheetTitle>
+            <SheetTitle>
+              {projectSlug ? t("assistant.panel.projectTitle") : t("assistant.panel.freeformTitle")}
+            </SheetTitle>
             <SheetDescription>
               {projectSlug
-                ? `AI coding assistant for \`${projectSlug}\`.`
-                : "AI coding assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
+                ? t("assistant.panel.projectDescription", { slug: projectSlug })
+                : t("assistant.panel.freeformDescription")}
             </SheetDescription>
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col">
@@ -782,7 +794,7 @@ export function ProjectAssistantPanel({
             {queuedChips}
             {questionsNode}
             {composerNode ?? (
-              <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading assistant models...</div>
+              <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
             )}
             {catalogError ? (
               <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
@@ -857,6 +869,7 @@ function isUserQuestionsMessage(message: AssistantChatMessage): boolean {
 }
 
 function UserQuestionsReceipt({ message }: { message: AssistantChatMessage }) {
+  const { t } = useTranslation();
   const rawQuestions = Array.isArray(message.metadata.questions)
     ? (message.metadata.questions as UserQuestion[])
     : [];
@@ -871,7 +884,7 @@ function UserQuestionsReceipt({ message }: { message: AssistantChatMessage }) {
     <div className="flex w-full justify-start">
       <article className="w-full max-w-none rounded-2xl border bg-muted/30 p-3 text-sm">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Clarifying questions
+          {t("assistant.panel.clarifyingQuestions")}
         </p>
         <dl className="space-y-2">
           {rawQuestions.map((question) => (
@@ -895,11 +908,12 @@ function AttachmentPreview({
   isUser: boolean;
   projectSlug?: string;
 }) {
+  const { t } = useTranslation();
   if (!attachment || typeof attachment !== "object") return null;
 
   const record = attachment as Record<string, unknown>;
   const type = record.type;
-  const name = typeof record.name === "string" ? record.name : "attachment";
+  const name = typeof record.name === "string" ? record.name : t("assistant.panel.attachmentLabel.default");
   const mediaType = typeof record.media_type === "string" ? record.media_type : "";
   const data = typeof record.data === "string" ? record.data : "";
   const path = typeof record.path === "string" ? record.path : "";
@@ -928,7 +942,7 @@ function AttachmentPreview({
         )}
       >
         <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Image: {name}</span>
+        <span className="truncate">{t("assistant.panel.attachmentLabel.image", { name })}</span>
       </span>
     );
   }
@@ -970,7 +984,7 @@ function AttachmentPreview({
         )}
       >
         <AudioLines className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Audio: {name}</span>
+        <span className="truncate">{t("assistant.panel.attachmentLabel.audio", { name })}</span>
       </span>
     );
   }
@@ -1010,21 +1024,23 @@ function AssistantMarkdown({
   );
 }
 
-function displayMessages(messages: AssistantChatMessage[]): AssistantChatMessage[] {
+function displayMessages(messages: AssistantChatMessage[], t: TFunction): AssistantChatMessage[] {
   if (messages.length > 0) return messages;
 
-  return [
-    assistantMessage(
-      "assistant-welcome",
-      "Ask naturally about this project, or request tracker actions. I can chat, create tasks, comment on issues, move statuses, list issues, and request Codex work when you ask for it.",
-    ),
-  ];
+  return [assistantMessage("assistant-welcome", t("assistant.panel.welcome"))];
 }
 
-function fallbackAttachmentMessage(attachments: AssistantComposerSubmit["attachments"]): string {
-  if (attachments.some((attachment) => attachment.type === "audio")) return "See the attached audio.";
-  if (attachments.some((attachment) => attachment.type === "image")) return "See the attached image.";
-  return "See the attached files.";
+function fallbackAttachmentMessage(
+  attachments: AssistantComposerSubmit["attachments"],
+  t: TFunction,
+): string {
+  if (attachments.some((attachment) => attachment.type === "audio")) {
+    return t("assistant.panel.attachmentFallback.audio");
+  }
+  if (attachments.some((attachment) => attachment.type === "image")) {
+    return t("assistant.panel.attachmentFallback.image");
+  }
+  return t("assistant.panel.attachmentFallback.files");
 }
 
 function assistantMessage(id: string, content: string): AssistantChatMessage {
@@ -1135,8 +1151,8 @@ function stringFromRecord(record: Record<string, unknown>, key: string): string 
   return typeof value === "string" ? value : null;
 }
 
-function errorMessage(reason: unknown): string {
+function errorMessage(reason: unknown, t: TFunction = i18n.t.bind(i18n) as TFunction): string {
   if (reason && typeof reason === "object" && "reason" in reason && typeof reason.reason === "string") return reason.reason;
   if (reason instanceof Error) return reason.message;
-  return "Assistant request failed";
+  return t("assistant.panel.requestFailed");
 }

@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
@@ -96,6 +97,7 @@ export function AssistantComposer({
   onAgentChange,
   dropTargetRef,
 }: AssistantComposerProps) {
+  const { t } = useTranslation();
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -228,7 +230,7 @@ export function AssistantComposer({
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
     if (!projectSlug.trim()) {
-      toast.error("Attachments are not available in this conversation.");
+      toast.error(t("assistant.composer.attachmentsUnavailable"));
       return;
     }
 
@@ -240,7 +242,7 @@ export function AssistantComposer({
         const attachment = createAttachmentPreview(file, uploaded);
         setAttachments((current) => [...current, attachment]);
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Failed to upload file.");
+        toast.error(cause instanceof Error ? cause.message : t("assistant.composer.uploadFailed"));
       } finally {
         setUploadingImage(false);
       }
@@ -411,7 +413,7 @@ export function AssistantComposer({
     }
 
     if (!speechSupported) {
-      toast.error("Voice dictation is not supported in this browser.");
+      toast.error(t("assistant.composer.voiceNotSupported"));
       return;
     }
 
@@ -425,7 +427,7 @@ export function AssistantComposer({
 
   const dropOverlay = dragActive ? (
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-primary/60 bg-background/85 text-sm font-medium text-primary">
-      Drop files to attach
+      {t("assistant.composer.dropFiles")}
     </div>
   ) : null;
 
@@ -463,7 +465,7 @@ export function AssistantComposer({
                     />
                     <button
                       type="button"
-                      aria-label={`Remove ${attachment.name}`}
+                      aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
                       onClick={() => removeAttachment(attachment.id)}
                       className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
                     >
@@ -487,7 +489,7 @@ export function AssistantComposer({
                     />
                     <button
                       type="button"
-                      aria-label={`Remove ${attachment.name}`}
+                      aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
                       onClick={() => removeAttachment(attachment.id)}
                       className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
                     >
@@ -507,7 +509,7 @@ export function AssistantComposer({
                   <span className="max-w-[12rem] truncate">{attachment.name}</span>
                   <button
                     type="button"
-                    aria-label={`Remove ${attachment.name}`}
+                    aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
                     onClick={() => removeAttachment(attachment.id)}
                     className="rounded p-0.5 text-muted-foreground hover:text-foreground"
                   >
@@ -532,7 +534,7 @@ export function AssistantComposer({
                 <span className="truncate text-xs text-muted-foreground">{command.description}</span>
               </button>
             ))}
-            <p className="px-2 pt-1 text-[10px] text-muted-foreground">Tab to complete</p>
+            <p className="px-2 pt-1 text-[10px] text-muted-foreground">{t("assistant.composer.tabToComplete")}</p>
           </div>
         ) : null}
 
@@ -541,7 +543,7 @@ export function AssistantComposer({
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Write a message..."
+          placeholder={t("assistant.composer.placeholder")}
           className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
         />
 
@@ -560,7 +562,7 @@ export function AssistantComposer({
               size="icon"
               className="h-8 w-8 rounded-full"
               disabled={disabled || uploadingImage}
-              aria-label="Attach file"
+              aria-label={t("assistant.composer.attachFile")}
               onClick={() => fileInputRef.current?.click()}
             >
               <Plus className="h-4 w-4" />
@@ -600,7 +602,7 @@ export function AssistantComposer({
                   "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50",
               )}
               disabled={disabled}
-              aria-label={recording ? "Stop recording" : "Record audio"}
+              aria-label={recording ? t("assistant.composer.stopRecording") : t("assistant.composer.recordAudio")}
               onClick={() => void toggleRecording()}
             >
               {recording ? (
@@ -622,7 +624,7 @@ export function AssistantComposer({
             {recording ? (
               <span className="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground" aria-live="polite">
                 <AudioLines className="h-3.5 w-3.5 animate-pulse text-primary" />
-                Recording
+                {t("assistant.composer.recording")}
               </span>
             ) : null}
           </div>
@@ -630,8 +632,8 @@ export function AssistantComposer({
       </div>
 
       <p className={cn("text-xs text-muted-foreground", floating ? "mt-1.5" : "mt-2")}>
-        Enter to send · Shift+Enter for a new line · paste or drop files · Models from {catalog.command}
-        {speechError ? <span className="text-destructive"> · Voice dictation unavailable ({speechError})</span> : null}
+        {t("assistant.composer.hint", { command: catalog.command })}
+        {speechError ? <span className="text-destructive">{t("assistant.composer.voiceUnavailable", { error: speechError })}</span> : null}
       </p>
     </form>
   );
@@ -648,6 +650,7 @@ function AgentMenu({
   disabled?: boolean;
   onChange: (agent: AgentKind) => void;
 }) {
+  const { t } = useTranslation();
   const current = catalogFor(bundle, agent);
   return (
     <DropdownMenu>
@@ -658,7 +661,7 @@ function AgentMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Agent</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("assistant.composer.agentMenu")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={agent} onValueChange={(v) => onChange(v as AgentKind)}>
           {bundle.agents.map((catalog) => (
@@ -687,6 +690,8 @@ function EffortMenu({
   disabled?: boolean;
   onChange: (effort: AssistantEffort) => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -696,7 +701,7 @@ function EffortMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Reasoning effort</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("assistant.composer.reasoningEffort")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={effort} onValueChange={onChange}>
           {options.map((option) => (

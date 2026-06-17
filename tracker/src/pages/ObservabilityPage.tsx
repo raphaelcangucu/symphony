@@ -1,5 +1,7 @@
 import { Eraser, Pause, RotateCcw } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -53,15 +55,15 @@ function formatRuntime(startedAt: string | null, nowMs: number): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-function formatAgo(at: string | null, nowMs: number): string {
-  if (!at) return "never";
+function formatAgo(at: string | null, nowMs: number, t: TFunction): string {
+  if (!at) return t("observability.time.never");
   const ts = Date.parse(at);
-  if (Number.isNaN(ts)) return "never";
+  if (Number.isNaN(ts)) return t("observability.time.never");
   const seconds = Math.max(Math.floor((nowMs - ts) / 1000), 0);
-  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 60) return t("observability.time.secondsAgo", { count: seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m ago`;
+  if (minutes < 60) return t("observability.time.minutesAgo", { count: minutes });
+  return t("observability.time.hoursMinutesAgo", { hours: Math.floor(minutes / 60), minutes: minutes % 60 });
 }
 
 function flattenRows(runtimeViews: RuntimeView[]): ProjectRunningRow[] {
@@ -113,6 +115,7 @@ function projectOptions(runtimeViews: RuntimeView[]): Array<{ key: string; label
 }
 
 export function ObservabilityPage() {
+  const { t } = useTranslation();
   const { runtimes, loading } = useObservability();
   const { data: prMonitor } = usePrMonitorObservability();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -169,17 +172,17 @@ export function ObservabilityPage() {
     <div className="space-y-6 p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Observability</h1>
-          <p className="text-sm text-muted-foreground">Live runtime state across all reporting Symphony processes.</p>
+          <h1 className="text-xl font-semibold">{t("observability.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("observability.subtitle")}</p>
         </div>
         <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Project</span>
+          <span className="text-muted-foreground">{t("observability.project")}</span>
           <select
             value={selectedProject}
             onChange={(event) => setSelectedProject(event.target.value)}
             className="rounded-md border bg-background px-2 py-1 text-sm"
           >
-            <option value={ALL_PROJECTS}>All projects</option>
+            <option value={ALL_PROJECTS}>{t("observability.allProjects")}</option>
             {options.map((option) => (
               <option key={option.key} value={option.key}>
                 {option.label}
@@ -189,10 +192,10 @@ export function ObservabilityPage() {
         </label>
       </div>
 
-      {loading ? <p className="text-sm text-muted-foreground">Loading runtimes…</p> : null}
+      {loading ? <p className="text-sm text-muted-foreground">{t("observability.loadingRuntimes")}</p> : null}
       {!loading && visibleRuntimeViews.length === 0 ? (
         <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          {runtimes.length === 0 ? "No runtimes are reporting yet." : "No runtimes match this project filter."}
+          {runtimes.length === 0 ? t("observability.noRuntimes") : t("observability.noRuntimesFilter")}
         </div>
       ) : null}
 
@@ -216,15 +219,15 @@ export function ObservabilityPage() {
             </p>
             <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <div>
-                <dt className="text-xs text-muted-foreground">Running</dt>
+                <dt className="text-xs text-muted-foreground">{t("observability.running")}</dt>
                 <dd className="font-medium tabular-nums">{runtime.counts.running}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Retrying</dt>
+                <dt className="text-xs text-muted-foreground">{t("observability.retrying")}</dt>
                 <dd className="font-medium tabular-nums">{runtime.counts.retrying}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Total tokens</dt>
+                <dt className="text-xs text-muted-foreground">{t("observability.totalTokens")}</dt>
                 <dd className="font-medium tabular-nums">{runtime.agentTotals.totalTokens.toLocaleString()}</dd>
               </div>
             </dl>
@@ -234,23 +237,23 @@ export function ObservabilityPage() {
 
       <section className="rounded-lg border">
         <div className="border-b p-3">
-          <h2 className="font-medium">Running sessions</h2>
-          <p className="text-xs text-muted-foreground">All active sessions across runtimes.</p>
+          <h2 className="font-medium">{t("observability.runningSessions")}</h2>
+          <p className="text-xs text-muted-foreground">{t("observability.runningSessionsHint")}</p>
         </div>
         {rows.length === 0 ? (
-          <p className="p-4 text-sm text-muted-foreground">No active sessions.</p>
+          <p className="p-4 text-sm text-muted-foreground">{t("observability.noActiveSessions")}</p>
         ) : (
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
-                  <th className="p-2">Project</th>
-                  <th className="p-2">Issue</th>
-                  <th className="p-2">State</th>
-                  <th className="p-2">Runtime / turns</th>
-                  <th className="p-2">Agent update</th>
-                  <th className="p-2">Tokens</th>
-                  <th className="p-2 text-right">Actions</th>
+                  <th className="p-2">{t("observability.table.project")}</th>
+                  <th className="p-2">{t("observability.table.issue")}</th>
+                  <th className="p-2">{t("observability.table.state")}</th>
+                  <th className="p-2">{t("observability.table.runtimeTurns")}</th>
+                  <th className="p-2">{t("observability.table.agentUpdate")}</th>
+                  <th className="p-2">{t("observability.table.tokens")}</th>
+                  <th className="p-2 text-right">{t("observability.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -298,22 +301,23 @@ export function ObservabilityPage() {
 
 type ConfirmAction = "restart" | "hard_reset";
 
-const CONFIRM_COPY: Record<ConfirmAction, { title: string; description: string; cta: string }> = {
-  restart: {
-    title: "Restart agent run?",
-    description:
-      "Stops the current run and starts a fresh agent pass on this issue. The workspace and git state are preserved.",
-    cta: "Restart",
-  },
-  hard_reset: {
-    title: "Hard reset session?",
-    description:
-      "Stops the run, discards the agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and git state are preserved.",
-    cta: "Hard reset",
-  },
-};
+function confirmCopy(t: TFunction, action: ConfirmAction): { title: string; description: string; cta: string } {
+  if (action === "restart") {
+    return {
+      title: t("observability.session.restartDialogTitle"),
+      description: t("observability.session.restartDialogDescription"),
+      cta: t("observability.session.restart"),
+    };
+  }
+  return {
+    title: t("observability.session.hardResetDialogTitle"),
+    description: t("observability.session.hardResetDialogDescription"),
+    cta: t("observability.session.hardReset"),
+  };
+}
 
 function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | null; identifier: string }) {
+  const { t } = useTranslation();
   const [pending, setPending] = useState<IssueDispatchAction | null>(null);
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
 
@@ -326,7 +330,7 @@ function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | 
       const result = await dispatchIssueAgent(projectSlug, identifier, { action });
       toast.success(result.message || `${identifier}: ${action}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `Failed to ${action} ${identifier}`);
+      toast.error(error instanceof Error ? error.message : t("observability.session.dispatchFailed", { action, identifier }));
     } finally {
       setPending(null);
       setConfirm(null);
@@ -343,11 +347,11 @@ function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | 
         variant="ghost"
         className="h-7 px-2"
         disabled={disabled || busy}
-        title={disabled ? "No project mapping for this runtime" : "Pause the run (keeps the session to resume later)"}
+        title={disabled ? t("observability.session.noProjectMapping") : t("observability.session.pauseTitle")}
         onClick={() => void run("stop")}
       >
         <Pause className="mr-1 h-3.5 w-3.5" />
-        {pending === "stop" ? "Pausing…" : "Pause"}
+        {pending === "stop" ? t("observability.session.pausing") : t("observability.session.pause")}
       </Button>
       <Button
         type="button"
@@ -355,11 +359,11 @@ function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | 
         variant="ghost"
         className="h-7 px-2"
         disabled={disabled || busy}
-        title={disabled ? "No project mapping for this runtime" : "Restart with a fresh agent pass"}
+        title={disabled ? t("observability.session.noProjectMapping") : t("observability.session.restartTitle")}
         onClick={() => setConfirm("restart")}
       >
         <RotateCcw className="mr-1 h-3.5 w-3.5" />
-        {pending === "restart" ? "Restarting…" : "Restart"}
+        {pending === "restart" ? t("observability.session.restarting") : t("observability.session.restart")}
       </Button>
       <Button
         type="button"
@@ -367,11 +371,11 @@ function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | 
         variant="ghost"
         className="h-7 px-2 text-destructive hover:text-destructive"
         disabled={disabled || busy}
-        title={disabled ? "No project mapping for this runtime" : "Hard reset: clear the session and start fresh"}
+        title={disabled ? t("observability.session.noProjectMapping") : t("observability.session.hardResetTitle")}
         onClick={() => setConfirm("hard_reset")}
       >
         <Eraser className="mr-1 h-3.5 w-3.5" />
-        {pending === "hard_reset" ? "Resetting…" : "Hard reset"}
+        {pending === "hard_reset" ? t("observability.session.resetting") : t("observability.session.hardReset")}
       </Button>
 
       <Dialog open={confirm !== null} onOpenChange={(open) => (open ? null : setConfirm(null))}>
@@ -379,15 +383,15 @@ function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | 
           {confirm ? (
             <>
               <DialogHeader>
-                <DialogTitle>{CONFIRM_COPY[confirm].title}</DialogTitle>
+                <DialogTitle>{confirmCopy(t, confirm).title}</DialogTitle>
                 <DialogDescription>
-                  {identifier}: {CONFIRM_COPY[confirm].description}
+                  {identifier}: {confirmCopy(t, confirm).description}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <DialogClose asChild>
                   <Button type="button" variant="outline" size="sm">
-                    Cancel
+                    {t("observability.session.cancel")}
                   </Button>
                 </DialogClose>
                 <Button
@@ -398,7 +402,7 @@ function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | 
                   onClick={() => void run(confirm)}
                 >
                   {confirm === "hard_reset" ? <Eraser className="mr-1.5 h-3.5 w-3.5" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />}
-                  {CONFIRM_COPY[confirm].cta}
+                  {confirmCopy(t, confirm).cta}
                 </Button>
               </DialogFooter>
             </>
@@ -409,28 +413,19 @@ function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | 
   );
 }
 
-const PR_MONITOR_EVENT_LABELS: Record<string, string> = {
-  none: "no change",
-  merged: "PR merged",
-  ci_failure: "CI failure",
-  review_findings: "review findings",
-};
+const PR_MONITOR_EVENT_KEYS = new Set(["none", "merged", "ci_failure", "review_findings"]);
+const PR_MONITOR_ACTION_KEYS = new Set(["moved_to_done", "moved_to_rework", "limit_reached", "kept_human_review"]);
 
-const PR_MONITOR_ACTION_LABELS: Record<string, string> = {
-  moved_to_done: "→ Done",
-  moved_to_rework: "→ Rework",
-  limit_reached: "limit reached",
-  kept_human_review: "kept in Human Review",
-};
-
-function prMonitorEventLabel(event: string | null): string {
+function prMonitorEventLabel(event: string | null, t: TFunction): string {
   if (!event) return "--";
-  return PR_MONITOR_EVENT_LABELS[event] ?? event;
+  if (PR_MONITOR_EVENT_KEYS.has(event)) return t(`observability.prMonitor.events.${event}`);
+  return event;
 }
 
-function prMonitorActionLabel(action: string | null): string {
+function prMonitorActionLabel(action: string | null, t: TFunction): string {
   if (!action) return "--";
-  return PR_MONITOR_ACTION_LABELS[action] ?? action;
+  if (PR_MONITOR_ACTION_KEYS.has(action)) return t(`observability.prMonitor.actions.${action}`);
+  return action;
 }
 
 interface PrMonitorSectionProps {
@@ -440,6 +435,7 @@ interface PrMonitorSectionProps {
 }
 
 function PrMonitorSection({ heartbeat, evaluations, nowMs }: PrMonitorSectionProps) {
+  const { t } = useTranslation();
   const online = heartbeat?.running ?? false;
   const tickFailed = heartbeat?.lastTickStatus === "error";
 
@@ -447,10 +443,8 @@ function PrMonitorSection({ heartbeat, evaluations, nowMs }: PrMonitorSectionPro
     <section className="rounded-lg border">
       <div className="flex flex-wrap items-start justify-between gap-2 border-b p-3">
         <div>
-          <h2 className="font-medium">PR monitor</h2>
-          <p className="text-xs text-muted-foreground">
-            Background follow-up of PRs for issues in wait states (merge → Done, CI/review → Rework).
-          </p>
+          <h2 className="font-medium">{t("observability.prMonitor.title")}</h2>
+          <p className="text-xs text-muted-foreground">{t("observability.prMonitor.subtitle")}</p>
         </div>
         <span
           className={
@@ -461,59 +455,59 @@ function PrMonitorSection({ heartbeat, evaluations, nowMs }: PrMonitorSectionPro
                 : "rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
           }
         >
-          {online ? (tickFailed ? "degraded" : "running") : "offline"}
+          {online ? (tickFailed ? t("observability.prMonitor.degraded") : t("observability.prMonitor.running")) : t("observability.prMonitor.offline")}
         </span>
       </div>
 
       {heartbeat ? (
         <dl className="grid grid-cols-2 gap-3 p-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
           <div>
-            <dt className="text-xs text-muted-foreground">Last tick</dt>
-            <dd className="font-medium tabular-nums">{formatAgo(heartbeat.lastTickFinishedAt, nowMs)}</dd>
+            <dt className="text-xs text-muted-foreground">{t("observability.prMonitor.lastTick")}</dt>
+            <dd className="font-medium tabular-nums">{formatAgo(heartbeat.lastTickFinishedAt, nowMs, t)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-muted-foreground">In-flight</dt>
+            <dt className="text-xs text-muted-foreground">{t("observability.prMonitor.inFlight")}</dt>
             <dd className="font-medium tabular-nums">{heartbeat.inFlight}</dd>
           </div>
           <div>
-            <dt className="text-xs text-muted-foreground">Evaluated last tick</dt>
+            <dt className="text-xs text-muted-foreground">{t("observability.prMonitor.evaluatedLastTick")}</dt>
             <dd className="font-medium tabular-nums">{heartbeat.lastEvaluatedCount}</dd>
           </div>
           <div>
-            <dt className="text-xs text-muted-foreground">Ticks</dt>
+            <dt className="text-xs text-muted-foreground">{t("observability.prMonitor.ticks")}</dt>
             <dd className="font-medium tabular-nums">{heartbeat.tickCount}</dd>
           </div>
           <div>
-            <dt className="text-xs text-muted-foreground">Interval</dt>
+            <dt className="text-xs text-muted-foreground">{t("observability.prMonitor.interval")}</dt>
             <dd className="font-medium tabular-nums">{Math.round(heartbeat.intervalMs / 1000)}s</dd>
           </div>
           <div>
-            <dt className="text-xs text-muted-foreground">Last tick status</dt>
+            <dt className="text-xs text-muted-foreground">{t("observability.prMonitor.lastTickStatus")}</dt>
             <dd className="font-medium">{heartbeat.lastTickStatus ?? "--"}</dd>
           </div>
         </dl>
       ) : (
-        <p className="p-3 text-sm text-muted-foreground">Heartbeat unavailable.</p>
+        <p className="p-3 text-sm text-muted-foreground">{t("observability.prMonitor.heartbeatUnavailable")}</p>
       )}
 
       {heartbeat?.lastError ? (
-        <p className="border-t px-3 py-2 text-xs text-amber-600">Last error: {heartbeat.lastError}</p>
+        <p className="border-t px-3 py-2 text-xs text-amber-600">{t("observability.prMonitor.lastError", { error: heartbeat.lastError })}</p>
       ) : null}
 
       <div className="border-t">
         {evaluations.length === 0 ? (
-          <p className="p-4 text-sm text-muted-foreground">No PR evaluations recorded yet.</p>
+          <p className="p-4 text-sm text-muted-foreground">{t("observability.prMonitor.noEvaluations")}</p>
         ) : (
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
-                  <th className="p-2">Project</th>
-                  <th className="p-2">Issue</th>
+                  <th className="p-2">{t("observability.table.project")}</th>
+                  <th className="p-2">{t("observability.table.issue")}</th>
                   <th className="p-2">PR</th>
-                  <th className="p-2">Event</th>
-                  <th className="p-2">Action</th>
-                  <th className="p-2">Checked</th>
+                  <th className="p-2">{t("observability.prMonitor.event")}</th>
+                  <th className="p-2">{t("observability.prMonitor.action")}</th>
+                  <th className="p-2">{t("observability.prMonitor.checked")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -544,18 +538,18 @@ function PrMonitorSection({ heartbeat, evaluations, nowMs }: PrMonitorSectionPro
                           target="_blank"
                           rel="noreferrer"
                         >
-                          link
+                          {t("observability.prMonitor.prLink")}
                         </a>
                       ) : (
                         "--"
                       )}
                     </td>
-                    <td className="p-2">{prMonitorEventLabel(evaluation.lastEvent)}</td>
+                    <td className="p-2">{prMonitorEventLabel(evaluation.lastEvent, t)}</td>
                     <td className="p-2">
-                      {prMonitorActionLabel(evaluation.lastAction)}
+                      {prMonitorActionLabel(evaluation.lastAction, t)}
                       {evaluation.autoReworkCount > 0 ? ` (${evaluation.autoReworkCount})` : ""}
                     </td>
-                    <td className="p-2 tabular-nums">{formatAgo(evaluation.lastCheckedAt, nowMs)}</td>
+                    <td className="p-2 tabular-nums">{formatAgo(evaluation.lastCheckedAt, nowMs, t)}</td>
                   </tr>
                 ))}
               </tbody>

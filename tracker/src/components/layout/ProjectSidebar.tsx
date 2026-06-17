@@ -10,6 +10,7 @@ import {
   Settings,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router-dom";
 
 import { RecentsSection } from "@/components/layout/RecentsSection";
@@ -22,23 +23,23 @@ import { cn } from "@/lib/utils";
 import { listProjects } from "@/services/projects";
 import type { Project } from "@/types/project";
 
-const TRACKER_BRAND_ICON_ALT = "Symphony Tracker icon";
+const TRACKER_BRAND_ICON_ALT_KEY = "nav.brandIconAlt";
 const TRACKER_BRAND_ICON_SRC = resolveTrackerAssetPath(import.meta.env.BASE_URL, "favicon.svg");
 
 export const TRACKER_SIDEBAR_COLLAPSED_STORAGE_KEY = "tracker-sidebar-collapsed";
 
 type NavItem = {
   to: string;
-  label: string;
+  labelKey: string;
   icon: LucideIcon;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/projects", label: "Projects", icon: ListTodo },
-  { to: "/templates", label: "Templates", icon: LayoutTemplate },
-  { to: "/observability", label: "Observability", icon: Activity },
-  { to: "/backups", label: "Backups", icon: HardDrive },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/projects", labelKey: "nav.projects", icon: ListTodo },
+  { to: "/templates", labelKey: "nav.templates", icon: LayoutTemplate },
+  { to: "/observability", labelKey: "nav.observability", icon: Activity },
+  { to: "/backups", labelKey: "nav.backups", icon: HardDrive },
+  { to: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 export function resolveTrackerAssetPath(baseUrl: string, assetName: string): string {
@@ -84,6 +85,7 @@ function writeStoredCollapsed(collapsed: boolean) {
 }
 
 export function ProjectSidebar() {
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState<boolean>(() => readStoredCollapsed());
@@ -133,30 +135,32 @@ export function ProjectSidebar() {
       <div className={cn("mb-6 flex items-center gap-2", collapsed && "flex-col gap-3")}>
         <img
           src={TRACKER_BRAND_ICON_SRC}
-          alt={TRACKER_BRAND_ICON_ALT}
+          alt={t(TRACKER_BRAND_ICON_ALT_KEY)}
           className="h-9 w-9 rounded-lg shadow-sm"
           decoding="async"
         />
         {collapsed ? null : (
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold">Symphony Tracker</div>
-            <div className="truncate text-xs text-muted-foreground">Local project board</div>
+            <div className="truncate text-sm font-semibold">{t("nav.brandTitle")}</div>
+            <div className="truncate text-xs text-muted-foreground">{t("nav.brandSubtitle")}</div>
           </div>
         )}
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0 text-muted-foreground"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
           aria-expanded={!collapsed}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
           onClick={toggleCollapsed}
         >
           {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </Button>
       </div>
 
-      {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+      {NAV_ITEMS.map(({ to, labelKey, icon: Icon }) => {
+        const label = t(labelKey);
+        return (
         <NavLink
           key={to}
           to={to}
@@ -172,12 +176,13 @@ export function ProjectSidebar() {
           <Icon className="h-4 w-4 shrink-0" />
           {collapsed ? <span className="sr-only">{label}</span> : label}
         </NavLink>
-      ))}
+        );
+      })}
 
       {collapsed ? null : <RecentsSection />}
 
       {collapsed ? null : (
-        <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Boards</div>
+        <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t("nav.boards")}</div>
       )}
       <div className={cn("min-h-0 flex-1 space-y-1 overflow-auto", collapsed && "mt-1")}>
         {loading ? (
@@ -187,7 +192,7 @@ export function ProjectSidebar() {
           </>
         ) : null}
         {!loading && projects.length === 0 && !collapsed ? (
-          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">No local projects yet.</div>
+          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">{t("nav.noProjects")}</div>
         ) : null}
         {projects.map((project) => (
           <NavLink
@@ -224,8 +229,8 @@ export function ProjectSidebar() {
             variant="ghost"
             size="icon"
             className="text-muted-foreground"
-            aria-label="Reset token"
-            title="Reset token"
+            aria-label={t("nav.resetToken")}
+            title={t("nav.resetToken")}
             onClick={() => {
               clearTrackerToken();
               window.location.assign("/token");
@@ -244,7 +249,7 @@ export function ProjectSidebar() {
             }}
           >
             <KeyRound className="h-4 w-4" />
-            Reset token
+            {t("nav.resetToken")}
           </Button>
         )}
       </div>

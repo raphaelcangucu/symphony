@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TRACKER_TOKEN_KEY } from "@/config";
+import { initTestI18n } from "@/i18n/testUtils";
 import { TokenGatePage } from "@/pages/TokenGatePage";
 import * as authService from "@/services/auth";
 import * as viewerService from "@/services/viewer";
@@ -31,7 +32,8 @@ function renderTokenGate() {
 }
 
 describe("TokenGatePage", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await initTestI18n("en");
     window.localStorage.clear();
     vi.clearAllMocks();
   });

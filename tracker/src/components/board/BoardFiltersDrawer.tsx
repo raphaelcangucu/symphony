@@ -1,5 +1,6 @@
 import { Clock } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
@@ -38,6 +39,7 @@ interface BoardFiltersDrawerProps {
 }
 
 export function BoardFiltersDrawer({ open, onOpenChange, focusSearch = false }: BoardFiltersDrawerProps) {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { issues } = useWorkspace();
 
@@ -127,26 +129,26 @@ export function BoardFiltersDrawer({ open, onOpenChange, focusSearch = false }: 
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex h-full flex-col gap-6 sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Filters</SheetTitle>
-          <SheetDescription>Search and narrow issues by people, recency, and text.</SheetDescription>
+          <SheetTitle>{t("board.filtersTitle")}</SheetTitle>
+          <SheetDescription>{t("board.filtersDescription")}</SheetDescription>
         </SheetHeader>
 
         <div className="space-y-5 overflow-visible">
           <div className="space-y-2">
-            <Label>Search</Label>
+            <Label>{t("board.searchLabel")}</Label>
             <Input
               data-testid="board-filters-search"
               ref={searchInputRef}
               value={searchDraft}
               onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search issues..."
+              placeholder={t("board.searchPlaceholder")}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Assignee</Label>
+            <Label>{t("board.assignee")}</Label>
             <PeopleMultiSelect
-              triggerLabel="Assignee"
+              triggerLabel={t("board.assignee")}
               people={assigneePeople}
               selected={filters.assignees}
               onToggle={(token) => toggleParam(ASSIGNEE_PARAM, token)}
@@ -159,9 +161,9 @@ export function BoardFiltersDrawer({ open, onOpenChange, focusSearch = false }: 
           </div>
 
           <div className="space-y-2">
-            <Label>Creator</Label>
+            <Label>{t("board.creator")}</Label>
             <PeopleMultiSelect
-              triggerLabel="Creator"
+              triggerLabel={t("board.creator")}
               people={creatorPeople}
               selected={filters.creators}
               onToggle={(token) => toggleParam(CREATOR_PARAM, token)}
@@ -172,7 +174,7 @@ export function BoardFiltersDrawer({ open, onOpenChange, focusSearch = false }: 
           </div>
 
           <div className="space-y-2">
-            <Label>Recency</Label>
+            <Label>{t("board.recency")}</Label>
             <button
               type="button"
               aria-pressed={recentActive}
@@ -184,17 +186,17 @@ export function BoardFiltersDrawer({ open, onOpenChange, focusSearch = false }: 
                   : "border-border bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
             >
-              <Clock className="h-3.5 w-3.5" /> Recently updated (7d)
+              <Clock className="h-3.5 w-3.5" /> {t("board.recentlyUpdated7d")}
             </button>
           </div>
         </div>
 
         <SheetFooter className="mt-auto flex flex-row items-center justify-between gap-2 sm:justify-between">
           <Button variant="ghost" size="sm" disabled={!hasActiveFilters(filters)} onClick={clearFilters}>
-            Clear all filters
+            {t("board.clearAllFilters")}
           </Button>
           <SheetClose asChild>
-            <Button size="sm">Done</Button>
+            <Button size="sm">{t("board.done")}</Button>
           </SheetClose>
         </SheetFooter>
       </SheetContent>

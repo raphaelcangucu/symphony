@@ -1,5 +1,6 @@
 import { Check, Clock, ListFilter, Search, UserRound, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
@@ -26,6 +27,7 @@ const DEBOUNCE_MS = 250;
 const RECENT_VALUE = "7d";
 
 export function BoardQuickFilters() {
+  const { t } = useTranslation();
   const { issues } = useWorkspace();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchDraft, setSearchDraft] = useState(searchParams.get(SEARCH_PARAM) ?? "");
@@ -114,7 +116,7 @@ export function BoardQuickFilters() {
     <div className="relative z-30 flex flex-wrap items-center gap-2 border-b border-border/60 bg-background/70 px-6 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/50">
       <span className="mr-1 hidden items-center gap-1.5 text-xs font-medium text-muted-foreground sm:flex">
         <ListFilter className="h-3.5 w-3.5" />
-        Quick filters
+        {t("board.quickFilters")}
       </span>
 
       <div className="relative w-full min-w-0 sm:w-44 md:w-52">
@@ -123,8 +125,8 @@ export function BoardQuickFilters() {
           data-testid="board-quick-filters-search"
           value={searchDraft}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search issues..."
-          aria-label="Search issues"
+          placeholder={t("board.searchPlaceholder")}
+          aria-label={t("board.searchAria")}
           className={cn(
             "h-8 pl-8 pr-8 text-sm",
             searchActive && "border-primary/40 bg-primary/5",
@@ -133,7 +135,7 @@ export function BoardQuickFilters() {
         {searchDraft ? (
           <button
             type="button"
-            aria-label="Clear search"
+            aria-label={t("board.clearSearch")}
             onClick={() => {
               setSearchDraft("");
               if (debounceRef.current) window.clearTimeout(debounceRef.current);
@@ -154,7 +156,7 @@ export function BoardQuickFilters() {
               <button
                 key={person.value}
                 type="button"
-                title={`${person.value} · ${person.count} issue${person.count === 1 ? "" : "s"}`}
+                title={t("board.assigneeTitle", { login: person.value, count: person.count })}
                 aria-pressed={active}
                 onClick={() => toggleAssignee(person.value)}
                 className={cn(
@@ -177,7 +179,7 @@ export function BoardQuickFilters() {
       ) : null}
 
       <PeopleMultiSelect
-        triggerLabel="Assignee"
+        triggerLabel={t("board.assignee")}
         people={people}
         selected={assignees}
         onToggle={toggleAssignee}
@@ -190,7 +192,7 @@ export function BoardQuickFilters() {
       <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
 
       <Chip active={meActive} onClick={() => toggleAssignee(ME_TOKEN)} icon={<UserRound className="h-4 w-4" />}>
-        Assigned to me
+        {t("board.assignedToMe")}
       </Chip>
       <Chip
         active={unassignedActive}
@@ -201,15 +203,15 @@ export function BoardQuickFilters() {
           </span>
         }
       >
-        Unassigned
+        {t("board.unassigned")}
       </Chip>
       <Chip active={recentActive} onClick={toggleRecent} icon={<Clock className="h-4 w-4" />}>
-        Recently updated
+        {t("board.recentlyUpdated")}
       </Chip>
 
       {anyActive ? (
         <Button variant="ghost" size="sm" className="ml-auto" onClick={clearAll}>
-          <X className="h-4 w-4" /> Clear
+          <X className="h-4 w-4" /> {t("board.clear")}
         </Button>
       ) : null}
     </div>
