@@ -4,7 +4,10 @@ import remarkGfm from "remark-gfm";
 
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
-import { isInternalAttachmentUrl, isVideoAttachmentSource } from "@/services/attachments";
+import {
+  isTrackerAuthenticatedMediaUrl,
+  isVideoAttachmentSource,
+} from "@/services/attachments";
 import { isAssistantWorkspaceMarkdownHref } from "@/services/threadDocuments";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +36,7 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
               return <span className="font-medium text-primary underline underline-offset-2">{linkChildren}</span>;
             }
 
-            if (href && isInternalAttachmentUrl(href) && isVideoAttachmentSource(href)) {
+            if (href && isTrackerAuthenticatedMediaUrl(href) && isVideoAttachmentSource(href)) {
               const label = linkText(linkChildren) || "video";
               return (
                 <AttachmentVideo
@@ -54,12 +57,13 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
             const source = typeof src === "string" ? src : "";
             const label = typeof alt === "string" && alt.length > 0 ? alt : "attachment";
 
-            if (isInternalAttachmentUrl(source)) {
+            if (isTrackerAuthenticatedMediaUrl(source)) {
               return (
                 <AttachmentImage
                   src={source}
                   alt={label}
-                  className="my-2 max-h-80 w-auto max-w-full object-contain"
+                  className="max-h-80 w-auto max-w-full object-contain"
+                  layout="inline"
                 />
               );
             }

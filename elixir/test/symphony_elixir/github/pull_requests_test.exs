@@ -504,6 +504,21 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
     end
   end
 
+  describe "all_merged?/1" do
+    test "returns false for an empty list" do
+      refute PullRequests.all_merged?([])
+    end
+
+    test "returns true only when every PR is merged" do
+      merged = %{state: "merged", merged: true}
+      open = %{state: "open", merged: false}
+
+      assert PullRequests.all_merged?([merged])
+      refute PullRequests.all_merged?([merged, open])
+      refute PullRequests.all_merged?([open])
+    end
+  end
+
   describe "annotate_branch_status/3" do
     test "sets base_behind_by for an open PR and leaves merged PRs nil" do
       open_pr = %{number: 1, state: "open", base_ref: "homolog", head_ref: "feat/508", base_behind_by: nil}

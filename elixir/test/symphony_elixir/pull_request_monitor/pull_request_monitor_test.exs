@@ -110,6 +110,59 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
       assert %{last_action: "moved_to_done"} = MonitorState.get("proj", issue.identifier, "u7")
     end
 
+    test "partial merge keeps issue in wait state until every PR is merged", %{project: project, issue: issue} do
+      calls = start_supervised!({Agent, fn -> [] end})
+
+      dispatch = fn _p, fun, args ->
+        Agent.update(calls, &[{fun, args} | &1])
+        {:ok, %{}}
+      end
+
+      prs = [
+        merged_pr(),
+        %{
+          number: 8,
+          url: "u8",
+          title: "other repo",
+          state: "open",
+          merged: false,
+          author: "bot",
+          head_sha: "def",
+          checks_state: nil,
+          pipelines: [],
+          conversation: []
+        }
+      ]
+
+      o =
+        opts(
+          pull_request_reader: fn _p, _i, _o -> {:ok, prs} end,
+          issue_dispatch: dispatch
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+      assert Agent.get(calls, & &1) == []
+      assert %{last_action: "merged_awaiting_others"} = MonitorState.get("proj", issue.identifier, "u7")
+
+      all_merged =
+        Enum.map(prs, fn
+          %{url: "u8"} = pr -> Map.merge(pr, %{state: "merged", merged: true})
+          pr -> pr
+        end)
+
+      assert :ok =
+               PullRequestMonitor.process_issue(
+                 project,
+                 issue,
+                 Keyword.merge(o, pull_request_reader: fn _p, _i, _o -> {:ok, all_merged} end)
+               )
+
+      assert [{:add_comment, _}, {:move_issue, [identifier, %{"status" => "Done"}]}] =
+               Agent.get(calls, &Enum.reverse/1)
+
+      assert identifier == issue.identifier
+    end
+
     test "pr_caused CI failure moves to Rework and increments the counter", %{project: project, issue: issue} do
       calls = start_supervised!({Agent, fn -> [] end})
 

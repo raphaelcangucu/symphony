@@ -37,6 +37,9 @@ defmodule SymphonyElixir.PullRequestMonitor.EventsTest do
 
     row = %MonitorState{last_action: "moved_to_done"}
     assert Events.detect(pr(%{merged: true, state: "merged"}), row) == :none
+
+    awaiting = %MonitorState{last_action: "merged_awaiting_others"}
+    assert Events.detect(pr(%{merged: true, state: "merged"}), awaiting) == :none
   end
 
   test "concluded failing checks yield {:ci_failure, fingerprint} once per fingerprint" do

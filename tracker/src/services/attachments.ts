@@ -3,6 +3,8 @@ import { API_PREFIX } from "@/config";
 import { http, trackerPath } from "./http";
 
 const ATTACHMENT_PATH_SEGMENT = "/assistant/attachments/";
+const EVIDENCE_ARTIFACT_PATH_SEGMENT = "/evidence/";
+const EVIDENCE_ARTIFACT_FILE_SEGMENT = "/artifacts/";
 
 /**
  * Builds the authenticated tracker API path that serves a stored project
@@ -48,6 +50,28 @@ export function isInternalAttachmentUrl(src: string | null | undefined): boolean
   if (/^(data:|blob:)/i.test(src)) return false;
 
   return src.includes(`${API_PREFIX}/projects/`) && src.includes(ATTACHMENT_PATH_SEGMENT);
+}
+
+/**
+ * True when a URL points at a Symphony evidence artifact endpoint, which
+ * requires an Authorization header and therefore cannot be rendered by a plain
+ * <img src> or <video src>.
+ */
+export function isEvidenceArtifactUrl(src: string | null | undefined): boolean {
+  if (typeof src !== "string" || src.length === 0) return false;
+  if (/^(data:|blob:)/i.test(src)) return false;
+
+  const path = src.replace(/^https?:\/\/[^/]+/i, "");
+  return (
+    path.includes(`${API_PREFIX}/projects/`) &&
+    path.includes(EVIDENCE_ARTIFACT_PATH_SEGMENT) &&
+    path.includes(EVIDENCE_ARTIFACT_FILE_SEGMENT)
+  );
+}
+
+/** Tracker-hosted media that must be fetched with the bearer token. */
+export function isTrackerAuthenticatedMediaUrl(src: string | null | undefined): boolean {
+  return isInternalAttachmentUrl(src) || isEvidenceArtifactUrl(src);
 }
 
 export function isVideoMediaType(mediaType: string | null | undefined): boolean {

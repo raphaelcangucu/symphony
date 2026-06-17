@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isEvidenceArtifactUrl,
   isInternalAttachmentUrl,
+  isTrackerAuthenticatedMediaUrl,
   isVideoAttachmentSource,
   isVideoMediaType,
   projectAttachmentUrl,
@@ -44,6 +46,43 @@ describe("isInternalAttachmentUrl", () => {
 
   it("rejects other tracker API paths", () => {
     expect(isInternalAttachmentUrl("/api/tracker/v1/projects/gamba/issues/GAM-2")).toBe(false);
+  });
+});
+
+describe("isEvidenceArtifactUrl", () => {
+  it("recognizes relative evidence artifact paths", () => {
+    expect(
+      isEvidenceArtifactUrl(
+        "/api/tracker/v1/projects/gamba/issues/1878/evidence/20260610-1/artifacts/artifacts/screens/home.png",
+      ),
+    ).toBe(true);
+  });
+
+  it("recognizes absolute evidence artifact URLs", () => {
+    expect(
+      isEvidenceArtifactUrl(
+        "http://localhost:4000/api/tracker/v1/projects/gamba/issues/1878/evidence/20260610-1/artifacts/artifacts/videos/flow.webm",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects external URLs", () => {
+    expect(isEvidenceArtifactUrl("https://example.com/evidence/artifacts/x.png")).toBe(false);
+  });
+});
+
+describe("isTrackerAuthenticatedMediaUrl", () => {
+  it("includes assistant attachments and evidence artifacts", () => {
+    expect(
+      isTrackerAuthenticatedMediaUrl(
+        "/api/tracker/v1/projects/gamba/assistant/attachments/uploads/x.png",
+      ),
+    ).toBe(true);
+    expect(
+      isTrackerAuthenticatedMediaUrl(
+        "http://localhost:4000/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png",
+      ),
+    ).toBe(true);
   });
 });
 

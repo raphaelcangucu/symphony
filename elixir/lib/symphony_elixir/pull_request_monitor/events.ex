@@ -61,8 +61,10 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
     end
   end
 
+  @merged_terminal_actions ~w(moved_to_done merged_awaiting_others)
+
   defp merged_event?(pr, row) do
-    Map.get(pr, :merged) == true and last_action(row) != "moved_to_done"
+    Map.get(pr, :merged) == true and last_action(row) not in @merged_terminal_actions
   end
 
   defp ci_failure_event(pr, row) do

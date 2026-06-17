@@ -47,7 +47,8 @@ defmodule SymphonyElixir.PullRequestMonitor do
       Logger.info("PR monitor evaluated issue_identifier=#{identifier} project_slug=#{project.slug} prs=#{length(prs)}")
 
       reconcile_task_pull_requests(project, identifier, prs, opts)
-      Enum.each(prs, &process_pr(project, config, repo, identifier, &1, opts))
+      pr_opts = Keyword.put(opts, :all_prs, prs)
+      Enum.each(prs, &process_pr(project, config, repo, identifier, &1, pr_opts))
     else
       false ->
         :ok
@@ -156,18 +157,24 @@ defmodule SymphonyElixir.PullRequestMonitor do
 
   defp handle_event(:merged, project, config, _repo, identifier, pr, opts) do
     if ProjectConfig.pr_monitor_done_on_merge?(config) do
-      apply_transition(
-        project,
-        config,
-        identifier,
-        pr,
-        :move_done,
-        merged_comment(pr),
-        %{},
-        0,
-        %{},
-        opts
-      )
+      all_prs = Keyword.get(opts, :all_prs, [pr])
+
+      if PullRequests.all_merged?(all_prs) do
+        apply_transition(
+          project,
+          config,
+          identifier,
+          pr,
+          :move_done,
+          merged_comment(pr),
+          %{},
+          0,
+          %{},
+          opts
+        )
+      else
+        acknowledge_merged_awaiting_others(project, identifier, pr)
+      end
     end
   end
 
@@ -212,6 +219,27 @@ defmodule SymphonyElixir.PullRequestMonitor do
       pr,
       opts
     )
+  end
+
+  defp acknowledge_merged_awaiting_others(project, identifier, pr) do
+    pr_url = pr_field(pr, :url)
+
+    case MonitorState.get(project.slug, identifier, pr_url) do
+      %{last_action: "merged_awaiting_others"} ->
+        :ok
+
+      _ ->
+        Logger.info(
+          "PR monitor partial merge issue_identifier=#{identifier} project_slug=#{project.slug} pr_url=#{inspect(pr_url)} awaiting_other_prs=true"
+        )
+
+        MonitorState.upsert(project.slug, identifier, pr_url, %{
+          last_action: "merged_awaiting_others",
+          last_action_at: DateTime.utc_now()
+        })
+
+        :ok
+    end
   end
 
   defp run_decision(event, verdict, rollback_attrs, project, config, repo, identifier, pr, opts) do

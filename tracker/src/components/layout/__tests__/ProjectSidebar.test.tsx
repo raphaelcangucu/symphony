@@ -1,8 +1,12 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ProjectSidebar, resolveTrackerAssetPath } from "@/components/layout/ProjectSidebar";
+import {
+  ProjectSidebar,
+  resolveTrackerAssetPath,
+  TRACKER_SIDEBAR_COLLAPSED_STORAGE_KEY,
+} from "@/components/layout/ProjectSidebar";
 import { TRACKER_PROJECTS_CHANGED_EVENT } from "@/lib/projectEvents";
 import { listProjects } from "@/services/projects";
 import type { Project } from "@/types/project";
@@ -61,6 +65,7 @@ describe("ProjectSidebar", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.resetAllMocks();
+    window.localStorage.clear();
   });
 
   it("reloads active project links when projects change", async () => {
@@ -124,6 +129,36 @@ describe("ProjectSidebar", () => {
     window.dispatchEvent(new Event(TRACKER_PROJECTS_CHANGED_EVENT));
 
     await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1));
+  });
+
+  it("collapses and expands the sidebar when the toggle is clicked", async () => {
+    vi.mocked(listProjects).mockResolvedValue([activeProject]);
+
+    renderProjectSidebar();
+    await screen.findByText("Active Project");
+
+    expect(screen.getByText("Symphony Tracker")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+
+    expect(screen.queryByText("Symphony Tracker")).toBeNull();
+    expect(window.localStorage.getItem(TRACKER_SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
+
+    expect(screen.getByText("Symphony Tracker")).toBeTruthy();
+    expect(window.localStorage.getItem(TRACKER_SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe("false");
+  });
+
+  it("restores the collapsed state from storage on mount", async () => {
+    window.localStorage.setItem(TRACKER_SIDEBAR_COLLAPSED_STORAGE_KEY, "true");
+    vi.mocked(listProjects).mockResolvedValue([activeProject]);
+
+    renderProjectSidebar();
+    await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
+    expect(screen.queryByText("Symphony Tracker")).toBeNull();
   });
 });
 

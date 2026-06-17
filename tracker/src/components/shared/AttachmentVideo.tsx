@@ -1,7 +1,7 @@
 import { VideoOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { fetchAttachmentObjectUrl, isInternalAttachmentUrl } from "@/services/attachments";
+import { fetchAttachmentObjectUrl, isTrackerAuthenticatedMediaUrl } from "@/services/attachments";
 import { cn } from "@/lib/utils";
 
 interface AttachmentVideoProps {
@@ -16,8 +16,8 @@ type LoadState =
   | { status: "error" };
 
 function needsAuthenticatedFetch(src: string): boolean {
-  if (/^(data:|blob:|https?:)/i.test(src)) return false;
-  return isInternalAttachmentUrl(src) || src.startsWith("/");
+  if (/^(data:|blob:)/i.test(src)) return false;
+  return isTrackerAuthenticatedMediaUrl(src);
 }
 
 export function AttachmentVideo({ src, label, className }: AttachmentVideoProps) {

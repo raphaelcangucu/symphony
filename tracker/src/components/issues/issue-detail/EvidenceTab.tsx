@@ -1,5 +1,7 @@
 import { ClipboardCheck, RefreshCw } from "lucide-react";
 
+import { AttachmentImage } from "@/components/shared/AttachmentImage";
+import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { CommitEvidenceSection } from "@/components/issues/issue-detail/CommitEvidenceSection";
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { Badge } from "@/components/ui/badge";
@@ -172,26 +174,38 @@ function EvidenceCard({
       ) : null}
 
       {screenshots.length > 0 ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {screenshots.map((relative) => (
-            <a href={artifactUrl(relative)} key={relative} rel="noreferrer" target="_blank">
-              <img
-                alt={relative.split("/").pop() ?? relative}
-                className="h-28 w-full rounded border object-cover"
-                loading="lazy"
+        <div className="space-y-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Screenshots</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {screenshots.map((relative) => {
+            const filename = relative.split("/").pop() ?? relative;
+            return (
+              <AttachmentImage
+                key={relative}
+                alt={filename}
+                layout="thumbnail"
+                showCaption
                 src={artifactUrl(relative)}
               />
-            </a>
-          ))}
+            );
+          })}
+          </div>
         </div>
       ) : null}
 
       {videos.length > 0 ? (
         <div className="space-y-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Videos</p>
+          <div className="space-y-3">
           {videos.map((relative) => (
-            // eslint-disable-next-line jsx-a11y/media-has-caption -- agent-captured e2e recordings have no captions
-            <video className="w-full rounded border" controls key={relative} src={artifactUrl(relative)} />
+            <AttachmentVideo
+              key={relative}
+              className="w-full rounded border"
+              label={relative.split("/").pop() ?? relative}
+              src={artifactUrl(relative)}
+            />
           ))}
+          </div>
         </div>
       ) : null}
 

@@ -6,6 +6,20 @@ import { EvidenceTab } from "../EvidenceTab";
 import type { EvidenceRecord } from "@/types/evidence";
 import type { Issue } from "@/types/issue";
 
+vi.mock("@/components/shared/AttachmentVideo", () => ({
+  AttachmentVideo: ({ src, label }: { src: string; label: string }) => (
+    <div data-testid="attachment-video" data-src={src}>
+      {label}
+    </div>
+  ),
+}));
+
+vi.mock("@/components/shared/AttachmentImage", () => ({
+  AttachmentImage: ({ src, alt }: { src: string; alt: string }) => (
+    <img data-testid="attachment-image" src={src} alt={alt} />
+  ),
+}));
+
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
 const getCommitEvidenceMock = vi.hoisted(() => vi.fn());
 
@@ -137,7 +151,7 @@ describe("EvidenceTab", () => {
   });
 
   it("renders run rows, screenshots and videos for a record", () => {
-    const { container } = render(
+    render(
       <EvidenceTab
         {...baseProps}
         records={[
@@ -177,14 +191,15 @@ describe("EvidenceTab", () => {
     expect(screen.getByText("3/3 passed, 0 failed")).toBeInTheDocument();
     expect(screen.getByText("UI change")).toBeInTheDocument();
 
-    const image = screen.getByRole("img", { name: "home.png" });
+    const image = screen.getByTestId("attachment-image");
     expect(image.getAttribute("src")).toContain(
       "/projects/advising/issues/CDE-1131/evidence/20260610-1/artifacts/artifacts/screens/home.png",
     );
+    expect(image).toHaveAttribute("alt", "home.png");
 
-    const video = container.querySelector("video");
-    expect(video).not.toBeNull();
-    expect(video?.getAttribute("src")).toContain("artifacts/videos/flow.webm");
+    const video = screen.getByTestId("attachment-video");
+    expect(video.getAttribute("data-src")).toContain("artifacts/videos/flow.webm");
+    expect(video).toHaveTextContent("flow.webm");
 
     const traceLink = screen.getByRole("link", { name: "e2e trace (frontend)" });
     expect(traceLink.getAttribute("href")).toContain("artifacts/trace.zip");

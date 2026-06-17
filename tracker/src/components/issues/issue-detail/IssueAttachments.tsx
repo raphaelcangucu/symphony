@@ -36,12 +36,12 @@ function AttachmentItem({ attachment, projectSlug }: { attachment: IssueAttachme
 
   if (attachment.isImage) {
     return (
-      <figure className="w-32 space-y-1">
-        <AttachmentImage src={src} alt={attachment.filename} className="h-24 w-32 rounded-lg border object-cover" />
-        <figcaption className="truncate text-[11px] text-muted-foreground" title={attachment.filename}>
-          {attachment.filename}
-        </figcaption>
-      </figure>
+      <AttachmentImage
+        alt={attachment.filename}
+        layout="thumbnail"
+        showCaption
+        src={src}
+      />
     );
   }
 
