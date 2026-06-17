@@ -1431,6 +1431,9 @@
     }
   },
   "assistant": {
+    "errors": {
+      "textOnlyMessages": "Apenas mensagens de texto do assistente são suportadas"
+    },
     "panel": {
       "ariaLabel": "Assistente do projeto",
       "exploreTitle": "Explorar projeto",
@@ -1533,7 +1536,8 @@
       },
       "errors": {
         "noCodexModels": "O Codex CLI não retornou modelos",
-        "loadFailed": "Falha ao carregar modelos do assistente."
+        "loadFailed": "Falha ao carregar modelos do assistente.",
+        "apiMissing": "A API do assistente não está disponível no servidor. Reinicie o Symphony para carregar as rotas mais recentes do tracker."
       }
     },
     "composer": {
@@ -1835,6 +1839,7 @@
       "github_unauthorized": "GitHub rejeitou o GITHUB_TOKEN configurado. Gere um novo token com os escopos necessários.",
       "github_rate_limited": "O rate limit da API do GitHub está esgotado. O Symphony se recuperará automaticamente quando o limite resetar.",
       "github_network_error": "Symphony não conseguiu alcançar o GitHub. Verifique a conectividade do servidor e tente novamente.",
+      "missingLogin": "A resposta do viewer não inclui o login do GitHub.",
       "default": "Symphony não conseguiu identificar o operador. Verifique a configuração do servidor."
     }
   }

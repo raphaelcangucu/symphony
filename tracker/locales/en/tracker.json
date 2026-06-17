@@ -1431,6 +1431,9 @@
     }
   },
   "assistant": {
+    "errors": {
+      "textOnlyMessages": "Only text assistant messages are supported"
+    },
     "panel": {
       "ariaLabel": "Project assistant",
       "exploreTitle": "Explore project",
@@ -1508,7 +1511,8 @@
       },
       "errors": {
         "noCodexModels": "Codex CLI returned no models",
-        "loadFailed": "Failed to load assistant models."
+        "loadFailed": "Failed to load assistant models.",
+        "apiMissing": "Assistant API is missing on the server. Restart Symphony to load the latest tracker routes."
       }
     },
     "speech": {
@@ -1835,6 +1839,7 @@
       "github_unauthorized": "GitHub rejected the configured GITHUB_TOKEN. Generate a new token with the required scopes.",
       "github_rate_limited": "GitHub's API rate limit is exhausted. Symphony will recover automatically once the limit resets.",
       "github_network_error": "Symphony could not reach GitHub. Check the server's connectivity and retry.",
+      "missingLogin": "Viewer payload is missing the GitHub login.",
       "default": "Symphony could not identify the operator. Check the server configuration."
     }
   }

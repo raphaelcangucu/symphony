@@ -76,7 +76,9 @@ export function useIssueComments({
 
   const addComment = useCallback(
     async (input: CreateCommentInput) => {
-      if (!identifier || !projectSlug) throw new Error("issue is required");
+      if (!identifier || !projectSlug) {
+        throw new Error(i18n.t("project.services.validation.fieldRequired", { field: "issue" }));
+      }
       const created = await createComment(projectSlug, identifier, input);
       setComments((current) => sortByCreatedAt([...current, created]));
       return created;
@@ -86,7 +88,9 @@ export function useIssueComments({
 
   const updateCommentById = useCallback(
     async (commentId: string, input: UpdateCommentInput) => {
-      if (!identifier || !projectSlug) throw new Error("issue is required");
+      if (!identifier || !projectSlug) {
+        throw new Error(i18n.t("project.services.validation.fieldRequired", { field: "issue" }));
+      }
       const updated = await updateComment(projectSlug, identifier, commentId, input);
       setComments((current) => sortByCreatedAt(current.map((comment) => (comment.id === commentId ? updated : comment))));
       return updated;
@@ -96,7 +100,9 @@ export function useIssueComments({
 
   const deleteCommentById = useCallback(
     async (commentId: string) => {
-      if (!identifier || !projectSlug) throw new Error("issue is required");
+      if (!identifier || !projectSlug) {
+        throw new Error(i18n.t("project.services.validation.fieldRequired", { field: "issue" }));
+      }
       await deleteComment(projectSlug, identifier, commentId);
       setComments((current) => current.filter((comment) => comment.id !== commentId));
     },

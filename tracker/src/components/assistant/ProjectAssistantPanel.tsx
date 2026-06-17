@@ -531,7 +531,7 @@ export function ProjectAssistantPanel({
   const onNew = useCallback(
     async (message: AppendMessage) => {
       const firstPart = message.content[0];
-      if (firstPart?.type !== "text") throw new Error("Only text assistant messages are supported");
+      if (firstPart?.type !== "text") throw new Error(i18n.t("assistant.errors.textOnlyMessages"));
       const activeBundle = bundleRef.current;
       if (!activeBundle) return;
 

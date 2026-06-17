@@ -262,9 +262,7 @@ export async function fetchAssistantCatalogBundle(projectSlug: string): Promise<
     return bundle;
   } catch (cause) {
     if (axios.isAxiosError(cause) && cause.response?.status === 404) {
-      throw new Error(
-        "Assistant API is missing on the server. Restart Symphony so it loads the latest tracker routes.",
-      );
+      throw new Error(i18n.t("assistant.catalog.errors.apiMissing"));
     }
 
     if (axios.isAxiosError(cause) && cause.response?.status === 503) {
@@ -385,7 +383,7 @@ function extractApiErrorMessage(cause: unknown, fallback: string): string {
       if (error?.message) return error.message;
     }
     if (cause.response?.status === 404) {
-      return "Assistant API is missing on the server. Restart Symphony to load the latest routes.";
+      return i18n.t("assistant.catalog.errors.apiMissing");
     }
     if (cause.message) return cause.message;
   }

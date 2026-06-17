@@ -1,5 +1,6 @@
 import { arrayMove } from "@dnd-kit/sortable";
 
+import { requireNonBlank } from "@/lib/serviceValidation";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
@@ -19,7 +20,7 @@ export type BoardState = Record<WorkflowStatusName, Issue[]>;
 export const ISSUE_DRAG_PREFIX = "issue:";
 
 export function issueDragId(identifier: string): string {
-  if (!identifier.trim()) throw new Error("identifier is required");
+  requireNonBlank(identifier, "identifier");
   return `${ISSUE_DRAG_PREFIX}${identifier}`;
 }
 
@@ -135,7 +136,7 @@ export function moveIssueLocally(
   targetIndex: number,
   statuses?: readonly WorkflowStatusName[],
 ): BoardState {
-  if (!identifier.trim()) throw new Error("identifier is required");
+  requireNonBlank(identifier, "identifier");
 
   const statusNames = workflowStatusNames(statuses ?? Object.keys(board));
   const sourceStatus = findIssueStatus(board, identifier, statusNames);
