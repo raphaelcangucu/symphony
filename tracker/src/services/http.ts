@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import { API_PREFIX, TRACKER_TOKEN_KEY, clearTrackerToken, getTrackerToken } from "@/config";
+import { getResolvedLocale } from "@/i18n";
 
 export { TRACKER_TOKEN_KEY };
 
@@ -17,6 +18,7 @@ http.interceptors.request.use((config) => {
   if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  config.headers["X-Symphony-Locale"] = getResolvedLocale();
   return config;
 });
 

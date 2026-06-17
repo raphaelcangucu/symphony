@@ -1,0 +1,70 @@
+{
+  "common": {
+    "loading": "Carregando…"
+  },
+  "settings": {
+    "title": "Configurações",
+    "subtitle": "Padrões da instância Symphony para o operador.",
+    "loadFailed": "Falha ao carregar configurações — atualize para tentar novamente.",
+    "codingAgent": {
+      "title": "Agente de código",
+      "description": "Agente padrão para novo trabalho. Projetos e tarefas podem sobrescrever (tarefa > projeto > este padrão).",
+      "saved": "Agente de código padrão definido como {{agent}}",
+      "saveFailed": "Falha ao salvar o agente de código padrão",
+      "availabilityFailed": "Não foi possível verificar a disponibilidade dos agentes.",
+      "notFound": "{{command}} não encontrado — instale ou escolha outro agente"
+    },
+    "language": {
+      "title": "Idioma",
+      "description": "Idioma da interface do tracker. Notificações push usam inglês enquanto estiver em Automático.",
+      "auto": "Automático (navegador)",
+      "en": "English",
+      "pt-BR": "Português (Brasil)",
+      "saved": "Preferência de idioma salva",
+      "saveFailed": "Falha ao salvar preferência de idioma",
+      "loadFailed": "Falha ao carregar configurações de idioma — atualize para tentar novamente."
+    }
+  },
+  "issue": {
+    "agent": {
+      "advancedControls": "Controles avançados"
+    },
+    "evidence": {
+      "missing": "Nenhuma evidência registrada no tracker.",
+      "incomplete": "Validação incompleta — {{details}}{{suffix}}",
+      "failedStatus": "Última evidência com status \"{{status}}\".",
+      "failedRunsHeader": "Runs que falharam ou ficaram bloqueados na última tentativa:",
+      "absent": "Evidence: ausente"
+    },
+    "returnToAgent": {
+      "resumeValidation": "Retomar validação",
+      "returnToAgent": "Devolver ao agente",
+      "failedGateDescription": "A última tentativa de evidência não passou no VALIDATE gate. Retome em {{target}} para corrigir o ambiente, rerodar testes e atualizar o manifest.",
+      "humanReviewDescription": "Esta issue está em revisão humana. Escolha o motivo, ajuste a instrução se quiser, e retome em {{target}}.",
+      "statusLine": "Status: {{status}}",
+      "instructionsPlaceholder": "Instruções específicas para o agente (opcional)",
+      "resuming": "Retomando…",
+      "resumeButton": "Voltar para {{target}} e retomar",
+      "resumeToast": "Retomando em {{target}}",
+      "resumeFailed": "Falha ao retomar o agente",
+      "templates": {
+        "evidence": {
+          "label": "Completar evidências",
+          "body": "Implementação e PR já estão prontos. Não altere código salvo instrução explícita.\n\nExecute apenas a etapa VALIDATE:\n1. Siga o skill `evidence`\n2. Suba Docker se necessário (`./vibe shared up`, `./vibe up`)\n3. Rode os testes aplicáveis ao diff\n4. Se tocou UI, rode Playwright com screenshot + vídeo\n5. Escreva `.symphony/evidence/manifest.json` na raiz do workspace Symphony (não dentro do clone git) com `\"repo\": \"advising\"` (ou o repo do projeto)\n6. Atualize o workpad na seção Validation\n7. Não mova o card para revisão — evidência apenas"
+        },
+        "fix": {
+          "label": "Corrigir implementação",
+          "body": "A implementação precisa de ajustes antes do handoff.\n\nPrioridade:\n1. Leia o feedback humano/comentários do PR\n2. Corrija o código, commits, push e PR\n3. Rode testes direcionados para o que mudou\n4. Só então execute VALIDATE/evidence se o handoff estiver pronto"
+        },
+        "review_feedback": {
+          "label": "Responder review do PR",
+          "body": "Há feedback de review/CI no PR que precisa ser endereçado.\n\nPrioridade:\n1. Leia comentários de review e checks falhos\n2. Corrija apenas o necessário para o PR ficar verde\n3. Atualize o workpad com o que foi feito\n4. Execute VALIDATE/evidence quando o PR estiver pronto de novo"
+        },
+        "custom": {
+          "label": "Outro",
+          "body": ""
+        }
+      }
+    }
+  }
+}

@@ -13,6 +13,10 @@ vi.mock("@/hooks/useIssueDevServers", () => ({
   useIssueDevServers: vi.fn(),
 }));
 
+vi.mock("@/hooks/useMeIdentities", () => ({
+  useMeIdentities: () => ({ identities: [], loading: false, error: null }),
+}));
+
 vi.mock("@/services/issues", () => ({
   getIssueFormOptions: (...args: unknown[]) => getIssueFormOptionsMock(...args),
 }));

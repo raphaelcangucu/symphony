@@ -1,0 +1,7 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Hi! I'm here in this project's context. Chat normally or ask me to create a task, comment on an issue, move status, or dispatch Codex work."
+msgstr "Hi! I'm here in this project's context. Chat normally or ask me to create a task, comment on an issue, move status, or dispatch Codex work."

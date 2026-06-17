@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
+import { initTestI18n } from "@/i18n/testUtils";
 import {
   assessEvidenceAttention,
   evidenceAttentionInstructions,
@@ -22,6 +23,10 @@ function record(overrides: Partial<EvidenceRecord> = {}): EvidenceRecord {
 }
 
 describe("evidenceStatus", () => {
+  beforeEach(async () => {
+    await initTestI18n("pt-BR");
+  });
+
   it("marks missing evidence", () => {
     const attention = assessEvidenceAttention([]);
     expect(attention.kind).toBe("missing");

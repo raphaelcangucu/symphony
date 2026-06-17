@@ -1,8 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { I18nextProvider } from "react-i18next";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EvidenceTab } from "../EvidenceTab";
+import { i18n } from "@/i18n";
+import { initTestI18n } from "@/i18n/testUtils";
 import type { EvidenceRecord } from "@/types/evidence";
 import type { Issue } from "@/types/issue";
 
@@ -85,13 +88,21 @@ function record(overrides: Partial<EvidenceRecord> = {}): EvidenceRecord {
 }
 
 describe("EvidenceTab", () => {
+  beforeEach(async () => {
+    await initTestI18n("pt-BR");
+  });
+
+  function renderTab(ui: React.ReactElement) {
+    return render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>);
+  }
+
   it("shows the empty state when there are no records", () => {
-    render(<EvidenceTab {...baseProps} records={[]} />);
+    renderTab(<EvidenceTab {...baseProps} records={[]} />);
     expect(screen.getByText("No evidence captured for this issue yet.")).toBeInTheDocument();
   });
 
   it("shows continue work when evidence is missing in review", () => {
-    render(
+    renderTab(
       <EvidenceTab
         {...baseProps}
         issue={issue}
@@ -113,7 +124,7 @@ describe("EvidenceTab", () => {
     });
 
     const user = userEvent.setup();
-    render(
+    renderTab(
       <EvidenceTab
         {...baseProps}
         issue={issue}
@@ -146,12 +157,12 @@ describe("EvidenceTab", () => {
   });
 
   it("shows the error message", () => {
-    render(<EvidenceTab {...baseProps} error="Could not load evidence." records={[]} />);
+    renderTab(<EvidenceTab {...baseProps} error="Could not load evidence." records={[]} />);
     expect(screen.getByText("Could not load evidence.")).toBeInTheDocument();
   });
 
   it("renders run rows, screenshots and videos for a record", () => {
-    render(
+    renderTab(
       <EvidenceTab
         {...baseProps}
         records={[
@@ -220,7 +231,7 @@ describe("EvidenceTab", () => {
     });
 
     const user = userEvent.setup();
-    render(
+    renderTab(
       <EvidenceTab
         {...baseProps}
         commits={[

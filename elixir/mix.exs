@@ -148,6 +148,7 @@ defmodule SymphonyElixir.MixProject do
       {:reverse_proxy_plug_websocket, "~> 0.2"},
       {:websockex, "~> 0.4.3"},
       {:jason, "~> 1.4"},
+      {:gettext, "~> 0.26"},
       {:yaml_elixir, "~> 2.12"},
       {:ymlr, "~> 5.0"},
       {:solid, "~> 1.2"},

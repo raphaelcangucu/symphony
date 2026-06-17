@@ -35,7 +35,8 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
                "orchestrator" => %{
                  "require_symphony_label" => true,
                  "require_assignee_match" => true
-               }
+               },
+               "ui" => %{"locale" => "auto"}
              }
            } = json_response(conn, 200)
   end
@@ -68,6 +69,11 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
 
     conn = get(authed_conn(), "/api/tracker/v1/settings")
     assert %{"data" => %{"agents" => %{"default_agent_kind" => "claude"}}} = json_response(conn, 200)
+  end
+
+  test "PUT /api/tracker/v1/settings/ui updates locale" do
+    conn = put(authed_conn(), "/api/tracker/v1/settings/ui", %{"locale" => "pt-BR"})
+    assert %{"data" => %{"locale" => "pt-BR"}} = json_response(conn, 200)
   end
 
   test "PUT rejects invalid values with 422 and unknown groups with 404" do

@@ -2,6 +2,10 @@ import Config
 
 config :phoenix, :json_library, Jason
 
+config :symphony_elixir, SymphonyElixirWeb.Gettext,
+  locales: ~w(en pt_BR),
+  default_locale: "en"
+
 config :symphony_elixir, ecto_repos: [SymphonyElixir.Repo]
 
 # Local-first tracker reads/sync. Enabled by default so the UI and orchestrator

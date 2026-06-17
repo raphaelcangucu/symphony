@@ -10,6 +10,10 @@ import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
+vi.mock("@/hooks/useMeIdentities", () => ({
+  useMeIdentities: () => ({ identities: [], loading: false, error: null }),
+}));
+
 vi.mock("@/services/issues", async () => {
   const actual = await vi.importActual<typeof import("@/services/issues")>("@/services/issues");
   return {

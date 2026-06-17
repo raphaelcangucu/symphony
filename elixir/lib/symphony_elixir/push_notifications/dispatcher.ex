@@ -5,13 +5,18 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   Delivery is best-effort: missing VAPID config or subscriptions is a no-op.
   """
 
+  use Gettext, backend: SymphonyElixirWeb.Gettext
+
+  alias Gettext, as: GettextCore
   alias SymphonyElixir.Evidence.Record, as: EvidenceRecord
   alias SymphonyElixir.Issue
   alias SymphonyElixir.LocalTracker.IssueRecord
   alias SymphonyElixir.LocalTracker.Project
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.PushNotifications.{Config, Sender}
+  alias SymphonyElixir.Settings.Ui
   alias SymphonyElixir.Tracker.Identity
+  alias SymphonyElixirWeb.Gettext, as: GettextBackend
 
   require Logger
 
@@ -32,12 +37,14 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
          identifier when is_binary(identifier) <- issue.identifier do
       title = issue.title || identifier
 
-      notify(@human_review_kind, %{
-        title: "Human review needed",
-        body: "#{identifier}: #{title}",
-        url: issue_url(slug, identifier),
-        tag: "human_review:#{slug}:#{identifier}"
-      })
+      with_push_locale(fn ->
+        notify(@human_review_kind, %{
+          title: dgettext("push", "Human review needed"),
+          body: "#{identifier}: #{title}",
+          url: issue_url(slug, identifier),
+          tag: "human_review:#{slug}:#{identifier}"
+        })
+      end)
     else
       _ -> :ok
     end
@@ -55,14 +62,20 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
       runs = record.manifest["runs"] || []
       passed = Enum.count(runs, &(&1["status"] == "passed"))
       total = length(runs)
-      summary = if total > 0, do: "#{passed}/#{total} runs passed", else: "Evidence recorded"
 
-      notify(@evidence_kind, %{
-        title: "Evidence generated",
-        body: "#{identifier}: #{summary}",
-        url: issue_url(slug, identifier, "evidence"),
-        tag: "evidence:#{slug}:#{identifier}:#{record.run_id}"
-      })
+      summary =
+        if total > 0,
+          do: dgettext("push", "%{passed}/%{total} runs passed", passed: passed, total: total),
+          else: dgettext("push", "Evidence recorded")
+
+      with_push_locale(fn ->
+        notify(@evidence_kind, %{
+          title: dgettext("push", "Evidence generated"),
+          body: "#{identifier}: #{summary}",
+          url: issue_url(slug, identifier, "evidence"),
+          tag: "evidence:#{slug}:#{identifier}:#{record.run_id}"
+        })
+      end)
     else
       _ -> :ok
     end
@@ -77,12 +90,14 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
     error = Map.get(metadata, :error)
     error_text = retry_error_text(error)
 
-    notify(@agent_retry_kind, %{
-      title: "Agent run failed — retry scheduled",
-      body: "#{identifier}: attempt #{attempt}#{error_text}",
-      url: issue_url(slug, identifier),
-      tag: "agent_retry:#{slug}:#{identifier}"
-    })
+    with_push_locale(fn ->
+      notify(@agent_retry_kind, %{
+        title: dgettext("push", "Agent run failed — retry scheduled"),
+        body: "#{identifier}: attempt #{attempt}#{error_text}",
+        url: issue_url(slug, identifier),
+        tag: "agent_retry:#{slug}:#{identifier}"
+      })
+    end)
   end
 
   def agent_retry_scheduled(_metadata), do: :ok
@@ -92,12 +107,14 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
       when is_binary(identifier) and is_binary(slug) and slug != "" do
     title = issue.title || identifier
 
-    notify(@agent_incomplete_kind, %{
-      title: "Agent run incomplete",
-      body: "#{identifier}: #{title} (#{incomplete_reason_summary(reason)})",
-      url: issue_url(slug, identifier),
-      tag: "agent_incomplete:#{slug}:#{identifier}"
-    })
+    with_push_locale(fn ->
+      notify(@agent_incomplete_kind, %{
+        title: dgettext("push", "Agent run incomplete"),
+        body: "#{identifier}: #{title} (#{incomplete_reason_summary(reason)})",
+        url: issue_url(slug, identifier),
+        tag: "agent_incomplete:#{slug}:#{identifier}"
+      })
+    end)
   end
 
   def agent_run_incomplete(_issue, _reason), do: :ok
@@ -108,12 +125,14 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
     title = issue.title || identifier
     summary = blocked_summary(violations)
 
-    notify(@agent_blocked_kind, %{
-      title: "Agent run blocked",
-      body: "#{identifier}: #{title} — #{summary}",
-      url: issue_url(slug, identifier),
-      tag: "agent_blocked:#{slug}:#{identifier}"
-    })
+    with_push_locale(fn ->
+      notify(@agent_blocked_kind, %{
+        title: dgettext("push", "Agent run blocked"),
+        body: "#{identifier}: #{title} — #{summary}",
+        url: issue_url(slug, identifier),
+        tag: "agent_blocked:#{slug}:#{identifier}"
+      })
+    end)
   end
 
   def agent_run_blocked(_issue, _violations), do: :ok
@@ -121,32 +140,38 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   @spec pr_monitor_attention(Project.t(), String.t(), term()) :: :ok
   def pr_monitor_attention(%Project{slug: slug}, identifier, {:stay, :limit_reached})
       when is_binary(slug) and slug != "" and is_binary(identifier) do
-    notify(@pr_limit_reached_kind, %{
-      title: "Auto-fix limit reached",
-      body: "#{identifier}: PR monitor stopped automatic rework",
-      url: issue_url(slug, identifier, "pull-request"),
-      tag: "pr_limit:#{slug}:#{identifier}"
-    })
+    with_push_locale(fn ->
+      notify(@pr_limit_reached_kind, %{
+        title: dgettext("push", "Auto-fix limit reached"),
+        body: dgettext("push", "%{identifier}: PR monitor stopped automatic rework", identifier: identifier),
+        url: issue_url(slug, identifier, "pull-request"),
+        tag: "pr_limit:#{slug}:#{identifier}"
+      })
+    end)
   end
 
   def pr_monitor_attention(%Project{slug: slug}, identifier, {:stay, :needs_human})
       when is_binary(slug) and slug != "" and is_binary(identifier) do
-    notify(@pr_needs_human_kind, %{
-      title: "PR feedback needs you",
-      body: "#{identifier}: review findings need human attention",
-      url: issue_url(slug, identifier, "pull-request"),
-      tag: "pr_needs_human:#{slug}:#{identifier}"
-    })
+    with_push_locale(fn ->
+      notify(@pr_needs_human_kind, %{
+        title: dgettext("push", "PR feedback needs you"),
+        body: dgettext("push", "%{identifier}: review findings need human attention", identifier: identifier),
+        url: issue_url(slug, identifier, "pull-request"),
+        tag: "pr_needs_human:#{slug}:#{identifier}"
+      })
+    end)
   end
 
   def pr_monitor_attention(%Project{slug: slug}, identifier, {:stay, :unrelated})
       when is_binary(slug) and slug != "" and is_binary(identifier) do
-    notify(@pr_ci_unrelated_kind, %{
-      title: "CI failure may be unrelated",
-      body: "#{identifier}: kept in review — consider re-running failed jobs",
-      url: issue_url(slug, identifier, "pull-request"),
-      tag: "pr_ci_unrelated:#{slug}:#{identifier}"
-    })
+    with_push_locale(fn ->
+      notify(@pr_ci_unrelated_kind, %{
+        title: dgettext("push", "CI failure may be unrelated"),
+        body: dgettext("push", "%{identifier}: kept in review — consider re-running failed jobs", identifier: identifier),
+        url: issue_url(slug, identifier, "pull-request"),
+        tag: "pr_ci_unrelated:#{slug}:#{identifier}"
+      })
+    end)
   end
 
   def pr_monitor_attention(_project, _identifier, _action), do: :ok
@@ -164,12 +189,18 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
          identifier when is_binary(identifier) <- issue.identifier do
       title = issue.title || identifier
 
-      notify(@issue_assigned_kind, %{
-        title: "Tarefa associada a você",
-        body: "#{identifier}: #{title} — clique para visualizar",
-        url: issue_url(slug, identifier),
-        tag: "issue_assigned:#{slug}:#{identifier}"
-      })
+      with_push_locale(fn ->
+        notify(@issue_assigned_kind, %{
+          title: dgettext("push", "Issue assigned to you"),
+          body:
+            dgettext("push", "%{identifier}: %{title} — click to view",
+              identifier: identifier,
+              title: title
+            ),
+          url: issue_url(slug, identifier),
+          tag: "issue_assigned:#{slug}:#{identifier}"
+        })
+      end)
     else
       _ -> :ok
     end
@@ -184,6 +215,10 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
     else
       :ok
     end
+  end
+
+  defp with_push_locale(fun) when is_function(fun, 0) do
+    GettextCore.with_locale(GettextBackend, Ui.effective_gettext_locale(), fun)
   end
 
   defp wait_state?(%IssueRecord{project: %Project{id: id}} = issue, status_name) when not is_nil(id) do
@@ -221,19 +256,19 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
 
   defp retry_error_text(_error), do: ""
 
-  defp incomplete_reason_summary(:max_turns), do: "max turns reached"
-  defp incomplete_reason_summary({:publish_gate, _}), do: "publish gate unsatisfied"
-  defp incomplete_reason_summary({:validate_gate, _}), do: "validate gate unsatisfied"
+  defp incomplete_reason_summary(:max_turns), do: dgettext("push", "max turns reached")
+  defp incomplete_reason_summary({:publish_gate, _}), do: dgettext("push", "publish gate unsatisfied")
+  defp incomplete_reason_summary({:validate_gate, _}), do: dgettext("push", "validate gate unsatisfied")
   defp incomplete_reason_summary(other), do: inspect(other)
 
   defp blocked_summary(violations) when is_list(violations) do
     case length(violations) do
-      0 -> "publish gate blocked"
-      n -> "#{n} publish gate violation(s)"
+      0 -> dgettext("push", "publish gate blocked")
+      n -> dgettext("push", "%{count} publish gate violation(s)", count: n)
     end
   end
 
-  defp blocked_summary(_), do: "publish gate blocked"
+  defp blocked_summary(_), do: dgettext("push", "publish gate blocked")
 
   defp assignee_changed?(previous, %IssueRecord{} = issue) do
     previous_value = canonical_assignee(previous)

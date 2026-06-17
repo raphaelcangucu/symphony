@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from "react
 import { Toaster } from "sonner";
 
 import { ViewerProvider } from "@/components/auth/ViewerProvider";
+import { I18nProvider } from "@/i18n/I18nProvider";
 import { Layout } from "@/components/layout/Layout";
 import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { NewProjectRoute } from "@/components/projects/NewProjectRoute";
@@ -45,9 +46,11 @@ export function App() {
         <Route
           element={
             <RequireToken>
-              <ViewerProvider>
-                <Outlet />
-              </ViewerProvider>
+              <I18nProvider>
+                <ViewerProvider>
+                  <Outlet />
+                </ViewerProvider>
+              </I18nProvider>
             </RequireToken>
           }
         >

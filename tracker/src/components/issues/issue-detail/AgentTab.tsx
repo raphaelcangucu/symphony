@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
@@ -53,6 +54,7 @@ export function AgentTab({
   steerSeedMessage = null,
   onIssueUpdated,
 }: AgentTabProps) {
+  const { t } = useTranslation();
   const [agentPending, setAgentPending] = useState(false);
   const trackerConfig: WorkflowTrackerConfig = parseWorkflowTrackerConfig(workflowMarkdown);
   const inWaitState = isWaitState(issue.status, trackerConfig);
@@ -215,7 +217,9 @@ export function AgentTab({
 
       {showReturnPanel ? (
         <details className="rounded-xl border border-border/70 bg-card/20 p-3">
-          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Controles avançados</summary>
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+            {t("issue.agent.advancedControls")}
+          </summary>
           <div className="mt-3">
             <ExecutionControlComposer
               projectSlug={projectSlug}

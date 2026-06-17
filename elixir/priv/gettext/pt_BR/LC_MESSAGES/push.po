@@ -1,0 +1,64 @@
+msgid ""
+msgstr ""
+"Language: pt_BR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Human review needed"
+msgstr "Revisão humana necessária"
+
+msgid "Evidence generated"
+msgstr "Evidência gerada"
+
+msgid "Evidence recorded"
+msgstr "Evidência registrada"
+
+msgid "%{passed}/%{total} runs passed"
+msgstr "%{passed}/%{total} execuções passaram"
+
+msgid "Agent run failed — retry scheduled"
+msgstr "Execução do agente falhou — nova tentativa agendada"
+
+msgid "Agent run incomplete"
+msgstr "Execução do agente incompleta"
+
+msgid "Agent run blocked"
+msgstr "Execução do agente bloqueada"
+
+msgid "Auto-fix limit reached"
+msgstr "Limite de auto-correção atingido"
+
+msgid "%{identifier}: PR monitor stopped automatic rework"
+msgstr "%{identifier}: monitor de PR interrompeu retrabalho automático"
+
+msgid "PR feedback needs you"
+msgstr "Feedback do PR precisa de você"
+
+msgid "%{identifier}: review findings need human attention"
+msgstr "%{identifier}: achados de review precisam de atenção humana"
+
+msgid "CI failure may be unrelated"
+msgstr "Falha de CI pode ser não relacionada"
+
+msgid "%{identifier}: kept in review — consider re-running failed jobs"
+msgstr "%{identifier}: mantido em revisão — considere reexecutar jobs falhos"
+
+msgid "Issue assigned to you"
+msgstr "Tarefa associada a você"
+
+msgid "%{identifier}: %{title} — click to view"
+msgstr "%{identifier}: %{title} — clique para visualizar"
+
+msgid "max turns reached"
+msgstr "limite de turnos atingido"
+
+msgid "publish gate unsatisfied"
+msgstr "publish gate não satisfeito"
+
+msgid "validate gate unsatisfied"
+msgstr "validate gate não satisfeito"
+
+msgid "publish gate blocked"
+msgstr "publish gate bloqueado"
+
+msgid "%{count} publish gate violation(s)"
+msgstr "%{count} violação(ões) de publish gate"

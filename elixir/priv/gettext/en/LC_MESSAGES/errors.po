@@ -1,0 +1,16 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Project not found"
+msgstr "Project not found"
+
+msgid "Validation failed"
+msgstr "Validation failed"
+
+msgid "Request failed"
+msgstr "Request failed"
+
+msgid "An agent is already running on this issue."
+msgstr "An agent is already running on this issue."

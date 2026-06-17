@@ -1,5 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
+import { initTestI18n } from "@/i18n/testUtils";
+
 // jsdom does not implement PointerEvent. Radix UI primitives open on
 // pointerdown and require `event.button === 0`; without a PointerEvent class,
 // fireEvent.pointerDown dispatches an event with no `button`, so menus never
@@ -29,3 +31,5 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     disconnect() {}
   } as unknown as typeof ResizeObserver;
 }
+
+await initTestI18n("en");

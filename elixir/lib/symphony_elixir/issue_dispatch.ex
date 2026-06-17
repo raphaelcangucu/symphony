@@ -13,6 +13,8 @@ defmodule SymphonyElixir.IssueDispatch do
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
   alias SymphonyElixirWeb.TrackerPresenter
 
+  use Gettext, backend: SymphonyElixirWeb.Gettext
+
   require Logger
 
   @type action :: :resume | :restart | :hard_reset | :stop | :continue_work
@@ -335,19 +337,19 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   defp dispatch_message(:resume, %IssueDTO{identifier: identifier}),
-    do: "Resuming agent work on #{identifier}"
+    do: dgettext("dispatch", "Resuming agent work on %{identifier}", identifier: identifier)
 
   defp dispatch_message(:restart, %IssueDTO{identifier: identifier}),
-    do: "Restarting agent work on #{identifier}"
+    do: dgettext("dispatch", "Restarting agent work on %{identifier}", identifier: identifier)
 
   defp dispatch_message(:hard_reset, %IssueDTO{identifier: identifier}),
-    do: "Hard reset — starting a fresh agent session for #{identifier}"
+    do: dgettext("dispatch", "Hard reset — starting a fresh agent session for %{identifier}", identifier: identifier)
 
   defp dispatch_message(:continue_work, %IssueDTO{identifier: identifier}),
-    do: "Continuing agent work on #{identifier}"
+    do: dgettext("dispatch", "Continuing agent work on %{identifier}", identifier: identifier)
 
   defp dispatch_message(:stop, %IssueDTO{identifier: identifier}),
-    do: "Paused agent run for #{identifier} — resume when ready"
+    do: dgettext("dispatch", "Paused agent run for %{identifier} — resume when ready", identifier: identifier)
 
   defp normalize_agent(agent) when agent in ["codex", "claude", "cursor"], do: agent
   defp normalize_agent(_agent), do: nil

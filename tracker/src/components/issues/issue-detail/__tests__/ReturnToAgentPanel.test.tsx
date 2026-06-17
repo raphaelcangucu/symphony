@@ -1,8 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { I18nextProvider } from "react-i18next";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
+import { i18n } from "@/i18n";
+import { initTestI18n } from "@/i18n/testUtils";
 import type { Issue } from "@/types/issue";
 
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
@@ -24,9 +27,14 @@ const issue = {
 } as unknown as Issue;
 
 describe("ReturnToAgentPanel", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     dispatchIssueAgentMock.mockReset();
+    await initTestI18n("pt-BR");
   });
+
+  function renderPanel(ui: React.ReactElement) {
+    return render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>);
+  }
 
   it("continues work with template instructions and target status", async () => {
     const onIssueUpdated = vi.fn();
@@ -37,7 +45,7 @@ describe("ReturnToAgentPanel", () => {
     });
 
     const user = userEvent.setup();
-    render(
+    renderPanel(
       <ReturnToAgentPanel
         projectSlug="advising"
         issue={issue}

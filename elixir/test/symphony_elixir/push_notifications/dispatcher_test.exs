@@ -1,10 +1,21 @@
 defmodule SymphonyElixir.PushNotifications.DispatcherTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
+  alias Gettext
   alias SymphonyElixir.Evidence.Record, as: EvidenceRecord
   alias SymphonyElixir.Issue
   alias SymphonyElixir.LocalTracker.{IssueRecord, Project, Viewer}
   alias SymphonyElixir.PushNotifications.Dispatcher
+  alias SymphonyElixir.Repo
+  alias SymphonyElixir.Settings
+  alias SymphonyElixir.Settings.Setting
+  alias SymphonyElixirWeb.Gettext, as: GettextBackend
+
+  setup do
+    Repo.delete_all(Setting)
+    on_exit(fn -> Repo.delete_all(Setting) end)
+    :ok
+  end
 
   test "human_review_needed ignores non-wait states" do
     issue = %IssueRecord{
@@ -67,6 +78,23 @@ defmodule SymphonyElixir.PushNotifications.DispatcherTest do
     assert :ok = Dispatcher.pr_monitor_attention(project, "MAC-7", {:stay, :unrelated})
     assert :ok = Dispatcher.pr_monitor_attention(project, "MAC-7", :move_done)
     assert :ok = Dispatcher.pr_monitor_attention(project, "MAC-7", :move_rework)
+  end
+
+  test "issue_assigned title is Portuguese when ui locale is pt-BR" do
+    {:ok, _} = Settings.put("ui", "locale", "pt-BR")
+
+    assert Gettext.dgettext(GettextBackend, "push", "Issue assigned to you") ==
+             "Issue assigned to you"
+
+    Gettext.put_locale(GettextBackend, Settings.Ui.effective_gettext_locale())
+
+    assert Gettext.dgettext(GettextBackend, "push", "Issue assigned to you") ==
+             "Tarefa associada a você"
+  end
+
+  test "issue_assigned title is English when ui locale is auto" do
+    Gettext.put_locale(GettextBackend, Settings.Ui.effective_gettext_locale())
+    assert Gettext.dgettext(GettextBackend, "push", "Issue assigned to you") == "Issue assigned to you"
   end
 
   test "issue_assigned notifies when assignee changes to the operator" do

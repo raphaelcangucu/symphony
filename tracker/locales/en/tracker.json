@@ -1,0 +1,70 @@
+{
+  "common": {
+    "loading": "Loading…"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Operator-level defaults for this Symphony instance.",
+    "loadFailed": "Failed to load settings — refresh to retry.",
+    "codingAgent": {
+      "title": "Coding agent",
+      "description": "Default agent for new work. Projects and tasks can override it (task > project > this default).",
+      "saved": "Default coding agent set to {{agent}}",
+      "saveFailed": "Failed to save the default coding agent",
+      "availabilityFailed": "Could not check agent availability.",
+      "notFound": "{{command}} not found — install it or pick another agent"
+    },
+    "language": {
+      "title": "Language",
+      "description": "UI language for the tracker. Push notifications use English while set to Auto.",
+      "auto": "Auto (browser)",
+      "en": "English",
+      "pt-BR": "Português (Brasil)",
+      "saved": "Language preference saved",
+      "saveFailed": "Failed to save language preference",
+      "loadFailed": "Failed to load language settings — refresh to retry."
+    }
+  },
+  "issue": {
+    "agent": {
+      "advancedControls": "Advanced controls"
+    },
+    "evidence": {
+      "missing": "No evidence recorded in the tracker.",
+      "incomplete": "Validation incomplete — {{details}}{{suffix}}",
+      "failedStatus": "Latest evidence has status \"{{status}}\".",
+      "failedRunsHeader": "Runs that failed or were blocked on the last attempt:",
+      "absent": "Evidence: absent"
+    },
+    "returnToAgent": {
+      "resumeValidation": "Resume validation",
+      "returnToAgent": "Return to agent",
+      "failedGateDescription": "The last evidence attempt did not pass the VALIDATE gate. Resume in {{target}} to fix the environment, rerun tests, and update the manifest.",
+      "humanReviewDescription": "This issue is in human review. Choose a reason, adjust the instructions if needed, and resume in {{target}}.",
+      "statusLine": "Status: {{status}}",
+      "instructionsPlaceholder": "Specific instructions for the agent (optional)",
+      "resuming": "Resuming…",
+      "resumeButton": "Return to {{target}} and resume",
+      "resumeToast": "Resuming in {{target}}",
+      "resumeFailed": "Failed to resume the agent",
+      "templates": {
+        "evidence": {
+          "label": "Complete evidence",
+          "body": "Implementation and PR are already ready. Do not change code unless explicitly instructed.\n\nRun only the VALIDATE step:\n1. Follow the `evidence` skill\n2. Start Docker if needed (`./vibe shared up`, `./vibe up`)\n3. Run tests applicable to the diff\n4. If UI was touched, run Playwright with screenshot + video\n5. Write `.symphony/evidence/manifest.json` at the Symphony workspace root (not inside the git clone) with `\"repo\": \"advising\"` (or the project repo)\n6. Update the workpad in the Validation section\n7. Do not move the card to review — evidence only"
+        },
+        "fix": {
+          "label": "Fix implementation",
+          "body": "The implementation needs adjustments before handoff.\n\nPriority:\n1. Read human feedback / PR comments\n2. Fix the code, commits, push, and PR\n3. Run targeted tests for what changed\n4. Only then run VALIDATE/evidence if the handoff is ready"
+        },
+        "review_feedback": {
+          "label": "Respond to PR review",
+          "body": "There is review/CI feedback on the PR that needs to be addressed.\n\nPriority:\n1. Read review comments and failing checks\n2. Fix only what is needed for the PR to go green\n3. Update the workpad with what was done\n4. Run VALIDATE/evidence when the PR is ready again"
+        },
+        "custom": {
+          "label": "Other",
+          "body": ""
+        }
+      }
+    }
+  }
+}
