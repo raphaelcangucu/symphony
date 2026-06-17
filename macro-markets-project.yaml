@@ -12,11 +12,11 @@ dev_env_steps:
     url_path: "/"
     working_dir: "back"
   - command: "bash .symphony/serve.sh"
-    description: "Backend Laravel API (docker compose up on $PORT + restore dumps + migrate + /api/symphony-health)"
+    description: "Backend Laravel API (docker compose up on $PORT + restore dumps + migrate + /health)"
     optional: false
     port_env: "PORT"
     primary: false
-    ready_path: "/api/symphony-health"
+    ready_path: "/health"
     ready_probe: "http"
     role: "serve"
     source: "manual"
@@ -272,14 +272,14 @@ setup:
     Symphony starts the **backend** first, then the **frontend** (serve steps boot in
     declared order; each waits for the previous to be ready). The backend `serve.sh`
     restores the committed DB dumps (Postgres + DynamoDB), runs migrations, and waits on
-    the lightweight readiness route `/api/symphony-health`. The frontend `serve.sh` then
-    waits for backend `/api/symphony-health`, writes the local API + Pusher targets into
+    the lightweight readiness route `/health`. The frontend `serve.sh` then
+    waits for backend `/health`, writes the local API + Pusher targets into
     `front/.env.local` (local-only — it fails if the backend is unhealthy), then starts
     Next.js.
 
     | Step order | Service | API target |
     |------------|---------|------------|
-    | 1–2 | Backend setup + serve | Local Laravel (readiness `/api/symphony-health`, GraphQL `/@`, GraphiQL `/graphiql`) |
+    | 1–2 | Backend setup + serve | Local Laravel (readiness `/health`, deep `/api/health` (Spatie), GraphQL `/@`, GraphiQL `/graphiql`) |
     | 3–4 | Frontend setup + serve | Wired to the backend on `127.0.0.1` (browser proxied via `/api`) |
 
     ### How to run each service (manual or Preview tab)
@@ -290,7 +290,7 @@ setup:
     cd back
     bash .symphony/setup.sh
     PORT=9100 bash .symphony/serve.sh
-    # Readiness: http://127.0.0.1:9100/api/symphony-health
+    # Readiness: http://127.0.0.1:9100/health  (deep Spatie at /api/health)
     # GraphQL:   http://127.0.0.1:9100/@
     # GraphiQL:  http://127.0.0.1:9100/graphiql (auth)
     ```
@@ -310,8 +310,9 @@ setup:
     - The backend seeds from committed dumps via `back/.symphony/db-dev.sh bootstrap`
       (Postgres `database/dump/postgresql.sql.gz` + DynamoDB `database/dump/dynamo.gz`);
       restore is idempotent (skipped when data already exists), then migrations run.
-      Readiness is the lightweight `GET /api/symphony-health` route (returns
-      `{ "status": "ok" }`) — not Spatie's `/health`.
+      Readiness is the lightweight `GET /health` route (returns
+      `{ "status": "ok" }`, defined in `routes/web.php`); Spatie's deep health
+      checks live at `GET /api/health`.
     - The frontend routes browser API calls through the Next proxy
       (`NEXT_PUBLIC_USE_API_PROXY=true` → `/api/[...path]` → `NEXT_PUBLIC_API_URL`),
       so the preview also works behind a tunnel.
