@@ -1,4 +1,6 @@
 import { ClipboardCheck, RefreshCw } from "lucide-react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
@@ -53,6 +55,7 @@ export function EvidenceTab({
   trackerConfig,
   onIssueUpdated,
 }: EvidenceTabProps) {
+  const { t } = useTranslation();
   const evidenceAttention = assessEvidenceAttention(records);
   const attentionSummary = evidenceAttentionSummary(evidenceAttention);
   const canContinueWork =
@@ -74,11 +77,11 @@ export function EvidenceTab({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium">
           <ClipboardCheck className="h-4 w-4 opacity-80" />
-          Evidence runs
+          {t("issue.evidence.tab.title")}
         </div>
         <Button onClick={onRefresh} size="sm" type="button" variant="ghost">
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-          Refresh
+          {t("issue.evidence.tab.refresh")}
         </Button>
       </div>
 
@@ -90,7 +93,7 @@ export function EvidenceTab({
 
       {!error && records.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {loading ? "Loading evidence…" : "No evidence captured for this issue yet."}
+          {loading ? t("issue.evidence.tab.loading") : t("issue.evidence.tab.empty")}
         </p>
       ) : null}
 
@@ -125,6 +128,7 @@ function EvidenceCard({
   identifier: string;
   record: EvidenceRecord;
 }) {
+  const { t } = useTranslation();
   const artifactUrl = (relative: string) =>
     evidenceArtifactUrl(projectSlug, identifier, record.runId, relative);
 
@@ -136,7 +140,7 @@ function EvidenceCard({
       <div className="flex flex-wrap items-center gap-2">
         <StatusPill status={record.status} />
         <span className="font-mono text-xs text-muted-foreground">{record.runId}</span>
-        {record.uiChange ? <Badge variant="outline">UI change</Badge> : null}
+        {record.uiChange ? <Badge variant="outline">{t("issue.evidence.tab.uiChange")}</Badge> : null}
         {record.insertedAt ? (
           <span className="ml-auto text-xs text-muted-foreground">
             {new Date(record.insertedAt).toLocaleString()}
@@ -148,11 +152,11 @@ function EvidenceCard({
         <table className="w-full text-left text-xs">
           <thead className="text-muted-foreground">
             <tr>
-              <th className="py-1 pr-2 font-medium">Kind</th>
-              <th className="py-1 pr-2 font-medium">Repo</th>
-              <th className="py-1 pr-2 font-medium">Command</th>
-              <th className="py-1 pr-2 font-medium">Status</th>
-              <th className="py-1 font-medium">Summary</th>
+              <th className="py-1 pr-2 font-medium">{t("issue.evidence.tab.columns.kind")}</th>
+              <th className="py-1 pr-2 font-medium">{t("issue.evidence.tab.columns.repo")}</th>
+              <th className="py-1 pr-2 font-medium">{t("issue.evidence.tab.columns.command")}</th>
+              <th className="py-1 pr-2 font-medium">{t("issue.evidence.tab.columns.status")}</th>
+              <th className="py-1 font-medium">{t("issue.evidence.tab.columns.summary")}</th>
             </tr>
           </thead>
           <tbody>
@@ -166,7 +170,7 @@ function EvidenceCard({
                 <td className="py-1.5 pr-2">
                   <StatusPill status={run.status} />
                 </td>
-                <td className="py-1.5">{summaryText(run)}</td>
+                <td className="py-1.5">{summaryText(run, t)}</td>
               </tr>
             ))}
           </tbody>
@@ -175,7 +179,9 @@ function EvidenceCard({
 
       {screenshots.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Screenshots</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("issue.evidence.tab.screenshots")}
+          </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {screenshots.map((relative) => {
             const filename = relative.split("/").pop() ?? relative;
@@ -195,7 +201,9 @@ function EvidenceCard({
 
       {videos.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Videos</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("issue.evidence.tab.videos")}
+          </p>
           <div className="space-y-3">
           {videos.map((relative) => (
             <AttachmentVideo
@@ -209,7 +217,7 @@ function EvidenceCard({
         </div>
       ) : null}
 
-      <ArtifactLinks artifactUrl={artifactUrl} runs={record.runs} />
+      <ArtifactLinks artifactUrl={artifactUrl} runs={record.runs} t={t} />
     </div>
   );
 }
@@ -217,14 +225,16 @@ function EvidenceCard({
 function ArtifactLinks({
   runs,
   artifactUrl,
+  t,
 }: {
   runs: EvidenceRun[];
   artifactUrl: (relative: string) => string;
+  t: TFunction;
 }) {
   const links = runs.flatMap((run) =>
     [
-      run.report ? { label: `${run.kind} report (${run.repo})`, relative: run.report } : null,
-      run.trace ? { label: `${run.kind} trace (${run.repo})`, relative: run.trace } : null,
+      run.report ? { label: t("issue.evidence.tab.reportLink", { kind: run.kind, repo: run.repo }), relative: run.report } : null,
+      run.trace ? { label: t("issue.evidence.tab.traceLink", { kind: run.kind, repo: run.repo }), relative: run.trace } : null,
     ].filter((link): link is { label: string; relative: string } => link !== null),
   );
 
@@ -247,7 +257,7 @@ function ArtifactLinks({
   );
 }
 
-function summaryText(run: EvidenceRun): string {
+function summaryText(run: EvidenceRun, t: TFunction): string {
   const summary = run.summary;
   if (!summary) return "-";
 
@@ -261,7 +271,11 @@ function summaryText(run: EvidenceRun): string {
     typeof summary.passed === "number" &&
     typeof summary.failed === "number"
   ) {
-    return `${summary.passed}/${summary.total} passed, ${summary.failed} failed`;
+    return t("issue.evidence.tab.runSummary", {
+      passed: summary.passed,
+      total: summary.total,
+      failed: summary.failed,
+    });
   }
 
   return "-";

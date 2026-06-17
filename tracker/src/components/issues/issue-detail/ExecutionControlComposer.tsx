@@ -548,6 +548,7 @@ function EffortMenu({
   disabled?: boolean;
   onChange: (effort: AssistantEffort) => void;
 }) {
+  const { t } = useTranslation();
   if (options.length === 0) return null;
 
   return (
@@ -558,7 +559,7 @@ function EffortMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Effort</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("issue.agent.effort")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={effort} onValueChange={(value) => onChange(value as AssistantEffort)}>
           {options.map((option) => (

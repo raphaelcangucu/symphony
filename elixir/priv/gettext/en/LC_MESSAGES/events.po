@@ -1,0 +1,304 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "thread started"
+msgstr "thread started"
+
+msgid "thread started (%{id})"
+msgstr "thread started (%{id})"
+
+msgid "turn started"
+msgstr "turn started"
+
+msgid "turn started (%{id})"
+msgstr "turn started (%{id})"
+
+msgid "turn completed (%{status})%{usage_suffix}"
+msgstr "turn completed (%{status})%{usage_suffix}"
+
+msgid "turn failed: %{message}"
+msgstr "turn failed: %{message}"
+
+msgid "turn failed"
+msgstr "turn failed"
+
+msgid "turn cancelled"
+msgstr "turn cancelled"
+
+msgid "turn diff updated (%{count} lines)"
+msgstr "turn diff updated (%{count} lines)"
+
+msgid "turn diff updated"
+msgstr "turn diff updated"
+
+msgid "plan updated (%{count} steps)"
+msgstr "plan updated (%{count} steps)"
+
+msgid "plan updated"
+msgstr "plan updated"
+
+msgid "thread token usage updated"
+msgstr "thread token usage updated"
+
+msgid "thread token usage updated (%{usage})"
+msgstr "thread token usage updated (%{usage})"
+
+msgid "item %{state}: %{type}%{suffix}"
+msgstr "item %{state}: %{type}%{suffix}"
+
+msgid "agent message streaming"
+msgstr "agent message streaming"
+
+msgid "plan streaming"
+msgstr "plan streaming"
+
+msgid "reasoning summary streaming"
+msgstr "reasoning summary streaming"
+
+msgid "reasoning summary section added"
+msgstr "reasoning summary section added"
+
+msgid "reasoning text streaming"
+msgstr "reasoning text streaming"
+
+msgid "command output streaming"
+msgstr "command output streaming"
+
+msgid "file change output streaming"
+msgstr "file change output streaming"
+
+msgid "command approval requested (%{command})"
+msgstr "command approval requested (%{command})"
+
+msgid "command approval requested"
+msgstr "command approval requested"
+
+msgid "file change approval requested (%{count} files)"
+msgstr "file change approval requested (%{count} files)"
+
+msgid "file change approval requested"
+msgstr "file change approval requested"
+
+msgid "tool requires user input: %{question}"
+msgstr "tool requires user input: %{question}"
+
+msgid "tool requires user input"
+msgstr "tool requires user input"
+
+msgid "account updated (auth %{mode})"
+msgstr "account updated (auth %{mode})"
+
+msgid "rate limits updated: %{summary}"
+msgstr "rate limits updated: %{summary}"
+
+msgid "account auth token refresh requested"
+msgstr "account auth token refresh requested"
+
+msgid "dynamic tool call requested (%{tool})"
+msgstr "dynamic tool call requested (%{tool})"
+
+msgid "dynamic tool call requested"
+msgstr "dynamic tool call requested"
+
+msgid "%{method} (%{msg_type})"
+msgstr "%{method} (%{msg_type})"
+
+msgid "in"
+msgstr "in"
+
+msgid "out"
+msgstr "out"
+
+msgid "total"
+msgstr "total"
+
+msgid "n/a"
+msgstr "n/a"
+
+msgid "primary %{primary}; secondary %{secondary}"
+msgstr "primary %{primary}; secondary %{secondary}"
+
+msgid "primary %{primary}"
+msgstr "primary %{primary}"
+
+msgid "secondary %{secondary}"
+msgstr "secondary %{secondary}"
+
+msgid "%{percent}% / %{mins}m"
+msgstr "%{percent}% / %{mins}m"
+
+msgid "%{percent}% used"
+msgstr "%{percent}% used"
+
+msgid "mcp startup: %{server} %{state}"
+msgstr "mcp startup: %{server} %{state}"
+
+msgid "mcp startup complete"
+msgstr "mcp startup complete"
+
+msgid "task started"
+msgstr "task started"
+
+msgid "user message received"
+msgstr "user message received"
+
+msgid "item started (%{type})"
+msgstr "item started (%{type})"
+
+msgid "item started"
+msgstr "item started"
+
+msgid "item completed (%{type})"
+msgstr "item completed (%{type})"
+
+msgid "item completed"
+msgstr "item completed"
+
+msgid "agent message content streaming"
+msgstr "agent message content streaming"
+
+msgid "reasoning streaming"
+msgstr "reasoning streaming"
+
+msgid "reasoning content streaming"
+msgstr "reasoning content streaming"
+
+msgid "reasoning section break"
+msgstr "reasoning section break"
+
+msgid "reasoning update: %{text}"
+msgstr "reasoning update: %{text}"
+
+msgid "reasoning update"
+msgstr "reasoning update"
+
+msgid "command started"
+msgstr "command started"
+
+msgid "command completed (exit %{code})"
+msgstr "command completed (exit %{code})"
+
+msgid "command completed"
+msgstr "command completed"
+
+msgid "mcp tool call started"
+msgstr "mcp tool call started"
+
+msgid "mcp tool call completed"
+msgstr "mcp tool call completed"
+
+msgid "token count update"
+msgstr "token count update"
+
+msgid "token count update (%{usage})"
+msgstr "token count update (%{usage})"
+
+msgid "%{event} (%{msg_type})"
+msgstr "%{event} (%{msg_type})"
+
+msgid "unknown"
+msgstr "unknown"
+
+msgid "updated"
+msgstr "updated"
+
+msgid "streaming%{preview}"
+msgstr "streaming%{preview}"
+
+msgid "thinking..."
+msgstr "thinking..."
+
+msgid "streaming..."
+msgstr "streaming..."
+
+msgid "turn completed (%{status}%{count_suffix})"
+msgstr "turn completed (%{status}%{count_suffix})"
+
+msgid "turn failed: %{error}"
+msgstr "turn failed: %{error}"
+
+msgid "permission denied: %{tool} (+%{more} more)"
+msgstr "permission denied: %{tool} (+%{more} more)"
+
+msgid "permission denied: %{tool}"
+msgstr "permission denied: %{tool}"
+
+msgid "permission denied"
+msgstr "permission denied"
+
+msgid "server initialized"
+msgstr "server initialized"
+
+msgid "agent message"
+msgstr "agent message"
+
+msgid "thinking"
+msgstr "thinking"
+
+msgid "tool call: %{name}"
+msgstr "tool call: %{name}"
+
+msgid "tool call"
+msgstr "tool call"
+
+msgid "tool result: %{status}%{id_suffix}"
+msgstr "tool result: %{status}%{id_suffix}"
+
+msgid "item created"
+msgstr "item created"
+
+msgid "item created: %{type}"
+msgstr "item created: %{type}"
+
+msgid "error"
+msgstr "error"
+
+msgid "ok"
+msgstr "ok"
+
+msgid "no message from %{agent} yet"
+msgstr "no message from %{agent} yet"
+
+msgid "session started (%{id})"
+msgstr "session started (%{id})"
+
+msgid "session started"
+msgstr "session started"
+
+msgid "turn blocked: waiting for user input"
+msgstr "turn blocked: waiting for user input"
+
+msgid "%{message} (auto-approved)"
+msgstr "%{message} (auto-approved)"
+
+msgid "approval request auto-approved"
+msgstr "approval request auto-approved"
+
+msgid "%{message} (auto-answered)"
+msgstr "%{message} (auto-answered)"
+
+msgid "dynamic tool call completed"
+msgstr "dynamic tool call completed"
+
+msgid "dynamic tool call failed"
+msgstr "dynamic tool call failed"
+
+msgid "unsupported dynamic tool call rejected"
+msgstr "unsupported dynamic tool call rejected"
+
+msgid "turn ended with error: %{reason}"
+msgstr "turn ended with error: %{reason}"
+
+msgid "startup failed: %{reason}"
+msgstr "startup failed: %{reason}"
+
+msgid "malformed JSON event from codex"
+msgstr "malformed JSON event from codex"
+
+msgid "error: %{error}"
+msgstr "error: %{error}"
+
+msgid "%{base} (%{tool})"
+msgstr "%{base} (%{tool})"

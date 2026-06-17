@@ -1,3 +1,13 @@
+defmodule SymphonyElixir.DevServer.ManagerTest.FakeTmux do
+  @moduledoc false
+  def open_dev_session(_project_slug, _identifier, _slug, _cwd, _opts \\ []),
+    do: {:ok, %{session_name: "sym-dev-test"}}
+
+  def kill_dev_session(_project_slug, _identifier, _slug, _opts \\ []), do: :ok
+
+  def send_keys(_session_name, _data), do: :ok
+end
+
 defmodule SymphonyElixir.DevServer.ManagerTest.MissingPaneTmux do
   @moduledoc false
   def capture_pane(session_name), do: {:error, "can't find pane: #{session_name}"}
@@ -11,8 +21,8 @@ end
 defmodule SymphonyElixir.DevServer.ManagerTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.DevServer.Manager
-  alias SymphonyElixir.DevServer.ManagerTest.{BrokenTmux, MissingPaneTmux}
+  alias SymphonyElixir.DevServer.{Instance, Manager}
+  alias SymphonyElixir.DevServer.ManagerTest.{BrokenTmux, FakeTmux, MissingPaneTmux}
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.TestSupport
@@ -535,6 +545,78 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.stop_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
   end
 
+  test "start_instance_for_server restarts a crashed instance instead of no-op", %{project: project} do
+    enable_project_dev_server!(project, port_range: [4100, 4199], max_concurrent: 2)
+    identifier = "535-start-restart"
+    workspace = prepare_workspace!(identifier)
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Front",
+          command: "npm run dev",
+          role: "serve",
+          working_dir: "front",
+          primary: true
+        }
+      ])
+
+    slug = "front"
+    key = {project.slug, identifier, slug}
+
+    {:ok, old_pid} =
+      Instance.start_link(
+        registry_name: {:via, Registry, {instance_registry(), key}},
+        project_id: project.id,
+        project_slug: project.slug,
+        identifier: identifier,
+        workspace_path: workspace,
+        step: %{
+          slug: slug,
+          command: "npm run dev",
+          working_dir: "front",
+          port_env: "PORT",
+          url_path: "/",
+          ready_probe: "tcp",
+          ready_path: "/",
+          primary: true
+        },
+        idle_timeout_ms: 60_000,
+        tmux: FakeTmux,
+        command_sender: &FakeTmux.send_keys/2,
+        port_allocator: fn _range, _claimed -> {:ok, 4101} end,
+        probe: fn "127.0.0.1", 4101, "tcp", "/" -> {:error, :timeout} end,
+        probe_interval_ms: 5,
+        max_probe_attempts: 1
+      )
+
+    assert_eventually(fn -> Instance.status(old_pid) == :crashed end)
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, identifier, slug, %{
+        working_dir: "front",
+        port: 4101,
+        url: "http://127.0.0.1:4101/",
+        status: "crashed",
+        primary: true,
+        session_name: "sym-dev-test"
+      })
+
+    result = Manager.start_instance_for_server(project.slug, identifier, record.id)
+    refute match?({:ok, [^old_pid]}, result)
+
+    new_pid =
+      case Registry.lookup(instance_registry(), key) do
+        [{pid, _}] -> pid
+        [] -> nil
+      end
+
+    assert is_pid(new_pid)
+    refute new_pid == old_pid
+    refute Process.alive?(old_pid)
+  end
+
   test "start_instance_for_server returns not_found for an unknown server id", %{project: project} do
     assert Manager.start_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
   end
@@ -613,6 +695,10 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
 
   defp reservation_table do
     Module.concat(Manager, PortReservations)
+  end
+
+  defp instance_registry do
+    Module.concat(Manager, Registry)
   end
 
   defp ensure_manager_started! do
@@ -718,4 +804,17 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
         :ok
     end
   end
+
+  defp assert_eventually(fun, attempts \\ 40)
+
+  defp assert_eventually(fun, attempts) when attempts > 0 do
+    if fun.() do
+      assert true
+    else
+      Process.sleep(25)
+      assert_eventually(fun, attempts - 1)
+    end
+  end
+
+  defp assert_eventually(_fun, 0), do: flunk("condition not met in time")
 end

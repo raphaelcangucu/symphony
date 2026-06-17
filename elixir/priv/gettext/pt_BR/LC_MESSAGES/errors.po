@@ -140,3 +140,9 @@ msgstr "Limite de taxa da API do GitHub excedido. Acesso restaurado às %{time}.
 
 msgid "GitHub API rate limit exceeded. Try again shortly."
 msgstr "Limite de taxa da API do GitHub excedido. Tente novamente em breve."
+
+msgid "Invalid GitHub pull request URL."
+msgstr "URL de pull request do GitHub inválida."
+
+msgid "A pull request URL is required."
+msgstr "Uma URL de pull request é obrigatória."

@@ -57,6 +57,7 @@ defmodule SymphonyElixir.MixProject do
           SymphonyElixir.Codex.DynamicTool,
           SymphonyElixir.Codex.EventHumanizer,
           SymphonyElixir.EventHumanizer,
+          SymphonyElixir.EventHumanizer.Text,
           SymphonyElixir.GitHub.Client,
           SymphonyElixir.GitHub.Tracker,
           SymphonyElixir.LocalTracker.Broadcaster,

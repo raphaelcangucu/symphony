@@ -9,6 +9,10 @@ defmodule SymphonyElixir.EventHumanizer do
 
   alias SymphonyElixir.Config
 
+  alias Gettext, as: GettextCore
+  alias SymphonyElixir.Settings.Ui
+  alias SymphonyElixirWeb.Gettext, as: GettextBackend
+
   @callback humanize_method(method :: String.t(), payload :: map()) :: String.t()
 
   @spec adapter() :: module()
@@ -20,5 +24,8 @@ defmodule SymphonyElixir.EventHumanizer do
   end
 
   @spec humanize_method(String.t(), map()) :: String.t()
-  def humanize_method(method, payload), do: adapter().humanize_method(method, payload)
+  def humanize_method(method, payload) do
+    GettextCore.put_locale(GettextBackend, Ui.effective_gettext_locale())
+    adapter().humanize_method(method, payload)
+  end
 end

@@ -2,6 +2,7 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
   @moduledoc "JSON API for local SQLite tracker backups."
 
   use Phoenix.Controller, formats: [:json]
+  use Gettext, backend: SymphonyElixirWeb.Gettext
 
   alias Plug.Conn
   alias SymphonyElixir.Backup
@@ -53,44 +54,18 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"category" => "all"}) do
     trigger = params_trigger(conn.params)
-
-    case Backup.create(trigger: trigger) do
-      {:ok, backup} ->
-        json(conn, %{
-          success: true,
-          message: "Backup id=#{backup.id} completed",
-          backup: Backup.present(backup)
-        })
-
-      {:error, reason} ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{success: false, message: format_error(reason), backup: nil})
-    end
+    respond_create(conn, trigger)
   end
 
   def create(conn, %{"category" => category}) when category in ["database"] do
     trigger = params_trigger(conn.params)
-
-    case Backup.create(trigger: trigger) do
-      {:ok, backup} ->
-        json(conn, %{
-          success: true,
-          message: "Backup id=#{backup.id} completed",
-          backup: Backup.present(backup)
-        })
-
-      {:error, reason} ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{success: false, message: format_error(reason), backup: nil})
-    end
+    respond_create(conn, trigger)
   end
 
   def create(conn, _params) do
     conn
     |> put_status(:bad_request)
-    |> json(%{success: false, message: "category must be database or all", backup: nil})
+    |> json(%{success: false, message: dgettext("backup", "category must be database or all"), backup: nil})
   end
 
   @spec show(Conn.t(), map()) :: Conn.t()
@@ -103,7 +78,7 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
         end
 
       :error ->
-        conn |> put_status(:bad_request) |> json(%{error: %{message: "invalid backup id"}})
+        conn |> put_status(:bad_request) |> json(%{error: %{message: dgettext("backup", "invalid backup id")}})
     end
   end
 
@@ -114,7 +89,7 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
 
     with {:ok, backup_id} <- parse_id_result(id),
          {:ok, _backup} <- Backup.restore(backup_id, restore_opts) do
-      json(conn, %{success: true, message: "Restored backup id=#{backup_id}"})
+      json(conn, %{success: true, message: dgettext("backup", "Restored backup id=%{id}", id: backup_id)})
     else
       {:error, :not_found} ->
         not_found(conn, id)
@@ -132,7 +107,7 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
 
     json(conn, %{
       success: true,
-      message: "Removed #{count} expired backup(s)",
+      message: dgettext("backup", "Removed %{count} expired backup(s)", count: count),
       count: count
     })
   end
@@ -142,14 +117,14 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
     with {:ok, backup_id} <- parse_id_result(id) do
       case Backup.delete(backup_id) do
         :ok ->
-          json(conn, %{success: true, message: "Deleted backup id=#{backup_id}"})
+          json(conn, %{success: true, message: dgettext("backup", "Deleted backup id=%{id}", id: backup_id)})
 
         {:error, :not_found} ->
           not_found(conn, backup_id)
       end
     else
       :error ->
-        conn |> put_status(:bad_request) |> json(%{error: %{message: "invalid backup id"}})
+        conn |> put_status(:bad_request) |> json(%{error: %{message: dgettext("backup", "invalid backup id")}})
     end
   end
 
@@ -172,10 +147,26 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
       false ->
         conn
         |> put_status(:not_found)
-        |> json(%{error: %{message: "backup file missing on disk"}})
+        |> json(%{error: %{message: dgettext("backup", "backup file missing on disk")}})
 
       :error ->
-        conn |> put_status(:bad_request) |> json(%{error: %{message: "invalid backup id"}})
+        conn |> put_status(:bad_request) |> json(%{error: %{message: dgettext("backup", "invalid backup id")}})
+    end
+  end
+
+  defp respond_create(conn, trigger) do
+    case Backup.create(trigger: trigger) do
+      {:ok, backup} ->
+        json(conn, %{
+          success: true,
+          message: dgettext("backup", "Backup id=%{id} completed", id: backup.id),
+          backup: Backup.present(backup)
+        })
+
+      {:error, reason} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{success: false, message: format_error(reason), backup: nil})
     end
   end
 
@@ -210,20 +201,27 @@ defmodule SymphonyElixirWeb.Tracker.BackupController do
   defp not_found(conn, id) do
     conn
     |> put_status(:not_found)
-    |> json(%{error: %{message: "Backup #{id} not found"}})
+    |> json(%{error: %{message: dgettext("backup", "Backup %{id} not found", id: id)}})
   end
 
-  defp format_error({:missing_database, path}), do: "Database file not found: #{path}"
+  defp format_error({:missing_database, path}),
+    do: dgettext("backup", "Database file not found: %{path}", path: path)
 
   defp format_error({:database_too_small, path, bytes}),
-    do: "Database file is too small to backup (#{bytes} bytes): #{path}"
+    do: dgettext("backup", "Database file is too small to backup (%{bytes} bytes): %{path}", bytes: bytes, path: path)
 
   defp format_error({:backup_too_small, path, bytes}),
-    do: "Backup file is too small to restore (#{bytes} bytes): #{path}"
+    do: dgettext("backup", "Backup file is too small to restore (%{bytes} bytes): %{path}", bytes: bytes, path: path)
 
   defp format_error({:backup_has_no_projects, current: current, backup: backup}),
-    do: "Refusing restore: current database has #{current} project(s) but backup has #{backup}. Pass force=true to override."
+    do:
+      dgettext(
+        "backup",
+        "Refusing restore: current database has %{current} project(s) but backup has %{backup}. Pass force=true to override.",
+        current: current,
+        backup: backup
+      )
 
-  defp format_error({:missing_file, path}), do: "Backup file not found: #{path}"
+  defp format_error({:missing_file, path}), do: dgettext("backup", "Backup file not found: %{path}", path: path)
   defp format_error(reason), do: inspect(reason)
 end

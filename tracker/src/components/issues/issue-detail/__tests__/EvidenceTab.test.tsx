@@ -98,7 +98,7 @@ describe("EvidenceTab", () => {
 
   it("shows the empty state when there are no records", () => {
     renderTab(<EvidenceTab {...baseProps} records={[]} />);
-    expect(screen.getByText("No evidence captured for this issue yet.")).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.evidence.tab.empty"))).toBeInTheDocument();
   });
 
   it("shows continue work when evidence is missing in review", () => {
@@ -199,8 +199,8 @@ describe("EvidenceTab", () => {
     expect(screen.getByText("unit")).toBeInTheDocument();
     expect(screen.getByText("e2e")).toBeInTheDocument();
     expect(screen.getByText("npm test")).toBeInTheDocument();
-    expect(screen.getByText("3/3 passed, 0 failed")).toBeInTheDocument();
-    expect(screen.getByText("UI change")).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.evidence.tab.runSummary", { passed: 3, total: 3, failed: 0 }))).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.evidence.tab.uiChange"))).toBeInTheDocument();
 
     const image = screen.getByTestId("attachment-image");
     expect(image.getAttribute("src")).toContain(
@@ -212,7 +212,9 @@ describe("EvidenceTab", () => {
     expect(video.getAttribute("data-src")).toContain("artifacts/videos/flow.webm");
     expect(video).toHaveTextContent("flow.webm");
 
-    const traceLink = screen.getByRole("link", { name: "e2e trace (frontend)" });
+    const traceLink = screen.getByRole("link", {
+      name: i18n.t("issue.evidence.tab.traceLink", { kind: "e2e", repo: "frontend" }),
+    });
     expect(traceLink.getAttribute("href")).toContain("artifacts/trace.zip");
   });
 

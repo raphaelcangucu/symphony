@@ -14,3 +14,9 @@ msgstr "Request failed"
 
 msgid "An agent is already running on this issue."
 msgstr "An agent is already running on this issue."
+
+msgid "Invalid GitHub pull request URL."
+msgstr "Invalid GitHub pull request URL."
+
+msgid "A pull request URL is required."
+msgstr "A pull request URL is required."

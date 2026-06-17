@@ -173,6 +173,12 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :invalid_pr_number),
     do: error(conn, 422, "invalid_pr_number", dgettext("errors", "Invalid pull request number."))
 
+  def render(conn, :invalid_pr_url),
+    do: error(conn, 422, "invalid_pr_url", dgettext("errors", "Invalid GitHub pull request URL."))
+
+  def render(conn, :pr_url_required),
+    do: error(conn, 422, "pr_url_required", dgettext("errors", "A pull request URL is required."))
+
   def render(conn, :no_failed_runs),
     do:
       error(

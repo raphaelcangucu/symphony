@@ -1,5 +1,6 @@
 import { FileText, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { fetchAttachmentObjectUrl } from "@/services/attachments";
@@ -12,6 +13,7 @@ interface AttachmentFileChipProps {
 }
 
 export function AttachmentFileChip({ src, name, className }: AttachmentFileChipProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
 
   async function open() {
@@ -20,9 +22,9 @@ export function AttachmentFileChip({ src, name, className }: AttachmentFileChipP
     try {
       const url = await fetchAttachmentObjectUrl(src);
       const opened = window.open(url, "_blank", "noopener,noreferrer");
-      if (!opened) toast.error("Allow pop-ups to open this file.");
+      if (!opened) toast.error(t("issue.attachments.popupBlocked"));
     } catch {
-      toast.error("Failed to open file.");
+      toast.error(t("issue.attachments.openFailed"));
     } finally {
       setLoading(false);
     }
@@ -32,8 +34,8 @@ export function AttachmentFileChip({ src, name, className }: AttachmentFileChipP
     <button
       type="button"
       onClick={() => void open()}
-      title={`Open ${name}`}
-      aria-label={`Open ${name}`}
+      title={t("issue.attachments.openTitle", { name })}
+      aria-label={t("issue.attachments.openAria", { name })}
       className={cn(
         "inline-flex max-w-full items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1.5 text-xs transition-colors hover:bg-muted",
         className,

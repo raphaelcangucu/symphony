@@ -255,24 +255,17 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp do_start_instance_for_server(project, identifier, server_id, runtime_options) do
-    with {:ok, slug} <- server_slug_for_id(project, identifier, server_id) do
-      case running_instance_pid(project.slug, identifier, slug) do
-        {:ok, pid} ->
-          {:ok, [pid]}
+    with {:ok, slug} <- server_slug_for_id(project, identifier, server_id),
+         {:ok, workspace_path} <- issue_workspace_path(identifier),
+         {:ok, step} <- serve_step_for_slug(project.slug, identifier, slug),
+         {:ok, reserved_steps} <-
+           reserve_ports(project, identifier, [step], runtime_options.dev_server_port_range),
+         [{step, port, key}] <- reserved_steps do
+      setup_issue_session(project.slug, identifier, workspace_path)
 
-        {:error, :not_running} ->
-          with {:ok, workspace_path} <- issue_workspace_path(identifier),
-               {:ok, step} <- serve_step_for_slug(project.slug, identifier, slug),
-               {:ok, reserved_steps} <-
-                 reserve_ports(project, identifier, [step], runtime_options.dev_server_port_range),
-               [{step, port, key}] <- reserved_steps do
-            setup_issue_session(project.slug, identifier, workspace_path)
-
-            case start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
-              {:ok, {pid, _key}} -> {:ok, [pid]}
-              {:error, reason} -> {:error, reason}
-            end
-          end
+      case start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
+        {:ok, {pid, _key}} -> {:ok, [pid]}
+        {:error, reason} -> {:error, reason}
       end
     end
   end
@@ -563,6 +556,52 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
+    slug = Map.fetch!(step, :slug)
+    project_slug = project.slug
+    step_map = step_to_map(step)
+
+    case running_instance_pid(project_slug, identifier, slug) do
+      {:ok, pid} ->
+        reuse_or_replace_instance(
+          pid,
+          project_slug,
+          identifier,
+          slug,
+          port,
+          step_map,
+          key,
+          fn ->
+            start_fresh_instance(project, identifier, workspace_path, step, port, key, runtime_options)
+          end
+        )
+
+      {:error, :not_running} ->
+        start_fresh_instance(project, identifier, workspace_path, step, port, key, runtime_options)
+    end
+  end
+
+  defp reuse_or_replace_instance(pid, project_slug, identifier, slug, port, step, key, start_fresh) do
+    case safe_instance_status(pid) do
+      :ready ->
+        if port_ready?(port, step) do
+          {:ok, {pid, key}}
+        else
+          with :ok <- do_stop_instance_for_server(project_slug, identifier, slug) do
+            start_fresh.()
+          end
+        end
+
+      status when status in [:starting, :provisioning] ->
+        await_reserved_instance_boot(pid, key)
+
+      _ ->
+        with :ok <- do_stop_instance_for_server(project_slug, identifier, slug) do
+          start_fresh.()
+        end
+    end
+  end
+
+  defp start_fresh_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
     case start_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
       {:ok, pid} -> await_reserved_instance_boot(pid, key)
       {:error, reason} -> {:error, reason}

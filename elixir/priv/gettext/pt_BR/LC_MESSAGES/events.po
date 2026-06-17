@@ -1,0 +1,304 @@
+msgid ""
+msgstr ""
+"Language: pt_BR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "thread started"
+msgstr "thread iniciada"
+
+msgid "thread started (%{id})"
+msgstr "thread iniciada (%{id})"
+
+msgid "turn started"
+msgstr "turn iniciado"
+
+msgid "turn started (%{id})"
+msgstr "turn iniciado (%{id})"
+
+msgid "turn completed (%{status})%{usage_suffix}"
+msgstr "turn concluído (%{status})%{usage_suffix}"
+
+msgid "turn failed: %{message}"
+msgstr "turn falhou: %{message}"
+
+msgid "turn failed"
+msgstr "turn falhou"
+
+msgid "turn cancelled"
+msgstr "turn cancelado"
+
+msgid "turn diff updated (%{count} lines)"
+msgstr "diff do turn atualizado (%{count} linhas)"
+
+msgid "turn diff updated"
+msgstr "diff do turn atualizado"
+
+msgid "plan updated (%{count} steps)"
+msgstr "plano atualizado (%{count} passos)"
+
+msgid "plan updated"
+msgstr "plano atualizado"
+
+msgid "thread token usage updated"
+msgstr "uso de tokens da thread atualizado"
+
+msgid "thread token usage updated (%{usage})"
+msgstr "uso de tokens da thread atualizado (%{usage})"
+
+msgid "item %{state}: %{type}%{suffix}"
+msgstr "item %{state}: %{type}%{suffix}"
+
+msgid "agent message streaming"
+msgstr "mensagem do agente em streaming"
+
+msgid "plan streaming"
+msgstr "plano em streaming"
+
+msgid "reasoning summary streaming"
+msgstr "resumo de raciocínio em streaming"
+
+msgid "reasoning summary section added"
+msgstr "seção de resumo de raciocínio adicionada"
+
+msgid "reasoning text streaming"
+msgstr "texto de raciocínio em streaming"
+
+msgid "command output streaming"
+msgstr "saída de comando em streaming"
+
+msgid "file change output streaming"
+msgstr "saída de alteração de arquivo em streaming"
+
+msgid "command approval requested (%{command})"
+msgstr "aprovação de comando solicitada (%{command})"
+
+msgid "command approval requested"
+msgstr "aprovação de comando solicitada"
+
+msgid "file change approval requested (%{count} files)"
+msgstr "aprovação de alteração de arquivo solicitada (%{count} arquivos)"
+
+msgid "file change approval requested"
+msgstr "aprovação de alteração de arquivo solicitada"
+
+msgid "tool requires user input: %{question}"
+msgstr "ferramenta requer entrada do usuário: %{question}"
+
+msgid "tool requires user input"
+msgstr "ferramenta requer entrada do usuário"
+
+msgid "account updated (auth %{mode})"
+msgstr "conta atualizada (auth %{mode})"
+
+msgid "rate limits updated: %{summary}"
+msgstr "limites de taxa atualizados: %{summary}"
+
+msgid "account auth token refresh requested"
+msgstr "atualização de token de auth da conta solicitada"
+
+msgid "dynamic tool call requested (%{tool})"
+msgstr "chamada de ferramenta dinâmica solicitada (%{tool})"
+
+msgid "dynamic tool call requested"
+msgstr "chamada de ferramenta dinâmica solicitada"
+
+msgid "%{method} (%{msg_type})"
+msgstr "%{method} (%{msg_type})"
+
+msgid "in"
+msgstr "entrada"
+
+msgid "out"
+msgstr "saída"
+
+msgid "total"
+msgstr "total"
+
+msgid "n/a"
+msgstr "n/d"
+
+msgid "primary %{primary}; secondary %{secondary}"
+msgstr "primário %{primary}; secundário %{secondary}"
+
+msgid "primary %{primary}"
+msgstr "primário %{primary}"
+
+msgid "secondary %{secondary}"
+msgstr "secundário %{secondary}"
+
+msgid "%{percent}% / %{mins}m"
+msgstr "%{percent}% / %{mins}m"
+
+msgid "%{percent}% used"
+msgstr "%{percent}% usado"
+
+msgid "mcp startup: %{server} %{state}"
+msgstr "inicialização mcp: %{server} %{state}"
+
+msgid "mcp startup complete"
+msgstr "inicialização mcp concluída"
+
+msgid "task started"
+msgstr "tarefa iniciada"
+
+msgid "user message received"
+msgstr "mensagem do usuário recebida"
+
+msgid "item started (%{type})"
+msgstr "item iniciado (%{type})"
+
+msgid "item started"
+msgstr "item iniciado"
+
+msgid "item completed (%{type})"
+msgstr "item concluído (%{type})"
+
+msgid "item completed"
+msgstr "item concluído"
+
+msgid "agent message content streaming"
+msgstr "conteúdo da mensagem do agente em streaming"
+
+msgid "reasoning streaming"
+msgstr "raciocínio em streaming"
+
+msgid "reasoning content streaming"
+msgstr "conteúdo de raciocínio em streaming"
+
+msgid "reasoning section break"
+msgstr "quebra de seção de raciocínio"
+
+msgid "reasoning update: %{text}"
+msgstr "atualização de raciocínio: %{text}"
+
+msgid "reasoning update"
+msgstr "atualização de raciocínio"
+
+msgid "command started"
+msgstr "comando iniciado"
+
+msgid "command completed (exit %{code})"
+msgstr "comando concluído (saída %{code})"
+
+msgid "command completed"
+msgstr "comando concluído"
+
+msgid "mcp tool call started"
+msgstr "chamada de ferramenta mcp iniciada"
+
+msgid "mcp tool call completed"
+msgstr "chamada de ferramenta mcp concluída"
+
+msgid "token count update"
+msgstr "atualização de contagem de tokens"
+
+msgid "token count update (%{usage})"
+msgstr "atualização de contagem de tokens (%{usage})"
+
+msgid "%{event} (%{msg_type})"
+msgstr "%{event} (%{msg_type})"
+
+msgid "unknown"
+msgstr "desconhecido"
+
+msgid "updated"
+msgstr "atualizado"
+
+msgid "streaming%{preview}"
+msgstr "streaming%{preview}"
+
+msgid "thinking..."
+msgstr "pensando..."
+
+msgid "streaming..."
+msgstr "streaming..."
+
+msgid "turn completed (%{status}%{count_suffix})"
+msgstr "turn concluído (%{status}%{count_suffix})"
+
+msgid "turn failed: %{error}"
+msgstr "turn falhou: %{error}"
+
+msgid "permission denied: %{tool} (+%{more} more)"
+msgstr "permissão negada: %{tool} (+%{more} a mais)"
+
+msgid "permission denied: %{tool}"
+msgstr "permissão negada: %{tool}"
+
+msgid "permission denied"
+msgstr "permissão negada"
+
+msgid "server initialized"
+msgstr "servidor inicializado"
+
+msgid "agent message"
+msgstr "mensagem do agente"
+
+msgid "thinking"
+msgstr "pensando"
+
+msgid "tool call: %{name}"
+msgstr "chamada de ferramenta: %{name}"
+
+msgid "tool call"
+msgstr "chamada de ferramenta"
+
+msgid "tool result: %{status}%{id_suffix}"
+msgstr "resultado da ferramenta: %{status}%{id_suffix}"
+
+msgid "item created"
+msgstr "item criado"
+
+msgid "item created: %{type}"
+msgstr "item criado: %{type}"
+
+msgid "error"
+msgstr "erro"
+
+msgid "ok"
+msgstr "ok"
+
+msgid "no message from %{agent} yet"
+msgstr "nenhuma mensagem de %{agent} ainda"
+
+msgid "session started (%{id})"
+msgstr "sessão iniciada (%{id})"
+
+msgid "session started"
+msgstr "sessão iniciada"
+
+msgid "turn blocked: waiting for user input"
+msgstr "turn bloqueado: aguardando entrada do usuário"
+
+msgid "%{message} (auto-approved)"
+msgstr "%{message} (auto-aprovado)"
+
+msgid "approval request auto-approved"
+msgstr "solicitação de aprovação auto-aprovada"
+
+msgid "%{message} (auto-answered)"
+msgstr "%{message} (auto-respondido)"
+
+msgid "dynamic tool call completed"
+msgstr "chamada de ferramenta dinâmica concluída"
+
+msgid "dynamic tool call failed"
+msgstr "chamada de ferramenta dinâmica falhou"
+
+msgid "unsupported dynamic tool call rejected"
+msgstr "chamada de ferramenta dinâmica não suportada rejeitada"
+
+msgid "turn ended with error: %{reason}"
+msgstr "turn encerrado com erro: %{reason}"
+
+msgid "startup failed: %{reason}"
+msgstr "inicialização falhou: %{reason}"
+
+msgid "malformed JSON event from codex"
+msgstr "evento JSON malformado do codex"
+
+msgid "error: %{error}"
+msgstr "erro: %{error}"
+
+msgid "%{base} (%{tool})"
+msgstr "%{base} (%{tool})"

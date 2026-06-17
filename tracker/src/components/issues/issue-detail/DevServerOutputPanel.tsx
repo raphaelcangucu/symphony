@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { fetchDevServerOutput, subscribeDevServerOutput } from "@/services/issueDevServers";
@@ -28,6 +29,7 @@ export function DevServerOutputPanel({
   sessionName,
   defaultOpen = false,
 }: DevServerOutputPanelProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   const [output, setOutput] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -55,11 +57,11 @@ export function DevServerOutputPanel({
       const response = await fetchDevServerOutput(projectSlug, issueIdentifier, serverId);
       applyOutput(response.output);
     } catch {
-      setError("Could not load server output.");
+      setError(t("issue.devServer.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [applyOutput, issueIdentifier, open, projectSlug, serverId]);
+  }, [applyOutput, issueIdentifier, open, projectSlug, serverId, t]);
 
   useEffect(() => {
     if (!open) {
@@ -109,12 +111,12 @@ export function DevServerOutputPanel({
           aria-expanded={open}
         >
           {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
-          <span>Command output</span>
+          <span>{t("issue.devServer.commandOutput")}</span>
           {sessionName ? <span className="truncate font-mono text-slate-400">{sessionName}</span> : null}
           {loading ? <Loader2 className="h-3 w-3 animate-spin text-slate-400" /> : null}
         </button>
         <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} disabled={!open}>
-          Refresh
+          {t("issue.devServer.refresh")}
         </Button>
       </div>
 
@@ -123,7 +125,7 @@ export function DevServerOutputPanel({
           {error ? <p className="mb-2 text-xs text-red-400">{error}</p> : null}
           <pre
             ref={preRef}
-            aria-label={`${slug} command output`}
+            aria-label={t("issue.devServer.outputAria", { slug })}
             className={cn(
               "max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-slate-100",
               output.trim().length === 0 && "text-slate-500",
@@ -134,7 +136,7 @@ export function DevServerOutputPanel({
               stickToBottomRef.current = nearBottom;
             }}
           >
-            {output.trim().length > 0 ? output : "No output captured yet. Output appears here while setup and serve commands run."}
+            {output.trim().length > 0 ? output : t("issue.devServer.empty")}
           </pre>
         </div>
       ) : null}

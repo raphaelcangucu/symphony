@@ -36,6 +36,7 @@ tracker:
     - Merging
   dispatch_states:
     - Todo
+    - Rework
   wait_states:
     - Human Review
   terminal_states:

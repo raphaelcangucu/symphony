@@ -1,5 +1,6 @@
 import { Plus, Search, Tag } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { labelDotClass } from "@/components/board/label-colors";
 import { resolveLabelColor, resolveLabelDisplay } from "@/lib/labelDisplay";
@@ -48,6 +49,7 @@ export function InlineLabelEditor({
   saving = false,
   onSave,
 }: InlineLabelEditorProps) {
+  const { t } = useTranslation();
   const selectedLabels = useMemo(
     () => labels.filter((label) => label.trim() !== ""),
     [labels],
@@ -171,7 +173,7 @@ export function InlineLabelEditor({
           {visibleLabels.length === 0 ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <Tag className="h-3.5 w-3.5" />
-              Add labels
+              {t("issue.labels.add")}
             </span>
           ) : (
             visibleLabels.map((label) => {
@@ -209,23 +211,25 @@ export function InlineLabelEditor({
 
       {open ? (
         <div className="absolute left-0 right-0 z-20 mt-2 overflow-hidden rounded-xl border border-border/70 bg-popover p-3 shadow-lg">
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Labels</div>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {t("issue.summary.labels")}
+          </div>
           <div className="relative mb-3">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               ref={searchRef}
               value={searchQuery}
-              placeholder="Search labels…"
-              aria-label="Search labels"
+              placeholder={t("issue.labels.searchPlaceholder")}
+              aria-label={t("issue.labels.searchAria")}
               className="h-8 w-full rounded-md border border-border/70 bg-background pl-8 pr-2.5 text-xs outline-none ring-0 focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/15"
               onChange={(event) => setSearchQuery(event.target.value)}
             />
           </div>
           {optionsLoading ? (
-            <p className="text-xs text-muted-foreground">Loading labels…</p>
+            <p className="text-xs text-muted-foreground">{t("issue.labels.loading")}</p>
           ) : filteredOptionItems.length === 0 ? (
             <p className="mb-3 text-xs text-muted-foreground">
-              {searchQuery.trim() ? "No labels match your search." : "Type a label name below to add one."}
+              {searchQuery.trim() ? t("issue.labels.noSearchMatch") : t("issue.labels.typeToAdd")}
             </p>
           ) : (
             <div className="mb-3 flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
@@ -260,8 +264,8 @@ export function InlineLabelEditor({
           <div className="flex items-center gap-2">
             <input
               value={customLabel}
-              placeholder="New label"
-              aria-label="New label"
+              placeholder={t("issue.labels.newLabelPlaceholder")}
+              aria-label={t("issue.labels.newLabelAria")}
               className="h-8 flex-1 rounded-md border border-border/70 bg-background px-2.5 text-xs outline-none ring-0 focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/15"
               onChange={(event) => setCustomLabel(event.target.value)}
               onKeyDown={(event) => {
@@ -277,7 +281,7 @@ export function InlineLabelEditor({
               className="inline-flex h-8 items-center gap-1 rounded-md border border-border/70 px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
             >
               <Plus className="h-3.5 w-3.5" />
-              Add
+              {t("issue.labels.addButton")}
             </button>
           </div>
         </div>

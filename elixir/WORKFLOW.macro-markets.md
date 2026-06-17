@@ -36,6 +36,7 @@ tracker:
     - Merging
   dispatch_states:
     - Todo
+    - Rework
   wait_states:
     - Human Review
   terminal_states:
@@ -234,7 +235,7 @@ Symphony reads and updates the GitHub Project **Status** field when moving cards
 | Todo | Orchestrator queue; move to In Progress before work |
 | In Progress | Active implementation |
 | Human Review | PR ready; poll for human decision — **no further coding turns** |
-| Rework | Address review feedback (see **Rework flow** below) |
+| Rework | Orchestrator queue for review feedback; address before returning to Human Review (see **Rework flow** below) |
 | Merging | Follow `.codex/skills/land/SKILL.md` (PR base per repo: front → **`homolog`**, back → **`dev`**) |
 | Done / Cancelled / Duplicate | Terminal |
 

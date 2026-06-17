@@ -15,6 +15,8 @@ defmodule SymphonyElixir.Claude.EventHumanizer do
 
   import SymphonyElixir.EventHumanizerHelpers
 
+  alias SymphonyElixir.EventHumanizer.Text, as: T
+
   @impl true
   def humanize_method("item/created", payload) do
     item =
@@ -37,13 +39,13 @@ defmodule SymphonyElixir.Claude.EventHumanizer do
       "text" ->
         text = map_value(delta, ["text", :text])
         preview = if is_binary(text), do: ": #{inline_text(text)}", else: ""
-        "streaming#{preview}"
+        T.t("streaming%{preview}", preview: preview)
 
       "thinking" ->
-        "thinking..."
+        T.t("thinking...")
 
       _ ->
-        "streaming..."
+        T.t("streaming...")
     end
   end
 
@@ -52,7 +54,9 @@ defmodule SymphonyElixir.Claude.EventHumanizer do
       map_path(payload, ["params", "turn_id"]) ||
         map_path(payload, [:params, :turn_id])
 
-    if is_binary(turn_id), do: "turn started (#{short_id(turn_id)})", else: "turn started"
+    if is_binary(turn_id),
+      do: T.t("turn started (%{id})", id: short_id(turn_id)),
+      else: T.t("turn started")
   end
 
   def humanize_method("turn/completed", payload) do
@@ -66,7 +70,7 @@ defmodule SymphonyElixir.Claude.EventHumanizer do
         map_path(payload, [:params, :items_count])
 
     count_suffix = if is_integer(items_count), do: ", #{items_count} items", else: ""
-    "turn completed (#{status}#{count_suffix})"
+    T.t("turn completed (%{status}%{count_suffix})", status: status, count_suffix: count_suffix)
   end
 
   def humanize_method("turn/failed", payload) do
@@ -74,7 +78,9 @@ defmodule SymphonyElixir.Claude.EventHumanizer do
       map_path(payload, ["params", "error"]) ||
         map_path(payload, [:params, :error])
 
-    if is_binary(error), do: "turn failed: #{inline_text(error)}", else: "turn failed"
+    if is_binary(error),
+      do: T.t("turn failed: %{error}", error: inline_text(error)),
+      else: T.t("turn failed")
   end
 
   def humanize_method("turn/permission_denied", payload) do
@@ -87,31 +93,31 @@ defmodule SymphonyElixir.Claude.EventHumanizer do
       [first | _] ->
         tool = map_value(first, ["tool_name", :tool_name])
         count = length(denials)
-        tool_text = if is_binary(tool), do: tool, else: "unknown"
+        tool_text = if is_binary(tool), do: tool, else: T.t("unknown")
 
         if count > 1 do
-          "permission denied: #{tool_text} (+#{count - 1} more)"
+          T.t("permission denied: %{tool} (+%{more} more)", tool: tool_text, more: count - 1)
         else
-          "permission denied: #{tool_text}"
+          T.t("permission denied: %{tool}", tool: tool_text)
         end
 
       _ ->
-        "permission denied"
+        T.t("permission denied")
     end
   end
 
-  def humanize_method("initialized", _payload), do: "server initialized"
+  def humanize_method("initialized", _payload), do: T.t("server initialized")
 
   def humanize_method(method, _payload), do: method
 
   defp humanize_created_item(item) do
     case map_value(item, ["type", :type]) do
-      "text" -> with_preview("agent message", map_value(item, ["text", :text]))
-      "thinking" -> with_preview("thinking", map_value(item, ["thinking", :thinking]))
+      "text" -> with_preview(T.t("agent message"), map_value(item, ["text", :text]))
+      "thinking" -> with_preview(T.t("thinking"), map_value(item, ["thinking", :thinking]))
       "tool_call" -> humanize_tool_call(item)
       "tool_result" -> humanize_tool_result(item)
-      nil -> "item created"
-      other -> "item created: #{humanize_item_type(other)}"
+      nil -> T.t("item created")
+      other -> T.t("item created: %{type}", type: humanize_item_type(other))
     end
   end
 
@@ -120,14 +126,14 @@ defmodule SymphonyElixir.Claude.EventHumanizer do
 
   defp humanize_tool_call(item) do
     name = map_value(item, ["name", :name])
-    if is_binary(name), do: "tool call: #{name}", else: "tool call"
+    if is_binary(name), do: T.t("tool call: %{name}", name: name), else: T.t("tool call")
   end
 
   defp humanize_tool_result(item) do
     tool_id = map_value(item, ["tool_use_id", :tool_use_id])
     is_error = map_value(item, ["is_error", :is_error])
-    status = if is_error, do: "error", else: "ok"
+    status = if is_error, do: T.t("error"), else: T.t("ok")
     id_suffix = if is_binary(tool_id), do: " (#{short_id(tool_id)})", else: ""
-    "tool result: #{status}#{id_suffix}"
+    T.t("tool result: %{status}%{id_suffix}", status: status, id_suffix: id_suffix)
   end
 end

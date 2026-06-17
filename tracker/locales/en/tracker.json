@@ -141,7 +141,36 @@
       "agentMenu": "Agent",
       "steer": "Steer",
       "queue": "Queue",
-      "pausing": "Pausing…"
+      "pausing": "Pausing…",
+      "effort": "Effort",
+      "tab": {
+        "runStatus": "Run status",
+        "noActiveAgent": "No active agent",
+        "session": "Session",
+        "turn": "Turn",
+        "runtime": "Runtime",
+        "started": "Started",
+        "lastActivity": "Last activity",
+        "retryAttempt": "Retry attempt",
+        "goalSource": "Source: {{source}}",
+        "goalSourceNative": "agent native state",
+        "goalSourcePrompt": "prompt guidance",
+        "goalCapabilities": "Capabilities: {{list}}",
+        "noExecution": "No agent is currently executing this issue.",
+        "latestUpdate": "Latest update",
+        "lastError": "Last error",
+        "tokens": "Tokens",
+        "input": "Input",
+        "output": "Output",
+        "total": "Total",
+        "assignment": "Assignment",
+        "noAgentAssigned": "No agent assigned",
+        "agentSection": "Agent",
+        "inherit": "Inherit",
+        "stopToChange": "Stop the active run to change the agent.",
+        "retryPaused": "Retries are paused when you pick a different agent. Move the issue out of its active state to stop re-dispatch entirely.",
+        "updateFailed": "Failed to update agent"
+      }
     },
     "drawer": {
       "tabs": {
@@ -299,7 +328,64 @@
       "incomplete": "Validation incomplete — {{details}}{{suffix}}",
       "failedStatus": "Latest evidence has status \"{{status}}\".",
       "failedRunsHeader": "Runs that failed or were blocked on the last attempt:",
-      "absent": "Evidence: absent"
+      "absent": "Evidence: absent",
+      "tab": {
+        "title": "Evidence runs",
+        "refresh": "Refresh",
+        "loading": "Loading evidence…",
+        "empty": "No evidence captured for this issue yet.",
+        "uiChange": "UI change",
+        "columns": {
+          "kind": "Kind",
+          "repo": "Repo",
+          "command": "Command",
+          "status": "Status",
+          "summary": "Summary"
+        },
+        "screenshots": "Screenshots",
+        "videos": "Videos",
+        "reportLink": "{{kind}} report ({{repo}})",
+        "traceLink": "{{kind}} trace ({{repo}})",
+        "runSummary": "{{passed}}/{{total}} passed, {{failed}} failed"
+      }
+    },
+    "summary": {
+      "openInGitHub": "Open in GitHub",
+      "openInLinear": "Open in Linear",
+      "openIssue": "Open issue",
+      "preview": "Preview",
+      "previewProvisioning": "Preview provisioning...",
+      "previewStarting": "Preview starting...",
+      "previewCrashed": "Preview crashed",
+      "description": "Description",
+      "noDescription": "No description yet.",
+      "agentWorkpad": "Agent Workpad",
+      "viewAllComments": "View all comments",
+      "status": "Status",
+      "priority": "Priority",
+      "assignee": "Assignee",
+      "agent": "Agent",
+      "updated": "Updated",
+      "labels": "Labels",
+      "noLabels": "No labels"
+    },
+    "labels": {
+      "add": "Add labels",
+      "searchPlaceholder": "Search labels…",
+      "searchAria": "Search labels",
+      "loading": "Loading labels…",
+      "noSearchMatch": "No labels match your search.",
+      "typeToAdd": "Type a label name below to add one.",
+      "newLabelPlaceholder": "New label",
+      "newLabelAria": "New label",
+      "addButton": "Add"
+    },
+    "devServer": {
+      "commandOutput": "Command output",
+      "refresh": "Refresh",
+      "loadFailed": "Could not load server output.",
+      "outputAria": "{{slug}} command output",
+      "empty": "No output captured yet. Output appears here while setup and serve commands run."
     },
     "returnToAgent": {
       "resumeValidation": "Resume validation",
@@ -350,7 +436,11 @@
     },
     "attachments": {
       "imageUnavailable": "Image uploads are not available here.",
-      "imageUploadFailed": "Failed to upload image."
+      "imageUploadFailed": "Failed to upload image.",
+      "popupBlocked": "Allow pop-ups to open this file.",
+      "openFailed": "Failed to open file.",
+      "openTitle": "Open {{name}}",
+      "openAria": "Open {{name}}"
     },
     "create": {
       "trigger": "New issue",
@@ -420,6 +510,75 @@
         "linkFailed": "Could not link the pull request.",
         "unlinked": "Pull request unlinked.",
         "unlinkFailed": "Could not unlink the pull request."
+      },
+      "panel": {
+        "branchUpdateStarted": "Branch update started — following CI…",
+        "branchUpdateFailed": "Could not update the branch.",
+        "forceMergeCompleted": "Force merge completed — issue moved to Done.",
+        "mergeCompleted": "Pull request merged — issue moved to Done.",
+        "mergeFailed": "Could not merge the pull request.",
+        "originLinked": "linked",
+        "originAgent": "agent",
+        "conflictTitle": "This branch has conflicts that must be resolved before it can merge.",
+        "titleFallback": "Pull request #{{number}}",
+        "updated": "Updated {{time}}",
+        "mergeMethodLabel": "Merge method",
+        "mergeMethodMerge": "Merge commit",
+        "mergeMethodSquash": "Squash",
+        "mergeMethodRebase": "Rebase",
+        "merging": "Merging…",
+        "merge": "Merge",
+        "forceMerging": "Force merging…",
+        "forceMerge": "Force merge",
+        "forceMergeTitle": "Attempts an immediate merge with the configured GitHub token. GitHub still enforces token permissions and branch rules.",
+        "updating": "Updating…",
+        "updateBranch": "Update branch ({{count}} behind)",
+        "open": "Open",
+        "unlinkTitle": "Unlink this pull request",
+        "unlinkAria": "Unlink this pull request",
+        "statusChecks": "Status checks",
+        "statusFallback": "status",
+        "noChecks": "No CI checks reported for this pull request.",
+        "conversation": "Conversation",
+        "jobFallback": "job"
+      },
+      "meta": {
+        "state": {
+          "open": "Open",
+          "draft": "Draft",
+          "merged": "Merged",
+          "closed": "Closed",
+          "unknown": "Pull request"
+        },
+        "job": {
+          "passed": "Passed",
+          "failed": "Failed",
+          "running": "Running",
+          "pending": "Pending",
+          "neutral": "Neutral",
+          "skipped": "Skipped",
+          "actionRequired": "Action required"
+        },
+        "rollup": {
+          "allPassed": "All checks passed",
+          "someFailed": "Some checks failed",
+          "checksRunning": "Checks running",
+          "noChecks": "No checks"
+        },
+        "conflicts": "Conflicts"
+      },
+      "link": {
+        "titleFallback": "Pull request #{{number}}",
+        "counts": {
+          "passed_one": "{{count}} passed",
+          "passed_other": "{{count}} passed",
+          "failed_one": "{{count}} failed",
+          "failed_other": "{{count}} failed",
+          "running_one": "{{count}} running",
+          "running_other": "{{count}} running",
+          "other_one": "{{count}} other",
+          "other_other": "{{count}} other"
+        }
       }
     }
   },
@@ -569,6 +728,25 @@
         "maxResults": "Max results",
         "maxResultsPlaceholder": "500"
       }
+    },
+    "createDialog": {
+      "trigger": "New project",
+      "title": "Create project",
+      "description": "Add a local project board backed by the tracker API.",
+      "namePlaceholder": "Project name",
+      "slugPlaceholder": "project-slug",
+      "descriptionPlaceholder": "Description",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "submit": "Create project",
+      "validation": {
+        "nameRequired": "Project name is required",
+        "slugRequired": "Project slug is required",
+        "slugFormat": "Use a lowercase URL slug such as macro-markets",
+        "invalid": "Invalid project"
+      },
+      "created": "Project created",
+      "createFailed": "Failed to create project"
     },
     "list": {
       "title": "Projects",

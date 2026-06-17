@@ -141,7 +141,36 @@
       "agentMenu": "Agente",
       "steer": "Direcionar",
       "queue": "Enfileirar",
-      "pausing": "Pausando…"
+      "pausing": "Pausando…",
+      "effort": "Esforço",
+      "tab": {
+        "runStatus": "Status da execução",
+        "noActiveAgent": "Nenhum agente ativo",
+        "session": "Sessão",
+        "turn": "Turno",
+        "runtime": "Tempo de execução",
+        "started": "Iniciado",
+        "lastActivity": "Última atividade",
+        "retryAttempt": "Tentativa de retry",
+        "goalSource": "Origem: {{source}}",
+        "goalSourceNative": "estado nativo do agente",
+        "goalSourcePrompt": "orientação do prompt",
+        "goalCapabilities": "Capacidades: {{list}}",
+        "noExecution": "Nenhum agente está executando esta issue no momento.",
+        "latestUpdate": "Última atualização",
+        "lastError": "Último erro",
+        "tokens": "Tokens",
+        "input": "Entrada",
+        "output": "Saída",
+        "total": "Total",
+        "assignment": "Atribuição",
+        "noAgentAssigned": "Nenhum agente atribuído",
+        "agentSection": "Agente",
+        "inherit": "Herdar",
+        "stopToChange": "Pare a execução ativa para trocar o agente.",
+        "retryPaused": "Retries ficam pausados ao escolher outro agente. Mova a issue para fora do estado ativo para parar o re-dispatch por completo.",
+        "updateFailed": "Falha ao atualizar agente"
+      }
     },
     "drawer": {
       "tabs": {
@@ -299,7 +328,64 @@
       "incomplete": "Validação incompleta — {{details}}{{suffix}}",
       "failedStatus": "Última evidência com status \"{{status}}\".",
       "failedRunsHeader": "Runs que falharam ou ficaram bloqueados na última tentativa:",
-      "absent": "Evidence: ausente"
+      "absent": "Evidence: ausente",
+      "tab": {
+        "title": "Runs de evidência",
+        "refresh": "Atualizar",
+        "loading": "Carregando evidências…",
+        "empty": "Nenhuma evidência capturada para esta issue ainda.",
+        "uiChange": "Mudança de UI",
+        "columns": {
+          "kind": "Tipo",
+          "repo": "Repo",
+          "command": "Comando",
+          "status": "Status",
+          "summary": "Resumo"
+        },
+        "screenshots": "Screenshots",
+        "videos": "Vídeos",
+        "reportLink": "relatório {{kind}} ({{repo}})",
+        "traceLink": "trace {{kind}} ({{repo}})",
+        "runSummary": "{{passed}}/{{total}} passou, {{failed}} falhou"
+      }
+    },
+    "summary": {
+      "openInGitHub": "Abrir no GitHub",
+      "openInLinear": "Abrir no Linear",
+      "openIssue": "Abrir issue",
+      "preview": "Preview",
+      "previewProvisioning": "Provisionando preview...",
+      "previewStarting": "Iniciando preview...",
+      "previewCrashed": "Preview falhou",
+      "description": "Descrição",
+      "noDescription": "Sem descrição ainda.",
+      "agentWorkpad": "Workpad do agente",
+      "viewAllComments": "Ver todos os comentários",
+      "status": "Status",
+      "priority": "Prioridade",
+      "assignee": "Responsável",
+      "agent": "Agente",
+      "updated": "Atualizado",
+      "labels": "Labels",
+      "noLabels": "Sem labels"
+    },
+    "labels": {
+      "add": "Adicionar labels",
+      "searchPlaceholder": "Buscar labels…",
+      "searchAria": "Buscar labels",
+      "loading": "Carregando labels…",
+      "noSearchMatch": "Nenhum label corresponde à busca.",
+      "typeToAdd": "Digite um nome de label abaixo para adicionar.",
+      "newLabelPlaceholder": "Novo label",
+      "newLabelAria": "Novo label",
+      "addButton": "Adicionar"
+    },
+    "devServer": {
+      "commandOutput": "Saída do comando",
+      "refresh": "Atualizar",
+      "loadFailed": "Não foi possível carregar a saída do servidor.",
+      "outputAria": "saída do comando {{slug}}",
+      "empty": "Nenhuma saída capturada ainda. A saída aparece aqui enquanto os comandos de setup e serve rodam."
     },
     "returnToAgent": {
       "resumeValidation": "Retomar validação",
@@ -350,7 +436,11 @@
     },
     "attachments": {
       "imageUnavailable": "Upload de imagens não está disponível aqui.",
-      "imageUploadFailed": "Falha ao enviar imagem."
+      "imageUploadFailed": "Falha ao enviar imagem.",
+      "popupBlocked": "Permita pop-ups para abrir este arquivo.",
+      "openFailed": "Falha ao abrir arquivo.",
+      "openTitle": "Abrir {{name}}",
+      "openAria": "Abrir {{name}}"
     },
     "create": {
       "trigger": "Nova issue",
@@ -420,6 +510,75 @@
         "linkFailed": "Não foi possível vincular o pull request.",
         "unlinked": "Pull request desvinculado.",
         "unlinkFailed": "Não foi possível desvincular o pull request."
+      },
+      "panel": {
+        "branchUpdateStarted": "Atualização do branch iniciada — acompanhando CI…",
+        "branchUpdateFailed": "Não foi possível atualizar o branch.",
+        "forceMergeCompleted": "Force merge concluído — issue movida para Done.",
+        "mergeCompleted": "Pull request mergeado — issue movida para Done.",
+        "mergeFailed": "Não foi possível fazer merge do pull request.",
+        "originLinked": "vinculado",
+        "originAgent": "agente",
+        "conflictTitle": "Este branch tem conflitos que devem ser resolvidos antes do merge.",
+        "titleFallback": "Pull request #{{number}}",
+        "updated": "Atualizado {{time}}",
+        "mergeMethodLabel": "Método de merge",
+        "mergeMethodMerge": "Merge commit",
+        "mergeMethodSquash": "Squash",
+        "mergeMethodRebase": "Rebase",
+        "merging": "Fazendo merge…",
+        "merge": "Merge",
+        "forceMerging": "Force merge…",
+        "forceMerge": "Force merge",
+        "forceMergeTitle": "Tenta um merge imediato com o token GitHub configurado. O GitHub ainda aplica permissões do token e regras de branch.",
+        "updating": "Atualizando…",
+        "updateBranch": "Atualizar branch ({{count}} atrás)",
+        "open": "Abrir",
+        "unlinkTitle": "Desvincular este pull request",
+        "unlinkAria": "Desvincular este pull request",
+        "statusChecks": "Status checks",
+        "statusFallback": "status",
+        "noChecks": "Nenhum check de CI reportado para este pull request.",
+        "conversation": "Conversa",
+        "jobFallback": "job"
+      },
+      "meta": {
+        "state": {
+          "open": "Aberto",
+          "draft": "Rascunho",
+          "merged": "Mergeado",
+          "closed": "Fechado",
+          "unknown": "Pull request"
+        },
+        "job": {
+          "passed": "Passou",
+          "failed": "Falhou",
+          "running": "Executando",
+          "pending": "Pendente",
+          "neutral": "Neutro",
+          "skipped": "Ignorado",
+          "actionRequired": "Ação necessária"
+        },
+        "rollup": {
+          "allPassed": "Todos os checks passaram",
+          "someFailed": "Alguns checks falharam",
+          "checksRunning": "Checks em execução",
+          "noChecks": "Sem checks"
+        },
+        "conflicts": "Conflitos"
+      },
+      "link": {
+        "titleFallback": "Pull request #{{number}}",
+        "counts": {
+          "passed_one": "{{count}} passou",
+          "passed_other": "{{count}} passaram",
+          "failed_one": "{{count}} falhou",
+          "failed_other": "{{count}} falharam",
+          "running_one": "{{count}} executando",
+          "running_other": "{{count}} executando",
+          "other_one": "{{count}} outro",
+          "other_other": "{{count}} outros"
+        }
       }
     }
   },
@@ -569,6 +728,25 @@
         "maxResults": "Máximo de resultados",
         "maxResultsPlaceholder": "500"
       }
+    },
+    "createDialog": {
+      "trigger": "Novo projeto",
+      "title": "Criar projeto",
+      "description": "Adicione um board local de projeto com o tracker API.",
+      "namePlaceholder": "Nome do projeto",
+      "slugPlaceholder": "project-slug",
+      "descriptionPlaceholder": "Descrição",
+      "cancel": "Cancelar",
+      "creating": "Criando...",
+      "submit": "Criar projeto",
+      "validation": {
+        "nameRequired": "Nome do projeto é obrigatório",
+        "slugRequired": "Slug do projeto é obrigatório",
+        "slugFormat": "Use um slug em minúsculas, como macro-markets",
+        "invalid": "Projeto inválido"
+      },
+      "created": "Projeto criado",
+      "createFailed": "Falha ao criar projeto"
     },
     "list": {
       "title": "Projetos",

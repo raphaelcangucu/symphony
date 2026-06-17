@@ -1,10 +1,11 @@
 import { ArrowRight, ExternalLink, GitBranch } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
 import type { PullRequest } from "@/types/pull-request";
 
-import { jobMeta, prStateMeta, rollupMeta } from "./pr-meta";
+import { jobOutcomeCategory, prStateMeta, rollupMeta } from "./pr-meta";
 
 interface PullRequestLinkProps {
   pullRequest: PullRequest;
@@ -12,9 +13,10 @@ interface PullRequestLinkProps {
 }
 
 export function PullRequestLink({ pullRequest: pr, onOpen }: PullRequestLinkProps) {
-  const state = prStateMeta(pr.state);
+  const { t } = useTranslation();
+  const state = prStateMeta(pr.state, t);
   const StateIcon = state.Icon;
-  const rollup = rollupMeta(pr.checksState);
+  const rollup = rollupMeta(pr.checksState, t);
   const RollupIcon = rollup.Icon;
 
   return (
@@ -38,19 +40,17 @@ export function PullRequestLink({ pullRequest: pr, onOpen }: PullRequestLinkProp
 }
 
 function PullRequestPreview({ pullRequest: pr }: { pullRequest: PullRequest }) {
-  const state = prStateMeta(pr.state);
+  const { t } = useTranslation();
+  const state = prStateMeta(pr.state, t);
   const StateIcon = state.Icon;
-  const rollup = rollupMeta(pr.checksState);
+  const rollup = rollupMeta(pr.checksState, t);
   const RollupIcon = rollup.Icon;
 
   const jobs = pr.pipelines.flatMap((pipeline) => pipeline.jobs);
   const counts = jobs.reduce(
     (acc, job) => {
-      const label = jobMeta(job).label;
-      if (label === "Passed") acc.passed += 1;
-      else if (label === "Failed") acc.failed += 1;
-      else if (label === "Running" || label === "Pending") acc.running += 1;
-      else acc.other += 1;
+      const category = jobOutcomeCategory(job);
+      acc[category] += 1;
       return acc;
     },
     { passed: 0, failed: 0, running: 0, other: 0 },
@@ -75,7 +75,9 @@ function PullRequestPreview({ pullRequest: pr }: { pullRequest: PullRequest }) {
           </a>
         ) : null}
       </div>
-      <p className="text-sm font-medium leading-snug">{pr.title ?? `Pull request #${pr.number}`}</p>
+      <p className="text-sm font-medium leading-snug">
+        {pr.title ?? t("issue.pullRequest.link.titleFallback", { number: pr.number })}
+      </p>
       {pr.headRef ? (
         <p className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
           <GitBranch className="h-3 w-3" />
@@ -94,10 +96,24 @@ function PullRequestPreview({ pullRequest: pr }: { pullRequest: PullRequest }) {
       </div>
       {jobs.length > 0 ? (
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          {counts.passed > 0 ? <span className="text-emerald-600 dark:text-emerald-400">{counts.passed} passed</span> : null}
-          {counts.failed > 0 ? <span className="text-rose-600 dark:text-rose-400">{counts.failed} failed</span> : null}
-          {counts.running > 0 ? <span className="text-amber-600 dark:text-amber-400">{counts.running} running</span> : null}
-          {counts.other > 0 ? <span>{counts.other} other</span> : null}
+          {counts.passed > 0 ? (
+            <span className="text-emerald-600 dark:text-emerald-400">
+              {t("issue.pullRequest.link.counts.passed", { count: counts.passed })}
+            </span>
+          ) : null}
+          {counts.failed > 0 ? (
+            <span className="text-rose-600 dark:text-rose-400">
+              {t("issue.pullRequest.link.counts.failed", { count: counts.failed })}
+            </span>
+          ) : null}
+          {counts.running > 0 ? (
+            <span className="text-amber-600 dark:text-amber-400">
+              {t("issue.pullRequest.link.counts.running", { count: counts.running })}
+            </span>
+          ) : null}
+          {counts.other > 0 ? (
+            <span>{t("issue.pullRequest.link.counts.other", { count: counts.other })}</span>
+          ) : null}
         </div>
       ) : null}
     </div>
