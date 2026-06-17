@@ -7,8 +7,11 @@ import {
   ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 
 import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
+import { i18n } from "@/i18n";
 import { cn, formatDateTime } from "@/lib/utils";
 import { listActivityEvents } from "@/services/activity";
 import type { ActivityEvent } from "@/types/activity";
@@ -32,33 +35,50 @@ function metaString(metadata: Record<string, unknown>, key: string): string | nu
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function eventMeta(event: ActivityEvent): EventMeta {
+function eventMeta(event: ActivityEvent, t: TFunction = i18n.t.bind(i18n) as TFunction): EventMeta {
   const status = metaString(event.metadata, "status");
   switch (event.eventType) {
     case "issue_created":
-      return { Icon: CirclePlus, className: "text-emerald-600 dark:text-emerald-400", summary: "Issue created" };
+      return {
+        Icon: CirclePlus,
+        className: "text-emerald-600 dark:text-emerald-400",
+        summary: t("issue.activity.events.issueCreated"),
+      };
     case "issue_moved":
       return {
         Icon: ArrowRightLeft,
         className: "text-blue-600 dark:text-blue-400",
-        summary: status ? `Moved to ${status}` : "Status changed",
+        summary: status ? t("issue.activity.events.movedTo", { status }) : t("issue.activity.events.statusChanged"),
       };
     case "issue_updated":
       return {
         Icon: Pencil,
         className: "text-muted-foreground",
-        summary: status ? `Updated · ${status}` : "Issue updated",
+        summary: status ? t("issue.activity.events.updated", { status }) : t("issue.activity.events.issueUpdated"),
       };
     case "comment_created":
-      return { Icon: MessageSquare, className: "text-violet-600 dark:text-violet-400", summary: "Comment added" };
+      return {
+        Icon: MessageSquare,
+        className: "text-violet-600 dark:text-violet-400",
+        summary: t("issue.activity.events.commentAdded"),
+      };
     case "blocker_changed":
-      return { Icon: ShieldAlert, className: "text-amber-600 dark:text-amber-400", summary: "Blocker updated" };
+      return {
+        Icon: ShieldAlert,
+        className: "text-amber-600 dark:text-amber-400",
+        summary: t("issue.activity.events.blockerUpdated"),
+      };
     default:
-      return { Icon: Pencil, className: "text-muted-foreground", summary: event.eventType.replaceAll("_", " ") };
+      return {
+        Icon: Pencil,
+        className: "text-muted-foreground",
+        summary: event.eventType.replaceAll("_", " "),
+      };
   }
 }
 
 export function ActivityTab({ projectSlug, issue, execution }: ActivityTabProps) {
+  const { t } = useTranslation();
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -83,8 +103,7 @@ export function ActivityTab({ projectSlug, issue, execution }: ActivityTabProps)
   if (loaded && !hasContent) {
     return (
       <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-        No activity recorded yet for {issue.identifier}. Tracker events appear here as the issue moves, gets comments,
-        or is worked on.
+        {t("issue.activity.empty", { identifier: issue.identifier })}
       </div>
     );
   }
@@ -95,7 +114,7 @@ export function ActivityTab({ projectSlug, issue, execution }: ActivityTabProps)
         <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
           <AgentStatusBadge status={execution.status} />
           <div className="min-w-0 text-xs text-muted-foreground">
-            {execution.lastMessage || execution.lastEvent || "Agent is attached to this issue."}
+            {execution.lastMessage || execution.lastEvent || t("issue.activity.agentAttached")}
             {execution.lastEventAt ? (
               <span className="ml-1">· {formatDateTime(execution.lastEventAt)}</span>
             ) : null}
@@ -106,7 +125,7 @@ export function ActivityTab({ projectSlug, issue, execution }: ActivityTabProps)
       {events.length > 0 ? (
         <ol className="relative space-y-4 border-l pl-5">
           {events.map((event) => {
-            const meta = eventMeta(event);
+            const meta = eventMeta(event, t);
             const Icon = meta.Icon;
             return (
               <li key={event.id} className="relative">

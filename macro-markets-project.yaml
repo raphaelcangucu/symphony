@@ -129,9 +129,9 @@ setup:
     codex:
       approval_policy: never
       command: codex --config shell_environment_policy.inherit=all app-server
-      thread_sandbox: workspace-write
+      thread_sandbox: danger-full-access
       turn_sandbox_policy:
-        type: workspaceWrite
+        type: dangerFullAccess
     dev_server:
       enabled: true
       idle_timeout_ms: 1800000
@@ -404,13 +404,12 @@ setup:
     http://localhost:4000/tracker/assistant/7006
     - Treat ticket `Validation`, `Test Plan`, or `Testing` sections as required; mirror them in the workpad.
     - **Frontend (`front/`)** — when you changed frontend code:
-      - Run lint: `cd front && npm run lint`
-      - Run unit tests: `cd front && npm run test:unit` (or targeted: `npm run test:unit -- tests/...`)
-      - Add/update Vitest tests under `front/tests/` (mirror `front/src/`).
-    - **Backend (`back/`)** — when you changed backend code:
-      - Run tests: `cd back && ./vibe test` (equivalently `vendor/bin/pest`).
-      - Use `sail`/`vibe` for artisan/commands (not bare `php`).
-      - Add/update Pest tests under `back/tests/`.
+      - Lint **changed paths only**: `cd front && npx eslint --max-warnings 0 <paths-from-git-diff>`
+      - Unit **scoped to the change**: `cd front && npm run test:unit -- tests/...` (mirror changed `src/` under `tests/`)
+      - Do **not** run `npm run lint` or `npm run test:unit` without paths during agent validation — CI owns full regression.
+    - **Backend (`back/`)** — only when `back/` has a git diff:
+      - Run scoped Pest: `cd back && ./vibe test tests/Feature/MyTest.php` or `./vibe test --filter=MyTest`
+      - Do **not** run `./vibe test` (full suite) unless the ticket explicitly requires it.
     - Record in workpad **Validation**: `targeted tests: <command>` and outcome for each repo touched.
     - Do **not** move to **Human Review** until, for every repo you changed:
       - Acceptance criteria are met

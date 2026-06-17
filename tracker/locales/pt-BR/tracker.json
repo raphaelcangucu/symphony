@@ -1,6 +1,14 @@
 {
   "common": {
-    "loading": "Carregando…"
+    "loading": "Carregando…",
+    "close": "Fechar",
+    "save": "Salvar",
+    "refresh": "Atualizar"
+  },
+  "ui": {
+    "dialog": {
+      "close": "Fechar"
+    }
   },
   "settings": {
     "title": "Configurações",
@@ -143,6 +151,14 @@
       "queue": "Enfileirar",
       "pausing": "Pausando…",
       "effort": "Esforço",
+      "executionStatus": {
+        "live": "Ao vivo",
+        "idle": "Ocioso",
+        "waiting": "Aguardando",
+        "retrying": "Repetindo",
+        "error": "Erro",
+        "aborted": "Abortado"
+      },
       "tab": {
         "runStatus": "Status da execução",
         "noActiveAgent": "Nenhum agente ativo",
@@ -204,8 +220,34 @@
         "workspaceMissing": "Workspace ainda não criado — execute o agente ou abra o terminal primeiro",
         "workspacePreparing": "Workspace ainda preparando — tente novamente em instantes",
         "unavailableUpgrade": "Editor indisponível — reinicie o Symphony após atualizar (make build && make update)",
-        "unavailable": "Editor indisponível"
+        "unavailable": "Editor indisponível",
+        "vsCode": "VS Code",
+        "cursor": "Cursor"
       }
+    },
+    "agentTabs": {
+      "authoringHint": "Rascunhe o brief e o plano, depois despache o agente.",
+      "executionHint": "Acompanhe a execução ao vivo, direcione com /infer e pause ou retome.",
+      "sectionsAria": "Seções do agente",
+      "authoring": "Authoring",
+      "execution": "Execução"
+    },
+    "toolCall": {
+      "status": {
+        "running": "em execução",
+        "completed": "concluído",
+        "failed": "falhou"
+      },
+      "input": "ENT",
+      "output": "SAÍ",
+      "showMore": "… mostrar mais"
+    },
+    "inlineMarkdown": {
+      "placeholder": "Adicione uma descrição…",
+      "descriptionAria": "Descrição da issue",
+      "editAria": "Editar descrição",
+      "nothingToPreview": "Nada para pré-visualizar ainda.",
+      "hint": "⌘↵ para salvar · Markdown suportado · cole imagens"
     },
     "comments": {
       "write": "Escrever",
@@ -237,7 +279,67 @@
       "save": "Salvar",
       "editAria": "Editar comentário",
       "deleteAria": "Excluir comentário",
-      "linkPlaceholder": "texto"
+      "linkPlaceholder": "texto",
+      "card": {
+        "unknownAuthor": "Desconhecido",
+        "commented": "comentou",
+        "empty": "Comentário vazio.",
+        "openOnGitHub": "Abrir no GitHub",
+        "sync": {
+          "pending": "Sincronizando…",
+          "conflict": "Conflito de sync",
+          "error": "Falha no sync"
+        },
+        "workpad": "Workpad"
+      }
+    },
+    "priority": {
+      "none": "Sem prioridade",
+      "urgent": "Urgente",
+      "high": "Alta",
+      "medium": "Média",
+      "low": "Baixa"
+    },
+    "inline": {
+      "agent": {
+        "title": "Agente",
+        "loading": "Carregando agentes...",
+        "save": "Salvar",
+        "close": "Fechar"
+      },
+      "assignee": {
+        "title": "Responsável",
+        "unassigned": "Não atribuído",
+        "searchPlaceholder": "Buscar responsáveis…",
+        "searchAria": "Buscar responsáveis",
+        "loading": "Carregando usuários…",
+        "empty": "Nenhum responsável encontrado.",
+        "mePrefix": "Eu — {{label}}",
+        "unknown": "Desconhecido"
+      },
+      "priority": {
+        "title": "Prioridade"
+      },
+      "status": {
+        "title": "Status"
+      }
+    },
+    "commits": {
+      "title": "Commits do agente",
+      "refresh": "Atualizar",
+      "workspaceUnavailable": "Workspace indisponível nesta máquina — histórico de commits não pode ser lido localmente.",
+      "loading": "Carregando commits…",
+      "empty": "Nenhum commit do agente à frente do branch de integração ainda.",
+      "files_one": "{{count}} arquivo",
+      "files_other": "{{count}} arquivos",
+      "sheet": {
+        "title": "Commit",
+        "descriptionFallback": "Alterações do commit do agente",
+        "loadFailed": "Não foi possível carregar o diff do commit.",
+        "loadingDiff": "Carregando diff…",
+        "noFiles": "Nenhuma alteração de arquivo neste commit.",
+        "selectFile": "Selecione um arquivo para ver o diff."
+      }
     },
     "preview": {
       "cannotLoadTitle": "Preview não pode carregar",
@@ -332,6 +434,13 @@
       "tab": {
         "title": "Runs de evidência",
         "refresh": "Atualizar",
+        "clearFailed": "Limpar falhas",
+        "clearAll": "Limpar tudo",
+        "clearFailedConfirm": "Remover todas as evidências com falha ou bloqueadas desta issue?",
+        "clearAllConfirm": "Remover todas as evidências desta issue? Isso não pode ser desfeito.",
+        "deleteRun": "Remover run {{runId}}",
+        "deleteRunConfirm": "Remover a evidência {{runId}}?",
+        "actionFailed": "Não foi possível atualizar as evidências.",
         "loading": "Carregando evidências…",
         "empty": "Nenhuma evidência capturada para esta issue ainda.",
         "uiChange": "Mudança de UI",
@@ -386,6 +495,60 @@
       "loadFailed": "Não foi possível carregar a saída do servidor.",
       "outputAria": "saída do comando {{slug}}",
       "empty": "Nenhuma saída capturada ainda. A saída aparece aqui enquanto os comandos de setup e serve rodam."
+    },
+    "sessionLog": {
+      "title": "Log da sessão",
+      "streaming": "Transmitindo",
+      "connecting": "Conectando…",
+      "agentHistory": "Exibindo histórico do {{shown}} — {{preferred}} ainda não produziu log para esta issue.",
+      "source": "Origem: {{agent}}",
+      "ariaLabel": "Log da sessão para {{identifier}}",
+      "waiting": "Aguardando saída da sessão…",
+      "subtitles": {
+        "reasoning": "Raciocínio interno",
+        "thinking": "Pensando…",
+        "system": "Sistema",
+        "session": "Sessão",
+        "event": "Evento"
+      }
+    },
+    "blockedBanner": {
+      "title": "Execução bloqueada — gate de publicação não satisfeito",
+      "body": "A execução do agente terminou com trabalho que não pôde ser publicado (push ou pull request falhou mesmo após o finalizer do Symphony). Veja a nota mais recente no workpad para a violação exata, corrija o problema subjacente e mova a issue de volta para um estado ativo para re-dispatch."
+    },
+    "activity": {
+      "empty": "Nenhuma atividade registrada ainda para {{identifier}}. Eventos do tracker aparecem aqui conforme a issue se move, recebe comentários ou é trabalhada.",
+      "agentAttached": "Agente vinculado a esta issue.",
+      "events": {
+        "issueCreated": "Issue criada",
+        "movedTo": "Movida para {{status}}",
+        "statusChanged": "Status alterado",
+        "updated": "Atualizada · {{status}}",
+        "issueUpdated": "Issue atualizada",
+        "commentAdded": "Comentário adicionado",
+        "blockerUpdated": "Bloqueio atualizado"
+      }
+    },
+    "terminal": {
+      "title": "Terminal da issue",
+      "description": "Executa no workspace da issue via tmux.",
+      "error": "Erro no terminal",
+      "joinTimeout": "Timeout ao entrar no canal do terminal",
+      "openFailed": "Falha ao abrir sessão do terminal",
+      "joinFailed": "Falha ao entrar no canal do terminal: {{reason}}",
+      "ariaLabel": "Terminal para {{identifier}}"
+    },
+    "blockers": {
+      "addTitle": "Adicionar bloqueio",
+      "blockingAria": "Identificador da issue bloqueadora",
+      "add": "Adicionar",
+      "addFailed": "Falha ao adicionar bloqueio",
+      "blockedBy": "Bloqueada por",
+      "empty": "Nenhum registro de bloqueio.",
+      "externalBlocker": "Bloqueio externo"
+    },
+    "attachmentsSection": {
+      "title": "Anexos"
     },
     "returnToAgent": {
       "resumeValidation": "Retomar validação",
@@ -883,6 +1046,29 @@
       "stateSelect": {
         "empty": "Nenhum status definido para este projeto ainda."
       },
+      "scalar": {
+        "maxTurns": "Máximo de turnos",
+        "maxConcurrentAgents": "Máximo de agentes concorrentes",
+        "maxRetryBackoffMs": "Backoff máximo de retry (ms)",
+        "turnTimeoutMs": "Timeout de turno (ms)",
+        "readTimeoutMs": "Timeout de leitura (ms)",
+        "stallTimeoutMs": "Timeout de stall (ms)",
+        "enabled": "Habilitado",
+        "binary": "Binário",
+        "host": "Host",
+        "port": "Porta",
+        "auth": "Auth",
+        "password": "Senha",
+        "baseUrl": "URL base",
+        "maxConcurrent": "Máximo concorrente",
+        "idleTimeoutMs": "Timeout de idle (ms)",
+        "baseDomain": "Domínio base",
+        "namespace": "Namespace",
+        "readIntervalMs": "Intervalo de leitura (ms)",
+        "mutationIntervalMs": "Intervalo de mutação (ms)",
+        "maxRetries": "Máximo de retries",
+        "maxBackoffMs": "Backoff máximo (ms)"
+      },
       "devenv": {
         "hint": "Passos são agrupados por repositório. Passos Serve alimentam a aba Preview da issue. Alterações são persistidas com Salvar configuração.",
         "serve": "Serve",
@@ -1182,6 +1368,11 @@
         "default": "anexo"
       }
     },
+    "modelMenu": {
+      "modelSuffix": "Modelo",
+      "searchPlaceholder": "Buscar modelos…",
+      "noMatch": "Nenhum modelo corresponde."
+    },
     "composer": {
       "placeholder": "Escreva uma mensagem...",
       "dropFiles": "Solte arquivos para anexar",
@@ -1377,6 +1568,43 @@
         "status": "Status",
         "updated": "Atualizada"
       }
+    },
+    "filtersTrigger": {
+      "filters": "Filtros",
+      "filtersCount": "Filtros · {{count}}"
+    },
+    "palette": {
+      "placeholder": "Digite um comando...",
+      "empty": "Nenhum comando correspondente.",
+      "filtersHeading": "Filtros",
+      "openFilters": "Abrir filtros",
+      "searchIssues": "Buscar issues...",
+      "assignedToMe": "Filtro: Atribuídas a mim",
+      "createdByMe": "Filtro: Criadas por mim",
+      "clearFilters": "Limpar filtros"
+    },
+    "people": {
+      "assignedToMe": "Atribuídas a mim",
+      "searchPlaceholder": "Buscar {{label}}…",
+      "noPeopleFound": "Nenhuma pessoa encontrada."
+    },
+    "issueCard": {
+      "openOnTracker": "Abrir no tracker",
+      "agentStatus": "Agente: {{status}}",
+      "blocked": "Bloqueada"
+    },
+    "column": {
+      "expandAria": "Expandir coluna {{status}}",
+      "expandTitle": "Expandir {{status}}",
+      "optionsAria": "Opções da coluna {{status}}",
+      "optionsTitle": "Opções da coluna",
+      "collapse": "Recolher coluna",
+      "editWipLimit": "Editar limite de WIP",
+      "setWipLimit": "Definir limite de WIP",
+      "clearLimit": "Remover limite",
+      "wipDialogTitle": "Limite de work-in-progress",
+      "wipDialogDescription": "Destaca a coluna “{{status}}” quando tiver mais issues que este número. Deixe vazio para remover o limite.",
+      "wipPlaceholder": "ex.: 5"
     }
   },
   "nav": {

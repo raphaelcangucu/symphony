@@ -304,14 +304,18 @@ defmodule SymphonyElixir.AgentRunner do
 
     #{Enum.map_join(violations, "\n", &validate_violation_line/1)}
 
-    Read and follow the `evidence` skill now. For every repo you changed: run its
-    unit tests. For each UI repo whose e2e is required (listed above), run e2e
-    with screenshot/video capture. For a changed back-end/service repo that the
-    config says may impact a UI repo but where you judge there is NO impact on
-    that UI surface, declare it in the manifest `impact` list with
-    `impacts_ui: false` and a concrete rationale instead of running its e2e. Then
-    write `.symphony/evidence/manifest.json` referencing the real artifacts. Do
-    nothing else in this turn.
+    Read and follow the `evidence` skill now. Run **focused** checks only on files
+    you changed (or backend tests that could be impacted by those changes) — do
+    **not** run the full lint or unit suite; CI/CD owns full regression. For every
+    repo you changed: one passing scoped `unit` run is enough — do not also record
+    a failed full-suite run in the manifest. For each UI repo whose e2e is required
+    (listed above), run e2e on the affected spec with screenshot/video capture.
+    For a changed back-end/service repo that the config says may impact a UI repo
+    but where you judge there is NO impact on that UI surface, declare it in the
+    manifest `impact` list with `impacts_ui: false` and a concrete rationale
+    instead of running its e2e. Re-run every command fresh in this session and
+    write a new `.symphony/evidence/manifest.json` — do not reuse a prior manifest.
+    Do nothing else in this turn.
     """
   end
 

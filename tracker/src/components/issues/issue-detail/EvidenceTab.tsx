@@ -1,5 +1,6 @@
-import { ClipboardCheck, RefreshCw } from "lucide-react";
+import { ClipboardCheck, RefreshCw, Trash2 } from "lucide-react";
 import type { TFunction } from "i18next";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
@@ -13,7 +14,12 @@ import {
   evidenceAttentionSummary,
   type EvidenceAttention,
 } from "@/lib/evidenceStatus";
-import { evidenceArtifactUrl } from "@/services/evidence";
+import {
+  clearFailedIssueEvidence,
+  clearIssueEvidence,
+  deleteEvidenceRun,
+  evidenceArtifactUrl,
+} from "@/services/evidence";
 import { cn } from "@/lib/utils";
 import type { WorkflowTrackerConfig } from "@/lib/workflowTracker";
 import type { CommitEvidenceSummary, CommitEvidenceWorkspace } from "@/types/commitEvidence";
@@ -26,7 +32,7 @@ interface EvidenceTabProps {
   records: EvidenceRecord[];
   loading: boolean;
   error: string | null;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
   commits?: CommitEvidenceSummary[];
   commitWorkspace?: CommitEvidenceWorkspace | null;
   commitsLoading?: boolean;
@@ -56,10 +62,47 @@ export function EvidenceTab({
   onIssueUpdated,
 }: EvidenceTabProps) {
   const { t } = useTranslation();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const evidenceAttention = assessEvidenceAttention(records);
   const attentionSummary = evidenceAttentionSummary(evidenceAttention);
   const canContinueWork =
     showContinueWork && issue && trackerConfig && evidenceAttention.kind !== "none";
+  const hasFailedRecords = records.some((record) => record.status !== "passed");
+
+  async function runAction(action: () => Promise<void>) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await action();
+      await Promise.resolve(onRefresh());
+    } catch {
+      setActionError(t("issue.evidence.tab.actionFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleClearFailed() {
+    if (!window.confirm(t("issue.evidence.tab.clearFailedConfirm"))) return;
+    void runAction(async () => {
+      await clearFailedIssueEvidence(projectSlug, identifier);
+    });
+  }
+
+  function handleClearAll() {
+    if (!window.confirm(t("issue.evidence.tab.clearAllConfirm"))) return;
+    void runAction(async () => {
+      await clearIssueEvidence(projectSlug, identifier);
+    });
+  }
+
+  function handleDeleteRun(runId: string) {
+    if (!window.confirm(t("issue.evidence.tab.deleteRunConfirm", { runId }))) return;
+    void runAction(async () => {
+      await deleteEvidenceRun(projectSlug, identifier, runId);
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -74,16 +117,44 @@ export function EvidenceTab({
         />
       ) : null}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <ClipboardCheck className="h-4 w-4 opacity-80" />
           {t("issue.evidence.tab.title")}
         </div>
-        <Button onClick={onRefresh} size="sm" type="button" variant="ghost">
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-          {t("issue.evidence.tab.refresh")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-1">
+          {hasFailedRecords ? (
+            <Button
+              disabled={busy || loading}
+              onClick={handleClearFailed}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {t("issue.evidence.tab.clearFailed")}
+            </Button>
+          ) : null}
+          {records.length > 0 ? (
+            <Button
+              disabled={busy || loading}
+              onClick={handleClearAll}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {t("issue.evidence.tab.clearAll")}
+            </Button>
+          ) : null}
+          <Button disabled={busy || loading} onClick={onRefresh} size="sm" type="button" variant="ghost">
+            <RefreshCw className={cn("h-3.5 w-3.5", (loading || busy) && "animate-spin")} />
+            {t("issue.evidence.tab.refresh")}
+          </Button>
+        </div>
       </div>
+
+      {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
@@ -100,7 +171,9 @@ export function EvidenceTab({
       {records.map((record) => (
         <EvidenceCard
           key={record.id}
+          busy={busy}
           identifier={identifier}
+          onDelete={handleDeleteRun}
           projectSlug={projectSlug}
           record={record}
         />
@@ -123,10 +196,14 @@ function EvidenceCard({
   projectSlug,
   identifier,
   record,
+  onDelete,
+  busy,
 }: {
   projectSlug: string;
   identifier: string;
   record: EvidenceRecord;
+  onDelete: (runId: string) => void;
+  busy: boolean;
 }) {
   const { t } = useTranslation();
   const artifactUrl = (relative: string) =>
@@ -142,10 +219,21 @@ function EvidenceCard({
         <span className="font-mono text-xs text-muted-foreground">{record.runId}</span>
         {record.uiChange ? <Badge variant="outline">{t("issue.evidence.tab.uiChange")}</Badge> : null}
         {record.insertedAt ? (
-          <span className="ml-auto text-xs text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {new Date(record.insertedAt).toLocaleString()}
           </span>
         ) : null}
+        <Button
+          aria-label={t("issue.evidence.tab.deleteRun", { runId: record.runId })}
+          className="ml-auto"
+          disabled={busy}
+          onClick={() => onDelete(record.runId)}
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
+          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+        </Button>
       </div>
 
       {record.runs.length > 0 ? (

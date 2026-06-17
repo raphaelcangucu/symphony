@@ -1,6 +1,14 @@
 {
   "common": {
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "close": "Close",
+    "save": "Save",
+    "refresh": "Refresh"
+  },
+  "ui": {
+    "dialog": {
+      "close": "Close"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -143,6 +151,14 @@
       "queue": "Queue",
       "pausing": "Pausing…",
       "effort": "Effort",
+      "executionStatus": {
+        "live": "Live",
+        "idle": "Idle",
+        "waiting": "Waiting",
+        "retrying": "Retrying",
+        "error": "Error",
+        "aborted": "Aborted"
+      },
       "tab": {
         "runStatus": "Run status",
         "noActiveAgent": "No active agent",
@@ -204,8 +220,34 @@
         "workspaceMissing": "Workspace not created yet — run the agent or open the terminal first",
         "workspacePreparing": "Workspace is still preparing — try again in a moment",
         "unavailableUpgrade": "Editor unavailable — restart Symphony after upgrading (make build && make update)",
-        "unavailable": "Editor unavailable"
+        "unavailable": "Editor unavailable",
+        "vsCode": "VS Code",
+        "cursor": "Cursor"
       }
+    },
+    "agentTabs": {
+      "authoringHint": "Draft the brief and plan, then dispatch the agent.",
+      "executionHint": "Watch the live run, steer with /infer, and pause or resume.",
+      "sectionsAria": "Agent sections",
+      "authoring": "Authoring",
+      "execution": "Execution"
+    },
+    "toolCall": {
+      "status": {
+        "running": "running",
+        "completed": "completed",
+        "failed": "failed"
+      },
+      "input": "IN",
+      "output": "OUT",
+      "showMore": "… show more"
+    },
+    "inlineMarkdown": {
+      "placeholder": "Add a description…",
+      "descriptionAria": "Issue description",
+      "editAria": "Edit description",
+      "nothingToPreview": "Nothing to preview yet.",
+      "hint": "⌘↵ to save · Markdown supported · paste images"
     },
     "comments": {
       "write": "Write",
@@ -237,7 +279,67 @@
       "save": "Save",
       "editAria": "Edit comment",
       "deleteAria": "Delete comment",
-      "linkPlaceholder": "text"
+      "linkPlaceholder": "text",
+      "card": {
+        "unknownAuthor": "Unknown",
+        "commented": "commented",
+        "empty": "Empty comment.",
+        "openOnGitHub": "Open on GitHub",
+        "sync": {
+          "pending": "Syncing…",
+          "conflict": "Sync conflict",
+          "error": "Sync failed"
+        },
+        "workpad": "Workpad"
+      }
+    },
+    "priority": {
+      "none": "No priority",
+      "urgent": "Urgent",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "inline": {
+      "agent": {
+        "title": "Agent",
+        "loading": "Loading agents...",
+        "save": "Save",
+        "close": "Close"
+      },
+      "assignee": {
+        "title": "Assignee",
+        "unassigned": "Unassigned",
+        "searchPlaceholder": "Search assignees…",
+        "searchAria": "Search assignees",
+        "loading": "Loading users…",
+        "empty": "No assignees found.",
+        "mePrefix": "Me — {{label}}",
+        "unknown": "Unknown"
+      },
+      "priority": {
+        "title": "Priority"
+      },
+      "status": {
+        "title": "Status"
+      }
+    },
+    "commits": {
+      "title": "Agent commits",
+      "refresh": "Refresh",
+      "workspaceUnavailable": "Workspace not available on this machine — commit history cannot be read locally.",
+      "loading": "Loading commits…",
+      "empty": "No agent commits ahead of the integration branch yet.",
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "sheet": {
+        "title": "Commit",
+        "descriptionFallback": "Agent commit changes",
+        "loadFailed": "Could not load commit diff.",
+        "loadingDiff": "Loading diff…",
+        "noFiles": "No file changes in this commit.",
+        "selectFile": "Select a file to view its diff."
+      }
     },
     "preview": {
       "cannotLoadTitle": "Preview cannot load",
@@ -332,6 +434,13 @@
       "tab": {
         "title": "Evidence runs",
         "refresh": "Refresh",
+        "clearFailed": "Clear failed",
+        "clearAll": "Clear all",
+        "clearFailedConfirm": "Remove all failed or blocked evidence runs for this issue?",
+        "clearAllConfirm": "Remove all evidence runs for this issue? This cannot be undone.",
+        "deleteRun": "Remove run {{runId}}",
+        "deleteRunConfirm": "Remove evidence run {{runId}}?",
+        "actionFailed": "Could not update evidence.",
         "loading": "Loading evidence…",
         "empty": "No evidence captured for this issue yet.",
         "uiChange": "UI change",
@@ -386,6 +495,60 @@
       "loadFailed": "Could not load server output.",
       "outputAria": "{{slug}} command output",
       "empty": "No output captured yet. Output appears here while setup and serve commands run."
+    },
+    "sessionLog": {
+      "title": "Session log",
+      "streaming": "Streaming",
+      "connecting": "Connecting…",
+      "agentHistory": "Showing {{shown}} history — {{preferred}} has not produced a log for this issue yet.",
+      "source": "Source: {{agent}}",
+      "ariaLabel": "Session log for {{identifier}}",
+      "waiting": "Waiting for session output…",
+      "subtitles": {
+        "reasoning": "Internal reasoning",
+        "thinking": "Thinking…",
+        "system": "System",
+        "session": "Session",
+        "event": "Event"
+      }
+    },
+    "blockedBanner": {
+      "title": "Run blocked — publish gate unsatisfied",
+      "body": "The agent run finished with work that could not be published (push or pull request failed even after Symphony's finalizer). See the latest workpad note for the exact violation, fix the underlying problem, and move the issue back to an active state to re-dispatch."
+    },
+    "activity": {
+      "empty": "No activity recorded yet for {{identifier}}. Tracker events appear here as the issue moves, gets comments, or is worked on.",
+      "agentAttached": "Agent is attached to this issue.",
+      "events": {
+        "issueCreated": "Issue created",
+        "movedTo": "Moved to {{status}}",
+        "statusChanged": "Status changed",
+        "updated": "Updated · {{status}}",
+        "issueUpdated": "Issue updated",
+        "commentAdded": "Comment added",
+        "blockerUpdated": "Blocker updated"
+      }
+    },
+    "terminal": {
+      "title": "Issue Terminal",
+      "description": "Runs in the issue workspace through tmux.",
+      "error": "Terminal error",
+      "joinTimeout": "Timed out joining terminal channel",
+      "openFailed": "Failed to open terminal session",
+      "joinFailed": "Failed to join terminal channel: {{reason}}",
+      "ariaLabel": "Terminal for {{identifier}}"
+    },
+    "blockers": {
+      "addTitle": "Add blocker",
+      "blockingAria": "Blocking issue identifier",
+      "add": "Add",
+      "addFailed": "Failed to add blocker",
+      "blockedBy": "Blocked by",
+      "empty": "No blocker records.",
+      "externalBlocker": "External blocker"
+    },
+    "attachmentsSection": {
+      "title": "Attachments"
     },
     "returnToAgent": {
       "resumeValidation": "Resume validation",
@@ -883,6 +1046,29 @@
       "stateSelect": {
         "empty": "No statuses defined for this project yet."
       },
+      "scalar": {
+        "maxTurns": "Max turns",
+        "maxConcurrentAgents": "Max concurrent agents",
+        "maxRetryBackoffMs": "Max retry backoff (ms)",
+        "turnTimeoutMs": "Turn timeout (ms)",
+        "readTimeoutMs": "Read timeout (ms)",
+        "stallTimeoutMs": "Stall timeout (ms)",
+        "enabled": "Enabled",
+        "binary": "Binary",
+        "host": "Host",
+        "port": "Port",
+        "auth": "Auth",
+        "password": "Password",
+        "baseUrl": "Base URL",
+        "maxConcurrent": "Max concurrent",
+        "idleTimeoutMs": "Idle timeout (ms)",
+        "baseDomain": "Base domain",
+        "namespace": "Namespace",
+        "readIntervalMs": "Read interval (ms)",
+        "mutationIntervalMs": "Mutation interval (ms)",
+        "maxRetries": "Max retries",
+        "maxBackoffMs": "Max backoff (ms)"
+      },
       "devenv": {
         "hint": "Steps are grouped by repository. Serve steps power the issue Preview tab. Changes are persisted with Save configuration.",
         "serve": "Serve",
@@ -1182,6 +1368,11 @@
         "default": "attachment"
       }
     },
+    "modelMenu": {
+      "modelSuffix": "Model",
+      "searchPlaceholder": "Search models…",
+      "noMatch": "No models match."
+    },
     "composer": {
       "placeholder": "Write a message...",
       "dropFiles": "Drop files to attach",
@@ -1377,6 +1568,43 @@
         "status": "Status",
         "updated": "Updated"
       }
+    },
+    "filtersTrigger": {
+      "filters": "Filters",
+      "filtersCount": "Filters · {{count}}"
+    },
+    "palette": {
+      "placeholder": "Type a command...",
+      "empty": "No matching command.",
+      "filtersHeading": "Filters",
+      "openFilters": "Open filters",
+      "searchIssues": "Search issues...",
+      "assignedToMe": "Filter: Assigned to me",
+      "createdByMe": "Filter: Created by me",
+      "clearFilters": "Clear filters"
+    },
+    "people": {
+      "assignedToMe": "Assigned to me",
+      "searchPlaceholder": "Search {{label}}…",
+      "noPeopleFound": "No people found."
+    },
+    "issueCard": {
+      "openOnTracker": "Open on tracker",
+      "agentStatus": "Agent: {{status}}",
+      "blocked": "Blocked"
+    },
+    "column": {
+      "expandAria": "Expand {{status}} column",
+      "expandTitle": "Expand {{status}}",
+      "optionsAria": "{{status}} column options",
+      "optionsTitle": "Column options",
+      "collapse": "Collapse column",
+      "editWipLimit": "Edit work-in-progress limit",
+      "setWipLimit": "Set work-in-progress limit",
+      "clearLimit": "Clear limit",
+      "wipDialogTitle": "Work-in-progress limit",
+      "wipDialogDescription": "Highlight the “{{status}}” column when it holds more than this many issues. Leave empty to remove the limit.",
+      "wipPlaceholder": "e.g. 5"
     }
   },
   "nav": {

@@ -1,5 +1,6 @@
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "cmdk";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useViewer } from "@/components/auth/ViewerProvider";
@@ -8,6 +9,7 @@ import { filtersPath, viewFromPathname } from "@/lib/workspaceRoutes";
 type PaletteAction = "assignee_me" | "creator_me" | "clear" | "open_drawer" | "focus_search";
 
 export function BoardPaletteShortcuts() {
+  const { t } = useTranslation();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { projectSlug = "" } = useParams();
   const location = useLocation();
@@ -85,15 +87,15 @@ export function BoardPaletteShortcuts() {
   return (
     <CommandDialog open={paletteOpen} onOpenChange={setPaletteOpen}>
       <Command>
-        <CommandInput placeholder="Type a command..." />
+        <CommandInput placeholder={t("board.palette.placeholder")} />
         <CommandList>
-          <CommandEmpty>No matching command.</CommandEmpty>
-          <CommandGroup heading="Filters">
-            <CommandItem onSelect={() => applyFilter("open_drawer")}>Open filters</CommandItem>
-            <CommandItem onSelect={() => applyFilter("focus_search")}>Search issues...</CommandItem>
-            <CommandItem onSelect={() => applyFilter("assignee_me")}>Filter: Assigned to me</CommandItem>
-            <CommandItem onSelect={() => applyFilter("creator_me")}>Filter: Created by me</CommandItem>
-            <CommandItem onSelect={() => applyFilter("clear")}>Clear filters</CommandItem>
+          <CommandEmpty>{t("board.palette.empty")}</CommandEmpty>
+          <CommandGroup heading={t("board.palette.filtersHeading")}>
+            <CommandItem onSelect={() => applyFilter("open_drawer")}>{t("board.palette.openFilters")}</CommandItem>
+            <CommandItem onSelect={() => applyFilter("focus_search")}>{t("board.palette.searchIssues")}</CommandItem>
+            <CommandItem onSelect={() => applyFilter("assignee_me")}>{t("board.palette.assignedToMe")}</CommandItem>
+            <CommandItem onSelect={() => applyFilter("creator_me")}>{t("board.palette.createdByMe")}</CommandItem>
+            <CommandItem onSelect={() => applyFilter("clear")}>{t("board.palette.clearFilters")}</CommandItem>
           </CommandGroup>
         </CommandList>
       </Command>

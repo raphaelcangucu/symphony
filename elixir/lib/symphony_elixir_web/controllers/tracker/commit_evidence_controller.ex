@@ -16,8 +16,10 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceController do
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    default_branches = Context.repo_default_branches(project_slug)
+
     with {:ok, workspace} <- issue_workspace(project_slug, identifier),
-         {:ok, commits} <- Commits.list(workspace) do
+         {:ok, commits} <- Commits.list(workspace, default_branches: default_branches) do
       json(conn, %{data: commits, workspace: workspace_brief(workspace)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)

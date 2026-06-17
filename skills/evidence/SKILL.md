@@ -14,6 +14,39 @@ description:
 - Prove the change works: unit tests green for every repo you changed.
 - When the change touches UI paths, prove it visually: e2e run with at least
   1 screenshot AND 1 video (plus trace) of the affected flow.
+
+## Focused testing (agent validation vs CI)
+
+During VALIDATE, **run only checks that cover what you changed** — not full-repo
+lint or unit suites. Leave full regression to CI/CD (GitHub Actions, etc.).
+
+### Scope from git diff first
+
+1. Run `git diff --name-only origin/<integration-branch>...HEAD` (and
+   `git status --porcelain`) **per repo you touched**.
+2. Only run lint/unit/e2e for repos that appear in the diff.
+3. Derive test/lint paths from changed source files (mirror `src/` → `tests/`).
+
+### Per check type
+
+| Check | Do | Don't |
+|-------|----|-------|
+| **Lint** | ESLint on changed paths only, e.g. `npx eslint --max-warnings 0 src/pages/foo.tsx tests/pages/foo.test.tsx` | `npm run lint` on the whole repo |
+| **Unit (frontend)** | `npm run test:unit -- tests/...` matching changed areas | `npm run test:unit` without paths |
+| **Unit (backend)** | `./vibe test tests/Feature/MyTest.php` or `--filter=MyTest` for changed/impacted code | `./vibe test` (full Pest suite) when only a few files changed |
+| **E2e** | Spec for the affected flow, e.g. `cypress run --spec cypress/e2e/my-flow.cy.ts` | Full e2e matrix |
+
+The gate needs **one** passing `unit` run per changed repo; a scoped run satisfies
+that. **Do not** also run the full suite and record a failing unrelated test —
+either skip the full suite entirely or omit failed supplementary runs from the
+manifest.
+
+### Manifest hygiene
+
+- Include **only** runs you executed in **this** session — never copy a prior
+  `manifest.json`.
+- One entry per `{kind, repo}` is enough (the passing scoped command).
+- Record the **actual scoped command** in the `command` field.
 - Decide cross-repo impact: when you change a back-end/service repo that the
   config says can impact a UI repo, either run that UI repo's e2e OR record a
   justified `impacts_ui: false` decision in the manifest. Silent skips are a

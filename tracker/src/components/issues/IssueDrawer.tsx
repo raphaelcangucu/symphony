@@ -252,7 +252,7 @@ export function IssueDrawer({
                           onSelect={() => openBrowserEditor()}
                         >
                           <Code2 className="mr-2 h-4 w-4" />
-                          VS Code
+                          {t("issue.drawer.editor.vsCode")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={!editor.cursorDesktop.available}
@@ -264,7 +264,7 @@ export function IssueDrawer({
                           onSelect={() => openCursorDesktop()}
                         >
                           <Code2 className="mr-2 h-4 w-4" />
-                          Cursor
+                          {t("issue.drawer.editor.cursor")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -340,7 +340,7 @@ export function IssueDrawer({
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-1 text-muted-foreground">
                     <PriorityIndicator priority={issue.priority} />
-                    {priorityLabel(issue.priority)}
+                    {priorityLabel(issue.priority, t)}
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-1 text-muted-foreground">
                     <AssigneeAvatar login={issue.assignee} />

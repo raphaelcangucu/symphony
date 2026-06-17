@@ -17,13 +17,32 @@ export function assessEvidenceAttention(records: EvidenceRecord[]): EvidenceAtte
   }
 
   const latestRecord = records[0];
-  const failedRuns = latestRecord.runs.filter((run) => run.status !== "passed");
+  const failedRuns = canonicalRuns(latestRecord.runs).filter((run) => run.status !== "passed");
 
   if (latestRecord.status !== "passed" || failedRuns.length > 0) {
     return { kind: "failed", latestRecord, failedRuns };
   }
 
   return { kind: "none", latestRecord, failedRuns: [] };
+}
+
+function canonicalRuns(runs: EvidenceRun[]): EvidenceRun[] {
+  const groups = new Map<string, EvidenceRun[]>();
+
+  for (const run of runs) {
+    const key = `${run.kind}:${run.repo}`;
+    const list = groups.get(key) ?? [];
+    list.push(run);
+    groups.set(key, list);
+  }
+
+  return [...groups.values()].map((group) => {
+    return (
+      group.find((run) => run.status === "passed") ??
+      group.find((run) => run.status === "blocked") ??
+      group[0]
+    );
+  });
 }
 
 export function evidenceNeedsAttention(records: EvidenceRecord[]): boolean {

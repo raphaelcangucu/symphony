@@ -2,6 +2,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Gauge, MoreHorizontal, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { AgentStatusDot } from "@/components/issues/AgentStatusBadge";
 import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
@@ -53,6 +54,7 @@ export function BoardColumn({
   limit,
   onChangeLimit,
 }: BoardColumnProps) {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const meta = getStatusMeta(status, category);
   const Icon = meta.Icon;
@@ -106,8 +108,8 @@ export function BoardColumn({
         <button
           type="button"
           onClick={onToggleCollapse}
-          aria-label={`Expand ${status} column`}
-          title={`Expand ${status}`}
+          aria-label={t("board.column.expandAria", { status })}
+          title={t("board.column.expandTitle", { status })}
           className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <PanelLeftOpen className="h-4 w-4" />
@@ -147,8 +149,8 @@ export function BoardColumn({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                aria-label={`${status} column options`}
-                title="Column options"
+                aria-label={t("board.column.optionsAria", { status })}
+                title={t("board.column.optionsTitle")}
                 className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <MoreHorizontal className="h-4 w-4" />
@@ -157,19 +159,19 @@ export function BoardColumn({
             <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuItem onSelect={onToggleCollapse}>
                 <PanelLeftClose className="mr-2 h-4 w-4" />
-                Collapse column
+                {t("board.column.collapse")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={openLimitDialog}>
                 <Gauge className="mr-2 h-4 w-4" />
-                {typeof limit === "number" ? "Edit work-in-progress limit" : "Set work-in-progress limit"}
+                {typeof limit === "number" ? t("board.column.editWipLimit") : t("board.column.setWipLimit")}
               </DropdownMenuItem>
               {typeof limit === "number" ? (
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onSelect={() => onChangeLimit?.(status, null)}
                 >
-                  Clear limit
+                  {t("board.column.clearLimit")}
                 </DropdownMenuItem>
               ) : null}
             </DropdownMenuContent>
@@ -215,15 +217,15 @@ export function BoardColumn({
       <Dialog open={limitOpen} onOpenChange={setLimitOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Work-in-progress limit</DialogTitle>
+            <DialogTitle>{t("board.column.wipDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Highlight the “{status}” column when it holds more than this many issues. Leave empty to remove the limit.
+              {t("board.column.wipDialogDescription", { status })}
             </DialogDescription>
           </DialogHeader>
           <Input
             value={limitDraft}
             onChange={(event) => setLimitDraft(event.target.value)}
-            placeholder="e.g. 5"
+            placeholder={t("board.column.wipPlaceholder")}
             inputMode="numeric"
             autoFocus
             onKeyDown={(event) => {
@@ -232,10 +234,10 @@ export function BoardColumn({
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setLimitOpen(false)}>
-              Cancel
+              {t("issue.comments.cancel")}
             </Button>
             <Button type="button" onClick={saveLimit}>
-              Save
+              {t("issue.comments.save")}
             </Button>
           </div>
         </DialogContent>

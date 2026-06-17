@@ -1,5 +1,6 @@
 import { Search, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { useMeIdentities } from "@/hooks/useMeIdentities";
@@ -42,6 +43,7 @@ export function InlineAssigneeEditor({
   saving = false,
   onSave,
 }: InlineAssigneeEditorProps) {
+  const { t } = useTranslation();
   const meIdentities = useMeIdentities();
   const current = findOption(options, assignee);
   const currentValue = current ? assigneeValue(current) : assignee ?? "";
@@ -97,7 +99,7 @@ export function InlineAssigneeEditor({
       .filter((option) => assigneeValue(option) !== "")
       .map((option) => ({
         value: assigneeValue(option),
-        label: option.name?.trim() || option.login || option.id || "Unknown",
+        label: option.name?.trim() || option.login || option.id || t("issue.inline.assignee.unknown"),
         login: option.login,
         option,
       }));
@@ -111,7 +113,7 @@ export function InlineAssigneeEditor({
       meIdentities,
       (item) => (item.option ? assigneeMatchesMe(item.option, meIdentities) : false),
     );
-  }, [assignee, meIdentities, options]);
+  }, [assignee, meIdentities, options, t]);
 
   const filteredOptionItems = useMemo(
     () =>
@@ -141,27 +143,27 @@ export function InlineAssigneeEditor({
         )}
       >
         <AssigneeAvatar login={assignee} />
-        <span className="text-sm">{assignee || "Unassigned"}</span>
+        <span className="text-sm">{assignee || t("issue.inline.assignee.unassigned")}</span>
       </button>
 
       {open ? (
         <div className="absolute left-0 z-20 mt-2 w-64 overflow-hidden rounded-xl border border-border/70 bg-popover p-2 shadow-lg">
           <div className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Assignee
+            {t("issue.inline.assignee.title")}
           </div>
           <div className="relative mb-2 px-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               ref={searchRef}
               value={searchQuery}
-              placeholder="Search assignees…"
-              aria-label="Search assignees"
+              placeholder={t("issue.inline.assignee.searchPlaceholder")}
+              aria-label={t("issue.inline.assignee.searchAria")}
               className="h-8 w-full rounded-md border border-border/70 bg-background pl-8 pr-2.5 text-xs outline-none ring-0 focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/15"
               onChange={(event) => setSearchQuery(event.target.value)}
             />
           </div>
           {optionsLoading ? (
-            <p className="px-1 text-xs text-muted-foreground">Loading users…</p>
+            <p className="px-1 text-xs text-muted-foreground">{t("issue.inline.assignee.loading")}</p>
           ) : (
             <div className="max-h-40 space-y-0.5 overflow-y-auto">
               {!searchQuery.trim() ? (
@@ -175,11 +177,11 @@ export function InlineAssigneeEditor({
                   )}
                 >
                   <UserRound className="h-4 w-4 opacity-70" />
-                  Unassigned
+                  {t("issue.inline.assignee.unassigned")}
                 </button>
               ) : null}
               {filteredOptionItems.length === 0 ? (
-                <p className="px-2 py-4 text-center text-xs text-muted-foreground">No assignees found.</p>
+                <p className="px-2 py-4 text-center text-xs text-muted-foreground">{t("issue.inline.assignee.empty")}</p>
               ) : (
                 filteredOptionItems.map((item) => {
                   const isMe = item.option ? assigneeMatchesMe(item.option, meIdentities) : false;
@@ -196,7 +198,7 @@ export function InlineAssigneeEditor({
                     >
                       <AssigneeAvatar login={item.login ?? null} />
                       <span className="min-w-0 flex-1 truncate">
-                        {isMe ? `Eu — ${item.label}` : item.label}
+                        {isMe ? t("issue.inline.assignee.mePrefix", { label: item.label }) : item.label}
                       </span>
                     </button>
                   );

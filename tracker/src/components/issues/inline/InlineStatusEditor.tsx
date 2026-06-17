@@ -1,5 +1,6 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { getStatusMeta } from "@/components/board/status-meta";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ export function InlineStatusEditor({
   saving = false,
   onSave,
 }: InlineStatusEditorProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<WorkflowStatusName>(status);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -81,7 +83,7 @@ export function InlineStatusEditor({
       {open ? (
         <div className="absolute left-0 z-20 mt-2 min-w-[220px] overflow-hidden rounded-xl border border-border/70 bg-popover p-2 shadow-lg">
           <div className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Status
+            {t("issue.inline.status.title")}
           </div>
           <div className="max-h-56 space-y-0.5 overflow-y-auto">
             {options.map((option) => {

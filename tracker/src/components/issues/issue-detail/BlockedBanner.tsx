@@ -1,4 +1,5 @@
 import { OctagonAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 const BLOCKED_LABEL = "symphony:blocked";
 
@@ -7,6 +8,8 @@ interface BlockedBannerProps {
 }
 
 export function BlockedBanner({ labels }: BlockedBannerProps) {
+  const { t } = useTranslation();
+
   if (!labels?.includes(BLOCKED_LABEL)) return null;
 
   return (
@@ -16,13 +19,8 @@ export function BlockedBanner({ labels }: BlockedBannerProps) {
     >
       <OctagonAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
       <div>
-        <p className="font-medium">Run blocked — publish gate unsatisfied</p>
-        <p className="mt-0.5">
-          The agent run finished with work that could not be published (push or pull
-          request failed even after Symphony&apos;s finalizer). See the latest workpad
-          note for the exact violation, fix the underlying problem, and move the issue
-          back to an active state to re-dispatch.
-        </p>
+        <p className="font-medium">{t("issue.blockedBanner.title")}</p>
+        <p className="mt-0.5">{t("issue.blockedBanner.body")}</p>
       </div>
     </div>
   );

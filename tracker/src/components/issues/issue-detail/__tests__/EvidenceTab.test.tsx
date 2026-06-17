@@ -23,6 +23,20 @@ vi.mock("@/components/shared/AttachmentImage", () => ({
   ),
 }));
 
+const clearFailedIssueEvidenceMock = vi.hoisted(() => vi.fn());
+const clearIssueEvidenceMock = vi.hoisted(() => vi.fn());
+const deleteEvidenceRunMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/evidence", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/evidence")>();
+  return {
+    ...actual,
+    clearFailedIssueEvidence: (...args: unknown[]) => clearFailedIssueEvidenceMock(...args),
+    clearIssueEvidence: (...args: unknown[]) => clearIssueEvidenceMock(...args),
+    deleteEvidenceRun: (...args: unknown[]) => deleteEvidenceRunMock(...args),
+  };
+});
+
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
 const getCommitEvidenceMock = vi.hoisted(() => vi.fn());
 
@@ -90,6 +104,12 @@ function record(overrides: Partial<EvidenceRecord> = {}): EvidenceRecord {
 describe("EvidenceTab", () => {
   beforeEach(async () => {
     await initTestI18n("pt-BR");
+    clearFailedIssueEvidenceMock.mockReset();
+    clearIssueEvidenceMock.mockReset();
+    deleteEvidenceRunMock.mockReset();
+    clearFailedIssueEvidenceMock.mockResolvedValue(1);
+    clearIssueEvidenceMock.mockResolvedValue(2);
+    deleteEvidenceRunMock.mockResolvedValue(undefined);
   });
 
   function renderTab(ui: React.ReactElement) {
@@ -159,6 +179,25 @@ describe("EvidenceTab", () => {
   it("shows the error message", () => {
     renderTab(<EvidenceTab {...baseProps} error="Could not load evidence." records={[]} />);
     expect(screen.getByText("Could not load evidence.")).toBeInTheDocument();
+  });
+
+  it("clears failed evidence runs after confirmation", async () => {
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+
+    renderTab(
+      <EvidenceTab
+        {...baseProps}
+        onRefresh={onRefresh}
+        records={[record({ status: "failed" })]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /limpar falhas/i }));
+    expect(clearFailedIssueEvidenceMock).toHaveBeenCalledWith("advising", "CDE-1131");
+    expect(onRefresh).toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 
   it("renders run rows, screenshots and videos for a record", () => {
@@ -255,7 +294,7 @@ describe("EvidenceTab", () => {
       />,
     );
 
-    expect(screen.getByText("Agent commits")).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.commits.title"))).toBeInTheDocument();
     await user.click(screen.getByTestId("commit-evidence-abc123d"));
     expect(getCommitEvidenceMock).toHaveBeenCalledWith("advising", "CDE-1131", "advising", "abc123def456");
     expect(await screen.findByText("work.txt")).toBeInTheDocument();

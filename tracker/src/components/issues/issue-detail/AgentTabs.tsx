@@ -1,5 +1,6 @@
 import { PenLine, Play } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
@@ -38,6 +39,7 @@ export function AgentTabs({
   evidenceRecords = [],
   onIssueUpdated,
 }: AgentTabsProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const section = agentSectionFromSearchParams(new URLSearchParams(location.search));
@@ -76,12 +78,10 @@ export function AgentTabs({
     >
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          {section === "authoring"
-            ? "Draft the brief and plan, then dispatch the agent."
-            : "Watch the live run, steer with /infer, and pause or resume."}
+          {section === "authoring" ? t("issue.agentTabs.authoringHint") : t("issue.agentTabs.executionHint")}
         </p>
         <TabsList
-          aria-label="Agent sections"
+          aria-label={t("issue.agentTabs.sectionsAria")}
           className="h-8 shrink-0 gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
         >
           <TabsTrigger
@@ -89,14 +89,14 @@ export function AgentTabs({
             className="gap-1.5 rounded-md px-2.5 text-xs data-[state=active]:shadow-sm"
           >
             <PenLine className="h-3.5 w-3.5" />
-            Authoring
+            {t("issue.agentTabs.authoring")}
           </TabsTrigger>
           <TabsTrigger
             value="execution"
             className="gap-1.5 rounded-md px-2.5 text-xs data-[state=active]:shadow-sm"
           >
             <Play className="h-3.5 w-3.5" />
-            Execution
+            {t("issue.agentTabs.execution")}
           </TabsTrigger>
         </TabsList>
       </div>

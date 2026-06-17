@@ -19,6 +19,31 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceController do
     end
   end
 
+  @spec clear(Conn.t(), map()) :: Conn.t()
+  def clear(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    case Store.delete_all(project_slug, identifier) do
+      {:ok, count} -> json(conn, %{data: %{deleted: count}})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec clear_failed(Conn.t(), map()) :: Conn.t()
+  def clear_failed(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    case Store.delete_failed(project_slug, identifier) do
+      {:ok, count} -> json(conn, %{data: %{deleted: count}})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec delete(Conn.t(), map()) :: Conn.t()
+  def delete(conn, %{"project_slug" => project_slug, "identifier" => identifier, "run_id" => run_id}) do
+    case Store.delete_run(project_slug, identifier, run_id) do
+      {:ok, _record} -> send_resp(conn, 204, "")
+      {:error, :run_not_found} -> artifact_error(conn, 404, "evidence_run_not_found", "Evidence run not found.")
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec artifact(Conn.t(), map()) :: Conn.t()
   def artifact(conn, %{
         "project_slug" => project_slug,

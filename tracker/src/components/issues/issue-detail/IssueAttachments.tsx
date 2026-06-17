@@ -3,6 +3,7 @@ import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { isVideoAttachmentSource, isVideoMediaType, jiraAttachmentUrl } from "@/services/attachments";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 import type { IssueAttachment } from "@/types/issue";
 
 interface IssueAttachmentsProps {
@@ -12,12 +13,14 @@ interface IssueAttachmentsProps {
 }
 
 export function IssueAttachments({ attachments, projectSlug, className }: IssueAttachmentsProps) {
+  const { t } = useTranslation();
+
   if (attachments.length === 0) return null;
 
   return (
     <section className={cn("space-y-2.5", className)}>
       <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Attachments
+        {t("issue.attachmentsSection.title")}
         <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
           {attachments.length}
         </span>

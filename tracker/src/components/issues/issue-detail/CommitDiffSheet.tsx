@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ export function CommitDiffSheet({
   identifier,
   commit,
 }: CommitDiffSheetProps) {
+  const { t } = useTranslation();
   const [detail, setDetail] = useState<CommitEvidenceDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function CommitDiffSheet({
       })
       .catch(() => {
         if (cancelled) return;
-        setError("Could not load commit diff.");
+        setError(t("issue.commits.sheet.loadFailed"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -55,7 +57,7 @@ export function CommitDiffSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, commit, projectSlug, identifier]);
+  }, [open, commit, projectSlug, identifier, t]);
 
   const selectedFile = detail?.files.find((file) => file.path === selectedPath) ?? null;
 
@@ -64,10 +66,10 @@ export function CommitDiffSheet({
       <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-3xl lg:max-w-4xl">
         <SheetHeader className="border-b px-6 py-4 text-left">
           <SheetTitle className="font-mono text-sm">
-            {commit ? `${commit.shortSha} · ${commit.repo}` : "Commit"}
+            {commit ? `${commit.shortSha} · ${commit.repo}` : t("issue.commits.sheet.title")}
           </SheetTitle>
           <SheetDescription className="text-left text-sm text-foreground">
-            {commit?.message ?? "Agent commit changes"}
+            {commit?.message ?? t("issue.commits.sheet.descriptionFallback")}
           </SheetDescription>
           {commit ? (
             <p className="text-xs text-muted-foreground">
@@ -80,7 +82,7 @@ export function CommitDiffSheet({
           {loading ? (
             <div className="flex flex-1 items-center justify-center text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Loading diff…
+              {t("issue.commits.sheet.loadingDiff")}
             </div>
           ) : null}
 
@@ -88,11 +90,7 @@ export function CommitDiffSheet({
 
           {!loading && !error && detail ? (
             <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-              <FileList
-                files={detail.files}
-                onSelect={setSelectedPath}
-                selectedPath={selectedPath}
-              />
+              <FileList files={detail.files} onSelect={setSelectedPath} selectedPath={selectedPath} />
               <FileDiff file={selectedFile} />
             </div>
           ) : null}
@@ -111,10 +109,12 @@ function FileList({
   selectedPath: string | null;
   onSelect: (path: string) => void;
 }) {
+  const { t } = useTranslation();
+
   if (files.length === 0) {
     return (
       <div className="border-b px-4 py-3 text-sm text-muted-foreground md:w-56 md:border-b-0 md:border-r">
-        No file changes in this commit.
+        {t("issue.commits.sheet.noFiles")}
       </div>
     );
   }
@@ -140,10 +140,12 @@ function FileList({
 }
 
 function FileDiff({ file }: { file: CommitFileChange | null }) {
+  const { t } = useTranslation();
+
   if (!file) {
     return (
       <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
-        Select a file to view its diff.
+        {t("issue.commits.sheet.selectFile")}
       </div>
     );
   }

@@ -120,6 +120,9 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/evidence/propose", EvidenceConfigController, :propose)
     put("/projects/:project_slug/evidence", EvidenceConfigController, :save)
     get("/projects/:project_slug/issues/:identifier/evidence", EvidenceController, :index)
+    delete("/projects/:project_slug/issues/:identifier/evidence", EvidenceController, :clear)
+    post("/projects/:project_slug/issues/:identifier/evidence/clear-failed", EvidenceController, :clear_failed)
+    delete("/projects/:project_slug/issues/:identifier/evidence/:run_id", EvidenceController, :delete)
     get("/projects/:project_slug/issues/:identifier/commit_evidence", CommitEvidenceController, :index)
 
     get(

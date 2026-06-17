@@ -66,6 +66,60 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceControllerTest do
     assert %{"error" => %{"code" => "project_not_found"}} = json_response(conn, 404)
   end
 
+  test "clear removes all evidence for an issue", ctx do
+    {:ok, _one} =
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => []}, evidence_root: ctx.evidence_root)
+
+    {:ok, _two} =
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => []}, evidence_root: ctx.evidence_root)
+
+    conn = delete(authorized_conn(), "/api/tracker/v1/projects/gam/issues/GAM-9/evidence")
+    assert %{"data" => %{"deleted" => 2}} = json_response(conn, 200)
+    assert %{"data" => []} = json_response(get(authorized_conn(), "/api/tracker/v1/projects/gam/issues/GAM-9/evidence"), 200)
+  end
+
+  test "delete run removes a single evidence record", ctx do
+    {:ok, record} =
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => []}, evidence_root: ctx.evidence_root)
+
+    conn =
+      delete(
+        authorized_conn(),
+        "/api/tracker/v1/projects/gam/issues/GAM-9/evidence/#{record.run_id}"
+      )
+
+    assert conn.status == 204
+    assert %{"data" => []} = json_response(get(authorized_conn(), "/api/tracker/v1/projects/gam/issues/GAM-9/evidence"), 200)
+  end
+
+  test "clear_failed removes only non-passing records", ctx do
+    {:ok, passed} =
+      Store.persist(
+        "gam",
+        "GAM-9",
+        ctx.workspace,
+        %{"issue" => "GAM-9", "runs" => [%{"kind" => "unit", "status" => "passed"}]},
+        evidence_root: ctx.evidence_root
+      )
+
+    {:ok, _failed} =
+      Store.persist(
+        "gam",
+        "GAM-9",
+        ctx.workspace,
+        %{"issue" => "GAM-9", "runs" => [%{"kind" => "unit", "status" => "failed"}]},
+        evidence_root: ctx.evidence_root
+      )
+
+    conn = post(authorized_conn(), "/api/tracker/v1/projects/gam/issues/GAM-9/evidence/clear-failed")
+    assert %{"data" => %{"deleted" => 1}} = json_response(conn, 200)
+
+    assert %{"data" => [entry]} =
+             json_response(get(authorized_conn(), "/api/tracker/v1/projects/gam/issues/GAM-9/evidence"), 200)
+
+    assert entry["run_id"] == passed.run_id
+  end
+
   test "artifact route serves the file bytes with content type", ctx do
     {:ok, record} =
       Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => []}, evidence_root: ctx.evidence_root)

@@ -1,5 +1,6 @@
 import { Check, Eye, Pencil, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Markdown } from "@/components/ui/markdown";
 import { useMarkdownImagePaste } from "@/hooks/useMarkdownImagePaste";
@@ -20,8 +21,10 @@ export function InlineEditableMarkdown({
   projectSlug = "",
   disabled = false,
   saving = false,
-  placeholder = "Add a description…",
+  placeholder,
 }: InlineEditableMarkdownProps) {
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? t("issue.inlineMarkdown.placeholder");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [preview, setPreview] = useState(false);
@@ -74,11 +77,11 @@ export function InlineEditableMarkdown({
         <div className="flex items-center gap-1 border-b border-border/60 bg-muted/30 px-2 py-1.5">
           <TabButton active={!preview} onClick={() => setPreview(false)}>
             <Pencil className="mr-1.5 h-3.5 w-3.5" />
-            Write
+            {t("issue.comments.write")}
           </TabButton>
           <TabButton active={preview} onClick={() => setPreview(true)}>
             <Eye className="mr-1.5 h-3.5 w-3.5" />
-            Preview
+            {t("issue.comments.preview")}
           </TabButton>
         </div>
         {preview ? (
@@ -86,7 +89,7 @@ export function InlineEditableMarkdown({
             {draft.trim() ? (
               <Markdown>{draft}</Markdown>
             ) : (
-              <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>
+              <p className="text-sm text-muted-foreground">{t("issue.inlineMarkdown.nothingToPreview")}</p>
             )}
           </div>
         ) : (
@@ -95,7 +98,7 @@ export function InlineEditableMarkdown({
             id={textareaId}
             value={draft}
             rows={10}
-            aria-label="Issue description"
+            aria-label={t("issue.inlineMarkdown.descriptionAria")}
             className="min-h-32 w-full resize-y border-0 bg-transparent px-4 py-3 text-sm outline-none ring-0 focus-visible:ring-0"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleKeyDown}
@@ -110,7 +113,7 @@ export function InlineEditableMarkdown({
             className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Check className="h-3.5 w-3.5" />
-            Save
+            {t("issue.comments.save")}
           </button>
           <button
             type="button"
@@ -119,10 +122,10 @@ export function InlineEditableMarkdown({
             className="inline-flex items-center gap-1 rounded-md border border-border/70 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" />
-            Cancel
+            {t("issue.comments.cancel")}
           </button>
           <span className="text-[11px] text-muted-foreground">
-            {uploading ? "Uploading image…" : "⌘↵ to save · Markdown supported · paste images"}
+            {uploading ? t("issue.comments.uploadingImage") : t("issue.inlineMarkdown.hint")}
           </span>
         </div>
       </div>
@@ -141,13 +144,13 @@ export function InlineEditableMarkdown({
           <Markdown>{value}</Markdown>
         </div>
       ) : (
-        <p className="pr-8 text-sm text-muted-foreground">{placeholder}</p>
+        <p className="pr-8 text-sm text-muted-foreground">{resolvedPlaceholder}</p>
       )}
       {!disabled ? (
         <button
           type="button"
           disabled={saving}
-          aria-label="Edit description"
+          aria-label={t("issue.inlineMarkdown.editAria")}
           onClick={() => setEditing(true)}
           className="absolute right-3 top-3 rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 group-hover:opacity-100"
         >

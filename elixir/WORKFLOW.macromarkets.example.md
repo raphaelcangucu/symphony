@@ -142,9 +142,9 @@ codex:
   # Enables the Codex-only Goal mode checkbox at dispatch time.
   # goals_enabled: true
   approval_policy: never
-  thread_sandbox: workspace-write
+  thread_sandbox: danger-full-access
   turn_sandbox_policy:
-    type: workspaceWrite
+    type: dangerFullAccess
 claude:
   command: claude
 ---

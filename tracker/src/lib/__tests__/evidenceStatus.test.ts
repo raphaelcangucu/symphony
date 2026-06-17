@@ -56,6 +56,32 @@ describe("evidenceStatus", () => {
     expect(evidenceAttentionInstructions(attention)).toMatch(/Docker is not running/);
   });
 
+  it("ignores a supplementary failed full-suite unit run when targeted unit passed", () => {
+    const attention = assessEvidenceAttention([
+      record({
+        status: "passed",
+        runs: [
+          {
+            kind: "unit",
+            repo: "frontend",
+            command: "CI=1 npm run test:unit",
+            status: "failed",
+            summary: { total: 580, passed: 573, failed: 1 },
+          },
+          {
+            kind: "unit",
+            repo: "frontend",
+            command: "CI=1 npm run test:unit -- tests/pages/foo.test.tsx",
+            status: "passed",
+            summary: { total: 5, passed: 5, failed: 0 },
+          },
+        ],
+      }),
+    ]);
+
+    expect(attention.kind).toBe("none");
+  });
+
   it("treats passing record as no attention needed", () => {
     const attention = assessEvidenceAttention([
       record({

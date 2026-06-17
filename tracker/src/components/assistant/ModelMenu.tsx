@@ -1,5 +1,6 @@
 import { ChevronDown, Search } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ export function ModelMenu({
   triggerVariant = "ghost",
   showChevron = true,
 }: ModelMenuProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -69,7 +71,9 @@ export function ModelMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>{catalog.agentLabel} · Model</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          {catalog.agentLabel} · {t("assistant.modelMenu.modelSuffix")}
+        </DropdownMenuLabel>
         <div className="px-1 pb-1">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-50" />
@@ -77,7 +81,7 @@ export function ModelMenu({
               ref={searchRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search models…"
+              placeholder={t("assistant.modelMenu.searchPlaceholder")}
               className="h-8 w-full rounded-sm border border-input bg-background pl-7 pr-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
               // Stop Radix's menu typeahead/navigation from hijacking typing.
               onKeyDown={(event) => event.stopPropagation()}
@@ -86,7 +90,7 @@ export function ModelMenu({
         </div>
         <DropdownMenuSeparator />
         {filtered.length === 0 ? (
-          <div className="px-2 py-3 text-center text-xs text-muted-foreground">No models match.</div>
+          <div className="px-2 py-3 text-center text-xs text-muted-foreground">{t("assistant.modelMenu.noMatch")}</div>
         ) : (
           <DropdownMenuRadioGroup
             value={model}

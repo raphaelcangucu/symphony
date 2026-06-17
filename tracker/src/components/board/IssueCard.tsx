@@ -1,6 +1,7 @@
 import { CSS } from "@dnd-kit/utilities";
 import { useSortable } from "@dnd-kit/sortable";
 import { AlertTriangle, ExternalLink, GitBranch, MessageSquare } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { AgentLongRunningBadge, AgentStatusDot, agentStatusLabel } from "@/components/issues/AgentStatusBadge";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
@@ -21,6 +22,7 @@ interface IssueCardProps {
 }
 
 export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: IssueCardProps) {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: issueDragId(issue.identifier),
     disabled: dragOverlay,
@@ -35,7 +37,9 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
   const isBlocked = issue.blockedBy.length > 0;
   const displayStatus = agent ? resolveDisplayStatus(agent) : null;
   const agentNeedsAttention = agent ? executionNeedsAttention(agent) : false;
-  const agentStatusTitle = agent?.error ?? (displayStatus ? `Agent: ${agentStatusLabel(displayStatus)}` : undefined);
+  const agentStatusTitle =
+    agent?.error ??
+    (displayStatus ? t("board.issueCard.agentStatus", { status: agentStatusLabel(displayStatus, t) }) : undefined);
 
   return (
     <article
@@ -63,8 +67,8 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
               target="_blank"
               rel="noreferrer noopener"
               onClick={(event) => event.stopPropagation()}
-              aria-label="Open on tracker"
-              title="Open on tracker"
+              aria-label={t("board.issueCard.openOnTracker")}
+              title={t("board.issueCard.openOnTracker")}
               className="text-muted-foreground transition-colors hover:text-foreground"
             >
               <ExternalLink className="h-3.5 w-3.5" />
@@ -100,7 +104,7 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
           {isBlocked ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-300">
               <AlertTriangle className="h-3 w-3" />
-              Blocked
+              {t("board.issueCard.blocked")}
             </span>
           ) : null}
           {issue.labels.slice(0, 3).map((label) => (
@@ -130,7 +134,7 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
               title={agentStatusTitle}
             >
               <AgentStatusDot status={displayStatus!} />
-              {agentStatusLabel(displayStatus!)}
+              {agentStatusLabel(displayStatus!, t)}
             </span>
           ) : null}
           {isBlocked ? (

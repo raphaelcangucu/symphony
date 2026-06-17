@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 import { SessionLogEntryCard } from "@/components/issues/issue-detail/SessionLogEntryCard";
 import { pairSessionLogItems, sessionPairToView } from "@/components/issues/issue-detail/sessionToolCall";
+import { AGENT_LABELS } from "@/components/shared/AgentChip";
 import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { SessionLogEntry } from "@/types/session-log";
@@ -17,11 +19,9 @@ interface IssueSessionLogProps {
   preferredAgentKind?: string | null;
 }
 
-const LOG_AGENT_LABELS: Record<string, string> = {
-  codex: "Codex",
-  claude: "Claude Code",
-  cursor: "Cursor Agent",
-};
+function agentLabel(kind: string): string {
+  return AGENT_LABELS[kind as keyof typeof AGENT_LABELS] ?? kind;
+}
 
 export function IssueSessionLog({
   issueIdentifier,
@@ -31,6 +31,7 @@ export function IssueSessionLog({
   logAgentKind = null,
   preferredAgentKind = null,
 }: IssueSessionLogProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const items = pairSessionLogItems(entries);
@@ -58,17 +59,23 @@ export function IssueSessionLog({
   return (
     <section className="rounded-xl border p-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Session log</div>
-        <span className="text-[11px] text-muted-foreground">{connected ? "Streaming" : "Connecting…"}</span>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {t("issue.sessionLog.title")}
+        </div>
+        <span className="text-[11px] text-muted-foreground">
+          {connected ? t("issue.sessionLog.streaming") : t("issue.sessionLog.connecting")}
+        </span>
       </div>
       {logAgentKind && preferredAgentKind && logAgentKind !== preferredAgentKind ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Showing {LOG_AGENT_LABELS[logAgentKind] ?? logAgentKind} history —{" "}
-          {LOG_AGENT_LABELS[preferredAgentKind] ?? preferredAgentKind} has not produced a log for this issue yet.
+          {t("issue.sessionLog.agentHistory", {
+            shown: agentLabel(logAgentKind),
+            preferred: agentLabel(preferredAgentKind),
+          })}
         </p>
       ) : logAgentKind ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Source: {LOG_AGENT_LABELS[logAgentKind] ?? logAgentKind}
+          {t("issue.sessionLog.source", { agent: agentLabel(logAgentKind) })}
         </p>
       ) : null}
       {error ? (
@@ -76,7 +83,7 @@ export function IssueSessionLog({
       ) : (
         <div
           ref={containerRef}
-          aria-label={`Session log for ${issueIdentifier}`}
+          aria-label={t("issue.sessionLog.ariaLabel", { identifier: issueIdentifier })}
           className={cn("mt-3 max-h-[520px] space-y-3 overflow-auto rounded-lg bg-muted/20 p-3", SCROLLBAR_THIN)}
         >
           {items.length > 0 ? (
@@ -88,7 +95,7 @@ export function IssueSessionLog({
               ),
             )
           ) : (
-            <p className="px-2 py-6 text-center text-sm text-muted-foreground">Waiting for session output…</p>
+            <p className="px-2 py-6 text-center text-sm text-muted-foreground">{t("issue.sessionLog.waiting")}</p>
           )}
         </div>
       )}

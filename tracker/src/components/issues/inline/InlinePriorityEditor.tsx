@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { PriorityIndicator, priorityLabel } from "@/components/issues/PriorityIndicator";
+import { PriorityIndicator, priorityLabel, priorityOptions } from "@/components/issues/PriorityIndicator";
 import { cn } from "@/lib/utils";
 import type { IssuePriority } from "@/types/issue";
-
-const PRIORITY_OPTIONS: Array<{ value: IssuePriority | null; label: string }> = [
-  { value: null, label: "No priority" },
-  { value: 1, label: "Urgent" },
-  { value: 2, label: "High" },
-  { value: 3, label: "Medium" },
-  { value: 4, label: "Low" },
-];
 
 interface InlinePriorityEditorProps {
   priority: IssuePriority | null;
@@ -25,9 +18,11 @@ export function InlinePriorityEditor({
   saving = false,
   onSave,
 }: InlinePriorityEditorProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<IssuePriority | null>(priority);
   const containerRef = useRef<HTMLDivElement>(null);
+  const options = priorityOptions(t);
 
   useEffect(() => {
     if (!open) setDraft(priority);
@@ -75,16 +70,16 @@ export function InlinePriorityEditor({
         )}
       >
         <PriorityIndicator priority={priority} />
-        <span className="text-sm">{priorityLabel(priority)}</span>
+        <span className="text-sm">{priorityLabel(priority, t)}</span>
       </button>
 
       {open ? (
         <div className="absolute left-0 z-20 mt-2 w-52 overflow-hidden rounded-xl border border-border/70 bg-popover p-2 shadow-lg">
           <div className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Priority
+            {t("issue.inline.priority.title")}
           </div>
           <div className="space-y-0.5">
-            {PRIORITY_OPTIONS.map((option) => {
+            {options.map((option) => {
               const active = draft === option.value;
               return (
                 <button

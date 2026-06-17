@@ -47,6 +47,30 @@ defmodule SymphonyElixir.Evidence.CommitsTest do
     assert {:ok, []} = Commits.list("/tmp/does-not-exist-#{System.unique_integer()}")
   end
 
+  test "lists commits using project default_branches when origin/HEAD is unset", %{tmp_dir: tmp_dir} do
+    repo = Path.join(tmp_dir, "back")
+    File.mkdir_p!(repo)
+    sh!(repo, "git init -b dev")
+    sh!(repo, ~s(git config user.email "agent@test.local"))
+    sh!(repo, "git config user.name \"Symphony Agent\"")
+    sh!(repo, "echo base > README.md && git add README.md && git commit -m 'chore: base'")
+    sh!(repo, "git checkout -b feature/symphony")
+    sh!(repo, "echo work > work.txt && git add work.txt && git commit -m 'feat: agent work'")
+    sh!(repo, "git remote add origin .")
+    sh!(repo, "git update-ref refs/remotes/origin/dev dev")
+    # Shallow-clone style: no origin/HEAD symbolic ref.
+
+    workspace = Path.join(tmp_dir, "MAC-535")
+    File.mkdir_p!(workspace)
+    File.rename!(repo, Path.join(workspace, "back"))
+
+    assert {:ok, []} = Commits.list(workspace)
+
+    assert {:ok, [commit]} = Commits.list(workspace, default_branches: %{"back" => "dev"})
+    assert commit.repo == "back"
+    assert commit.message =~ "agent work"
+  end
+
   defp sh!(cwd, command) do
     {output, status} = System.cmd("bash", ["-lc", command], cd: cwd, stderr_to_stdout: true)
     assert status == 0, output

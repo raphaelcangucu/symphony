@@ -158,6 +158,28 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @doc """
+  Maps workspace repo directory names to integration branches from project config.
+
+  Used by commit evidence and the publish gate when `origin/HEAD` is unset (e.g.
+  shallow clones from `gh repo clone --depth 1`).
+  """
+  @spec repo_default_branches(String.t()) :: %{String.t() => String.t()}
+  def repo_default_branches(project_slug) when is_binary(project_slug) do
+    project_slug
+    |> list_repositories()
+    |> Enum.reduce(%{}, fn repo, acc ->
+      branch = repo.default_branch || repo.selected_branch
+      key = repo.workspace_path || repo.github_full_name
+
+      if is_binary(key) and is_binary(branch) and branch != "" do
+        Map.put(acc, key, branch)
+      else
+        acc
+      end
+    end)
+  end
+
   @spec replace_repositories(String.t(), [map()]) ::
           {:ok, [Repository.t()]} | {:error, :project_not_found | Ecto.Changeset.t()}
   def replace_repositories(project_slug, repositories)

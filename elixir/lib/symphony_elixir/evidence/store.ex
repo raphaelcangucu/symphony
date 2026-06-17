@@ -9,6 +9,7 @@ defmodule SymphonyElixir.Evidence.Store do
 
   alias SymphonyElixir.Evidence.Manifest
   alias SymphonyElixir.Evidence.Record
+  alias SymphonyElixir.Evidence.RunStatus
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
@@ -51,6 +52,62 @@ defmodule SymphonyElixir.Evidence.Store do
     end
   end
 
+  @spec delete_run(String.t(), String.t(), String.t()) ::
+          {:ok, Record.t()} | {:error, :run_not_found | term()}
+  def delete_run(project_slug, identifier, run_id) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         %Record{} = record <- find_record(project.id, identifier, run_id) do
+      delete_record(record)
+    else
+      nil -> {:error, :run_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec delete_all(String.t(), String.t()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def delete_all(project_slug, identifier) do
+    with {:ok, project} <- Context.get_project(project_slug) do
+      records =
+        Repo.all(
+          from(r in Record,
+            where: r.project_id == ^project.id and r.issue_identifier == ^identifier
+          )
+        )
+
+      count = Enum.reduce(records, 0, fn record, acc ->
+        case delete_record(record) do
+          {:ok, _} -> acc + 1
+          {:error, _} -> acc
+        end
+      end)
+
+      {:ok, count}
+    end
+  end
+
+  @spec delete_failed(String.t(), String.t()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def delete_failed(project_slug, identifier) do
+    with {:ok, project} <- Context.get_project(project_slug) do
+      records =
+        Repo.all(
+          from(r in Record,
+            where:
+              r.project_id == ^project.id and r.issue_identifier == ^identifier and
+                r.status != "passed"
+          )
+        )
+
+      count = Enum.reduce(records, 0, fn record, acc ->
+        case delete_record(record) do
+          {:ok, _} -> acc + 1
+          {:error, _} -> acc
+        end
+      end)
+
+      {:ok, count}
+    end
+  end
+
   @spec resolve_artifact(Record.t(), String.t()) ::
           {:ok, Path.t()} | {:error, :invalid_path | :not_found}
   def resolve_artifact(%Record{artifact_dir: dir}, relative) do
@@ -81,9 +138,7 @@ defmodule SymphonyElixir.Evidence.Store do
     end
   end
 
-  defp overall_status(%{"runs" => runs}) when is_list(runs) do
-    if Enum.all?(runs, &(&1["status"] == "passed")), do: "passed", else: "failed"
-  end
+  defp overall_status(%{"runs" => runs}) when is_list(runs), do: RunStatus.overall_status(runs)
 
   defp overall_status(_manifest), do: "failed"
 
@@ -94,4 +149,35 @@ defmodule SymphonyElixir.Evidence.Store do
   end
 
   defp safe(identifier), do: String.replace(identifier, ~r/[^a-zA-Z0-9._-]/, "_")
+
+  defp find_record(project_id, identifier, run_id) do
+    Repo.one(
+      from(r in Record,
+        where:
+          r.project_id == ^project_id and r.issue_identifier == ^identifier and
+            r.run_id == ^run_id
+      )
+    )
+  end
+
+  defp delete_record(%Record{} = record) do
+    remove_artifact_dir(record)
+
+    case Repo.delete(record) do
+      {:ok, deleted} -> {:ok, deleted}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp remove_artifact_dir(%Record{artifact_dir: dir}) when is_binary(dir) and dir != "" do
+    full = Path.expand(dir)
+
+    if File.exists?(full) do
+      File.rm_rf!(full)
+    end
+
+    :ok
+  end
+
+  defp remove_artifact_dir(_record), do: :ok
 end

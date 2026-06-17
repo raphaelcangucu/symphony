@@ -1,5 +1,6 @@
 import { Check, ChevronDown, UserRound, X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export function PeopleMultiSelect({
   align = "left",
   className,
 }: PeopleMultiSelectProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -114,7 +116,7 @@ export function PeopleMultiSelect({
               ref={searchRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={`Search ${triggerLabel.toLowerCase()}…`}
+              placeholder={t("board.people.searchPlaceholder", { label: triggerLabel.toLowerCase() })}
               className="h-8"
             />
           </div>
@@ -122,7 +124,7 @@ export function PeopleMultiSelect({
           <div className="max-h-64 space-y-0.5 overflow-y-auto p-1">
             {includeMe ? (
               <OptionRow
-                label="Assigned to me"
+                label={t("board.people.assignedToMe")}
                 active={selectedSet.has(ME_TOKEN)}
                 onClick={() => onToggle(ME_TOKEN)}
                 leading={<UserRound className="h-4 w-4 text-primary" />}
@@ -130,7 +132,7 @@ export function PeopleMultiSelect({
             ) : null}
             {includeUnassigned ? (
               <OptionRow
-                label="Unassigned"
+                label={t("board.unassigned")}
                 count={unassignedCount}
                 active={selectedSet.has(UNASSIGNED_TOKEN)}
                 onClick={() => onToggle(UNASSIGNED_TOKEN)}
@@ -146,7 +148,7 @@ export function PeopleMultiSelect({
             ) : null}
 
             {filtered.length === 0 ? (
-              <p className="px-2 py-6 text-center text-xs text-muted-foreground">No people found.</p>
+              <p className="px-2 py-6 text-center text-xs text-muted-foreground">{t("board.people.noPeopleFound")}</p>
             ) : (
               filtered.map((person) => (
                 <OptionRow
@@ -164,10 +166,10 @@ export function PeopleMultiSelect({
           {count > 0 && onClear ? (
             <div className="flex items-center justify-between border-t px-2 py-1.5">
               <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={onClear}>
-                <X className="h-3 w-3" /> Clear
+                <X className="h-3 w-3" /> {t("board.clear")}
               </Button>
               <Button size="sm" className="h-7 text-xs" onClick={() => setOpen(false)}>
-                Done
+                {t("board.done")}
               </Button>
             </div>
           ) : null}

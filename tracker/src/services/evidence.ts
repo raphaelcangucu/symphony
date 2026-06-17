@@ -72,3 +72,57 @@ export async function listEvidence(
 
   return (response.data?.data ?? []).map(normalizeEvidence);
 }
+
+export async function deleteEvidenceRun(
+  projectSlug: string,
+  identifier: string,
+  runId: string,
+): Promise<void> {
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!projectSlug.trim() || !issueIdentifier || !runId.trim()) {
+    throw new Error("projectSlug, identifier, and runId are required");
+  }
+
+  await http.delete(
+    trackerPath(
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence/${encodeURIComponent(runId)}`,
+    ),
+  );
+}
+
+export async function clearIssueEvidence(
+  projectSlug: string,
+  identifier: string,
+): Promise<number> {
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!projectSlug.trim() || !issueIdentifier) {
+    throw new Error("projectSlug and identifier are required");
+  }
+
+  const response = await http.delete<{ data?: { deleted?: number } }>(
+    trackerPath(
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence`,
+    ),
+  );
+
+  return response.data?.data?.deleted ?? 0;
+}
+
+export async function clearFailedIssueEvidence(
+  projectSlug: string,
+  identifier: string,
+): Promise<number> {
+  const issueIdentifier = normalizeIssueIdentifier(identifier);
+  if (!projectSlug.trim() || !issueIdentifier) {
+    throw new Error("projectSlug and identifier are required");
+  }
+
+  const response = await http.post<{ data?: { deleted?: number } }>(
+    trackerPath(
+      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence/clear-failed`,
+    ),
+    {},
+  );
+
+  return response.data?.data?.deleted ?? 0;
+}

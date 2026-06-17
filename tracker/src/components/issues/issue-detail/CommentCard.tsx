@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 import { ExternalLink, NotebookPen } from "lucide-react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { Markdown } from "@/components/ui/markdown";
+import { i18n } from "@/i18n";
 import { cn, formatDateTime } from "@/lib/utils";
 
 interface CommentCardProps {
@@ -16,6 +19,8 @@ interface CommentCardProps {
 }
 
 export function CommentCard({ author, body, createdAt, url, badge, highlight, actions }: CommentCardProps) {
+  const { t } = useTranslation();
+
   return (
     <article className="overflow-hidden rounded-lg border">
       <header
@@ -25,10 +30,11 @@ export function CommentCard({ author, body, createdAt, url, badge, highlight, ac
         )}
       >
         <AssigneeAvatar login={author} />
-        <span className="font-medium text-foreground">{author || "Unknown"}</span>
+        <span className="font-medium text-foreground">{author || t("issue.comments.card.unknownAuthor")}</span>
         {badge}
         <span className="text-muted-foreground">
-          commented{createdAt ? ` · ${formatDateTime(createdAt)}` : ""}
+          {t("issue.comments.card.commented")}
+          {createdAt ? ` · ${formatDateTime(createdAt)}` : ""}
         </span>
         <div className="ml-auto flex items-center gap-2">
           {actions}
@@ -38,7 +44,7 @@ export function CommentCard({ author, body, createdAt, url, badge, highlight, ac
               target="_blank"
               rel="noreferrer noopener"
               className="text-muted-foreground transition-colors hover:text-foreground"
-              title="Open on GitHub"
+              title={t("issue.comments.card.openOnGitHub")}
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -49,7 +55,7 @@ export function CommentCard({ author, body, createdAt, url, badge, highlight, ac
         {body.trim() ? (
           <Markdown>{body}</Markdown>
         ) : (
-          <p className="text-sm text-muted-foreground">Empty comment.</p>
+          <p className="text-sm text-muted-foreground">{t("issue.comments.card.empty")}</p>
         )}
       </div>
     </article>
@@ -64,14 +70,22 @@ const SYNC_BADGE_STYLES: Record<string, string> = {
   error: "border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200",
 };
 
-const SYNC_BADGE_LABELS: Record<string, string> = {
-  pending: "Syncing…",
-  conflict: "Sync conflict",
-  error: "Sync failed",
+const SYNC_BADGE_KEYS: Record<string, string> = {
+  pending: "issue.comments.card.sync.pending",
+  conflict: "issue.comments.card.sync.conflict",
+  error: "issue.comments.card.sync.error",
 };
 
-export function SyncBadge({ syncStatus }: { syncStatus: string | null }) {
+export function SyncBadge({
+  syncStatus,
+  t = i18n.t.bind(i18n) as TFunction,
+}: {
+  syncStatus: string | null;
+  t?: TFunction;
+}) {
   if (!syncStatus || syncStatus === "synced" || syncStatus === "archived") return null;
+
+  const labelKey = SYNC_BADGE_KEYS[syncStatus] ?? SYNC_BADGE_KEYS.error;
 
   return (
     <span
@@ -80,16 +94,18 @@ export function SyncBadge({ syncStatus }: { syncStatus: string | null }) {
         SYNC_BADGE_STYLES[syncStatus] ?? SYNC_BADGE_STYLES.error,
       )}
     >
-      {SYNC_BADGE_LABELS[syncStatus] ?? "Sync failed"}
+      {t(labelKey)}
     </span>
   );
 }
 
 export function WorkpadBadge() {
+  const { t } = useTranslation();
+
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-medium text-primary">
       <NotebookPen className="h-3 w-3" />
-      Workpad
+      {t("issue.comments.card.workpad")}
     </span>
   );
 }

@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 
+import { i18n } from "@/i18n";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import { openTerminalSession, terminalTopic } from "@/services/terminal";
 
@@ -54,7 +55,7 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
         });
         channel.on("error", (payload) => {
           const message = payloadValue(payload, "message");
-          setError(typeof message === "string" ? message : "Terminal error");
+          setError(typeof message === "string" ? message : i18n.t("issue.terminal.error"));
         });
 
         terminal.onData((data) => {
@@ -72,20 +73,17 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
             if (typeof output === "string" && output.length > 0) {
               lastSnapshot = renderSnapshot(terminal, output, lastSnapshot);
             }
-            // The first fitAddon.fit() runs before this channel exists, so its
-            // resize event is lost and tmux stays at its 80x24 default. Push the
-            // current size explicitly so the detached pane matches the viewport.
             channel?.push("resize", { cols: terminal.cols, rows: terminal.rows });
           })
           .receive("error", (reason) => {
-            setError(`Failed to join terminal channel: ${JSON.stringify(reason)}`);
+            setError(i18n.t("issue.terminal.joinFailed", { reason: JSON.stringify(reason) }));
           })
           .receive("timeout", () => {
-            setError("Timed out joining terminal channel");
+            setError(i18n.t("issue.terminal.joinTimeout"));
           });
       })
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : "Failed to open terminal session");
+        setError(reason instanceof Error ? reason.message : i18n.t("issue.terminal.openFailed"));
       });
 
     const resizeObserver =
@@ -113,7 +111,7 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
         </div>
       ) : null}
       <div
-        aria-label={`Terminal for ${issueIdentifier}`}
+        aria-label={i18n.t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
         className="h-[480px] overflow-hidden rounded-lg border bg-slate-950 p-2"
         ref={containerRef}
       />

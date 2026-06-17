@@ -29,12 +29,14 @@ defmodule SymphonyElixir.Evidence.Commits do
           patch: String.t()
         }
 
-  @spec list(Path.t()) :: {:ok, [commit()]} | {:error, term()}
-  def list(workspace) when is_binary(workspace) do
+  @spec list(Path.t(), keyword()) :: {:ok, [commit()]} | {:error, term()}
+  def list(workspace, opts \\ []) when is_binary(workspace) do
+    default_branches = Keyword.get(opts, :default_branches, %{})
+
     if File.dir?(workspace) do
       commits =
         workspace
-        |> RunContract.repo_states()
+        |> RunContract.repo_states(default_branches: default_branches)
         |> Enum.flat_map(&list_repo_commits/1)
         |> Enum.sort_by(& &1.authored_at, :desc)
 
