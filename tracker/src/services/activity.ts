@@ -1,3 +1,4 @@
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import type { ActivityEvent } from "@/types/activity";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -21,11 +22,11 @@ function normalizeActivityEvent(dto: BackendActivityEventDto): ActivityEvent {
 }
 
 export async function listActivityEvents(projectSlug: string, identifier: string): Promise<ActivityEvent[]> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
 
   const response = await http.get(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/activity`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/activity`),
   );
 
   return unwrapData<BackendActivityEventDto[]>(response).map(normalizeActivityEvent);

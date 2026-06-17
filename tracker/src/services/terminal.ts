@@ -1,3 +1,4 @@
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import type { TerminalSession } from "@/types/terminal";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -13,18 +14,18 @@ interface BackendTerminalSessionDto {
 }
 
 export function terminalTopic(projectSlug: string, issueIdentifier: string): string {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!issueIdentifier.trim()) throw new Error("issueIdentifier is required");
-  return `terminal:${projectSlug}:${issueIdentifier}`;
+  const slug = requireProjectSlug(projectSlug);
+  const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");
+  return `terminal:${slug}:${identifier}`;
 }
 
 export async function openTerminalSession(projectSlug: string, issueIdentifier: string): Promise<TerminalSession> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!issueIdentifier.trim()) throw new Error("issueIdentifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");
 
   const response = await http.post(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/terminal`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(identifier)}/terminal`,
     ),
   );
 

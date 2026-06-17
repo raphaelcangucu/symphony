@@ -1,4 +1,5 @@
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import type { EvidenceRecord, EvidenceRun } from "@/types/evidence";
 
 import { http, trackerPath } from "./http";
@@ -66,13 +67,12 @@ export async function listEvidence(
   projectSlug: string,
   identifier: string,
 ): Promise<EvidenceRecord[]> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
 
   const response = await http.get<BackendEvidenceEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence`,
     ),
   );
 
@@ -84,14 +84,13 @@ export async function deleteEvidenceRun(
   identifier: string,
   runId: string,
 ): Promise<void> {
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!projectSlug.trim() || !issueIdentifier || !runId.trim()) {
-    throw new Error("projectSlug, identifier, and runId are required");
-  }
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
+  const run = requireNonBlank(runId, "runId");
 
   await http.delete(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence/${encodeURIComponent(runId)}`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence/${encodeURIComponent(run)}`,
     ),
   );
 }
@@ -100,14 +99,12 @@ export async function clearIssueEvidence(
   projectSlug: string,
   identifier: string,
 ): Promise<number> {
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!projectSlug.trim() || !issueIdentifier) {
-    throw new Error("projectSlug and identifier are required");
-  }
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
 
   const response = await http.delete<{ data?: { deleted?: number } }>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence`,
     ),
   );
 
@@ -118,14 +115,12 @@ export async function clearFailedIssueEvidence(
   projectSlug: string,
   identifier: string,
 ): Promise<number> {
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!projectSlug.trim() || !issueIdentifier) {
-    throw new Error("projectSlug and identifier are required");
-  }
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
 
   const response = await http.post<{ data?: { deleted?: number } }>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence/clear-failed`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/evidence/clear-failed`,
     ),
     {},
   );

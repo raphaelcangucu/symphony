@@ -15,6 +15,8 @@ import type {
   UpdateBranchResult,
 } from "@/types/pull-request";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { i18n } from "@/i18n";
+import { requireNonBlank, requirePositiveField, requireProjectSlug } from "@/lib/serviceValidation";
 
 import { http, trackerPath } from "./http";
 import { type BackendIssueDto, normalizeIssue } from "./mappers";
@@ -185,18 +187,23 @@ export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
   };
 }
 
+function issuePullRequestContext(projectSlug: string, identifier: string): { slug: string; issueId: string } {
+  return {
+    slug: requireProjectSlug(projectSlug),
+    issueId: requireNonBlank(normalizeIssueIdentifier(identifier), "identifier"),
+  };
+}
+
 export async function listPullRequests(
   projectSlug: string,
   identifier: string,
   options?: { refresh?: boolean },
 ): Promise<PullRequestResult> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
+  const { slug, issueId } = issuePullRequestContext(projectSlug, identifier);
 
   const response = await http.get<BackendPullRequestEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/pull_requests`,
     ),
     options?.refresh ? { params: { refresh: "1" } } : undefined,
   );
@@ -214,16 +221,14 @@ export async function linkPullRequest(
   identifier: string,
   url: string,
 ): Promise<void> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
-  if (!url.trim()) throw new Error("url is required");
+  const { slug, issueId } = issuePullRequestContext(projectSlug, identifier);
+  const trimmedUrl = requireNonBlank(url, "url");
 
   await http.post(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/link`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/pull_requests/link`,
     ),
-    { url: url.trim() },
+    { url: trimmedUrl },
   );
 }
 
@@ -232,16 +237,14 @@ export async function unlinkPullRequest(
   identifier: string,
   url: string,
 ): Promise<void> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
-  if (!url.trim()) throw new Error("url is required");
+  const { slug, issueId } = issuePullRequestContext(projectSlug, identifier);
+  const trimmedUrl = requireNonBlank(url, "url");
 
   await http.delete(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/link`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/pull_requests/link`,
     ),
-    { data: { url: url.trim() } },
+    { data: { url: trimmedUrl } },
   );
 }
 
@@ -257,13 +260,11 @@ export async function requestPullRequestFix(
   projectSlug: string,
   identifier: string,
 ): Promise<PullRequestFixResult> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
+  const { slug, issueId } = issuePullRequestContext(projectSlug, identifier);
 
   const response = await http.post<BackendFixEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/fix`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/pull_requests/fix`,
     ),
   );
 
@@ -288,14 +289,12 @@ export async function updatePullRequestBranch(
   identifier: string,
   number: number,
 ): Promise<UpdateBranchResult> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
-  if (!Number.isInteger(number) || number <= 0) throw new Error("number is required");
+  const { slug, issueId } = issuePullRequestContext(projectSlug, identifier);
+  requirePositiveField(number, "number");
 
   const response = await http.post<BackendUpdateBranchEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/${number}/update_branch`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/pull_requests/${number}/update_branch`,
     ),
   );
 
@@ -319,15 +318,15 @@ export async function mergePullRequest(
   number: number,
   input: MergePullRequestInput,
 ): Promise<MergePullRequestResult> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
-  if (!Number.isInteger(number) || number <= 0) throw new Error("number is required");
-  if (!isMergeMethod(input.method)) throw new Error("method is required");
+  const { slug, issueId } = issuePullRequestContext(projectSlug, identifier);
+  requirePositiveField(number, "number");
+  if (!isMergeMethod(input.method)) {
+    throw new Error(i18n.t("project.services.validation.fieldRequired", { field: "method" }));
+  }
 
   const payload = { method: input.method, bypass: input.bypass === true };
   const response = await http.post<BackendMergeEnvelope>(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/${number}/merge`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/pull_requests/${number}/merge`),
     payload,
   );
 
@@ -359,14 +358,12 @@ export async function rerunFailedJobs(
   identifier: string,
   number: number,
 ): Promise<RerunResult[]> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
-  if (!Number.isInteger(number) || number <= 0) throw new Error("number is required");
+  const { slug, issueId } = issuePullRequestContext(projectSlug, identifier);
+  requirePositiveField(number, "number");
 
   const response = await http.post<BackendRerunEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/pull_requests/${number}/rerun_failed`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/pull_requests/${number}/rerun_failed`,
     ),
   );
 

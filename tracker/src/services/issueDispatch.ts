@@ -1,3 +1,4 @@
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import type { AgentKind, Issue } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -30,8 +31,8 @@ export async function dispatchIssueAgent(
   identifier: string,
   input: IssueDispatchInput,
 ): Promise<IssueDispatchResult> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
 
   const payload: Record<string, unknown> = { action: input.action };
   if (input.agent) payload.agent = input.agent;
@@ -40,7 +41,7 @@ export async function dispatchIssueAgent(
   if (input.targetStatus?.trim()) payload.target_status = input.targetStatus.trim();
 
   const response = await http.post(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/dispatch`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/dispatch`),
     payload,
   );
 

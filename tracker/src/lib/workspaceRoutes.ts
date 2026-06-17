@@ -1,4 +1,5 @@
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 
 export type WorkspaceView = "board" | "list";
 
@@ -25,9 +26,7 @@ export function isIssueTab(value: string | undefined | null): value is IssueTab 
 }
 
 function requireSlug(projectSlug: string): string {
-  const trimmed = projectSlug.trim();
-  if (!trimmed) throw new Error("projectSlug is required to build a workspace route");
-  return encodeURIComponent(trimmed);
+  return encodeURIComponent(requireProjectSlug(projectSlug));
 }
 
 export function workspaceBasePath(projectSlug: string, view: WorkspaceView): string {
@@ -47,8 +46,7 @@ export function newIssueAssistantPath(projectSlug: string): string {
 }
 
 export function issueAssistantPath(projectSlug: string, issueId: string): string {
-  const trimmed = normalizeIssueIdentifier(issueId);
-  if (!trimmed) throw new Error("identifier is required to build an issue assistant route");
+  const trimmed = requireNonBlank(normalizeIssueIdentifier(issueId), "identifier");
   return `/projects/${requireSlug(projectSlug)}/assistant/issue/${encodeURIComponent(trimmed)}`;
 }
 
@@ -101,8 +99,7 @@ export function issuePath(
   identifier: string,
   tab: IssueTab = DEFAULT_ISSUE_TAB,
 ): string {
-  const trimmed = normalizeIssueIdentifier(identifier);
-  if (!trimmed) throw new Error("identifier is required to build an issue route");
+  const trimmed = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
   const base = `${workspaceBasePath(projectSlug, view)}/issues/${encodeURIComponent(trimmed)}`;
   return tab === DEFAULT_ISSUE_TAB ? base : `${base}/${tab}`;
 }

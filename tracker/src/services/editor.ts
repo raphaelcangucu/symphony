@@ -1,3 +1,5 @@
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
+
 import { http, trackerPath, unwrapData } from "./http";
 
 export type EditorReason =
@@ -78,11 +80,11 @@ function resolveCursorDesktop(dto: BackendEditorDto, browser: EditorTarget): Edi
 }
 
 export async function fetchEditorTargets(projectSlug: string, identifier: string): Promise<EditorTargets> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
 
   const response = await http.get(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/editor`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/editor`),
   );
 
   const dto = unwrapData<BackendEditorDto>(response);

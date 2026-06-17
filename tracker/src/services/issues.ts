@@ -1,3 +1,4 @@
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import type {
   AgentKind,
   CreateIssueInput,
@@ -22,10 +23,10 @@ export interface IssueListFilters {
 }
 
 export async function listIssues(projectSlug: string, filters: IssueListFilters = {}): Promise<Issue[]> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
+  const slug = requireProjectSlug(projectSlug);
 
   const params = buildIssueListParams(filters);
-  const path = trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues`);
+  const path = trackerPath(`/projects/${encodeURIComponent(slug)}/issues`);
   const response =
     Object.keys(params).length === 0 ? await http.get(path) : await http.get(path, { params });
 
@@ -41,25 +42,25 @@ function buildIssueListParams(filters: IssueListFilters): Record<string, string>
 }
 
 export async function getIssue(projectSlug: string, identifier: string): Promise<Issue> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
   const response = await http.get(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}`),
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
 
 export async function getIssueFormOptions(projectSlug: string): Promise<IssueFormOptions> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const response = await http.get(trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/form_options`));
+  const slug = requireProjectSlug(projectSlug);
+  const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/issues/form_options`));
   return normalizeIssueFormOptions(unwrapData<BackendIssueFormOptionsDto>(response));
 }
 
 export async function createIssue(projectSlug: string, input: CreateIssueInput): Promise<Issue> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!input.title.trim()) throw new Error("title is required");
+  const slug = requireProjectSlug(projectSlug);
+  requireNonBlank(input.title, "title");
   const response = await http.post(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues`),
     serializeCreateInput(input),
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
@@ -86,10 +87,10 @@ export async function updateIssue(
   identifier: string,
   input: UpdateIssueInput,
 ): Promise<Issue> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
   const response = await http.patch(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}`),
     serializeUpdateInput(input),
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
@@ -107,38 +108,38 @@ function serializeUpdateInput(input: UpdateIssueInput): Record<string, unknown> 
 }
 
 export async function moveIssue(projectSlug: string, identifier: string, input: MoveIssueInput): Promise<Issue> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
   const response = await http.post(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/move`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/move`),
     input,
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
 
 export async function forceSyncIssue(projectSlug: string, identifier: string): Promise<Issue> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
   const response = await http.post(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/sync`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/sync`),
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
 
 export async function archiveIssue(projectSlug: string, identifier: string): Promise<Issue> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
   const response = await http.post(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/archive`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/archive`),
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
 
 export async function restoreIssue(projectSlug: string, identifier: string): Promise<Issue> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
   const response = await http.post(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}/restore`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/restore`),
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
@@ -148,20 +149,20 @@ export async function updateIssueAgent(
   identifier: string,
   agent: AgentKind | null,
 ): Promise<Issue> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
   const response = await http.put(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}`),
     { agent },
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
 
 export async function deleteIssue(projectSlug: string, identifier: string): Promise<Issue> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!identifier.trim()) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
   const response = await http.delete(
-    trackerPath(`/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`),
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}`),
   );
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }

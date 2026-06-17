@@ -1226,7 +1226,9 @@
         "repositoryRequired": "Pelo menos um repositório é obrigatório",
         "githubOwnerRequired": "Owner GitHub é obrigatório",
         "documentPathInvalid": "O caminho do documento não pode incluir segmentos . ou ..",
-        "uploadPathMissing": "A resposta do upload não incluiu um caminho de arquivo."
+        "uploadPathMissing": "A resposta do upload não incluiu um caminho de arquivo.",
+        "projectAndIdentifierRequired": "projectSlug e identifier são obrigatórios",
+        "evidenceDeleteRequired": "projectSlug, identifier e runId são obrigatórios"
       }
     },
     "templates": {

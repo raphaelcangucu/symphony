@@ -1,5 +1,7 @@
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
+
 export function sessionLogTopic(projectSlug: string, issueIdentifier: string): string {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  if (!issueIdentifier.trim()) throw new Error("issueIdentifier is required");
-  return `session_log:${projectSlug}:${issueIdentifier}`;
+  const slug = requireProjectSlug(projectSlug);
+  const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");
+  return `session_log:${slug}:${identifier}`;
 }

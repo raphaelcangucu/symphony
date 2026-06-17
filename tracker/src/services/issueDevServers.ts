@@ -1,4 +1,5 @@
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import { getTrackerToken } from "@/config";
 import type { IssueDevServerTunnel, IssueDevServersResponse } from "@/types/issue";
 
@@ -272,17 +273,13 @@ function issueDevServersEventsPath(projectSlug: string, issueIdentifier: string)
 }
 
 function issueDevServersPath(projectSlug: string, issueIdentifier: string): string {
-  requireNonBlank(projectSlug, "projectSlug");
-  const normalizedIssueIdentifier = normalizeIssueIdentifier(issueIdentifier);
-  requireNonBlank(normalizedIssueIdentifier, "issueIdentifier");
+  const slug = requireProjectSlug(projectSlug);
+  const normalizedIssueIdentifier = requireNonBlank(
+    normalizeIssueIdentifier(issueIdentifier),
+    "issueIdentifier",
+  );
 
   return trackerPath(
-    `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(normalizedIssueIdentifier)}/${DEV_SERVERS_PATH_SEGMENT}`,
+    `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(normalizedIssueIdentifier)}/${DEV_SERVERS_PATH_SEGMENT}`,
   );
-}
-
-function requireNonBlank(value: string, fieldName: string): void {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${fieldName} is required`);
-  }
 }

@@ -1,5 +1,7 @@
 import type { Channel } from "phoenix";
 
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
+
 import {
   normalizeAssistantChatMessage,
   normalizeToolCall,
@@ -72,29 +74,23 @@ interface IssueCreatedPayload {
 }
 
 export function assistantTopic(projectSlug: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
+  const slug = requireProjectSlug(projectSlug);
   return `assistant:${slug}`;
 }
 
 export function assistantExploreTopic(projectSlug: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
+  const slug = requireProjectSlug(projectSlug);
   return `assistant:explore:${encodeURIComponent(slug)}`;
 }
 
 export function assistantThreadTopic(threadId: number | string): string {
-  const id = String(threadId).trim();
-  if (!id) throw new Error("threadId is required");
+  const id = requireNonBlank(String(threadId), "threadId");
   return `assistant:thread:${id}`;
 }
 
 export function assistantIssueTopic(projectSlug: string, identifier: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
-
-  const issueIdentifier = identifier.trim();
-  if (!issueIdentifier) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(identifier, "identifier");
 
   return `assistant:issue:${encodeURIComponent(slug)}:${encodeURIComponent(issueIdentifier)}`;
 }

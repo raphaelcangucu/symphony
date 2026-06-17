@@ -1226,7 +1226,9 @@
         "repositoryRequired": "At least one repository is required",
         "githubOwnerRequired": "GitHub owner is required",
         "documentPathInvalid": "Document path cannot include . or .. segments",
-        "uploadPathMissing": "Upload response did not include a file path."
+        "uploadPathMissing": "Upload response did not include a file path.",
+        "projectAndIdentifierRequired": "projectSlug and identifier are required",
+        "evidenceDeleteRequired": "projectSlug, identifier, and runId are required"
       }
     },
     "templates": {

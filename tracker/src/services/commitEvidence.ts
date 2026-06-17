@@ -1,4 +1,5 @@
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import type {
   CommitEvidenceDetail,
   CommitEvidenceSummary,
@@ -77,13 +78,12 @@ export async function listCommitEvidence(
   projectSlug: string,
   identifier: string,
 ): Promise<{ commits: CommitEvidenceSummary[]; workspace: CommitEvidenceWorkspace }> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
 
   const response = await http.get<BackendCommitListEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/commit_evidence`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/commit_evidence`,
     ),
   );
 
@@ -99,13 +99,12 @@ export async function getCommitEvidence(
   repo: string,
   sha: string,
 ): Promise<CommitEvidenceDetail> {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  const issueIdentifier = normalizeIssueIdentifier(identifier);
-  if (!issueIdentifier) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
 
   const response = await http.get<BackendCommitDetailEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(issueIdentifier)}/commit_evidence/${encodeURIComponent(repo)}/${encodeURIComponent(sha)}`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/commit_evidence/${encodeURIComponent(repo)}/${encodeURIComponent(sha)}`,
     ),
   );
 

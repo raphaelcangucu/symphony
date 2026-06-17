@@ -1,5 +1,7 @@
 import { API_PREFIX } from "@/config";
 
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
+
 import { http, trackerPath } from "./http";
 
 const ATTACHMENT_PATH_SEGMENT = "/assistant/attachments/";
@@ -11,11 +13,9 @@ const EVIDENCE_ARTIFACT_FILE_SEGMENT = "/artifacts/";
  * attachment (e.g. `uploads/<id>.png`).
  */
 export function projectAttachmentUrl(projectSlug: string, relativePath: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
+  const slug = requireProjectSlug(projectSlug);
 
-  const path = relativePath.trim().replace(/^\/+/, "");
-  if (!path) throw new Error("attachment path is required");
+  const path = requireNonBlank(relativePath.trim().replace(/^\/+/, ""), "attachment path");
 
   const encoded = path
     .split("/")
@@ -31,11 +31,8 @@ export function projectAttachmentUrl(projectSlug: string, relativePath: string):
  * attachment (the daemon fetches it from JIRA with the operator's credentials).
  */
 export function jiraAttachmentUrl(projectSlug: string, attachmentId: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
-
-  const id = attachmentId.trim();
-  if (!id) throw new Error("attachmentId is required");
+  const slug = requireProjectSlug(projectSlug);
+  const id = requireNonBlank(attachmentId, "attachmentId");
 
   return trackerPath(`/projects/${encodeURIComponent(slug)}/jira/attachments/${encodeURIComponent(id)}`);
 }
@@ -94,7 +91,7 @@ const objectUrlCache = new Map<string, Promise<string>>();
  * renders reuse a single object URL for the lifetime of the page.
  */
 export function fetchAttachmentObjectUrl(src: string): Promise<string> {
-  if (!src) throw new Error("attachment src is required");
+  requireNonBlank(src, "attachment src");
 
   const cached = objectUrlCache.get(src);
   if (cached) return cached;
