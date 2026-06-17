@@ -1,5 +1,7 @@
 import { ExternalLink, Rocket, Sparkles } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { DocumentViewer } from "@/components/assistant/DocumentViewer";
@@ -42,6 +44,7 @@ export function IssueAuthoringPanel({
   onDraftIssueCreated,
   onIssueCreated,
 }: IssueAuthoringPanelProps) {
+  const { t } = useTranslation();
   const normalizedIdentifier = useMemo(() => normalizeIssueIdentifier(identifier) || null, [identifier]);
   const [effectiveAgent, setEffectiveAgent] = useState<AgentKind>(effectiveAgentProp ?? "codex");
   const [composerAgent, setComposerAgent] = useState<AgentKind | null>(null);
@@ -94,14 +97,14 @@ export function IssueAuthoringPanel({
     setIssueMode(mode);
     setIssueModeRequestId((current) => current + 1);
     setIssueModeError(null);
-    setIssueModeStatus(`Setting ${issueModeLabel(mode)} mode...`);
-  }, []);
+    setIssueModeStatus(t("assistant.authoring.settingMode", { mode: issueModeLabel(mode, t) }));
+  }, [t]);
 
   const handleIssueModeChanged = useCallback((mode: IssueAssistantMode) => {
     setIssueMode(mode);
     setIssueModeError(null);
-    setIssueModeStatus(`${issueModeLabel(mode)} mode active.`);
-  }, []);
+    setIssueModeStatus(t("assistant.authoring.modeActive", { mode: issueModeLabel(mode, t) }));
+  }, [t]);
 
   const handleIssueModeError = useCallback((message: string) => {
     setIssueModeError(message);
@@ -109,25 +112,29 @@ export function IssueAuthoringPanel({
   }, []);
 
   const toggleGoalMode = useCallback((enabled: boolean) => {
-    const term = longRunningModeTerm(activeAgentRef.current);
+    const term = longRunningModeTerm(activeAgentRef.current, t);
     const name = agentDisplayName(activeAgentRef.current);
     setGoalMode(enabled);
     setGoalModeRequestId((current) => current + 1);
     setGoalModeError(null);
-    setGoalModeStatus(enabled ? `Enabling ${name} ${term} mode...` : `Disabling ${name} ${term} mode...`);
-  }, []);
+    setGoalModeStatus(
+      enabled
+        ? t("assistant.authoring.enablingMode", { agent: name, term })
+        : t("assistant.authoring.disablingMode", { agent: name, term }),
+    );
+  }, [t]);
 
   const handleGoalModeChanged = useCallback((enabled: boolean) => {
-    const term = longRunningModeTerm(activeAgentRef.current);
+    const term = longRunningModeTerm(activeAgentRef.current, t);
     const name = agentDisplayName(activeAgentRef.current);
     setGoalMode(enabled);
     setGoalModeError(null);
     setGoalModeStatus(
       enabled
-        ? `${capitalize(term)} mode on: ${name} dispatches will follow a long-running ${term}.`
-        : `${capitalize(term)} mode off.`,
+        ? t("assistant.authoring.modeOn", { termCapitalized: capitalize(term), term, agent: name })
+        : t("assistant.authoring.modeOff", { termCapitalized: capitalize(term), term }),
     );
-  }, []);
+  }, [t]);
 
   const handleGoalModeError = useCallback((message: string) => {
     setGoalModeError(message);
@@ -145,9 +152,9 @@ export function IssueAuthoringPanel({
   const handleDispatch = useCallback(() => {
     setDispatching(true);
     setDispatchError(null);
-    setDispatchStatus(`Dispatching to ${agentDisplayName(activeAgentRef.current)}...`);
+    setDispatchStatus(t("assistant.authoring.dispatchingTo", { agent: agentDisplayName(activeAgentRef.current) }));
     setDispatchRequestId((current) => current + 1);
-  }, []);
+  }, [t]);
 
   const handleDispatchSucceeded = useCallback((message: string) => {
     setDispatching(false);
@@ -215,8 +222,7 @@ export function IssueAuthoringPanel({
     />
   ) : (
     <div className="rounded-2xl border border-dashed border-border/70 bg-card/60 px-6 py-10 text-center text-sm text-muted-foreground shadow-sm backdrop-blur-sm">
-      Draft documents appear here after the assistant creates or links an issue. Start by asking the project assistant
-      to draft the issue, then open the issue authoring route once an identifier exists.
+      {t("assistant.authoring.documentsEmpty")}
     </div>
   );
 
@@ -237,13 +243,15 @@ export function IssueAuthoringPanel({
           </span>
           <div className="min-w-0 flex-1">
             <h1 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight">
-              {normalizedIdentifier ? `Issue authoring: ${normalizedIdentifier}` : "New issue authoring"}
+              {normalizedIdentifier
+                ? t("assistant.authoring.titleWithId", { identifier: normalizedIdentifier })
+                : t("assistant.authoring.titleNew")}
               {normalizedIdentifier ? (
                 <Link
                   to={issuePath(projectSlug, view, normalizedIdentifier)}
                   className="text-muted-foreground transition-colors hover:text-foreground"
-                  aria-label={`Open issue ${normalizedIdentifier}`}
-                  title={`Open issue ${normalizedIdentifier}`}
+                  aria-label={t("assistant.authoring.openIssueAria", { identifier: normalizedIdentifier })}
+                  title={t("assistant.authoring.openIssueTitle", { identifier: normalizedIdentifier })}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Link>
@@ -252,9 +260,9 @@ export function IssueAuthoringPanel({
             <p className={cn("text-xs leading-relaxed text-muted-foreground", compact ? "mt-0.5" : "mt-1")}>
               {normalizedIdentifier
                 ? compact
-                  ? "Simple for a polished brief, Complex for a spec + implementation plan."
-                  : "Documents refresh when the assistant reports changes for the open issue. Choose Simple for a polished issue brief or Complex for a spec and implementation plan."
-                : "Start by asking the assistant to draft an issue; documents appear once an identifier exists."}
+                  ? t("assistant.authoring.hintCompact")
+                  : t("assistant.authoring.hintFull")
+                : t("assistant.authoring.hintNoId")}
             </p>
           </div>
         </div>
@@ -262,7 +270,7 @@ export function IssueAuthoringPanel({
           <div className={cn("space-y-3", compact ? "mt-3" : "mt-4")}>
             <div
               className="inline-flex w-full items-center gap-1 rounded-xl bg-muted/70 p-1 ring-1 ring-inset ring-border/50"
-              aria-label="Issue authoring mode"
+              aria-label={t("assistant.authoring.modeAria")}
             >
               <Button
                 type="button"
@@ -275,7 +283,7 @@ export function IssueAuthoringPanel({
                   issueMode === "simple" ? "shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                Simple
+                {t("assistant.authoring.modes.simple")}
               </Button>
               <Button
                 type="button"
@@ -288,7 +296,7 @@ export function IssueAuthoringPanel({
                   issueMode === "complex" ? "shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                Complex
+                {t("assistant.authoring.modes.complex")}
               </Button>
             </div>
             {issueModeError ? (
@@ -302,18 +310,26 @@ export function IssueAuthoringPanel({
               <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2.5">
                 <span className="min-w-0">
                   <span className="block text-xs font-medium text-foreground">
-                    {agentDisplayName(activeAgent)} {longRunningModeTerm(activeAgent)} mode (long-running)
+                    {t("assistant.authoring.longRunningLabel", {
+                      agent: agentDisplayName(activeAgent),
+                      term: longRunningModeTerm(activeAgent, t),
+                    })}
                   </span>
                   <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-                    When on, dispatched {agentDisplayName(activeAgent)} runs follow the spec/plan as a long-running{" "}
-                    {longRunningModeTerm(activeAgent)}.
+                    {t("assistant.authoring.longRunningHint", {
+                      agent: agentDisplayName(activeAgent),
+                      term: longRunningModeTerm(activeAgent, t),
+                    })}
                   </span>
                 </span>
                 <span className="relative inline-flex shrink-0 items-center">
                   <input
                     type="checkbox"
                     checked={goalMode}
-                    aria-label={`${agentDisplayName(activeAgent)} ${longRunningModeTerm(activeAgent)} mode`}
+                    aria-label={t("assistant.authoring.longRunningAria", {
+                      agent: agentDisplayName(activeAgent),
+                      term: longRunningModeTerm(activeAgent, t),
+                    })}
                     onChange={(event) => toggleGoalMode(event.target.checked)}
                     className="peer sr-only"
                   />
@@ -338,15 +354,25 @@ export function IssueAuthoringPanel({
               >
                 <Rocket className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                 {dispatching
-                  ? "Dispatching..."
+                  ? t("assistant.authoring.dispatching")
                   : goalMode
-                    ? `Dispatch to ${agentDisplayName(activeAgent)} (${longRunningModeTerm(activeAgent)})`
-                    : `Dispatch to ${agentDisplayName(activeAgent)}`}
+                    ? t("assistant.authoring.dispatchToTerm", {
+                        agent: agentDisplayName(activeAgent),
+                        term: longRunningModeTerm(activeAgent, t),
+                      })
+                    : t("assistant.authoring.dispatchTo", { agent: agentDisplayName(activeAgent) })}
               </Button>
               <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                {`Moves this issue to In Progress and hands it to the ${agentDisplayName(activeAgent)} ${
-                  activeAgent === "codex" ? "orchestrator" : "coding agent"
-                }${goalMode ? ` as a long-running ${longRunningModeTerm(activeAgent)}` : ""}.`}
+                {t("assistant.authoring.dispatchHint", {
+                  agent: agentDisplayName(activeAgent),
+                  orchestrator:
+                    activeAgent === "codex"
+                      ? t("assistant.authoring.orchestrator")
+                      : t("assistant.authoring.codingAgent"),
+                  longRunningSuffix: goalMode
+                    ? t("assistant.authoring.longRunningSuffix", { term: longRunningModeTerm(activeAgent, t) })
+                    : "",
+                })}
               </p>
               {dispatchError ? (
                 <p role="alert" className="mt-1 text-xs text-destructive">
@@ -367,11 +393,11 @@ export function IssueAuthoringPanel({
   if (compact) {
     return (
       <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden bg-gradient-to-b from-muted/30 to-muted/10 p-2">
-        <section className="flex min-h-0 flex-[2.4] overflow-hidden" aria-label="Issue authoring chat">
+        <section className="flex min-h-0 flex-[2.4] overflow-hidden" aria-label={t("assistant.authoring.chatAria")}>
           {assistantPanel}
         </section>
 
-        <aside className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden" aria-label="Issue authoring documents">
+        <aside className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden" aria-label={t("assistant.authoring.documentsAria")}>
           {documentsPanel}
         </aside>
       </div>
@@ -387,17 +413,17 @@ export function IssueAuthoringPanel({
     >
       <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">{assistantPanel}</div>
 
-      <aside className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden" aria-label="Issue authoring documents">
+      <aside className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden" aria-label={t("assistant.authoring.documentsAria")}>
         {documentsPanel}
       </aside>
     </main>
   );
 }
 
-function issueModeLabel(mode: IssueAssistantMode): string {
-  if (mode === "simple") return "Simple";
-  if (mode === "complex") return "Complex";
-  return "Triage";
+function issueModeLabel(mode: IssueAssistantMode, t: TFunction): string {
+  if (mode === "simple") return t("assistant.authoring.modes.simple");
+  if (mode === "complex") return t("assistant.authoring.modes.complex");
+  return t("assistant.authoring.modes.triage");
 }
 
 function agentDisplayName(agent: AgentKind): string {
@@ -406,9 +432,10 @@ function agentDisplayName(agent: AgentKind): string {
   return "Codex";
 }
 
-// Codex calls the long-running mode a "goal"; Claude Code and Cursor call it a "workflow".
-function longRunningModeTerm(agent: AgentKind): string {
-  return agent === "claude" || agent === "cursor" ? "workflow" : "goal";
+function longRunningModeTerm(agent: AgentKind, t: TFunction): string {
+  return agent === "claude" || agent === "cursor"
+    ? t("assistant.authoring.terms.workflow")
+    : t("assistant.authoring.terms.goal");
 }
 
 function capitalize(value: string): string {

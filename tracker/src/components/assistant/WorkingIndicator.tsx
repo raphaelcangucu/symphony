@@ -1,18 +1,19 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
-const WORKING_VERBS = [
-  "Pondering",
-  "Cooking",
-  "Wrangling tokens",
-  "Consulting the codex",
-  "Untangling threads",
-  "Spelunking the repo",
-  "Composing",
-  "Crunching",
-  "Plotting",
+const WORKING_VERB_KEYS = [
+  "assistant.working.verbs.pondering",
+  "assistant.working.verbs.cooking",
+  "assistant.working.verbs.wrangling",
+  "assistant.working.verbs.consulting",
+  "assistant.working.verbs.untangling",
+  "assistant.working.verbs.spelunking",
+  "assistant.working.verbs.composing",
+  "assistant.working.verbs.crunching",
+  "assistant.working.verbs.plotting",
 ] as const;
 
 const VERB_ROTATION_MS = 3000;
@@ -35,6 +36,7 @@ function formatElapsed(ms: number): string {
 }
 
 export function WorkingIndicator({ startedAt, activeTool }: WorkingIndicatorProps) {
+  const { t } = useTranslation();
   const reducedMotion = useRef(prefersReducedMotion());
   const [elapsedMs, setElapsedMs] = useState(() => Date.now() - startedAt);
   const [verbIndex, setVerbIndex] = useState(0);
@@ -47,13 +49,15 @@ export function WorkingIndicator({ startedAt, activeTool }: WorkingIndicatorProp
   useEffect(() => {
     if (reducedMotion.current) return;
     const id = window.setInterval(
-      () => setVerbIndex((current) => (current + 1) % WORKING_VERBS.length),
+      () => setVerbIndex((current) => (current + 1) % WORKING_VERB_KEYS.length),
       VERB_ROTATION_MS,
     );
     return () => window.clearInterval(id);
   }, []);
 
-  const label = activeTool ? `Running ${activeTool}` : WORKING_VERBS[verbIndex];
+  const label = activeTool
+    ? t("assistant.working.runningTool", { tool: activeTool })
+    : t(WORKING_VERB_KEYS[verbIndex]);
 
   return (
     <div

@@ -1,5 +1,6 @@
 import { Plus, Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
@@ -52,6 +53,7 @@ function ConversationsView({
   archiving: boolean;
   onArchive: (threadId: number) => void;
 }) {
+  const { t } = useTranslation();
   const { creating, createChat } = useCreateFreeformChat(() => void refetch());
   const [query, setQuery] = useState("");
 
@@ -64,12 +66,12 @@ function ConversationsView({
   );
 
   return (
-    <section className="flex h-full flex-col" aria-label="Conversations">
+    <section className="flex h-full flex-col" aria-label={t("assistant.page.conversationsAria")}>
       <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
-        <h1 className="text-base font-semibold">Conversations</h1>
+        <h1 className="text-base font-semibold">{t("assistant.page.title")}</h1>
         <Button type="button" size="sm" onClick={() => void createChat()} disabled={creating}>
           <Plus className="h-4 w-4" />
-          New chat
+          {t("assistant.page.newChat")}
         </Button>
       </div>
 
@@ -80,8 +82,8 @@ function ConversationsView({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search conversations..."
-            aria-label="Search conversations"
+            placeholder={t("assistant.page.searchPlaceholder")}
+            aria-label={t("assistant.page.searchAria")}
             className="pl-9"
           />
         </div>
@@ -96,11 +98,11 @@ function ConversationsView({
         ) : null}
 
         {!loading && chatSessions.length === 0 ? (
-          <p className="px-3 py-8 text-center text-sm text-muted-foreground">No conversations yet. Start a new one.</p>
+          <p className="px-3 py-8 text-center text-sm text-muted-foreground">{t("assistant.page.empty")}</p>
         ) : null}
 
         {!loading && chatSessions.length > 0 && filtered.length === 0 ? (
-          <p className="px-3 py-8 text-center text-sm text-muted-foreground">No conversations match your search.</p>
+          <p className="px-3 py-8 text-center text-sm text-muted-foreground">{t("assistant.page.noMatch")}</p>
         ) : null}
 
         <ul className="space-y-1">
@@ -113,7 +115,7 @@ function ConversationsView({
                 <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{session.title}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{recentSessionSubtitle(session)}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{recentSessionSubtitle(session, t)}</span>
                 </span>
               </Link>
               {session.threadId != null ? (

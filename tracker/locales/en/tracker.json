@@ -524,6 +524,125 @@
       "attachmentsUnavailable": "Attachments are not available in this conversation.",
       "uploadFailed": "Failed to upload file.",
       "voiceNotSupported": "Voice dictation is not supported in this browser."
+    },
+    "authoring": {
+      "chatAria": "Issue authoring chat",
+      "documentsAria": "Issue authoring documents",
+      "documentsEmpty": "Draft documents appear here after the assistant creates or links an issue. Start by asking the project assistant to draft the issue, then open the issue authoring route once an identifier exists.",
+      "titleWithId": "Issue authoring: {{identifier}}",
+      "titleNew": "New issue authoring",
+      "openIssueAria": "Open issue {{identifier}}",
+      "openIssueTitle": "Open issue {{identifier}}",
+      "hintCompact": "Simple for a polished brief, Complex for a spec + implementation plan.",
+      "hintFull": "Documents refresh when the assistant reports changes for the open issue. Choose Simple for a polished issue brief or Complex for a spec and implementation plan.",
+      "hintNoId": "Start by asking the assistant to draft an issue; documents appear once an identifier exists.",
+      "modeAria": "Issue authoring mode",
+      "modes": { "simple": "Simple", "complex": "Complex", "triage": "Triage" },
+      "settingMode": "Setting {{mode}} mode...",
+      "modeActive": "{{mode}} mode active.",
+      "longRunningLabel": "{{agent}} {{term}} mode (long-running)",
+      "longRunningHint": "When on, dispatched {{agent}} runs follow the spec/plan as a long-running {{term}}.",
+      "longRunningAria": "{{agent}} {{term}} mode",
+      "enablingMode": "Enabling {{agent}} {{term}} mode...",
+      "disablingMode": "Disabling {{agent}} {{term}} mode...",
+      "modeOn": "{{termCapitalized}} mode on: {{agent}} dispatches will follow a long-running {{term}}.",
+      "modeOff": "{{termCapitalized}} mode off.",
+      "dispatching": "Dispatching...",
+      "dispatchTo": "Dispatch to {{agent}}",
+      "dispatchToTerm": "Dispatch to {{agent}} ({{term}})",
+      "dispatchingTo": "Dispatching to {{agent}}...",
+      "dispatchHint": "Moves this issue to In Progress and hands it to the {{agent}} {{orchestrator}}{{longRunningSuffix}}.",
+      "orchestrator": "orchestrator",
+      "codingAgent": "coding agent",
+      "longRunningSuffix": " as a long-running {{term}}",
+      "terms": { "goal": "goal", "workflow": "workflow" }
+    },
+    "btw": {
+      "ariaLabel": "Side question",
+      "title": "By the way",
+      "closeAria": "Close side question",
+      "thinking": "Thinking…",
+      "footer": "Esc to dismiss · not saved to the conversation"
+    },
+    "working": {
+      "runningTool": "Running {{tool}}",
+      "verbs": {
+        "pondering": "Pondering",
+        "cooking": "Cooking",
+        "wrangling": "Wrangling tokens",
+        "consulting": "Consulting the codex",
+        "untangling": "Untangling threads",
+        "spelunking": "Spelunking the repo",
+        "composing": "Composing",
+        "crunching": "Crunching",
+        "plotting": "Plotting"
+      }
+    },
+    "questions": {
+      "placeholder": "Type your answer",
+      "other": "Other",
+      "submit": "Submit answers",
+      "questionFallback": "Q{{index}}"
+    },
+    "page": {
+      "conversationsAria": "Conversations",
+      "title": "Conversations",
+      "newChat": "New chat",
+      "searchPlaceholder": "Search conversations...",
+      "searchAria": "Search conversations",
+      "empty": "No conversations yet. Start a new one.",
+      "noMatch": "No conversations match your search."
+    },
+    "documents": {
+      "ariaLabel": "Issue documents",
+      "listAria": "Document list",
+      "title": "Documents",
+      "subtitle": "Generated specs, plans, and handoffs.",
+      "workspaceMissing": "The working tree is not ready yet. Documents appear once the assistant starts working.",
+      "unavailable": "No documents available.",
+      "empty": "No spec or plan documents yet.",
+      "loading": "Loading document...",
+      "loadError": "Could not load this document.",
+      "loadErrorHint": "Use Retry to load it again, or ask the assistant to regenerate the document.",
+      "retry": "Retry",
+      "noContent": "No content to display.",
+      "kinds": {
+        "spec": { "label": "Spec", "group": "Specs" },
+        "plan": { "label": "Plan", "group": "Plans" },
+        "handoff": { "label": "Handoff", "group": "Handoff" }
+      },
+      "itemAria": "{{label}} {{title}}"
+    }
+  },
+  "layout": {
+    "projectHeader": {
+      "pollingActive": "Polling active",
+      "pollingPaused": "Polling paused (window not focused)",
+      "syncError": "Sync error",
+      "syncErrorTitle": "Background sync with the remote tracker is failing.",
+      "lastError": "Last error: {{error}}",
+      "lastSync": "Last successful sync: {{when}}",
+      "lessThanMinute": "less than a minute ago",
+      "minutesAgo": "{{count}} min ago",
+      "hoursAgo": "{{count}} h ago",
+      "refreshing": "Refreshing",
+      "refreshBoard": "Refresh board",
+      "board": "Board",
+      "list": "List",
+      "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
+    },
+    "recents": {
+      "title": "Recents",
+      "seeAll": "See all",
+      "loading": "Loading…",
+      "empty": "No recent sessions yet.",
+      "newChatAria": "New chat",
+      "newChatTitle": "New chat"
+    },
+    "sessionSubtitle": {
+      "freeform": "Freeform chat",
+      "explore": "Explore project",
+      "projectChat": "Project chat"
     }
   },
   "board": {

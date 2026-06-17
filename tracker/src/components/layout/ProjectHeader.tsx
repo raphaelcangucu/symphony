@@ -1,5 +1,7 @@
 import { AlertTriangle, LayoutDashboard, List, RefreshCw } from "lucide-react";
+import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,12 +11,6 @@ import { cn } from "@/lib/utils";
 import { workspaceBasePath } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 import type { ProjectSyncState, TrackerKind } from "@/types/project";
-
-const TRACKER_LABELS: Record<Exclude<TrackerKind, "local">, string> = {
-  github: "GitHub Project",
-  linear: "Linear",
-  jira: "Jira",
-};
 
 interface ProjectHeaderProps {
   projectSlug: string;
@@ -28,27 +24,23 @@ interface ProjectHeaderProps {
   onIssueCreated?: (issue: Issue) => void;
 }
 
-const POLLING_ACTIVE_LABEL = "Polling active";
-const POLLING_PAUSED_LABEL = "Polling paused (window not focused)";
-const SYNC_ERROR_LABEL = "Sync error";
-
-function formatTimeAgo(iso: string | null): string | null {
+function formatTimeAgo(iso: string | null, t: TFunction): string | null {
   if (!iso) return null;
   const timestamp = new Date(iso).getTime();
   if (Number.isNaN(timestamp)) return null;
   const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60_000));
-  if (minutes < 1) return "less than a minute ago";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t("layout.projectHeader.lessThanMinute");
+  if (minutes < 60) return t("layout.projectHeader.minutesAgo", { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
+  if (hours < 24) return t("layout.projectHeader.hoursAgo", { count: hours });
   return new Date(timestamp).toLocaleString();
 }
 
-function syncErrorTitle(syncState: ProjectSyncState): string {
-  const lines = ["Background sync with the remote tracker is failing."];
-  if (syncState.lastError) lines.push(`Last error: ${syncState.lastError}`);
-  const lastOk = formatTimeAgo(syncState.lastPullAt);
-  if (lastOk) lines.push(`Last successful sync: ${lastOk}`);
+function syncErrorTitle(syncState: ProjectSyncState, t: TFunction): string {
+  const lines = [t("layout.projectHeader.syncErrorTitle")];
+  if (syncState.lastError) lines.push(t("layout.projectHeader.lastError", { error: syncState.lastError }));
+  const lastOk = formatTimeAgo(syncState.lastPullAt, t);
+  if (lastOk) lines.push(t("layout.projectHeader.lastSync", { when: lastOk }));
   return lines.join("\n");
 }
 
@@ -63,9 +55,14 @@ export function ProjectHeader({
   pollingActive = true,
   onIssueCreated,
 }: ProjectHeaderProps) {
-  const pollingLabel = pollingActive ? POLLING_ACTIVE_LABEL : POLLING_PAUSED_LABEL;
+  const { t } = useTranslation();
+  const pollingLabel = pollingActive
+    ? t("layout.projectHeader.pollingActive")
+    : t("layout.projectHeader.pollingPaused");
   const remoteTracker = trackerKind != null && trackerKind !== "local";
   const syncFailing = remoteTracker && syncState?.status === "error";
+  const syncErrorLabel = t("layout.projectHeader.syncError");
+
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
       <div>
@@ -76,24 +73,24 @@ export function ProjectHeader({
         {refreshing ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            Refreshing
+            {t("layout.projectHeader.refreshing")}
           </span>
         ) : null}
         {syncFailing && syncState ? (
           <Badge
             variant="destructive"
             role="status"
-            aria-label={SYNC_ERROR_LABEL}
-            title={syncErrorTitle(syncState)}
+            aria-label={syncErrorLabel}
+            title={syncErrorTitle(syncState, t)}
             className="gap-1"
           >
             <AlertTriangle className="h-3 w-3" />
-            {SYNC_ERROR_LABEL}
+            {syncErrorLabel}
           </Badge>
         ) : null}
         {remoteTracker ? (
           <div className="flex items-center gap-2">
-            <Badge variant="muted">{TRACKER_LABELS[trackerKind]}</Badge>
+            <Badge variant="muted">{t(`layout.projectHeader.trackers.${trackerKind}`)}</Badge>
             <span
               role="status"
               aria-label={pollingLabel}
@@ -103,7 +100,13 @@ export function ProjectHeader({
                 pollingActive ? "bg-green-500" : "bg-muted-foreground",
               )}
             />
-            <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh board" disabled={refreshing}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onRefresh}
+              aria-label={t("layout.projectHeader.refreshBoard")}
+              disabled={refreshing}
+            >
               <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
             </Button>
           </div>
@@ -115,7 +118,7 @@ export function ProjectHeader({
             className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
           >
             <LayoutDashboard className="h-4 w-4" />
-            Board
+            {t("layout.projectHeader.board")}
           </NavLink>
         </Button>
         <Button variant="ghost" size="sm" asChild>
@@ -124,7 +127,7 @@ export function ProjectHeader({
             className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
           >
             <List className="h-4 w-4" />
-            List
+            {t("layout.projectHeader.list")}
           </NavLink>
         </Button>
         <NewIssueMenu projectSlug={projectSlug} size="sm" onCreated={onIssueCreated} />

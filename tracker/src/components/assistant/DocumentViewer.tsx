@@ -1,5 +1,7 @@
 import { FileText, ListChecks, ScrollText, type LucideIcon } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
@@ -23,11 +25,19 @@ interface DocumentKindConfig {
 
 const DOCUMENT_KIND_ORDER: readonly IssueDocumentKind[] = ["spec", "plan", "handoff"];
 
-const DOCUMENT_KIND_CONFIG: Record<IssueDocumentKind, DocumentKindConfig> = {
-  spec: { label: "Spec", groupLabel: "Specs", Icon: ScrollText },
-  plan: { label: "Plan", groupLabel: "Plans", Icon: ListChecks },
-  handoff: { label: "Handoff", groupLabel: "Handoff", Icon: FileText },
+const DOCUMENT_KIND_ICONS: Record<IssueDocumentKind, LucideIcon> = {
+  spec: ScrollText,
+  plan: ListChecks,
+  handoff: FileText,
 };
+
+function documentKindConfig(kind: IssueDocumentKind, t: TFunction): DocumentKindConfig {
+  return {
+    label: t(`assistant.documents.kinds.${kind}.label`),
+    groupLabel: t(`assistant.documents.kinds.${kind}.group`),
+    Icon: DOCUMENT_KIND_ICONS[kind],
+  };
+}
 
 export function DocumentViewer({
   projectSlug,
@@ -36,6 +46,7 @@ export function DocumentViewer({
   available,
   reason,
 }: DocumentViewerProps) {
+  const { t } = useTranslation();
   const visibleDocuments = useMemo(() => documents.filter(hasReadablePath), [documents]);
   const groupedDocuments = useMemo(() => groupDocumentsByKind(visibleDocuments), [visibleDocuments]);
   const orderedDocuments = useMemo(() => groupedDocuments.flatMap((group) => group.documents), [groupedDocuments]);
@@ -105,25 +116,28 @@ export function DocumentViewer({
     return (
       <DocumentViewerEmptyState>
         {reason === "workspace_missing"
-          ? "The working tree is not ready yet. Documents appear once the assistant starts working."
-          : "No documents available."}
+          ? t("assistant.documents.workspaceMissing")
+          : t("assistant.documents.unavailable")}
       </DocumentViewerEmptyState>
     );
   }
 
   if (visibleDocuments.length === 0) {
-    return <DocumentViewerEmptyState>No spec or plan documents yet.</DocumentViewerEmptyState>;
+    return <DocumentViewerEmptyState>{t("assistant.documents.empty")}</DocumentViewerEmptyState>;
   }
 
   return (
     <section
       className="flex h-full min-h-0 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-14px_rgba(0,0,0,0.1)] ring-1 ring-black/[0.02]"
-      aria-label="Issue documents"
+      aria-label={t("assistant.documents.ariaLabel")}
     >
-      <aside className="flex min-h-0 w-72 shrink-0 flex-col border-r border-border/60 bg-muted/30" aria-label="Document list">
+      <aside
+        className="flex min-h-0 w-72 shrink-0 flex-col border-r border-border/60 bg-muted/30"
+        aria-label={t("assistant.documents.listAria")}
+      >
         <div className="sticky top-0 z-10 shrink-0 border-b border-border/60 bg-muted/30 px-4 py-3 backdrop-blur-sm">
-          <h2 className="text-sm font-semibold tracking-tight">Documents</h2>
-          <p className="text-xs text-muted-foreground">Generated specs, plans, and handoffs.</p>
+          <h2 className="text-sm font-semibold tracking-tight">{t("assistant.documents.title")}</h2>
+          <p className="text-xs text-muted-foreground">{t("assistant.documents.subtitle")}</p>
         </div>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-2.5">
@@ -140,16 +154,14 @@ export function DocumentViewer({
       </aside>
 
       <article className="min-w-0 flex-1 overflow-auto bg-background/40 p-6" aria-live="polite">
-        {loading ? <DocumentContentState>Loading document...</DocumentContentState> : null}
+        {loading ? <DocumentContentState>{t("assistant.documents.loading")}</DocumentContentState> : null}
 
         {!loading && loadError ? (
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
-            <p className="text-sm font-medium text-destructive">Could not load this document.</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Use Retry to load it again, or ask the assistant to regenerate the document.
-            </p>
+            <p className="text-sm font-medium text-destructive">{t("assistant.documents.loadError")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("assistant.documents.loadErrorHint")}</p>
             <Button type="button" variant="outline" size="sm" className="mt-3 rounded-lg" onClick={retrySelectedDocument}>
-              Retry
+              {t("assistant.documents.retry")}
             </Button>
           </div>
         ) : null}
@@ -158,7 +170,9 @@ export function DocumentViewer({
           <Markdown className="mx-auto max-w-3xl text-sm leading-7">{content}</Markdown>
         ) : null}
 
-        {!loading && !loadError && !content ? <DocumentContentState>No content to display.</DocumentContentState> : null}
+        {!loading && !loadError && !content ? (
+          <DocumentContentState>{t("assistant.documents.noContent")}</DocumentContentState>
+        ) : null}
       </article>
     </section>
   );
@@ -175,7 +189,8 @@ function DocumentKindGroup({
   selectedPath: string | null;
   onSelect: (path: string) => void;
 }) {
-  const { groupLabel } = DOCUMENT_KIND_CONFIG[kind];
+  const { t } = useTranslation();
+  const { groupLabel } = documentKindConfig(kind, t);
   const headingId = `document-kind-${kind}`;
 
   return (
@@ -217,7 +232,8 @@ function DocumentListItem({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const { Icon, label } = DOCUMENT_KIND_CONFIG[document.kind];
+  const { t } = useTranslation();
+  const { Icon, label } = documentKindConfig(document.kind, t);
 
   return (
     <Button
@@ -230,7 +246,7 @@ function DocumentListItem({
           : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
       )}
       aria-current={selected ? "true" : undefined}
-      aria-label={`${label} ${document.title}`}
+      aria-label={t("assistant.documents.itemAria", { label, title: document.title })}
       onClick={onSelect}
     >
       {selected ? (
