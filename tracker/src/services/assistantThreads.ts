@@ -1,3 +1,4 @@
+import { requirePositiveInteger } from "@/lib/serviceValidation";
 import type { AssistantThread } from "@/types/assistant-thread";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -43,7 +44,7 @@ export async function createFreeformThread(title?: string): Promise<AssistantThr
 }
 
 export async function archiveAssistantThread(threadId: number): Promise<AssistantThread> {
-  if (!Number.isInteger(threadId) || threadId <= 0) throw new Error("threadId is required");
+  requirePositiveInteger(threadId, "threadId");
 
   const response = await http.post(
     trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}/archive`),

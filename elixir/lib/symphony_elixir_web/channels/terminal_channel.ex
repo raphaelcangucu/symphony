@@ -2,7 +2,9 @@ defmodule SymphonyElixirWeb.TerminalChannel do
   @moduledoc "Issue-scoped terminal channel for local tracker tmux sessions."
 
   use Phoenix.Channel
+  use Gettext, backend: SymphonyElixirWeb.Gettext
 
+  alias Gettext, as: GettextCore
   alias Phoenix.Socket
   alias SymphonyElixir.Config
   alias SymphonyElixir.Terminal.Registry
@@ -76,7 +78,7 @@ defmodule SymphonyElixirWeb.TerminalChannel do
   end
 
   def handle_in("input", _payload, socket) do
-    push(socket, "error", %{message: "terminal input data is required"})
+    push(socket, "error", %{message: localized_message(socket, "terminal input data is required")})
     {:noreply, socket}
   end
 
@@ -100,7 +102,7 @@ defmodule SymphonyElixirWeb.TerminalChannel do
   end
 
   def handle_in("resize", _payload, socket) do
-    push(socket, "error", %{message: "terminal resize cols and rows are required"})
+    push(socket, "error", %{message: localized_message(socket, "terminal resize cols and rows are required")})
     {:noreply, socket}
   end
 
@@ -172,5 +174,13 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     else
       {:error, "invalid_topic"}
     end
+  end
+
+  defp localized_message(socket, msgid, bindings \\ %{}) when is_binary(msgid) and is_map(bindings) do
+    locale = Map.get(socket.assigns, :gettext_locale, "en")
+
+    GettextCore.with_locale(SymphonyElixirWeb.Gettext, locale, fn ->
+      dgettext("errors", msgid, bindings)
+    end)
   end
 end

@@ -1,5 +1,5 @@
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
+import { requireNonBlank, requirePositiveInteger, requireProjectSlug } from "@/lib/serviceValidation";
 import { getTrackerToken } from "@/config";
 import type { IssueDevServerTunnel, IssueDevServersResponse } from "@/types/issue";
 
@@ -79,9 +79,7 @@ async function postIssueDevServerInstanceAction(
   serverId: number,
   action: IssueDevServerAction,
 ): Promise<IssueDevServersResponse> {
-  if (!Number.isInteger(serverId) || serverId <= 0) {
-    throw new Error("serverId must be a positive integer");
-  }
+  requirePositiveInteger(serverId, "serverId");
 
   const response = await http.post(
     `${issueDevServersPath(projectSlug, issueIdentifier)}/${encodeURIComponent(String(serverId))}/${action}`,
@@ -95,9 +93,7 @@ export async function fetchDevServerOutput(
   issueIdentifier: string,
   serverId: number,
 ): Promise<{ output: string; session_name: string }> {
-  if (!Number.isInteger(serverId) || serverId <= 0) {
-    throw new Error("serverId must be a positive integer");
-  }
+  requirePositiveInteger(serverId, "serverId");
 
   const response = await http.get(
     `${issueDevServersPath(projectSlug, issueIdentifier)}/${encodeURIComponent(String(serverId))}/output`,

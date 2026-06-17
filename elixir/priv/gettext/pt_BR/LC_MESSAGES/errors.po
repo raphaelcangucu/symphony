@@ -275,3 +275,9 @@ msgstr "grupo de configurações desconhecido"
 
 msgid "runtime_id is required"
 msgstr "runtime_id é obrigatório"
+
+msgid "terminal input data is required"
+msgstr "dados de entrada do terminal são obrigatórios"
+
+msgid "terminal resize cols and rows are required"
+msgstr "cols e rows do redimensionamento do terminal são obrigatórios"

@@ -9,6 +9,10 @@ defmodule SymphonyElixirWeb.Plugs.SetLocale do
   @default "en"
   @supported %{"en" => "en", "pt-BR" => "pt_BR", "pt-br" => "pt_BR", "pt_BR" => "pt_BR"}
 
+  @spec resolve_locale(String.t() | nil) :: String.t()
+  def resolve_locale(nil), do: @default
+  def resolve_locale(header), do: Map.get(@supported, header, @default)
+
   @spec init(keyword()) :: keyword()
   def init(opts), do: opts
 
@@ -25,5 +29,5 @@ defmodule SymphonyElixirWeb.Plugs.SetLocale do
   end
 
   defp normalize_locale(nil), do: @default
-  defp normalize_locale(header), do: Map.get(@supported, header, @default)
+  defp normalize_locale(header), do: resolve_locale(header)
 end

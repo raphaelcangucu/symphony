@@ -149,3 +149,9 @@ msgstr "unknown settings group"
 
 msgid "runtime_id is required"
 msgstr "runtime_id is required"
+
+msgid "terminal input data is required"
+msgstr "terminal input data is required"
+
+msgid "terminal resize cols and rows are required"
+msgstr "terminal resize cols and rows are required"

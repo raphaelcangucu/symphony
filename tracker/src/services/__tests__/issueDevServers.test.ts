@@ -10,6 +10,7 @@ vi.mock("@/config", async (importOriginal) => {
 
 import {
   fetchIssueDevServers,
+  fetchDevServerOutput,
   restartIssueDevServer,
   restartIssueDevServers,
   startIssueDevServer,
@@ -125,6 +126,17 @@ describe("issue dev-server service", () => {
     await expect(fetchIssueDevServers(" ", "508")).rejects.toThrow(/projectSlug/);
     await expect(fetchIssueDevServers("macro-markets", " ")).rejects.toThrow(/issueIdentifier/);
     await expect(fetchIssueDevServers("macro-markets", " # ")).rejects.toThrow(/issueIdentifier/);
+  });
+
+  it("rejects invalid server ids before calling the API", async () => {
+    const post = vi.spyOn(http, "post");
+    const get = vi.spyOn(http, "get");
+
+    await expect(startIssueDevServer("macro-markets", "MAC-1", 0)).rejects.toThrow(/serverId/);
+    await expect(fetchDevServerOutput("macro-markets", "MAC-1", -1)).rejects.toThrow(/serverId/);
+
+    expect(post).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled();
   });
 
   it("subscribes to dev-server output events", () => {

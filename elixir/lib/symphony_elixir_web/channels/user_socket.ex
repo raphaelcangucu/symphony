@@ -4,6 +4,7 @@ defmodule SymphonyElixirWeb.UserSocket do
   use Phoenix.Socket
 
   alias SymphonyElixir.Config
+  alias SymphonyElixirWeb.Plugs.SetLocale
   alias SymphonyElixirWeb.TrackerAuth
 
   channel("project:*", SymphonyElixirWeb.TrackerChannel)
@@ -13,11 +14,14 @@ defmodule SymphonyElixirWeb.UserSocket do
   channel("observability:global", SymphonyElixirWeb.ObservabilityChannel)
 
   @impl true
-  def connect(%{"token" => token}, socket, _connect_info) when is_binary(token) do
+  def connect(%{"token" => token} = params, socket, _connect_info) when is_binary(token) do
     expected_token = System.get_env(Config.local_api_token_env())
 
     if TrackerAuth.valid_token?(token, expected_token) do
-      {:ok, assign(socket, :tracker_token_valid, true)}
+      {:ok,
+       socket
+       |> assign(:tracker_token_valid, true)
+       |> assign(:gettext_locale, SetLocale.resolve_locale(Map.get(params, "locale")))}
     else
       :error
     end
