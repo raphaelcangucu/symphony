@@ -4,7 +4,9 @@ import {
   MouseSensor,
   TouchSensor,
   closestCorners,
+  type DragCancelEvent,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
   useSensor,
   useSensors,
@@ -16,13 +18,7 @@ import type { Issue } from "@/types/issue";
 import type { WorkflowStatus, WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflow-status";
 
 import { BoardColumn } from "./BoardColumn";
-import {
-  type BoardState,
-  findIssueStatus,
-  isWorkflowStatusName,
-  parseDragIssueId,
-  workflowStatusNames,
-} from "./board-utils";
+import { parseDragIssueId, resolveBoardMove, workflowStatusNames, type BoardState } from "./board-utils";
 import { IssueCard } from "./IssueCard";
 
 interface BoardViewProps {
@@ -55,7 +51,9 @@ export function BoardView({
   onChangeLimit,
 }: BoardViewProps) {
   const [activeIdentifier, setActiveIdentifier] = useState<string | null>(null);
+  const [previewBoard, setPreviewBoard] = useState<typeof board | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  const displayBoard = previewBoard ?? board;
   const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 8 } }), useSensor(TouchSensor));
   const statusNames = useMemo(() => workflowStatusNames(statuses ?? Object.keys(board)), [board, statuses]);
 
@@ -67,36 +65,39 @@ export function BoardView({
 
   const activeIssue = useMemo(() => {
     if (!activeIdentifier) return null;
-    return statusNames.flatMap((status) => board[status] ?? []).find((issue) => issue.identifier === activeIdentifier);
-  }, [activeIdentifier, board, statusNames]);
+    return statusNames
+      .flatMap((status) => displayBoard[status] ?? [])
+      .find((issue) => issue.identifier === activeIdentifier);
+  }, [activeIdentifier, displayBoard, statusNames]);
 
   function handleDragStart(event: DragStartEvent) {
     setActiveIdentifier(parseDragIssueId(event.active.id));
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveIdentifier(null);
+  function handleDragOver(event: DragOverEvent) {
     const identifier = parseDragIssueId(event.active.id);
     if (!identifier || !event.over) return;
 
-    const overId = String(event.over.id);
-    const currentStatus = findIssueStatus(board, identifier, statusNames);
-    const targetStatus = isWorkflowStatusName(overId, statusNames)
-      ? overId
-      : findIssueStatus(board, parseDragIssueId(overId) ?? "", statusNames);
+    const resolved = resolveBoardMove(board, identifier, String(event.over.id), statusNames);
+    if (resolved) setPreviewBoard(resolved.board);
+  }
 
-    if (!currentStatus || !targetStatus) return;
+  function handleDragEnd(event: DragEndEvent) {
+    setPreviewBoard(null);
+    setActiveIdentifier(null);
 
-    const overIdentifier = parseDragIssueId(overId);
-    const overIndex = overIdentifier
-      ? board[targetStatus].findIndex((issue) => issue.identifier === overIdentifier)
-      : board[targetStatus].length;
-    const targetIndex = overIndex >= 0 ? overIndex : board[targetStatus].length;
+    const identifier = parseDragIssueId(event.active.id);
+    if (!identifier || !event.over) return;
 
-    const currentIndex = board[currentStatus].findIndex((issue) => issue.identifier === identifier);
-    if (currentStatus === targetStatus && currentIndex === targetIndex) return;
+    const resolved = resolveBoardMove(board, identifier, String(event.over.id), statusNames);
+    if (!resolved) return;
 
-    void onMoveIssue(identifier, targetStatus, targetIndex);
+    void onMoveIssue(identifier, resolved.targetStatus, resolved.targetIndex);
+  }
+
+  function handleDragCancel(_event: DragCancelEvent) {
+    setPreviewBoard(null);
+    setActiveIdentifier(null);
   }
 
   useEffect(() => {
@@ -125,7 +126,14 @@ export function BoardView({
   }, []);
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
       <div
         ref={boardRef}
         className="scrollbar-discrete flex h-[calc(100vh-7.25rem)] w-full min-w-0 gap-3 overflow-x-auto px-6 pb-3 pt-5"
@@ -135,7 +143,7 @@ export function BoardView({
             key={status}
             status={status}
             category={categoryByName.get(status) ?? null}
-            issues={board[status] ?? []}
+            issues={displayBoard[status] ?? []}
             onSelectIssue={onSelectIssue}
             projectSlug={projectSlug}
             statuses={statusNames}

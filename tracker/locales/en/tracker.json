@@ -351,6 +351,76 @@
     "attachments": {
       "imageUnavailable": "Image uploads are not available here.",
       "imageUploadFailed": "Failed to upload image."
+    },
+    "create": {
+      "trigger": "New issue",
+      "title": "Create issue",
+      "description": "Add an issue to this project's tracker.",
+      "titlePlaceholder": "Issue title",
+      "descriptionPlaceholder": "Description",
+      "status": "Status",
+      "priority": "Priority",
+      "priorityPlaceholder": "0-4",
+      "agent": "Agent",
+      "inherit": "Inherit ({{agent}})",
+      "longRunningMode": "{{termCapitalized}} mode (long-running)",
+      "goalAria": "{{agent}} {{term}}",
+      "terms": { "goal": "goal", "workflow": "workflow" },
+      "labels": "Labels",
+      "assignees": "Assignees",
+      "loadingLabels": "Loading labels...",
+      "noLabels": "No labels available.",
+      "loadingAssignees": "Loading assignees...",
+      "noAssignees": "No assignees available.",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "create": "Create",
+      "validation": {
+        "titleRequired": "Title is required",
+        "statusRequired": "Status is required",
+        "invalid": "Invalid issue"
+      },
+      "goalModeRequired": "{{termCapitalized}} mode requires a {{term}}.",
+      "created": "Issue created",
+      "createFailed": "Failed to create issue",
+      "unknownAssignee": "unknown"
+    },
+    "pullRequest": {
+      "refresh": "Refresh",
+      "linkPlaceholder": "https://github.com/owner/repo/pull/123",
+      "linking": "Linking…",
+      "linkPr": "Link PR",
+      "loading": "Loading pull request details…",
+      "retry": "Retry",
+      "unsupported": "Pull requests require a configured GitHub repository. Add one in project settings to link PRs to {{identifier}}.",
+      "tokenRequired": "A GitHub token is required to discover pull requests and load CI details. Set GITHUB_TOKEN and refresh, or link a PR manually below.",
+      "empty": "No pull request linked to this issue yet. Once an agent opens a PR that references {{identifier}} (or uses its linked branch), it will appear here. You can also link one manually below (e.g. a PR in another repository).",
+      "limitedAccessTitle": "Limited GitHub access.",
+      "limitedAccessBody": "Linked pull requests are shown, but CI details and merge actions need GITHUB_TOKEN configured.",
+      "relatedCount": "{{count}} related pull request",
+      "relatedCount_plural": "{{count}} related pull requests",
+      "rerunning": "Re-running…",
+      "rerunFailedJobs": "Re-run failed jobs",
+      "sending": "Sending…",
+      "fixWithAgent": "Fix with agent",
+      "monitor": {
+        "movedToRework": "CI/review failure attributed to this PR — sent to Rework (attempt {{count}})",
+        "movedToDone": "PR merged — issue moved to Done",
+        "keptHumanReview": "Kept in review — failure looks unrelated or needs a human",
+        "limitReached": "Automatic fix limit reached — human review required",
+        "fallback": "Monitor: {{action}}"
+      },
+      "toasts": {
+        "fixSent": "Sent to {{status}} — the agent will pick it up on the next poll.",
+        "fixFailed": "Could not request a fix.",
+        "rerunPartialFailed": "Some jobs could not be re-run. Refresh in a minute to see results.",
+        "rerunSuccess": "Failed jobs were re-run. Refresh in a minute to see results.",
+        "rerunFailed": "Could not re-run the failed jobs.",
+        "linked": "Pull request linked.",
+        "linkFailed": "Could not link the pull request.",
+        "unlinked": "Pull request unlinked.",
+        "unlinkFailed": "Could not unlink the pull request."
+      }
     }
   },
   "project": {

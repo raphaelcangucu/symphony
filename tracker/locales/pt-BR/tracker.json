@@ -351,6 +351,76 @@
     "attachments": {
       "imageUnavailable": "Upload de imagens não está disponível aqui.",
       "imageUploadFailed": "Falha ao enviar imagem."
+    },
+    "create": {
+      "trigger": "Nova issue",
+      "title": "Criar issue",
+      "description": "Adicione uma issue ao tracker deste projeto.",
+      "titlePlaceholder": "Título da issue",
+      "descriptionPlaceholder": "Descrição",
+      "status": "Status",
+      "priority": "Prioridade",
+      "priorityPlaceholder": "0-4",
+      "agent": "Agente",
+      "inherit": "Herdar ({{agent}})",
+      "longRunningMode": "Modo {{termCapitalized}} (long-running)",
+      "goalAria": "{{agent}} {{term}}",
+      "terms": { "goal": "goal", "workflow": "workflow" },
+      "labels": "Labels",
+      "assignees": "Assignees",
+      "loadingLabels": "Carregando labels...",
+      "noLabels": "Nenhuma label disponível.",
+      "loadingAssignees": "Carregando assignees...",
+      "noAssignees": "Nenhum assignee disponível.",
+      "cancel": "Cancelar",
+      "creating": "Criando...",
+      "create": "Criar",
+      "validation": {
+        "titleRequired": "Título é obrigatório",
+        "statusRequired": "Status é obrigatório",
+        "invalid": "Issue inválida"
+      },
+      "goalModeRequired": "Modo {{termCapitalized}} exige um {{term}}.",
+      "created": "Issue criada",
+      "createFailed": "Falha ao criar issue",
+      "unknownAssignee": "desconhecido"
+    },
+    "pullRequest": {
+      "refresh": "Atualizar",
+      "linkPlaceholder": "https://github.com/owner/repo/pull/123",
+      "linking": "Vinculando…",
+      "linkPr": "Vincular PR",
+      "loading": "Carregando detalhes do pull request…",
+      "retry": "Tentar novamente",
+      "unsupported": "Pull requests exigem um repositório GitHub configurado. Adicione um nas configurações do projeto para vincular PRs a {{identifier}}.",
+      "tokenRequired": "Um token GitHub é necessário para descobrir pull requests e carregar detalhes de CI. Defina GITHUB_TOKEN e atualize, ou vincule um PR manualmente abaixo.",
+      "empty": "Nenhum pull request vinculado a esta issue ainda. Quando um agente abrir um PR que referencia {{identifier}} (ou usar o branch vinculado), ele aparecerá aqui. Você também pode vincular manualmente abaixo (ex.: PR em outro repositório).",
+      "limitedAccessTitle": "Acesso GitHub limitado.",
+      "limitedAccessBody": "Pull requests vinculados são exibidos, mas detalhes de CI e ações de merge precisam de GITHUB_TOKEN configurado.",
+      "relatedCount": "{{count}} pull request relacionado",
+      "relatedCount_plural": "{{count}} pull requests relacionados",
+      "rerunning": "Reexecutando…",
+      "rerunFailedJobs": "Reexecutar jobs com falha",
+      "sending": "Enviando…",
+      "fixWithAgent": "Corrigir com agente",
+      "monitor": {
+        "movedToRework": "Falha de CI/review atribuída a este PR — enviado para Rework (tentativa {{count}})",
+        "movedToDone": "PR mergeado — issue movida para Done",
+        "keptHumanReview": "Mantido em review — falha parece não relacionada ou precisa de humano",
+        "limitReached": "Limite de correção automática atingido — revisão humana necessária",
+        "fallback": "Monitor: {{action}}"
+      },
+      "toasts": {
+        "fixSent": "Enviado para {{status}} — o agente pegará no próximo poll.",
+        "fixFailed": "Não foi possível solicitar correção.",
+        "rerunPartialFailed": "Alguns jobs não puderam ser reexecutados. Atualize em um minuto para ver os resultados.",
+        "rerunSuccess": "Jobs com falha foram reexecutados. Atualize em um minuto para ver os resultados.",
+        "rerunFailed": "Não foi possível reexecutar os jobs com falha.",
+        "linked": "Pull request vinculado.",
+        "linkFailed": "Não foi possível vincular o pull request.",
+        "unlinked": "Pull request desvinculado.",
+        "unlinkFailed": "Não foi possível desvincular o pull request."
+      }
     }
   },
   "project": {

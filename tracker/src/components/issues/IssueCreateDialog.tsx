@@ -1,5 +1,7 @@
 import { Plus } from "lucide-react";
+import type { TFunction } from "i18next";
 import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -23,9 +25,9 @@ import type { WorkflowStatusName } from "@/types/workflow-status";
 import { DEFAULT_WORKFLOW_STATUSES } from "../board/board-utils";
 
 export const issueFormSchema = z.object({
-  title: z.string().trim().min(1, "Title is required"),
+  title: z.string().trim().min(1, "title_required"),
   description: z.string().optional(),
-  status: z.string().trim().min(1, "Status is required"),
+  status: z.string().trim().min(1, "status_required"),
   priority: z.coerce.number().int().min(0).max(4).optional(),
 });
 
@@ -55,8 +57,8 @@ function assigneeValue(assignee: IssueAssigneeOption): string | null {
   return assignee.id ?? assignee.login ?? null;
 }
 
-function assigneeLabel(assignee: IssueAssigneeOption): string {
-  return assignee.login ?? assignee.name ?? "unknown";
+function assigneeLabel(assignee: IssueAssigneeOption, t: TFunction): string {
+  return assignee.login ?? assignee.name ?? t("issue.create.unknownAssignee");
 }
 
 function toggle(values: string[], value: string): string[] {
@@ -84,8 +86,16 @@ function agentDisplayName(agent: AgentKind): string {
 }
 
 // Codex calls the long-running mode a "goal"; Claude Code and Cursor call it a "workflow".
-function longRunningModeTerm(agent: AgentKind): string {
-  return agent === "claude" || agent === "cursor" ? "workflow" : "goal";
+function longRunningModeTerm(agent: AgentKind, t: TFunction): string {
+  return agent === "claude" || agent === "cursor"
+    ? t("issue.create.terms.workflow")
+    : t("issue.create.terms.goal");
+}
+
+function validationMessage(code: string | undefined, t: TFunction): string {
+  if (code === "title_required") return t("issue.create.validation.titleRequired");
+  if (code === "status_required") return t("issue.create.validation.statusRequired");
+  return t("issue.create.validation.invalid");
 }
 
 function capitalize(value: string): string {
@@ -105,6 +115,7 @@ export function IssueCreateDialog({
   open: controlledOpen,
   onOpenChange,
 }: IssueCreateDialogProps) {
+  const { t } = useTranslation();
   const isControlled = controlledOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? controlledOpen : internalOpen;
@@ -196,13 +207,13 @@ export function IssueCreateDialog({
     event.preventDefault();
     const parsed = issueFormSchema.safeParse({ title, description, status, priority: priority || undefined });
     if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Invalid issue");
+      toast.error(validationMessage(parsed.error.issues[0]?.message, t));
       return;
     }
     const goalAgent = concreteAgent(agent);
     if (goalAgent !== null && codexGoalMode && !codexGoal.trim()) {
-      const term = longRunningModeTerm(goalAgent);
-      toast.error(`${capitalize(term)} mode requires a ${term}.`);
+      const term = longRunningModeTerm(goalAgent, t);
+      toast.error(t("issue.create.goalModeRequired", { termCapitalized: capitalize(term), term }));
       return;
     }
 
@@ -221,9 +232,9 @@ export function IssueCreateDialog({
       onCreated?.(issue);
       resetForm();
       setOpen(false);
-      toast.success("Issue created");
+      toast.success(t("issue.create.created"));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to create issue");
+      toast.error(cause instanceof Error ? cause.message : t("issue.create.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -238,22 +249,31 @@ export function IssueCreateDialog({
           {trigger ?? (
             <Button size="sm">
               <Plus className="h-4 w-4" />
-              New issue
+              {t("issue.create.trigger")}
             </Button>
           )}
         </DialogTrigger>
       ) : null}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create issue</DialogTitle>
-          <DialogDescription>Add an issue to this project's tracker.</DialogDescription>
+          <DialogTitle>{t("issue.create.title")}</DialogTitle>
+          <DialogDescription>{t("issue.create.description")}</DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Issue title" autoFocus />
-          <Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description" />
+          <Input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder={t("issue.create.titlePlaceholder")}
+            autoFocus
+          />
+          <Textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder={t("issue.create.descriptionPlaceholder")}
+          />
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">Status</span>
+              <span className="text-xs font-medium text-muted-foreground">{t("issue.create.status")}</span>
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as WorkflowStatusName)}
@@ -267,17 +287,22 @@ export function IssueCreateDialog({
               </select>
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">Priority</span>
-              <Input value={priority} onChange={(event) => setPriority(event.target.value)} placeholder="0-4" inputMode="numeric" />
+              <span className="text-xs font-medium text-muted-foreground">{t("issue.create.priority")}</span>
+              <Input
+                value={priority}
+                onChange={(event) => setPriority(event.target.value)}
+                placeholder={t("issue.create.priorityPlaceholder")}
+                inputMode="numeric"
+              />
             </label>
           </div>
 
           {agentOptions.length > 0 ? (
             <div className="space-y-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">Agent</span>
+              <span className="text-xs font-medium text-muted-foreground">{t("issue.create.agent")}</span>
               <div className="flex flex-wrap gap-1.5">
                 <AgentChip
-                  label={`Inherit (${AGENT_LABELS[options?.effectiveAgent ?? "codex"]})`}
+                  label={t("issue.create.inherit", { agent: AGENT_LABELS[options?.effectiveAgent ?? "codex"] })}
                   active={agent === ""}
                   onClick={() => setAgent("")}
                 />
@@ -306,13 +331,15 @@ export function IssueCreateDialog({
                   onChange={(event) => handleGoalModeChange(event.target.checked)}
                   className="h-4 w-4 rounded border-input"
                 />
-                {capitalize(longRunningModeTerm(concreteAgent(agent) as AgentKind))} mode (long-running)
+                {t("issue.create.longRunningMode", {
+                  termCapitalized: capitalize(longRunningModeTerm(concreteAgent(agent) as AgentKind, t)),
+                })}
               </label>
               {codexGoalMode ? (
                 <label className="block space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">
                     {agentDisplayName(concreteAgent(agent) as AgentKind)}{" "}
-                    {longRunningModeTerm(concreteAgent(agent) as AgentKind)}
+                    {longRunningModeTerm(concreteAgent(agent) as AgentKind, t)}
                   </span>
                   <Textarea
                     value={codexGoal}
@@ -321,9 +348,10 @@ export function IssueCreateDialog({
                       setCodexGoal(event.target.value);
                     }}
                     className="min-h-28"
-                    aria-label={`${agentDisplayName(concreteAgent(agent) as AgentKind)} ${longRunningModeTerm(
-                      concreteAgent(agent) as AgentKind,
-                    )}`}
+                    aria-label={t("issue.create.goalAria", {
+                      agent: agentDisplayName(concreteAgent(agent) as AgentKind),
+                      term: longRunningModeTerm(concreteAgent(agent) as AgentKind, t),
+                    })}
                   />
                 </label>
               ) : null}
@@ -331,8 +359,8 @@ export function IssueCreateDialog({
           ) : null}
 
           <ChipPicker
-            title="Labels"
-            emptyText={optionsLoading ? "Loading labels..." : "No labels available."}
+            title={t("issue.create.labels")}
+            emptyText={optionsLoading ? t("issue.create.loadingLabels") : t("issue.create.noLabels")}
             items={visibleLabels.map((label) => ({
               value: labelValue(label),
               label: label.name,
@@ -343,10 +371,10 @@ export function IssueCreateDialog({
           />
 
           <ChipPicker
-            title="Assignees"
-            emptyText={optionsLoading ? "Loading assignees..." : "No assignees available."}
+            title={t("issue.create.assignees")}
+            emptyText={optionsLoading ? t("issue.create.loadingAssignees") : t("issue.create.noAssignees")}
             items={assigneeOptions
-              .map((assignee) => ({ value: assigneeValue(assignee), label: assigneeLabel(assignee) }))
+              .map((assignee) => ({ value: assigneeValue(assignee), label: assigneeLabel(assignee, t) }))
               .filter((item): item is { value: string; label: string } => item.value !== null)}
             selected={selectedAssignees}
             onToggle={(value) => setSelectedAssignees((current) => toggle(current, value))}
@@ -354,10 +382,10 @@ export function IssueCreateDialog({
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+              {t("issue.create.cancel")}
             </Button>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Creating..." : "Create"}
+              {submitting ? t("issue.create.creating") : t("issue.create.create")}
             </Button>
           </div>
         </form>
