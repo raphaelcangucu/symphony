@@ -71,7 +71,11 @@ export function ReturnToAgentPanel({
     if (evidenceAttention?.kind === "missing") {
       parts.push(t("issue.evidence.absent"));
     } else if (evidenceAttention?.kind === "failed") {
-      parts.push(`Evidence: ${evidenceAttentionSummary(evidenceAttention, t)}`);
+      parts.push(
+        t("issue.returnToAgent.evidenceLine", {
+          summary: evidenceAttentionSummary(evidenceAttention, t),
+        }),
+      );
     }
     return parts.join(" · ");
   }, [evidenceAttention, issue.status, t]);

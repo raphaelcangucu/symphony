@@ -146,3 +146,18 @@ msgstr "URL de pull request do GitHub inválida."
 
 msgid "A pull request URL is required."
 msgstr "Uma URL de pull request é obrigatória."
+
+msgid "Evidence run not found."
+msgstr "Run de evidência não encontrado."
+
+msgid "Evidence artifact not found."
+msgstr "Artefato de evidência não encontrado."
+
+msgid "Invalid artifact path."
+msgstr "Caminho de artefato inválido."
+
+msgid "Commit not found in workspace repo."
+msgstr "Commit não encontrado no repositório do workspace."
+
+msgid "Repository not found in workspace."
+msgstr "Repositório não encontrado no workspace."

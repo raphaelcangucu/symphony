@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import {
+  catalogAgentLabel,
   fallbackCatalogBundle,
   fallbackClaudeCatalog,
   fallbackCodexCatalog,
@@ -13,6 +14,8 @@ import {
   type AssistantEffortOption,
   type AssistantModelOption,
 } from "@/lib/assistantSettings";
+import { i18n } from "@/i18n";
+import { requireProjectSlug } from "@/lib/serviceValidation";
 import type { AgentKind } from "@/types/issue";
 import type { Comment } from "@/types/comment";
 import type { Issue } from "@/types/issue";
@@ -225,8 +228,7 @@ export async function uploadAssistantAttachment(
   projectSlug: string,
   file: File,
 ): Promise<UploadedAssistantAttachment> {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
+  const slug = requireProjectSlug(projectSlug);
 
   const form = new FormData();
   form.append("file", file);
@@ -237,7 +239,7 @@ export async function uploadAssistantAttachment(
 
   const dto = unwrapData<BackendUploadedAttachmentDto>(response);
   const path = dto.path?.trim();
-  if (!path) throw new Error("Upload response did not include a file path.");
+  if (!path) throw new Error(i18n.t("project.services.validation.uploadPathMissing"));
 
   return {
     id: dto.id ?? path,
@@ -250,8 +252,7 @@ export async function uploadAssistantAttachment(
 }
 
 export async function fetchAssistantCatalogBundle(projectSlug: string): Promise<AssistantCatalogBundle> {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
+  const slug = requireProjectSlug(projectSlug);
 
   try {
     const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/config`));
@@ -290,7 +291,7 @@ export async function fetchAssistantCatalogBundle(projectSlug: string): Promise<
     const cached = loadCachedCatalogBundle();
     if (cached) return cached;
 
-    throw new Error(extractApiErrorMessage(cause, "Failed to load assistant models."));
+    throw new Error(extractApiErrorMessage(cause, i18n.t("assistant.catalog.errors.loadFailed")));
   }
 }
 
@@ -307,12 +308,12 @@ export function normalizeAssistantCodexCatalog(dto: BackendAssistantCodexCatalog
   const models = (dto.models ?? []).map(normalizeAssistantModel).filter((model) => model.model.length > 0);
 
   if (models.length === 0) {
-    throw new Error("Codex CLI returned no models");
+    throw new Error(i18n.t("assistant.catalog.errors.noCodexModels"));
   }
 
   return {
     agent: "codex",
-    agentLabel: dto.agentLabel ?? dto.agent_label ?? "Codex CLI",
+    agentLabel: dto.agentLabel ?? dto.agent_label ?? catalogAgentLabel("codex"),
     command: dto.command ?? "codex app-server",
     defaultModel: dto.defaultModel ?? dto.default_model ?? null,
     models,
@@ -334,12 +335,11 @@ export function normalizeAssistantCatalogBundle(dto: BackendAssistantCatalogBund
         return fallbackCodexCatalog();
       }
 
-      const fallbackLabels: Record<AgentKind, string> = { codex: "Codex CLI", claude: "Claude Code", cursor: "Cursor Agent" };
       const fallbackCommands: Record<AgentKind, string> = { codex: "codex app-server", claude: "claude", cursor: "cursor-agent" };
 
       return {
         agent: agentKind as AgentKind,
-        agentLabel: agentDto.agentLabel ?? agentDto.agent_label ?? fallbackLabels[agentKind],
+        agentLabel: agentDto.agentLabel ?? agentDto.agent_label ?? catalogAgentLabel(agentKind),
         command: agentDto.command ?? fallbackCommands[agentKind],
         defaultModel: agentDto.defaultModel ?? agentDto.default_model ?? null,
         models,
@@ -407,10 +407,9 @@ export async function sendAssistantMessage(
   projectSlug: string,
   input: SendAssistantMessageInput,
 ): Promise<AssistantMessageResponse> {
-  const slug = projectSlug.trim();
+  const slug = requireProjectSlug(projectSlug);
   const message = input.message.trim();
-  if (!slug) throw new Error("projectSlug is required");
-  if (!message) throw new Error("message is required");
+  if (!message) throw new Error(i18n.t("project.services.validation.fieldRequired", { field: "message" }));
 
   const response = await http.post(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/messages`), {
     message,

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { i18n } from "@/i18n";
 import { fetchAssistantCodexCatalog, normalizeAssistantCodexCatalog, sendAssistantMessage } from "@/services/assistant";
 import { http } from "@/services/http";
 
@@ -95,7 +96,7 @@ describe("assistant service", () => {
       ],
     });
 
-    expect(catalog.agentLabel).toBe("Codex CLI");
+    expect(catalog.agentLabel).toBe(i18n.t("assistant.catalog.agents.codex"));
     expect(catalog.models[0]?.label).toBe("GPT-5.3 Codex");
   });
 

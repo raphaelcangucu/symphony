@@ -615,6 +615,7 @@
       "failedGateDescription": "The last evidence attempt did not pass the VALIDATE gate. Resume in {{target}} to fix the environment, rerun tests, and update the manifest.",
       "humanReviewDescription": "This issue is in human review. Choose a reason, adjust the instructions if needed, and resume in {{target}}.",
       "statusLine": "Status: {{status}}",
+      "evidenceLine": "Evidence: {{summary}}",
       "instructionsPlaceholder": "Specific instructions for the agent (optional)",
       "resuming": "Resuming…",
       "resumeButton": "Return to {{target}} and resume",
@@ -664,7 +665,8 @@
       "openTitle": "Open {{name}}",
       "openAria": "Open {{name}}",
       "loading": "Loading {{name}}",
-      "loadFailed": "Failed to load {{name}}"
+      "loadFailed": "Failed to load {{name}}",
+      "defaultVideo": "Video"
     },
     "create": {
       "trigger": "New issue",
@@ -1213,6 +1215,20 @@
       "loadFailed": "Unable to load project",
       "saved": "Saved"
     },
+    "services": {
+      "validation": {
+        "nameRequired": "Project name is required",
+        "slugRequired": "Project slug is required",
+        "projectSlugRequired": "projectSlug is required",
+        "fieldRequired": "{{field}} is required",
+        "positiveIntegerRequired": "{{field}} must be a positive integer",
+        "workflowStatusRequired": "At least one workflow status is required",
+        "repositoryRequired": "At least one repository is required",
+        "githubOwnerRequired": "GitHub owner is required",
+        "documentPathInvalid": "Document path cannot include . or .. segments",
+        "uploadPathMissing": "Upload response did not include a file path."
+      }
+    },
     "templates": {
       "back": "Templates",
       "editTitle": "Edit template",
@@ -1466,6 +1482,32 @@
       "xhigh": "Extra high",
       "max": "Max"
     },
+    "catalog": {
+      "agents": {
+        "codex": "Codex CLI",
+        "claude": "Claude Code",
+        "cursor": "Cursor Agent"
+      },
+      "models": {
+        "gpt-5_5": "GPT-5.5",
+        "gpt-5_4": "GPT-5.4",
+        "gpt-5_3-codex": "GPT-5.3 Codex",
+        "claude-opus-4-8": "Claude Opus 4.8",
+        "claude-opus-4-7": "Claude Opus 4.7",
+        "claude-opus-4-6": "Claude Opus 4.6",
+        "claude-sonnet-4-6": "Claude Sonnet 4.6",
+        "claude-haiku-4-5": "Claude Haiku 4.5",
+        "auto": "Auto",
+        "composer-1": "Composer 1",
+        "gpt-5": "GPT-5",
+        "sonnet-4": "Claude Sonnet 4",
+        "sonnet-4-thinking": "Claude Sonnet 4 Thinking"
+      },
+      "errors": {
+        "noCodexModels": "Codex CLI returned no models",
+        "loadFailed": "Failed to load assistant models."
+      }
+    },
     "speech": {
       "errors": {
         "notAllowed": "Speech recognition needs microphone permission.",
@@ -1506,7 +1548,15 @@
       "voiceUnavailable": " · Voice dictation unavailable ({{error}})",
       "attachmentsUnavailable": "Attachments are not available in this conversation.",
       "uploadFailed": "Failed to upload file.",
-      "voiceNotSupported": "Voice dictation is not supported in this browser."
+      "voiceNotSupported": "Voice dictation is not supported in this browser.",
+      "attachmentValidation": {
+        "imagesOnly": "Only image files are supported.",
+        "imageTooLarge": "Images must be 4 MB or smaller.",
+        "emptyFile": "Empty files cannot be attached.",
+        "fileTooLarge": "Files must be 5 MB or smaller.",
+        "audioTooLarge": "Audio recordings must be 8 MB or smaller.",
+        "readAudioFailed": "Failed to read audio."
+      }
     },
     "authoring": {
       "chatAria": "Issue authoring chat",

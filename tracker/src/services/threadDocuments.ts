@@ -1,5 +1,7 @@
 import type { ThreadDocument, ThreadDocumentList } from "@/types/threadDocument";
 
+import { assertSafeDocumentPath, requireNonBlank, requirePositiveInteger } from "@/lib/serviceValidation";
+
 import { http, trackerPath, unwrapData } from "./http";
 
 interface BackendThreadDocumentDto {
@@ -47,23 +49,16 @@ export async function readThreadDocument(threadId: number, path: string): Promis
 }
 
 function threadDocumentsPath(threadId: number): string {
-  if (!Number.isInteger(threadId) || threadId <= 0) {
-    throw new Error("threadId must be a positive integer");
-  }
+  requirePositiveInteger(threadId, "threadId");
 
   return trackerPath(`/assistant/threads/${threadId}/documents`);
 }
 
 function encodeDocumentPath(path: string): string {
-  const normalizedPath = path.trim();
-  if (!normalizedPath) throw new Error("path is required");
+  const normalizedPath = requireNonBlank(path, "path");
+  assertSafeDocumentPath(normalizedPath);
 
-  const segments = normalizedPath.split("/");
-  if (segments.some((segment) => segment === "." || segment === "..")) {
-    throw new Error("Document path cannot include . or .. segments");
-  }
-
-  return segments.map(encodeURIComponent).join("/");
+  return normalizedPath.split("/").map(encodeURIComponent).join("/");
 }
 
 const FREEFORM_WORKSPACE_PATH_RE = /(?:^|\/)assistant\/freeform\/\d+\/(.+)$/i;

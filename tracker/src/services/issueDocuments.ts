@@ -1,4 +1,5 @@
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { assertSafeDocumentPath, requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import type { IssueDocument, IssueDocumentKind, IssueDocumentList } from "@/types/issueDocument";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -54,7 +55,7 @@ export async function readIssueDocument(projectSlug: string, identifier: string,
 }
 
 function issueDocumentsPath(projectSlug: string, identifier: string): string {
-  const slug = requireNonBlank(projectSlug, "projectSlug");
+  const slug = requireProjectSlug(projectSlug);
   const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
 
   return trackerPath(
@@ -64,19 +65,7 @@ function issueDocumentsPath(projectSlug: string, identifier: string): string {
 
 function encodeDocumentPath(path: string): string {
   const normalizedPath = requireNonBlank(path, "path");
-  const segments = normalizedPath.split("/");
+  assertSafeDocumentPath(normalizedPath);
 
-  if (segments.some((segment) => segment === "." || segment === "..")) {
-    throw new Error("Document path cannot include . or .. segments");
-  }
-
-  return segments.map(encodeURIComponent).join("/");
-}
-
-function requireNonBlank(value: string, fieldName: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${fieldName} is required`);
-  }
-
-  return value.trim();
+  return normalizedPath.split("/").map(encodeURIComponent).join("/");
 }

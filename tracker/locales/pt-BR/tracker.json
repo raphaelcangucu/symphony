@@ -615,6 +615,7 @@
       "failedGateDescription": "A última tentativa de evidência não passou no VALIDATE gate. Retome em {{target}} para corrigir o ambiente, rerodar testes e atualizar o manifest.",
       "humanReviewDescription": "Esta issue está em revisão humana. Escolha o motivo, ajuste a instrução se quiser, e retome em {{target}}.",
       "statusLine": "Status: {{status}}",
+      "evidenceLine": "Evidence: {{summary}}",
       "instructionsPlaceholder": "Instruções específicas para o agente (opcional)",
       "resuming": "Retomando…",
       "resumeButton": "Voltar para {{target}} e retomar",
@@ -664,7 +665,8 @@
       "openTitle": "Abrir {{name}}",
       "openAria": "Abrir {{name}}",
       "loading": "Carregando {{name}}",
-      "loadFailed": "Falha ao carregar {{name}}"
+      "loadFailed": "Falha ao carregar {{name}}",
+      "defaultVideo": "Vídeo"
     },
     "create": {
       "trigger": "Nova issue",
@@ -1213,6 +1215,20 @@
       "loadFailed": "Não foi possível carregar projeto",
       "saved": "Salvo"
     },
+    "services": {
+      "validation": {
+        "nameRequired": "Nome do projeto é obrigatório",
+        "slugRequired": "Slug do projeto é obrigatório",
+        "projectSlugRequired": "projectSlug é obrigatório",
+        "fieldRequired": "{{field}} é obrigatório",
+        "positiveIntegerRequired": "{{field}} deve ser um inteiro positivo",
+        "workflowStatusRequired": "Pelo menos um status de workflow é obrigatório",
+        "repositoryRequired": "Pelo menos um repositório é obrigatório",
+        "githubOwnerRequired": "Owner GitHub é obrigatório",
+        "documentPathInvalid": "O caminho do documento não pode incluir segmentos . ou ..",
+        "uploadPathMissing": "A resposta do upload não incluiu um caminho de arquivo."
+      }
+    },
     "templates": {
       "back": "Templates",
       "editTitle": "Editar template",
@@ -1491,6 +1507,32 @@
       "xhigh": "Extra alto",
       "max": "Máximo"
     },
+    "catalog": {
+      "agents": {
+        "codex": "Codex CLI",
+        "claude": "Claude Code",
+        "cursor": "Cursor Agent"
+      },
+      "models": {
+        "gpt-5_5": "GPT-5.5",
+        "gpt-5_4": "GPT-5.4",
+        "gpt-5_3-codex": "GPT-5.3 Codex",
+        "claude-opus-4-8": "Claude Opus 4.8",
+        "claude-opus-4-7": "Claude Opus 4.7",
+        "claude-opus-4-6": "Claude Opus 4.6",
+        "claude-sonnet-4-6": "Claude Sonnet 4.6",
+        "claude-haiku-4-5": "Claude Haiku 4.5",
+        "auto": "Auto",
+        "composer-1": "Composer 1",
+        "gpt-5": "GPT-5",
+        "sonnet-4": "Claude Sonnet 4",
+        "sonnet-4-thinking": "Claude Sonnet 4 Thinking"
+      },
+      "errors": {
+        "noCodexModels": "O Codex CLI não retornou modelos",
+        "loadFailed": "Falha ao carregar modelos do assistente."
+      }
+    },
     "composer": {
       "placeholder": "Escreva uma mensagem...",
       "dropFiles": "Solte arquivos para anexar",
@@ -1506,7 +1548,15 @@
       "voiceUnavailable": " · Ditado por voz indisponível ({{error}})",
       "attachmentsUnavailable": "Anexos não estão disponíveis nesta conversa.",
       "uploadFailed": "Falha ao enviar arquivo.",
-      "voiceNotSupported": "Ditado por voz não é suportado neste navegador."
+      "voiceNotSupported": "Ditado por voz não é suportado neste navegador.",
+      "attachmentValidation": {
+        "imagesOnly": "Apenas arquivos de imagem são suportados.",
+        "imageTooLarge": "Imagens devem ter no máximo 4 MB.",
+        "emptyFile": "Arquivos vazios não podem ser anexados.",
+        "fileTooLarge": "Arquivos devem ter no máximo 5 MB.",
+        "audioTooLarge": "Gravações de áudio devem ter no máximo 8 MB.",
+        "readAudioFailed": "Falha ao ler o áudio."
+      }
     },
     "authoring": {
       "chatAria": "Chat de authoring da issue",

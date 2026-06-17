@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -23,6 +24,8 @@ interface MarkdownProps {
 }
 
 export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
+  const { t } = useTranslation();
+
   return (
     <div className={cn("markdown-body text-sm leading-6 text-foreground/90", className)}>
       <ReactMarkdown
@@ -37,7 +40,7 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
             }
 
             if (href && isTrackerAuthenticatedMediaUrl(href) && isVideoAttachmentSource(href)) {
-              const label = linkText(linkChildren) || "video";
+              const label = linkText(linkChildren) || t("issue.attachments.defaultVideo");
               return (
                 <AttachmentVideo
                   src={href}
@@ -55,7 +58,7 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
           },
           img: ({ src, alt }) => {
             const source = typeof src === "string" ? src : "";
-            const label = typeof alt === "string" && alt.length > 0 ? alt : "attachment";
+            const label = typeof alt === "string" && alt.length > 0 ? alt : t("assistant.panel.attachmentLabel.default");
 
             if (isTrackerAuthenticatedMediaUrl(source)) {
               return (

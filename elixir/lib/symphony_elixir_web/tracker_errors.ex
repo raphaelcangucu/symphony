@@ -36,6 +36,21 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :comment_not_found),
     do: not_found(conn, "comment_not_found", dgettext("errors", "Comment not found"))
 
+  def render(conn, :evidence_run_not_found),
+    do: not_found(conn, "evidence_run_not_found", dgettext("errors", "Evidence run not found."))
+
+  def render(conn, :artifact_not_found),
+    do: not_found(conn, "artifact_not_found", dgettext("errors", "Evidence artifact not found."))
+
+  def render(conn, :invalid_artifact_path),
+    do: error(conn, 422, "invalid_artifact_path", dgettext("errors", "Invalid artifact path."))
+
+  def render(conn, :commit_not_found),
+    do: not_found(conn, "commit_not_found", dgettext("errors", "Commit not found in workspace repo."))
+
+  def render(conn, :repo_not_found),
+    do: not_found(conn, "repo_not_found", dgettext("errors", "Repository not found in workspace."))
+
   def render(conn, :dev_server_not_found),
     do: not_found(conn, "dev_server_not_found", dgettext("errors", "Dev server not found"))
 

@@ -37,15 +37,9 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceController do
          {:ok, commit} <- Commits.show(workspace, repo, sha) do
       json(conn, %{data: commit})
     else
-      {:error, :commit_not_found} ->
-        conn
-        |> Conn.put_status(404)
-        |> json(%{error: %{code: "commit_not_found", message: "Commit not found in workspace repo."}})
+      {:error, :commit_not_found} -> TrackerErrors.render(conn, :commit_not_found)
 
-      {:error, :repo_not_found} ->
-        conn
-        |> Conn.put_status(404)
-        |> json(%{error: %{code: "repo_not_found", message: "Repository not found in workspace."}})
+      {:error, :repo_not_found} -> TrackerErrors.render(conn, :repo_not_found)
 
       {:error, reason} ->
         TrackerErrors.render(conn, reason)

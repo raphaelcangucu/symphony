@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  catalogAgentLabel,
   catalogFor,
   fallbackCatalogBundle,
   loadComposerState,
@@ -29,6 +30,6 @@ describe("composer state v2", () => {
     const reloaded = loadComposerState(bundle);
     expect(reloaded.agent).toBe("claude");
     expect(reloaded.byAgent.claude?.model).toBe("claude-sonnet-4-6");
-    expect(catalogFor(bundle, "claude").agentLabel).toBe("Claude Code");
+    expect(catalogFor(bundle, "claude").agentLabel).toBe(catalogAgentLabel("claude"));
   });
 });

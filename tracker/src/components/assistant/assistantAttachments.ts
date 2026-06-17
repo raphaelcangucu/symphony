@@ -1,4 +1,5 @@
 import { isVideoAttachmentSource, isVideoMediaType } from "@/services/attachments";
+import { i18n } from "@/i18n";
 
 export type AssistantAttachment =
   | {
@@ -42,17 +43,25 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 
 export function validateImageFile(file: File): void {
-  if (!file.type.startsWith("image/")) throw new Error("Only image files are supported.");
-  if (file.size > MAX_IMAGE_BYTES) throw new Error("Images must be 4 MB or smaller.");
+  if (!file.type.startsWith("image/")) {
+    throw new Error(i18n.t("assistant.composer.attachmentValidation.imagesOnly"));
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error(i18n.t("assistant.composer.attachmentValidation.imageTooLarge"));
+  }
 }
 
 export function validateAttachmentFile(file: File): void {
-  if (file.size === 0) throw new Error("Empty files cannot be attached.");
+  if (file.size === 0) {
+    throw new Error(i18n.t("assistant.composer.attachmentValidation.emptyFile"));
+  }
   if (file.type.startsWith("image/")) {
     validateImageFile(file);
     return;
   }
-  if (file.size > MAX_FILE_BYTES) throw new Error("Files must be 5 MB or smaller.");
+  if (file.size > MAX_FILE_BYTES) {
+    throw new Error(i18n.t("assistant.composer.attachmentValidation.fileTooLarge"));
+  }
 }
 
 interface UploadedAttachmentLike {
@@ -95,7 +104,9 @@ export function createAttachmentPreview(file: File, uploaded: UploadedAttachment
 }
 
 export async function blobToAudioAttachment(blob: Blob, durationMs?: number): Promise<AssistantAttachment> {
-  if (blob.size > MAX_AUDIO_BYTES) throw new Error("Audio recordings must be 8 MB or smaller.");
+  if (blob.size > MAX_AUDIO_BYTES) {
+    throw new Error(i18n.t("assistant.composer.attachmentValidation.audioTooLarge"));
+  }
 
   const dataUrl = await readBlobAsDataUrl(blob);
 
@@ -158,7 +169,7 @@ function readBlobAsDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(new Error("Failed to read audio."));
+    reader.onerror = () => reject(new Error(i18n.t("assistant.composer.attachmentValidation.readAudioFailed")));
     reader.readAsDataURL(blob);
   });
 }

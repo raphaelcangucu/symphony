@@ -20,3 +20,18 @@ msgstr "Invalid GitHub pull request URL."
 
 msgid "A pull request URL is required."
 msgstr "A pull request URL is required."
+
+msgid "Evidence run not found."
+msgstr "Evidence run not found."
+
+msgid "Evidence artifact not found."
+msgstr "Evidence artifact not found."
+
+msgid "Invalid artifact path."
+msgstr "Invalid artifact path."
+
+msgid "Commit not found in workspace repo."
+msgstr "Commit not found in workspace repo."
+
+msgid "Repository not found in workspace."
+msgstr "Repository not found in workspace."

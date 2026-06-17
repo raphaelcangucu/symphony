@@ -1,6 +1,8 @@
 import type { WorkspaceSuggestion, WorkspaceSuggestionInput } from "@/types/project-setup";
 import type { GitHubOwner, RepositoryScan, RepositoryScanRequest, WorkspaceRepository } from "@/types/repository";
 
+import { i18n } from "@/i18n";
+
 import { http, trackerPath, unwrapData } from "./http";
 import {
   type BackendRepositoryDto,
@@ -22,7 +24,7 @@ export async function listGitHubOwners(): Promise<GitHubOwner[]> {
 
 export async function listGitHubRepositories(owner: string): Promise<WorkspaceRepository[]> {
   const trimmedOwner = owner.trim();
-  if (!trimmedOwner) throw new Error("GitHub owner is required");
+  if (!trimmedOwner) throw new Error(i18n.t("project.services.validation.githubOwnerRequired"));
 
   const response = await http.get(trackerPath(`/github/owners/${encodeURIComponent(trimmedOwner)}/repositories`));
   return unwrapData<BackendRepositoryDto[]>(response).map(normalizeRepository);
