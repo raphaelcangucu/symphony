@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,7 @@ import {
 } from "@/services/settings";
 
 export function ProviderCredentialsCard() {
+  const { t } = useTranslation();
   const [providers, setProviders] = useState<CredentialProvider[] | null>(null);
   const [loadError, setLoadError] = useState(false);
 
@@ -40,17 +42,14 @@ export function ProviderCredentialsCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Provider tokens</CardTitle>
-        <CardDescription>
-          Tokens saved here are encrypted at rest and override the matching environment variable.
-          Leave a secret blank to keep the current value, or clear it to fall back to the environment.
-        </CardDescription>
+        <CardTitle>{t("settings.credentials.title")}</CardTitle>
+        <CardDescription>{t("settings.credentials.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {loadError ? (
-          <p className="text-xs text-muted-foreground">Failed to load credentials — refresh to retry.</p>
+          <p className="text-xs text-muted-foreground">{t("settings.credentials.loadFailed")}</p>
         ) : !providers ? (
-          <p className="text-xs text-muted-foreground">Loading…</p>
+          <p className="text-xs text-muted-foreground">{t("settings.credentials.loading")}</p>
         ) : (
           providers.map((provider) => (
             <ProviderSection key={provider.provider} provider={provider} onUpdated={replaceProvider} />
@@ -91,6 +90,7 @@ interface CredentialFieldRowProps {
 }
 
 function CredentialFieldRow({ providerKey, field, onUpdated }: CredentialFieldRowProps) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(field.secret ? "" : (field.value ?? ""));
   const [saving, setSaving] = useState(false);
 
@@ -100,8 +100,10 @@ function CredentialFieldRow({ providerKey, field, onUpdated }: CredentialFieldRo
 
   const placeholder = useMemo(() => {
     if (!field.secret) return field.label;
-    return field.configured && field.hint ? `${field.hint} — enter a new value to replace` : "Not set";
-  }, [field]);
+    return field.configured && field.hint
+      ? t("settings.credentials.placeholderReplace", { hint: field.hint })
+      : t("settings.credentials.placeholderNotSet");
+  }, [field, t]);
 
   async function save() {
     if (saving) return;
@@ -110,9 +112,9 @@ function CredentialFieldRow({ providerKey, field, onUpdated }: CredentialFieldRo
       const updated = await updateCredential(providerKey, field.key, draft.trim());
       onUpdated(updated);
       if (field.secret) setDraft("");
-      toast.success(`${field.label} saved`);
+      toast.success(t("settings.credentials.toasts.saved", { label: field.label }));
     } catch {
-      toast.error(`Failed to save ${field.label}`);
+      toast.error(t("settings.credentials.toasts.saveFailed", { label: field.label }));
     } finally {
       setSaving(false);
     }
@@ -125,9 +127,9 @@ function CredentialFieldRow({ providerKey, field, onUpdated }: CredentialFieldRo
       const updated = await clearCredential(providerKey, field.key);
       onUpdated(updated);
       setDraft("");
-      toast.success(`${field.label} cleared`);
+      toast.success(t("settings.credentials.toasts.cleared", { label: field.label }));
     } catch {
-      toast.error(`Failed to clear ${field.label}`);
+      toast.error(t("settings.credentials.toasts.clearFailed", { label: field.label }));
     } finally {
       setSaving(false);
     }
@@ -152,11 +154,11 @@ function CredentialFieldRow({ providerKey, field, onUpdated }: CredentialFieldRo
           onChange={(event) => setDraft(event.target.value)}
         />
         <Button type="button" size="sm" variant="secondary" disabled={saveDisabled} onClick={() => void save()}>
-          Save
+          {t("settings.credentials.save")}
         </Button>
         {field.source === "db" ? (
           <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => void clear()}>
-            Clear
+            {t("settings.credentials.clear")}
           </Button>
         ) : null}
       </div>
@@ -165,11 +167,13 @@ function CredentialFieldRow({ providerKey, field, onUpdated }: CredentialFieldRo
 }
 
 function SourceBadge({ field }: { field: CredentialField }) {
+  const { t } = useTranslation();
+
   if (field.source === "db") {
-    return <Badge variant="secondary">Saved here</Badge>;
+    return <Badge variant="secondary">{t("settings.credentials.source.savedHere")}</Badge>;
   }
   if (field.source === "env") {
-    return <Badge variant="muted">From environment</Badge>;
+    return <Badge variant="muted">{t("settings.credentials.source.fromEnv")}</Badge>;
   }
-  return <Badge variant="outline">Not set</Badge>;
+  return <Badge variant="outline">{t("settings.credentials.source.notSet")}</Badge>;
 }

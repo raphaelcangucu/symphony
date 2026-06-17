@@ -1,4 +1,5 @@
 import { Archive } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,8 @@ export function ArchiveChatButton({
   className,
   variant = "icon",
 }: ArchiveChatButtonProps) {
+  const { t } = useTranslation();
+
   if (variant === "menu") {
     return (
       <button
@@ -30,7 +33,7 @@ export function ArchiveChatButton({
         onClick={() => onArchive(threadId)}
       >
         <Archive className="mr-2 h-4 w-4" />
-        Archive
+        {t("assistant.archive.label")}
       </button>
     );
   }
@@ -41,8 +44,8 @@ export function ArchiveChatButton({
       variant="ghost"
       size="icon"
       disabled={archiving}
-      aria-label="Archive conversation"
-      title="Archive conversation"
+      aria-label={t("assistant.archive.ariaLabel")}
+      title={t("assistant.archive.title")}
       className={cn("h-8 w-8 shrink-0 text-muted-foreground", className)}
       onClick={(event) => {
         event.preventDefault();

@@ -50,6 +50,45 @@
       "disable": "Desativar notificações",
       "sendTest": "Enviar notificação de teste",
       "enable": "Ativar notificações"
+    },
+    "identities": {
+      "title": "Identidades conectadas",
+      "description": "Com quem o Symphony se autentica em cada provider. A regra \"atribuídas a mim\" do orquestrador usa essas identidades.",
+      "loadFailed": "Falha ao carregar identidades — atualize para tentar novamente.",
+      "loading": "Carregando…",
+      "providers": { "github": "GitHub", "jira": "Jira", "linear": "Linear" },
+      "status": {
+        "notConfigured": "Não configurado",
+        "connected": "Conectado",
+        "error": "Erro"
+      },
+      "describe": {
+        "addToken": "Adicione um token abaixo para conectar este provider.",
+        "connected": "Conectado",
+        "verifyFailed": "Não foi possível verificar: {{error}}",
+        "verifyTokenFailed": "Não foi possível verificar o token."
+      }
+    },
+    "credentials": {
+      "title": "Tokens de providers",
+      "description": "Tokens salvos aqui são criptografados em repouso e substituem a variável de ambiente correspondente. Deixe um segredo em branco para manter o valor atual ou limpe para voltar ao ambiente.",
+      "loadFailed": "Falha ao carregar credenciais — atualize para tentar novamente.",
+      "loading": "Carregando…",
+      "save": "Salvar",
+      "clear": "Limpar",
+      "placeholderNotSet": "Não definido",
+      "placeholderReplace": "{{hint}} — digite um novo valor para substituir",
+      "source": {
+        "savedHere": "Salvo aqui",
+        "fromEnv": "Do ambiente",
+        "notSet": "Não definido"
+      },
+      "toasts": {
+        "saved": "{{label}} salvo",
+        "saveFailed": "Falha ao salvar {{label}}",
+        "cleared": "{{label}} removido",
+        "clearFailed": "Falha ao remover {{label}}"
+      }
     }
   },
   "issue": {
@@ -612,6 +651,31 @@
         "handoff": { "label": "Handoff", "group": "Handoff" }
       },
       "itemAria": "{{label}} {{title}}"
+    },
+    "freeform": {
+      "chatAria": "Chat do assistente",
+      "backToConversations": "Conversas",
+      "filesAria": "Arquivos do chat",
+      "filesTitle": "Arquivos da conversa",
+      "filesHint": "Abra rascunhos markdown à direita. Clique em um nome no chat para abrir aqui."
+    },
+    "archive": {
+      "label": "Arquivar",
+      "ariaLabel": "Arquivar conversa",
+      "title": "Arquivar conversa"
+    },
+    "threadDocuments": {
+      "ariaLabel": "Arquivos do chat",
+      "listAria": "Lista de arquivos",
+      "filesTitle": "Arquivos",
+      "filesSubtitle": "Rascunhos markdown escritos nesta conversa.",
+      "workspaceMissing": "O workspace do chat ainda não está pronto. Arquivos gerados aparecem aqui depois que o assistente escrever.",
+      "unavailable": "Nenhum arquivo disponível ainda.",
+      "empty": "Rascunhos markdown deste chat aparecem aqui. Peça ao assistente para criar ou atualizar um arquivo e abra pela lista ou por um link na conversa.",
+      "loading": "Carregando arquivo...",
+      "loadError": "Não foi possível carregar este arquivo.",
+      "retry": "Tentar novamente",
+      "noContent": "Nenhum conteúdo para exibir."
     }
   },
   "layout": {

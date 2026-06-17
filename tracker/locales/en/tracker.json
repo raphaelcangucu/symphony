@@ -50,6 +50,45 @@
       "disable": "Disable notifications",
       "sendTest": "Send test notification",
       "enable": "Enable notifications"
+    },
+    "identities": {
+      "title": "Connected identities",
+      "description": "Who Symphony authenticates as on each provider. The orchestrator's \"assigned to me\" rule matches against these identities.",
+      "loadFailed": "Failed to load identities — refresh to retry.",
+      "loading": "Loading…",
+      "providers": { "github": "GitHub", "jira": "Jira", "linear": "Linear" },
+      "status": {
+        "notConfigured": "Not configured",
+        "connected": "Connected",
+        "error": "Error"
+      },
+      "describe": {
+        "addToken": "Add a token below to connect this provider.",
+        "connected": "Connected",
+        "verifyFailed": "Could not verify: {{error}}",
+        "verifyTokenFailed": "Could not verify the token."
+      }
+    },
+    "credentials": {
+      "title": "Provider tokens",
+      "description": "Tokens saved here are encrypted at rest and override the matching environment variable. Leave a secret blank to keep the current value, or clear it to fall back to the environment.",
+      "loadFailed": "Failed to load credentials — refresh to retry.",
+      "loading": "Loading…",
+      "save": "Save",
+      "clear": "Clear",
+      "placeholderNotSet": "Not set",
+      "placeholderReplace": "{{hint}} — enter a new value to replace",
+      "source": {
+        "savedHere": "Saved here",
+        "fromEnv": "From environment",
+        "notSet": "Not set"
+      },
+      "toasts": {
+        "saved": "{{label}} saved",
+        "saveFailed": "Failed to save {{label}}",
+        "cleared": "{{label}} cleared",
+        "clearFailed": "Failed to clear {{label}}"
+      }
     }
   },
   "issue": {
@@ -612,6 +651,31 @@
         "handoff": { "label": "Handoff", "group": "Handoff" }
       },
       "itemAria": "{{label}} {{title}}"
+    },
+    "freeform": {
+      "chatAria": "Assistant chat",
+      "backToConversations": "Conversations",
+      "filesAria": "Assistant chat files",
+      "filesTitle": "Conversation files",
+      "filesHint": "Open markdown drafts on the right. Click a filename in the chat to jump to it here."
+    },
+    "archive": {
+      "label": "Archive",
+      "ariaLabel": "Archive conversation",
+      "title": "Archive conversation"
+    },
+    "threadDocuments": {
+      "ariaLabel": "Chat files",
+      "listAria": "Chat file list",
+      "filesTitle": "Files",
+      "filesSubtitle": "Markdown drafts written in this conversation.",
+      "workspaceMissing": "The chat workspace is not ready yet. Generated files appear here after the assistant writes them.",
+      "unavailable": "No files available yet.",
+      "empty": "Markdown drafts from this chat will appear here. Ask the assistant to create or update a file, then open it from the list or from a link in the conversation.",
+      "loading": "Loading file...",
+      "loadError": "Could not load this file.",
+      "retry": "Retry",
+      "noContent": "No content to display."
     }
   },
   "layout": {
