@@ -834,17 +834,13 @@ defmodule SymphonyElixir.Orchestrator do
   defp apply_successful_completion(%State{} = state, running_entry, issue_id) do
     case Map.get(running_entry, :agent_outcome) do
       {:incomplete, {:validate_gate, _violations}} ->
-        Logger.warning(
-          "Validate gate incomplete for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier}; skipping completion transition"
-        )
+        Logger.warning("Validate gate incomplete for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier}; skipping completion transition")
 
         maybe_annotate_incomplete(running_entry, issue_id)
         complete_issue(state, issue_id)
 
       {:incomplete, {:publish_gate, _violations}} ->
-        Logger.warning(
-          "Publish gate incomplete for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier}; skipping completion transition"
-        )
+        Logger.warning("Publish gate incomplete for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier}; skipping completion transition")
 
         maybe_annotate_incomplete(running_entry, issue_id)
         complete_issue(state, issue_id)
@@ -1010,9 +1006,7 @@ defmodule SymphonyElixir.Orchestrator do
     case verified_prs do
       [] ->
         if prs != [] do
-          Logger.warning(
-            "Skipping run PR links issue=#{identifier}: no PR matched Symphony-Issue marker #{marker_key}"
-          )
+          Logger.warning("Skipping run PR links issue=#{identifier}: no PR matched Symphony-Issue marker #{marker_key}")
         end
 
         :ok
@@ -1304,8 +1298,13 @@ defmodule SymphonyElixir.Orchestrator do
     """
   end
 
-  defp incomplete_handoff_note({:validate_gate, _}),
-    do: "- The issue was **not** moved to review — evidence/validation is missing or failing."
+  defp incomplete_handoff_note({:validate_gate, violations}) do
+    if Evidence.Gate.environment_blocked_only?(violations) do
+      "- The issue was **not** moved to review — required tests could not run in the workspace environment (e.g. no Docker/network). This is an environment blocker, not necessarily a code failure: fix the environment (or sandbox capabilities) and re-dispatch."
+    else
+      "- The issue was **not** moved to review — evidence/validation is missing or failing."
+    end
+  end
 
   defp incomplete_handoff_note({:publish_gate, _}),
     do: "- The issue was **not** moved to review — publish requirements (PRs / pushed branches) are unsatisfied."
@@ -1318,8 +1317,13 @@ defmodule SymphonyElixir.Orchestrator do
   defp incomplete_reason_text({:publish_gate, _violations}),
     do: "ended with the publish gate unsatisfied (deliverables missing)"
 
-  defp incomplete_reason_text({:validate_gate, _violations}),
-    do: "ended with the validate gate unsatisfied (test/e2e evidence missing or failing)"
+  defp incomplete_reason_text({:validate_gate, violations}) do
+    if Evidence.Gate.environment_blocked_only?(violations) do
+      "ended with required tests blocked by the workspace environment (e.g. missing Docker/network), not a code failure"
+    else
+      "ended with the validate gate unsatisfied (test/e2e evidence missing or failing)"
+    end
+  end
 
   defp incomplete_reason_text(other), do: "reason=#{inspect(other)}"
 

@@ -56,20 +56,39 @@ defmodule SymphonyElixir.DevServer.PortPlan do
     end
   end
 
-  @spec choose_port(context(), non_neg_integer(), [pos_integer()]) ::
+  @doc """
+  Pick a port for `offset` within the context's band/slot.
+
+  `owned` is the port this exact service was previously assigned (from its
+  `DevServerRecord`). When the canonical slot port equals `owned` and is not
+  claimed by another live instance, it is reclaimed directly — skipping the
+  `:gen_tcp` bind probe. This keeps a service on its deterministic port across
+  restarts even when a long-lived resource it owns (e.g. a shared docker
+  container that is not torn down on stop) is still bound to that port. Without
+  this, the bind probe would treat the service's own lingering port as occupied
+  and drift it onto the next free port, colliding with sibling services.
+  """
+  @spec choose_port(context(), non_neg_integer(), [pos_integer()], pos_integer() | nil) ::
           {:ok, pos_integer()} | {:error, :no_free_port}
-  def choose_port(%{slot_index: nil} = ctx, _offset, claimed), do: scan(ctx, claimed)
+  def choose_port(ctx, offset, claimed, owned \\ nil)
+
+  def choose_port(%{slot_index: nil} = ctx, _offset, claimed, _owned), do: scan(ctx, claimed)
 
   def choose_port(
         %{slot_index: slot_index, ports_per_slot: ports_per_slot} = ctx,
         offset,
-        claimed
+        claimed,
+        owned
       ) do
     {band_start, _band_end} = ctx.band
 
     case port(band_start, slot_index, offset, ports_per_slot) do
       {:ok, preferred} ->
-        if free?(ctx, preferred, claimed), do: {:ok, preferred}, else: scan(ctx, claimed)
+        cond do
+          preferred == owned and preferred not in claimed -> {:ok, preferred}
+          free?(ctx, preferred, claimed) -> {:ok, preferred}
+          true -> scan(ctx, claimed)
+        end
 
       {:error, :offset_out_of_range} ->
         scan(ctx, claimed)

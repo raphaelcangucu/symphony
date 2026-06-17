@@ -120,6 +120,39 @@ non-empty `rationale`.
 Copy real outputs into `.symphony/evidence/artifacts/` (test stdout to a .txt
 file, Playwright's `playwright-report/`, `test-results/` screenshots/videos).
 
+## When a required test cannot run (environment blocked)
+
+Sometimes a required command cannot run in this workspace at all — not because
+the code is broken, but because the environment lacks a capability the command
+needs: no Docker daemon for `./vibe test`, no network to download Go modules or
+install Playwright/browsers, a sandbox that blocks the browser's own sandbox,
+etc. Retrying the same command will never succeed.
+
+After a real attempt (the command MUST appear in your session log), record that
+run with `"status": "blocked"` and a concrete `"blocked_reason"` instead of
+thrashing on it:
+
+```json
+{
+  "kind": "unit",
+  "repo": "backend",
+  "command": "./vibe test",
+  "status": "blocked",
+  "blocked_reason": "Docker daemon unreachable at /var/run/docker.sock; Sail shared services cannot start in this sandbox.",
+  "report": "artifacts/backend-unit.txt"
+}
+```
+
+A `blocked` run does NOT satisfy the gate — the change is still unproven. But it
+tells Symphony the blocker is the environment, so it stops spending corrective
+turns on the impossible and annotates the run as `environment_blocked` (a clear,
+human-actionable signal: fix the environment / sandbox capabilities and
+re-dispatch) instead of a generic test failure.
+
+Use `blocked` ONLY for a true environment limitation you actually hit. A test
+that fails on an assertion is `"failed"` — fix the code and re-run. Do not use
+`blocked` to skip work you could have done.
+
 ## Definition of done (Symphony validate gate)
 
 Symphony verifies ALL of the following per repo; the run cannot finish until
@@ -139,5 +172,7 @@ they hold:
    decision for that source→UI pair.
 5. Every declared `command` appears in this session's execution log.
 
-If tests fail: fix the code, re-run, and only then update the manifest.
+If tests fail: fix the code, re-run, and only then update the manifest. If a
+required test cannot run because of the environment (not the code), record it as
+`blocked` with a `blocked_reason` (see above) rather than retrying forever.
 Never declare a run you did not execute — the gate will reject it.

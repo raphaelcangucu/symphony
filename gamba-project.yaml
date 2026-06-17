@@ -110,9 +110,9 @@ setup:
     codex:
       approval_policy: never
       command: codex --config shell_environment_policy.inherit=all app-server
-      thread_sandbox: workspace-write
+      thread_sandbox: danger-full-access
       turn_sandbox_policy:
-        type: workspaceWrite
+        type: dangerFullAccess
     dev_server:
       enabled: true
       idle_timeout_ms: 1800000
@@ -125,7 +125,7 @@ setup:
         frontend:
           unit_command: "yarn test --run"
           ui_paths:
-            - "**"
+            - "src/**"
           e2e:
             command: "npx playwright test"
         backend:

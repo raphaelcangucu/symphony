@@ -31,6 +31,38 @@ defmodule SymphonyElixir.AgentRunnerValidateGateTest do
     assert :completed = AgentRunner.apply_validate_gate(:completed, "/tmp/ws", evaluator, run_turn, 2)
   end
 
+  test "all environment-blocked violations skip corrective turns" do
+    violations = [%{kind: :environment_blocked, repo: "backend", detail: "Docker unreachable"}]
+    evaluator = fn _workspace -> {:violations, violations} end
+    run_turn = fn _prompt -> raise "must not run corrective turn when environment-blocked" end
+
+    assert {:incomplete, {:validate_gate, ^violations}} =
+             AgentRunner.apply_validate_gate(:completed, "/tmp/ws", evaluator, run_turn, 2)
+  end
+
+  test "mixed environment-blocked and code violations still run corrective turns" do
+    {:ok, agent} = Agent.start_link(fn -> 0 end)
+
+    violations = [
+      %{kind: :environment_blocked, repo: "backend", detail: "Docker unreachable"},
+      %{kind: :unit_not_green, repo: "frontend", detail: "no passing unit run"}
+    ]
+
+    evaluator = fn _workspace ->
+      case Agent.get_and_update(agent, fn n -> {n, n + 1} end) do
+        0 -> {:violations, violations}
+        _ -> :satisfied
+      end
+    end
+
+    run_turn = fn prompt ->
+      assert prompt =~ "Validate gate failed"
+      :ok
+    end
+
+    assert :completed = AgentRunner.apply_validate_gate(:completed, "/tmp/ws", evaluator, run_turn, 2)
+  end
+
   test "exhausted corrective turns return validate_gate incomplete" do
     violations = [%{kind: :e2e_missing, repo: nil, detail: "UI paths changed but no passing e2e run"}]
     evaluator = fn _workspace -> {:violations, violations} end

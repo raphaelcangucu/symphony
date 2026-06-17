@@ -83,6 +83,25 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     assert Enum.any?(reasons, &(&1 =~ "repo"))
   end
 
+  test "parses a blocked run with blocked_reason", %{tmp_dir: ws} do
+    write_manifest!(ws, %{
+      "issue" => "GAM-9",
+      "runs" => [
+        %{
+          "kind" => "unit",
+          "repo" => "backend",
+          "command" => "./vibe test",
+          "status" => "blocked",
+          "blocked_reason" => "Docker daemon unreachable in sandbox"
+        }
+      ]
+    })
+
+    assert {:ok, %{runs: [run]}} = Manifest.read(ws)
+    assert run.status == "blocked"
+    assert run.blocked_reason == "Docker daemon unreachable in sandbox"
+  end
+
   test "referenced artifact missing on disk", %{tmp_dir: ws} do
     write_manifest!(ws, valid_manifest())
     assert {:error, {:artifacts_missing, missing}} = Manifest.read(ws)

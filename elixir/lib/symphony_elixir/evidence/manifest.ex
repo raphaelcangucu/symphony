@@ -19,6 +19,9 @@ defmodule SymphonyElixir.Evidence.Manifest do
       :summary,
       :report,
       :duration_ms,
+      # Set when `status == "blocked"`: why the command could not run in this
+      # workspace environment (no Docker/network/browser sandbox, etc.).
+      :blocked_reason,
       screenshots: [],
       videos: [],
       trace: nil
@@ -152,6 +155,7 @@ defmodule SymphonyElixir.Evidence.Manifest do
       summary: run["summary"],
       report: run["report"],
       duration_ms: run["duration_ms"],
+      blocked_reason: run["blocked_reason"],
       screenshots: List.wrap(run["screenshots"]),
       videos: List.wrap(run["videos"]),
       trace: run["trace"]

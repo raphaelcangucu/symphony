@@ -80,6 +80,53 @@ defmodule SymphonyElixir.Evidence.GateTest do
              Gate.evaluate("/ws", @config, d)
   end
 
+  test "changed repo with a blocked unit run is environment_blocked" do
+    blocked =
+      %Run{
+        kind: "unit",
+        repo: "goapi",
+        command: "go test ./...",
+        status: "blocked",
+        blocked_reason: "no network to fetch Go modules"
+      }
+
+    d =
+      deps(
+        read_manifest: fn _ws -> {:ok, manifest([blocked])} end,
+        changed_files: fn _ws -> %{"goapi" => ["main.go"]} end
+      )
+
+    assert {:violations, [%{kind: :environment_blocked, repo: "goapi", detail: detail}]} =
+             Gate.evaluate("/ws", @config, d)
+
+    assert detail =~ "no network to fetch Go modules"
+  end
+
+  test "required e2e with a blocked run is environment_blocked" do
+    blocked_e2e =
+      %Run{
+        kind: "e2e",
+        repo: "frontend",
+        command: "npx playwright test",
+        status: "blocked",
+        blocked_reason: "browser sandbox blocked Chromium launch"
+      }
+
+    d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), blocked_e2e])} end)
+
+    assert {:violations, [%{kind: :environment_blocked, repo: "frontend", detail: detail}]} =
+             Gate.evaluate("/ws", @config, d)
+
+    assert detail =~ "browser sandbox blocked Chromium launch"
+  end
+
+  test "environment_blocked_only? detects all-blocked violation lists" do
+    assert Gate.environment_blocked_only?([%{kind: :environment_blocked, repo: "goapi", detail: "x"}])
+    refute Gate.environment_blocked_only?([%{kind: :environment_blocked}, %{kind: :unit_not_green}])
+    refute Gate.environment_blocked_only?([])
+    refute Gate.environment_blocked_only?(:nope)
+  end
+
   describe "frontend-only (direct UI change)" do
     test "demands e2e for frontend with screenshots and video" do
       d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend")])} end)

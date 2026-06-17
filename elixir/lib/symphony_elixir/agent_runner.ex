@@ -272,16 +272,24 @@ defmodule SymphonyElixir.AgentRunner do
       :satisfied ->
         result
 
-      {:violations, violations} when budget > 0 ->
-        Logger.info("Validate gate violated; running corrective turn (remaining budget=#{budget}) violations=#{inspect(violations)}")
-
-        case run_turn.(corrective_validate_prompt(violations)) do
-          :ok -> apply_validate_gate(result, workspace, evaluator, run_turn, budget - 1)
-          {:error, _reason} -> {:incomplete, {:validate_gate, violations}}
-        end
-
       {:violations, violations} ->
-        {:incomplete, {:validate_gate, violations}}
+        cond do
+          Evidence.Gate.environment_blocked_only?(violations) ->
+            Logger.info("Validate gate blocked by environment; skipping corrective turns violations=#{inspect(violations)}")
+
+            {:incomplete, {:validate_gate, violations}}
+
+          budget > 0 ->
+            Logger.info("Validate gate violated; running corrective turn (remaining budget=#{budget}) violations=#{inspect(violations)}")
+
+            case run_turn.(corrective_validate_prompt(violations)) do
+              :ok -> apply_validate_gate(result, workspace, evaluator, run_turn, budget - 1)
+              {:error, _reason} -> {:incomplete, {:validate_gate, violations}}
+            end
+
+          true ->
+            {:incomplete, {:validate_gate, violations}}
+        end
     end
   end
 

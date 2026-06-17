@@ -346,18 +346,32 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   defp reserve_ports(project, identifier, serve_steps, port_range) do
     ctx = allocation_context(project, identifier, port_range)
-    reserve_with_context(project.slug, identifier, serve_steps, ctx)
+    owned = owned_ports(project.id, identifier)
+    reserve_with_context(project.slug, identifier, serve_steps, ctx, owned)
   end
 
-  defp reserve_with_context(project_slug, identifier, serve_steps, ctx) do
+  # Ports each service of this issue was last assigned (from its DevServerRecord),
+  # keyed by slug. Used so a restart reclaims a service's own canonical port even
+  # when a long-lived resource it owns still holds it (see PortPlan.choose_port/4).
+  defp owned_ports(project_id, identifier) do
+    for record <- DevServerRecord.list_for_issue(project_id, identifier),
+        is_binary(record.slug),
+        is_integer(record.port),
+        into: %{} do
+      {record.slug, record.port}
+    end
+  end
+
+  defp reserve_with_context(project_slug, identifier, serve_steps, ctx, owned_ports) do
     serve_steps
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {step, offset}, {:ok, reserved_steps} ->
+      slug = Map.fetch!(step, :slug)
       claimed = live_ports() ++ Enum.map(reserved_steps, fn {_step, port, _key} -> port end)
 
-      case PortPlan.choose_port(ctx, offset, claimed) do
+      case PortPlan.choose_port(ctx, offset, claimed, Map.get(owned_ports, slug)) do
         {:ok, port} ->
-          key = {project_slug, identifier, Map.fetch!(step, :slug)}
+          key = {project_slug, identifier, slug}
           reserve_port_for_key(key, port)
           {:cont, {:ok, [{step, port, key} | reserved_steps]}}
 

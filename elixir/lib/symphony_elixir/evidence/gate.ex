@@ -30,6 +30,19 @@ defmodule SymphonyElixir.Evidence.Gate do
     end
   end
 
+  @doc """
+  True when a non-empty violation list contains only `:environment_blocked`
+  entries. The corrective loop and the orchestrator use this to avoid retrying
+  commands that cannot run in the workspace (no Docker/network/browser sandbox)
+  and to annotate the run as an environment blocker rather than a code failure.
+  """
+  @spec environment_blocked_only?([violation()]) :: boolean()
+  def environment_blocked_only?(violations) when is_list(violations) do
+    violations != [] and Enum.all?(violations, &(&1.kind == :environment_blocked))
+  end
+
+  def environment_blocked_only?(_violations), do: false
+
   @spec default_deps() :: map()
   def default_deps do
     %{
@@ -91,7 +104,12 @@ defmodule SymphonyElixir.Evidence.Gate do
         &(&1.kind == "unit" and &1.repo == repo and &1.status == "passed")
       )
     end)
-    |> Enum.map(&%{kind: :unit_not_green, repo: &1, detail: "no passing unit run for changed repo #{&1}"})
+    |> Enum.map(fn repo ->
+      case blocked_run(manifest, "unit", repo) do
+        nil -> %{kind: :unit_not_green, repo: repo, detail: "no passing unit run for changed repo #{repo}"}
+        run -> environment_blocked_violation(repo, "unit", run)
+      end
+    end)
   end
 
   # Decides which UI repos must have an e2e run, in three layers:
@@ -154,7 +172,10 @@ defmodule SymphonyElixir.Evidence.Gate do
   defp e2e_violation_for(manifest, repo) do
     case Enum.find(manifest.runs, &(&1.kind == "e2e" and &1.repo == repo and &1.status == "passed")) do
       nil ->
-        [%{kind: :e2e_missing, repo: repo, detail: "e2e required for #{repo} but no passing e2e run"}]
+        case blocked_run(manifest, "e2e", repo) do
+          nil -> [%{kind: :e2e_missing, repo: repo, detail: "e2e required for #{repo} but no passing e2e run"}]
+          run -> [environment_blocked_violation(repo, "e2e", run)]
+        end
 
       run ->
         if run.screenshots != [] and run.videos != [] do
@@ -170,6 +191,32 @@ defmodule SymphonyElixir.Evidence.Gate do
         end
     end
   end
+
+  # A required `unit`/`e2e` run the agent explicitly marked as unrunnable in this
+  # workspace environment. Distinct from a `failed` (code) run: it never
+  # satisfies the gate, but it is reported as `:environment_blocked` so the
+  # corrective loop stops retrying the impossible and a human gets a clear,
+  # actionable blocker.
+  defp blocked_run(manifest, kind, repo) do
+    Enum.find(manifest.runs, &(&1.kind == kind and &1.repo == repo and &1.status == "blocked"))
+  end
+
+  defp environment_blocked_violation(repo, kind, run) do
+    %{
+      kind: :environment_blocked,
+      repo: repo,
+      detail: "#{kind} for #{repo} could not run in this environment: #{blocked_detail(run)}"
+    }
+  end
+
+  defp blocked_detail(%{blocked_reason: reason}) when is_binary(reason) do
+    case String.trim(reason) do
+      "" -> "no reason provided"
+      trimmed -> trimmed
+    end
+  end
+
+  defp blocked_detail(_run), do: "no reason provided"
 
   defp ui_repos(repos) do
     for {name, cfg} <- repos, e2e_command(cfg) != nil, do: name

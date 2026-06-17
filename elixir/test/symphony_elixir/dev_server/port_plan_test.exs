@@ -28,9 +28,11 @@ defmodule SymphonyElixir.DevServer.PortPlanTest do
     assert PortPlan.port(10_000, 0, 8, 8) == {:error, :offset_out_of_range}
   end
 
-  defp fake_allocate do
+  defp fake_allocate(occupied \\ []) do
+    occupied_set = MapSet.new(occupied)
+
     fn [min, max], claimed ->
-      claimed_set = MapSet.new(claimed)
+      claimed_set = MapSet.union(MapSet.new(claimed), occupied_set)
 
       case Enum.find(min..max//1, &(not MapSet.member?(claimed_set, &1))) do
         nil -> {:error, :no_free_port}
@@ -77,5 +79,25 @@ defmodule SymphonyElixir.DevServer.PortPlanTest do
   test "choose_port does not leave the band for pinned (non-auto) projects" do
     band_ports = Enum.to_list(10_000..10_255)
     assert PortPlan.choose_port(ctx(%{auto?: false}), 2, band_ports) == {:error, :no_free_port}
+  end
+
+  test "choose_port reclaims an owned port even when the bind probe reports it busy" do
+    # 10_002 is bound at the OS level (e.g. a shared container the service owns
+    # that was not torn down on stop), so the probe would reject it and drift.
+    c = ctx(%{allocate: fake_allocate([10_002])})
+
+    assert PortPlan.choose_port(c, 2, [], 10_002) == {:ok, 10_002}
+  end
+
+  test "choose_port does not reclaim an owned port a live sibling instance holds" do
+    c = ctx(%{allocate: fake_allocate([10_002])})
+
+    # 10_002 is claimed by another tracked instance, so it must not be reclaimed;
+    # it scans to the next free port instead.
+    assert PortPlan.choose_port(c, 2, [10_002], 10_002) == {:ok, 10_000}
+  end
+
+  test "choose_port ignores a stale owned port that is not the canonical slot port" do
+    assert PortPlan.choose_port(ctx(%{}), 2, [], 99_999) == {:ok, 10_002}
   end
 end

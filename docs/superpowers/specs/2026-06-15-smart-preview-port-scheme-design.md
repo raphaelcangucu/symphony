@@ -216,14 +216,24 @@ On start, for an issue with serve steps `[s0, s1, …]`:
 1. Resolve `band_start` for the project: pinned `port_range` min, else
    ensure/lookup the auto-leased `band_index`.
 2. Ensure the issue's `slot_index` (lookup or lease lowest-free).
-3. For each step, compute the **preferred** port via `PortPlan`.
-4. Verify each preferred port is free (`bindable?` **and** not in `live_ports/0`).
-5. **Fallback** when a preferred port is occupied (e.g. external process):
-   probe forward within the slot, then within the band, then — auto-leased
-   projects only — anywhere in the pool that's free. Log a structured warning
-   noting the displaced step and chosen port. Never hard-fail while a port is
-   physically available.
-6. Reserve the chosen ports in ETS (unchanged) and proceed to
+3. Build the issue's **owned ports** map (`slug -> port`) from its
+   `DevServerRecord`s — the port each service was last assigned.
+4. For each step, compute the **preferred** port via `PortPlan`.
+5. **Reclaim own port:** if the preferred port equals the step's owned port and
+   is not in `live_ports/0`, take it directly — skip the `bindable?` probe. A
+   service's own previously-assigned port is not a conflict for that service,
+   even when a long-lived resource it manages (e.g. a shared docker container
+   that is not torn down on stop) still holds it. Without this, the probe would
+   treat the service's own lingering port as occupied and drift it onto the next
+   free port, colliding with sibling services — a +1 ratchet on every restart.
+6. Otherwise verify the preferred port is free (`bindable?` **and** not in
+   `live_ports/0`).
+7. **Fallback** when a preferred port is occupied by something that isn't the
+   service's own (e.g. external process): probe forward within the slot, then
+   within the band, then — auto-leased projects only — anywhere in the pool
+   that's free. Log a structured warning noting the displaced step and chosen
+   port. Never hard-fail while a port is physically available.
+8. Reserve the chosen ports in ETS (unchanged) and proceed to
    `start_instances/5`.
 
 `Instance` keeps receiving a concrete port via the injected
@@ -274,8 +284,13 @@ allocator logs a warning and falls back to legacy linear scan within that range.
 - **All bands leased** (auto): log a warning and fall back to a free-port scan
   across the pool for that project (degraded, no isolation) rather than failing.
 - **All slots leased** for a project: same fallback — scan the band, then pool.
-- **Preferred port externally occupied**: forward-probe per §5.5; warn with the
+- **Preferred port externally occupied**: forward-probe per §5.7; warn with the
   displaced step + chosen port.
+- **Service owns a long-lived resource on its port** (e.g. a shared docker
+  container the serve step maps to the issue's `PORT` and that survives a stop):
+  the service reclaims its own canonical port per §5.5 instead of drifting. This
+  is what lets a project bind a shared container directly to the per-issue port
+  (no forwarder) without ratcheting on restart.
 - **Serve steps reordered/removed**: offsets recompute from the new order
   (positional). Running instances are unaffected until restart; logged.
 - **`PORTS_PER_SLOT` < serve-step count**: configuration error — log and fall
