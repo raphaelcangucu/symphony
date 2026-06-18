@@ -157,14 +157,16 @@ file, Playwright's `playwright-report/`, `test-results/` screenshots/videos).
 
 When a project runs Symphony preview dev servers (typical ports **4200–4299**):
 
-- **Always** use the repo's evidence wrapper (e.g. `bash admin/.symphony/run-e2e.sh`).
-  It prepares `data/e2e.db`, boots Playwright on **5173/5172**, and **refuses to
-  kill** Symphony preview ports (protected by `.symphony/preview-lease` markers).
-- **Never** run bare `npx playwright test` against preview ports while evidence
-  is configured to start its own webServer — that SIGTERM's the preview API/admin
-  and leaves the tracker stuck in `starting`/`crashed`.
-- Do **not** set `PLAYWRIGHT_ALLOW_KILL_PREVIEW=1` unless a human explicitly asked
-  you to tear down preview.
+- **First** call **`manage_preview`** with `action: status` (or `start` / `restart`).
+  Read `local_url` and `port` for each server in the tool response.
+- **Always** use the **project's configured e2e command** (the `e2e.command` in the
+  project's `evidence` config / workflow). That command is responsible for reusing the
+  issue's preview ports and its isolated e2e database — read the project workflow for the
+  exact wrapper, ports, and DB path, as these differ per project.
+- **Never** run bare `npx playwright test` on ad-hoc ports (e.g. 4310) — that bypasses
+  preview wiring and causes webServer timeouts.
+- Do **not** kill Symphony preview band ports (or set any preview-kill override) unless a
+  human explicitly asked you to tear down preview.
 
 ## When a check fails: fix it, or (only if truly external) mark it `blocked`
 
@@ -270,12 +272,12 @@ be fine but the environment cannot prove it. Say so once in the workpad
 ❌  npm run test:unit (full suite) + record unrelated failure alongside scoped pass
 ❌  Copy prior manifest.json without re-running commands this session
 ❌  Assume "no commits ahead" means "nothing to do" while e2e/backend tests were never run
-❌  npx playwright test directly on Symphony preview ports (4200/4201) — kills the preview stack
+❌  bare `npx playwright test` on ad-hoc ports instead of the project's configured e2e command
 ```
 
 ```text
-✅  git diff → scoped lint/unit → ./vibe up → scoped backend test → cypress --spec … → fresh manifest
-✅  bash admin/.symphony/run-e2e.sh … (isolated 5173/5172 + data/e2e.db; preview stays up)
+✅  git diff → scoped lint/unit → ./vibe up → scoped backend test → project's e2e command → fresh manifest
+✅  manage_preview(status) → run the project's configured e2e command (reuses preview + isolated DB)
 ✅  blocked after real attempt → one-sentence Validation summary → end turn
 ```
 

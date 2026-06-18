@@ -310,6 +310,10 @@ defmodule SymphonyElixir.AgentRunner do
     repo you changed: one passing scoped `unit` run is enough — do not also record
     a failed full-suite run in the manifest. For each UI repo whose e2e is required
     (listed above), run e2e on the affected spec with screenshot/video capture.
+    Before UI e2e: call **`manage_preview`** with `action: status` (or `start` / `restart` if not ready).
+    Run e2e via the **project's configured e2e command** (from the `evidence` config /
+    project workflow) — not bare `npx playwright test` on ad-hoc ports. The configured
+    command reuses the issue's preview ports and its isolated e2e database.
     For a changed back-end/service repo that the config says may impact a UI repo
     but where you judge there is NO impact on that UI surface, declare it in the
     manifest `impact` list with `impacts_ui: false` and a concrete rationale

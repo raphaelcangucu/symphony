@@ -17,7 +17,34 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
     assert enriched.next_steps =~ "manage_dev_env"
   end
 
-  test "status returns enriched preview view" do
+  test "status returns enriched preview view with local_url" do
+    issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
+
+    assert {:ok, result} =
+             PreviewTools.execute("demo", %{"action" => "status"},
+               issue: issue,
+               issue_targets: fn _slug, _id ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [
+                      %{slug: "distributionmachine-admin", status: "ready", port: 4201, primary: true},
+                      %{slug: "distributionmachine-api", status: "ready", port: 4200}
+                    ]
+                  }}
+               end,
+               list_serve_steps: fn _slug -> [%{role: "serve"}] end
+             )
+
+    assert result.tool == "manage_preview"
+    [admin, api] = result.data.servers
+    assert admin.local_url == "http://127.0.0.1:4201/"
+    assert api.local_url == "http://127.0.0.1:4200/api/health"
+    assert result.data.e2e_command == "cd admin && bash .symphony/run-e2e.sh"
+  end
+
+  test "status returns enriched preview view for disabled" do
     issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
 
     assert {:ok, result} =

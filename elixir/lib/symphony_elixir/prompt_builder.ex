@@ -4,6 +4,7 @@ defmodule SymphonyElixir.PromptBuilder do
   """
 
   alias SymphonyElixir.{ProjectConfig, Repo}
+  alias SymphonyElixir.DevServer
   alias SymphonyElixir.LocalTracker.Context
 
   @render_opts [strict_filters: true]
@@ -35,6 +36,7 @@ defmodule SymphonyElixir.PromptBuilder do
 
     rendered <>
       workflow_guidance_section(issue, Keyword.get(opts, :agent_kind)) <>
+      preview_context_section(issue) <>
       discussion_section(issue) <>
       artifacts_section(Keyword.get(opts, :workspace))
   end
@@ -62,6 +64,87 @@ defmodule SymphonyElixir.PromptBuilder do
   end
 
   defp workflow_guidance_section(_issue, _agent_kind), do: ""
+
+  @doc false
+  @spec preview_context_section(SymphonyElixir.Issue.t()) :: String.t()
+  def preview_context_section(%SymphonyElixir.Issue{project_slug: slug, identifier: id})
+      when is_binary(slug) and slug != "" and is_binary(id) and id != "" do
+    case DevServer.issue_targets(slug, id) do
+      {:ok, view} ->
+        format_preview_context(slug, id, view)
+
+      {:error, _reason} ->
+        ""
+    end
+  end
+
+  def preview_context_section(_issue), do: ""
+
+  defp format_preview_context(project_slug, identifier, view) when is_map(view) do
+    available = Map.get(view, :available, false)
+    reason = Map.get(view, :reason)
+    servers = Map.get(view, :servers, [])
+
+    server_lines =
+      servers
+      |> Enum.map(&preview_server_line/1)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+
+    availability =
+      if available do
+        "Preview is **available** for this issue."
+      else
+        "Preview is **not available**#{if reason, do: " (#{reason})", else: ""}."
+      end
+
+    """
+    ## Issue preview (Symphony)
+
+    #{availability}
+
+    Use the **`manage_preview`** tool (`action`: `status` | `start` | `restart`) before UI e2e evidence.
+    Do **not** run bare `npx playwright test` on random ports — use the project's configured
+    e2e command (see the `evidence` config / project workflow), which reuses the preview ports
+    below and the project's isolated e2e database.
+
+    #{if server_lines == "", do: "_No preview servers registered yet — call `manage_preview` with `start`._", else: server_lines}
+
+    Project: `#{project_slug}` · Issue: `#{identifier}`
+    """
+  end
+
+  defp preview_server_line(server) when is_map(server) do
+    slug = Map.get(server, :slug) || Map.get(server, "slug") || "?"
+    status = Map.get(server, :status) || Map.get(server, "status") || "unknown"
+    port = Map.get(server, :port) || Map.get(server, "port")
+    primary = Map.get(server, :primary) || Map.get(server, "primary")
+    local_url = local_preview_url(server)
+
+    primary_tag = if primary, do: " (primary UI)", else: ""
+
+    "- `#{slug}`#{primary_tag}: status=#{status}, port=#{inspect(port)}, local=#{local_url}"
+  end
+
+  defp preview_server_line(_), do: ""
+
+  defp local_preview_url(server) when is_map(server) do
+    port = Map.get(server, :port) || Map.get(server, "port")
+    slug = to_string(Map.get(server, :slug) || Map.get(server, "slug") || "")
+
+    cond do
+      not is_integer(port) or port <= 0 ->
+        "n/a"
+
+      String.contains?(slug, "admin") ->
+        "http://127.0.0.1:#{port}/"
+
+      true ->
+        "http://127.0.0.1:#{port}/api/health"
+    end
+  end
+
+  defp local_preview_url(_), do: "n/a"
 
   defp resolve_template(%SymphonyElixir.Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
     case Context.get_project(slug) do

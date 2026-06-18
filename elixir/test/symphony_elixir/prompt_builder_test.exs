@@ -49,8 +49,14 @@ defmodule SymphonyElixir.PromptBuilderTest do
       state: "In Progress"
     }
 
-    assert PromptBuilder.build_prompt(issue) == "Ticket MAC-2"
-    assert PromptBuilder.build_prompt(issue, workspace: root) == "Ticket MAC-2"
+    prompt = PromptBuilder.build_prompt(issue)
+
+    assert prompt =~ "Ticket MAC-2"
+    refute prompt =~ "## Existing authoring artifacts"
+    assert prompt =~ "manage_preview"
+
+    assert PromptBuilder.build_prompt(issue, workspace: root) =~ "Ticket MAC-2"
+    refute PromptBuilder.build_prompt(issue, workspace: root) =~ "## Existing authoring artifacts"
   end
 
   test "appends recent discussion comments to the prompt" do
@@ -227,6 +233,40 @@ defmodule SymphonyElixir.PromptBuilderTest do
     prompt = PromptBuilder.build_prompt(issue, [])
 
     assert prompt =~ "ALPHA A-1"
+  end
+
+  test "preview_context_section includes guidance when preview is disabled" do
+    issue = %Issue{
+      identifier: "#1",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    section = PromptBuilder.preview_context_section(issue)
+
+    assert section =~ "## Issue preview (Symphony)"
+    assert section =~ "manage_preview"
+    assert section =~ "run-e2e.sh"
+  end
+
+  test "preview_context_section includes manage_preview guidance when servers exist" do
+    issue = %Issue{
+      identifier: "#38",
+      project_slug: "distributionmachine",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    section = PromptBuilder.preview_context_section(issue)
+
+    if section != "" do
+      assert section =~ "## Issue preview (Symphony)"
+      assert section =~ "manage_preview"
+      assert section =~ "run-e2e.sh"
+    end
   end
 
   test "raises a tagged error when the issue has no project_slug (no global fallback)" do

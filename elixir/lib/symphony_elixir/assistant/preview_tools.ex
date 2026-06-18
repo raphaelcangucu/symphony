@@ -119,7 +119,32 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
     |> Map.put(:serve_steps_configured, serve_steps_configured)
     |> Map.put(:reason, present_reason(reason))
     |> Map.put(:next_steps, next_steps_hint(reason, serve_steps_configured))
+    |> Map.put(:servers, enrich_servers(Map.get(view, :servers, [])))
+    |> Map.put(:e2e_command, "cd admin && bash .symphony/run-e2e.sh")
   end
+
+  defp enrich_servers(servers) when is_list(servers) do
+    Enum.map(servers, &enrich_server/1)
+  end
+
+  defp enrich_servers(_), do: []
+
+  defp enrich_server(server) when is_map(server) do
+    port = Map.get(server, :port) || Map.get(server, "port")
+    slug = to_string(Map.get(server, :slug) || Map.get(server, "slug") || "")
+
+    local_url =
+      if is_integer(port) and port > 0 do
+        path = if String.contains?(slug, "admin"), do: "/", else: "/api/health"
+        "http://127.0.0.1:#{port}#{path}"
+      else
+        nil
+      end
+
+    Map.put(server, :local_url, local_url)
+  end
+
+  defp enrich_server(server), do: server
 
   defp present_reason(nil), do: nil
   defp present_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
