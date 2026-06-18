@@ -17,13 +17,11 @@ defmodule SymphonyElixir.PromptBuilder do
 
   @spec build_prompt(SymphonyElixir.Issue.t(), keyword()) :: String.t()
   def build_prompt(issue, opts \\ []) do
-    template =
-      issue
-      |> resolve_template()
-      |> parse_template!()
+    config = resolve_config!(issue)
 
     rendered =
-      template
+      config.prompt_template
+      |> parse_template!()
       |> Solid.render!(
         %{
           "attempt" => Keyword.get(opts, :attempt),
@@ -36,6 +34,7 @@ defmodule SymphonyElixir.PromptBuilder do
 
     rendered <>
       workflow_guidance_section(issue, Keyword.get(opts, :agent_kind)) <>
+      validate_section(config) <>
       preview_context_section(issue) <>
       discussion_section(issue) <>
       artifacts_section(Keyword.get(opts, :workspace))
@@ -64,6 +63,74 @@ defmodule SymphonyElixir.PromptBuilder do
   end
 
   defp workflow_guidance_section(_issue, _agent_kind), do: ""
+
+  # Pre-fills the VALIDATE/evidence guidance from the project's own `evidence:`
+  # config (repos, scoped unit/e2e commands, UI paths) so every dispatched prompt
+  # carries project-specific validation instructions instead of a hand-copied,
+  # tool-specific template. Renders nothing when the project declares no evidence
+  # repos.
+  @doc false
+  @spec validate_section(ProjectConfig.t()) :: String.t()
+  def validate_section(%ProjectConfig{evidence: evidence}) do
+    case evidence_repo_lines(evidence) do
+      [] ->
+        ""
+
+      repo_lines ->
+        """
+
+        ## VALIDATE — evidence gate (follow the `evidence` skill)
+
+        Before handoff, prove what you changed and write `.symphony/evidence/manifest.json` at the **workspace root** (not inside the git clone). Scope checks to the diff (`git diff --name-only origin/<integration-branch>...HEAD` per repo) — CI owns full regression.
+
+        Per-repo commands (from this project's `evidence` config):
+        #{Enum.join(repo_lines, "\n")}
+
+        When a UI repo's paths change, run its **configured** e2e command above with screenshot + video — never bare `npx playwright test` on ad-hoc ports. Call `manage_preview` (`status`/`start`) first.
+
+        Manifest: one passing `unit` run per changed repo; for a changed UI repo, a passing `e2e` run with at least 1 screenshot and 1 video. Record only commands you ran this session, then end the turn — do not move the card.
+        """
+    end
+  end
+
+  def validate_section(_config), do: ""
+
+  defp evidence_repo_lines(%{repos: repos}) when is_map(repos) and map_size(repos) > 0 do
+    repos
+    |> Enum.sort_by(fn {name, _cfg} -> name end)
+    |> Enum.map(&evidence_repo_line/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp evidence_repo_lines(_evidence), do: []
+
+  defp evidence_repo_line({name, cfg}) when is_map(cfg) do
+    parts =
+      [
+        evidence_command_part("unit", Map.get(cfg, :unit_command)),
+        evidence_command_part("e2e", get_in(cfg, [:e2e, :command])),
+        evidence_list_part("UI paths", Map.get(cfg, :ui_paths)),
+        evidence_list_part("impacts", Map.get(cfg, :impacts))
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    case parts do
+      [] -> nil
+      parts -> "- `#{name}`: " <> Enum.join(parts, " · ")
+    end
+  end
+
+  defp evidence_repo_line(_entry), do: nil
+
+  defp evidence_command_part(label, command) when is_binary(command) and command != "",
+    do: "#{label} `#{command}`"
+
+  defp evidence_command_part(_label, _command), do: nil
+
+  defp evidence_list_part(label, values) when is_list(values) and values != [],
+    do: "#{label} `#{Enum.join(values, ", ")}`"
+
+  defp evidence_list_part(_label, _values), do: nil
 
   @doc false
   @spec preview_context_section(SymphonyElixir.Issue.t()) :: String.t()
@@ -146,15 +213,15 @@ defmodule SymphonyElixir.PromptBuilder do
 
   defp local_preview_url(_), do: "n/a"
 
-  defp resolve_template(%SymphonyElixir.Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
+  defp resolve_config!(%SymphonyElixir.Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
     case Context.get_project(slug) do
       {:ok, project} ->
         project
         |> Repo.preload(:setup)
         |> ProjectConfig.resolve_runnable()
         |> case do
-          {:ok, %ProjectConfig{prompt_template: prompt}} when is_binary(prompt) ->
-            prompt
+          {:ok, %ProjectConfig{} = config} ->
+            config
 
           {:skip, reason} ->
             raise RuntimeError, "prompt_unresolved: project=#{slug} reason=#{reason}"
@@ -165,7 +232,7 @@ defmodule SymphonyElixir.PromptBuilder do
     end
   end
 
-  defp resolve_template(%SymphonyElixir.Issue{} = issue) do
+  defp resolve_config!(%SymphonyElixir.Issue{} = issue) do
     raise RuntimeError, "prompt_unresolved: issue=#{inspect(issue.id)} reason=no project_slug"
   end
 

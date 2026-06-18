@@ -2,6 +2,7 @@ defmodule SymphonyElixir.PromptBuilderTest do
   use SymphonyElixir.TestSupport
 
   alias SymphonyElixir.LocalTracker.{Context, ProjectSetup}
+  alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
 
   @default_prompt "Ticket {{ issue.identifier }}"
@@ -270,6 +271,102 @@ defmodule SymphonyElixir.PromptBuilderTest do
     end
   end
 
+  test "validate_section renders project-specific commands from the evidence config" do
+    config = %ProjectConfig{
+      project_id: 1,
+      project_slug: "dm",
+      tracker_kind: "local",
+      evidence: %{
+        required: true,
+        repos: %{
+          "admin" => %{
+            unit_command: "cd admin && bun run test",
+            ui_paths: ["admin/src/**"],
+            e2e: %{command: "cd admin && bash .symphony/run-e2e.sh"}
+          },
+          "distributionmachine" => %{
+            unit_command: "python -m pytest tests/test_modules.py",
+            impacts: ["admin"],
+            contract_paths: ["api/**", "src/**"]
+          }
+        }
+      }
+    }
+
+    section = PromptBuilder.validate_section(config)
+
+    assert section =~ "## VALIDATE"
+    assert section =~ "`evidence`"
+    assert section =~ "cd admin && bun run test"
+    assert section =~ "cd admin && bash .symphony/run-e2e.sh"
+    assert section =~ "python -m pytest tests/test_modules.py"
+    assert section =~ "admin/src/**"
+    assert section =~ "impacts `admin`"
+    assert section =~ "npx playwright test"
+    assert section =~ "manage_preview"
+
+    {admin_pos, _} = :binary.match(section, "`admin`:")
+    {dm_pos, _} = :binary.match(section, "`distributionmachine`:")
+    assert admin_pos < dm_pos
+  end
+
+  test "validate_section is empty when the project has no evidence config" do
+    config = %ProjectConfig{
+      project_id: 1,
+      project_slug: "noevidence",
+      tracker_kind: "local",
+      evidence: %{}
+    }
+
+    assert PromptBuilder.validate_section(config) == ""
+  end
+
+  test "build_prompt injects the project's pre-filled VALIDATE evidence section" do
+    seed_project_with_evidence("dm", "Ticket {{ issue.identifier }}", %{
+      "evidence" => %{
+        "required" => true,
+        "repos" => %{
+          "admin" => %{
+            "unit_command" => "cd admin && bun run test",
+            "ui_paths" => ["admin/src/**"],
+            "e2e" => %{"command" => "cd admin && bash .symphony/run-e2e.sh"}
+          },
+          "distributionmachine" => %{
+            "unit_command" => "python -m pytest tests/test_modules.py",
+            "impacts" => ["admin"]
+          }
+        }
+      }
+    })
+
+    issue = %Issue{
+      identifier: "DM-38",
+      project_slug: "dm",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    prompt = PromptBuilder.build_prompt(issue)
+
+    assert prompt =~ "Ticket DM-38"
+    assert prompt =~ "## VALIDATE"
+    assert prompt =~ "cd admin && bash .symphony/run-e2e.sh"
+    assert prompt =~ "python -m pytest tests/test_modules.py"
+  end
+
+  test "build_prompt omits the VALIDATE section when the project has no evidence config" do
+    issue = %Issue{
+      identifier: "MAC-9",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    refute PromptBuilder.build_prompt(issue) =~ "## VALIDATE"
+  end
+
   test "raises a tagged error when the issue has no project_slug (no global fallback)" do
     issue = %Issue{identifier: "G-1", project_slug: nil, state: "Todo"}
 
@@ -306,6 +403,22 @@ defmodule SymphonyElixir.PromptBuilderTest do
       |> ProjectSetup.changeset(%{
         project_id: project.id,
         workflow_markdown: SymphonyElixir.Workflow.to_markdown(%{}, prompt || ""),
+        validation_commands: %{"commands" => []},
+        scan_summary: %{}
+      })
+      |> Repo.insert()
+
+    project
+  end
+
+  defp seed_project_with_evidence(slug, prompt, front_matter) do
+    {:ok, project} = Context.ensure_project(%{name: slug, slug: slug, tracker_kind: "local"})
+
+    {:ok, _setup} =
+      %ProjectSetup{}
+      |> ProjectSetup.changeset(%{
+        project_id: project.id,
+        workflow_markdown: SymphonyElixir.Workflow.to_markdown(front_matter, prompt || ""),
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })

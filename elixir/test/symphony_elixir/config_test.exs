@@ -61,6 +61,20 @@ defmodule SymphonyElixir.ConfigTest do
 
       assert get_in(opts, [:dev_server, :port_range]) == [4100, 4199]
     end
+
+    test "per-project dev_server reclaim_ports defaults to false" do
+      opts = SymphonyElixir.Config.validate_front_matter(%{"dev_server" => %{"enabled" => true}})
+      assert get_in(opts, [:dev_server, :reclaim_ports]) == false
+    end
+
+    test "per-project dev_server reclaim_ports honors an explicit true" do
+      opts =
+        SymphonyElixir.Config.validate_front_matter(%{
+          "dev_server" => %{"enabled" => true, "reclaim_ports" => true}
+        })
+
+      assert get_in(opts, [:dev_server, :reclaim_ports]) == true
+    end
   end
 
   describe "evidence workflow section" do

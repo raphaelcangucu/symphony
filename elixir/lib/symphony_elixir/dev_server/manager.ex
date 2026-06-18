@@ -12,6 +12,7 @@ defmodule SymphonyElixir.DevServer.Manager do
   alias SymphonyElixir.DevServer.Instance
   alias SymphonyElixir.DevServer.LeaseStore
   alias SymphonyElixir.DevServer.PortPlan
+  alias SymphonyElixir.DevServer.PortReclaimer
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord, ProjectSetup}
   alias SymphonyElixir.Terminal.Registry, as: TerminalRegistry
   alias SymphonyElixir.Workspace
@@ -248,7 +249,13 @@ defmodule SymphonyElixir.DevServer.Manager do
     with {:ok, workspace_path} <- issue_workspace_path(identifier),
          {:ok, serve_steps} <- serve_steps(project.slug, identifier),
          {:ok, reserved_steps} <-
-           reserve_ports(project, identifier, serve_steps, runtime_options.dev_server_port_range) do
+           reserve_ports(
+             project,
+             identifier,
+             serve_steps,
+             runtime_options.dev_server_port_range,
+             runtime_options.dev_server_reclaim_ports?
+           ) do
       setup_issue_session(project.slug, identifier, workspace_path)
       start_instances(project, identifier, workspace_path, reserved_steps, runtime_options)
     end
@@ -259,7 +266,13 @@ defmodule SymphonyElixir.DevServer.Manager do
          {:ok, workspace_path} <- issue_workspace_path(identifier),
          {:ok, step} <- serve_step_for_slug(project.slug, identifier, slug),
          {:ok, reserved_steps} <-
-           reserve_ports(project, identifier, [step], runtime_options.dev_server_port_range),
+           reserve_ports(
+             project,
+             identifier,
+             [step],
+             runtime_options.dev_server_port_range,
+             runtime_options.dev_server_reclaim_ports?
+           ),
          [{step, port, key}] <- reserved_steps do
       setup_issue_session(project.slug, identifier, workspace_path)
 
@@ -337,10 +350,10 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp reserve_ports(project, identifier, serve_steps, port_range) do
+  defp reserve_ports(project, identifier, serve_steps, port_range, reclaim?) do
     ctx = allocation_context(project, identifier, port_range)
     owned = owned_ports(project.id, identifier)
-    reserve_with_context(project.slug, identifier, serve_steps, ctx, owned)
+    reserve_with_context(project.slug, identifier, serve_steps, ctx, owned, reclaim?)
   end
 
   # Ports each service of this issue was last assigned (from its DevServerRecord),
@@ -355,11 +368,16 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp reserve_with_context(project_slug, identifier, serve_steps, ctx, owned_ports) do
+  defp reserve_with_context(project_slug, identifier, serve_steps, ctx, owned_ports, reclaim?) do
     serve_steps
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {step, offset}, {:ok, reserved_steps} ->
       slug = Map.fetch!(step, :slug)
+
+      if reclaim? do
+        reclaim_canonical_port(project_slug, identifier, slug, ctx, offset)
+      end
+
       claimed = live_ports() ++ Enum.map(reserved_steps, fn {_step, port, _key} -> port end)
 
       case PortPlan.choose_port(ctx, offset, claimed, Map.get(owned_ports, slug)) do
@@ -376,6 +394,55 @@ defmodule SymphonyElixir.DevServer.Manager do
     |> case do
       {:ok, reserved_steps} -> {:ok, Enum.reverse(reserved_steps)}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Free a service's *canonical* port (deterministic from its band/slot/offset)
+  # before reserving, so a restart reclaims the same port instead of drifting
+  # onto the next free one. The canonical port belongs exclusively to this
+  # project+issue+service slot by construction, so killing whatever lingers on
+  # it is safe. We never touch a port currently served by a healthy, tracked
+  # Symphony instance for the same key (that is a legitimate reuse, not a leak).
+  defp reclaim_canonical_port(project_slug, identifier, slug, ctx, offset) do
+    case canonical_port(ctx, offset) do
+      nil ->
+        :ok
+
+      port ->
+        if port_held_by_tracked_instance?(project_slug, identifier, slug, port) do
+          :ok
+        else
+          case PortReclaimer.reclaim(port) do
+            :ok ->
+              :ok
+
+            {:error, :still_bound} ->
+              Logger.warning(
+                "[port-reclaim] could not free canonical port #{port} for " <>
+                  "#{project_slug}/#{identifier}/#{slug}; falling back to drift"
+              )
+
+              :ok
+          end
+        end
+    end
+  end
+
+  defp canonical_port(%{slot_index: nil}, _offset), do: nil
+
+  defp canonical_port(%{slot_index: slot_index, ports_per_slot: ports_per_slot, band: {band_start, _}}, offset) do
+    case PortPlan.port(band_start, slot_index, offset, ports_per_slot) do
+      {:ok, port} -> port
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp canonical_port(_ctx, _offset), do: nil
+
+  defp port_held_by_tracked_instance?(project_slug, identifier, slug, port) do
+    case running_instance_pid(project_slug, identifier, slug) do
+      {:ok, pid} -> port in instance_port(pid)
+      _ -> false
     end
   end
 
@@ -1091,6 +1158,7 @@ defmodule SymphonyElixir.DevServer.Manager do
 
     %{
       dev_server_enabled?: get_in(opts, [:dev_server, :enabled]) == true,
+      dev_server_reclaim_ports?: get_in(opts, [:dev_server, :reclaim_ports]) == true,
       dev_server_port_range: get_in(opts, [:dev_server, :port_range]),
       dev_server_base_url: normalize_base_url(get_in(opts, [:dev_server, :base_url])),
       dev_server_idle_timeout_ms: get_in(opts, [:dev_server, :idle_timeout_ms]),

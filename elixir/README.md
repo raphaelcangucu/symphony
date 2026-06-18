@@ -848,12 +848,25 @@ tracker. Enable the feature in a project's `workflow_markdown` front matter:
 dev_server:
   enabled: true
   # port_range: [4100, 4199]   # optional — omit to auto-lease from the pool
+  # reclaim_ports: true        # optional — kill stale listeners to keep ports stable
   idle_timeout_ms: 1800000
   auto_start_on: pull_request,human_review
 ```
 
-Defaults are `enabled: false`, `port_range: nil` (auto-lease, see below),
-`idle_timeout_ms: 1800000`, and `auto_start_on: [pull_request, human_review]`.
+Defaults are `enabled: false`, `reclaim_ports: false`, `port_range: nil`
+(auto-lease, see below), `idle_timeout_ms: 1800000`, and
+`auto_start_on: [pull_request, human_review]`.
+
+`reclaim_ports` hardens the port bridge. When `true`, before (re)starting a
+serve step Symphony frees that step's **canonical** port (the deterministic
+`band/slot/offset` port) by terminating any stale process still listening on it
+(`SIGTERM`, then `SIGKILL`, waiting until the socket is bindable), then reuses
+the same port instead of drifting onto the next free one. This keeps the
+Symphony → preview → public-tunnel mapping stable across restarts and crashes.
+A port already served by a healthy, Symphony-tracked instance is never touched.
+Leave it `false` (default) for projects that deliberately keep a long-lived
+resource (e.g. a shared docker container) bound to a service's port across
+restarts, since that resource must not be killed.
 When `base_url` is omitted, each preview URL is built as
 `http://127.0.0.1:<allocated-port><url_path>`.
 

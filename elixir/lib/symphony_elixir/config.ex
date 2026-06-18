@@ -30,6 +30,7 @@ defmodule SymphonyElixir.Config do
   @default_editor_port 4002
   @default_editor_auth "none"
   @default_dev_server_enabled false
+  @default_dev_server_reclaim_ports false
   @default_dev_server_port_range [4100, 4199]
   @default_dev_server_max_concurrent 3
   @default_dev_server_idle_timeout_ms 1_800_000
@@ -254,6 +255,10 @@ defmodule SymphonyElixir.Config do
                                default: %{},
                                keys: [
                                  enabled: [type: :boolean, default: @default_dev_server_enabled],
+                                 reclaim_ports: [
+                                   type: :boolean,
+                                   default: @default_dev_server_reclaim_ports
+                                 ],
                                  port_range: [
                                    type: {:or, [{:list, :pos_integer}, nil]},
                                    default: nil
@@ -1070,6 +1075,7 @@ defmodule SymphonyElixir.Config do
   defp extract_dev_server_options(section) do
     %{}
     |> put_if_present(:enabled, boolean_value(Map.get(section, "enabled")))
+    |> put_if_present(:reclaim_ports, boolean_value(Map.get(section, "reclaim_ports")))
     |> put_if_present(:port_range, integer_list_value(Map.get(section, "port_range")))
     |> put_if_present(:max_concurrent, positive_integer_value(Map.get(section, "max_concurrent")))
     |> put_if_present(:idle_timeout_ms, positive_integer_value(Map.get(section, "idle_timeout_ms")))
