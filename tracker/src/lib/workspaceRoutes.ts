@@ -3,7 +3,7 @@ import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 
 export type WorkspaceView = "board" | "list";
 
-export const ISSUE_TABS = ["summary", "pr", "comments", "evidence", "blockers", "agent", "preview", "activity", "terminal"] as const;
+export const ISSUE_TABS = ["summary", "pr", "comments", "evidence", "agent", "preview", "activity", "terminal"] as const;
 
 export type IssueTab = (typeof ISSUE_TABS)[number];
 
@@ -23,6 +23,18 @@ export function isWorkspaceView(value: string | undefined | null): value is Work
 
 export function isIssueTab(value: string | undefined | null): value is IssueTab {
   return typeof value === "string" && (ISSUE_TABS as readonly string[]).includes(value);
+}
+
+/** Issue drawer tabs that are no longer exposed in the UI but may still appear in old links. */
+const HIDDEN_ISSUE_TABS = new Set(["blockers"]);
+
+export function isHiddenIssueTab(value: string | undefined | null): boolean {
+  return typeof value === "string" && HIDDEN_ISSUE_TABS.has(value);
+}
+
+export function resolveIssueTab(value: string | undefined | null): IssueTab {
+  if (isIssueTab(value)) return value;
+  return DEFAULT_ISSUE_TAB;
 }
 
 function requireSlug(projectSlug: string): string {

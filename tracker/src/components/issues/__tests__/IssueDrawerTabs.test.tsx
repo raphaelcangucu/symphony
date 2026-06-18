@@ -78,10 +78,6 @@ vi.mock("@/components/issues/issue-detail/ActivityTab", () => ({
   ActivityTab: () => <div>Activity panel</div>,
 }));
 
-vi.mock("@/components/issues/issue-detail/BlockersTab", () => ({
-  BlockersTab: () => <div>Blockers panel</div>,
-}));
-
 vi.mock("@/components/issues/issue-detail/AgentTabs", () => ({
   AgentTabs: () => <div>Agent panel</div>,
 }));
@@ -150,11 +146,11 @@ describe("IssueDrawer tab navigation", () => {
 
     await screen.findByRole("tab", { name: /summary/i });
 
-    await user.click(screen.getByRole("tab", { name: /blockers/i }));
+    await user.click(screen.getByRole("tab", { name: /evidence/i }));
     await user.click(screen.getByRole("tab", { name: /activity/i }));
     await user.click(screen.getByRole("tab", { name: /terminal/i }));
 
-    expect(onTabChange).toHaveBeenNthCalledWith(1, "blockers");
+    expect(onTabChange).toHaveBeenNthCalledWith(1, "evidence");
     expect(onTabChange).toHaveBeenNthCalledWith(2, "activity");
     expect(onTabChange).toHaveBeenNthCalledWith(3, "terminal");
   });

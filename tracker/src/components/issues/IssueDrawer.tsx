@@ -12,7 +12,6 @@ import {
   MoreHorizontal,
   RefreshCw,
   Server,
-  ShieldAlert,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
@@ -50,7 +49,6 @@ import { AgentLongRunningBadge, AgentStatusBadge } from "./AgentStatusBadge";
 import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { AgentTabs } from "./issue-detail/AgentTabs";
 import { AssigneeAvatar } from "./AssigneeAvatar";
-import { BlockersTab } from "./issue-detail/BlockersTab";
 import { CommentsTab } from "./issue-detail/CommentsTab";
 import { EvidenceTab } from "./issue-detail/EvidenceTab";
 import { PriorityIndicator, priorityLabel } from "./PriorityIndicator";
@@ -65,7 +63,6 @@ const TAB_DEFS = [
   { value: "pr", labelKey: "issue.drawer.tabs.pr", Icon: GitPullRequest },
   { value: "comments", labelKey: "issue.drawer.tabs.comments", Icon: MessageSquare },
   { value: "evidence", labelKey: "issue.drawer.tabs.evidence", Icon: ClipboardCheck },
-  { value: "blockers", labelKey: "issue.drawer.tabs.blockers", Icon: ShieldAlert },
   { value: "agent", labelKey: "issue.drawer.tabs.agent", Icon: Bot },
   { value: "preview", labelKey: "issue.drawer.tabs.preview", Icon: Server },
   { value: "activity", labelKey: "issue.drawer.tabs.activity", Icon: Activity },
@@ -199,7 +196,6 @@ export function IssueDrawer({
   );
 
   const commentsCount = commentsState.comments.length;
-  const blockersCount = issue?.blockedBy.length ?? 0;
   const anyEditorAvailable = editor.browser.available || editor.cursorDesktop.available;
   const editorMenuTitle = editor.browser.available
     ? t("issue.drawer.openWorkspaceCode")
@@ -376,7 +372,6 @@ export function IssueDrawer({
                       <prRollup.Icon className={cn("h-3 w-3", prRollup.className, prRollup.spin && "animate-spin")} />
                     ) : null}
                     {value === "comments" && commentsCount > 0 ? <TabCount>{commentsCount}</TabCount> : null}
-                    {value === "blockers" && blockersCount > 0 ? <TabCount tone="amber">{blockersCount}</TabCount> : null}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -458,7 +453,6 @@ export function IssueDrawer({
                     trackerConfig={trackerConfig}
                   />
                 </TabsContent>
-                <TabsContent value="blockers"><BlockersTab projectSlug={projectSlug} issue={issue} /></TabsContent>
                 <TabsContent value="agent">
                   <AgentTabs
                     issue={issue}

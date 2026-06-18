@@ -6,10 +6,10 @@ import { toast } from "sonner";
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import {
-  DEFAULT_ISSUE_TAB,
-  isIssueTab,
+  isHiddenIssueTab,
   issueAgentTabPath,
   issuePath,
+  resolveIssueTab,
   workspaceBasePath,
   type IssueTab,
 } from "@/lib/workspaceRoutes";
@@ -23,7 +23,7 @@ export function IssueDetailRoute() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const tab: IssueTab = isIssueTab(tabParam) ? tabParam : DEFAULT_ISSUE_TAB;
+  const tab: IssueTab = resolveIssueTab(tabParam);
   const issueFromList = issues.find((candidate) => candidate.identifier === identifier) ?? null;
   const [fetchedIssue, setFetchedIssue] = useState<Issue | null>(null);
   // Tracks the (project, issue) we've already requested so unrelated board churn
@@ -95,6 +95,11 @@ export function IssueDetailRoute() {
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!identifier || !isHiddenIssueTab(tabParam)) return;
+    navigate({ pathname: issuePath(projectSlug, view, identifier, tab), search: location.search }, { replace: true });
+  }, [identifier, tab, tabParam, projectSlug, view, location.search, navigate]);
 
   useEffect(() => {
     if (!identifier || loading) return;

@@ -4,8 +4,10 @@ import {
   agentSectionFromSearchParams,
   DEFAULT_ISSUE_TAB,
   filtersPath,
+  isHiddenIssueTab,
   isIssueTab,
   isBoardPath,
+  resolveIssueTab,
   isWorkspaceView,
   issueAgentTabPath,
   issueAssistantPath,
@@ -75,8 +77,16 @@ describe("workspaceRoutes", () => {
   it("validates issue tabs", () => {
     expect(isIssueTab("comments")).toBe(true);
     expect(isIssueTab("preview")).toBe(true);
+    expect(isIssueTab("blockers")).toBe(false);
     expect(isIssueTab("nope")).toBe(false);
     expect(isIssueTab(undefined)).toBe(false);
+  });
+
+  it("resolves hidden issue tabs to the default tab", () => {
+    expect(isHiddenIssueTab("blockers")).toBe(true);
+    expect(isHiddenIssueTab("comments")).toBe(false);
+    expect(resolveIssueTab("blockers")).toBe(DEFAULT_ISSUE_TAB);
+    expect(resolveIssueTab("comments")).toBe("comments");
   });
 
   it("validates workspace views", () => {
