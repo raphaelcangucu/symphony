@@ -48,6 +48,18 @@ msgstr "uso de tokens da thread atualizado (%{usage})"
 msgid "item %{state}: %{type}%{suffix}"
 msgstr "item %{state}: %{type}%{suffix}"
 
+msgid "started"
+msgstr "iniciado"
+
+msgid "completed"
+msgstr "concluído"
+
+msgid ", %{count} items"
+msgstr ", %{count} itens"
+
+msgid " (%{details})"
+msgstr " (%{details})"
+
 msgid "agent message streaming"
 msgstr "mensagem do agente em streaming"
 
@@ -127,7 +139,7 @@ msgid "secondary %{secondary}"
 msgstr "secundário %{secondary}"
 
 msgid "%{percent}% / %{mins}m"
-msgstr "%{percent}% / %{mins}m"
+msgstr "%{percent}% / %{mins} min"
 
 msgid "%{percent}% used"
 msgstr "%{percent}% usado"
@@ -205,13 +217,13 @@ msgid "updated"
 msgstr "atualizado"
 
 msgid "streaming%{preview}"
-msgstr "streaming%{preview}"
+msgstr "transmitindo%{preview}"
 
 msgid "thinking..."
 msgstr "pensando..."
 
 msgid "streaming..."
-msgstr "streaming..."
+msgstr "transmitindo..."
 
 msgid "turn completed (%{status}%{count_suffix})"
 msgstr "turn concluído (%{status}%{count_suffix})"

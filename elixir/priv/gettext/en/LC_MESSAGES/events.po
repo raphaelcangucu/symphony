@@ -48,6 +48,18 @@ msgstr "thread token usage updated (%{usage})"
 msgid "item %{state}: %{type}%{suffix}"
 msgstr "item %{state}: %{type}%{suffix}"
 
+msgid "started"
+msgstr "started"
+
+msgid "completed"
+msgstr "completed"
+
+msgid ", %{count} items"
+msgstr ", %{count} items"
+
+msgid " (%{details})"
+msgstr " (%{details})"
+
 msgid "agent message streaming"
 msgstr "agent message streaming"
 

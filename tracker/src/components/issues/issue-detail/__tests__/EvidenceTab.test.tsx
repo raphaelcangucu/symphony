@@ -170,7 +170,7 @@ describe("EvidenceTab", () => {
 
     expect(screen.getByText(/Retomar validação/)).toBeInTheDocument();
     expect(screen.getAllByText(/Docker is not running/).length).toBeGreaterThan(0);
-    expect(screen.getByText("blocked")).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.evidence.status.blocked"))).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /voltar para em andamento e retomar/i }));
     expect(dispatchIssueAgentMock).toHaveBeenCalled();

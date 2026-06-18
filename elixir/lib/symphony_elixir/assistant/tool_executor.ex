@@ -5,7 +5,19 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.AgentPreference
-  alias SymphonyElixir.Assistant.{DiscoveryTools, DevEnvTools, EvidenceTools, GitHubTools, HandoffTools, PreviewTools, ProjectBoardTools, PullRequestLookup, ReadTools, SetupTools}
+  alias SymphonyElixir.Assistant.{
+    DiscoveryTools,
+    DevEnvTools,
+    EvidenceTools,
+    GitHubTools,
+    HandoffTools,
+    PreviewTools,
+    ProjectBoardTools,
+    PullRequestLookup,
+    ReadTools,
+    SetupTools,
+    ToolText
+  }
   alias SymphonyElixir.Config
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.LocalTracker.Context
@@ -58,6 +70,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   @spec tool_specs() :: [map()]
   def tool_specs do
+    build_tool_specs() |> ToolText.localize_specs()
+  end
+
+  defp build_tool_specs do
     [
       tool_spec("list_issues", "List tracker issues in the current project (prefer get_issue when you know the identifier).", %{
         "type" => "object",
@@ -265,11 +281,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       ReadTools.tool_specs()
       |> Enum.filter(&(&1["name"] in @freeform_project_agnostic_read_tools))
 
-    DiscoveryTools.tool_specs() ++
-      ProjectBoardTools.tool_specs() ++
-      GitHubTools.tool_specs() ++
-      read_specs ++
-      DynamicTool.tool_specs()
+    (DiscoveryTools.tool_specs() ++
+       ProjectBoardTools.tool_specs() ++
+       GitHubTools.tool_specs() ++
+       read_specs ++
+       DynamicTool.tool_specs())
+    |> ToolText.localize_specs()
   end
 
   @spec freeform_codex_tool_executor(keyword()) :: (String.t() | nil, term() -> map())
@@ -307,8 +324,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   def issue_bound_tool_specs(issue_identifier) when is_binary(issue_identifier) do
     identifier = normalize_issue_identifier!(issue_identifier)
 
-    tool_specs()
+    build_tool_specs()
     |> Enum.filter(&(Map.get(&1, "name") in @issue_bound_supported_tools))
+    |> ToolText.localize_specs()
     |> Enum.map(&bind_tool_spec_identifier(&1, identifier))
   end
 
@@ -688,7 +706,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     issue_schema = %{
       "type" => "string",
       "const" => identifier,
-      "description" => "Bound issue workspace for #{identifier}."
+      "description" => ToolText.msg("Bound issue workspace for %{identifier}.", %{identifier: identifier})
     }
 
     schema =
@@ -705,7 +723,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     identifier_schema = %{
       "type" => "string",
       "const" => identifier,
-      "description" => "Bound issue identifier. Must be #{identifier}."
+      "description" => ToolText.msg("Bound issue identifier. Must be %{identifier}.", %{identifier: identifier})
     }
 
     schema =
@@ -724,7 +742,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     %{
       "type" => "string",
       "const" => identifier,
-      "description" => "Bound issue identifier. Must be #{identifier}."
+      "description" => ToolText.msg("Bound issue identifier. Must be %{identifier}.", %{identifier: identifier})
     }
   end
 

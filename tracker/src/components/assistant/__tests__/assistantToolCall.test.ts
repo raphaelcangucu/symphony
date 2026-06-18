@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 
 import { assistantToolCallToView, isActionTool } from "@/components/assistant/assistantToolCall";
+import { i18n } from "@/i18n";
+import { initTestI18n } from "@/i18n/testUtils";
 import type { AssistantToolCall } from "@/services/assistant";
 
 function toolCall(partial: Partial<AssistantToolCall>): AssistantToolCall {
@@ -8,6 +10,10 @@ function toolCall(partial: Partial<AssistantToolCall>): AssistantToolCall {
 }
 
 describe("assistant tool call adapter", () => {
+  beforeEach(async () => {
+    await initTestI18n("en");
+  });
+
   it("classifies action vs read tools", () => {
     expect(isActionTool("move_issue")).toBe(true);
     expect(isActionTool("dispatch_codex")).toBe(true);
@@ -26,7 +32,7 @@ describe("assistant tool call adapter", () => {
       }),
     );
 
-    expect(view.toolType).toBe("Move issue");
+    expect(view.toolType).toBe(i18n.t("issue.toolCall.tools.move_issue"));
     expect(view.status).toBe("completed");
     expect(view.defaultCollapsed).toBe(false);
     expect(view.input?.language).toBe("json");
@@ -43,5 +49,11 @@ describe("assistant tool call adapter", () => {
     const view = assistantToolCallToView(toolCall({ name: "move_issue", status: "error", output: "Issue not found." }));
     expect(view.status).toBe("failed");
     expect(view.output?.value).toBe("Issue not found.");
+  });
+
+  it("localizes tool names in pt-BR", async () => {
+    await initTestI18n("pt-BR");
+    const view = assistantToolCallToView(toolCall({ name: "move_issue", status: "complete" }));
+    expect(view.toolType).toBe("Mover issue");
   });
 });

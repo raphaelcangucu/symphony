@@ -318,7 +318,7 @@ defmodule SymphonyElixir.Assistant.ReadTools do
       "status" => string_schema("Optional workflow status name filter."),
       "limit" => %{
         "type" => ["integer", "null"],
-        "description" => "Maximum issues to return (default #{@default_list_limit}, max #{@max_list_limit})."
+        "description" => "Maximum issues to return (default 20, max 100)."
       }
     }
   end

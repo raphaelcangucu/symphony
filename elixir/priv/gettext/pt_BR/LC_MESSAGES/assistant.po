@@ -11,3 +11,343 @@ msgstr "Eu estava tratando texto livre como busca de issues, por isso a resposta
 
 msgid "Got it. I can chat about the project and call tracker tools when you ask for something concrete — create a task, comment, move status, list issues, or dispatch Codex."
 msgstr "Entendi. Posso conversar sobre o projeto e acionar ferramentas do tracker quando você pedir algo concreto, como criar uma tarefa, comentar em uma issue, mover status, consultar tarefas ou pedir trabalho do Codex."
+
+msgid "1-based end line (inclusive)."
+msgstr "Linha final (1-based, inclusiva)."
+
+msgid "1-based start line (inclusive)."
+msgstr "Linha inicial (1-based, inclusiva)."
+
+msgid "Add a comment on a tracker issue (use when the user wants it recorded on the issue, not for normal chat replies)."
+msgstr "Adicionar comentário em uma issue do tracker (use quando o usuário quiser registrá-lo na issue, não para respostas normais do chat)."
+
+msgid "Alias for dispatch_coding_agent (resolves agent via task > project > user preference)."
+msgstr "Alias de dispatch_coding_agent (resolve o agente via tarefa > projeto > preferência do usuário)."
+
+msgid "Bound issue identifier. Must be %{identifier}."
+msgstr "Identificador da issue vinculado. Deve ser %{identifier}."
+
+msgid "Bound issue workspace for %{identifier}."
+msgstr "Workspace da issue vinculada a %{identifier}."
+
+msgid ""
+"Check validate and publish gates before moving to a handoff status (Human Review, Done, etc.).\n"
+"Call this before set_issue_status when targeting wait_states or completion destinations."
+msgstr ""
+"Verificar gates de validação e publicação antes de mover para um status de handoff (Human Review, Done, etc.).\n"
+"Chame antes de set_issue_status ao mirar wait_states ou destinos de conclusão."
+
+msgid "Comment body markdown/text."
+msgstr "Corpo do comentário em markdown/texto."
+
+msgid "Comment id from list_comments."
+msgstr "Id do comentário retornado por list_comments."
+
+msgid "Concrete coding instructions for Codex."
+msgstr "Instruções concretas de código para o Codex."
+
+msgid "Concrete coding instructions for the agent."
+msgstr "Instruções concretas de código para o agente."
+
+msgid "Create a GitHub Project v2 on the repo owner with a single-select status field and states (server-side GraphQL)."
+msgstr "Criar um GitHub Project v2 no dono do repositório com campo de status single-select e estados (GraphQL no servidor)."
+
+msgid "Create a draft tracker issue (non-actionable status) to anchor the authoring chat."
+msgstr "Criar rascunho de issue no tracker (status não acionável) para ancorar o chat de authoring."
+
+msgid "Create a local-only Symphony tracker project (no GitHub/Linear/Jira link). Use after list_tracker_projects when setting up a new board."
+msgstr "Criar projeto tracker local no Symphony (sem vínculo GitHub/Linear/Jira). Use após list_tracker_projects ao configurar um novo board."
+
+msgid "Create a tracker issue in the current project."
+msgstr "Criar uma issue no tracker do projeto atual."
+
+msgid "Dev-env action."
+msgstr "Ação do ambiente de dev."
+
+msgid "Display name."
+msgstr "Nome de exibição."
+
+msgid "Edit an existing issue comment in place (for workpad updates)."
+msgstr "Editar um comentário existente da issue no lugar (para atualizações do workpad)."
+
+msgid "Execute a raw GraphQL query or mutation against GitHub using Symphony's configured GITHUB_TOKEN."
+msgstr "Executar query ou mutation GraphQL no GitHub usando o GITHUB_TOKEN configurado no Symphony."
+
+msgid "Execute a raw GraphQL query or mutation against Linear using Symphony's configured auth."
+msgstr "Executar query ou mutation GraphQL no Linear usando a autenticação configurada no Symphony."
+
+msgid "Existing GitHub Project node id; skips remote creation when set."
+msgstr "Node id do GitHub Project existente; pula criação remota quando definido."
+
+msgid "Fetch assignees, labels, and statuses for creating or updating issues in this project. Use this instead of linear_graphql or shell commands to resolve assignee logins/ids."
+msgstr "Buscar assignees, labels e statuses para criar ou atualizar issues neste projeto. Use isto em vez de linear_graphql ou comandos shell para resolver logins/ids de assignee."
+
+msgid "Fetch one tracker issue by identifier. Prefer this over list_issues when you know the id."
+msgstr "Buscar uma issue do tracker por identificador. Prefira isto a list_issues quando souber o id."
+
+msgid "Fetch one workspace template by slug. Call list_templates first when unsure of slugs (e.g. multi-repo-fullstack, not multi-repo)."
+msgstr "Buscar um template de workspace por slug. Chame list_templates primeiro se não tiver certeza dos slugs (ex.: multi-repo-fullstack, não multi-repo)."
+
+msgid "Fetch project metadata: board status names and categories (unstarted/started/completed), repositories, and setup summary. Status categories are UI metadata — they do NOT define orchestrator dispatch. For dispatch_states, active_states, and terminal_states use get_workflow."
+msgstr "Buscar metadados do projeto: nomes e categorias de status do board (unstarted/started/completed), repositórios e resumo de setup. Categorias de status são metadados de UI — NÃO definem dispatch do orchestrator. Para dispatch_states, active_states e terminal_states use get_workflow."
+
+msgid "Fetch workflow markdown from project settings (YAML front matter + body). Source of truth for orchestrator: tracker.dispatch_states (queue for NEW auto-runs), tracker.active_states (polled candidates), tracker.wait_states, tracker.terminal_states. Parsed config is in data.config. Body prose guides agents only; orchestrator reads YAML keys."
+msgstr "Buscar markdown de workflow das configurações do projeto (YAML front matter + corpo). Fonte de verdade do orchestrator: tracker.dispatch_states (fila para NOVOS auto-runs), tracker.active_states (candidatos polled), tracker.wait_states, tracker.terminal_states. Config parseada está em data.config. O corpo guia agentes; o orchestrator lê as chaves YAML."
+
+msgid "Full WORKFLOW markdown stored on the project."
+msgstr "Markdown WORKFLOW completo armazenado no projeto."
+
+msgid "Full replacement list. Each entry needs github_full_name, workspace_path, and role. Optional: clone_url, default_branch, selected_branch, local_path, scan_summary."
+msgstr "Lista completa de substituição. Cada entrada precisa de github_full_name, workspace_path e role. Opcional: clone_url, default_branch, selected_branch, local_path, scan_summary."
+
+msgid "GitHub Project title when provisioning (defaults to name)."
+msgstr "Título do GitHub Project ao provisionar (padrão: name)."
+
+msgid "GitHub repo owner/name, e.g. clouapp/distributionmachine."
+msgstr "Repositório GitHub owner/name, ex.: clouapp/distributionmachine."
+
+msgid "GitHub repo owner/name."
+msgstr "Repositório GitHub owner/name."
+
+msgid "GitHub repo, e.g. GambaLabs/frontend."
+msgstr "Repositório GitHub, ex.: GambaLabs/frontend."
+
+msgid "GraphQL query or mutation document to execute."
+msgstr "Documento GraphQL (query ou mutation) a executar."
+
+msgid ""
+"Inspect or control the issue dev-server preview (status, start, stop, restart).\n"
+"When preview is unavailable, read `next_steps` and configure serve steps via manage_dev_env first."
+msgstr ""
+"Inspecionar ou controlar o preview do dev-server da issue (status, start, stop, restart).\n"
+"Quando o preview estiver indisponível, leia `next_steps` e configure passos serve via manage_dev_env primeiro."
+
+msgid "Issue identifier to dispatch, for example MAC-1."
+msgstr "Identificador da issue a disparar, por exemplo MAC-1."
+
+msgid "Issue identifier, for example MAC-1."
+msgstr "Identificador da issue, por exemplo MAC-1."
+
+msgid "Issue title."
+msgstr "Título da issue."
+
+msgid "List GitHub Project v2 boards visible to Symphony's GITHUB_TOKEN (server-side; do not use gh in the shell)."
+msgstr "Listar boards GitHub Project v2 visíveis ao GITHUB_TOKEN do Symphony (no servidor; não use gh no shell)."
+
+msgid "List Jira Cloud projects visible to Symphony's configured Jira credentials (server-side REST)."
+msgstr "Listar projetos Jira Cloud visíveis às credenciais Jira configuradas no Symphony (REST no servidor)."
+
+msgid "List Linear projects visible to Symphony's configured Linear auth (server-side GraphQL)."
+msgstr "Listar projetos Linear visíveis à autenticação Linear configurada no Symphony (GraphQL no servidor)."
+
+msgid "List Symphony local tracker projects (server-side). Prefer this before remote GitHub/Linear/Jira discovery when the user asks about existing projects here."
+msgstr "Listar projetos tracker locais do Symphony (no servidor). Prefira isto antes da descoberta remota GitHub/Linear/Jira quando o usuário perguntar sobre projetos existentes aqui."
+
+msgid "List active or retrying coding-agent executions for this project."
+msgstr "Listar execuções do agente de código ativas ou em retry neste projeto."
+
+msgid "List comments on a tracker issue (use to find workpad comment ids before update_comment)."
+msgstr "Listar comentários de uma issue do tracker (use para achar ids de comentário do workpad antes de update_comment)."
+
+msgid "List pull requests linked to an issue (GitHub discovery + persisted links)."
+msgstr "Listar pull requests vinculados a uma issue (descoberta GitHub + links persistidos)."
+
+msgid "List repositories linked to this project in Symphony (persisted metadata). Compare with get_workflow when workflow front matter declares more repos than settings show."
+msgstr "Listar repositórios vinculados a este projeto no Symphony (metadados persistidos). Compare com get_workflow quando o front matter do workflow declarar mais repos do que as settings mostram."
+
+msgid "List tracker issues in the current project (prefer get_issue when you know the identifier)."
+msgstr "Listar issues do tracker no projeto atual (prefira get_issue quando souber o identificador)."
+
+msgid "List workspace templates stored in Symphony (slug, name, description). Use before get_template."
+msgstr "Listar templates de workspace armazenados no Symphony (slug, name, description). Use antes de get_template."
+
+msgid ""
+"List, propose, save, or run project dev-environment setup/serve steps.\n"
+"Coding agents may only list or run existing steps (optionally filter category_filter=serve)."
+msgstr ""
+"Listar, propor, salvar ou executar passos de setup/serve do ambiente de dev do projeto.\n"
+"Agentes de código só podem listar ou executar passos existentes (opcionalmente filtrar category_filter=serve)."
+
+msgid "Local tracker project display name."
+msgstr "Nome de exibição do projeto tracker local."
+
+msgid "Local tracker project slug."
+msgstr "Slug do projeto tracker local."
+
+msgid "Maximum issues to return (default 20, max 100)."
+msgstr "Máximo de issues a retornar (padrão 20, máx. 100)."
+
+msgid "Move an issue to a workflow status."
+msgstr "Mover uma issue para um status de workflow."
+
+msgid "Optional GraphQL variables object."
+msgstr "Objeto opcional de variáveis GraphQL."
+
+msgid "Optional absolute path on the host for discovery scans."
+msgstr "Caminho absoluto opcional no host para scans de descoberta."
+
+msgid "Optional agent override: codex, claude, or cursor. Omit to follow task > project > user preference."
+msgstr "Override opcional de agente: codex, claude ou cursor. Omita para seguir tarefa > projeto > preferência do usuário."
+
+msgid "Optional assignee filter."
+msgstr "Filtro opcional de assignee."
+
+msgid "Optional assignee logins or remote ids. Call get_issue_form_options first."
+msgstr "Logins ou ids remotos opcionais de assignee. Chame get_issue_form_options primeiro."
+
+msgid "Optional branch Symphony checks out."
+msgstr "Branch opcional que o Symphony faz checkout."
+
+msgid "Optional creator filter."
+msgstr "Filtro opcional de criador."
+
+msgid "Optional default branch from GitHub."
+msgstr "Branch padrão opcional do GitHub."
+
+msgid "Optional description."
+msgstr "Descrição opcional."
+
+msgid "Optional discovery metadata."
+msgstr "Metadados opcionais de descoberta."
+
+msgid "Optional filter when running steps, e.g. serve."
+msgstr "Filtro opcional ao executar passos, ex.: serve."
+
+msgid "Optional full-text search query."
+msgstr "Query opcional de busca full-text."
+
+msgid "Optional git clone URL."
+msgstr "URL opcional de git clone."
+
+msgid "Optional issue description."
+msgstr "Descrição opcional da issue."
+
+msgid "Optional issue id; reads from that issue workspace instead of project explore."
+msgstr "Id opcional da issue; lê do workspace dessa issue em vez do explore do projeto."
+
+msgid "Optional long-running Codex goal to persist for the orchestrator."
+msgstr "Goal Codex opcional de longa duração para persistir no orchestrator."
+
+msgid "Optional long-running objective to persist for the orchestrator (Codex goal or Claude/Cursor workflow)."
+msgstr "Objetivo opcional de longa duração para persistir no orchestrator (goal Codex ou workflow Claude/Cursor)."
+
+msgid "Optional new description."
+msgstr "Nova descrição opcional."
+
+msgid "Optional new title."
+msgstr "Novo título opcional."
+
+msgid "Optional numeric priority."
+msgstr "Prioridade numérica opcional."
+
+msgid "Optional project description."
+msgstr "Descrição opcional do projeto."
+
+msgid "Optional repository metadata. Omit to use the project's linked repositories."
+msgstr "Metadados opcionais de repositório. Omita para usar os repositórios vinculados do projeto."
+
+msgid "Optional repository scan inputs. Omit to scan the project's linked repositories."
+msgstr "Entradas opcionais de scan de repositório. Omita para escanear os repositórios vinculados do projeto."
+
+msgid "Optional scan results. Omit to run scan_project_setup first."
+msgstr "Resultados opcionais de scan. Omita para executar scan_project_setup primeiro."
+
+msgid "Optional short description."
+msgstr "Descrição curta opcional."
+
+msgid "Optional workflow status name filter."
+msgstr "Filtro opcional por nome de status de workflow."
+
+msgid "Optional workflow status."
+msgstr "Status de workflow opcional."
+
+msgid "Optional workflow status. Omit to create in Backlog (intake). Do not use orchestrator queue statuses (e.g. Todo) on create — move_issue after intake when ready."
+msgstr "Status de workflow opcional. Omita para criar em Backlog (intake). Não use statuses de fila do orchestrator (ex.: Todo) na criação — use move_issue após intake quando estiver pronto."
+
+msgid "Preview action."
+msgstr "Ação de preview."
+
+msgid "Project board title."
+msgstr "Título do board do projeto."
+
+msgid "Provision (or link) a GitHub Project and create the matching local Symphony tracker project."
+msgstr "Provisionar (ou vincular) um GitHub Project e criar o projeto tracker local correspondente no Symphony."
+
+msgid "Read a text file under the project explore workspace or an issue workspace (path relative to workspace root). For workflow markdown use get_workflow instead of WORKFLOW.md."
+msgstr "Ler arquivo de texto no workspace explore do projeto ou workspace de uma issue (caminho relativo à raiz do workspace). Para markdown de workflow use get_workflow em vez de WORKFLOW.md."
+
+msgid ""
+"Read persisted evidence runs and the current validate gate state for an issue workspace.\n"
+"Call after writing .symphony/evidence/manifest.json and before handoff."
+msgstr ""
+"Ler runs de evidência persistidos e o estado atual do gate de validação do workspace da issue.\n"
+"Chame após escrever .symphony/evidence/manifest.json e antes do handoff."
+
+msgid "Relative path inside the workspace, e.g. front/README.md."
+msgstr "Caminho relativo dentro do workspace, ex.: front/README.md."
+
+msgid "Relative path under the project workspace root (unique per project)."
+msgstr "Caminho relativo sob a raiz do workspace do projeto (único por projeto)."
+
+msgid "Replace the repositories linked to this project in Symphony (same as Project Settings). Does not delete workspace files; only updates persisted metadata."
+msgstr "Substituir os repositórios vinculados a este projeto no Symphony (igual a Project Settings). Não apaga arquivos do workspace; só atualiza metadados persistidos."
+
+msgid "Replacement comment body markdown/text."
+msgstr "Corpo substituto do comentário em markdown/texto."
+
+msgid "Repo role label, e.g. frontend or backend."
+msgstr "Rótulo de role do repo, ex.: frontend ou backend."
+
+msgid "Request coding-agent work (Codex or Claude) through the existing issue workflow."
+msgstr "Solicitar trabalho do agente de código (Codex ou Claude) pelo workflow de issue existente."
+
+msgid "Required for run_step."
+msgstr "Obrigatório para run_step."
+
+msgid "Required for save_steps."
+msgstr "Obrigatório para save_steps."
+
+msgid "Response format: json (default) or yaml."
+msgstr "Formato de resposta: json (padrão) ou yaml."
+
+msgid "Scan linked repositories for stack hints (same as the project setup wizard)."
+msgstr "Escanear repositórios vinculados para dicas de stack (igual ao assistente de setup do projeto)."
+
+msgid "Single-select field name (default Status, the built-in board field)."
+msgstr "Nome do campo single-select (padrão Status, campo built-in do board)."
+
+msgid "Status field name when provisioning (default Status, the built-in board field)."
+msgstr "Nome do campo de status ao provisionar (padrão Status, campo built-in do board)."
+
+msgid "Status names when provisioning a new GitHub Project."
+msgstr "Nomes de status ao provisionar um novo GitHub Project."
+
+msgid "Suggest workflow markdown, hooks, and validation commands from repository scans."
+msgstr "Sugerir markdown de workflow, hooks e comandos de validação a partir de scans de repositório."
+
+msgid "Symphony tracker project slug (from list_tracker_projects)."
+msgstr "Slug do projeto tracker Symphony (de list_tracker_projects)."
+
+msgid "Target workflow status."
+msgstr "Status de workflow alvo."
+
+msgid "Template slug."
+msgstr "Slug do template."
+
+msgid "URL slug, e.g. meu-projeto."
+msgstr "Slug de URL, ex.: meu-projeto."
+
+msgid "Update mutable fields on an existing tracker issue."
+msgstr "Atualizar campos mutáveis de uma issue existente no tracker."
+
+msgid "Update workflow markdown (YAML front matter + body). Orchestrator behavior requires tracker.* lists in front matter (dispatch_states, active_states, terminal_states, wait_states, field_states) — editing body prose alone does not change auto-dispatch. Preserve or update YAML when changing queue/work statuses."
+msgstr "Atualizar markdown de workflow (YAML front matter + corpo). O comportamento do orchestrator exige listas tracker.* no front matter (dispatch_states, active_states, terminal_states, wait_states, field_states) — editar só o corpo não muda auto-dispatch. Preserve ou atualize o YAML ao mudar statuses de fila/trabalho."
+
+msgid "When true, include archived local projects (default false)."
+msgstr "Quando true, incluir projetos locais arquivados (padrão false)."
+
+msgid "When true, include issue comments in the response."
+msgstr "Quando true, incluir comentários da issue na resposta."
+
+msgid "Workflow status option names to create on the board."
+msgstr "Nomes de opções de status de workflow a criar no board."

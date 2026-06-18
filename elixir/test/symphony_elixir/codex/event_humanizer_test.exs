@@ -25,4 +25,16 @@ defmodule SymphonyElixir.Codex.EventHumanizerTest do
     assert EventHumanizer.humanize_method("item/tool/requestUserInput", payload) ==
              "tool requires user input: Continue?"
   end
+
+  test "localizes item lifecycle state in Portuguese" do
+    Gettext.put_locale(GettextBackend, "pt_BR")
+
+    payload = %{
+      "params" => %{
+        "item" => %{"type" => "agentMessage", "id" => "item-1", "status" => "completed"}
+      }
+    }
+
+    assert EventHumanizer.humanize_method("item/started", payload) =~ "iniciado"
+  end
 end

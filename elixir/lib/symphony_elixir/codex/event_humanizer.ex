@@ -219,9 +219,18 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
       |> append_if_present(short_id(item_id))
       |> append_if_present(humanize_status(item_status))
 
-    detail_suffix = if details == [], do: "", else: " (#{Enum.join(details, ", ")})"
-    T.t("item %{state}: %{type}%{suffix}", state: state, type: item_type, suffix: detail_suffix)
+    detail_suffix =
+      if details == [],
+        do: "",
+        else: T.t(" (%{details})", details: Enum.join(details, ", "))
+
+    state_label = localize_lifecycle_state(state)
+    T.t("item %{state}: %{type}%{suffix}", state: state_label, type: item_type, suffix: detail_suffix)
   end
+
+  defp localize_lifecycle_state("started"), do: T.t("started")
+  defp localize_lifecycle_state("completed"), do: T.t("completed")
+  defp localize_lifecycle_state(other), do: other
 
   defp humanize_streaming_event(label, payload) do
     case extract_delta_preview(payload) do

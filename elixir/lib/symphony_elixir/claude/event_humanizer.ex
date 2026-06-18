@@ -69,7 +69,11 @@ defmodule SymphonyElixir.Claude.EventHumanizer do
       map_path(payload, ["params", "items_count"]) ||
         map_path(payload, [:params, :items_count])
 
-    count_suffix = if is_integer(items_count), do: ", #{items_count} items", else: ""
+    count_suffix =
+      if is_integer(items_count),
+        do: T.t(", %{count} items", count: items_count),
+        else: ""
+
     T.t("turn completed (%{status}%{count_suffix})", status: status, count_suffix: count_suffix)
   end
 

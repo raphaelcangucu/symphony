@@ -31,4 +31,11 @@ defmodule SymphonyElixir.Claude.EventHumanizerTest do
     assert EventHumanizer.humanize_method("turn/permission_denied", payload) ==
              "permission denied: Bash"
   end
+
+  test "localizes turn completed item count in Portuguese" do
+    Gettext.put_locale(GettextBackend, "pt_BR")
+
+    assert EventHumanizer.humanize_method("turn/completed", %{"params" => %{"status" => "completed", "items_count" => 3}}) ==
+             "turn concluído (completed, 3 itens)"
+  end
 end
