@@ -51,6 +51,20 @@ defmodule SymphonyElixir.LocalTracker.TrackerTest do
     assert Enum.find(issues, &(&1.identifier == "MAC-1")).labels == ["symphony:codex"]
   end
 
+  test "fetched candidate issues carry group identifiers" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+
+    {:ok, issues} = Tracker.fetch_candidate_issues()
+    lead = Enum.find(issues, &(&1.identifier == "MAC-1"))
+    member = Enum.find(issues, &(&1.identifier == "MAC-2"))
+
+    assert lead.group_member_identifiers == ["MAC-2"]
+    assert member.group_lead_identifier == "MAC-1"
+  end
+
   test "fetch_issues_by_states and fetch_issue_states_by_ids stay scoped to configured project" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _other_project} = Context.ensure_project(%{name: "Macro Ops", slug: "macro-ops"})

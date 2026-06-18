@@ -203,6 +203,8 @@ defmodule SymphonyElixir.LocalTracker.Tracker do
     [
       :status,
       :labels,
+      :group_lead,
+      :group_members,
       comments: from(comment in Comment, order_by: [asc: comment.inserted_at, asc: comment.id]),
       source_relations:
         from(relation in IssueRelation,

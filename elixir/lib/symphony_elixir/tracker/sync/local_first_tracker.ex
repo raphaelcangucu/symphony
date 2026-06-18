@@ -231,6 +231,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     [
       :project,
       :status,
+      :group_lead,
+      :group_members,
       :labels,
       comments: from(comment in Comment, order_by: [asc: comment.inserted_at, asc: comment.id]),
       source_relations:
