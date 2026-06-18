@@ -21,7 +21,9 @@ defmodule SymphonyElixir.Issue do
     agent_kind: nil,
     assigned_to_worker: true,
     created_at: nil,
-    updated_at: nil
+    updated_at: nil,
+    group_lead_identifier: nil,
+    group_member_identifiers: []
   ]
 
   @type t :: %__MODULE__{
@@ -41,7 +43,9 @@ defmodule SymphonyElixir.Issue do
           agent_kind: String.t() | nil,
           assigned_to_worker: boolean(),
           created_at: DateTime.t() | nil,
-          updated_at: DateTime.t() | nil
+          updated_at: DateTime.t() | nil,
+          group_lead_identifier: String.t() | nil,
+          group_member_identifiers: [String.t()]
         }
 
   @spec label_names(t()) :: [String.t()]
