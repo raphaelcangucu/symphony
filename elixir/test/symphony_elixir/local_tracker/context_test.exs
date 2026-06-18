@@ -773,6 +773,18 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert {:error, :not_in_group} = Context.remove_from_group("macro-markets", "MAC-1")
   end
 
+  test "move_issue carries group members to the lead's new status" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+
+    assert {:ok, lead} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+    assert lead.status.name == "In Progress"
+    assert {:ok, [member]} = Context.list_group_members("macro-markets", "MAC-1")
+    assert member.status.name == "In Progress"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

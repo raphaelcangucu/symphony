@@ -453,6 +453,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       project.id
       |> persist_moved_issue(issue, status, attrs)
       |> tap_issue_event("issue_moved", %{status: status.name, position_only: position_only})
+      |> move_group_members(status)
     end
   end
 
@@ -1260,6 +1261,22 @@ defmodule SymphonyElixir.LocalTracker.Context do
     Enum.each(members, &detach_group_member/1)
     {:ok, Repo.preload(lead, @issue_preloads, force: true)}
   end
+
+  defp move_group_members({:ok, %IssueRecord{} = lead} = result, %WorkflowStatus{} = status) do
+    lead.id
+    |> group_member_records()
+    |> Enum.each(fn member ->
+      member
+      |> IssueRecord.changeset(%{status_id: status.id})
+      |> Repo.update()
+      |> preload_issue_result()
+      |> tap_issue_event("issue_moved", %{status: status.name, position_only: false})
+    end)
+
+    result
+  end
+
+  defp move_group_members(result, _status), do: result
 
   defp insert_issue(attrs) do
     %IssueRecord{}
