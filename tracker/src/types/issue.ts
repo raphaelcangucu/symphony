@@ -80,6 +80,8 @@ export interface Issue {
   updatedAt: string;
   agentKind?: AgentKind | null;
   attachments: IssueAttachment[];
+  groupLeadIdentifier: string | null;
+  groupMemberIdentifiers: string[];
 }
 
 export const AGENT_KINDS = ["codex", "claude", "cursor"] as const;

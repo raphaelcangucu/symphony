@@ -149,6 +149,8 @@ const issue: Issue = {
   updatedAt: "2026-05-31T00:00:00Z",
   url: null,
   attachments: [],
+  groupLeadIdentifier: null,
+  groupMemberIdentifiers: [],
 };
 
 const execution: AgentExecution = {

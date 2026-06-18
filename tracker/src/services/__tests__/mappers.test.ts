@@ -174,3 +174,23 @@ describe("tracker DTO mappers", () => {
     expect(payload.issue.projectSlug).toBe("macro-markets");
   });
 });
+
+describe("normalizeIssue group fields", () => {
+  it("reads snake_case group identifiers", () => {
+    const issue = normalizeIssue({
+      id: 1,
+      identifier: "MAC-2",
+      title: "Member",
+      group_lead_identifier: "MAC-1",
+      group_member_identifiers: [],
+    });
+    expect(issue.groupLeadIdentifier).toBe("MAC-1");
+    expect(issue.groupMemberIdentifiers).toEqual([]);
+  });
+
+  it("reads a lead's members and defaults to null/[]", () => {
+    const lead = normalizeIssue({ id: 2, identifier: "MAC-1", title: "Lead", group_member_identifiers: ["MAC-2"] });
+    expect(lead.groupLeadIdentifier).toBeNull();
+    expect(lead.groupMemberIdentifiers).toEqual(["MAC-2"]);
+  });
+});

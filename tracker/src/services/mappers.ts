@@ -175,6 +175,10 @@ export interface BackendIssueDto {
   branchName?: string | null;
   agent_kind?: string | null;
   agentKind?: string | null;
+  group_lead_identifier?: string | null;
+  groupLeadIdentifier?: string | null;
+  group_member_identifiers?: string[] | null;
+  groupMemberIdentifiers?: string[] | null;
   attachments?: BackendIssueAttachmentDto[] | null;
   inserted_at?: string | null;
   created_at?: string | null;
@@ -269,6 +273,8 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     branchName: dto.branchName ?? dto.branch_name ?? null,
     agentKind,
     attachments: (dto.attachments ?? []).flatMap(normalizeIssueAttachment),
+    groupLeadIdentifier: dto.groupLeadIdentifier ?? dto.group_lead_identifier ?? null,
+    groupMemberIdentifiers: dto.groupMemberIdentifiers ?? dto.group_member_identifiers ?? [],
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };

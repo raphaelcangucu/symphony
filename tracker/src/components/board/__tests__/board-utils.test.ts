@@ -29,6 +29,8 @@ function issue(overrides: Partial<Issue>): Issue {
     createdAt: overrides.createdAt ?? "2026-05-27T00:00:00Z",
     updatedAt: overrides.updatedAt ?? "2026-05-27T00:00:00Z",
     attachments: overrides.attachments ?? [],
+    groupLeadIdentifier: overrides.groupLeadIdentifier ?? null,
+    groupMemberIdentifiers: overrides.groupMemberIdentifiers ?? [],
   };
 }
 

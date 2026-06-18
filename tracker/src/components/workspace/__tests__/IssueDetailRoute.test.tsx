@@ -46,6 +46,8 @@ const sampleIssue: Issue = {
   createdAt: "2026-05-29T00:00:00Z",
   updatedAt: "2026-05-29T00:00:00Z",
   attachments: [],
+  groupLeadIdentifier: null,
+  groupMemberIdentifiers: [],
 };
 
 let workspaceValue: {

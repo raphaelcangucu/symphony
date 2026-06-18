@@ -41,6 +41,8 @@ const createdIssue: Issue = {
   createdAt: "2026-05-31T00:00:00Z",
   updatedAt: "2026-05-31T00:00:00Z",
   attachments: [],
+  groupLeadIdentifier: null,
+  groupMemberIdentifiers: [],
 };
 
 const formOptions: IssueFormOptions = {
