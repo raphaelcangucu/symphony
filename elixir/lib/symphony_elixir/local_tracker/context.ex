@@ -723,6 +723,31 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @spec set_issue_group(String.t(), String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, atom() | Ecto.Changeset.t()}
+  def set_issue_group(project_slug, member_identifier, lead_identifier)
+      when is_binary(project_slug) and is_binary(member_identifier) and is_binary(lead_identifier) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, member} <- fetch_project_issue(project.id, member_identifier),
+         {:ok, lead} <- fetch_project_issue(project.id, lead_identifier),
+         :ok <- validate_group_pair(member, lead) do
+      member
+      |> IssueRecord.changeset(%{group_lead_id: lead.id, status_id: lead.status_id})
+      |> Repo.update()
+      |> preload_issue_result()
+      |> tap_issue_event("issue_updated", %{group_lead_identifier: lead.identifier})
+    end
+  end
+
+  @spec list_group_members(String.t(), String.t()) :: {:ok, [IssueRecord.t()]} | {:error, missing_error()}
+  def list_group_members(project_slug, lead_identifier)
+      when is_binary(project_slug) and is_binary(lead_identifier) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, lead} <- fetch_project_issue(project.id, lead_identifier) do
+      {:ok, lead.id |> group_member_records() |> Enum.map(&Repo.preload(&1, @issue_preloads))}
+    end
+  end
+
   defp create_project_with_default_statuses(attrs) do
     Repo.transaction(fn ->
       with {:ok, project} <- insert_project(attrs),
@@ -1184,6 +1209,27 @@ defmodule SymphonyElixir.LocalTracker.Context do
       nil -> {:error, :blocker_not_found}
       %IssueRelation{} = relation -> {:ok, relation}
     end
+  end
+
+  defp validate_group_pair(%IssueRecord{id: id}, %IssueRecord{id: id}), do: {:error, :cannot_group_with_self}
+
+  defp validate_group_pair(%IssueRecord{} = member, %IssueRecord{} = lead) do
+    cond do
+      not is_nil(lead.group_lead_id) -> {:error, :lead_is_member}
+      group_member_count(member.id) > 0 -> {:error, :member_is_lead}
+      true -> :ok
+    end
+  end
+
+  defp group_member_count(lead_id) do
+    IssueRecord |> where([issue], issue.group_lead_id == ^lead_id) |> Repo.aggregate(:count, :id)
+  end
+
+  defp group_member_records(lead_id) do
+    IssueRecord
+    |> where([issue], issue.group_lead_id == ^lead_id)
+    |> order_by([issue], asc: issue.inserted_at, asc: issue.id)
+    |> Repo.all()
   end
 
   defp insert_issue(attrs) do

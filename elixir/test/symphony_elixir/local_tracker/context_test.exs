@@ -726,6 +726,30 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     refute "old-label" in label_names
   end
 
+  test "set_issue_group makes the target the lead and snaps the member to its status" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Backlog"})
+
+    assert {:ok, member} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    assert member.group_lead_id
+    assert member.status.name == "Todo"
+    assert {:ok, [m]} = Context.list_group_members("macro-markets", "MAC-1")
+    assert m.identifier == "MAC-2"
+  end
+
+  test "set_issue_group rejects self / nested / existing-lead" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _a} = Context.create_issue("macro-markets", %{title: "A", status: "Todo"})
+    {:ok, _b} = Context.create_issue("macro-markets", %{title: "B", status: "Todo"})
+    {:ok, _c} = Context.create_issue("macro-markets", %{title: "C", status: "Todo"})
+
+    assert {:error, :cannot_group_with_self} = Context.set_issue_group("macro-markets", "MAC-1", "MAC-1")
+    assert {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    assert {:error, :lead_is_member} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-2")
+    assert {:error, :member_is_lead} = Context.set_issue_group("macro-markets", "MAC-1", "MAC-3")
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
