@@ -41,59 +41,59 @@ function EditToSettingsRedirect() {
 export function App() {
   return (
     <BrowserRouter basename={routerBasename}>
-      <Routes>
-        <Route path="/token" element={<TokenGatePage />} />
-        <Route
-          element={
-            <RequireToken>
-              <I18nProvider>
+      <I18nProvider>
+        <Routes>
+          <Route path="/token" element={<TokenGatePage />} />
+          <Route
+            element={
+              <RequireToken>
                 <ViewerProvider>
                   <Outlet />
                 </ViewerProvider>
-              </I18nProvider>
-            </RequireToken>
-          }
-        >
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Navigate to="/projects" replace />} />
-            <Route path="projects" element={<ProjectListPage />}>
-              <Route path="new" element={<NewProjectRoute />} />
-              <Route path="filters" element={<ProjectFiltersRoute />} />
-              <Route path=":projectSlug/edit" element={<EditToSettingsRedirect />} />
-            </Route>
-            <Route path="projects/:projectSlug" element={<ProjectWorkspaceLayout />}>
-              <Route index element={<Navigate to="board" replace />} />
-              <Route path="board" element={<BoardPage />}>
-                <Route path="new-issue" element={<NewIssueRoute />} />
-                <Route path="filters" element={<WorkspaceFiltersRoute />} />
-                <Route path="issues/:identifier" element={<IssueDetailRoute />} />
-                <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
+              </RequireToken>
+            }
+          >
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Navigate to="/projects" replace />} />
+              <Route path="projects" element={<ProjectListPage />}>
+                <Route path="new" element={<NewProjectRoute />} />
+                <Route path="filters" element={<ProjectFiltersRoute />} />
+                <Route path=":projectSlug/edit" element={<EditToSettingsRedirect />} />
               </Route>
-              <Route path="list" element={<ListPage />}>
-                <Route path="new-issue" element={<NewIssueRoute />} />
-                <Route path="filters" element={<WorkspaceFiltersRoute />} />
-                <Route path="issues/:identifier" element={<IssueDetailRoute />} />
-                <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
+              <Route path="projects/:projectSlug" element={<ProjectWorkspaceLayout />}>
+                <Route index element={<Navigate to="board" replace />} />
+                <Route path="board" element={<BoardPage />}>
+                  <Route path="new-issue" element={<NewIssueRoute />} />
+                  <Route path="filters" element={<WorkspaceFiltersRoute />} />
+                  <Route path="issues/:identifier" element={<IssueDetailRoute />} />
+                  <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
+                </Route>
+                <Route path="list" element={<ListPage />}>
+                  <Route path="new-issue" element={<NewIssueRoute />} />
+                  <Route path="filters" element={<WorkspaceFiltersRoute />} />
+                  <Route path="issues/:identifier" element={<IssueDetailRoute />} />
+                  <Route path="issues/:identifier/:tab" element={<IssueDetailRoute />} />
+                </Route>
+                <Route path="assistant" element={<ProjectAssistantRoute />} />
+                <Route path="assistant/explore" element={<ProjectExploreAssistantRoute />} />
+                <Route path="assistant/new-issue" element={<IssueAssistantRoute />} />
+                <Route path="assistant/issue/:issueId" element={<IssueAssistantRoute />} />
+                <Route path="settings" element={<ProjectSettingsPage />} />
+                <Route path="settings/:tab" element={<ProjectSettingsPage />} />
               </Route>
-              <Route path="assistant" element={<ProjectAssistantRoute />} />
-              <Route path="assistant/explore" element={<ProjectExploreAssistantRoute />} />
-              <Route path="assistant/new-issue" element={<IssueAssistantRoute />} />
-              <Route path="assistant/issue/:issueId" element={<IssueAssistantRoute />} />
-              <Route path="settings" element={<ProjectSettingsPage />} />
-              <Route path="settings/:tab" element={<ProjectSettingsPage />} />
+              <Route path="templates" element={<TemplateListPage />} />
+              <Route path="templates/:slug" element={<TemplateEditPage />} />
+              <Route path="observability" element={<ObservabilityPage />} />
+              <Route path="backups" element={<BackupPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="assistant" element={<AssistantPage />} />
+              <Route path="assistant/:threadId" element={<AssistantPage />} />
             </Route>
-            <Route path="templates" element={<TemplateListPage />} />
-            <Route path="templates/:slug" element={<TemplateEditPage />} />
-            <Route path="observability" element={<ObservabilityPage />} />
-            <Route path="backups" element={<BackupPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="assistant" element={<AssistantPage />} />
-            <Route path="assistant/:threadId" element={<AssistantPage />} />
           </Route>
-        </Route>
-        <Route path="*" element={<Navigate to="/projects" replace />} />
-      </Routes>
-      <Toaster position="bottom-right" richColors />
+          <Route path="*" element={<Navigate to="/projects" replace />} />
+        </Routes>
+        <Toaster position="bottom-right" richColors />
+      </I18nProvider>
     </BrowserRouter>
   );
 }
