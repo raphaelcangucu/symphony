@@ -6,7 +6,6 @@ defmodule SymphonyElixir.Terminal.Registry do
   alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Terminal.Tmux
-  alias SymphonyElixir.Terminal.ErrorMessages
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixir.Workspace
 
