@@ -4,6 +4,8 @@ import type { Issue } from "@/types/issue";
 import {
   DEFAULT_WORKFLOW_STATUSES,
   buildBoardState,
+  groupIssuesIntoUnits,
+  mergeIntent,
   moveIssueLocally,
   parseDragIssueId,
   resolveBoardMove,
@@ -127,5 +129,29 @@ describe("board-utils", () => {
     expect(upsertIssue(existing, created).map((item) => item.identifier)).toEqual(["MAC-1", "MAC-2"]);
     expect(upsertIssue(upsertIssue(existing, created), created)).toHaveLength(2);
     expect(upsertIssue(existing, updated)).toEqual([updated]);
+  });
+});
+
+describe("groupIssuesIntoUnits", () => {
+  it("absorbs members under their lead and keeps standalone issues", () => {
+    const lead = issue({ identifier: "MAC-1", groupMemberIdentifiers: ["MAC-2"] });
+    const member = issue({ identifier: "MAC-2", groupLeadIdentifier: "MAC-1" });
+    const solo = issue({ identifier: "MAC-3" });
+
+    const units = groupIssuesIntoUnits([lead, member, solo]);
+    expect(units).toEqual([
+      { kind: "group", id: "group:MAC-1", lead, members: [member] },
+      { kind: "issue", id: "issue:MAC-3", issue: solo },
+    ]);
+  });
+});
+
+describe("mergeIntent", () => {
+  const over = { top: 0, left: 0, width: 100, height: 100, right: 100, bottom: 100 };
+  it("is true when the dragged center is in the middle band", () => {
+    expect(mergeIntent({ ...over, top: 10 }, over, 0.25)).toBe(true);
+  });
+  it("is false near the edges", () => {
+    expect(mergeIntent({ ...over, top: -45 }, over, 0.25)).toBe(false);
   });
 });

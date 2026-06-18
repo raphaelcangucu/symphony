@@ -169,3 +169,47 @@ export function upsertIssue(issues: readonly Issue[], issue: Issue): Issue[] {
   if (index === -1) return [...issues, issue];
   return issues.map((item, itemIndex) => (itemIndex === index ? issue : item));
 }
+
+export const GROUP_DRAG_PREFIX = "group:";
+
+export type BoardUnit =
+  | { kind: "issue"; id: string; issue: Issue }
+  | { kind: "group"; id: string; lead: Issue; members: Issue[] };
+
+export function groupIssuesIntoUnits(issues: readonly Issue[]): BoardUnit[] {
+  const byIdentifier = new Map(issues.map((issue) => [issue.identifier, issue]));
+  const absorbed = new Set<string>();
+  for (const issue of issues) {
+    if (issue.groupMemberIdentifiers.length > 0) {
+      for (const memberId of issue.groupMemberIdentifiers) absorbed.add(memberId);
+    }
+  }
+
+  const units: BoardUnit[] = [];
+  for (const issue of issues) {
+    if (issue.groupLeadIdentifier && absorbed.has(issue.identifier)) continue;
+
+    if (issue.groupMemberIdentifiers.length > 0) {
+      const members = issue.groupMemberIdentifiers
+        .map((id) => byIdentifier.get(id))
+        .filter((member): member is Issue => Boolean(member));
+      units.push({ kind: "group", id: `${GROUP_DRAG_PREFIX}${issue.identifier}`, lead: issue, members });
+    } else {
+      units.push({ kind: "issue", id: issueDragId(issue.identifier), issue });
+    }
+  }
+
+  return units;
+}
+
+interface DragRect {
+  top: number;
+  height: number;
+}
+
+/** True when the dragged card's vertical center sits in the over card's middle band (merge), not its edges (reorder). */
+export function mergeIntent(activeRect: DragRect, overRect: DragRect, bandRatio: number): boolean {
+  const activeCenter = activeRect.top + activeRect.height / 2;
+  const band = overRect.height * bandRatio;
+  return activeCenter > overRect.top + band && activeCenter < overRect.top + overRect.height - band;
+}
