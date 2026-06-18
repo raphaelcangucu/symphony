@@ -258,6 +258,7 @@ Follow `.codex/skills/evidence/SKILL.md` during the VALIDATE stage — write
   - **E2E (Playwright)** — required when UI paths change (`admin/src/**`):
     - `cd distributionmachine/admin && bash .symphony/run-e2e.sh e2e/<affected-flow>.spec.js`
     - Ports resolve automatically: `PORT` / `PLAYWRIGHT_*` from Symphony, else `admin/.symphony/preview-port` + `distributionmachine/.symphony/preview-port`. Skips webServer when preview is already up.
+    - **Never kill Symphony preview ports (4200–4299).** Always use `bash .symphony/run-e2e.sh` — it boots an isolated stack on **5173/5172** with `data/e2e.db` and refuses to SIGTERM preview leases.
     - Default login: `admin@distributionmachine.local` / `changeme123`
 - **Cross-repo impact**: API changes under `api/**` or `src/**` can affect the admin UI.
   Either run admin Playwright for the impacted flow or record `impacts_ui: false` with rationale in the manifest.

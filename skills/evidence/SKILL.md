@@ -153,6 +153,19 @@ non-empty `rationale`.
 Copy real outputs into `.symphony/evidence/artifacts/` (test stdout to a .txt
 file, Playwright's `playwright-report/`, `test-results/` screenshots/videos).
 
+## Symphony preview vs Playwright e2e (do not collide)
+
+When a project runs Symphony preview dev servers (typical ports **4200–4299**):
+
+- **Always** use the repo's evidence wrapper (e.g. `bash admin/.symphony/run-e2e.sh`).
+  It prepares `data/e2e.db`, boots Playwright on **5173/5172**, and **refuses to
+  kill** Symphony preview ports (protected by `.symphony/preview-lease` markers).
+- **Never** run bare `npx playwright test` against preview ports while evidence
+  is configured to start its own webServer — that SIGTERM's the preview API/admin
+  and leaves the tracker stuck in `starting`/`crashed`.
+- Do **not** set `PLAYWRIGHT_ALLOW_KILL_PREVIEW=1` unless a human explicitly asked
+  you to tear down preview.
+
 ## When a check fails: fix it, or (only if truly external) mark it `blocked`
 
 When a required command does not pass, first decide **who owns the blocker** —
@@ -257,10 +270,12 @@ be fine but the environment cannot prove it. Say so once in the workpad
 ❌  npm run test:unit (full suite) + record unrelated failure alongside scoped pass
 ❌  Copy prior manifest.json without re-running commands this session
 ❌  Assume "no commits ahead" means "nothing to do" while e2e/backend tests were never run
+❌  npx playwright test directly on Symphony preview ports (4200/4201) — kills the preview stack
 ```
 
 ```text
 ✅  git diff → scoped lint/unit → ./vibe up → scoped backend test → cypress --spec … → fresh manifest
+✅  bash admin/.symphony/run-e2e.sh … (isolated 5173/5172 + data/e2e.db; preview stays up)
 ✅  blocked after real attempt → one-sentence Validation summary → end turn
 ```
 
