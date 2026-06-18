@@ -11,7 +11,7 @@ import {
 import type { IssueFilters } from "@/lib/issueFilters";
 import { applyIssueFilters, emptyFilters } from "@/lib/issueFilters";
 import { i18n } from "@/i18n";
-import { listIssues, moveIssue } from "@/services/issues";
+import { groupIssue, listIssues, moveIssue, ungroupIssue } from "@/services/issues";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
@@ -28,6 +28,8 @@ export interface UseIssueBoardResult {
   refreshing: boolean;
   refetch: () => Promise<void>;
   moveIssueOptimistically: (identifier: string, status: WorkflowStatusName, position: number) => Promise<void>;
+  groupIssueOptimistically: (memberIdentifier: string, leadIdentifier: string) => Promise<void>;
+  ungroupIssueOptimistically: (identifier: string) => Promise<void>;
   setIssues: React.Dispatch<React.SetStateAction<Issue[]>>;
 }
 
@@ -100,6 +102,32 @@ export function useIssueBoard(
     [issues, projectSlug, statuses],
   );
 
+  const groupIssueOptimistically = useCallback(
+    async (memberIdentifier: string, leadIdentifier: string) => {
+      try {
+        await groupIssue(projectSlug, memberIdentifier, leadIdentifier);
+        await refetch();
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : i18n.t("issue.board.moveFailed");
+        toast.error(message);
+      }
+    },
+    [projectSlug, refetch],
+  );
+
+  const ungroupIssueOptimistically = useCallback(
+    async (identifier: string) => {
+      try {
+        await ungroupIssue(projectSlug, identifier);
+        await refetch();
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : i18n.t("issue.board.moveFailed");
+        toast.error(message);
+      }
+    },
+    [projectSlug, refetch],
+  );
+
   useProjectChannel(projectSlug, (event, payload) => {
     if (event === "issue_moved") {
       void refetch();
@@ -114,5 +142,16 @@ export function useIssueBoard(
     void refetch();
   });
 
-  return { issues, filteredIssues, board, loading, refreshing, refetch, moveIssueOptimistically, setIssues };
+  return {
+    issues,
+    filteredIssues,
+    board,
+    loading,
+    refreshing,
+    refetch,
+    moveIssueOptimistically,
+    groupIssueOptimistically,
+    ungroupIssueOptimistically,
+    setIssues,
+  };
 }
