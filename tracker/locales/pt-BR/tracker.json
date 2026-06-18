@@ -1823,6 +1823,15 @@
       "searchPlaceholder": "Buscar {{label}}…",
       "noPeopleFound": "Nenhuma pessoa encontrada."
     },
+    "group": {
+      "mergeHint": "Agrupar com {{identifier}}",
+      "count": "{{count}} agrupadas",
+      "expand": "Mostrar tarefas do grupo",
+      "collapse": "Ocultar tarefas do grupo",
+      "removeMember": "Remover {{identifier}} do grupo",
+      "disband": "Desfazer grupo",
+      "runningLocked": "Não dá para alterar o grupo enquanto ele está rodando"
+    },
     "issueCard": {
       "openOnTracker": "Abrir no tracker",
       "agentStatus": "Agente: {{status}}",

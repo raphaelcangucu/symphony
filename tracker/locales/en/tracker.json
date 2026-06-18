@@ -1823,6 +1823,15 @@
       "searchPlaceholder": "Search {{label}}…",
       "noPeopleFound": "No people found."
     },
+    "group": {
+      "mergeHint": "Group with {{identifier}}",
+      "count": "{{count}} grouped",
+      "expand": "Show grouped tasks",
+      "collapse": "Hide grouped tasks",
+      "removeMember": "Remove {{identifier}} from group",
+      "disband": "Ungroup all",
+      "runningLocked": "Can't change the group while it's running"
+    },
     "issueCard": {
       "openOnTracker": "Open on tracker",
       "agentStatus": "Agent: {{status}}",
