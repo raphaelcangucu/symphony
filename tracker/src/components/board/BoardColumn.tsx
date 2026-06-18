@@ -21,8 +21,9 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflow-status";
 
+import { GroupCard } from "./GroupCard";
 import { IssueCard } from "./IssueCard";
-import { issueDragId } from "./board-utils";
+import { groupIssuesIntoUnits } from "./board-utils";
 import { getStatusMeta } from "./status-meta";
 
 interface BoardColumnProps {
@@ -38,6 +39,11 @@ interface BoardColumnProps {
   agentExecutions?: ReadonlyMap<string, AgentExecution>;
   limit?: number;
   onChangeLimit?: (status: WorkflowStatusName, limit: number | null) => void;
+  /** True while a card is being dragged anywhere on the board. */
+  dragActive?: boolean;
+  onRemoveMember: (identifier: string) => void;
+  onDisband: (leadIdentifier: string) => void;
+  mergeTargetId?: string | null;
 }
 
 export function BoardColumn({
@@ -53,11 +59,16 @@ export function BoardColumn({
   agentExecutions,
   limit,
   onChangeLimit,
+  dragActive = false,
+  onRemoveMember,
+  onDisband,
+  mergeTargetId = null,
 }: BoardColumnProps) {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const meta = getStatusMeta(status, category);
   const Icon = meta.Icon;
+  const units = groupIssuesIntoUnits(issues);
 
   const [limitOpen, setLimitOpen] = useState(false);
   const [limitDraft, setLimitDraft] = useState("");
@@ -190,19 +201,34 @@ export function BoardColumn({
         )}
       >
         <span className={cn("absolute inset-x-3 top-0 h-0.5 rounded-full", overLimit ? "bg-rose-500/70" : meta.accentClass)} />
-        <SortableContext items={issues.map((issue) => issueDragId(issue.identifier))} strategy={verticalListSortingStrategy}>
+        <SortableContext items={units.map((unit) => unit.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-2.5 pt-1">
-            {issues.map((issue) => (
-              <IssueCard
-                key={issue.identifier}
-                issue={issue}
-                onSelect={onSelectIssue}
-                agent={agentExecutions?.get(issue.identifier)}
-              />
-            ))}
+            {units.map((unit) =>
+              unit.kind === "group" ? (
+                <GroupCard
+                  key={unit.id}
+                  id={unit.id}
+                  lead={unit.lead}
+                  members={unit.members}
+                  onSelectIssue={onSelectIssue}
+                  onRemoveMember={onRemoveMember}
+                  onDisband={onDisband}
+                  agentExecutions={agentExecutions}
+                  mergeActive={mergeTargetId === unit.id}
+                />
+              ) : (
+                <IssueCard
+                  key={unit.id}
+                  issue={unit.issue}
+                  onSelect={onSelectIssue}
+                  agent={agentExecutions?.get(unit.issue.identifier)}
+                  mergeActive={mergeTargetId === unit.id}
+                />
+              ),
+            )}
           </div>
         </SortableContext>
-        {issues.length === 0 ? (
+        {issues.length === 0 && !dragActive ? (
           <NewIssueMenu
             projectSlug={projectSlug}
             status={status}

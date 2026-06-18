@@ -19,9 +19,10 @@ interface IssueCardProps {
   onSelect: (issue: Issue) => void;
   agent?: AgentExecution;
   dragOverlay?: boolean;
+  mergeActive?: boolean;
 }
 
-export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: IssueCardProps) {
+export function IssueCard({ issue, onSelect, agent, dragOverlay = false, mergeActive = false }: IssueCardProps) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: issueDragId(issue.identifier),
@@ -49,6 +50,7 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false }: Issue
         "group cursor-grab cursor-pointer rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-all active:cursor-grabbing",
         "hover:-translate-y-px hover:border-primary/40 hover:shadow-md",
         agentNeedsAttention && "border-rose-500/40 ring-1 ring-rose-500/20",
+        mergeActive && "ring-2 ring-primary/50",
         isDragging && "opacity-40",
         dragOverlay && "w-72 rotate-2 shadow-xl ring-2 ring-primary/20",
       )}
