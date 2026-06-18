@@ -36,6 +36,15 @@ defmodule SymphonyElixir.RunContract.FinalizerTest do
     assert body =~ "Symphony-Issue: GAM-9"
   end
 
+  test "pull_request_body includes a marker for the lead and each member" do
+    issue = %Issue{identifier: "MAC-1", title: "Lead", description: nil, group_member_identifiers: ["MAC-2", "MAC-3"]}
+    body = Finalizer.pull_request_body(issue)
+
+    assert body =~ "Symphony-Issue: MAC-1"
+    assert body =~ "Symphony-Issue: MAC-2"
+    assert body =~ "Symphony-Issue: MAC-3"
+  end
+
   test "pushes unpublished branch and creates PR (GAM-3 case)", %{tmp_dir: tmp_dir} do
     ws = Path.join(tmp_dir, "GAM-9")
     File.mkdir_p!(ws)
