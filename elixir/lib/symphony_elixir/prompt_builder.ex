@@ -34,10 +34,42 @@ defmodule SymphonyElixir.PromptBuilder do
 
     rendered <>
       workflow_guidance_section(issue, Keyword.get(opts, :agent_kind)) <>
+      group_members_section(Keyword.get(opts, :members, [])) <>
       validate_section(config) <>
       preview_context_section(issue) <>
       discussion_section(issue) <>
       artifacts_section(Keyword.get(opts, :workspace))
+  end
+
+  @doc false
+  @spec group_members_section([SymphonyElixir.Issue.t()]) :: String.t()
+  def group_members_section([]), do: ""
+
+  def group_members_section(members) when is_list(members) do
+    items =
+      Enum.map_join(members, "\n", fn %SymphonyElixir.Issue{} = member ->
+        goal =
+          if is_binary(member.agent_goal) and String.trim(member.agent_goal) != "",
+            do: " — goal: #{String.trim(member.agent_goal)}",
+            else: ""
+
+        desc =
+          if is_binary(member.description) and String.trim(member.description) != "",
+            do: " — #{String.trim(member.description)}",
+            else: ""
+
+        "- **#{member.identifier}: #{member.title}**#{desc}#{goal}"
+      end)
+
+    """
+
+    ## Grouped tasks (Symphony)
+
+    This run covers a **group** of issues. Complete ALL of them in this single workspace and branch, then open ONE pull request. In the PR body include a `Symphony-Issue: <identifier>` marker line for the lead AND for every member task below.
+
+    Member tasks:
+    #{items}
+    """
   end
 
   # Codex receives the long-running objective as a native goal (set on the
