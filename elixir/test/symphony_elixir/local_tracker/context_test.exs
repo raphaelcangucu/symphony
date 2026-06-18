@@ -785,6 +785,19 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert member.status.name == "In Progress"
   end
 
+  test "archiving a lead promotes the oldest member to lead" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
+    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, _archived} = Context.archive_issue("macro-markets", "MAC-1")
+    assert {:ok, [member]} = Context.list_group_members("macro-markets", "MAC-2")
+    assert member.identifier == "MAC-3"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

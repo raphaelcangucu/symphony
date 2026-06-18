@@ -1190,6 +1190,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp set_issue_archived_at(project_slug, identifier, archived_at) do
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      if not is_nil(archived_at), do: reassign_group_on_removal(issue)
+
       issue
       |> IssueRecord.changeset(%{archived_at: archived_at})
       |> Repo.update()
@@ -1199,6 +1201,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   defp delete_issue_with_children(%IssueRecord{id: issue_id} = issue) do
     Repo.transaction(fn ->
+      reassign_group_on_removal(issue)
       Repo.delete_all(from(event in ActivityEvent, where: event.issue_id == ^issue_id))
       Repo.delete_all(from(relation in IssueRelation, where: relation.source_issue_id == ^issue_id))
       Repo.delete_all(from(relation in IssueRelation, where: relation.target_issue_id == ^issue_id))
@@ -1277,6 +1280,22 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   defp move_group_members(result, _status), do: result
+
+  defp reassign_group_on_removal(%IssueRecord{} = issue) do
+    case group_member_records(issue.id) do
+      [] ->
+        :ok
+
+      [new_lead | rest] ->
+        {:ok, _} = new_lead |> IssueRecord.changeset(%{group_lead_id: nil}) |> Repo.update()
+
+        Enum.each(rest, fn member ->
+          {:ok, _} = member |> IssueRecord.changeset(%{group_lead_id: new_lead.id}) |> Repo.update()
+        end)
+
+        :ok
+    end
+  end
 
   defp insert_issue(attrs) do
     %IssueRecord{}
