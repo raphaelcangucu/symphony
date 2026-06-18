@@ -120,7 +120,6 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
     |> Map.put(:reason, present_reason(reason))
     |> Map.put(:next_steps, next_steps_hint(reason, serve_steps_configured))
     |> Map.put(:servers, enrich_servers(Map.get(view, :servers, [])))
-    |> Map.put(:e2e_command, "cd admin && bash .symphony/run-e2e.sh")
   end
 
   defp enrich_servers(servers) when is_list(servers) do

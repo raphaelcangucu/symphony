@@ -41,7 +41,6 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
     [admin, api] = result.data.servers
     assert admin.local_url == "http://127.0.0.1:4201/"
     assert api.local_url == "http://127.0.0.1:4200/api/health"
-    assert result.data.e2e_command == "cd admin && bash .symphony/run-e2e.sh"
   end
 
   test "status returns enriched preview view for disabled" do

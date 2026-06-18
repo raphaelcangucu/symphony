@@ -248,10 +248,11 @@ defmodule SymphonyElixir.PromptBuilderTest do
 
     assert section =~ "## Issue preview (Symphony)"
     assert section =~ "manage_preview"
-    assert section =~ "run-e2e.sh"
+    assert section =~ "configured"
+    refute section =~ "run-e2e.sh"
   end
 
-  test "preview_context_section includes manage_preview guidance when servers exist" do
+  test "preview_context_section stays generic (no project-specific e2e path)" do
     issue = %Issue{
       identifier: "#38",
       project_slug: "distributionmachine",
@@ -265,7 +266,7 @@ defmodule SymphonyElixir.PromptBuilderTest do
     if section != "" do
       assert section =~ "## Issue preview (Symphony)"
       assert section =~ "manage_preview"
-      assert section =~ "run-e2e.sh"
+      refute section =~ "run-e2e.sh"
     end
   end
 
