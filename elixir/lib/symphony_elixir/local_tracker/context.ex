@@ -31,7 +31,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   alias SymphonyElixir.Tracker.Sync.UserRecord
   alias SymphonyElixir.Tracker.Workpad
 
-  @issue_preloads [:project, :status, :labels]
+  @issue_preloads [:project, :status, :labels, :group_lead, :group_members]
   @default_issue_status "Todo"
 
   @type missing_error ::

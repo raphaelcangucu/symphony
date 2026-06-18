@@ -124,7 +124,9 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       started_at: nil,
       completed_at: nil,
       inserted_at: dto.created_at,
-      updated_at: dto.updated_at
+      updated_at: dto.updated_at,
+      group_lead_identifier: dto.group_lead_identifier,
+      group_member_identifiers: dto.group_member_identifiers
     }
   end
 
@@ -149,7 +151,9 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       started_at: iso8601(issue.started_at),
       completed_at: iso8601(issue.completed_at),
       inserted_at: iso8601(issue.inserted_at),
-      updated_at: iso8601(issue.updated_at)
+      updated_at: iso8601(issue.updated_at),
+      group_lead_identifier: loaded_group_lead_identifier(issue.group_lead),
+      group_member_identifiers: loaded_group_member_identifiers(issue.group_members)
     }
   end
 
@@ -291,6 +295,18 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
 
   defp loaded_issue_identifier(%IssueRecord{} = issue), do: issue.identifier
   defp loaded_issue_identifier(_issue), do: nil
+
+  defp loaded_group_lead_identifier(%IssueRecord{identifier: identifier}) when is_binary(identifier), do: identifier
+  defp loaded_group_lead_identifier(_group_lead), do: nil
+
+  defp loaded_group_member_identifiers(members) when is_list(members) do
+    Enum.flat_map(members, fn
+      %IssueRecord{identifier: identifier} when is_binary(identifier) -> [identifier]
+      _member -> []
+    end)
+  end
+
+  defp loaded_group_member_identifiers(_members), do: []
 
   defp iso8601(%DateTime{} = datetime) do
     datetime
