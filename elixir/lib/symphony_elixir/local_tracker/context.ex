@@ -735,7 +735,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       |> IssueRecord.changeset(%{group_lead_id: lead.id, status_id: lead.status_id})
       |> Repo.update()
       |> preload_issue_result()
-      |> tap_issue_event("issue_updated", %{group_lead_identifier: lead.identifier})
+      |> tap_issue_event("issue_updated", %{previous_assignee: assignee_snapshot(member)})
     end
   end
 
@@ -745,6 +745,22 @@ defmodule SymphonyElixir.LocalTracker.Context do
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, lead} <- fetch_project_issue(project.id, lead_identifier) do
       {:ok, lead.id |> group_member_records() |> Enum.map(&Repo.preload(&1, @issue_preloads))}
+    end
+  end
+
+  @spec remove_from_group(String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, atom() | Ecto.Changeset.t()}
+  def remove_from_group(project_slug, identifier)
+      when is_binary(project_slug) and is_binary(identifier) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      members = group_member_records(issue.id)
+
+      cond do
+        not is_nil(issue.group_lead_id) -> detach_group_member(issue)
+        members != [] -> disband_group(issue, members)
+        true -> {:error, :not_in_group}
+      end
     end
   end
 
@@ -1230,6 +1246,19 @@ defmodule SymphonyElixir.LocalTracker.Context do
     |> where([issue], issue.group_lead_id == ^lead_id)
     |> order_by([issue], asc: issue.inserted_at, asc: issue.id)
     |> Repo.all()
+  end
+
+  defp detach_group_member(%IssueRecord{} = member) do
+    member
+    |> IssueRecord.changeset(%{group_lead_id: nil})
+    |> Repo.update()
+    |> preload_issue_result()
+    |> tap_issue_event("issue_updated", %{previous_assignee: assignee_snapshot(member)})
+  end
+
+  defp disband_group(%IssueRecord{} = lead, members) do
+    Enum.each(members, &detach_group_member/1)
+    {:ok, Repo.preload(lead, @issue_preloads, force: true)}
   end
 
   defp insert_issue(attrs) do
