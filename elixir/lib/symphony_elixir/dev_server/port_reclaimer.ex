@@ -92,9 +92,7 @@ defmodule SymphonyElixir.DevServer.PortReclaimer do
           {:error, :still_bound} ->
             remaining = list_pids.(port)
 
-            Logger.warning(
-              "[port-reclaim] port #{port} still bound after SIGTERM; SIGKILL pids=#{inspect(remaining)}"
-            )
+            Logger.warning("[port-reclaim] port #{port} still bound after SIGTERM; SIGKILL pids=#{inspect(remaining)}")
 
             Enum.each(remaining, &signal.("KILL", &1))
             wait_bindable(port, bindable_fun, sleep, kill_attempts, kill_wait)

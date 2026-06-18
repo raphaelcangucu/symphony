@@ -31,7 +31,10 @@ defmodule SymphonyElixir.DevServer.PortReclaimerTest do
     assert :ok =
              PortReclaimer.reclaim(4200,
                bindable?: fn _ -> true end,
-               list_pids: fn _ -> send(test_pid, :listed); [] end,
+               list_pids: fn _ ->
+                 send(test_pid, :listed)
+                 []
+               end,
                signal: recording_signal(test_pid),
                sleep: no_sleep()
              )
