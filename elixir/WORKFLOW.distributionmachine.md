@@ -26,6 +26,7 @@ tracker:
     - Merging
   dispatch_states:
     - Todo
+    - Rework
   wait_states:
     - Human Review
   terminal_states:
@@ -44,13 +45,34 @@ editor:
   port: 4003
   auth: none
 dev_server:
-  # This project is a Python standalone application, so previews are disabled
-  # until the repository declares a serve step in `.symphony/devenv.yaml`.
-  enabled: false
+  enabled: true
   port_range: [4200, 4299]
   idle_timeout_ms: 1800000
   auto_start_on: pull_request,human_review
-  # base_url: https://previews.example.com  # optional proxy-facing base URL
+evidence:
+  required: true
+  repos:
+    admin:
+      unit_command: "cd admin && bun run test"
+      ui_paths:
+        - "admin/src/**"
+      e2e:
+        command: "cd admin && bash .symphony/run-e2e.sh"
+    distributionmachine:
+      unit_command: "python -m pytest tests/test_modules.py"
+      impacts:
+        - admin
+      contract_paths:
+        - "api/**"
+        - "src/**"
+pr_monitor:
+  done_on_merge: true
+  enabled: true
+  max_auto_rework: 2
+source_control:
+  branch_pattern: "symphony/{issue}"
+  issue_marker_key: "Symphony-Issue"
+  pr_title_pattern: "{issue}: {title}"
 # Public preview tunnel (Cloudflare). Same tracker tunnel domain as macro-markets.
 public_tunnel:
   enabled: true
@@ -100,6 +122,61 @@ This is a **single-repository** workspace for a Python standalone application.
 - Open PRs against the repo base:
   - `cd distributionmachine && gh pr create --base main --title "..."`
 - On **Rework**, sync with the integration branch and address feedback before pushing updates.
+
+## Issue preview servers
+
+Symphony exposes a **Preview** tab when `dev_server.enabled` is true and DevEnv
+serve steps are saved for this project (imported via `distributionmachine-project.yaml`
+→ `dev_env_steps`).
+
+### Preview flow
+
+Symphony starts the **FastAPI API** first, then the **React Admin** (serve steps
+boot in declared order; admin waits for API `/api/health`). The admin Vite dev
+server proxies browser `/api` calls to the local API, so previews work behind a
+tunnel without exposing the API port directly.
+
+| Step order | Service | Target |
+|------------|---------|--------|
+| 1–2 | API setup + serve | FastAPI on `127.0.0.1` (`/api/health`, `/docs`) |
+| 3–4 | Admin setup + serve (primary) | Vite React Admin wired to local API (`/` UI, `/api/health` proxied) |
+
+### How to run each service (manual or Preview tab)
+
+**API — FastAPI (`distributionmachine/`)** — run first
+
+```bash
+cd distributionmachine
+bash .symphony/setup.sh
+PORT=5000 bash .symphony/serve.sh
+# Health: http://127.0.0.1:5000/api/health
+# Docs:   http://127.0.0.1:5000/docs
+```
+
+**Admin — React/Vite (`distributionmachine/admin/`)** — after API is healthy
+
+```bash
+cd distributionmachine/admin
+bash .symphony/setup.sh
+PORT=5173 bash .symphony/serve.sh
+# UI:     http://127.0.0.1:5173/
+# Health: http://127.0.0.1:5173/api/health  (proxied to API)
+```
+
+- Scripts ship under `distributionmachine/.symphony/` and `distributionmachine/admin/.symphony/`.
+- Setup runs `alembic upgrade head` (seeds default admin `admin@distributionmachine.local` / `changeme123`).
+- Admin wiring reads API port from `distributionmachine/.symphony/preview-port` (Symphony assigns e.g. **4200** for API, **4201** for Admin in the same slot). It does **not** use `API_PORT=5000` from `.env`.
+- Symphony health: API probes `/api/health` directly; Admin probes `/` (Vite UI), then scripts verify proxied `/api/health`.
+- Local dev (outside Symphony): `make dev` from repo root starts both servers.
+
+### Saved DevEnv steps (imported)
+
+| Step | Role | Dir | Command |
+|------|------|-----|---------|
+| API setup | setup | `distributionmachine/` | `bash .symphony/setup.sh` |
+| FastAPI server | serve | `distributionmachine/` | `bash .symphony/serve.sh` |
+| Admin setup | setup | `distributionmachine/admin/` | `bash .symphony/setup.sh` |
+| React Admin dev | serve (primary) | `distributionmachine/admin/` | `bash .symphony/serve.sh` |
 
 ## Python standalone conventions
 
@@ -167,21 +244,27 @@ Do not ignore human comments that only appear on the PR; they are part of the re
 ## Tests and validation (mandatory)
 
 Symphony does **not** run the test suite automatically. Validate before **Human Review**.
+Follow `.codex/skills/evidence/SKILL.md` during the VALIDATE stage — write
+`.symphony/evidence/manifest.json` with real artifacts before handoff.
 
 - Treat ticket `Validation`, `Test Plan`, or `Testing` sections as required; mirror them in the workpad.
-- First discover the repository's intended commands:
-  - `cd distributionmachine && rg -n "pytest|unittest|ruff|mypy|tox|nox|coverage|make test|python -m" README.md pyproject.toml setup.py setup.cfg tox.ini noxfile.py Makefile requirements*.txt`
-- When available, prefer the repo's declared commands.
-- Typical Python validation candidates:
-  - `cd distributionmachine && python -m pytest`
-  - `cd distributionmachine && python -m unittest`
-  - `cd distributionmachine && ruff check .`
-  - `cd distributionmachine && mypy .`
-  - `cd distributionmachine && python -m build`
-- For packaging or entrypoint changes, validate installability or execution with the repo's documented command.
+- **API / Python (`distributionmachine/`)** — when you changed backend code:
+  - Scoped unit: `cd distributionmachine && python -m pytest tests/test_modules.py` (or a path matching your diff)
+  - Lint (when touched): `cd distributionmachine && make lint` or `ruff check <changed-paths>`
+  - Do **not** run the full pytest suite unless the ticket requires it — CI owns regression.
+- **Admin UI (`distributionmachine/admin/`)** — when you changed frontend code:
+  - Scoped unit: `cd distributionmachine/admin && bun run test -- src/...` (mirror changed paths)
+  - Lint changed paths: `cd distributionmachine/admin && bun run lint -- <paths-from-git-diff>`
+  - **E2E (Playwright)** — required when UI paths change (`admin/src/**`):
+    - `cd distributionmachine/admin && bash .symphony/run-e2e.sh e2e/<affected-flow>.spec.js`
+    - Ports resolve automatically: `PORT` / `PLAYWRIGHT_*` from Symphony, else `admin/.symphony/preview-port` + `distributionmachine/.symphony/preview-port`. Skips webServer when preview is already up.
+    - Default login: `admin@distributionmachine.local` / `changeme123`
+- **Cross-repo impact**: API changes under `api/**` or `src/**` can affect the admin UI.
+  Either run admin Playwright for the impacted flow or record `impacts_ui: false` with rationale in the manifest.
 - Record in workpad **Validation**: `targeted tests: <command>` and outcome.
 - Do **not** move to **Human Review** until:
   - Acceptance criteria are met
-  - Tests pass for the latest commit, or failures are documented as unrelated
+  - Scoped tests pass for the latest commit
+  - Evidence manifest is present when `evidence.required` is true
   - A PR is open against `main`, linked on the issue, with checks green where applicable
 - In **Human Review**, do not implement; wait and poll for human feedback.
