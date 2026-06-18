@@ -27,11 +27,12 @@ defmodule SymphonyElixir.PullRequestMonitor.MonitorState do
     field(:last_action_at, :utc_datetime_usec)
     field(:last_checked_at, :utc_datetime_usec)
     field(:last_event, :string)
+    field(:last_merge_conflict_head_sha, :string)
 
     timestamps(type: :utc_datetime_usec)
   end
 
-  @updatable ~w(last_head_sha last_checks_fingerprint last_review_marker auto_rework_count last_classification last_action last_action_at last_checked_at last_event)a
+  @updatable ~w(last_head_sha last_checks_fingerprint last_review_marker last_merge_conflict_head_sha auto_rework_count last_classification last_action last_action_at last_checked_at last_event)a
 
   @spec get(String.t(), String.t(), String.t()) :: t() | nil
   def get(project_slug, identifier, pr_url) do

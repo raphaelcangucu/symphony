@@ -76,6 +76,7 @@ defmodule SymphonyElixir.PushNotifications.DispatcherTest do
     assert :ok = Dispatcher.pr_monitor_attention(project, "MAC-7", {:stay, :limit_reached})
     assert :ok = Dispatcher.pr_monitor_attention(project, "MAC-7", {:stay, :needs_human})
     assert :ok = Dispatcher.pr_monitor_attention(project, "MAC-7", {:stay, :unrelated})
+    assert :ok = Dispatcher.pr_monitor_attention(project, "MAC-7", {:stay, :merge_conflict})
     assert :ok = Dispatcher.pr_monitor_attention(project, "MAC-7", :move_done)
     assert :ok = Dispatcher.pr_monitor_attention(project, "MAC-7", :move_rework)
   end

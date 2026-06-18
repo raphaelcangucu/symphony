@@ -395,6 +395,65 @@ defmodule SymphonyElixir.PullRequestMonitorTest do
       assert :ok = PullRequestMonitor.process_issue(project, issue, o)
       assert %{last_review_marker: nil} = MonitorState.get("proj", issue.identifier, "u7")
     end
+
+    test "merge conflict notifies once per head sha and clears after resolution", %{
+      project: project,
+      issue: issue
+    } do
+      calls = start_supervised!({Agent, fn -> [] end})
+
+      dispatch = fn _p, fun, args ->
+        Agent.update(calls, &[{fun, args} | &1])
+        {:ok, %{}}
+      end
+
+      conflicting = fn head_sha ->
+        clean_pr()
+        |> Map.merge(%{mergeable: "CONFLICTING", head_sha: head_sha})
+      end
+
+      o =
+        opts(
+          pull_request_reader: fn _p, _i, _o -> {:ok, [conflicting.("sha1")]} end,
+          issue_dispatch: dispatch
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+      assert Agent.get(calls, & &1) == []
+
+      assert %{
+               last_event: "merge_conflict",
+               last_action: "merge_conflict_notified",
+               last_merge_conflict_head_sha: "sha1"
+             } = MonitorState.get("proj", issue.identifier, "u7")
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, o)
+
+      assert %MonitorState{last_merge_conflict_head_sha: "sha1"} =
+               MonitorState.get("proj", issue.identifier, "u7")
+
+      resolved =
+        opts(
+          pull_request_reader: fn _p, _i, _o -> {:ok, [conflicting.("sha1") |> Map.put(:mergeable, "MERGEABLE")]} end,
+          issue_dispatch: dispatch
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, resolved)
+
+      assert %MonitorState{last_merge_conflict_head_sha: nil} =
+               MonitorState.get("proj", issue.identifier, "u7")
+
+      reconflicted =
+        opts(
+          pull_request_reader: fn _p, _i, _o -> {:ok, [conflicting.("sha2")]} end,
+          issue_dispatch: dispatch
+        )
+
+      assert :ok = PullRequestMonitor.process_issue(project, issue, reconflicted)
+
+      assert %MonitorState{last_merge_conflict_head_sha: "sha2", last_action: "merge_conflict_notified"} =
+               MonitorState.get("proj", issue.identifier, "u7")
+    end
   end
 
   defp migrate_repo do

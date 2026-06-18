@@ -130,6 +130,7 @@ defmodule SymphonyElixir.PullRequestMonitor do
       event = Events.detect(pr, row)
 
       record_evaluation(project.slug, identifier, pr_url, event)
+      maybe_clear_merge_conflict_state(project, identifier, pr, row)
 
       case event do
         :none -> :ok
@@ -152,8 +153,20 @@ defmodule SymphonyElixir.PullRequestMonitor do
 
   defp event_label(:none), do: "none"
   defp event_label(:merged), do: "merged"
+  defp event_label({:merge_conflict, _head_sha}), do: "merge_conflict"
   defp event_label({:ci_failure, _fingerprint}), do: "ci_failure"
   defp event_label({:review_findings, _marker}), do: "review_findings"
+
+  defp maybe_clear_merge_conflict_state(project, identifier, pr, row) do
+    pr_url = pr_field(pr, :url)
+
+    if is_binary(pr_url) and match?(%MonitorState{last_merge_conflict_head_sha: sha} when is_binary(sha), row) and
+         not Events.merge_conflicting?(pr) do
+      MonitorState.upsert(project.slug, identifier, pr_url, %{last_merge_conflict_head_sha: nil})
+    end
+
+    :ok
+  end
 
   defp handle_event(:merged, project, config, _repo, identifier, pr, opts) do
     if ProjectConfig.pr_monitor_done_on_merge?(config) do
@@ -176,6 +189,26 @@ defmodule SymphonyElixir.PullRequestMonitor do
         acknowledge_merged_awaiting_others(project, identifier, pr)
       end
     end
+  end
+
+  defp handle_event({:merge_conflict, head_sha}, project, _config, _repo, identifier, pr, _opts) do
+    pr_url = pr_field(pr, :url)
+    number = pr_field(pr, :number)
+
+    PushDispatcher.pr_monitor_attention(project, identifier, {:stay, :merge_conflict})
+
+    {:ok, _row} =
+      MonitorState.upsert(project.slug, identifier, pr_url, %{
+        last_merge_conflict_head_sha: head_sha,
+        last_action: "merge_conflict_notified",
+        last_action_at: DateTime.utc_now()
+      })
+
+    Logger.info(
+      "PR monitor merge conflict issue_identifier=#{identifier} project_slug=#{project.slug} pr_number=#{inspect(number)} head_sha=#{head_sha}"
+    )
+
+    :ok
   end
 
   defp handle_event({:ci_failure, fingerprint}, project, config, repo, identifier, pr, opts) do

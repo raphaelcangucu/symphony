@@ -152,4 +152,54 @@ defmodule SymphonyElixir.PullRequestMonitor.EventsTest do
 
     assert Events.detect(pr(%{merged: true, state: "merged", conversation: convo}), nil) == :merged
   end
+
+  test "merge conflict on open PR yields {:merge_conflict, head_sha} once per head" do
+    conflicting = pr(%{mergeable: "CONFLICTING", head_sha: "sha1"})
+
+    assert {:merge_conflict, "sha1"} = Events.detect(conflicting, nil)
+
+    seen = %MonitorState{last_merge_conflict_head_sha: "sha1"}
+    assert Events.detect(conflicting, seen) == :none
+  end
+
+  test "new conflicting head sha yields a fresh merge_conflict event" do
+    seen = %MonitorState{last_merge_conflict_head_sha: "sha1"}
+    updated = pr(%{mergeable: "CONFLICTING", head_sha: "sha2"})
+
+    assert {:merge_conflict, "sha2"} = Events.detect(updated, seen)
+  end
+
+  test "merge conflict ignored for closed and non-conflicting PRs" do
+    assert Events.detect(pr(%{state: "closed", mergeable: "CONFLICTING"}), nil) == :none
+    assert Events.detect(pr(%{state: "open", mergeable: "MERGEABLE"}), nil) == :none
+    assert Events.detect(pr(%{state: "open", mergeable: nil}), nil) == :none
+  end
+
+  test "merge conflict wins over ci_failure and review findings" do
+    convo = [
+      %{
+        author: "review-bot",
+        body: "fix this",
+        kind: "review",
+        review_state: "CHANGES_REQUESTED",
+        created_at: "2026-06-10T11:00:00Z"
+      }
+    ]
+
+    conflicting_failing =
+      pr(%{
+        mergeable: "CONFLICTING",
+        checks_state: "FAILURE",
+        pipelines: failing_pipeline(),
+        conversation: convo
+      })
+
+    assert {:merge_conflict, "abc"} = Events.detect(conflicting_failing, nil)
+  end
+
+  test "merge_conflicting?/1 mirrors frontend semantics" do
+    assert Events.merge_conflicting?(pr(%{mergeable: "CONFLICTING"}))
+    refute Events.merge_conflicting?(pr(%{mergeable: "MERGEABLE"}))
+    refute Events.merge_conflicting?(pr(%{mergeable: nil}))
+  end
 end

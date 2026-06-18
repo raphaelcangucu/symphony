@@ -42,6 +42,12 @@ msgstr "Falha de CI pode ser não relacionada"
 msgid "%{identifier}: kept in review — consider re-running failed jobs"
 msgstr "%{identifier}: mantido em revisão — considere reexecutar jobs falhos"
 
+msgid "PR has merge conflicts"
+msgstr "PR com conflitos de merge"
+
+msgid "%{identifier}: resolve merge conflicts before merging"
+msgstr "%{identifier}: resolva conflitos de merge antes de fazer merge"
+
 msgid "Issue assigned to you"
 msgstr "Tarefa associada a você"
 

@@ -28,6 +28,7 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   @pr_limit_reached_kind "pr_limit_reached"
   @pr_needs_human_kind "pr_needs_human"
   @pr_ci_unrelated_kind "pr_ci_unrelated"
+  @pr_merge_conflict_kind "pr_merge_conflict"
   @issue_assigned_kind "issue_assigned"
 
   @spec human_review_needed(IssueRecord.t(), String.t()) :: :ok
@@ -170,6 +171,19 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
         body: dgettext("push", "%{identifier}: kept in review — consider re-running failed jobs", identifier: identifier),
         url: issue_url(slug, identifier, "pull-request"),
         tag: "pr_ci_unrelated:#{slug}:#{identifier}"
+      })
+    end)
+  end
+
+  def pr_monitor_attention(%Project{slug: slug}, identifier, {:stay, :merge_conflict})
+      when is_binary(slug) and slug != "" and is_binary(identifier) do
+    with_push_locale(fn ->
+      notify(@pr_merge_conflict_kind, %{
+        title: dgettext("push", "PR has merge conflicts"),
+        body:
+          dgettext("push", "%{identifier}: resolve merge conflicts before merging", identifier: identifier),
+        url: issue_url(slug, identifier, "pull-request"),
+        tag: "pr_merge_conflict:#{slug}:#{identifier}"
       })
     end)
   end
