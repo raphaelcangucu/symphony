@@ -79,7 +79,7 @@ daemon boot) stays out of scope** — agents must not start the OS-level daemon;
 - Duplicating full observability hub UI in tool responses.
 - Streaming dev-env / preview logs over tools (use existing SSE endpoints or
   terminal channel from the UI; tools return status + last-run summary only).
-
+p
 ## Architecture
 
 ```text

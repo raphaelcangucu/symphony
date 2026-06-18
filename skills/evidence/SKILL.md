@@ -153,17 +153,43 @@ non-empty `rationale`.
 Copy real outputs into `.symphony/evidence/artifacts/` (test stdout to a .txt
 file, Playwright's `playwright-report/`, `test-results/` screenshots/videos).
 
-## When a required test cannot run (environment blocked)
+## When a check fails: fix it, or (only if truly external) mark it `blocked`
 
-Sometimes a required command cannot run in this workspace at all — not because
-the code is broken, but because the environment lacks a capability the command
-needs: no Docker daemon for `./vibe test`, no network to download Go modules or
-install Playwright/browsers, a sandbox that blocks the browser's own sandbox,
-etc. Retrying the same command will never succeed.
+When a required command does not pass, first decide **who owns the blocker** —
+the three buckets are treated very differently, and only the last one is
+`blocked`:
 
-After a real attempt (the command MUST appear in your session log), record that
-run with `"status": "blocked"` and a concrete `"blocked_reason"` instead of
-thrashing on it:
+| Failure | Owner | What you do |
+|---------|-------|-------------|
+| **Assertion failure** — the command ran and a test/lint check failed | the code | Fix the code, re-run, record `passed`. Use `failed` only if you genuinely cannot make it pass. |
+| **Repo tooling/config broken** — the command never ran because something *inside this workspace that you can change* is wrong: a `.symphony/*` or `vibe`/Sail script, a wrong `COMPOSE_PROJECT_NAME`, a missing setup step, file permissions, an installable-but-missing dependency | you (this repo) | **Diagnose and fix it, then re-run.** This is NOT `blocked`. |
+| **Platform/sandbox limitation** — the command cannot run here no matter what you change: no Docker daemon, no network to fetch modules/browsers, a sandbox that blocks the browser's own sandbox | the environment | Record `blocked` + a concrete `blocked_reason` and hand off. |
+
+Retrying the same command will never succeed for bucket 3; it WILL succeed for
+buckets 1 and 2 once you fix the cause — so those are work you must do, not
+blockers.
+
+### Why the label matters
+
+A `blocked` run makes Symphony **stop spending corrective turns**: it annotates
+the run as `environment_blocked` (a human-actionable "fix the environment and
+re-dispatch" signal) and waits for a person. A `failed`/missing run instead gets
+corrective turns that push you to fix and re-run. So labeling a fixable,
+repo-owned problem as `blocked` **suppresses the self-heal loop** and strands the
+issue on a human for something you could have fixed yourself.
+
+**Concrete trap:** `./vibe test` prints `Sail is not running`. That *looks* like
+"no Docker", but if the containers are actually up under a different compose
+project (e.g. Symphony Preview started them as `whitelabel` while `vibe`
+defaulted the project name to the worktree directory), the real fix is to
+correct the script/compose project — that is bucket 2: **fix it and re-run**, do
+NOT record `blocked`.
+
+### Recording a genuine environment block
+
+Only for a real bucket-3 limitation, after an actual attempt (the command MUST
+appear in your session log), record the run with `"status": "blocked"` and a
+concrete `"blocked_reason"` instead of thrashing on it:
 
 ```json
 {
@@ -171,20 +197,14 @@ thrashing on it:
   "repo": "backend",
   "command": "./vibe test",
   "status": "blocked",
-  "blocked_reason": "Docker daemon unreachable at /var/run/docker.sock; Sail shared services cannot start in this sandbox.",
+  "blocked_reason": "Docker daemon unreachable at /var/run/docker.sock; no container runtime exists in this sandbox, so Sail cannot start at all.",
   "report": "artifacts/backend-unit.txt"
 }
 ```
 
-A `blocked` run does NOT satisfy the gate — the change is still unproven. But it
-tells Symphony the blocker is the environment, so it stops spending corrective
-turns on the impossible and annotates the run as `environment_blocked` (a clear,
-human-actionable signal: fix the environment / sandbox capabilities and
-re-dispatch) instead of a generic test failure.
-
-Use `blocked` ONLY for a true environment limitation you actually hit. A test
-that fails on an assertion is `"failed"` — fix the code and re-run. Do not use
-`blocked` to skip work you could have done.
+A `blocked` run does NOT satisfy the gate — the change is still unproven. Use
+`blocked` ONLY for a true platform limitation you actually hit and cannot fix
+from inside the workspace. Do not use `blocked` to skip work you could have done.
 
 ## Continuation turns — agent responsibility
 
@@ -264,9 +284,12 @@ they hold:
 5. Every declared `command` appears in this session's execution log.
 
 If tests fail: fix the code, re-run, and only then update the manifest. If a
-required test cannot run because of the environment (not the code), record it as
-`blocked` with a `blocked_reason` (see above) rather than retrying forever.
-Never declare a run you did not execute — the gate will reject it.
+required command is blocked by fixable repo tooling/config (a `vibe`/`.symphony`
+script, a wrong compose project, permissions, a missing setup step), fix that and
+re-run — that is NOT `blocked`. Reserve `blocked` (with a `blocked_reason`) for a
+genuine environment limitation you cannot fix from inside the workspace (see the
+three buckets above), rather than retrying forever. Never declare a run you did
+not execute — the gate will reject it.
 
 ## Symphony tracker tools (coding agent)
 

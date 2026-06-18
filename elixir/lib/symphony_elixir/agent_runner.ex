@@ -315,6 +315,11 @@ defmodule SymphonyElixir.AgentRunner do
     manifest `impact` list with `impacts_ui: false` and a concrete rationale
     instead of running its e2e. Re-run every command fresh in this session and
     write a new `.symphony/evidence/manifest.json` — do not reuse a prior manifest.
+    If any prior run is marked `blocked` but the blocker is actually fixable repo
+    tooling/config (a `vibe`/`.symphony` script, a wrong compose project, file
+    permissions, a missing setup step), fix it and re-run instead of leaving it
+    `blocked` — `blocked` is only for environment limits you cannot change from
+    inside the workspace.
     Do nothing else in this turn.
     """
   end
