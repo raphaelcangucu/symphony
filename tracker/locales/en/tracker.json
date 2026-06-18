@@ -1825,6 +1825,7 @@
     },
     "group": {
       "mergeHint": "Group with {{identifier}}",
+      "dropToGroup": "Drop to group",
       "count": "{{count}} grouped",
       "expand": "Show grouped tasks",
       "collapse": "Hide grouped tasks",

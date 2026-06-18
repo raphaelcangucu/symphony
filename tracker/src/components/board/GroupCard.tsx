@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
+import { GroupDropOverlay, ReorderDropLine } from "./GroupDropOverlay";
 import { IssueCard } from "./IssueCard";
 
 interface GroupCardProps {
@@ -19,6 +20,7 @@ interface GroupCardProps {
   onDisband: (leadIdentifier: string) => void;
   agentExecutions?: ReadonlyMap<string, AgentExecution>;
   mergeActive?: boolean;
+  dropEdge?: "top" | "bottom" | null;
 }
 
 export function GroupCard({
@@ -30,6 +32,7 @@ export function GroupCard({
   onDisband,
   agentExecutions,
   mergeActive = false,
+  dropEdge = null,
 }: GroupCardProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -46,13 +49,15 @@ export function GroupCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "rounded-xl border border-border/70 bg-muted/30 p-1.5 shadow-sm transition-all",
+        "relative rounded-xl border border-border/70 bg-muted/30 p-1.5 shadow-sm transition-all",
         isDragging && "opacity-40",
-        mergeActive && "ring-2 ring-primary/50",
+        mergeActive && "border-primary ring-2 ring-primary ring-offset-1 ring-offset-background",
       )}
       {...attributes}
       {...listeners}
     >
+      {mergeActive ? <GroupDropOverlay /> : null}
+      {dropEdge && !mergeActive ? <ReorderDropLine edge={dropEdge} /> : null}
       <div className="mb-1 flex items-center justify-between px-1 pt-0.5">
         <button
           type="button"

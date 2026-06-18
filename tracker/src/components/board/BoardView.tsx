@@ -5,6 +5,7 @@ import {
   TouchSensor,
   type DragCancelEvent,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragOverEvent,
   type DragStartEvent,
   useSensor,
@@ -19,7 +20,6 @@ import type { WorkflowStatus, WorkflowStatusCategory, WorkflowStatusName } from 
 import { BoardColumn } from "./BoardColumn";
 import { boardCollisionDetection } from "./board-collision";
 import {
-  findIssueStatus,
   mergeIntent,
   parseDragIssueId,
   resolveBoardMove,
@@ -27,8 +27,32 @@ import {
   GROUP_DRAG_PREFIX,
   ISSUE_DRAG_PREFIX,
   type BoardState,
+  type DropIndicator,
 } from "./board-utils";
 import { IssueCard } from "./IssueCard";
+
+/**
+ * Merge uses hysteresis so the gesture can't oscillate with reordering:
+ * the pointer must reach the middle 50% of a card to *enter* group mode, but
+ * only leaves it once the pointer is within the outer 10% (middle 80%). This
+ * stops the merge<->reorder feedback loop that reflows the column on every
+ * frame (which previously flickered for users and could exhaust React's
+ * update depth under fast input).
+ */
+const MERGE_ENTER_EDGE_RATIO = 0.25;
+const MERGE_EXIT_EDGE_RATIO = 0.1;
+
+/**
+ * Live pointer Y in viewport coordinates, derived from where the drag started
+ * plus how far it has moved. This stays accurate even while the reorder preview
+ * reflows the column (unlike the dragged card's own translated rect).
+ */
+function dragPointerY(event: DragMoveEvent | DragOverEvent): number | null {
+  const activator = event.activatorEvent as { clientY?: number; touches?: TouchList } | null;
+  const startY =
+    typeof activator?.clientY === "number" ? activator.clientY : (activator?.touches?.[0]?.clientY ?? null);
+  return startY == null ? null : startY + event.delta.y;
+}
 
 interface BoardViewProps {
   board: BoardState;
@@ -64,10 +88,36 @@ export function BoardView({
   onUngroupIssue,
 }: BoardViewProps) {
   const [activeIdentifier, setActiveIdentifier] = useState<string | null>(null);
-  const [previewBoard, setPreviewBoard] = useState<typeof board | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-  const displayBoard = previewBoard ?? board;
+  // Refs mirror the drag state so the move handler can read/compare
+  // synchronously across the rapid event burst dnd-kit emits, committing a
+  // render only when the resolved target actually changes.
+  const mergeTargetRef = useRef<string | null>(null);
+  const dropIndicatorRef = useRef<DropIndicator | null>(null);
+
+  function commitMergeTarget(next: string | null) {
+    if (mergeTargetRef.current === next) return;
+    mergeTargetRef.current = next;
+    setMergeTargetId(next);
+  }
+
+  function commitDropIndicator(next: DropIndicator | null) {
+    const current = dropIndicatorRef.current;
+    if (current?.unitId === next?.unitId && current?.edge === next?.edge) return;
+    dropIndicatorRef.current = next;
+    setDropIndicator(next);
+  }
+
+  function resetDragState() {
+    mergeTargetRef.current = null;
+    dropIndicatorRef.current = null;
+    setActiveIdentifier(null);
+    setMergeTargetId(null);
+    setDropIndicator(null);
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
@@ -83,75 +133,57 @@ export function BoardView({
   const activeIssue = useMemo(() => {
     if (!activeIdentifier) return null;
     return statusNames
-      .flatMap((status) => displayBoard[status] ?? [])
+      .flatMap((status) => board[status] ?? [])
       .find((issue) => issue.identifier === activeIdentifier);
-  }, [activeIdentifier, displayBoard, statusNames]);
+  }, [activeIdentifier, board, statusNames]);
 
   function handleDragStart(event: DragStartEvent) {
+    mergeTargetRef.current = null;
+    dropIndicatorRef.current = null;
     setActiveIdentifier(parseDragIssueId(event.active.id));
   }
 
-  function handleDragOver(event: DragOverEvent) {
+  // Cards do not reflow during a drag (see the no-op sorting strategy), so the
+  // pointer always sits over the card the user is aiming at. Re-evaluated on
+  // every move (onDragMove), the pointer's depth within that card decides the
+  // intent: middle band = group, top/bottom edge = reorder before/after.
+  function handleDragMove(event: DragMoveEvent | DragOverEvent) {
     const identifier = parseDragIssueId(event.active.id);
     if (!identifier || !event.over) {
-      setMergeTargetId(null);
+      commitMergeTarget(null);
+      commitDropIndicator(null);
       return;
     }
 
     const overId = String(event.over.id);
     const overIsUnit = overId.startsWith(ISSUE_DRAG_PREFIX) || overId.startsWith(GROUP_DRAG_PREFIX);
-    const activeRect = event.active.rect.current.translated;
-    const merge =
-      overIsUnit && overId !== String(event.active.id) && activeRect != null && event.over.rect != null
-        ? mergeIntent(activeRect, event.over.rect, 0.25)
-        : false;
+    const overIsOtherUnit = overIsUnit && overId !== String(event.active.id);
+    const pointerY = dragPointerY(event);
 
-    setMergeTargetId(merge ? overId : null);
-
-    if (merge) {
-      setPreviewBoard(null);
+    if (!overIsOtherUnit || event.over.rect == null || pointerY == null) {
+      commitMergeTarget(null);
+      commitDropIndicator(null);
       return;
     }
 
-    const resolved = resolveBoardMove(board, identifier, overId, statusNames);
-    if (resolved) setPreviewBoard(resolved.board);
-  }
+    // Wider keep-band while already merging this target adds hysteresis so a
+    // tiny wobble near the edge can't flip between grouping and reordering.
+    const edgeRatio = mergeTargetRef.current === overId ? MERGE_EXIT_EDGE_RATIO : MERGE_ENTER_EDGE_RATIO;
 
-  function resolveDropTarget(
-    identifier: string,
-    overId: string,
-    preview: BoardState | null,
-  ): { targetStatus: WorkflowStatusName; targetIndex: number } | null {
-    // When releasing over the dragged card itself (its previewed slot — e.g. the
-    // top of an empty target column), the live preview already reflects the
-    // intended destination. Commit that instead of re-resolving against the real
-    // board, which would resolve back to the source column and drop nothing.
-    if (preview && parseDragIssueId(overId) === identifier) {
-      const targetStatus = findIssueStatus(preview, identifier, statusNames);
-      if (!targetStatus) return null;
-
-      const targetIndex = preview[targetStatus].findIndex((issue) => issue.identifier === identifier);
-      if (targetIndex < 0) return null;
-
-      const sourceStatus = findIssueStatus(board, identifier, statusNames);
-      const sourceIndex = sourceStatus
-        ? board[sourceStatus].findIndex((issue) => issue.identifier === identifier)
-        : -1;
-      if (sourceStatus === targetStatus && sourceIndex === targetIndex) return null;
-
-      return { targetStatus, targetIndex };
+    if (mergeIntent(pointerY, event.over.rect, edgeRatio)) {
+      commitMergeTarget(overId);
+      commitDropIndicator(null);
+      return;
     }
 
-    const resolved = resolveBoardMove(board, identifier, overId, statusNames);
-    return resolved ? { targetStatus: resolved.targetStatus, targetIndex: resolved.targetIndex } : null;
+    commitMergeTarget(null);
+    const overMidpoint = event.over.rect.top + event.over.rect.height / 2;
+    commitDropIndicator({ unitId: overId, edge: pointerY < overMidpoint ? "top" : "bottom" });
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    const preview = previewBoard;
-    const wasMergeTarget = mergeTargetId;
-    setPreviewBoard(null);
-    setActiveIdentifier(null);
-    setMergeTargetId(null);
+    const wasMergeTarget = mergeTargetRef.current;
+    resetDragState();
 
     const identifier = parseDragIssueId(event.active.id);
     if (!identifier || !event.over) return;
@@ -166,21 +198,20 @@ export function BoardView({
       }
     }
 
-    const move = resolveDropTarget(identifier, String(event.over.id), preview);
+    const resolved = resolveBoardMove(board, identifier, String(event.over.id), statusNames);
+    const move = resolved ? { targetStatus: resolved.targetStatus, targetIndex: resolved.targetIndex } : null;
     if (!move) return;
 
     void onMoveIssue(identifier, move.targetStatus, move.targetIndex);
   }
 
   function handleDragCancel(_event: DragCancelEvent) {
-    setPreviewBoard(null);
-    setActiveIdentifier(null);
-    setMergeTargetId(null);
+    resetDragState();
   }
 
   function handleDisband(leadIdentifier: string) {
     const lead = statusNames
-      .flatMap((status) => displayBoard[status] ?? [])
+      .flatMap((status) => board[status] ?? [])
       .find((issue) => issue.identifier === leadIdentifier);
     for (const memberIdentifier of lead?.groupMemberIdentifiers ?? []) void onUngroupIssue(memberIdentifier);
   }
@@ -215,7 +246,8 @@ export function BoardView({
       sensors={sensors}
       collisionDetection={boardCollisionDetection}
       onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
+      onDragMove={handleDragMove}
+      onDragOver={handleDragMove}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
@@ -228,7 +260,7 @@ export function BoardView({
             key={status}
             status={status}
             category={categoryByName.get(status) ?? null}
-            issues={displayBoard[status] ?? []}
+            issues={board[status] ?? []}
             onSelectIssue={onSelectIssue}
             projectSlug={projectSlug}
             statuses={statusNames}
@@ -242,17 +274,22 @@ export function BoardView({
             onRemoveMember={onUngroupIssue}
             onDisband={handleDisband}
             mergeTargetId={mergeTargetId}
+            dropIndicator={dropIndicator}
           />
         ))}
       </div>
       <DragOverlay>
         {activeIssue ? (
-          <IssueCard
-            issue={activeIssue}
-            onSelect={onSelectIssue}
-            agent={agentExecutions?.get(activeIssue.identifier)}
-            dragOverlay
-          />
+          // Dim the floating card while it is over a group target so the
+          // target's "drop to group" affordance underneath stays readable.
+          <div className={mergeTargetId ? "opacity-50 transition-opacity" : "transition-opacity"}>
+            <IssueCard
+              issue={activeIssue}
+              onSelect={onSelectIssue}
+              agent={agentExecutions?.get(activeIssue.identifier)}
+              dragOverlay
+            />
+          </div>
         ) : null}
       </DragOverlay>
     </DndContext>

@@ -172,6 +172,12 @@ export function upsertIssue(issues: readonly Issue[], issue: Issue): Issue[] {
 
 export const GROUP_DRAG_PREFIX = "group:";
 
+/** Where a reorder drop would land, rendered as a line above/below a card. */
+export interface DropIndicator {
+  unitId: string;
+  edge: "top" | "bottom";
+}
+
 export type BoardUnit =
   | { kind: "issue"; id: string; issue: Issue }
   | { kind: "group"; id: string; lead: Issue; members: Issue[] };
@@ -202,14 +208,20 @@ export function groupIssuesIntoUnits(issues: readonly Issue[]): BoardUnit[] {
   return units;
 }
 
-interface DragRect {
+interface OverRect {
   top: number;
   height: number;
 }
 
-/** True when the dragged card's vertical center sits in the over card's middle band (merge), not its edges (reorder). */
-export function mergeIntent(activeRect: DragRect, overRect: DragRect, bandRatio: number): boolean {
-  const activeCenter = activeRect.top + activeRect.height / 2;
-  const band = overRect.height * bandRatio;
-  return activeCenter > overRect.top + band && activeCenter < overRect.top + overRect.height - band;
+/**
+ * True when the pointer's Y sits in the over card's middle band (group intent),
+ * rather than its top/bottom edges (reorder intent).
+ *
+ * Using the live pointer position — instead of the dragged card's translated
+ * rect — keeps the decision stable even while the reorder preview reflows the
+ * column, which is what previously made grouping flip-flop with reordering.
+ */
+export function mergeIntent(pointerY: number, overRect: OverRect, edgeRatio: number): boolean {
+  const edge = overRect.height * edgeRatio;
+  return pointerY > overRect.top + edge && pointerY < overRect.top + overRect.height - edge;
 }

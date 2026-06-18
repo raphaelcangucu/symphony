@@ -12,6 +12,7 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { issueDragId } from "./board-utils";
+import { GroupDropOverlay, ReorderDropLine } from "./GroupDropOverlay";
 import { labelDotClass } from "./label-colors";
 
 interface IssueCardProps {
@@ -20,9 +21,17 @@ interface IssueCardProps {
   agent?: AgentExecution;
   dragOverlay?: boolean;
   mergeActive?: boolean;
+  dropEdge?: "top" | "bottom" | null;
 }
 
-export function IssueCard({ issue, onSelect, agent, dragOverlay = false, mergeActive = false }: IssueCardProps) {
+export function IssueCard({
+  issue,
+  onSelect,
+  agent,
+  dragOverlay = false,
+  mergeActive = false,
+  dropEdge = null,
+}: IssueCardProps) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: issueDragId(issue.identifier),
@@ -47,17 +56,19 @@ export function IssueCard({ issue, onSelect, agent, dragOverlay = false, mergeAc
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group cursor-grab cursor-pointer rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-all active:cursor-grabbing",
+        "group relative cursor-grab cursor-pointer rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-all active:cursor-grabbing",
         "hover:-translate-y-px hover:border-primary/40 hover:shadow-md",
         agentNeedsAttention && "border-rose-500/40 ring-1 ring-rose-500/20",
-        mergeActive && "ring-2 ring-primary/50",
+        mergeActive && "border-primary ring-2 ring-primary ring-offset-1 ring-offset-background",
         isDragging && "opacity-40",
-        dragOverlay && "w-72 rotate-2 shadow-xl ring-2 ring-primary/20",
+        dragOverlay && "w-72 rotate-3 shadow-2xl ring-1 ring-border",
       )}
       {...attributes}
       {...listeners}
       onClick={() => onSelect(issue)}
     >
+      {mergeActive ? <GroupDropOverlay /> : null}
+      {dropEdge && !mergeActive ? <ReorderDropLine edge={dropEdge} /> : null}
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           {issue.identifier}

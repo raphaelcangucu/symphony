@@ -1825,6 +1825,7 @@
     },
     "group": {
       "mergeHint": "Agrupar com {{identifier}}",
+      "dropToGroup": "Soltar para agrupar",
       "count": "{{count}} agrupadas",
       "expand": "Mostrar tarefas do grupo",
       "collapse": "Ocultar tarefas do grupo",

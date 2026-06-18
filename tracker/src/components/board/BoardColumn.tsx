@@ -1,5 +1,5 @@
 import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, type SortingStrategy } from "@dnd-kit/sortable";
 import { Gauge, MoreHorizontal, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,8 +23,16 @@ import type { WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflo
 
 import { GroupCard } from "./GroupCard";
 import { IssueCard } from "./IssueCard";
-import { groupIssuesIntoUnits } from "./board-utils";
+import { groupIssuesIntoUnits, type DropIndicator } from "./board-utils";
 import { getStatusMeta } from "./status-meta";
+
+/**
+ * Keeps cards fixed in place during a drag (no shuffle to "make room"). A
+ * stationary column means the card under the pointer is always the one the user
+ * is aiming at, which is what makes drag-to-group reliable and keeps it visually
+ * distinct from reordering (shown via an explicit drop line instead).
+ */
+const noShiftStrategy: SortingStrategy = () => null;
 
 interface BoardColumnProps {
   status: WorkflowStatusName;
@@ -44,6 +52,7 @@ interface BoardColumnProps {
   onRemoveMember: (identifier: string) => void;
   onDisband: (leadIdentifier: string) => void;
   mergeTargetId?: string | null;
+  dropIndicator?: DropIndicator | null;
 }
 
 export function BoardColumn({
@@ -63,6 +72,7 @@ export function BoardColumn({
   onRemoveMember,
   onDisband,
   mergeTargetId = null,
+  dropIndicator = null,
 }: BoardColumnProps) {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -201,7 +211,7 @@ export function BoardColumn({
         )}
       >
         <span className={cn("absolute inset-x-3 top-0 h-0.5 rounded-full", overLimit ? "bg-rose-500/70" : meta.accentClass)} />
-        <SortableContext items={units.map((unit) => unit.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={units.map((unit) => unit.id)} strategy={noShiftStrategy}>
           <div className="space-y-2.5 pt-1">
             {units.map((unit) =>
               unit.kind === "group" ? (
@@ -215,6 +225,7 @@ export function BoardColumn({
                   onDisband={onDisband}
                   agentExecutions={agentExecutions}
                   mergeActive={mergeTargetId === unit.id}
+                  dropEdge={dropIndicator?.unitId === unit.id ? dropIndicator.edge : null}
                 />
               ) : (
                 <IssueCard
@@ -223,6 +234,7 @@ export function BoardColumn({
                   onSelect={onSelectIssue}
                   agent={agentExecutions?.get(unit.issue.identifier)}
                   mergeActive={mergeTargetId === unit.id}
+                  dropEdge={dropIndicator?.unitId === unit.id ? dropIndicator.edge : null}
                 />
               ),
             )}

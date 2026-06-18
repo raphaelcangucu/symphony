@@ -147,11 +147,15 @@ describe("groupIssuesIntoUnits", () => {
 });
 
 describe("mergeIntent", () => {
-  const over = { top: 0, left: 0, width: 100, height: 100, right: 100, bottom: 100 };
-  it("is true when the dragged center is in the middle band", () => {
-    expect(mergeIntent({ ...over, top: 10 }, over, 0.25)).toBe(true);
+  // top=100, height=200, edge=50 -> group band is (150, 250).
+  const over = { top: 100, height: 200 };
+  it("is true when the pointer is in the middle band", () => {
+    expect(mergeIntent(200, over, 0.25)).toBe(true);
   });
-  it("is false near the edges", () => {
-    expect(mergeIntent({ ...over, top: -45 }, over, 0.25)).toBe(false);
+  it("is false near the top edge", () => {
+    expect(mergeIntent(120, over, 0.25)).toBe(false);
+  });
+  it("is false near the bottom edge", () => {
+    expect(mergeIntent(280, over, 0.25)).toBe(false);
   });
 });
