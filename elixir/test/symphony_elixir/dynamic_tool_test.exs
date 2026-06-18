@@ -65,6 +65,43 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert is_boolean(response["toolResult"]["data"]["ready"])
   end
 
+  @tag :tmp_dir
+  test "get_evidence_status serializes DateTime run timestamps instead of crashing", %{
+    tmp_dir: tmp_dir
+  } do
+    ws = Path.join(tmp_dir, "GAM-1")
+    File.mkdir_p!(ws)
+    issue = %Issue{id: "1", identifier: "GAM-1", project_slug: "gam"}
+    recorded_at = ~U[2026-06-18 02:48:26.297945Z]
+
+    run = %{
+      id: 7,
+      run_id: "run-7",
+      session_id: "sess-7",
+      status: "passed",
+      ui_change: true,
+      manifest: %{"issue" => "GAM-1"},
+      inserted_at: recorded_at
+    }
+
+    response =
+      DynamicTool.execute("get_evidence_status", %{},
+        issue: issue,
+        project_config: evidence_disabled_config(),
+        workspace: ws,
+        list_runs: fn _slug, _identifier -> {:ok, [run]} end
+      )
+
+    assert response["success"] == true
+    text = hd(response["contentItems"])["text"]
+    decoded = Jason.decode!(text)
+    assert [run_json] = decoded["data"]["runs"]
+    assert run_json["recorded_at"] == DateTime.to_iso8601(recorded_at)
+
+    assert response["toolResult"]["data"]["runs"] |> hd() |> Map.fetch!("recorded_at") ==
+             DateTime.to_iso8601(recorded_at)
+  end
+
   test "set_issue_status fails when no issue is bound to the session" do
     response = DynamicTool.execute("set_issue_status", %{"status" => "In Progress"})
 

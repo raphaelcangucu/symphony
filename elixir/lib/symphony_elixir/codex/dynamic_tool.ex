@@ -248,6 +248,15 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   end
 
+  # Structs are maps in Elixir, so they must be handled before the `is_map`
+  # clause — otherwise `Map.new/2` tries to enumerate them and crashes (e.g.
+  # `Protocol.UndefinedError` for `DateTime`), taking down the agent turn.
+  defp stringify_keys(%DateTime{} = value), do: DateTime.to_iso8601(value)
+  defp stringify_keys(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)
+  defp stringify_keys(%Date{} = value), do: Date.to_iso8601(value)
+  defp stringify_keys(%Time{} = value), do: Time.to_iso8601(value)
+  defp stringify_keys(value) when is_struct(value), do: value
+
   defp stringify_keys(value) when is_map(value) do
     Map.new(value, fn
       {key, nested} when is_atom(key) -> {Atom.to_string(key), stringify_keys(nested)}
