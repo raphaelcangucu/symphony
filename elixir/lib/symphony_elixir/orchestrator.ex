@@ -23,6 +23,7 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, Repository}
+  alias SymphonyElixir.Orchestrator.Grouping
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -510,15 +511,19 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp choose_issues(issues, state) do
     issues
+    |> Grouping.dispatch_candidates()
     |> sort_issues_for_dispatch()
-    |> Enum.reduce(state, &maybe_dispatch_candidate(&2, &1))
+    |> Enum.reduce(state, fn issue, acc -> maybe_dispatch_candidate(acc, issue, issues) end)
   end
 
-  defp maybe_dispatch_candidate(state, issue) do
+  defp maybe_dispatch_candidate(state, issue, all_issues) do
     case dispatch_decision(issue) do
       {:ok, sets} ->
-        if should_dispatch_issue?(issue, state, dispatch_set(sets), terminal_set(sets)) do
-          dispatch_issue(state, issue)
+        members = Grouping.members_for(issue, all_issues)
+
+        if should_dispatch_issue?(issue, state, dispatch_set(sets), terminal_set(sets)) and
+             not any_member_blocked?(members, terminal_set(sets)) do
+          dispatch_issue(state, issue, nil, members)
         else
           state
         end
@@ -527,6 +532,10 @@ defmodule SymphonyElixir.Orchestrator do
         Logger.warning("Skipping dispatch; project not runnable for #{issue_context(issue)}: #{reason}")
         state
     end
+  end
+
+  defp any_member_blocked?(members, terminal_states) when is_list(members) do
+    Enum.any?(members, &issue_blocked_by_non_terminal?(&1, terminal_states))
   end
 
   defp sort_issues_for_dispatch(issues) when is_list(issues) do
@@ -708,10 +717,10 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp dispatch_decision(_issue), do: {:ok, global_state_lists()}
 
-  defp dispatch_issue(%State{} = state, issue, attempt \\ nil) do
+  defp dispatch_issue(%State{} = state, issue, attempt, members) do
     case revalidate_issue_for_dispatch(issue, &Tracker.fetch_issue_states_by_ids/1) do
       {:ok, %Issue{} = refreshed_issue} ->
-        do_dispatch_issue(state, refreshed_issue, attempt)
+        do_dispatch_issue(state, refreshed_issue, attempt, members)
 
       {:skip, :missing} ->
         Logger.info("Skipping dispatch; issue no longer active or visible: #{issue_context(issue)}")
@@ -728,50 +737,27 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  defp do_dispatch_issue(%State{} = state, issue, attempt) do
+  defp do_dispatch_issue(%State{} = state, issue, attempt, members) do
     recipient = self()
     issue = Tracker.enrich_issue(issue)
     agent_kind = AgentRunner.issue_agent_kind(issue)
 
     case Task.Supervisor.start_child(SymphonyElixir.Orchestrator.TaskSupervisor, fn ->
-           AgentRunner.run(issue, recipient, attempt: attempt)
+           AgentRunner.run(issue, recipient, attempt: attempt, members: members)
          end) do
       {:ok, pid} ->
         ref = Process.monitor(pid)
 
-        Logger.info("Dispatching issue to agent: #{issue_context(issue)} pid=#{inspect(pid)} attempt=#{inspect(attempt)}")
+        Logger.info("Dispatching #{if members == [], do: "issue", else: "group"} to agent: #{issue_context(issue)} members=#{length(members)} pid=#{inspect(pid)} attempt=#{inspect(attempt)}")
 
-        running =
-          Map.put(state.running, issue.id, %{
-            pid: pid,
-            ref: ref,
-            identifier: issue.identifier,
-            issue: issue,
-            agent_kind: agent_kind,
-            agent_goal: Map.get(issue, :agent_goal),
-            goal: nil,
-            session_id: nil,
-            last_codex_message: nil,
-            last_codex_timestamp: nil,
-            last_codex_event: nil,
-            codex_app_server_pid: nil,
-            agent_input_tokens: 0,
-            agent_output_tokens: 0,
-            agent_total_tokens: 0,
-            codex_last_reported_input_tokens: 0,
-            codex_last_reported_output_tokens: 0,
-            codex_last_reported_total_tokens: 0,
-            turn_count: 0,
-            retry_attempt: normalize_retry_attempt(attempt),
-            started_at: DateTime.utc_now()
-          })
+        running = Map.put(state.running, issue.id, dispatch_running_entry(pid, ref, issue, agent_kind, attempt, members))
 
-        %{
-          state
-          | running: running,
-            claimed: MapSet.put(state.claimed, issue.id),
-            retry_attempts: Map.delete(state.retry_attempts, issue.id)
-        }
+        claimed =
+          issue
+          |> Grouping.claim_ids(members)
+          |> Enum.reduce(state.claimed, fn id, acc -> MapSet.put(acc, id) end)
+
+        %{state | running: running, claimed: claimed, retry_attempts: Map.delete(state.retry_attempts, issue.id)}
 
       {:error, reason} ->
         Logger.error("Unable to spawn agent for #{issue_context(issue)}: #{inspect(reason)}")
@@ -783,6 +769,33 @@ defmodule SymphonyElixir.Orchestrator do
           error: "failed to spawn agent: #{inspect(reason)}"
         })
     end
+  end
+
+  defp dispatch_running_entry(pid, ref, %Issue{} = issue, agent_kind, attempt, members) do
+    %{
+      pid: pid,
+      ref: ref,
+      identifier: issue.identifier,
+      issue: issue,
+      members: members,
+      agent_kind: agent_kind,
+      agent_goal: Map.get(issue, :agent_goal),
+      goal: nil,
+      session_id: nil,
+      last_codex_message: nil,
+      last_codex_timestamp: nil,
+      last_codex_event: nil,
+      codex_app_server_pid: nil,
+      agent_input_tokens: 0,
+      agent_output_tokens: 0,
+      agent_total_tokens: 0,
+      codex_last_reported_input_tokens: 0,
+      codex_last_reported_output_tokens: 0,
+      codex_last_reported_total_tokens: 0,
+      turn_count: 0,
+      retry_attempt: normalize_retry_attempt(attempt),
+      started_at: DateTime.utc_now()
+    }
   end
 
   defp revalidate_issue_for_dispatch(%Issue{id: issue_id}, issue_fetcher)
@@ -859,6 +872,7 @@ defmodule SymphonyElixir.Orchestrator do
       {:ok, prs} ->
         remove_label(running_entry, @blocked_run_label)
         record_run_pull_requests(issue, prs)
+        Enum.each(Map.get(running_entry, :members, []), &record_run_pull_requests(&1, prs))
         persist_evidence(running_entry, issue, workspace)
         maybe_annotate_incomplete(running_entry, issue_id)
         apply_transition_after_contract(state, running_entry, issue_id)
@@ -1171,6 +1185,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp apply_transition_after_contract(%State{} = state, running_entry, issue_id) do
     case apply_completion_transition(state, issue_id, running_entry.issue) do
       {:transitioned, transitioned_state} ->
+        transition_group_members(running_entry)
         transitioned_state
 
       result when result in [:not_configured, :not_visible] ->
@@ -1188,6 +1203,30 @@ defmodule SymphonyElixir.Orchestrator do
           project_slug: running_entry.issue.project_slug,
           error: "completion transition failed: #{inspect(reason)}"
         })
+    end
+  end
+
+  defp transition_group_members(running_entry) do
+    members = Map.get(running_entry, :members, [])
+
+    Enum.each(members, fn %Issue{} = member ->
+      transitions = completion_transitions_for(member)
+
+      with dest when is_binary(dest) <- member_destination(member, transitions),
+           :ok <- Tracker.update_issue_state(member.id, dest) do
+        Logger.info("Moved grouped member after completion: #{issue_context(member)} -> #{dest}")
+      else
+        _ -> :ok
+      end
+    end)
+
+    :ok
+  end
+
+  defp member_destination(%Issue{id: id, state: state}, transitions) do
+    case Tracker.fetch_issue_states_by_ids([id]) do
+      {:ok, [%Issue{state: current} | _]} -> Map.get(transitions, current)
+      _ -> Map.get(transitions, state)
     end
   end
 
@@ -1501,7 +1540,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp handle_active_retry(state, issue, attempt, metadata) do
     if retry_candidate_issue?(issue) and
          dispatch_slots_available?(issue, state) do
-      {:noreply, dispatch_issue(state, issue, attempt)}
+      {:noreply, dispatch_issue(state, issue, attempt, [])}
     else
       Logger.debug("No available slots for retrying #{issue_context(issue)}; retrying again")
 
@@ -2130,7 +2169,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp dispatch_issue_for_manual_resume(%State{} = state, issue) do
     case manual_revalidate_issue(issue) do
-      {:ok, refreshed_issue} -> do_dispatch_issue(state, refreshed_issue, nil)
+      {:ok, refreshed_issue} -> do_dispatch_issue(state, refreshed_issue, nil, [])
       _other -> state
     end
   end
