@@ -162,7 +162,7 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     locale = Map.get(socket.assigns, :gettext_locale, "en")
 
     GettextCore.with_locale(SymphonyElixirWeb.Gettext, locale, fn ->
-      dgettext("errors", msgid, bindings)
+      GettextCore.dgettext(SymphonyElixirWeb.Gettext, "errors", msgid, bindings)
     end)
   end
 

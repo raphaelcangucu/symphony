@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   import Phoenix.Controller
   import Plug.Conn
 
+  alias Gettext, as: GettextCore
   alias Plug.Conn
 
   @spec render(Conn.t(), Ecto.Changeset.t() | atom() | String.t()) :: Conn.t()
@@ -362,7 +363,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
 
   @spec validation_msg(Conn.t(), String.t(), map()) :: Conn.t()
   def validation_msg(conn, msgid, bindings \\ %{}) when is_binary(msgid) and is_map(bindings) do
-    validation(conn, dgettext("errors", msgid, bindings))
+    validation(conn, GettextCore.dgettext(SymphonyElixirWeb.Gettext, "errors", msgid, bindings))
   end
 
   defp error(conn, status, code, message, details \\ nil) do

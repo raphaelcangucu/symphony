@@ -8,7 +8,8 @@ defmodule SymphonyElixirWeb.Tracker.PushController do
   alias Plug.Conn
   alias SymphonyElixir.PushNotifications.{Config, Subscription, Subscriptions}
   alias SymphonyElixir.Settings.Ui
-  alias SymphonyElixirWeb.{Gettext, as: GettextBackend, TrackerErrors}
+  alias SymphonyElixirWeb.Gettext, as: GettextBackend
+  alias SymphonyElixirWeb.TrackerErrors
 
   @spec config(Conn.t(), map()) :: Conn.t()
   def config(conn, _params) do
