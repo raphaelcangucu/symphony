@@ -351,6 +351,18 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         dgettext("errors", "workspace setup failed: %{reason}", reason: format_terminal_reason(reason))
       )
 
+  def render(conn, :cannot_group_with_self),
+    do: error(conn, 422, "cannot_group_with_self", dgettext("errors", "An issue cannot be grouped with itself."))
+
+  def render(conn, :lead_is_member),
+    do: error(conn, 422, "lead_is_member", dgettext("errors", "The chosen lead already belongs to another group."))
+
+  def render(conn, :member_is_lead),
+    do: error(conn, 422, "member_is_lead", dgettext("errors", "This issue already leads a group; ungroup it first."))
+
+  def render(conn, :not_in_group),
+    do: error(conn, 422, "not_in_group", dgettext("errors", "This issue is not part of a group."))
+
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
 
