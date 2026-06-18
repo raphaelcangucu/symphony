@@ -23,7 +23,9 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
             project_slug: nil,
             attachments: [],
             created_at: nil,
-            updated_at: nil
+            updated_at: nil,
+            group_lead_identifier: nil,
+            group_member_identifiers: []
 
   @type status :: %{
           name: String.t(),
@@ -60,7 +62,9 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
           project_slug: String.t() | nil,
           attachments: [attachment()],
           created_at: String.t() | nil,
-          updated_at: String.t() | nil
+          updated_at: String.t() | nil,
+          group_lead_identifier: String.t() | nil,
+          group_member_identifiers: [String.t()]
         }
 
   @spec build(map()) :: t()
@@ -75,6 +79,7 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
     |> Map.put_new(:labels, [])
     |> Map.put_new(:blocked_by, [])
     |> Map.put_new(:attachments, [])
+    |> Map.put_new(:group_member_identifiers, [])
   end
 
   defp normalize_identifier(%{identifier: identifier} = attrs) when is_binary(identifier) do

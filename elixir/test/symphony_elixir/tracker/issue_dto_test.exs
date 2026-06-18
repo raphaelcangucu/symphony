@@ -21,4 +21,12 @@ defmodule SymphonyElixir.Tracker.IssueDTOTest do
     assert dto.priority == nil
     assert dto.position == nil
   end
+
+  test "build/1 defaults and keeps group fields" do
+    assert IssueDTO.build(%{identifier: "MAC-1", title: "T"}).group_member_identifiers == []
+    assert IssueDTO.build(%{identifier: "MAC-1", title: "T"}).group_lead_identifier == nil
+
+    dto = IssueDTO.build(%{identifier: "MAC-2", title: "T", group_lead_identifier: "MAC-1"})
+    assert dto.group_lead_identifier == "MAC-1"
+  end
 end
