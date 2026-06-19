@@ -148,7 +148,7 @@ defmodule SymphonyElixir.PromptBuilder do
         Per-repo commands (from this project's `evidence` config):
         #{Enum.join(repo_lines, "\n")}
 
-        When a UI repo's paths change, run its **configured** e2e command above with screenshot + video — never bare `npx playwright test` on ad-hoc ports. Call `manage_preview` (`status`/`start`) first.
+        When a UI repo's paths change, run its **configured** e2e command above with screenshot + video — never bare `npx playwright test` on ad-hoc ports. Call `manage_preview` (`status`/`start`) first. Preview is best-effort and non-blocking: if it won't reach `ready`, still write the e2e tests, run the unit suite, record the blocker in your workpad, and proceed (CI can run UI e2e) — do not stall on a stuck preview.
 
         Manifest: one passing `unit` run per changed repo; for a changed UI repo, a passing `e2e` run with at least 1 screenshot and 1 video. Record only commands you ran this session, then end the turn — do not move the card.
         """
@@ -236,6 +236,12 @@ defmodule SymphonyElixir.PromptBuilder do
     Do **not** run bare `npx playwright test` on random ports — use the project's configured
     e2e command (see the `evidence` config / project workflow), which reuses the preview ports
     below and the project's isolated e2e database.
+
+    Preview is **best-effort**: `manage_preview start` returns quickly even while a server is still
+    booting or after it crashed (read the result's `status`/`next_steps`). If preview does not reach
+    `ready`, do **not** block the run on it — keep writing the tests, run the unit suite, record the
+    preview blocker in your `## Codex Workpad`, and either poll `manage_preview status`/`restart` later
+    or proceed without UI e2e (CI can run it). Never retry a failing preview in a tight loop.
 
     #{if server_lines == "", do: "_No preview servers registered yet — call `manage_preview` with `start`._", else: server_lines}
 

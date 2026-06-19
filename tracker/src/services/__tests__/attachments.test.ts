@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   isEvidenceArtifactUrl,
   isInternalAttachmentUrl,
+  isJiraAttachmentUrl,
   isTrackerAuthenticatedMediaUrl,
   isVideoAttachmentSource,
   isVideoMediaType,
+  jiraAttachmentUrl,
   projectAttachmentUrl,
 } from "@/services/attachments";
 
@@ -71,8 +73,30 @@ describe("isEvidenceArtifactUrl", () => {
   });
 });
 
+describe("isJiraAttachmentUrl", () => {
+  it("recognizes the relative jira attachment proxy path", () => {
+    expect(isJiraAttachmentUrl(jiraAttachmentUrl("advising", "60658"))).toBe(true);
+    expect(isJiraAttachmentUrl("/api/tracker/v1/projects/advising/jira/attachments/60658")).toBe(true);
+  });
+
+  it("recognizes absolute jira attachment URLs", () => {
+    expect(
+      isJiraAttachmentUrl("http://localhost:4000/api/tracker/v1/projects/advising/jira/attachments/60658"),
+    ).toBe(true);
+  });
+
+  it("rejects external, data, blob, and unrelated tracker URLs", () => {
+    expect(isJiraAttachmentUrl("https://example.com/jira/attachments/60658")).toBe(false);
+    expect(isJiraAttachmentUrl("data:image/png;base64,AAAA")).toBe(false);
+    expect(isJiraAttachmentUrl("blob:http://localhost/x")).toBe(false);
+    expect(isJiraAttachmentUrl("/api/tracker/v1/projects/advising/issues/CDE-1139")).toBe(false);
+    expect(isJiraAttachmentUrl("")).toBe(false);
+    expect(isJiraAttachmentUrl(null)).toBe(false);
+  });
+});
+
 describe("isTrackerAuthenticatedMediaUrl", () => {
-  it("includes assistant attachments and evidence artifacts", () => {
+  it("includes assistant attachments, evidence artifacts, and jira attachments", () => {
     expect(
       isTrackerAuthenticatedMediaUrl(
         "/api/tracker/v1/projects/gamba/assistant/attachments/uploads/x.png",
@@ -81,6 +105,11 @@ describe("isTrackerAuthenticatedMediaUrl", () => {
     expect(
       isTrackerAuthenticatedMediaUrl(
         "http://localhost:4000/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png",
+      ),
+    ).toBe(true);
+    expect(
+      isTrackerAuthenticatedMediaUrl(
+        "/api/tracker/v1/projects/advising/jira/attachments/60658",
       ),
     ).toBe(true);
   });

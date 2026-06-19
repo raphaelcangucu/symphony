@@ -617,6 +617,73 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     refute Process.alive?(old_pid)
   end
 
+  test "start_for_issue/3 honors a short ready_timeout_ms instead of blocking on a starting instance", %{
+    project: project
+  } do
+    enable_project_dev_server!(project, port_range: [4100, 4199], max_concurrent: 2)
+    identifier = "771-bounded-start"
+    workspace = prepare_workspace!(identifier)
+    File.mkdir_p!(Path.join(workspace, "front"))
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front", primary: true}
+      ])
+
+    slug = "front"
+    key = {project.slug, identifier, slug}
+
+    {:ok, pid} =
+      Instance.start_link(
+        registry_name: {:via, Registry, {instance_registry(), key}},
+        project_id: project.id,
+        project_slug: project.slug,
+        identifier: identifier,
+        workspace_path: workspace,
+        step: %{
+          slug: slug,
+          command: "npm run dev",
+          working_dir: "front",
+          port_env: "PORT",
+          url_path: "/",
+          ready_probe: "tcp",
+          ready_path: "/",
+          primary: true
+        },
+        idle_timeout_ms: 60_000,
+        tmux: FakeTmux,
+        command_sender: &FakeTmux.send_keys/2,
+        port_allocator: fn _range, _claimed -> {:ok, 4101} end,
+        # Never readies; the next probe is far enough out that the instance stays
+        # `starting` for the whole test instead of crashing.
+        probe: fn _host, _port, _probe, _path -> {:error, :timeout} end,
+        probe_interval_ms: 60_000,
+        max_probe_attempts: 1_000
+      )
+
+    # Detach from the test process so teardown order can't race the instance,
+    # then stop it explicitly (the instance traps exits, so it would otherwise
+    # outlive the test and leak its port into later tests).
+    Process.unlink(pid)
+
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        try do
+          Instance.stop(pid)
+        catch
+          :exit, _reason -> :ok
+        end
+      end
+    end)
+
+    # A 0ms ready budget must return immediately and reuse the already-running
+    # (still starting) instance instead of waiting for readiness — proving the
+    # bound is threaded all the way through start_for_issue.
+    assert {:ok, [^pid]} = Manager.start_for_issue(project.slug, "##{identifier}", ready_timeout_ms: 0)
+    assert Instance.status(pid) in [:provisioning, :starting]
+  end
+
   test "start_instance_for_server returns not_found for an unknown server id", %{project: project} do
     assert Manager.start_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
   end

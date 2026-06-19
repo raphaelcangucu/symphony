@@ -65,12 +65,15 @@ defmodule SymphonyElixir.DevServer.Manager do
     Supervisor.init(children, strategy: :one_for_all)
   end
 
-  @spec start_for_issue(String.t(), String.t()) :: {:ok, [pid()]} | {:error, start_error()}
-  def start_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
+  @spec start_for_issue(String.t(), String.t(), keyword()) :: {:ok, [pid()]} | {:error, start_error()}
+  def start_for_issue(project_slug, identifier, opts \\ [])
+
+  def start_for_issue(project_slug, identifier, opts)
+      when is_binary(project_slug) and is_binary(identifier) and is_list(opts) do
     identifier = canonical_identifier(identifier)
 
     with {:ok, project} <- Context.get_project(project_slug) do
-      runtime_options = project_runtime_options(project)
+      runtime_options = project |> project_runtime_options() |> apply_runtime_overrides(opts)
 
       if runtime_options.dev_server_enabled? do
         normalize_lock_result(
@@ -84,7 +87,7 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  def start_for_issue(_project_slug, _identifier), do: {:error, :invalid_arguments}
+  def start_for_issue(_project_slug, _identifier, _opts), do: {:error, :invalid_arguments}
 
   @spec stop_for_issue(String.t(), String.t()) :: :ok
   def stop_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
@@ -105,14 +108,17 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   def stop_for_issue(_project_slug, _identifier), do: :ok
 
-  @spec restart_for_issue(String.t(), String.t()) :: {:ok, [pid()]} | {:error, term()}
-  def restart_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
+  @spec restart_for_issue(String.t(), String.t(), keyword()) :: {:ok, [pid()]} | {:error, term()}
+  def restart_for_issue(project_slug, identifier, opts \\ [])
+
+  def restart_for_issue(project_slug, identifier, opts)
+      when is_binary(project_slug) and is_binary(identifier) and is_list(opts) do
     identifier = canonical_identifier(identifier)
     :ok = stop_for_issue(project_slug, identifier)
-    start_for_issue(project_slug, identifier)
+    start_for_issue(project_slug, identifier, opts)
   end
 
-  def restart_for_issue(_project_slug, _identifier), do: {:error, :invalid_arguments}
+  def restart_for_issue(_project_slug, _identifier, _opts), do: {:error, :invalid_arguments}
 
   @spec stop_instance_for_server(String.t(), String.t(), pos_integer()) :: :ok | {:error, :not_found}
   def stop_instance_for_server(project_slug, identifier, server_id)
@@ -627,16 +633,18 @@ defmodule SymphonyElixir.DevServer.Manager do
     project_slug = project.slug
     step_map = step_to_map(step)
 
+    ready_timeout_ms = ready_timeout_ms(runtime_options)
+
     case running_instance_pid(project_slug, identifier, slug) do
       {:ok, pid} ->
         reuse_or_replace_instance(
           pid,
           project_slug,
           identifier,
-          slug,
           port,
           step_map,
           key,
+          ready_timeout_ms,
           fn ->
             start_fresh_instance(project, identifier, workspace_path, step, port, key, runtime_options)
           end
@@ -647,7 +655,9 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp reuse_or_replace_instance(pid, project_slug, identifier, slug, port, step, key, start_fresh) do
+  defp reuse_or_replace_instance(pid, project_slug, identifier, port, step, key, ready_timeout_ms, start_fresh) do
+    slug = Map.fetch!(step, :slug)
+
     case safe_instance_status(pid) do
       :ready ->
         if port_ready?(port, step) do
@@ -659,7 +669,7 @@ defmodule SymphonyElixir.DevServer.Manager do
         end
 
       status when status in [:starting, :provisioning] ->
-        await_reserved_instance_boot(pid, key)
+        await_reserved_instance_boot(pid, key, ready_timeout_ms)
 
       _ ->
         with :ok <- do_stop_instance_for_server(project_slug, identifier, slug) do
@@ -670,13 +680,13 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   defp start_fresh_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
     case start_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
-      {:ok, pid} -> await_reserved_instance_boot(pid, key)
+      {:ok, pid} -> await_reserved_instance_boot(pid, key, ready_timeout_ms(runtime_options))
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp await_reserved_instance_boot(pid, key) do
-    case await_instance_ready(pid) do
+  defp await_reserved_instance_boot(pid, key, ready_timeout_ms) do
+    case await_instance_ready(pid, ready_timeout_ms) do
       :ok ->
         {:ok, {pid, key}}
 
@@ -685,17 +695,17 @@ defmodule SymphonyElixir.DevServer.Manager do
         {:error, :crashed}
 
       :timeout ->
-        Logger.warning("Dev server prior instance not ready before next slug; proceeding slug=#{inspect(key)}")
+        Logger.warning("Dev server instance not ready within #{ready_timeout_ms}ms; proceeding slug=#{inspect(key)}")
         {:ok, {pid, key}}
     end
   end
 
-  defp await_instance_ready(pid) when is_pid(pid) do
-    deadline = System.monotonic_time(:millisecond) + @prior_instance_ready_timeout_ms
-    await_instance_ready(pid, deadline)
+  defp await_instance_ready(pid, ready_timeout_ms) when is_pid(pid) and is_integer(ready_timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + ready_timeout_ms
+    await_instance_ready_loop(pid, deadline)
   end
 
-  defp await_instance_ready(pid, deadline) when is_pid(pid) do
+  defp await_instance_ready_loop(pid, deadline) when is_pid(pid) do
     case safe_instance_status(pid) do
       :ready ->
         :ok
@@ -711,10 +721,13 @@ defmodule SymphonyElixir.DevServer.Manager do
           :timeout
         else
           Process.sleep(@prior_instance_ready_poll_ms)
-          await_instance_ready(pid, deadline)
+          await_instance_ready_loop(pid, deadline)
         end
     end
   end
+
+  defp ready_timeout_ms(%{ready_timeout_ms: ms}) when is_integer(ms) and ms >= 0, do: ms
+  defp ready_timeout_ms(_runtime_options), do: @prior_instance_ready_timeout_ms
 
   defp safe_instance_status(pid) do
     Instance.status(pid)
@@ -1162,12 +1175,24 @@ defmodule SymphonyElixir.DevServer.Manager do
       dev_server_port_range: get_in(opts, [:dev_server, :port_range]),
       dev_server_base_url: normalize_base_url(get_in(opts, [:dev_server, :base_url])),
       dev_server_idle_timeout_ms: get_in(opts, [:dev_server, :idle_timeout_ms]),
+      ready_timeout_ms: @prior_instance_ready_timeout_ms,
       public_tunnel: [
         enabled: get_in(opts, [:public_tunnel, :enabled]),
         base_domain: get_in(opts, [:public_tunnel, :base_domain]),
         namespace: get_in(opts, [:public_tunnel, :namespace])
       ]
     }
+  end
+
+  # Callers (such as the `manage_preview` agent tool) can shorten the synchronous
+  # wait for instance readiness so a slow/crashing dev server cannot block the
+  # turn for minutes. The instance keeps booting asynchronously regardless; the
+  # caller just stops *waiting* and reports the in-flight status instead.
+  defp apply_runtime_overrides(runtime_options, opts) do
+    case Keyword.get(opts, :ready_timeout_ms) do
+      ms when is_integer(ms) and ms >= 0 -> Map.put(runtime_options, :ready_timeout_ms, ms)
+      _ -> runtime_options
+    end
   end
 
   defp project_workflow_config(project) do
