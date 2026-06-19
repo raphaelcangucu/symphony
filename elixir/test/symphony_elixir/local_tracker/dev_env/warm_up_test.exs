@@ -84,6 +84,25 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.WarmUpTest do
       assert project.warm_up_status == "failed"
     end
 
+    test "runs under an isolated <slug>-warmup compose project with the tenant" do
+      base = tmp_repo(with_serve: true)
+      test_pid = self()
+      exec = fn _dir, cmd, _opts ->
+        send(test_pid, {:warm_up_cmd, cmd})
+        {"Preview is healthy", 0}
+      end
+
+      {:ok, _result} = DevEnv.warm_up("adv", base: base, exec: exec, port: 4390)
+
+      assert_received {:warm_up_cmd, cmd}
+      assert cmd =~ "COMPOSE_PROJECT_NAME=adv-warmup"
+      assert cmd =~ "SYMPHONY_WARMUP=1"
+      assert cmd =~ "SYMPHONY_PREVIEW_TENANT=illume"
+      assert cmd =~ "INSPIRE_PORT=4390"
+      assert cmd =~ "bash .symphony/setup.sh"
+      assert cmd =~ "bash .symphony/serve.sh"
+    end
+
     test "reports needs_scaffold when .symphony/serve.sh is missing" do
       base = tmp_repo(with_serve: false)
       {:ok, result} = DevEnv.warm_up("adv", base: base, exec: fn _, _, _ -> {"", 0} end)

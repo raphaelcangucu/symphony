@@ -128,7 +128,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
          {:ok, run} <- start_run(project_slug, "warm_up") do
       if File.exists?(Path.join([base, ".symphony", "serve.sh"])) do
         port = Keyword.get(opts, :port, pick_ephemeral_port())
-        {output, status} = exec.(base, warm_up_command(port, tenant), [])
+        {output, status} = exec.(base, warm_up_command(project_slug, port, tenant), [])
         run_status = if status == 0, do: "succeeded", else: "failed"
         failure = if status == 0, do: nil, else: classify_warm_up_failure(output)
         finalize_warm_up(project_slug, run, run_status, failure, port, output)
@@ -138,11 +138,21 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
     end
   end
 
-  defp warm_up_command(port, tenant) do
-    env = "INSPIRE_PORT=#{port} SYMPHONY_WARMUP=1 SYMPHONY_PREVIEW_TENANT=#{tenant}"
+  defp warm_up_command(project_slug, port, tenant) do
+    # Boot under a dedicated, isolated Compose project so the warm-up never reuses
+    # or tears down a running per-issue preview on the same host (serve.sh/vibe
+    # honor an explicit COMPOSE_PROJECT_NAME — see .symphony/common.sh).
+    env =
+      "COMPOSE_PROJECT_NAME=#{warm_up_compose_project(project_slug)} " <>
+        "INSPIRE_PORT=#{port} SYMPHONY_WARMUP=1 SYMPHONY_PREVIEW_TENANT=#{tenant}"
 
     "export PATH=\"$PWD/node_modules/.bin:$PATH\" && " <>
       "#{env} bash .symphony/setup.sh && #{env} bash .symphony/serve.sh"
+  end
+
+  defp warm_up_compose_project(project_slug) do
+    sanitized = project_slug |> String.downcase() |> String.replace(~r/[^a-z0-9_-]/, "-")
+    "#{sanitized}-warmup"
   end
 
   defp default_warm_up_exec(base, command, _opts) do
