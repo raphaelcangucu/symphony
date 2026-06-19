@@ -97,3 +97,47 @@ export function composerSeedFromHandoff(handoff: PreviewAssistantHandoff): strin
   }
   return handoff.message;
 }
+
+export interface ProjectAssistantHandoff {
+  projectSlug: string;
+  message: string;
+  createdAt: number;
+}
+
+const PROJECT_STORAGE_KEY = "symphony:project-assistant-handoff";
+
+export function buildWarmUpBootstrapPrompt(projectSlug: string): string {
+  return [
+    `Prepare the dev environment for project "${projectSlug}" before any task starts.`,
+    "",
+    'Call manage_dev_env with action "warm_up" to run the deterministic warm-up',
+    "(ECR login, pull/build images, boot a dry-run on an ephemeral port, confirm a",
+    "tenant-aware /health for the default tenant, then tear it down).",
+    "",
+    "If it fails, use the returned failure_class to fix it in this thread and re-run warm_up:",
+    "- image_pull_auth → refresh/ask for AWS creds (prefer the AWS profile)",
+    "- needs_scaffold → scaffold the .symphony/ scripts, propose a commit, then re-run",
+    "- container_name_conflict / port_allocation → inspect docker and resolve",
+    "- health_timeout → read the logs and report the likely cause",
+  ].join("\n");
+}
+
+export function stashProjectAssistantHandoff(handoff: ProjectAssistantHandoff): void {
+  sessionStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(handoff));
+}
+
+export function consumeProjectAssistantHandoff(projectSlug: string): ProjectAssistantHandoff | null {
+  const raw = sessionStorage.getItem(PROJECT_STORAGE_KEY);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as ProjectAssistantHandoff;
+    if (parsed.projectSlug !== projectSlug) return null;
+
+    sessionStorage.removeItem(PROJECT_STORAGE_KEY);
+    return parsed;
+  } catch {
+    sessionStorage.removeItem(PROJECT_STORAGE_KEY);
+    return null;
+  }
+}

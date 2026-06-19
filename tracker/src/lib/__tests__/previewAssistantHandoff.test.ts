@@ -3,9 +3,12 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { i18n } from "@/i18n";
 import {
   buildPreviewFailurePrompt,
+  buildWarmUpBootstrapPrompt,
   consumePreviewAssistantHandoff,
+  consumeProjectAssistantHandoff,
   previewHandoffTarget,
   stashPreviewAssistantHandoff,
+  stashProjectAssistantHandoff,
 } from "@/lib/previewAssistantHandoff";
 import type { IssueDevServer } from "@/types/issue";
 
@@ -61,5 +64,24 @@ describe("previewAssistantHandoff", () => {
   it("prefers execution steer when an agent run is live", () => {
     expect(previewHandoffTarget({ status: "live" } as never)).toBe("execution-steer");
     expect(previewHandoffTarget(undefined)).toBe("authoring");
+  });
+
+  it("stashes and consumes a project warm-up handoff (single-use)", () => {
+    stashProjectAssistantHandoff({ projectSlug: "adv", message: "Prepare env", createdAt: Date.now() });
+
+    expect(consumeProjectAssistantHandoff("adv")?.message).toBe("Prepare env");
+    expect(consumeProjectAssistantHandoff("adv")).toBeNull();
+  });
+
+  it("ignores a project handoff for a different project", () => {
+    stashProjectAssistantHandoff({ projectSlug: "adv", message: "Prepare env", createdAt: Date.now() });
+    expect(consumeProjectAssistantHandoff("other")).toBeNull();
+  });
+
+  it("builds a warm-up bootstrap prompt mentioning the project and the tool", () => {
+    const prompt = buildWarmUpBootstrapPrompt("adv");
+    expect(prompt).toContain("adv");
+    expect(prompt).toContain("manage_dev_env");
+    expect(prompt).toContain("warm_up");
   });
 });
