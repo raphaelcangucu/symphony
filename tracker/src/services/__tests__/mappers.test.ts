@@ -99,6 +99,8 @@ describe("tracker DTO mappers", () => {
       ],
       inserted_at: "2026-05-27T01:00:00Z",
       updated_at: "2026-05-27T02:00:00Z",
+      warm_up_status: "failed",
+      last_warm_up_run_id: 3,
     });
 
     expect(project).toMatchObject({
@@ -109,11 +111,27 @@ describe("tracker DTO mappers", () => {
       issueCount: 5,
       createdAt: "2026-05-27T01:00:00Z",
       updatedAt: "2026-05-27T02:00:00Z",
+      warmUpStatus: "failed",
+      lastWarmUpRunId: 3,
       workflowStatuses: [
         { id: "1", name: "Todo", category: "unstarted", position: 1, isTerminal: false },
         { id: "2", name: "Done", category: "completed", position: 6, isTerminal: true },
       ],
     });
+  });
+
+  it("defaults warm-up readiness when the project DTO omits it", () => {
+    const project = normalizeProject({
+      id: 7,
+      slug: "p",
+      name: "P",
+      description: null,
+      inserted_at: "2026-05-27T01:00:00Z",
+      updated_at: "2026-05-27T02:00:00Z",
+    });
+
+    expect(project.warmUpStatus).toBe("never");
+    expect(project.lastWarmUpRunId).toBeNull();
   });
 
   it("normalizes comments and blockers from snake_case backend DTOs", () => {

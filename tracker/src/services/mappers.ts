@@ -138,6 +138,12 @@ export interface BackendProjectDto {
   updatedAt?: string | null;
   archived_at?: string | null;
   archivedAt?: string | null;
+  warm_up_status?: string | null;
+  warmUpStatus?: string | null;
+  warmed_at?: string | null;
+  warmedAt?: string | null;
+  last_warm_up_run_id?: number | null;
+  lastWarmUpRunId?: number | null;
   sync_state?: BackendProjectSyncStateDto | null;
   syncState?: BackendProjectSyncStateDto | null;
 }
@@ -382,6 +388,9 @@ export function normalizeProject(dto: BackendProjectDto): Project {
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? undefined,
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? undefined,
     archivedAt: dto.archivedAt ?? dto.archived_at ?? null,
+    warmUpStatus: (dto.warmUpStatus ?? dto.warm_up_status ?? "never") as Project["warmUpStatus"],
+    warmedAt: dto.warmedAt ?? dto.warmed_at ?? null,
+    lastWarmUpRunId: dto.lastWarmUpRunId ?? dto.last_warm_up_run_id ?? null,
   };
 }
 
