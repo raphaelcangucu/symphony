@@ -7,7 +7,7 @@ defmodule SymphonyElixir.Assistant.DevEnvTools do
 
   @tool "manage_dev_env"
 
-  @assistant_actions ~w(list_steps propose_steps save_steps run run_step list_runs)a
+  @assistant_actions ~w(list_steps propose_steps save_steps run run_step list_runs warm_up)a
   @coding_agent_actions ~w(list_steps run run_step list_runs)a
 
   @description """
@@ -39,23 +39,42 @@ defmodule SymphonyElixir.Assistant.DevEnvTools do
     start_run = Keyword.get(opts, :start_run, &DevEnv.start_run/1)
     finish_run = Keyword.get(opts, :finish_run, &DevEnv.finish_run/1)
     run_step = Keyword.get(opts, :run_step, &Runner.run_step/3)
+    warm_up = Keyword.get(opts, :warm_up, &DevEnv.warm_up/2)
 
     with {:ok, action} <- normalize_action(Map.get(arguments, "action")),
          :ok <- authorize_action(action, opts) do
-      execute_action(
-        action,
-        project_slug,
-        arguments,
-        propose_steps,
-        list_steps,
-        save_steps,
-        list_runs,
-        start_run,
-        finish_run,
-        run_step
-      )
+      if action == :warm_up do
+        execute_warm_up(project_slug, warm_up)
+      else
+        execute_action(
+          action,
+          project_slug,
+          arguments,
+          propose_steps,
+          list_steps,
+          save_steps,
+          list_runs,
+          start_run,
+          finish_run,
+          run_step
+        )
+      end
     end
   end
+
+  defp execute_warm_up(project_slug, warm_up) do
+    case warm_up.(project_slug, []) do
+      {:ok, data} ->
+        {:ok, %{tool: @tool, message: warm_up_message(data), data: data}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp warm_up_message(%{status: "succeeded"}), do: "Dev environment warm-up succeeded."
+  defp warm_up_message(%{failure_class: class}), do: "Warm-up failed (#{class}). See data for remediation."
+  defp warm_up_message(_data), do: "Warm-up finished."
 
   defp execute_action(:list_steps, project_slug, _arguments, _propose, list_steps, _save, _runs, _start, _finish, _run_step) do
     steps = list_steps.(project_slug) |> Enum.map(&DevEnvPresenter.step/1)
@@ -200,6 +219,7 @@ defmodule SymphonyElixir.Assistant.DevEnvTools do
       "run" -> {:ok, :run}
       "run_step" -> {:ok, :run_step}
       "list_runs" -> {:ok, :list_runs}
+      "warm_up" -> {:ok, :warm_up}
       other -> {:error, {:invalid_dev_env_action, other}}
     end
   end

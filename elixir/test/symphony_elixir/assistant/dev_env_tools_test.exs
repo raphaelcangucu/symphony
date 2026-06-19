@@ -68,6 +68,35 @@ defmodule SymphonyElixir.Assistant.DevEnvToolsTest do
     assert result.data.steps == []
   end
 
+  test "assistant can run warm_up via injected fun" do
+    warm = fn _slug, _opts ->
+      {:ok, %{run_id: 1, status: "succeeded", failure_class: nil, port: 4399, output: "ok"}}
+    end
+
+    assert {:ok, result} =
+             DevEnvTools.execute("dev-env-test", %{"action" => "warm_up"}, warm_up: warm)
+
+    assert result.tool == "manage_dev_env"
+    assert result.message == "Dev environment warm-up succeeded."
+    assert result.data.status == "succeeded"
+  end
+
+  test "warm_up surfaces a failure_class in the message" do
+    warm = fn _slug, _opts ->
+      {:ok, %{run_id: 2, status: "failed", failure_class: "image_pull_auth", port: nil, output: "403"}}
+    end
+
+    assert {:ok, result} =
+             DevEnvTools.execute("dev-env-test", %{"action" => "warm_up"}, warm_up: warm)
+
+    assert result.message =~ "image_pull_auth"
+  end
+
+  test "coding agents are denied warm_up" do
+    assert {:error, :action_not_allowed} =
+             DevEnvTools.execute("dev-env-test", %{"action" => "warm_up"}, coding_agent: true)
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
