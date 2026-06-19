@@ -2,7 +2,7 @@ defmodule SymphonyElixir.Assistant.EvidenceTools do
   @moduledoc false
 
   alias SymphonyElixir.Assistant.HandoffTools
-  alias SymphonyElixir.Evidence.{Gate, Store}
+  alias SymphonyElixir.Evidence.{Gate, Judge, Store}
   alias SymphonyElixir.ProjectConfig
 
   @tool "get_evidence_status"
@@ -50,7 +50,12 @@ defmodule SymphonyElixir.Assistant.EvidenceTools do
          {:ok, config} <- HandoffTools.load_config(project_slug, opts),
          workspace = HandoffTools.workspace_for(issue, opts),
          {:ok, records} <- list_runs.(project_slug, issue.identifier) do
-      gate = Gate.evaluate(workspace, evidence_config(config))
+      gate =
+        Gate.evaluate(
+          workspace,
+          evidence_config(config),
+          Map.put(Gate.default_deps(), :judge_verdict, &Judge.read_verdict/1)
+        )
 
       {:ok,
        %{

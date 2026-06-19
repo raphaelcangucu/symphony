@@ -1354,10 +1354,16 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp incomplete_handoff_note({:validate_gate, violations}) do
-    if Evidence.Gate.environment_blocked_only?(violations) do
-      "- The issue was **not** moved to review — required tests could not run in the workspace environment (e.g. no Docker/network). This is an environment blocker, not necessarily a code failure: fix the environment (or sandbox capabilities) and re-dispatch."
-    else
-      "- The issue was **not** moved to review — evidence/validation is missing or failing."
+    cond do
+      Evidence.Gate.environment_blocked_only?(violations) ->
+        "- The issue was **not** moved to review — required tests could not run in the workspace environment (e.g. no Docker/network). This is an environment blocker, not necessarily a code failure: fix the environment (or sandbox capabilities) and re-dispatch."
+
+      Enum.any?(violations, &(&1.kind == :judge_rejected)) ->
+        reasons = violations |> Enum.filter(&(&1.kind == :judge_rejected)) |> Enum.map_join("; ", & &1.detail)
+        "- The issue was **not** moved to review — the independent validation judge rejected the evidence (#{reasons}). The tests do not yet prove the change; fix the tests/evidence and re-dispatch."
+
+      true ->
+        "- The issue was **not** moved to review — evidence/validation is missing or failing."
     end
   end
 

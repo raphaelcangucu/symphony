@@ -171,6 +171,7 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp run_codex_turns(workspace, issue, codex_update_recipient, opts) do
+    opts = Keyword.put_new(opts, :issue, issue)
     max_turns = Keyword.get(opts, :max_turns, project_max_turns(Keyword.get(opts, :project_config)))
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
@@ -204,7 +205,8 @@ defmodule SymphonyElixir.AgentRunner do
 
         validate_evaluator =
           Keyword.get(opts, :validate_gate_evaluator, fn ws ->
-            Evidence.Gate.evaluate(ws, evidence_config(Keyword.get(opts, :project_config)))
+            cfg = evidence_config(Keyword.get(opts, :project_config))
+            Evidence.Gate.evaluate(ws, cfg, Evidence.Gate.default_deps(issue: Keyword.get(opts, :issue), config: cfg))
           end)
 
         turn_opts = agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)
@@ -540,7 +542,8 @@ defmodule SymphonyElixir.AgentRunner do
   defp validate_gate_outcome(workspace, opts) do
     evaluator =
       Keyword.get(opts, :validate_gate_evaluator, fn ws ->
-        Evidence.Gate.evaluate(ws, evidence_config(Keyword.get(opts, :project_config)))
+        cfg = evidence_config(Keyword.get(opts, :project_config))
+        Evidence.Gate.evaluate(ws, cfg, Evidence.Gate.default_deps(issue: Keyword.get(opts, :issue), config: cfg))
       end)
 
     case evaluator.(workspace) do

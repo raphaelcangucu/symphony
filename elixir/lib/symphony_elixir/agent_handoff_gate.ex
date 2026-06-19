@@ -25,7 +25,7 @@ defmodule SymphonyElixir.AgentHandoffGate do
   def check(issue, %ProjectConfig{} = config, opts \\ []) do
     workspace = workspace_path(issue, opts)
 
-    with :ok <- check_validate_workspace(workspace, config),
+    with :ok <- check_validate_workspace(workspace, config, issue),
          :ok <- check_publish_workspace(workspace, config) do
       :ok
     end
@@ -36,7 +36,7 @@ defmodule SymphonyElixir.AgentHandoffGate do
   def check_validate(issue, %ProjectConfig{} = config, opts \\ []) do
     issue
     |> workspace_path(opts)
-    |> check_validate_workspace(config)
+    |> check_validate_workspace(config, issue)
   end
 
   @spec check_publish(map(), ProjectConfig.t(), keyword()) ::
@@ -51,8 +51,10 @@ defmodule SymphonyElixir.AgentHandoffGate do
     Keyword.get(opts, :workspace, Workspace.path_for_issue(issue))
   end
 
-  defp check_validate_workspace(workspace, config) do
-    case Gate.evaluate(workspace, evidence_config(config)) do
+  defp check_validate_workspace(workspace, config, issue) do
+    cfg = evidence_config(config)
+
+    case Gate.evaluate(workspace, cfg, Gate.default_deps(issue: issue, config: cfg)) do
       :satisfied -> :ok
       {:violations, violations} -> {:error, :validate_gate, violations}
     end
