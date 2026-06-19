@@ -45,6 +45,20 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
     assert json.tracker_config == %{"project_id" => "PVT_1"}
   end
 
+  test "project/1 includes warm-up readiness" do
+    project = %SymphonyElixir.LocalTracker.Project{
+      id: 1,
+      name: "P",
+      slug: "p",
+      warm_up_status: "succeeded",
+      last_warm_up_run_id: 7
+    }
+
+    json = SymphonyElixirWeb.TrackerPresenter.project(project)
+    assert json.warm_up_status == "succeeded"
+    assert json.last_warm_up_run_id == 7
+  end
+
   test "sync_state/1 serializes a StateRecord and passes nil through" do
     state = %SymphonyElixir.Tracker.Sync.StateRecord{
       status: "error",

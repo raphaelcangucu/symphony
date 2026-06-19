@@ -32,6 +32,9 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       repositories: repositories && Enum.map(repositories, &repository/1),
       setup: setup && project_setup(setup),
       archived_at: iso8601(project.archived_at),
+      warmed_at: iso8601(project.warmed_at),
+      warm_up_status: project.warm_up_status,
+      last_warm_up_run_id: project.last_warm_up_run_id,
       inserted_at: iso8601(project.inserted_at),
       updated_at: iso8601(project.updated_at)
     }
