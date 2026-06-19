@@ -133,6 +133,27 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @doc """
+  Persists the project-level dev-env warm-up readiness. `status` is one of
+  `never | running | succeeded | failed`; `warmed_at` is stamped only on success.
+  Uses a bare changeset (not `Project.changeset/2`) so these internal fields are
+  never castable from the public update API.
+  """
+  @spec update_warm_up_state(String.t(), map()) :: {:ok, Project.t()} | {:error, missing_error()}
+  def update_warm_up_state(project_slug, %{status: status} = attrs) when is_binary(project_slug) do
+    with {:ok, project} <- fetch_project(project_slug) do
+      changes = %{
+        warm_up_status: status,
+        last_warm_up_run_id: Map.get(attrs, :run_id, project.last_warm_up_run_id),
+        warmed_at: if(status == "succeeded", do: DateTime.utc_now(), else: project.warmed_at)
+      }
+
+      project
+      |> Ecto.Changeset.change(changes)
+      |> Repo.update()
+    end
+  end
+
   @spec list_statuses(String.t()) :: [WorkflowStatus.t()]
   def list_statuses(project_slug) when is_binary(project_slug) do
     case Repo.get_by(Project, slug: project_slug) do
