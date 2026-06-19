@@ -1139,7 +1139,13 @@ defmodule SymphonyElixir.Config do
 
   defp parse_repo_config(_cfg), do: %{}
 
-  defp parse_e2e(%{} = e2e), do: e2e_command_map(scalar_string_value(Map.get(e2e, "command")))
+  defp parse_e2e(%{} = e2e) do
+    case e2e_command_map(scalar_string_value(Map.get(e2e, "command"))) do
+      :omit -> :omit
+      map -> put_if_present(map, :require_url_pattern, scalar_string_value(Map.get(e2e, "require_url_pattern")))
+    end
+  end
+
   defp parse_e2e(command) when is_binary(command), do: e2e_command_map(scalar_string_value(command))
   defp parse_e2e(_e2e), do: :omit
 

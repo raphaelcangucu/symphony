@@ -140,6 +140,26 @@ defmodule SymphonyElixir.ConfigTest do
       assert get_in(validated, [:evidence, :required]) == false
       assert get_in(validated, [:evidence, :repos]) == %{}
     end
+
+    test "validate_front_matter passes through e2e require_url_pattern" do
+      validated =
+        SymphonyElixir.Config.validate_front_matter(%{
+          "evidence" => %{
+            "required" => true,
+            "repos" => %{
+              "frontend" => %{
+                "ui_paths" => ["src/**"],
+                "e2e" => %{"command" => "npx playwright test", "require_url_pattern" => "^https?://[^/]+\\.localhost"}
+              }
+            }
+          }
+        })
+
+      assert get_in(validated, [:evidence, :repos, "frontend", :e2e]) == %{
+               command: "npx playwright test",
+               require_url_pattern: "^https?://[^/]+\\.localhost"
+             }
+    end
   end
 
   describe "validate_workflow_config/1 (strict)" do

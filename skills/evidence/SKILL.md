@@ -90,6 +90,39 @@ Each spec should screenshot the key states of the changed screen
 (`await page.screenshot({ path: "...", fullPage: true })` for before/after
 states where applicable).
 
+## Real-flow proof (no fakes)
+
+The VALIDATE gate checks that an e2e **actually exercised the change** — not just
+that screenshots exist:
+
+- **Drive the real flow.** Use `page.goto(<real app/tenant URL>)` and interact
+  with the real UI. `page.setContent(...)`, `about:blank`, and `data:` URLs do
+  NOT count — the gate rejects them as `:synthetic_e2e`.
+- **Record the proof contract.** Import the `symphony-evidence` Playwright
+  fixture so the harness writes `test-results/symphony-navigations.json`, then
+  copy the real URLs into each e2e run's `navigations` (and any key asserted
+  title/selector into `proof`) in `.symphony/evidence/manifest.json`. Some
+  projects also set `e2e.require_url_pattern` (e.g. advising's `<tenant>.localhost`)
+  — a real navigation must match it.
+- **Substitute evidence is a gate violation, not a pass.** Never swap the real
+  flow for a preview-health check or a hand-built page to "make the gate green".
+  If the real check genuinely cannot run (e.g. tenant DB import fails), record
+  the run as `blocked` with a written `blocked_reason` — that is the honest path
+  and is not penalized.
+- **An independent judge reads your tests.** A separate, fresh-context judge
+  compares your test files against the ticket criteria and the git diff. If the
+  tests do not exercise the change, it returns `fail` and the gate blocks
+  (`:judge_rejected`) with reasons — fix the tests, not the gate.
+
+### Shift-left: dispatch the code-reviewer with the evidence
+
+Before declaring VALIDATE done, dispatch the superpowers `code-reviewer`
+subagent (see `requesting-code-review`) to review the **generated code quality**
+and, **when evidence exists**, the **evidence** too — pass it the diff + test
+files plus the artifacts (screenshots, video, `navigations`/`proof`, manifest).
+Fix any Critical/Important findings (regenerating evidence if needed) before
+finishing.
+
 ## Cross-repo impact (when you changed a back-end/service repo)
 
 For each repo you changed that declares `impacts: [<ui repos>]`:

@@ -113,6 +113,8 @@ setup:
             - "kiosk/**"
           e2e:
             command: "cd automation/playwright && npx playwright test"
+            # Tenants are served on <tenant>.localhost; a real e2e must navigate there.
+            require_url_pattern: "^https?://[^/]+\\.localhost"
     agent:
       max_turns: 30
     codex:
