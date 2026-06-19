@@ -67,11 +67,11 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
     end
   end
 
-  @spec start_run(String.t()) :: {:ok, Run.t()} | {:error, error()}
-  def start_run(project_slug) do
+  @spec start_run(String.t(), String.t()) :: {:ok, Run.t()} | {:error, error()}
+  def start_run(project_slug, kind \\ "run") do
     with {:ok, project} <- Context.get_project(project_slug) do
       %Run{}
-      |> Run.changeset(%{project_id: project.id, status: "running", started_at: now()})
+      |> Run.changeset(%{project_id: project.id, kind: kind, status: "running", started_at: now()})
       |> Repo.insert()
     end
   end
@@ -110,6 +110,81 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
       _ ->
         []
     end
+  end
+
+  @doc """
+  One-time, project-level dev-env warm-up: run the `.symphony/` setup + a
+  `SYMPHONY_WARMUP=1` serve dry-run (boot → /health → teardown) as a blocking
+  shell exec, classify any failure, record a `warm_up` run, and update project
+  readiness. Injectable `:exec`/`:base`/`:tenant`/`:port` keep it testable.
+  """
+  @spec warm_up(String.t(), keyword()) :: {:ok, map()} | {:error, error()}
+  def warm_up(project_slug, opts \\ []) do
+    exec = Keyword.get(opts, :exec, &default_warm_up_exec/3)
+    tenant = Keyword.get(opts, :tenant, "illume")
+    base = Keyword.get(opts, :base, workspace_root(project_slug))
+
+    with {:ok, _project} <- Context.get_project(project_slug),
+         {:ok, run} <- start_run(project_slug, "warm_up") do
+      if File.exists?(Path.join([base, ".symphony", "serve.sh"])) do
+        port = Keyword.get(opts, :port, pick_ephemeral_port())
+        {output, status} = exec.(base, warm_up_command(port, tenant), [])
+        run_status = if status == 0, do: "succeeded", else: "failed"
+        failure = if status == 0, do: nil, else: classify_warm_up_failure(output)
+        finalize_warm_up(project_slug, run, run_status, failure, port, output)
+      else
+        finalize_warm_up(project_slug, run, "failed", "needs_scaffold", nil, "Missing .symphony/serve.sh")
+      end
+    end
+  end
+
+  defp warm_up_command(port, tenant) do
+    env = "INSPIRE_PORT=#{port} SYMPHONY_WARMUP=1 SYMPHONY_PREVIEW_TENANT=#{tenant}"
+
+    "export PATH=\"$PWD/node_modules/.bin:$PATH\" && " <>
+      "#{env} bash .symphony/setup.sh && #{env} bash .symphony/serve.sh"
+  end
+
+  defp default_warm_up_exec(base, command, _opts) do
+    System.cmd("bash", ["-lc", command], cd: base, stderr_to_stdout: true)
+  rescue
+    error -> {Exception.message(error), 1}
+  end
+
+  defp classify_warm_up_failure(output) do
+    cond do
+      output =~ ~r/403 Forbidden|pull access denied|not authorized|no basic auth/i -> "image_pull_auth"
+      output =~ ~r/already in use by container/i -> "container_name_conflict"
+      output =~ ~r/port is already allocated|address already in use/i -> "port_allocation"
+      output =~ ~r/No such file or directory.*\.symphony|\.symphony.*No such file/i -> "needs_scaffold"
+      output =~ ~r/Health was not confirmed|not running after|is not running/i -> "health_timeout"
+      true -> "unknown"
+    end
+  end
+
+  defp finalize_warm_up(project_slug, run, status, failure, port, output) do
+    record_step_result(run, warm_up_step(), %{
+      status: status,
+      output: String.slice(output || "", 0, 20_000)
+    })
+
+    {:ok, _finished} = finish_run(run)
+    {:ok, _project} = Context.update_warm_up_state(project_slug, %{status: status, run_id: run.id})
+
+    {:ok, %{run_id: run.id, status: status, failure_class: failure, port: port, output: output}}
+  end
+
+  # Transient (non-persisted) step carrying only description/command for the
+  # StepRun record; warm-up has no project-scoped Step row.
+  defp warm_up_step do
+    %Step{id: nil, description: "warm-up dry-run", command: "bash .symphony/serve.sh (SYMPHONY_WARMUP=1)"}
+  end
+
+  defp pick_ephemeral_port do
+    {:ok, socket} = :gen_tcp.listen(0, [:binary, ip: {127, 0, 0, 1}])
+    {:ok, port} = :inet.port(socket)
+    :gen_tcp.close(socket)
+    port
   end
 
   defp step_attrs(attrs, project_id, index) do
