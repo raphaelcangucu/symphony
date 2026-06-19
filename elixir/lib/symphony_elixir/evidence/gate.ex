@@ -14,6 +14,7 @@ defmodule SymphonyElixir.Evidence.Gate do
   """
 
   alias SymphonyElixir.Evidence.GitDiff
+  alias SymphonyElixir.Evidence.Judge
   alias SymphonyElixir.Evidence.Manifest
   alias SymphonyElixir.Evidence.SessionAudit
 
@@ -43,13 +44,19 @@ defmodule SymphonyElixir.Evidence.Gate do
 
   def environment_blocked_only?(_violations), do: false
 
-  @spec default_deps() :: map()
-  def default_deps do
-    %{
+  @spec default_deps(keyword()) :: map()
+  def default_deps(opts \\ []) do
+    base = %{
       read_manifest: &Manifest.read/1,
       changed_files: &GitDiff.changed_files/1,
-      audit: fn commands, opts -> SessionAudit.verify_commands(commands, opts) end
+      audit: fn commands, audit_opts -> SessionAudit.verify_commands(commands, audit_opts) end,
+      judge_verdict: fn _ws -> :none end
     }
+
+    case Keyword.get(opts, :issue) do
+      nil -> base
+      issue -> Map.put(base, :judge_verdict, fn ws -> Judge.verdict(ws, issue: issue, config: Keyword.get(opts, :config)) end)
+    end
   end
 
   defp evaluate_manifest(workspace, config, changed, deps) do
@@ -80,6 +87,7 @@ defmodule SymphonyElixir.Evidence.Gate do
       unit_violations(manifest, changed) ++
         impact_violations ++
         e2e_violations(manifest, required_ui, repos) ++
+        judge_violations(workspace, deps) ++
         audit_violations(manifest, workspace, deps)
 
     case violations do
@@ -238,6 +246,23 @@ defmodule SymphonyElixir.Evidence.Gate do
   end
 
   defp real_navigation?(_url), do: false
+
+  # Layer B: the independent judge's verdict, read purely via the injected dep.
+  # `{:fail, reasons}` vetoes; `:pass`/`:none` (none = disabled or unavailable)
+  # never block — the LLM call lives in the dep, not in this pure function.
+  defp judge_violations(workspace, deps) do
+    case deps.judge_verdict.(workspace) do
+      {:fail, reasons} ->
+        [%{kind: :judge_rejected, repo: nil, detail: "validation judge rejected the evidence: " <> format_reasons(reasons)}]
+
+      _pass_or_none ->
+        []
+    end
+  end
+
+  defp format_reasons(reasons) when is_list(reasons), do: Enum.join(reasons, "; ")
+  defp format_reasons(reason) when is_binary(reason), do: reason
+  defp format_reasons(other), do: inspect(other)
 
   # A required `unit`/`e2e` run the agent explicitly marked as unrunnable in this
   # workspace environment. Distinct from a `failed` (code) run: it never

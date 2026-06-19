@@ -33,7 +33,8 @@ defmodule SymphonyElixir.Evidence.GateTest do
       %{
         read_manifest: fn _ws -> {:ok, manifest([unit("frontend")])} end,
         changed_files: fn _ws -> %{"frontend" => ["src/App.tsx"]} end,
-        audit: fn _commands, _opts -> :ok end
+        audit: fn _commands, _opts -> :ok end,
+        judge_verdict: fn _ws -> :pass end
       },
       Map.new(overrides)
     )
@@ -166,6 +167,47 @@ defmodule SymphonyElixir.Evidence.GateTest do
       config = put_in(@config, [:repos, "frontend", :e2e, :require_url_pattern], "^https?://[^/]+\\.localhost")
       d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e("frontend", navigations: ["http://localhost:3000/app"])])} end)
       assert {:violations, [%{kind: :e2e_url_mismatch, repo: "frontend"}]} = Gate.evaluate("/ws", config, d)
+    end
+  end
+
+  describe "judge verdict (Layer B)" do
+    test "judge fail verdict is a violation" do
+      d =
+        deps(
+          judge_verdict: fn _ws -> {:fail, ["e2e does not exercise the diff"]} end,
+          read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e()])} end
+        )
+
+      assert {:violations, [%{kind: :judge_rejected, detail: detail}]} = Gate.evaluate("/ws", @config, d)
+      assert detail =~ "does not exercise the diff"
+    end
+
+    test "judge pass verdict does not block an otherwise green gate" do
+      d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e()])} end)
+      assert :satisfied = Gate.evaluate("/ws", @config, d)
+    end
+
+    test "judge none (unavailable) is non-blocking" do
+      d =
+        deps(
+          judge_verdict: fn _ws -> :none end,
+          read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e()])} end
+        )
+
+      assert :satisfied = Gate.evaluate("/ws", @config, d)
+    end
+  end
+
+  describe "default_deps wiring" do
+    test "default_deps without an issue yields a non-blocking :none verdict" do
+      deps = Gate.default_deps()
+      assert deps.judge_verdict.("/ws") == :none
+    end
+
+    test "default_deps with an issue wires a judge_verdict reader" do
+      deps = Gate.default_deps(issue: %{identifier: "X", title: "t"}, config: %{judge: %{enabled: false}})
+      assert is_function(deps.judge_verdict, 1)
+      assert deps.judge_verdict.("/ws") == :none
     end
   end
 
