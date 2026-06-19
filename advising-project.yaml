@@ -52,8 +52,8 @@ repositories:
   # lacks origin/HEAD (common in ephemeral workspaces). Must match the PR base branch.
   - github_full_name: civitaslearning/advising
     clone_url: git@github.com:civitaslearning/advising.git
-    default_branch: pre-release
-    selected_branch: pre-release
+    default_branch: feature/lti-group-sharing-CDE-1106
+    selected_branch: feature/lti-group-sharing-CDE-1106
     role: primary
     workspace_path: advising
 workflow_statuses:
@@ -133,7 +133,7 @@ setup:
     hooks:
       after_create: |
         # Prefer gh (SSH per `gh config`) or git+SSH — not the Codex GitHub app connector.
-        gh repo clone civitaslearning/advising advising -- --depth 1 -b pre-release
+        gh repo clone civitaslearning/advising advising -- --depth 1 -b feature/lti-group-sharing-CDE-1106
 
         if [ -f advising/docker/.env.example ] && [ ! -f advising/docker/.env ]; then
           cp advising/docker/.env.example advising/docker/.env
@@ -175,7 +175,8 @@ setup:
     (Jira project `CDE`, scoped to Product `Inspire`).
 
     Repository: `civitaslearning/advising` (workspace path `advising/`), integration
-    branch and PR base `pre-release`.
+    branch and PR base `feature/lti-group-sharing-CDE-1106` (the active dev branch;
+    it will be merged into `pre-release` soon).
 
     Read `docs/SAIL.md`, `docs/VIBE.md`, `docs/TESTS.md`, and `docs/INSTALL.md` in
     the repo before running commands. This is **PHP 7.4 Symfony 1.x** (legacy Inspire)
@@ -298,10 +299,34 @@ setup:
 
     ```bash
     cd advising/automation/playwright
-    npm run playwright:preview              # uses playwright.preview.config.js
+    SYMPHONY_PREVIEW_TENANT=<tenant> npm run playwright:preview   # playwright.preview.config.js
     ```
 
-    Tenant URLs (when app is ready): `http://cwu.localhost:<port>/`, etc.
+    ## Tenant-aware e2e (read `docs/SYMPHONY_E2E.md`)
+
+    The e2e you record as evidence MUST cover the **screens your change touched** — derive
+    it from `git diff`, exactly like the `evidence` skill ("Focused testing"). Do not record
+    a generic "app loads" check or the full matrix. Two specifics for this repo:
+
+    - **Tenant host, never the bare host.** Each CDE issue belongs to a client/tenant served
+      at `http://<tenant>.localhost:<port>/` (the app maps the subdomain to its DB via
+      `DynamicDoctrineDatabase`). The bare `http://localhost:<port>/` is the **kiosk login**
+      — a different product, so a kiosk screenshot is invalid evidence.
+    - **Resolve the tenant**: Jira issue fields/description first, else infer from the
+      ticket, else fall back to the default dev tenant **`illume`** (`illume.localhost`).
+
+    Per issue:
+
+    1. **Ensure the tenant DB exists**: `bash .symphony/ensure-tenant-db.sh <tenant>`
+       (downloads + imports a scrubbed dump if missing, and seeds a `Welcome123` login;
+       see `docs/DBDUMP.md`).
+    2. **Precondition smoke** (not the deliverable):
+       `SYMPHONY_PREVIEW_TENANT=<tenant> npm run playwright:preview` — proves the tenant app
+       boots and is not the kiosk.
+    3. **Change-scoped e2e** (the actual evidence): write/run a spec under
+       `automation/playwright/playwright/e2e/tests/jira/<ticket-id>/` that drives the changed
+       flow on the tenant host, logs in with a `manage-user`-seeded account, and screenshots
+       its key states. Record only that scoped run in `.symphony/evidence/manifest.json`.
 
     ## Workflow
 
@@ -313,9 +338,9 @@ setup:
     - **READY FOR QA** / **IN QA** / **Ready for Deploy**: post-review pipeline (humans or QA move these).
     - **Concluído**: done.
 
-    - Sync before handoff: `cd advising && git fetch origin && git merge origin/pre-release`.
-    - Open the PR against `pre-release`:
-      `cd advising && gh pr create --base pre-release --title "{{ issue.identifier }}: ..."`.
+    - Sync before handoff: `cd advising && git fetch origin && git merge origin/feature/lti-group-sharing-CDE-1106`.
+    - Open the PR against `feature/lti-group-sharing-CDE-1106`:
+      `cd advising && gh pr create --base feature/lti-group-sharing-CDE-1106 --title "{{ issue.identifier }}: ..."`.
     - **Every PR body MUST include the association marker on its own line** so Symphony
       links the PR to this issue deterministically: `Symphony-Issue: {{ issue.identifier }}`.
     - Use a single `## Codex Workpad` comment for progress and the machine-readable
