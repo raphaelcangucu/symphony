@@ -127,6 +127,9 @@ export function buildWarmUpBootstrapPrompt(projectSlug: string): string {
     "  then configure the AWS profile or docker/.env and re-run.",
     "- needs_scaffold → scaffold the .symphony/ scripts, propose a commit, then re-run.",
     "- container_name_conflict / port_allocation → inspect docker and resolve, then re-run.",
+    "- db_not_seeded → the default-tenant DB is missing and the scrubbed-dump import needs an",
+    "  authenticated GitHub CLI: ASK the user to run `gh auth login` (or provide a dump path),",
+    "  then run `bash .symphony/ensure-tenant-db.sh illume` and re-run. Never fabricate DB data.",
     "- health_timeout → read the logs; if the default-tenant DB is missing, seed it; ask the",
     "  user only if a decision or secret is required.",
   ].join("\n");

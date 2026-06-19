@@ -166,10 +166,18 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
       output =~ ~r/403 Forbidden|pull access denied|not authorized|no basic auth/i -> "image_pull_auth"
       output =~ ~r/already in use by container/i -> "container_name_conflict"
       output =~ ~r/port is already allocated|address already in use/i -> "port_allocation"
+      output =~ db_not_seeded_pattern() -> "db_not_seeded"
       output =~ ~r/No such file or directory.*\.symphony|\.symphony.*No such file/i -> "needs_scaffold"
       output =~ ~r/Health was not confirmed|not running after|is not running/i -> "health_timeout"
       true -> "unknown"
     end
+  end
+
+  # Markers emitted by .symphony/serve.sh + ensure-tenant-db.sh when the default
+  # tenant's database is missing and could not be auto-imported (e.g. the
+  # GitHub CLI used to download the scrubbed dump is not authenticated).
+  defp db_not_seeded_pattern do
+    ~r/DB_NOT_READY|tenant DB .*(not found|does not exist|could not be prepared)|GitHub CLI \(gh\) must be|Import failed for/i
   end
 
   defp finalize_warm_up(project_slug, run, status, failure, port, output) do
@@ -237,6 +245,21 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
       summary: "A host port needed by the stack is already allocated.",
       ask: [],
       apply: "Re-resolve to a free host port (the scripts remap shared ports) and call warm_up again."
+    }
+  end
+
+  defp warm_up_remediation("db_not_seeded") do
+    %{
+      needs_user_input: true,
+      summary:
+        "The default tenant's database (e.g. illume) is missing locally and could not be auto-imported. The local seed path is a scrubbed dump downloaded via GitHub Actions, which needs an authenticated GitHub CLI (gh) — a prerequisite only the user can grant.",
+      ask: [
+        "Is the GitHub CLI authenticated on this host? If not, please run `gh auth login` (the warm-up downloads the scrubbed dump via GitHub Actions).",
+        "Which source environment should the tenant dump come from? (prod | stage | dev; default: prod)",
+        "Or, if you already have a dump file locally, what is its path under docker/postgresql/?"
+      ],
+      apply:
+        "Do NOT fabricate database contents. Once gh is authenticated (or a dump path is provided), run `bash .symphony/ensure-tenant-db.sh illume` (it checks existence, downloads + imports the scrubbed dump, sets the search_path, and flushes memcached), then call warm_up again."
     }
   end
 

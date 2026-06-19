@@ -120,6 +120,33 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.WarmUpTest do
       assert result.failure_class == "needs_scaffold"
       assert result.status == "failed"
     end
+
+    test "classifies a missing tenant DB as db_not_seeded and asks the user" do
+      base = tmp_repo(with_serve: true)
+
+      exec = fn _dir, _cmd, _opts ->
+        {"[symphony] Tenant DB 'illume' not found locally.\n[symphony] DB_NOT_READY: tenant DB for 'illume' is missing and could not be prepared.", 1}
+      end
+
+      {:ok, result} = DevEnv.warm_up("adv", base: base, exec: exec)
+
+      assert result.status == "failed"
+      assert result.failure_class == "db_not_seeded"
+      assert result.remediation.needs_user_input == true
+      assert result.remediation.ask != []
+    end
+
+    test "classifies an unauthenticated gh dump download as db_not_seeded" do
+      base = tmp_repo(with_serve: true)
+
+      exec = fn _dir, _cmd, _opts ->
+        {"GitHub CLI (gh) must be installed and authenticated to download the dump.", 1}
+      end
+
+      {:ok, result} = DevEnv.warm_up("adv", base: base, exec: exec)
+
+      assert result.failure_class == "db_not_seeded"
+    end
   end
 
   defp tmp_repo(with_serve: with_serve) do

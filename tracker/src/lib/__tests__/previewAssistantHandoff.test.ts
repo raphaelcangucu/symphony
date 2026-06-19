@@ -92,4 +92,12 @@ describe("previewAssistantHandoff", () => {
     expect(prompt).toMatch(/never invent, guess/i);
     expect(prompt).toContain("AWS credentials");
   });
+
+  it("guides the db_not_seeded failure to gh auth + ensure-tenant-db without fabricating data", () => {
+    const prompt = buildWarmUpBootstrapPrompt("adv");
+    expect(prompt).toContain("db_not_seeded");
+    expect(prompt).toContain("gh auth login");
+    expect(prompt).toContain("ensure-tenant-db.sh");
+    expect(prompt).toMatch(/never fabricate/i);
+  });
 });
