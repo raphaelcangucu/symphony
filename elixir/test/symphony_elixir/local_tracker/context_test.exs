@@ -819,6 +819,42 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     end
   end
 
+  test "move_issue sends a human review push only for the group lead" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    {:ok, _setup} =
+      Context.upsert_project_setup("macro-markets", %{
+        workflow_markdown: """
+        ---
+        tracker:
+          wait_states:
+            - Human Review
+        ---
+
+        Prompt.
+        """,
+        validation_commands: [],
+        scan_summary: %{}
+      })
+
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
+    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+
+    trace_push_dispatch_calls()
+
+    task = Task.async(fn -> Context.move_issue("macro-markets", "MAC-2", %{status: "Human Review"}) end)
+
+    assert {:ok, lead} = Task.await(task)
+    assert lead.identifier == "MAC-1"
+
+    assert_receive {:trace, _pid, :call, {SymphonyElixir.PushNotifications.Dispatcher, :notify, ["human_review", %{tag: "human_review:macro-markets:MAC-1"}]}}
+
+    refute_receive {:trace, _pid, :call, {SymphonyElixir.PushNotifications.Dispatcher, :notify, ["human_review", _payload]}}
+  end
+
   test "update_issue_state on a member carries the lead and siblings" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
@@ -854,5 +890,16 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
 
   defp clean_repo do
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
+  end
+
+  defp trace_push_dispatch_calls do
+    test_pid = self()
+    :erlang.trace(:all, true, [:call, {:tracer, test_pid}])
+    :erlang.trace_pattern({SymphonyElixir.PushNotifications.Dispatcher, :notify, 2}, true, [:local])
+
+    on_exit(fn ->
+      :erlang.trace(:all, false, [:call])
+      :erlang.trace_pattern({SymphonyElixir.PushNotifications.Dispatcher, :notify, 2}, false, [:local])
+    end)
   end
 end

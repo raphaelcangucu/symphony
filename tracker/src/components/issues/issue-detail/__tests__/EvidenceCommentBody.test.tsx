@@ -26,7 +26,8 @@ describe("EvidenceCommentBody", () => {
     render(<EvidenceCommentBody body={SAMPLE_BODY} />);
 
     expect(screen.getByText("20260617215714-1242947")).toBeInTheDocument();
-    expect(screen.getAllByText("failed").length).toBeGreaterThan(0);
+    // Status pills render the localized label ("Failed"), not the raw status.
+    expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
     expect(screen.getByText("e2e")).toBeInTheDocument();
     expect(screen.getByText("0/1 passed, 1 failed")).toBeInTheDocument();
 

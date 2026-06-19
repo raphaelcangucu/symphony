@@ -26,6 +26,13 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     update_project_repositories
     dispatch_codex
     get_agent_executions
+    link_pull_request
+    get_issue_orchestrator_state
+    explain_dispatch_eligibility
+    manage_blockers
+    sync_issue
+    list_running_agents
+    steer_agent
   )
 
   @tools @scoped_tools ++ ~w(create_tracker_project)

@@ -5,19 +5,28 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.AgentPreference
+
   alias SymphonyElixir.Assistant.{
+    BlockerTools,
     DiscoveryTools,
     DevEnvTools,
+    DispatchTools,
     EvidenceTools,
     GitHubTools,
     HandoffTools,
+    OrchestratorTools,
     PreviewTools,
     ProjectBoardTools,
     PullRequestLookup,
+    PullRequestTools,
     ReadTools,
+    RunningAgentsTools,
     SetupTools,
+    SteerTools,
+    SyncTools,
     ToolText
   }
+
   alias SymphonyElixir.Config
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.LocalTracker.Context
@@ -47,6 +56,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     manage_dev_env
     scan_project_setup
     suggest_project_setup
+    link_pull_request
+    get_issue_orchestrator_state
+    explain_dispatch_eligibility
+    manage_blockers
+    sync_issue
+    list_running_agents
+    steer_agent
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
@@ -233,6 +249,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       [HandoffTools.assistant_tool_spec(), EvidenceTools.assistant_tool_spec(), PreviewTools.assistant_tool_spec()] ++
       SetupTools.tool_specs() ++
       [DevEnvTools.assistant_tool_spec()] ++
+      [
+        PullRequestTools.assistant_tool_spec(),
+        OrchestratorTools.assistant_tool_spec(),
+        DispatchTools.assistant_tool_spec(),
+        BlockerTools.assistant_tool_spec(),
+        SyncTools.assistant_tool_spec(),
+        RunningAgentsTools.assistant_tool_spec(),
+        SteerTools.assistant_tool_spec()
+      ] ++
       ReadTools.tool_specs() ++ GitHubTools.tool_specs()
   end
 
@@ -607,6 +632,49 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       {:ok, result} -> {:ok, result}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp do_execute(project, "link_pull_request", arguments, opts) do
+    case PullRequestTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "get_issue_orchestrator_state", arguments, opts) do
+    case OrchestratorTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "explain_dispatch_eligibility", arguments, opts) do
+    case DispatchTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "manage_blockers", arguments, opts) do
+    case BlockerTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "sync_issue", arguments, opts) do
+    case SyncTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "list_running_agents", arguments, opts) do
+    RunningAgentsTools.execute(project_slug(project), arguments, opts)
+  end
+
+  defp do_execute(project, "steer_agent", arguments, opts) do
+    SteerTools.execute(project_slug(project), arguments, opts)
   end
 
   defp do_execute(project, "update_project_workflow", arguments, _opts) do

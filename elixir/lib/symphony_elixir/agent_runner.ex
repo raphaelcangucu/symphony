@@ -182,8 +182,11 @@ defmodule SymphonyElixir.AgentRunner do
       [workspace_root: workspace_root]
       |> maybe_put_codex_config(Keyword.get(opts, :project_config))
       |> maybe_put_claude_tools(agent_kind, issue)
+      |> maybe_put_resume_thread_id(opts, issue, agent_kind)
 
     with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, session_opts) do
+      maybe_persist_goal_thread(session, issue, agent_kind, opts)
+
       try do
         result =
           do_run_codex_turns(
@@ -530,6 +533,18 @@ defmodule SymphonyElixir.AgentRunner do
   @doc false
   @spec handoff_ready_outcome(Path.t(), keyword()) :: :continue | {:stop, run_outcome()}
   def handoff_ready_outcome(workspace, opts) do
+    # `:handoff_ready_evaluator` is a test seam (mirroring `:validate_gate_evaluator`
+    # and `:publish_gate_evaluator`): production never sets it, so the default logic
+    # below is what actually runs. It lets continuation tests drive the outer loop
+    # without standing up a dirty git tree just to keep the loop alive.
+    case Keyword.get(opts, :handoff_ready_evaluator) do
+      fun when is_function(fun, 2) -> fun.(workspace, opts)
+      fun when is_function(fun, 1) -> fun.(workspace)
+      nil -> default_handoff_ready_outcome(workspace, opts)
+    end
+  end
+
+  defp default_handoff_ready_outcome(workspace, opts) do
     repo_states = RunContract.repo_states(workspace)
 
     if RunContract.work_present?(repo_states) do
@@ -713,6 +728,56 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp maybe_put_claude_tools(session_opts, _agent_kind, _issue), do: session_opts
+
+  # Goal-mode Codex runs resume the issue's durable thread so the native goal
+  # state persists across orchestrator dispatches. The workspace sidecar is the
+  # primary source; the issue's stored `agent_session_id` is a belt-and-suspenders
+  # pointer that survives even when the workspace is recreated.
+  defp maybe_put_resume_thread_id(session_opts, opts, "codex", issue) do
+    if goal_mode?(opts) do
+      case issue_session_thread_id(issue) do
+        thread_id when is_binary(thread_id) and thread_id != "" ->
+          Keyword.put(session_opts, :resume_thread_id, thread_id)
+
+        _ ->
+          session_opts
+      end
+    else
+      session_opts
+    end
+  end
+
+  defp maybe_put_resume_thread_id(session_opts, _opts, _agent_kind, _issue), do: session_opts
+
+  defp issue_session_thread_id(%Issue{agent_session_id: id}) when is_binary(id) and id != "", do: id
+  defp issue_session_thread_id(_issue), do: nil
+
+  # Persist the durable Codex thread id at the issue level for goal-mode runs so
+  # the tracker can show that a goal thread exists (even when no worker is live)
+  # and so future dispatches can resume it. Best-effort: trackers without a local
+  # row (e.g. GitHub/Jira) simply skip persistence.
+  defp maybe_persist_goal_thread(session, %Issue{} = issue, "codex", opts) do
+    with true <- goal_mode?(opts),
+         thread_id when is_binary(thread_id) and thread_id != "" <- Map.get(session, :thread_id),
+         slug when is_binary(slug) and slug != "" <- issue.project_slug,
+         identifier when is_binary(identifier) and identifier != "" <- issue.identifier,
+         true <- thread_id != issue.agent_session_id do
+      persist_agent_session_id(slug, identifier, thread_id)
+    else
+      _ -> :ok
+    end
+  end
+
+  defp maybe_persist_goal_thread(_session, _issue, _agent_kind, _opts), do: :ok
+
+  defp persist_agent_session_id(slug, identifier, thread_id) do
+    Context.set_agent_session_id(slug, identifier, thread_id)
+    :ok
+  rescue
+    error ->
+      Logger.debug("Skipping agent_session_id persistence identifier=#{identifier} reason=#{inspect(error)}")
+      :ok
+  end
 
   defp project_max_turns(%ProjectConfig{max_turns: n}) when is_integer(n) and n > 0, do: n
   defp project_max_turns(_project_config), do: Config.agent_max_turns()

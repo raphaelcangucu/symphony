@@ -23,6 +23,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     :ok
   end
 
+  test "tool_specs includes the phase 2/3 tools" do
+    names = Enum.map(ToolExecutor.tool_specs(), & &1["name"])
+
+    for tool <-
+          ~w(link_pull_request get_issue_orchestrator_state explain_dispatch_eligibility manage_blockers sync_issue list_running_agents steer_agent) do
+      assert tool in names, "expected #{tool} in tool_specs"
+    end
+  end
+
   test "creates an issue through the project tracker adapter" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 

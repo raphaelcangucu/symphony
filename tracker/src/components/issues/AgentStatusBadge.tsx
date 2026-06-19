@@ -3,6 +3,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { i18n } from "@/i18n";
+import { longRunningBadgeText } from "@/lib/agentExecutionDisplay";
 import { cn } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AgentExecutionStatus } from "@/types/agent-execution";
@@ -72,6 +73,15 @@ const AGENT_STATUS_META: Record<AgentExecutionStatus, AgentStatusMeta> = {
     pulse: false,
     spin: false,
   },
+  saved: {
+    labelKey: "issue.agent.executionStatus.saved",
+    Icon: Target,
+    dotClass: "bg-violet-400",
+    textClass: "text-violet-600 dark:text-violet-300",
+    chipClass: "border-violet-400/30 bg-violet-400/10 text-violet-600 dark:text-violet-300",
+    pulse: false,
+    spin: false,
+  },
 };
 
 type Translate = TFunction;
@@ -133,14 +143,15 @@ interface AgentLongRunningBadgeProps {
 }
 
 export function AgentLongRunningBadge({ execution, className, compact = false }: AgentLongRunningBadgeProps) {
-  if (!execution.longRunning || !execution.longRunningLabel) return null;
+  const { t } = useTranslation();
+  if (!execution.longRunning) return null;
 
-  const status = execution.goal?.status;
-  const statusSuffix = status && status !== "active" ? ` (${status})` : "";
+  const text = longRunningBadgeText(execution, t);
+  if (!text) return null;
 
   return (
     <span
-      title={execution.goal?.objective ?? execution.longRunningLabel}
+      title={execution.goal?.objective ?? text}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 font-semibold text-violet-700 dark:text-violet-300",
         compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]",
@@ -148,8 +159,7 @@ export function AgentLongRunningBadge({ execution, className, compact = false }:
       )}
     >
       <Target className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
-      {execution.longRunningLabel}
-      {statusSuffix}
+      {text}
     </span>
   );
 }

@@ -17,6 +17,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @thread_start_id 2
   @turn_start_id 3
   @goal_set_id 4
+  @thread_resume_id 5
+  @goal_get_id 6
+  @goal_clear_id 7
   @steer_base_id 100
   @default_max_goal_turns 50
   @max_goal_turns_cap 500
@@ -56,9 +59,12 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       metadata = port_metadata(port)
       expanded_workspace = Path.expand(workspace)
 
+      goals_section = goals_section(opts)
+
       with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section),
-           {:ok, thread_id} <- do_start_session(port, expanded_workspace, session_policies, opts) do
-        goal_state = maybe_set_goal(port, thread_id, Keyword.get(opts, :goal))
+           {:ok, thread_id, origin} <-
+             do_start_session(port, expanded_workspace, session_policies, opts, goals_section) do
+        goal_state = establish_goal(port, thread_id, origin, opts, goals_section)
         Session.write(expanded_workspace, thread_id)
 
         {:ok,
@@ -71,6 +77,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
            turn_sandbox_policy: session_policies.turn_sandbox_policy,
            thread_id: thread_id,
            workspace: expanded_workspace,
+           goals_section: goals_section,
+           thread_origin: origin,
            goal_active: goal_state == :active,
            goal_attempted: goal_state != :not_requested
          }}
@@ -78,6 +86,47 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         {:error, reason} ->
           stop_port(port)
           {:error, reason}
+      end
+    end
+  end
+
+  @typedoc """
+  Out-of-band goal operations against a stored Codex thread:
+
+    * `:get` — read the current persisted goal.
+    * `:clear` — remove the persisted goal.
+    * `{:set, attrs}` — create/replace/update the goal. `attrs` may carry
+      `:objective`, `:status` and `:token_budget` (use `nil` to remove the
+      budget; omit the key to leave it unchanged).
+  """
+  @type goal_command :: :get | :clear | {:set, map()}
+
+  @doc """
+  Operate on a stored Codex thread goal without running a turn.
+
+  Opens a short-lived app-server connection, resumes the issue's durable thread,
+  and applies the requested native `thread/goal/*` operation. This is the control
+  plane Symphony uses for operator actions (pause/resume/clear/edit/budget): the
+  goal lifecycle stays owned by the Codex thread rather than a Symphony-side
+  abstraction.
+  """
+  @spec manage_goal(Path.t(), goal_command(), keyword()) ::
+          {:ok, map() | nil | :cleared} | {:error, term()}
+  def manage_goal(workspace, command, opts \\ []) do
+    codex_section = codex_section(opts)
+    goals_section = goals_section(opts)
+
+    with :ok <- validate_workspace_cwd(workspace, opts),
+         {:ok, thread_id} <- control_thread_id(workspace, opts),
+         {:ok, port} <- start_port(workspace, codex_section) do
+      try do
+        with {:ok, session_policies} <- session_policies(Path.expand(workspace), codex_section),
+             :ok <- send_initialize(port),
+             {:ok, _resumed_id} <- resume_thread(port, thread_id, session_policies, opts) do
+          apply_goal_command(port, thread_id, command, goals_section)
+        end
+      after
+        stop_port(port)
       end
     end
   end
@@ -241,8 +290,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   defp ensure_goal_active(%{goal_active: true}, _opts), do: true
   defp ensure_goal_active(%{goal_attempted: true}, _opts), do: false
 
-  defp ensure_goal_active(%{port: port, thread_id: thread_id}, opts) do
-    maybe_set_goal(port, thread_id, Keyword.get(opts, :goal)) == :active
+  defp ensure_goal_active(%{port: port, thread_id: thread_id} = session, opts) do
+    section = Map.get(session, :goals_section) || default_goals_section()
+    maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section) == :active
   end
 
   defp ensure_goal_active(_session, _opts), do: false
@@ -403,10 +453,83 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     SymphonyElixir.InstanceConfig.codex_section()
   end
 
-  defp do_start_session(port, workspace, session_policies, opts) do
+  # The section that decides Goal mode (`goals_enabled`). The workflow `codex:`
+  # section is the base (it preserves `goals_enabled`, unlike the InstanceConfig
+  # command fallback that dispatches thread via `:codex_config`). A per-project
+  # `codex_config` is merged on top so a project can override the global flag.
+  defp goals_section(opts) do
+    base = default_goals_section()
+
+    case Keyword.get(opts, :codex_config) do
+      %{} = section -> Map.merge(base, section)
+      _ -> base
+    end
+  end
+
+  defp default_goals_section do
+    case SymphonyElixir.Config.section("codex") do
+      %{} = section -> section
+      _ -> %{}
+    end
+  end
+
+  defp do_start_session(port, workspace, session_policies, opts, section) do
     case send_initialize(port) do
-      :ok -> start_thread(port, workspace, session_policies, opts)
+      :ok -> start_or_resume_thread(port, workspace, session_policies, opts, section)
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Goal-mode runs reuse the issue's durable Codex thread so the native goal
+  # state, history and accounting persist across orchestrator dispatches.
+  # Non-goal runs keep the previous behavior of starting a fresh thread each time
+  # and relying on the workspace git state plus resume prompts for continuity.
+  defp start_or_resume_thread(port, workspace, session_policies, opts, section) do
+    case resumable_thread_id(workspace, opts, section) do
+      {:ok, thread_id} ->
+        case resume_thread(port, thread_id, session_policies, opts) do
+          {:ok, resumed_id} ->
+            Logger.info("Codex resumed durable thread thread_id=#{resumed_id} for goal-mode run")
+            {:ok, resumed_id, :resumed}
+
+          {:error, reason} ->
+            Logger.warning(
+              "Codex thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}"
+            )
+
+            start_fresh_thread(port, workspace, session_policies, opts)
+        end
+
+      :error ->
+        start_fresh_thread(port, workspace, session_policies, opts)
+    end
+  end
+
+  defp start_fresh_thread(port, workspace, session_policies, opts) do
+    case start_thread(port, workspace, session_policies, opts) do
+      {:ok, thread_id} -> {:ok, thread_id, :started}
+      other -> other
+    end
+  end
+
+  # Resume only when the run is in goal mode and goals are enabled. The resume
+  # target is the issue's durable Codex thread id (passed explicitly by the
+  # runner) or the workspace session sidecar written by a previous run.
+  defp resumable_thread_id(workspace, opts, section) do
+    if goal_opt?(opts) and CodexConfig.goals_enabled?(section) do
+      case Keyword.get(opts, :resume_thread_id) do
+        id when is_binary(id) and id != "" -> {:ok, id}
+        _ -> Session.resolve(workspace, opts)
+      end
+    else
+      :error
+    end
+  end
+
+  defp goal_opt?(opts) do
+    case Keyword.get(opts, :goal) do
+      goal when is_binary(goal) -> String.trim(goal) != ""
+      _ -> false
     end
   end
 
@@ -434,35 +557,75 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp maybe_set_goal(_port, _thread_id, nil), do: :not_requested
+  # Codex restores persisted dynamicTools on resume when none are supplied, so we
+  # intentionally omit them here and reuse the recorded session configuration.
+  defp resume_thread(port, thread_id, %{approval_policy: approval_policy, thread_sandbox: thread_sandbox}, _opts) do
+    send_message(port, %{
+      "method" => "thread/resume",
+      "id" => @thread_resume_id,
+      "params" => %{
+        "threadId" => thread_id,
+        "approvalPolicy" => approval_policy,
+        "sandbox" => thread_sandbox
+      }
+    })
 
-  defp maybe_set_goal(port, thread_id, goal) when is_binary(goal) do
-    goal = String.trim(goal)
-
-    if goal == "" do
-      :inactive
-    else
-      set_goal(port, thread_id, goal)
+    case await_response(port, @thread_resume_id) do
+      {:ok, %{"thread" => %{"id" => resumed_id}}} when is_binary(resumed_id) -> {:ok, resumed_id}
+      {:ok, %{"thread" => thread_payload}} -> {:error, {:invalid_thread_payload, thread_payload}}
+      other -> other
     end
   end
 
-  defp maybe_set_goal(_port, thread_id, _goal) do
+  # Goal state is owned by the Codex thread. On a freshly started thread we set
+  # the initial objective (the operator's intent). On a resumed thread we read
+  # the persisted goal first and only seed an objective when the thread does not
+  # already have one — avoiding an accidental objective replacement that would
+  # reset native usage accounting.
+  defp establish_goal(port, thread_id, :started, opts, section) do
+    maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
+  end
+
+  defp establish_goal(port, thread_id, :resumed, opts, section) do
+    case request_goal_get(port, thread_id) do
+      {:ok, %{} = goal} ->
+        goal_state_from_status(goal_status_value(goal))
+
+      {:ok, nil} ->
+        maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
+
+      {:error, reason} ->
+        Logger.warning(
+          "Codex thread/goal/get failed on resume thread_id=#{thread_id}; falling back to provided goal: #{inspect(reason)}"
+        )
+
+        maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
+    end
+  end
+
+  defp maybe_set_goal(_port, _thread_id, nil, _section), do: :not_requested
+
+  defp maybe_set_goal(port, thread_id, goal, section) when is_binary(goal) do
+    case String.trim(goal) do
+      "" -> :inactive
+      trimmed -> set_goal(port, thread_id, %{objective: trimmed, status: "active"}, section)
+    end
+  end
+
+  defp maybe_set_goal(_port, thread_id, _goal, _section) do
     Logger.warning("Codex goal option must be a string; continuing with single-turn session thread_id=#{thread_id}")
 
     :inactive
   end
 
-  defp set_goal(port, thread_id, goal) do
-    if CodexConfig.goals_enabled?() do
-      send_message(port, %{
-        "method" => "thread/goal/set",
-        "id" => @goal_set_id,
-        "params" => %{"threadId" => thread_id, "objective" => goal, "status" => "active"}
-      })
-
-      case await_response(port, @goal_set_id) do
-        {:ok, _result} ->
-          :active
+  # Session-start goal set: gated on `goals_enabled` and reduced to a goal_active
+  # state for the turn loop. Control-plane mutations use `request_goal_set/3`.
+  defp set_goal(port, thread_id, attrs, section) do
+    if CodexConfig.goals_enabled?(section) do
+      case request_goal_set(port, thread_id, attrs) do
+        {:ok, goal} ->
+          status = goal_status_value(goal) || Map.get(attrs, :status) || "active"
+          goal_state_from_status(status)
 
         {:error, reason} ->
           Logger.warning("Codex failed to set thread goal; continuing with single-turn session thread_id=#{thread_id}: #{inspect(reason)}")
@@ -473,6 +636,111 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       Logger.warning("Codex goal provided but goal mode is disabled; continuing with single-turn session thread_id=#{thread_id}")
 
       :inactive
+    end
+  end
+
+  defp control_thread_id(workspace, opts) do
+    case Keyword.get(opts, :thread_id) do
+      id when is_binary(id) and id != "" ->
+        {:ok, id}
+
+      _ ->
+        case Session.resolve(workspace, opts) do
+          {:ok, id} -> {:ok, id}
+          :error -> {:error, :no_codex_thread}
+        end
+    end
+  end
+
+  defp apply_goal_command(port, thread_id, :get, _section), do: request_goal_get(port, thread_id)
+
+  defp apply_goal_command(port, thread_id, :clear, section) do
+    if CodexConfig.goals_enabled?(section) do
+      case request_goal_clear(port, thread_id) do
+        {:ok, _cleared} -> {:ok, :cleared}
+        other -> other
+      end
+    else
+      {:error, :goals_disabled}
+    end
+  end
+
+  defp apply_goal_command(port, thread_id, {:set, attrs}, section) when is_map(attrs) do
+    if CodexConfig.goals_enabled?(section) do
+      request_goal_set(port, thread_id, attrs)
+    else
+      {:error, :goals_disabled}
+    end
+  end
+
+  defp request_goal_set(port, thread_id, attrs) do
+    send_message(port, %{
+      "method" => "thread/goal/set",
+      "id" => @goal_set_id,
+      "params" => goal_set_params(thread_id, attrs)
+    })
+
+    case await_response(port, @goal_set_id) do
+      {:ok, result} -> {:ok, goal_from_result(result)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp request_goal_get(port, thread_id) do
+    send_message(port, %{
+      "method" => "thread/goal/get",
+      "id" => @goal_get_id,
+      "params" => %{"threadId" => thread_id}
+    })
+
+    case await_response(port, @goal_get_id) do
+      {:ok, result} -> {:ok, goal_from_result(result)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp request_goal_clear(port, thread_id) do
+    send_message(port, %{
+      "method" => "thread/goal/clear",
+      "id" => @goal_clear_id,
+      "params" => %{"threadId" => thread_id}
+    })
+
+    case await_response(port, @goal_clear_id) do
+      {:ok, result} when is_map(result) -> {:ok, Map.get(result, "cleared", true)}
+      {:ok, _result} -> {:ok, true}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp goal_set_params(thread_id, attrs) do
+    %{"threadId" => thread_id}
+    |> maybe_put_param("objective", Map.get(attrs, :objective))
+    |> maybe_put_param("status", Map.get(attrs, :status))
+    |> put_token_budget(Map.get(attrs, :token_budget, :omit))
+  end
+
+  # `tokenBudget` uses double-option semantics: omit the key to leave it
+  # unchanged, send `null` to remove the budget, or an integer to set it.
+  defp put_token_budget(params, :omit), do: params
+  defp put_token_budget(params, value), do: Map.put(params, "tokenBudget", value)
+
+  defp goal_from_result(result) when is_map(result) do
+    case Map.get(result, "goal") do
+      %{} = goal -> goal
+      _ -> nil
+    end
+  end
+
+  defp goal_from_result(_result), do: nil
+
+  defp goal_status_value(%{} = goal), do: Map.get(goal, "status") || Map.get(goal, :status)
+  defp goal_status_value(_goal), do: nil
+
+  defp goal_state_from_status(status) do
+    case normalize_goal_status(status) do
+      :active -> :active
+      _other -> :inactive
     end
   end
 

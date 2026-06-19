@@ -29,6 +29,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert "get_evidence_status" in names
     assert "manage_preview" in names
     assert "manage_dev_env" in names
+    assert "link_pull_request" in names
     refute "scan_project_setup" in names
 
     spec = Enum.find(DynamicTool.coding_agent_tool_specs(), &(&1["name"] == "set_issue_status"))
@@ -226,6 +227,29 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
       text = hd(response["contentItems"])["text"]
       assert Jason.decode!(text)["error"]["message"] =~ "No comment with that id"
     end
+
+    test "link_pull_request links a PR to the bound issue", %{issue: issue} do
+      response =
+        DynamicTool.execute(
+          "link_pull_request",
+          %{"url" => "https://github.com/org/repo/pull/7"},
+          issue: issue
+        )
+
+      assert response["success"] == true
+      payload = response["contentItems"] |> hd() |> Map.fetch!("text") |> Jason.decode!()
+      assert payload["tool"] == "link_pull_request"
+      assert payload["data"]["pull_request"]["number"] == 7
+      assert payload["data"]["pull_request"]["repo"] == "org/repo"
+    end
+
+    test "link_pull_request rejects an invalid url", %{issue: issue} do
+      response = DynamicTool.execute("link_pull_request", %{"url" => "not-a-pr"}, issue: issue)
+
+      assert response["success"] == false
+      text = hd(response["contentItems"])["text"]
+      assert Jason.decode!(text)["error"]["message"] =~ "invalid_pr_url"
+    end
   end
 
   test "unsupported tools return a failure payload with the supported tool list" do
@@ -253,7 +277,8 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
                  "check_handoff_gate",
                  "get_evidence_status",
                  "manage_preview",
-                 "manage_dev_env"
+                 "manage_dev_env",
+                 "link_pull_request"
                ]
              }
            }

@@ -444,7 +444,11 @@ defmodule SymphonyElixir.AgentRunnerTest do
                AgentRunner.run(issue, self(),
                  max_turns: 2,
                  continuation_delay_ms: 0,
-                 issue_state_fetcher: issue_state_fetcher
+                 issue_state_fetcher: issue_state_fetcher,
+                 # Keep the outer loop alive: the fake agent does no git work, so the
+                 # handoff gate would otherwise stop early as :completed. This test is
+                 # about exhausting the turn budget, not the handoff gate itself.
+                 handoff_ready_evaluator: fn _ws -> :continue end
                )
 
       assert_received {:agent_outcome, "issue-incomplete", {:incomplete, :max_turns}}
@@ -512,7 +516,10 @@ defmodule SymphonyElixir.AgentRunnerTest do
           AgentRunner.run(issue, self(),
             max_turns: 3,
             continuation_delay_ms: delay_ms,
-            issue_state_fetcher: issue_state_fetcher
+            issue_state_fetcher: issue_state_fetcher,
+            # Keep the outer loop alive so the continuation delay is actually
+            # exercised across turns (the fake agent does no git work).
+            handoff_ready_evaluator: fn _ws -> :continue end
           )
         end)
 

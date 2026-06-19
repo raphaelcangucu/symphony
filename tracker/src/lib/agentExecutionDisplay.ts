@@ -9,6 +9,46 @@ function hasInterruptedSignals(execution: AgentExecution): boolean {
   return event.includes("aborted") || event === "turn_aborted";
 }
 
+/**
+ * Native Codex goal statuses (plus the Symphony-side `not_loaded` dormant
+ * marker) mapped to localized labels. Falls back to the raw status string for
+ * any value the backend introduces that the UI does not yet know about.
+ */
+export function goalStatusLabel(
+  status: string | null | undefined,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): string | null {
+  if (!status) return null;
+  const key = `issue.agent.goalStatus.${status}`;
+  const label = t(key);
+  return label === key ? status : label;
+}
+
+/** True when the goal is parked on the issue without a live run attached. */
+export function isGoalNotLoaded(execution?: AgentExecution): boolean {
+  if (!execution) return false;
+  return execution.status === "saved" || execution.goal?.status === "not_loaded";
+}
+
+/** Localized badge text for the long-running goal/workflow chip. */
+export function longRunningBadgeText(
+  execution: AgentExecution,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): string | null {
+  if (!execution.longRunning) return null;
+
+  const status = execution.goal?.status;
+  const baseLabel = execution.longRunningLabel ?? execution.goal?.kind ?? null;
+  if (!baseLabel) return null;
+
+  if (status && status !== "active") {
+    const humanized = goalStatusLabel(status, t);
+    if (humanized) return `${baseLabel} · ${humanized}`;
+  }
+
+  return baseLabel;
+}
+
 /** Single display status for board cards and execution detail. */
 export function resolveDisplayStatus(execution: AgentExecution): AgentExecutionStatus {
   if (execution.status === "aborted" || execution.status === "error") return execution.status;
@@ -59,7 +99,8 @@ export type AgentControlState =
   | "waiting"
   | "retrying"
   | "error"
-  | "aborted";
+  | "aborted"
+  | "saved";
 
 /** Lifecycle action the primary control button performs in a given state. */
 export type AgentPrimaryAction = "start" | "resume" | "pause";

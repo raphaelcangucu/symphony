@@ -4,10 +4,28 @@ import {
   agentEnterHintLabel,
   canResumeExecution,
   deriveAgentControl,
+  goalStatusLabel,
+  isGoalNotLoaded,
+  longRunningBadgeText,
   reconcileExecutionStatus,
   resolveDisplayStatus,
 } from "@/lib/agentExecutionDisplay";
-import type { AgentExecution } from "@/types/agent-execution";
+import type { AgentExecution, AgentExecutionGoal } from "@/types/agent-execution";
+
+function goal(overrides: Partial<AgentExecutionGoal> = {}): AgentExecutionGoal {
+  return {
+    kind: "goal",
+    source: "native",
+    objective: "Ship the migration",
+    status: "active",
+    capabilities: ["get", "edit", "pause", "resume", "clear"],
+    tokenBudget: null,
+    tokensUsed: null,
+    timeUsedSeconds: null,
+    updatedAt: null,
+    ...overrides,
+  };
+}
 
 function execution(overrides: Partial<AgentExecution> = {}): AgentExecution {
   return {
@@ -106,5 +124,50 @@ describe("deriveAgentControl", () => {
     expect(agentEnterHintLabel("queue")).toMatch(/queue/i);
     expect(agentEnterHintLabel("resume")).toMatch(/resume/i);
     expect(agentEnterHintLabel("start")).toMatch(/start/i);
+  });
+
+  it("treats a saved (not-loaded) goal as resumable, not active", () => {
+    const control = deriveAgentControl(
+      execution({ status: "saved", longRunning: true, goal: goal({ status: "not_loaded" }) }),
+    );
+
+    expect(control.state).toBe("saved");
+    expect(control.isActive).toBe(false);
+    expect(control.canResume).toBe(true);
+    expect(control.canPause).toBe(false);
+    expect(control.primaryAction).toBe("resume");
+  });
+});
+
+describe("goal status display", () => {
+  it("humanizes known native goal statuses", () => {
+    expect(goalStatusLabel("paused")).toBe("Paused");
+    expect(goalStatusLabel("budgetLimited")).toBe("Budget limited");
+    expect(goalStatusLabel("not_loaded")).toBe("Not loaded");
+  });
+
+  it("falls back to the raw status for unknown values", () => {
+    expect(goalStatusLabel("brand_new_status")).toBe("brand_new_status");
+    expect(goalStatusLabel(null)).toBeNull();
+  });
+
+  it("detects a not-loaded goal from status or run state", () => {
+    expect(isGoalNotLoaded(execution({ status: "saved" }))).toBe(true);
+    expect(isGoalNotLoaded(execution({ goal: goal({ status: "not_loaded" }) }))).toBe(true);
+    expect(isGoalNotLoaded(execution({ status: "live", goal: goal({ status: "active" }) }))).toBe(false);
+  });
+
+  it("appends a humanized status to the long-running badge for non-active goals", () => {
+    const text = longRunningBadgeText(
+      execution({ longRunning: true, longRunningLabel: "Pursuing goal", goal: goal({ status: "paused" }) }),
+    );
+    expect(text).toBe("Pursuing goal · Paused");
+  });
+
+  it("omits the suffix when the goal is active", () => {
+    const text = longRunningBadgeText(
+      execution({ longRunning: true, longRunningLabel: "Pursuing goal", goal: goal({ status: "active" }) }),
+    );
+    expect(text).toBe("Pursuing goal");
   });
 });

@@ -17,8 +17,14 @@ defmodule SymphonyElixir.AgentExecution do
   alias SymphonyElixir.SessionLog
   alias SymphonyElixir.Workspace
 
-  @typedoc "Coarse, UI-facing execution status derived from orchestrator runtime."
-  @type status :: :live | :idle | :waiting | :retrying | :error | :aborted
+  @typedoc """
+  Coarse, UI-facing execution status derived from orchestrator runtime.
+
+  `:saved` means there is no live or interrupted run, but the issue still owns a
+  durable Codex goal thread (persisted `agent_session_id` + objective). The UI
+  surfaces it as a dormant "goal not loaded" state that can be resumed.
+  """
+  @type status :: :live | :idle | :waiting | :retrying | :error | :aborted | :saved
 
   @type t :: %{
           issue_id: String.t() | nil,
@@ -74,7 +80,11 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp executions_from_snapshot(snapshot) do
-    from_snapshot(snapshot) ++ interrupted_executions(snapshot)
+    live = from_snapshot(snapshot)
+    interrupted = interrupted_executions(snapshot)
+    covered = MapSet.new(live ++ interrupted, & &1.issue_identifier)
+
+    live ++ interrupted ++ saved_goal_executions(snapshot, covered)
   end
 
   defp dedupe_executions(executions) when is_list(executions) do
@@ -89,7 +99,8 @@ defmodule SymphonyElixir.AgentExecution do
   defp status_priority(:waiting), do: 3
   defp status_priority(:live), do: 4
   defp status_priority(:idle), do: 5
-  defp status_priority(_status), do: 6
+  defp status_priority(:saved), do: 6
+  defp status_priority(_status), do: 7
 
   @doc "Projects a raw orchestrator snapshot into agent execution views."
   @spec from_snapshot(map()) :: [t()]
@@ -223,6 +234,84 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp interrupted_executions(_snapshot), do: []
+
+  # Issues that own a durable Codex goal thread (persisted `agent_session_id` +
+  # objective) but have no live or interrupted run. These are projected as a
+  # dormant `:saved` ("goal not loaded") state so the UI can show a goal is
+  # parked on the issue even when no worker is attached.
+  defp saved_goal_executions(%{running: running, retrying: retrying}, covered) do
+    active_identifiers =
+      (running ++ retrying)
+      |> Enum.map(&Map.get(&1, :identifier))
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
+
+    Context.list_routable_non_terminal_issues()
+    |> Enum.reject(fn record ->
+      MapSet.member?(active_identifiers, record.identifier) or
+        MapSet.member?(covered, record.identifier)
+    end)
+    |> Enum.filter(&saved_goal_issue?/1)
+    |> Enum.map(&saved_goal_execution/1)
+  end
+
+  defp saved_goal_executions(_snapshot, _covered), do: []
+
+  defp saved_goal_issue?(%{} = record) do
+    issue = IssueMapper.to_issue(record)
+
+    with true <- present?(record.agent_session_id),
+         true <- present?(record.agent_goal),
+         true <- AgentRouting.routable?(issue.labels),
+         true <- issue_in_active_state?(record, issue) do
+      true
+    else
+      _ -> false
+    end
+  end
+
+  defp saved_goal_execution(record) do
+    issue = IssueMapper.to_issue(record)
+    agent_kind = issue.agent_kind || "codex"
+    goal = saved_goal(record, agent_kind)
+
+    %{
+      issue_id: to_string(record.id),
+      issue_identifier: record.identifier,
+      status: :saved,
+      session_id: record.agent_session_id,
+      last_event: nil,
+      last_message: nil,
+      last_event_at: record.updated_at,
+      turn_count: 0,
+      runtime_seconds: nil,
+      started_at: nil,
+      retry_attempt: 0,
+      error: nil,
+      agent_kind: agent_kind,
+      goal: goal,
+      long_running: true,
+      long_running_kind: long_running_kind(goal),
+      long_running_label: long_running_label(goal),
+      tokens: nil
+    }
+  end
+
+  defp saved_goal(record, agent_kind) do
+    objective = String.trim(record.agent_goal || "")
+    kind = goal_kind(%{agent_kind: agent_kind})
+
+    %{
+      kind: kind,
+      source: goal_source(kind),
+      status: "not_loaded",
+      objective: objective,
+      capabilities: goal_capabilities(kind)
+    }
+  end
+
+  defp present?(value) when is_binary(value), do: String.trim(value) != ""
+  defp present?(_value), do: false
 
   defp interrupted_issue?(%{} = record) do
     issue = IssueMapper.to_issue(record)

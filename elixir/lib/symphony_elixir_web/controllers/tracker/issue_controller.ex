@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   alias Plug.Conn
   alias SymphonyElixir.{AgentPreference, IssueDispatch, Orchestrator, ProjectConfig, Repo}
+  alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.{IssueAdapter, LabelResolver}
@@ -157,6 +158,80 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
+
+  @doc """
+  Drives the native Codex goal controls (pause/resume/clear/edit/budget/get) for
+  an issue's durable goal thread. Mutations map directly onto `thread/goal/*`.
+  """
+  @spec goal_control(Conn.t(), map()) :: Conn.t()
+  def goal_control(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
+    action = Map.get(params, "action", "get")
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, result} <- run_goal_action(project, identifier, action, params) do
+      json(conn, %{data: goal_control_payload(action, result)})
+    else
+      {:error, :project_not_found} ->
+        TrackerErrors.render(conn, :project_not_found)
+
+      {:error, :invalid_action} ->
+        TrackerErrors.validation_msg(conn, "action must be get, pause, resume, clear, set_objective, or set_budget")
+
+      {:error, :empty_objective} ->
+        TrackerErrors.validation_msg(conn, "objective is required for set_objective")
+
+      {:error, :invalid_budget} ->
+        TrackerErrors.validation_msg(conn, "token_budget must be a positive integer or null")
+
+      {:error, :goals_disabled} ->
+        TrackerErrors.validation_msg(conn, "Codex goal mode is disabled for this project")
+
+      {:error, :no_codex_thread} ->
+        TrackerErrors.validation_msg(conn, "no Codex goal thread exists for this issue yet")
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  defp run_goal_action(project, identifier, "get", _params),
+    do: GoalControl.get(project, identifier)
+
+  defp run_goal_action(project, identifier, "pause", _params),
+    do: GoalControl.pause(project, identifier)
+
+  defp run_goal_action(project, identifier, "resume", _params),
+    do: GoalControl.resume(project, identifier)
+
+  defp run_goal_action(project, identifier, "clear", _params),
+    do: GoalControl.clear(project, identifier)
+
+  defp run_goal_action(project, identifier, "set_objective", params),
+    do: GoalControl.set_objective(project, identifier, Map.get(params, "objective", ""))
+
+  defp run_goal_action(project, identifier, "set_budget", params) do
+    case parse_token_budget(Map.get(params, "token_budget")) do
+      {:ok, budget} -> GoalControl.set_budget(project, identifier, budget)
+      :error -> {:error, :invalid_budget}
+    end
+  end
+
+  defp run_goal_action(_project, _identifier, _action, _params), do: {:error, :invalid_action}
+
+  defp parse_token_budget(nil), do: {:ok, nil}
+  defp parse_token_budget(value) when is_integer(value) and value > 0, do: {:ok, value}
+
+  defp parse_token_budget(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {budget, ""} when budget > 0 -> {:ok, budget}
+      _ -> :error
+    end
+  end
+
+  defp parse_token_budget(_value), do: :error
+
+  defp goal_control_payload(action, :cleared), do: %{action: action, cleared: true, goal: nil}
+  defp goal_control_payload(action, goal), do: %{action: action, goal: goal}
 
   defp run_dispatch_action(project, identifier, "resume", opts),
     do: IssueDispatch.resume(project, identifier, opts)

@@ -49,7 +49,15 @@ export interface BackendAgentExecutionDto {
   tokens?: BackendAgentExecutionTokensDto | null;
 }
 
-const KNOWN_STATUSES: readonly AgentExecutionStatus[] = ["live", "idle", "waiting", "retrying", "error", "aborted"];
+const KNOWN_STATUSES: readonly AgentExecutionStatus[] = [
+  "live",
+  "idle",
+  "waiting",
+  "retrying",
+  "error",
+  "aborted",
+  "saved",
+];
 
 function normalizeStatus(status: string | null | undefined): AgentExecutionStatus {
   return KNOWN_STATUSES.includes(status as AgentExecutionStatus) ? (status as AgentExecutionStatus) : "idle";
@@ -80,7 +88,7 @@ function stringArrayValue(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function normalizeGoal(goal: Record<string, unknown> | null | undefined): AgentExecutionGoal | null {
+export function normalizeGoal(goal: Record<string, unknown> | null | undefined): AgentExecutionGoal | null {
   if (!goal) return null;
   const kind = normalizeGoalKind(goal.kind);
   const source = normalizeGoalSource(goal.source);

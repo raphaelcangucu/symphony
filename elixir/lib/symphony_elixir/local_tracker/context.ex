@@ -444,6 +444,27 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   @doc """
+  Updates the cached `agent_goal` objective for an issue.
+
+  The operational goal state lives in the Codex thread; this only mirrors the
+  objective text so the UI has a fallback before the native goal is read. Pass
+  `nil` to clear the cache (e.g. after the goal is cleared natively).
+  """
+  @spec set_agent_goal(String.t(), String.t(), String.t() | nil) ::
+          {:ok, IssueRecord.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def set_agent_goal(project_slug, identifier, agent_goal)
+      when is_binary(project_slug) and is_binary(identifier) and
+             (is_binary(agent_goal) or is_nil(agent_goal)) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      issue
+      |> IssueRecord.changeset(%{agent_goal: agent_goal})
+      |> Repo.update()
+      |> preload_issue_result()
+    end
+  end
+
+  @doc """
   Clears the persisted agent session id for an issue.
 
   Used by the hard-reset control so the issue starts a fresh agent session
@@ -1446,12 +1467,16 @@ defmodule SymphonyElixir.LocalTracker.Context do
   # Post-commit side-effects for a (possibly grouped) move. Mirrors the broadcast +
   # push behavior of `tap_issue_event/3`; the activity-event rows are already
   # persisted inside `persist_group_move/5`.
-  defp emit_move_events(events) do
-    Enum.each(events, fn {%IssueRecord{} = issue, event_type, metadata} ->
+  defp emit_move_events([{%IssueRecord{} = lead, event_type, metadata} | member_events]) do
+    Broadcaster.issue_changed(event_type, lead)
+    maybe_push_on_issue_event(event_type, lead, metadata)
+
+    Enum.each(member_events, fn {%IssueRecord{} = issue, event_type, _metadata} ->
       Broadcaster.issue_changed(event_type, issue)
-      maybe_push_on_issue_event(event_type, issue, metadata)
     end)
   end
+
+  defp emit_move_events([]), do: :ok
 
   defp reorder_issue_siblings(project_id, %IssueRecord{} = issue, target_status_id, target_position) do
     if issue.status_id == target_status_id do

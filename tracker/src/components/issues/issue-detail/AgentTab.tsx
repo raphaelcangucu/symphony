@@ -5,13 +5,19 @@ import { toast } from "sonner";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
+import { GoalControls } from "@/components/issues/issue-detail/GoalControls";
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
 import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
 import { Separator } from "@/components/ui/separator";
 import { useSessionLogChannel } from "@/hooks/useSessionLogChannel";
 import { formatDateTime } from "@/lib/utils";
-import { canResumeExecution, canSteerExecution, resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
+import {
+  canResumeExecution,
+  canSteerExecution,
+  goalStatusLabel,
+  resolveDisplayStatus,
+} from "@/lib/agentExecutionDisplay";
 import { assessEvidenceAttention, type EvidenceAttention } from "@/lib/evidenceStatus";
 import type { ReturnToAgentTemplate } from "@/lib/returnToAgent";
 import { isWaitState, parseWorkflowTrackerConfig, type WorkflowTrackerConfig } from "@/lib/workflowTracker";
@@ -155,6 +161,41 @@ export function AgentTab({
                     ? ` · ${t("issue.agent.tab.goalCapabilities", { list: execution.goal.capabilities.join(", ") })}`
                     : ""}
                 </dd>
+                <dl className="mt-3 grid grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <dt className="text-muted-foreground">{t("issue.agent.tab.goalStatus")}</dt>
+                    <dd className="mt-1 font-medium text-foreground/90">
+                      {goalStatusLabel(execution.goal.status, t) ?? "-"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">{t("issue.agent.tab.goalTokensUsed")}</dt>
+                    <dd className="mt-1 font-medium text-foreground/90">
+                      {execution.goal.tokensUsed != null ? execution.goal.tokensUsed.toLocaleString() : "-"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">{t("issue.agent.tab.goalBudget")}</dt>
+                    <dd className="mt-1 font-medium text-foreground/90">
+                      {execution.goal.tokenBudget != null
+                        ? execution.goal.tokenBudget.toLocaleString()
+                        : t("issue.agent.tab.goalBudgetUnlimited")}
+                    </dd>
+                  </div>
+                  {execution.goal.timeUsedSeconds != null ? (
+                    <div>
+                      <dt className="text-muted-foreground">{t("issue.agent.tab.goalTimeUsed")}</dt>
+                      <dd className="mt-1 font-medium text-foreground/90">
+                        {t("issue.agent.tab.goalSeconds", { seconds: execution.goal.timeUsedSeconds })}
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <GoalControls
+                  projectSlug={projectSlug}
+                  issueIdentifier={issue.identifier}
+                  goal={execution.goal}
+                />
               </div>
             ) : null}
           </dl>

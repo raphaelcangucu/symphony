@@ -347,6 +347,7 @@ When working inside Symphony (MCP / dynamic tools), prefer structured probes ove
 
 - **`get_evidence_status`** — after writing `.symphony/evidence/manifest.json`, confirm gate state and missing artifacts.
 - **`check_handoff_gate`** — before calling `set_issue_status` to a handoff/wait status (e.g. Human Review), verify validate + publish gates.
+- **`link_pull_request`** — after opening the PR, attach its URL to the issue so the publish gate and board see the association (origin `manual`).
 - **`manage_dev_env`** + **`manage_preview`** — before UI e2e, run configured serve steps (`category_filter: serve`) then start/check preview URLs.
 
 These tools read the same backend as the orchestrator; use them instead of re-parsing manifests by hand on continuation turns.

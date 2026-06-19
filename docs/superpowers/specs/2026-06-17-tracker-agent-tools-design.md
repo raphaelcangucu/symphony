@@ -117,6 +117,8 @@ p
 | `explain_dispatch_eligibility` | Phase 2 | not exposed | Pure Elixir over project + issue |
 | `manage_blockers` | Phase 3 | optional later | Wraps blocker API logic |
 | `sync_issue` | Phase 3 | not exposed | Wraps issue sync endpoint logic |
+| `list_running_agents` | Phase 4 | not exposed | Wraps `Presenter.state_payload/3` (live snapshot) |
+| `steer_agent` | Phase 4 | not exposed | Wraps `Orchestrator.steer/3` (inject into running turn) |
 
 ### Preview / setup / serve flow (agent mental model)
 
@@ -492,6 +494,37 @@ change gate or dev-server semantics.
 
 **Audience**: assistant only.
 
+## Phase 4 — Live agent control (done)
+
+Both capabilities already exist at the runtime level; these tools surface them.
+
+### 10. `list_running_agents`
+
+**Purpose**: List the agents the orchestrator is running/retrying right now (live,
+in-memory state) — distinct from `get_agent_executions` (persisted DB records) and
+`get_issue_orchestrator_state` (one issue). Use it to see what is executing before
+steering.
+
+**Backend**: `SymphonyElixirWeb.Presenter.state_payload/3` over
+`Orchestrator.snapshot/2`; scopes `running`/`retrying` by `project_slug`. Returns
+`available: false` (graceful, never raises) when the snapshot is unavailable.
+
+**Audience**: assistant + CLI. Project-scoped as a tool; the CLI `running` command
+accepts an optional slug (omit = all projects), routed directly to the tool with a
+`nil` slug via `Tracker.Cli`.
+
+### 11. `steer_agent`
+
+**Purpose**: Inject a text message into a running coding agent's current turn (the
+agent reads it mid-run via the Codex `turn/steer` protocol) — no restart needed.
+
+**Backend**: `Orchestrator.steer/3` (finds the running turn process by identifier
+and sends `{:codex_steer, …}`). Fire-and-forget (`reply_to: nil`). Maps
+`:ActiveTurnNotSteerable` → `:agent_not_running` and `:empty_message` →
+`:missing_message`. Validates the issue belongs to the project first.
+
+**Audience**: assistant + CLI only (no coding-agent self/peer steering).
+
 ## Error handling
 
 - All tools return `{:ok, %{tool, message, data}}` / `{:error, reason}` through
@@ -517,12 +550,39 @@ Run `make all` in `elixir/` before merge.
 
 ## Rollout
 
-1. **Phase 1** — single PR: handoff/evidence/comments + preview/setup/serve
-   modules + ToolExecutor + DynamicTool + skills/prompts.
-2. **Phase 2** — orchestrator debug + PR link (assistant-heavy).
-3. **Phase 3** — blockers + sync if authoring demand confirms.
+1. **Phase 1 (done)** — handoff/evidence/comments + preview/setup/serve modules +
+   ToolExecutor + DynamicTool + skills/prompts.
+2. **Phase 2 (done)** — `link_pull_request` (assistant + coding agent),
+   `get_issue_orchestrator_state`, `explain_dispatch_eligibility` (assistant).
+3. **Phase 3 (done)** — `manage_blockers`, `sync_issue` (assistant).
+4. **Phase 4 (done)** — `list_running_agents`, `steer_agent` (assistant + CLI).
+5. **CLI (done)** — `mix symphony.tracker` ships as a thin shell over
+   `ToolExecutor`; see the CLI section below.
 
 No feature flags required; tools appear in tool specs immediately once deployed.
+
+## CLI — `mix symphony.tracker` (implemented)
+
+The CLI is a thin shell over the **same** assistant tools, not a parallel
+implementation. The tracker SQLite database is owned by the running daemon, so the
+task never starts its own app: it connects over distributed Erlang (the `:erpc`
+pattern from `mix symphony.ctl`) to an in-daemon dispatcher
+`SymphonyElixir.Tracker.Cli.call/3`, which routes to `ToolExecutor.execute/4`
+(plus `DiscoveryTools` for the slug-less `projects` command) and returns the
+structured `{tool, message, data}` result.
+
+- Output: default prints the human `message` then pretty `data`; `--json` prints
+  the full `{tool, message, data}` as one compact JSON line (script/agent friendly).
+- Commands pair 1:1 with tools: `projects`, `issues`, `issue`, `move`, `comment`,
+  `comments`, `dispatch`, `running`, `steer`, `sync`, `evidence`, `handoff`,
+  `orchestrator`, `dispatch-explain`, `pr-link`, `preview`, `dev-env`,
+  `blockers[-add|-rm]`. `running` takes an optional slug (omit = all projects).
+- Requires `make serve` (a running daemon).
+
+`explain_dispatch_eligibility` is intentionally scoped to deterministic
+config/label/status eligibility (dispatch/terminal/wait states + symphony-label
+gate); live "running/retrying right now" is answered by
+`get_issue_orchestrator_state`.
 
 ## Open questions (resolved)
 
@@ -532,7 +592,7 @@ No feature flags required; tools appear in tool specs immediately once deployed.
 | Phase 1 ordering | Handoff/evidence/comments + preview/setup/serve in parallel |
 | Preview/setup/serve in Phase 1 | Yes — extend `manage_preview`; add dev-env + setup tools |
 | `mix symphony.ctl serve` via tools | No — daemon boot stays operator-only |
-| CLI `mix symphony.tracker` | Deferred |
+| CLI `mix symphony.tracker` | Implemented — thin `:erpc` shell over `ToolExecutor` (single SQLite owner) |
 
 ## References
 

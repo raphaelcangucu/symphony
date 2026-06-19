@@ -699,6 +699,38 @@ make new-migration name=add_widgets   # generate a new migration file
 make rollback                         # roll back the last migration
 ```
 
+#### Tracker CLI (`mix symphony.tracker`)
+
+A thin shell over the same assistant tools the chat assistant and coding agents
+use. It connects to the **running** daemon over distributed Erlang (`make serve`
+first) so the SQLite DB keeps a single owner — it never starts its own app.
+
+```bash
+mix symphony.tracker projects                              # list local tracker projects
+mix symphony.tracker issues <slug> [--search TEXT]         # list issues
+mix symphony.tracker issue <slug> <id>                     # get one issue
+mix symphony.tracker move <slug> <id> <status>             # move to a workflow status
+mix symphony.tracker comment <slug> <id> <body>            # add a comment
+mix symphony.tracker comments <slug> <id>                  # list comments
+mix symphony.tracker dispatch <slug> <id> --instructions "…" [--agent codex]
+mix symphony.tracker running [slug]                        # live agents running/retrying (omit slug = all projects)
+mix symphony.tracker steer <slug> <id> <message>          # inject a message into a running agent's turn
+mix symphony.tracker sync <slug> <id>                      # pull remote tracker state
+mix symphony.tracker evidence <slug> <id>                  # evidence gate status
+mix symphony.tracker handoff <slug> <id>                   # validate + publish gates
+mix symphony.tracker orchestrator <slug> <id>              # live running/retry/idle state
+mix symphony.tracker dispatch-explain <slug> <id>          # why an issue is / isn't dispatchable
+mix symphony.tracker pr-link <slug> <id> <url>             # attach a PR URL
+mix symphony.tracker preview <slug> <id> [status|start|stop|restart]
+mix symphony.tracker dev-env <slug> <action> [--step-id ID] [--category CAT]
+mix symphony.tracker blockers <slug> <id>                  # list blockers
+mix symphony.tracker blockers-add <slug> <id> <target>     # add blocked_by relation
+mix symphony.tracker blockers-rm <slug> <id> <target>      # remove blocked_by relation
+```
+
+Add `--json` to print the full structured `{tool, message, data}` as one JSON line
+(ideal for scripts / `jq`); the default prints a human summary plus pretty data.
+
 #### SQLite backups
 
 Symphony snapshots the tracker database to `.symphony/backups/database/` (configurable via

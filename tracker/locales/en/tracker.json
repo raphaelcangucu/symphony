@@ -165,7 +165,28 @@
         "waiting": "Waiting",
         "retrying": "Retrying",
         "error": "Error",
-        "aborted": "Aborted"
+        "aborted": "Aborted",
+        "saved": "Goal saved"
+      },
+      "goalStatus": {
+        "active": "Active",
+        "paused": "Paused",
+        "blocked": "Blocked",
+        "complete": "Complete",
+        "completed": "Complete",
+        "budgetLimited": "Budget limited",
+        "usageLimited": "Usage limited",
+        "interrupted": "Interrupted",
+        "not_loaded": "Not loaded"
+      },
+      "goalControls": {
+        "pause": "Pause goal",
+        "resume": "Resume goal",
+        "clear": "Clear goal",
+        "pauseDone": "Goal paused",
+        "resumeDone": "Goal resumed",
+        "clearDone": "Goal cleared",
+        "failed": "Goal control failed"
       },
       "tab": {
         "runStatus": "Run status",
@@ -180,6 +201,12 @@
         "goalSourceNative": "agent native state",
         "goalSourcePrompt": "prompt guidance",
         "goalCapabilities": "Capabilities: {{list}}",
+        "goalStatus": "Status",
+        "goalBudget": "Token budget",
+        "goalTokensUsed": "Tokens used",
+        "goalTimeUsed": "Time used",
+        "goalBudgetUnlimited": "Unlimited",
+        "goalSeconds": "{{seconds}}s",
         "noExecution": "No agent is currently executing this issue.",
         "latestUpdate": "Latest update",
         "lastError": "Last error",

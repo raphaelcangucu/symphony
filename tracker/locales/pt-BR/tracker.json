@@ -165,7 +165,28 @@
         "waiting": "Aguardando",
         "retrying": "Repetindo",
         "error": "Erro",
-        "aborted": "Abortado"
+        "aborted": "Abortado",
+        "saved": "Goal salvo"
+      },
+      "goalStatus": {
+        "active": "Ativo",
+        "paused": "Pausado",
+        "blocked": "Bloqueado",
+        "complete": "Concluído",
+        "completed": "Concluído",
+        "budgetLimited": "Limite de orçamento",
+        "usageLimited": "Limite de uso",
+        "interrupted": "Interrompido",
+        "not_loaded": "Não carregado"
+      },
+      "goalControls": {
+        "pause": "Pausar goal",
+        "resume": "Retomar goal",
+        "clear": "Limpar goal",
+        "pauseDone": "Goal pausado",
+        "resumeDone": "Goal retomado",
+        "clearDone": "Goal limpo",
+        "failed": "Falha no controle do goal"
       },
       "tab": {
         "runStatus": "Status da execução",
@@ -180,6 +201,12 @@
         "goalSourceNative": "estado nativo do agente",
         "goalSourcePrompt": "orientação do prompt",
         "goalCapabilities": "Capacidades: {{list}}",
+        "goalStatus": "Status",
+        "goalBudget": "Orçamento de tokens",
+        "goalTokensUsed": "Tokens usados",
+        "goalTimeUsed": "Tempo usado",
+        "goalBudgetUnlimited": "Ilimitado",
+        "goalSeconds": "{{seconds}}s",
         "noExecution": "Nenhum agente está executando esta issue no momento.",
         "latestUpdate": "Última atualização",
         "lastError": "Último erro",

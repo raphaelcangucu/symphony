@@ -146,6 +146,18 @@ Check in order:
 6. Not in `terminal_states`, not blocked by open blocker issues
 7. Orchestrator logs: `Dispatching issue to agent` vs skip reasons
 
+### Tools to diagnose and repair
+
+- **`explain_dispatch_eligibility`** (assistant) — one call returns `eligible` + concrete `reasons` (`status_not_in_dispatch_states`, `terminal_state`, `wait_state`, `missing_symphony_label`) and the active gate flags. Prefer this over reading config by hand.
+- **`get_issue_orchestrator_state`** (assistant) — whether the issue is running, retrying, or idle right now (live snapshot + persisted status).
+- **`list_running_agents`** (assistant) — every agent the orchestrator is running/retrying right now (live, in-memory). Use it to see what is executing before steering.
+- **`steer_agent`** (assistant) — inject a message into a running agent's current turn (the agent reads it mid-run); no restart needed. Returns `agent_not_running` when there is no steerable active turn.
+- **`manage_blockers`** (assistant) — `list` / `create` / `delete` `blocked_by` relations; a non-terminal blocker keeps an issue out of the queue.
+- **`sync_issue`** (assistant) — pull the latest remote state after the issue was edited outside Symphony.
+- **`link_pull_request`** (assistant + coding agent) — attach a PR URL so the publish gate and board see it.
+
+From a shell against the running daemon (`make serve` first): `mix symphony.tracker dispatch-explain <slug> <id>`, `mix symphony.tracker orchestrator <slug> <id>`, `mix symphony.tracker running [slug]`, `mix symphony.tracker steer <slug> <id> "<message>"`, `mix symphony.tracker blockers <slug> <id>`, `mix symphony.tracker sync <slug> <id>`, `mix symphony.tracker pr-link <slug> <id> <url>` (add `--json` for structured output). See `elixir/README.md`.
+
 ## References
 
 - `elixir/README.md` — Tracker setup (per project)

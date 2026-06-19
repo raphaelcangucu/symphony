@@ -207,8 +207,9 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     For orchestrator/dispatch questions: call get_workflow and read tracker.dispatch_states (queue for new auto-runs), active_states (polled), terminal_states, wait_states in data.config — not board status categories from get_project. Follow the workflow skill when editing workflow YAML.
     #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
-    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, check_handoff_gate, get_evidence_status, manage_preview (start/stop/restart/status), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (start/stop/restart/status), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
     Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview URLs, configure serve steps with manage_dev_env then manage_preview (start|status).
+    To explain why an issue is or isn't auto-dispatched, call explain_dispatch_eligibility; for live running/retry/idle state call get_issue_orchestrator_state. To see every agent executing right now call list_running_agents, and steer_agent to inject a message into a running agent's turn. After opening a PR call link_pull_request. Manage dependencies with manage_blockers; pull external tracker edits with sync_issue.
     If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
     When the user attaches an image or file, it is already saved in this project. If they want it on a task (e.g. in the description), embed it using the exact Markdown URL given in the attachment note (`![alt](URL)` for images) when you call create_issue/update_issue/add_comment — never just describe it in words.
     create_issue places new work in Backlog (intake) by default — omit status. Do not create directly in orchestrator queue statuses (e.g. Todo); use move_issue when the issue is ready for execution.
@@ -475,10 +476,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Create projects: create_tracker_project (local only), create_github_tracker_project, provision_github_project.
 
     Board / issues (require project_slug): list_issues, create_issue, get_issue, update_issue, move_issue, add_comment,
-    list_comments, update_comment, list_pull_requests, check_handoff_gate, get_evidence_status,
+    list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status,
     manage_preview (action: status|start|stop|restart), manage_dev_env, scan_project_setup, suggest_project_setup,
-    dispatch_codex, get_agent_executions, get_project, list_project_repositories, get_workflow, read_workspace_file,
+    dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility,
+    list_running_agents, steer_agent, manage_blockers,
+    sync_issue, get_project, list_project_repositories, get_workflow, read_workspace_file,
     update_project_workflow, update_project_repositories.
+
+    Diagnose / repair: explain_dispatch_eligibility (why an issue isn't dispatching), get_issue_orchestrator_state
+    (live running/retry/idle), list_running_agents (every agent executing now), steer_agent (inject a message into a
+    running agent's turn), manage_blockers (blocked_by relations), sync_issue (pull external tracker edits).
 
     Project setup flow: scan_project_setup → suggest_project_setup → update_project_workflow / update_project_repositories,
     then manage_dev_env (propose_steps|save_steps|run) before manage_preview for serve URLs.

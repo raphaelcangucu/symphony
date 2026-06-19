@@ -5,7 +5,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
 
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.Issue
-  alias SymphonyElixir.Assistant.{EvidenceTools, HandoffTools, DevEnvTools, PreviewTools}
+  alias SymphonyElixir.Assistant.{EvidenceTools, HandoffTools, DevEnvTools, PreviewTools, PullRequestTools}
   alias SymphonyElixir.Linear.Client, as: LinearClient
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.AgentHandoffGate
@@ -23,6 +23,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @get_evidence_status_tool "get_evidence_status"
   @manage_preview_tool "manage_preview"
   @manage_dev_env_tool "manage_dev_env"
+  @link_pull_request_tool "link_pull_request"
 
   @graphql_input_schema %{
     "type" => "object",
@@ -154,6 +155,9 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       @manage_dev_env_tool ->
         execute_bound_assistant_tool(DevEnvTools, arguments, opts, coding_agent: true)
 
+      @link_pull_request_tool ->
+        execute_bound_assistant_tool(PullRequestTools, arguments, opts)
+
       other ->
         failure_response(%{
           "error" => %{
@@ -212,7 +216,8 @@ defmodule SymphonyElixir.Codex.DynamicTool do
         HandoffTools.issue_bound_tool_spec(),
         EvidenceTools.issue_bound_tool_spec(),
         PreviewTools.issue_bound_tool_spec(),
-        DevEnvTools.issue_bound_tool_spec()
+        DevEnvTools.issue_bound_tool_spec(),
+        PullRequestTools.issue_bound_tool_spec()
       ]
   end
 

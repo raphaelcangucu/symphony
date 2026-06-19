@@ -25,6 +25,7 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
       url: record.url,
       assignee_id: record.assignee_id,
       agent_goal: record.agent_goal,
+      agent_session_id: record.agent_session_id,
       labels: visible_labels(label_names),
       comments: comments(record.comments),
       blocked_by: blockers(record.source_relations),
