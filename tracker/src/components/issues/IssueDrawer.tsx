@@ -48,6 +48,8 @@ import { ActivityTab } from "./issue-detail/ActivityTab";
 import { AgentLongRunningBadge, AgentStatusBadge } from "./AgentStatusBadge";
 import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { AgentTabs } from "./issue-detail/AgentTabs";
+import { IssueGroupBanner } from "./issue-detail/IssueGroupBanner";
+import type { ResolvedIssueGroup } from "./issue-detail/issueGroup";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { CommentsTab } from "./issue-detail/CommentsTab";
 import { EvidenceTab } from "./issue-detail/EvidenceTab";
@@ -84,6 +86,8 @@ interface IssueDrawerProps {
   onDelete?: (issue: Issue) => void | Promise<void>;
   onForceSync?: (issue: Issue) => void | Promise<void>;
   onIssueUpdated?: (updated: Issue) => void;
+  group?: ResolvedIssueGroup | null;
+  onOpenIssue?: (identifier: string) => void;
 }
 
 export function IssueDrawer({
@@ -101,6 +105,8 @@ export function IssueDrawer({
   onDelete,
   onForceSync,
   onIssueUpdated,
+  group = null,
+  onOpenIssue,
 }: IssueDrawerProps) {
   const { t } = useTranslation();
   const meta = issue ? getStatusMeta(issue.status) : null;
@@ -344,6 +350,9 @@ export function IssueDrawer({
                   </span>
                 </div>
               </SheetDescription>
+              {group ? (
+                <IssueGroupBanner group={group} currentIdentifier={issue.identifier} onOpenIssue={onOpenIssue} />
+              ) : null}
             </SheetHeader>
             <Tabs
               value={tab}

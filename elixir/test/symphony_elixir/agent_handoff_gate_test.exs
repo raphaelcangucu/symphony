@@ -34,6 +34,13 @@ defmodule SymphonyElixir.AgentHandoffGateTest do
     refute AgentHandoffGate.handoff_status?("In Progress", cfg)
   end
 
+  test "handoff_status? is false when completion_transitions is nil" do
+    cfg = config(completion_transitions: nil, wait_states: ["Human Review"])
+
+    refute AgentHandoffGate.handoff_status?("In Progress", cfg)
+    assert AgentHandoffGate.handoff_status?("Human Review", cfg)
+  end
+
   test "check passes when evidence is not required" do
     issue = %Issue{id: "1", identifier: "GAM-1", project_slug: "gam"}
     cfg = config(evidence: %{required: false, repos: %{}})

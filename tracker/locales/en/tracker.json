@@ -221,6 +221,12 @@
       "issueTitleAria": "Issue title",
       "untitledIssue": "Untitled issue",
       "unassigned": "Unassigned",
+      "group": {
+        "title": "Group",
+        "lead": "Lead",
+        "current": "This issue",
+        "unavailable": "Not in current view"
+      },
       "code": "Code",
       "editor": {
         "checking": "Checking editor…",

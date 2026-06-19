@@ -84,7 +84,7 @@ export function GroupCard({
         </button>
       </div>
 
-      <IssueCard issue={lead} onSelect={onSelectIssue} agent={agentExecutions?.get(lead.identifier)} />
+      <IssueCard issue={lead} onSelect={onSelectIssue} agent={agentExecutions?.get(lead.identifier)} presentational />
 
       {expanded ? (
         <div className="mt-1.5 space-y-1 border-l-2 border-border/60 pl-2">

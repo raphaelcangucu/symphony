@@ -99,8 +99,7 @@ defmodule SymphonyElixir.Assistant.HandoffTools do
   defp target_statuses(%ProjectConfig{} = config) do
     destinations =
       config.completion_transitions
-      |> Map.values()
-      |> List.wrap()
+      |> completion_destinations()
       |> Enum.uniq()
 
     %{
@@ -108,6 +107,14 @@ defmodule SymphonyElixir.Assistant.HandoffTools do
       completion_destinations: destinations
     }
   end
+
+  # `completion_transitions` is an optional per-project override, so it stays
+  # `nil` when unset (see `ProjectConfig`). Treat the missing/invalid case as "no
+  # extra destinations" instead of letting `Map.values/1` crash the tool — and,
+  # with it, the whole agent run.
+  defp completion_destinations(transitions) when is_map(transitions), do: Map.values(transitions)
+  defp completion_destinations(transitions) when is_list(transitions), do: transitions
+  defp completion_destinations(_transitions), do: []
 
   @spec resolve_issue(String.t(), map(), keyword()) :: {:ok, Issue.t()} | {:error, term()}
   def resolve_issue(project_slug, arguments, opts) do

@@ -28,7 +28,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
   alias SymphonyElixir.Tracker.Identity
-  alias SymphonyElixir.Tracker.Sync.{LocalStore, Outbox}
+  alias SymphonyElixir.Tracker.Sync.{GroupStatus, LocalStore, Outbox}
 
   @impl true
   def project_identity, do: remote_adapter().project_identity()
@@ -162,10 +162,15 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   def update_issue_state(issue_id, state_name) when is_binary(issue_id) and is_binary(state_name) do
     with {:ok, project} <- resolve_project_for_issue(issue_id),
          {:ok, identifier} <- resolve_identifier(project, issue_id),
-         {:ok, _issue} <- Context.update_issue_state(project.slug, identifier, state_name) do
-      LocalStore.mark_dirty(identifier, project.slug, [:state])
-      payload = %{"identifier" => identifier, "state" => state_name}
-      enqueue(project, identifier, "state", "move", payload, "state:move:#{project.id}:#{identifier}")
+         {:ok, issue} <- Context.update_issue_state(project.slug, identifier, state_name) do
+      issue
+      |> GroupStatus.push_identifiers()
+      |> Enum.each(fn id ->
+        LocalStore.mark_dirty(id, project.slug, [:state])
+        payload = %{"identifier" => id, "state" => state_name}
+        enqueue(project, id, "state", "move", payload, "state:move:#{project.id}:#{id}")
+      end)
+
       :ok
     else
       :skip -> {:error, :project_not_resolved}

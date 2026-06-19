@@ -198,6 +198,55 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     assert Map.has_key?(after_pull.dirty_fields, "title")
   end
 
+  test "remote pull does not overwrite a group member's local status", %{project: project} do
+    {:ok, lead} = LocalStore.upsert_remote_issue(project, remote_issue(%{remote_id: "I_lead", identifier: "MM-1"}))
+    {:ok, member} = LocalStore.upsert_remote_issue(project, remote_issue(%{remote_id: "I_mem", identifier: "MM-2"}))
+
+    {:ok, _} = Context.set_issue_group(project.slug, "MM-2", "MM-1")
+    assert {:ok, _} = Context.move_issue(project.slug, "MM-1", %{status: "In Progress"})
+
+    lead = Repo.get!(IssueRecord, lead.id) |> Repo.preload(:status)
+    member = Repo.get!(IssueRecord, member.id) |> Repo.preload(:status)
+    assert lead.status.name == "In Progress"
+    assert member.status.name == "In Progress"
+
+    {:ok, after_pull} =
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{
+          remote_id: "I_mem",
+          identifier: "MM-2",
+          state: "Todo",
+          remote_updated_at: DateTime.utc_now()
+        })
+      )
+
+    reloaded = Repo.get!(IssueRecord, after_pull.id) |> Repo.preload(:status)
+    assert reloaded.status.name == "In Progress"
+    assert reloaded.group_lead_id == lead.id
+  end
+
+  test "remote pull on the lead propagates status to grouped members", %{project: project} do
+    {:ok, lead} = LocalStore.upsert_remote_issue(project, remote_issue(%{remote_id: "I_lead", identifier: "MM-1"}))
+    {:ok, member} = LocalStore.upsert_remote_issue(project, remote_issue(%{remote_id: "I_mem", identifier: "MM-2"}))
+    {:ok, _} = Context.set_issue_group(project.slug, "MM-2", "MM-1")
+    assert {:ok, _} = Context.move_issue(project.slug, "MM-1", %{status: "In Progress"})
+
+    {:ok, _} =
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{
+          remote_id: "I_lead",
+          identifier: "MM-1",
+          state: "Done",
+          remote_updated_at: DateTime.utc_now()
+        })
+      )
+
+    member = Repo.get!(IssueRecord, member.id) |> Repo.preload(:status)
+    assert member.status.name == "Done"
+  end
+
   test "upsert_pull_requests links and updates PR state", %{project: project} do
     {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
 

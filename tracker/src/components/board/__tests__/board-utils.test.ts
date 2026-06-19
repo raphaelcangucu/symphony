@@ -6,9 +6,11 @@ import {
   buildBoardState,
   groupIssuesIntoUnits,
   mergeIntent,
+  moveGroupLocally,
   moveIssueLocally,
   parseDragIssueId,
   resolveBoardMove,
+  resolveGroupMoveLead,
   upsertIssue,
 } from "../board-utils";
 
@@ -114,8 +116,55 @@ describe("board-utils", () => {
     expect(moveIssueLocally(board, "MAC-404", "Done", 0)).toBe(board);
   });
 
+  it("moves a group's members along with the lead so they stay together", () => {
+    const board = buildBoardState([
+      issue({ identifier: "MAC-1", status: "Todo", position: 0, groupMemberIdentifiers: ["MAC-2", "MAC-3"] }),
+      issue({ identifier: "MAC-2", status: "Todo", position: 1, groupLeadIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-3", status: "Todo", position: 2, groupLeadIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-9", status: "In Progress", position: 0 }),
+    ]);
+
+    const next = moveGroupLocally(board, "MAC-1", ["MAC-2", "MAC-3"], "In Progress", 0);
+
+    expect(next.Todo).toHaveLength(0);
+    expect(next["In Progress"].map((item) => item.identifier).sort()).toEqual(["MAC-1", "MAC-2", "MAC-3", "MAC-9"]);
+    // Lead lands at the requested slot with its members tucked right behind it.
+    expect(next["In Progress"].slice(0, 3).map((item) => item.identifier)).toEqual(["MAC-1", "MAC-3", "MAC-2"]);
+    expect(next["In Progress"].every((item) => item.status === "In Progress")).toBe(true);
+  });
+
+  it("resolveGroupMoveLead maps a member drag to its lead and siblings", () => {
+    const issues = [
+      issue({ identifier: "MAC-1", groupMemberIdentifiers: ["MAC-2", "MAC-3"] }),
+      issue({ identifier: "MAC-2", groupLeadIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-3", groupLeadIdentifier: "MAC-1" }),
+    ];
+
+    expect(resolveGroupMoveLead(issues, "MAC-2")).toEqual({
+      leadIdentifier: "MAC-1",
+      memberIdentifiers: ["MAC-2", "MAC-3"],
+    });
+    expect(resolveGroupMoveLead(issues, "MAC-1")).toEqual({
+      leadIdentifier: "MAC-1",
+      memberIdentifiers: ["MAC-2", "MAC-3"],
+    });
+  });
+
+  it("leaves a lead with no members as a plain single-issue move", () => {
+    const board = buildBoardState([
+      issue({ identifier: "MAC-1", status: "Todo", position: 0 }),
+      issue({ identifier: "MAC-2", status: "Done", position: 0 }),
+    ]);
+
+    const next = moveGroupLocally(board, "MAC-1", [], "Done", 0);
+
+    expect(next.Todo).toHaveLength(0);
+    expect(next.Done.map((item) => item.identifier)).toEqual(["MAC-1", "MAC-2"]);
+  });
+
   it("parses sortable card ids defensively", () => {
     expect(parseDragIssueId("issue:MAC-1")).toBe("MAC-1");
+    expect(parseDragIssueId("group:MAC-1")).toBe("MAC-1");
     expect(parseDragIssueId("MAC-1")).toBe("MAC-1");
     expect(parseDragIssueId(null)).toBeNull();
     expect(parseDragIssueId("")).toBeNull();

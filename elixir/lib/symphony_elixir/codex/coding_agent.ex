@@ -558,7 +558,17 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp send_steer(port, %{thread_id: thread_id, turn_id: turn_id, next_id: next_id, pending: pending} = turn_ctx, input, reply_to) do
+  defp send_steer(port, turn_ctx, input, reply_to) do
+    do_send_steer(port, turn_ctx, input, reply_to, false)
+  end
+
+  defp do_send_steer(
+         port,
+         %{thread_id: thread_id, turn_id: turn_id, next_id: next_id, pending: pending} = turn_ctx,
+         input,
+         reply_to,
+         retried?
+       ) do
     send_message(port, %{
       "method" => "turn/steer",
       "id" => next_id,
@@ -569,7 +579,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       }
     })
 
-    %{turn_ctx | next_id: next_id + 1, pending: Map.put(pending, next_id, reply_to)}
+    entry = %{reply_to: reply_to, input: input, retried: retried?}
+    %{turn_ctx | next_id: next_id + 1, pending: Map.put(pending, next_id, entry)}
   end
 
   defp send_interrupt(port, %{thread_id: thread_id, turn_id: turn_id, next_id: next_id}) do
@@ -661,7 +672,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         {:error, {:turn_cancelled, Map.get(payload, "params")}}
 
       {:ok, %{"id" => id} = payload} when is_map_key(turn_ctx.pending, id) ->
-        turn_ctx = route_steer_response(turn_ctx, id, payload)
+        turn_ctx = route_steer_response(port, turn_ctx, id, payload)
         receive_loop(port, on_message, timeout_ms, "", tool_executor, auto_approve_requests, turn_ctx)
 
       {:ok, %{"method" => method} = payload}
@@ -708,19 +719,56 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp route_steer_response(%{pending: pending} = turn_ctx, id, payload) do
-    {reply_to, rest} = Map.pop(pending, id)
-
-    if is_pid(reply_to) do
-      case payload do
-        %{"error" => error} -> send(reply_to, {:steer_error, error})
-        %{"result" => result} -> send(reply_to, {:steer_ok, result})
-        _ -> :ok
-      end
-    end
-
-    %{turn_ctx | pending: rest}
+  defp route_steer_response(port, %{pending: pending} = turn_ctx, id, payload) do
+    {entry, rest} = Map.pop(pending, id)
+    handle_steer_response(port, %{turn_ctx | pending: rest}, entry, payload)
   end
+
+  # A `turn/steer` rejected with "expected active turn id X but found Y" means our
+  # cached `expectedTurnId` is stale relative to the app-server's active turn
+  # (a known race at turn boundaries in long sessions). The error carries the
+  # server's current turn id, so we resync to it and retry the steer exactly once
+  # before surfacing the failure — mirroring the Codex app-server clients.
+  defp handle_steer_response(port, turn_ctx, %{reply_to: reply_to, input: input, retried: false}, %{"error" => error}) do
+    case steer_turn_mismatch_id(error) do
+      actual when is_binary(actual) and actual != "" ->
+        Logger.info("Codex turn/steer expectedTurnId stale; resyncing to active turn_id=#{actual} and retrying once")
+
+        turn_ctx
+        |> Map.put(:turn_id, actual)
+        |> then(&do_send_steer(port, &1, input, reply_to, true))
+
+      _ ->
+        notify_steer_reply(reply_to, {:steer_error, error})
+        turn_ctx
+    end
+  end
+
+  defp handle_steer_response(_port, turn_ctx, %{reply_to: reply_to}, %{"error" => error}) do
+    notify_steer_reply(reply_to, {:steer_error, error})
+    turn_ctx
+  end
+
+  defp handle_steer_response(_port, turn_ctx, %{reply_to: reply_to}, %{"result" => result}) do
+    notify_steer_reply(reply_to, {:steer_ok, result})
+    turn_ctx
+  end
+
+  defp handle_steer_response(_port, turn_ctx, _entry, _payload), do: turn_ctx
+
+  defp notify_steer_reply(reply_to, message) when is_pid(reply_to), do: send(reply_to, message)
+  defp notify_steer_reply(_reply_to, _message), do: :ok
+
+  defp steer_turn_mismatch_id(%{"message" => message}), do: steer_turn_mismatch_id(message)
+
+  defp steer_turn_mismatch_id(message) when is_binary(message) do
+    case Regex.run(~r/expected active turn id `[^`]*` but found `([^`]+)`/, message) do
+      [_, actual] -> actual
+      _ -> nil
+    end
+  end
+
+  defp steer_turn_mismatch_id(_), do: nil
 
   # A Codex turn can emit a top-level `error` notification (transient model/API
   # failure) and still report `turn/completed` with no agent output. Without this
@@ -915,7 +963,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
     emit_message(on_message, :tool_call_started, %{payload: payload, raw: payload_string}, metadata)
 
-    result = tool_executor.(tool_name, arguments)
+    result = safe_execute_tool(tool_executor, tool_name, arguments)
 
     send_message(port, %{
       "id" => id,
@@ -1533,6 +1581,49 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   defp maybe_set_usage(metadata, _payload), do: metadata
 
   defp default_on_message(_message), do: :ok
+
+  # A client-side tool must never abort the agent run. Any exception, exit, or
+  # throw from the executor is converted into a structured tool failure result so
+  # Codex receives the error and the agent can record it and try another
+  # approach. This mirrors the resilience the Claude/Cursor MCP ToolGateway
+  # already provides for those agents.
+  defp safe_execute_tool(tool_executor, tool_name, arguments) do
+    tool_executor.(tool_name, arguments)
+  rescue
+    exception ->
+      Logger.error(
+        "Codex client tool #{inspect(tool_name)} crashed: #{Exception.message(exception)}\n" <>
+          Exception.format_stacktrace(__STACKTRACE__)
+      )
+
+      tool_crash_result(tool_name, Exception.message(exception))
+  catch
+    kind, reason ->
+      Logger.error(
+        "Codex client tool #{inspect(tool_name)} #{kind}: #{inspect(reason)}\n" <>
+          Exception.format_stacktrace(__STACKTRACE__)
+      )
+
+      tool_crash_result(tool_name, Exception.format(kind, reason, __STACKTRACE__))
+  end
+
+  defp tool_crash_result(tool_name, detail) do
+    payload = %{
+      "error" => %{
+        "message" =>
+          "Tool #{tool_name || "unknown"} failed with an internal error and was not executed. " <>
+            "The failure has been recorded — try a different approach or another tool instead of giving up.",
+        "reason" => detail
+      }
+    }
+
+    %{
+      "success" => false,
+      "contentItems" => [
+        %{"type" => "inputText", "text" => Jason.encode!(payload, pretty: true)}
+      ]
+    }
+  end
 
   defp tool_call_name(params) when is_map(params) do
     case Map.get(params, "tool") || Map.get(params, :tool) || Map.get(params, "name") || Map.get(params, :name) do

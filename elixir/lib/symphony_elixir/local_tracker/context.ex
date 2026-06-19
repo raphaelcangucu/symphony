@@ -447,13 +447,33 @@ defmodule SymphonyElixir.LocalTracker.Context do
       when is_binary(project_slug) and is_binary(identifier) and is_map(attrs) do
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, issue} <- fetch_project_issue(project.id, identifier),
+         issue = resolve_group_move_issue(issue),
          {:ok, status} <- fetch_move_status(project.id, attrs, issue.status_id) do
       position_only = issue.status_id == status.id
 
-      project.id
-      |> persist_moved_issue(issue, status, attrs)
-      |> tap_issue_event("issue_moved", %{status: status.name, position_only: position_only})
-      |> move_group_members(status)
+      # Persist the lead plus every group member and record their activity events
+      # in a SINGLE transaction. This keeps a grouped move atomic (it can no longer
+      # partially apply if a member update fails mid-way) and acquires the SQLite
+      # write lock exactly once instead of once per member, which is what surfaced
+      # as "database is locked"/"Database busy" under concurrent board moves.
+      #
+      # Side-effects (PubSub broadcast + push notifications) are deferred to
+      # `emit_move_events/1` AFTER commit, because `PushDispatcher` performs
+      # synchronous HTTP that must never run while the write lock is held.
+      #
+      # SQLite allows only one writer at a time. Under a burst of concurrent board
+      # moves, a writer that loses the race for the write lock can exhaust
+      # `busy_timeout` and raise `Exqlite.Error: database is locked`. Because the
+      # whole move is now atomic, nothing was applied on failure, so retrying the
+      # transaction is safe — see `with_write_retry/1`.
+      case with_write_retry(fn -> persist_group_move(project.id, issue, status, attrs, position_only) end) do
+        {:ok, {moved_lead, events}} ->
+          emit_move_events(events)
+          {:ok, moved_lead}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
@@ -487,6 +507,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       when is_binary(project_slug) and is_binary(identifier) and is_binary(state_name) do
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, issue} <- fetch_project_issue(project.id, identifier),
+         issue = resolve_group_move_issue(issue),
          {:ok, status} <- fetch_status(issue.project_id, state_name) do
       changes =
         %{status_id: status.id}
@@ -498,6 +519,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       |> Repo.update()
       |> preload_issue_result()
       |> tap_issue_event("issue_updated", %{status: status.name})
+      |> move_group_members(status)
     end
   end
 
@@ -1265,6 +1287,15 @@ defmodule SymphonyElixir.LocalTracker.Context do
     {:ok, Repo.preload(lead, @issue_preloads, force: true)}
   end
 
+  defp resolve_group_move_issue(%IssueRecord{group_lead_id: nil} = issue), do: issue
+
+  defp resolve_group_move_issue(%IssueRecord{group_lead_id: lead_id} = member) when not is_nil(lead_id) do
+    case Repo.get(IssueRecord, lead_id) do
+      %IssueRecord{} = lead -> Repo.preload(lead, @issue_preloads)
+      nil -> member
+    end
+  end
+
   defp move_group_members({:ok, %IssueRecord{} = lead} = result, %WorkflowStatus{} = status) do
     lead.id
     |> group_member_records()
@@ -1306,16 +1337,98 @@ defmodule SymphonyElixir.LocalTracker.Context do
     |> tap_issue_event("issue_created", %{})
   end
 
-  defp persist_moved_issue(project_id, %IssueRecord{} = issue, %WorkflowStatus{} = status, attrs) do
-    Repo.transaction(fn ->
-      target_position = requested_issue_position(attrs, issue.position)
+  # SQLite serializes writers, so a concurrent burst can make a losing
+  # `BEGIN IMMEDIATE` exhaust `busy_timeout` and raise. Retry with exponential
+  # backoff + full jitter to spread contenders out. Safe only because the wrapped
+  # work is a single atomic transaction (nothing is applied on failure).
+  @write_busy_max_attempts 5
+  @write_busy_base_backoff_ms 40
+  @write_busy_max_backoff_ms 400
 
-      with {:ok, moved_position} <- reorder_issue_siblings(project_id, issue, status.id, target_position),
-           {:ok, moved_issue} <- update_moved_issue(issue, status, attrs, moved_position) do
-        moved_issue
+  defp with_write_retry(fun, attempt \\ 1) when is_function(fun, 0) do
+    fun.()
+  rescue
+    error in [Exqlite.Error, DBConnection.ConnectionError] ->
+      if write_busy?(error) and attempt < @write_busy_max_attempts do
+        attempt |> backoff_ms() |> Process.sleep()
+        with_write_retry(fun, attempt + 1)
+      else
+        reraise error, __STACKTRACE__
+      end
+  end
+
+  defp write_busy?(%{message: message}) when is_binary(message) do
+    message = String.downcase(message)
+    String.contains?(message, "database is locked") or String.contains?(message, "database busy")
+  end
+
+  defp write_busy?(_), do: false
+
+  defp backoff_ms(attempt) do
+    ceiling =
+      (@write_busy_base_backoff_ms * Integer.pow(2, attempt - 1))
+      |> min(@write_busy_max_backoff_ms)
+
+    :rand.uniform(ceiling + 1) - 1
+  end
+
+  # Atomic group move: reorder + update the lead, update every group member, and
+  # record each issue's "issue_moved" activity event inside one transaction.
+  # Returns `{:ok, {moved_lead, events}}` where `events` are the post-commit
+  # side-effects to emit. DB writes only — no broadcasts or push notifications run
+  # while the write lock is held.
+  defp persist_group_move(project_id, %IssueRecord{} = lead, %WorkflowStatus{} = status, attrs, position_only) do
+    Repo.transaction(fn ->
+      lead_metadata = %{status: status.name, position_only: position_only}
+
+      with {:ok, moved_lead} <- persist_moved_issue_changes(project_id, lead, status, attrs),
+           {:ok, _event} <- insert_event(moved_lead.id, "issue_moved", lead_metadata),
+           {:ok, moved_members} <- persist_group_member_moves(moved_lead.id, status) do
+        member_events =
+          Enum.map(moved_members, &{&1, "issue_moved", %{status: status.name, position_only: false}})
+
+        {moved_lead, [{moved_lead, "issue_moved", lead_metadata} | member_events]}
       else
         {:error, reason} -> Repo.rollback(reason)
       end
+    end)
+  end
+
+  defp persist_moved_issue_changes(project_id, %IssueRecord{} = issue, %WorkflowStatus{} = status, attrs) do
+    target_position = requested_issue_position(attrs, issue.position)
+
+    with {:ok, moved_position} <- reorder_issue_siblings(project_id, issue, status.id, target_position) do
+      update_moved_issue(issue, status, attrs, moved_position)
+    end
+  end
+
+  # Updates each group member's status and inserts its activity event, halting on
+  # the first failure so the surrounding transaction rolls the whole move back.
+  defp persist_group_member_moves(lead_id, %WorkflowStatus{} = status) do
+    lead_id
+    |> group_member_records()
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+      with {:ok, updated} <- member |> IssueRecord.changeset(%{status_id: status.id}) |> Repo.update(),
+           updated = Repo.preload(updated, @issue_preloads),
+           {:ok, _event} <- insert_event(updated.id, "issue_moved", %{status: status.name, position_only: false}) do
+        {:cont, {:ok, [updated | acc]}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, members} -> {:ok, Enum.reverse(members)}
+      error -> error
+    end
+  end
+
+  # Post-commit side-effects for a (possibly grouped) move. Mirrors the broadcast +
+  # push behavior of `tap_issue_event/3`; the activity-event rows are already
+  # persisted inside `persist_group_move/5`.
+  defp emit_move_events(events) do
+    Enum.each(events, fn {%IssueRecord{} = issue, event_type, metadata} ->
+      Broadcaster.issue_changed(event_type, issue)
+      maybe_push_on_issue_event(event_type, issue, metadata)
     end)
   end
 

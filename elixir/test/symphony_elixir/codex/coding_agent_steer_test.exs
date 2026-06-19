@@ -33,7 +33,45 @@ defmodule SymphonyElixir.Codex.CodingAgentSteerTest do
     end)
   end
 
+  test "resyncs to the server-reported turn id and retries once when expectedTurnId is stale" do
+    with_fake_steer_server(&write_mismatch_fake_codex!/2, fn workspace, issue, trace_file ->
+      test_pid = self()
+
+      runner =
+        Task.async(fn ->
+          AppServer.run(workspace, "Build the feature", issue,
+            on_message: fn message ->
+              if Map.get(message, :event) == :session_started do
+                send(test_pid, {:turn_started, Map.get(message, :turn_id)})
+              end
+            end
+          )
+        end)
+
+      # The turn/start id the client caches is already stale on the server.
+      assert_receive {:turn_started, "turn-stale"}, 2_000
+
+      send(runner.pid, {:codex_steer, [%{"type" => "text", "text" => "Focus on tests"}], self()})
+
+      # The retry must succeed, so the steerer is told :steer_ok, not :steer_error.
+      assert_receive {:steer_ok, _result}, 5_000
+      refute_received {:steer_error, _error}
+
+      assert {:ok, _result} = Task.await(runner, 5_000)
+
+      steers = messages_with_method(outbound_messages(trace_file), "turn/steer")
+
+      assert length(steers) == 2
+      assert Enum.map(steers, & &1["params"]["expectedTurnId"]) == ["turn-stale", "turn-live"]
+      assert Enum.all?(steers, &(&1["params"]["input"] == [%{"type" => "text", "text" => "Focus on tests"}]))
+    end)
+  end
+
   defp with_fake_steer_server(fun) when is_function(fun, 3) do
+    with_fake_steer_server(&write_steer_fake_codex!/2, fun)
+  end
+
+  defp with_fake_steer_server(fake_writer, fun) when is_function(fake_writer, 2) and is_function(fun, 3) do
     test_root =
       Path.join(System.tmp_dir!(), "symphony-coding-agent-steer-#{System.unique_integer([:positive])}")
 
@@ -44,7 +82,7 @@ defmodule SymphonyElixir.Codex.CodingAgentSteerTest do
       trace_file = Path.join(test_root, "codex-steer.trace")
 
       File.mkdir_p!(workspace)
-      write_steer_fake_codex!(codex_binary, trace_file)
+      fake_writer.(codex_binary, trace_file)
 
       write_workflow_file!(Workflow.workflow_file_path(),
         workspace_root: workspace_root,
@@ -104,6 +142,52 @@ defmodule SymphonyElixir.Codex.CodingAgentSteerTest do
     File.chmod!(codex_binary, 0o755)
   end
 
+  # The first turn/steer is rejected because the cached expectedTurnId ("turn-stale")
+  # no longer matches the server's active turn; the error reports the live id
+  # ("turn-live"). The client must resync and retry, which the fake then accepts.
+  defp write_mismatch_fake_codex!(codex_binary, trace_file) do
+    steer_marker = trace_file <> ".steered"
+
+    File.write!(codex_binary, """
+    #!/bin/sh
+    trace_file="#{trace_file}"
+    steer_marker="#{steer_marker}"
+
+    while IFS= read -r line; do
+      printf 'JSON:%s\\n' "$line" >> "$trace_file"
+
+      case "$line" in
+        *'"method":"initialize"'*)
+          printf '%s\\n' '{"id":1,"result":{}}'
+          ;;
+        *'"method":"initialized"'*)
+          ;;
+        *'"method":"thread/start"'*)
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-steer"}}}'
+          ;;
+        *'"method":"turn/start"'*)
+          printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-stale"}}}'
+          printf '%s\\n' '{"method":"turn/started","params":{"turn":{"id":"turn-stale"}}}'
+          ;;
+        *'"method":"turn/steer"'*)
+          if [ -f "$steer_marker" ]; then
+            printf '%s\\n' '{"id":101,"result":{"turnId":"turn-live"}}'
+            printf '%s\\n' '{"method":"turn/completed","params":{"turn":{"id":"turn-live","status":"completed"}}}'
+            exit 0
+          else
+            : > "$steer_marker"
+            printf '%s\\n' '{"id":100,"error":{"code":-32602,"message":"expected active turn id `turn-stale` but found `turn-live`"}}'
+          fi
+          ;;
+        *)
+          ;;
+      esac
+    done
+    """)
+
+    File.chmod!(codex_binary, 0o755)
+  end
+
   defp outbound_messages(trace_file) do
     trace_file
     |> File.read!()
@@ -113,5 +197,9 @@ defmodule SymphonyElixir.Codex.CodingAgentSteerTest do
 
   defp message_with_method(messages, method) do
     Enum.find(messages, &(Map.get(&1, "method") == method))
+  end
+
+  defp messages_with_method(messages, method) do
+    Enum.filter(messages, &(Map.get(&1, "method") == method))
   end
 end

@@ -3,7 +3,7 @@ defmodule SymphonyElixir.PromptBuilder do
   Builds agent prompts from issue data.
   """
 
-  alias SymphonyElixir.{ProjectConfig, Repo}
+  alias SymphonyElixir.{ProjectConfig, Repo, Skills}
   alias SymphonyElixir.DevServer
   alias SymphonyElixir.LocalTracker.Context
 
@@ -33,6 +33,7 @@ defmodule SymphonyElixir.PromptBuilder do
       |> ensure_utf8()
 
     rendered <>
+      execution_methodology_section() <>
       workflow_guidance_section(issue, Keyword.get(opts, :agent_kind)) <>
       group_members_section(Keyword.get(opts, :members, [])) <>
       validate_section(config) <>
@@ -95,6 +96,35 @@ defmodule SymphonyElixir.PromptBuilder do
   end
 
   defp workflow_guidance_section(_issue, _agent_kind), do: ""
+
+  # Orchestrator dispatches are execution runs — not issue authoring. Inject the
+  # vendored subagent-driven-development skill (same pattern as complex-mode
+  # authoring in Assistant.CodexSession) and tell the agent to skip design-first
+  # skills that are already satisfied by injected spec/plan artifacts.
+  @doc false
+  @spec execution_methodology_section() :: String.t()
+  def execution_methodology_section do
+    case Skills.load(["subagent-driven-development"]) do
+      "" ->
+        ""
+
+      skill_body ->
+        """
+
+        ## Symphony execution mode (orchestrator dispatch)
+
+        This is an **execution** run dispatched by Symphony — not issue authoring.
+        Design/spec work is already done (see authoring artifacts below when present).
+
+        - Do **NOT** use `brainstorming`, `writing-plans`, or `using-superpowers`.
+        - Do **NOT** restart design-first discovery or ask for spec approval.
+        - Follow the vendored execution methodology below exactly.
+        - When `docs/superpowers/plans/` artifacts appear below, treat them as the implementation plan.
+
+        #{skill_body}
+        """
+    end
+  end
 
   # Pre-fills the VALIDATE/evidence guidance from the project's own `evidence:`
   # config (repos, scoped unit/e2e commands, UI paths) so every dispatched prompt

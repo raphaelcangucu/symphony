@@ -20,12 +20,10 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
   def enqueue(%{dedup_key: key} = attrs) when is_binary(key) do
     case pending_by_dedup(attrs.project_id, key) do
       %OutboxEntry{} = existing ->
-        existing
-        |> OutboxEntry.changeset(%{payload: Map.merge(existing.payload, Map.get(attrs, :payload, %{})), status: "pending"})
-        |> Repo.update()
+        merge_pending(existing, attrs)
 
       nil ->
-        insert_entry(attrs)
+        insert_pending_or_coalesce(attrs, key)
     end
   end
 
@@ -204,6 +202,40 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
 
     count
   end
+
+  defp merge_pending(%OutboxEntry{} = existing, attrs) do
+    existing
+    |> OutboxEntry.changeset(%{
+      payload: Map.merge(existing.payload, Map.get(attrs, :payload, %{})),
+      status: "pending"
+    })
+    |> Repo.update()
+  end
+
+  # `pending_by_dedup/2` followed by `insert_entry/1` is not atomic. A concurrent
+  # `enqueue/1` (e.g. a grouped status move) or a sync-engine requeue
+  # (`record_failed` flips an entry `in_flight -> pending`) can create the pending
+  # row for this dedup_key between our lookup and insert. The partial unique index
+  # then rejects our insert. Recover by coalescing into whatever pending row now
+  # exists instead of bubbling an `Ecto.ConstraintError` up as an HTTP 500.
+  defp insert_pending_or_coalesce(attrs, key) do
+    case insert_entry(attrs) do
+      {:error, %Ecto.Changeset{} = changeset} = error ->
+        if dedup_conflict?(changeset) do
+          case pending_by_dedup(attrs.project_id, key) do
+            %OutboxEntry{} = existing -> merge_pending(existing, attrs)
+            nil -> error
+          end
+        else
+          error
+        end
+
+      result ->
+        result
+    end
+  end
+
+  defp dedup_conflict?(%Ecto.Changeset{errors: errors}), do: Keyword.has_key?(errors, :dedup_key)
 
   defp pending_by_dedup(project_id, key) do
     OutboxEntry

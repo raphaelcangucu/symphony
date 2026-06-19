@@ -22,6 +22,12 @@ interface IssueCardProps {
   dragOverlay?: boolean;
   mergeActive?: boolean;
   dropEdge?: "top" | "bottom" | null;
+  /**
+   * Render as a non-draggable card. Used for the lead inside a group so the
+   * group is the single draggable unit (otherwise the lead's own sortable would
+   * shadow the group's, letting the lead move out on its own).
+   */
+  presentational?: boolean;
 }
 
 export function IssueCard({
@@ -31,13 +37,15 @@ export function IssueCard({
   dragOverlay = false,
   mergeActive = false,
   dropEdge = null,
+  presentational = false,
 }: IssueCardProps) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: issueDragId(issue.identifier),
-    disabled: dragOverlay,
+    disabled: dragOverlay || presentational,
   });
 
+  const interactive = !presentational;
   const style = {
     transform: CSS.Translate.toString(transform),
     transition,
@@ -53,18 +61,18 @@ export function IssueCard({
 
   return (
     <article
-      ref={setNodeRef}
-      style={style}
+      ref={interactive ? setNodeRef : undefined}
+      style={interactive ? style : undefined}
       className={cn(
-        "group relative cursor-grab cursor-pointer rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-all active:cursor-grabbing",
-        "hover:-translate-y-px hover:border-primary/40 hover:shadow-md",
+        "group relative cursor-pointer rounded-xl border border-border/70 bg-card p-3 shadow-sm transition-all",
+        interactive && "cursor-grab active:cursor-grabbing hover:-translate-y-px hover:border-primary/40 hover:shadow-md",
         agentNeedsAttention && "border-rose-500/40 ring-1 ring-rose-500/20",
         mergeActive && "border-primary ring-2 ring-primary ring-offset-1 ring-offset-background",
-        isDragging && "opacity-40",
+        interactive && isDragging && "opacity-40",
         dragOverlay && "w-72 rotate-3 shadow-2xl ring-1 ring-border",
       )}
-      {...attributes}
-      {...listeners}
+      {...(interactive ? attributes : {})}
+      {...(interactive ? listeners : {})}
       onClick={() => onSelect(issue)}
     >
       {mergeActive ? <GroupDropOverlay /> : null}

@@ -28,15 +28,15 @@ defmodule SymphonyElixir.WorkspaceSkillsTest do
 
     assert File.regular?(Path.join([workspace, ".codex", "skills", "commit", "SKILL.md"]))
     assert File.regular?(Path.join([workspace, ".claude", "skills", "commit", "SKILL.md"]))
-    assert File.regular?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
-    assert File.regular?(Path.join([workspace, ".claude", "skills", "brainstorming", "SKILL.md"]))
+    refute File.exists?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
+    refute File.exists?(Path.join([workspace, ".claude", "skills", "brainstorming", "SKILL.md"]))
   end
 
   test "is idempotent", %{workspace: workspace} do
     assert :ok = WorkspaceSkills.prepare(workspace)
     assert :ok = WorkspaceSkills.prepare(workspace)
 
-    assert File.regular?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
+    refute File.exists?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
   end
 
   test "populates an existing agent skills directory without replacing it", %{workspace: workspace} do
@@ -46,8 +46,8 @@ defmodule SymphonyElixir.WorkspaceSkillsTest do
     assert :ok = WorkspaceSkills.prepare(workspace)
 
     assert File.dir?(existing_skills)
-    assert File.regular?(Path.join([existing_skills, "brainstorming", "SKILL.md"]))
-    assert File.regular?(Path.join([workspace, ".claude", "skills", "brainstorming", "SKILL.md"]))
+    refute File.exists?(Path.join([existing_skills, "brainstorming", "SKILL.md"]))
+    refute File.exists?(Path.join([workspace, ".claude", "skills", "brainstorming", "SKILL.md"]))
   end
 
   test "adds local excludes and skills links for repository roots inside the workspace", %{workspace: workspace} do
@@ -57,12 +57,50 @@ defmodule SymphonyElixir.WorkspaceSkillsTest do
 
     assert :ok = WorkspaceSkills.prepare(workspace)
 
-    assert File.regular?(Path.join([front, ".codex", "skills", "brainstorming", "SKILL.md"]))
-    assert File.regular?(Path.join([front, ".claude", "skills", "brainstorming", "SKILL.md"]))
+    refute File.exists?(Path.join([front, ".codex", "skills", "brainstorming", "SKILL.md"]))
+    refute File.exists?(Path.join([front, ".claude", "skills", "brainstorming", "SKILL.md"]))
 
     exclude = File.read!(Path.join(front, ".git/info/exclude"))
     assert exclude =~ "/.codex/"
     assert exclude =~ "/.claude/"
+  end
+
+  test "omits authoring-only superpowers skills from execution workspaces", %{workspace: workspace, skills_root: skills_root} do
+    write_skill!(Path.join(skills_root, "superpowers"), "subagent-driven-development", "# Subagent\n")
+    write_skill!(Path.join(skills_root, "superpowers"), "using-superpowers", "# Using\n")
+
+    assert :ok = WorkspaceSkills.prepare(workspace)
+
+    assert File.regular?(
+             Path.join([workspace, ".codex", "skills", "subagent-driven-development", "SKILL.md"])
+           )
+
+    refute File.exists?(Path.join([workspace, ".codex", "skills", "using-superpowers", "SKILL.md"]))
+    refute File.exists?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
+  end
+
+  test "prunes stale authoring skill links from existing workspaces", %{workspace: workspace, skills_root: skills_root} do
+    write_skill!(Path.join(skills_root, "superpowers"), "subagent-driven-development", "# Subagent\n")
+
+    mirror = Path.join([workspace, ".symphony", "skills"])
+    codex_skills = Path.join([workspace, ".codex", "skills"])
+    File.mkdir_p!(mirror)
+    File.mkdir_p!(Path.dirname(codex_skills))
+
+    stale_source = Path.join([skills_root, "superpowers", "brainstorming"])
+    write_skill!(Path.join(skills_root, "superpowers"), "brainstorming", "# Stale\n")
+    :ok = File.ln_s(stale_source, Path.join(mirror, "brainstorming"))
+    :ok = File.ln_s(mirror, codex_skills)
+
+    assert File.exists?(Path.join(codex_skills, "brainstorming"))
+
+    assert :ok = WorkspaceSkills.prepare(workspace)
+
+    refute File.exists?(Path.join(mirror, "brainstorming"))
+    refute File.exists?(Path.join(codex_skills, "brainstorming"))
+    assert File.regular?(
+             Path.join([codex_skills, "subagent-driven-development", "SKILL.md"])
+           )
   end
 
   test "returns a clear error when a file blocks an agent configuration directory", %{workspace: workspace} do

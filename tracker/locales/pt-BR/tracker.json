@@ -221,6 +221,12 @@
       "issueTitleAria": "Título da issue",
       "untitledIssue": "Issue sem título",
       "unassigned": "Sem assignee",
+      "group": {
+        "title": "Grupo",
+        "lead": "Principal",
+        "current": "Esta issue",
+        "unavailable": "Fora da visão atual"
+      },
       "code": "Code",
       "editor": {
         "checking": "Verificando editor…",

@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
+import { resolveIssueGroup } from "@/components/issues/issue-detail/issueGroup";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import {
   isHiddenIssueTab,
@@ -36,6 +37,8 @@ export function IssueDetailRoute() {
   // attachments) that the board list endpoint omits. Fall back to the cached
   // list entry for an instant first paint while the full fetch is in flight.
   const issue = matchedFetched ?? issueFromList;
+
+  const group = issue ? resolveIssueGroup(issue, issues) : null;
 
   const basePath = workspaceBasePath(projectSlug, view);
 
@@ -158,6 +161,10 @@ export function IssueDetailRoute() {
       onDelete={handleDelete}
       onForceSync={trackerKind === "local" ? undefined : handleForceSync}
       onIssueUpdated={handleIssueUpdated}
+      group={group}
+      onOpenIssue={(targetIdentifier) => {
+        navigate({ pathname: issuePath(projectSlug, view, targetIdentifier), search: location.search });
+      }}
     />
   );
 }

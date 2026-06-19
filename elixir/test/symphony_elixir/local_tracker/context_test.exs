@@ -785,6 +785,53 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert member.status.name == "In Progress"
   end
 
+  test "move_issue on a member carries the lead and siblings to the new status" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
+    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, lead} = Context.move_issue("macro-markets", "MAC-2", %{status: "In Progress"})
+    assert lead.identifier == "MAC-1"
+    assert lead.status.name == "In Progress"
+
+    assert {:ok, members} = Context.list_group_members("macro-markets", "MAC-1")
+    assert Enum.all?(members, &(&1.status.name == "In Progress"))
+  end
+
+  test "move_issue records an issue_moved activity event for the lead and every member" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
+    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, _lead} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+
+    for identifier <- ["MAC-1", "MAC-2", "MAC-3"] do
+      assert {:ok, events} = Context.list_activity_events("macro-markets", identifier)
+
+      assert Enum.any?(events, &(&1.event_type == "issue_moved")),
+             "expected an issue_moved event for #{identifier}"
+    end
+  end
+
+  test "update_issue_state on a member carries the lead and siblings" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+
+    assert {:ok, lead} = Context.update_issue_state("macro-markets", "MAC-2", "In Progress")
+    assert lead.identifier == "MAC-1"
+    assert lead.status.name == "In Progress"
+    assert {:ok, [member]} = Context.list_group_members("macro-markets", "MAC-1")
+    assert member.status.name == "In Progress"
+  end
+
   test "archiving a lead promotes the oldest member to lead" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})

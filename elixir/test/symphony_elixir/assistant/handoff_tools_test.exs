@@ -101,4 +101,20 @@ defmodule SymphonyElixir.Assistant.HandoffToolsTest do
 
     assert result.data.ready == true
   end
+
+  test "tolerates nil completion_transitions without crashing", %{tmp_dir: tmp_dir} do
+    ws = Path.join(tmp_dir, "GAM-NIL")
+    File.mkdir_p!(ws)
+    issue = %Issue{id: "1", identifier: "GAM-NIL", project_slug: "gam"}
+
+    assert {:ok, result} =
+             HandoffTools.execute("gam", %{"identifier" => "GAM-NIL"},
+               issue: issue,
+               project_config: config(completion_transitions: nil),
+               workspace: ws
+             )
+
+    assert result.data.target_statuses.completion_destinations == []
+    assert "Human Review" in result.data.target_statuses.wait_states
+  end
 end

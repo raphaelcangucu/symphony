@@ -14,6 +14,44 @@ defmodule SymphonyElixir.PromptBuilderTest do
     :ok
   end
 
+  test "injects execution methodology and skips authoring skills guidance" do
+    issue = %Issue{
+      identifier: "MAC-10",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    prompt = PromptBuilder.build_prompt(issue)
+
+    assert prompt =~ "## Symphony execution mode (orchestrator dispatch)"
+    assert prompt =~ "subagent-driven-development" or prompt =~ "Subagent-Driven Development"
+    assert prompt =~ "Fresh subagent per task"
+    assert prompt =~ "Do **NOT** use `brainstorming`"
+    refute prompt =~ "Brainstorming Ideas Into Designs"
+  end
+
+  test "execution methodology appears before authoring artifacts in the prompt" do
+    root = temporary_workspace_root!("pb-exec-order")
+    File.mkdir_p!(Path.join([root, "docs", "superpowers", "plans"]))
+    File.write!(Path.join([root, "docs", "superpowers", "plans", "plan.md"]), "# Plan")
+
+    issue = %Issue{
+      identifier: "MAC-11",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    prompt = PromptBuilder.build_prompt(issue, workspace: root)
+
+    {exec_pos, _} = :binary.match(prompt, "## Symphony execution mode (orchestrator dispatch)")
+    {artifacts_pos, _} = :binary.match(prompt, "## Existing authoring artifacts (follow these)")
+    assert exec_pos < artifacts_pos
+  end
+
   test "appends superpowers artifacts when present in the workspace" do
     root = temporary_workspace_root!("pb-artifacts")
     File.mkdir_p!(Path.join([root, "docs", "superpowers", "specs"]))

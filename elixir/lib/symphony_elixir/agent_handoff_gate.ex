@@ -77,7 +77,7 @@ defmodule SymphonyElixir.AgentHandoffGate do
   end
 
   defp destination?(norm, config) do
-    config.completion_transitions
+    (config.completion_transitions || %{})
     |> Map.values()
     |> Enum.any?(&(normalize(&1) == norm))
   end

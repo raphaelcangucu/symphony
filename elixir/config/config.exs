@@ -118,9 +118,48 @@ config :symphony_elixir, SymphonyElixir.Repo,
   # write lock up front so concurrent writers queue (honoring `busy_timeout`)
   # instead of crashing the sync/assistant task.
   default_transaction_mode: :immediate,
-  busy_timeout: String.to_integer(System.get_env("SYMPHONY_LOCAL_TRACKER_BUSY_TIMEOUT_MS") || "5000"),
+  # `busy_timeout` is how long a writer that loses the single-writer lock race will
+  # *block its pooled connection* before raising. A large value (we used to run
+  # 5000ms) means a stalled writer holds one of `pool_size` connections hostage,
+  # which under a burst of board moves starves the DBConnection pool itself —
+  # surfacing as "connection not available ... dropped from queue", NOT
+  # "database is locked". We keep it just above a typical move transaction so a
+  # writer waits out a single in-flight transaction (no churn) but releases its
+  # connection quickly when the queue is deep, letting the app-level retry
+  # (`LocalTracker.Context.with_write_retry/1`) re-queue with backoff instead.
+  busy_timeout: String.to_integer(System.get_env("SYMPHONY_LOCAL_TRACKER_BUSY_TIMEOUT_MS") || "1000"),
+  # DBConnection sheds load ("dropped from queue") when checkout waits exceed
+  # `queue_target` across a `queue_interval` window. The defaults (50ms / 1000ms)
+  # are far too tight for SQLite's serialized writes under a concurrent burst, so
+  # legitimate moves were 500ing while merely waiting their turn. Tolerate multi-
+  # second queueing instead; the hard cap is still the per-call `timeout`.
+  queue_target: 5_000,
+  queue_interval: 5_000,
+  # SQLite concurrency best practices (https://sqlite.org/wal.html). Most of these
+  # already match ecto_sqlite3's defaults; we set them explicitly so the
+  # concurrency contract is visible and cannot silently regress on a dep bump:
+  #   * journal_mode :wal     — readers never block the single writer (and vice versa)
+  #   * synchronous :normal   — WAL-safe (no corruption on crash) with far fewer
+  #                             fsyncs than :full, so each write commits faster and
+  #                             holds the write lock for less time
+  #   * temp_store :memory    — keep temp b-trees out of the locked main DB file
+  #   * cache_size -64000     — 64 MB page cache → fewer disk hits under load
+  #   * mmap_size 256 MB      — memory-mapped reads shorten read transactions, which
+  #                             frees the writer sooner (this is the one addition
+  #                             over the defaults)
+  journal_mode: :wal,
+  synchronous: :normal,
+  temp_store: :memory,
+  cache_size: -64_000,
+  mmap_size: 268_435_456,
+  foreign_keys: :on,
   stacktrace: Mix.env() in [:dev, :test],
   show_sensitive_data_on_connection_error: Mix.env() in [:dev, :test]
+
+# Surface the underlying exception + stacktrace in API 500 responses for local
+# dev/test, so clients (curl, the tracker UI) see the real failure instead of a
+# bare "Internal Server Error". Never enabled in prod (avoids leaking internals).
+config :symphony_elixir, :expose_internal_errors, Mix.env() in [:dev, :test]
 
 # Tests drive the endpoint via Phoenix.ConnTest (no real listener), so suppress
 # the HTTP listener under :test. `nil` makes SymphonyElixir.HttpServer `:ignore`

@@ -18,6 +18,7 @@ export const DEFAULT_WORKFLOW_STATUSES = [
 export type BoardState = Record<WorkflowStatusName, Issue[]>;
 
 export const ISSUE_DRAG_PREFIX = "issue:";
+export const GROUP_DRAG_PREFIX = "group:";
 
 export function issueDragId(identifier: string): string {
   requireNonBlank(identifier, "identifier");
@@ -26,7 +27,11 @@ export function issueDragId(identifier: string): string {
 
 export function parseDragIssueId(id: unknown): string | null {
   if (typeof id !== "string" || id.trim() === "") return null;
-  return id.startsWith(ISSUE_DRAG_PREFIX) ? id.slice(ISSUE_DRAG_PREFIX.length) : id;
+  if (id.startsWith(ISSUE_DRAG_PREFIX)) return id.slice(ISSUE_DRAG_PREFIX.length);
+  // A group's drag id encodes its lead, so dragging the group resolves to moving
+  // (and reordering against) the lead issue.
+  if (id.startsWith(GROUP_DRAG_PREFIX)) return id.slice(GROUP_DRAG_PREFIX.length);
+  return id;
 }
 
 export function workflowStatusNames(statuses?: readonly WorkflowStatusName[]): WorkflowStatusName[] {
@@ -160,6 +165,44 @@ export function moveIssueLocally(
   return next;
 }
 
+export function resolveGroupMoveLead(
+  issues: readonly Issue[],
+  identifier: string,
+): { leadIdentifier: string; memberIdentifiers: string[] } {
+  const issue = issues.find((candidate) => candidate.identifier === identifier);
+  const leadIdentifier = issue?.groupLeadIdentifier ?? identifier;
+  const lead = issues.find((candidate) => candidate.identifier === leadIdentifier) ?? issue;
+
+  return {
+    leadIdentifier,
+    memberIdentifiers: lead?.groupMemberIdentifiers ?? [],
+  };
+}
+
+/**
+ * Moves an issue and, when it leads a group, drags its members into the same
+ * column right behind the lead so the whole group travels as one unit. Pure
+ * board transform used for optimistic updates; the server mirrors this through
+ * `move_group_members`. Without it the lead would jump columns alone and its
+ * members would be stranded (rendering as loose cards) until the next refetch.
+ */
+export function moveGroupLocally(
+  board: BoardState,
+  leadIdentifier: string,
+  memberIdentifiers: readonly string[],
+  targetStatus: WorkflowStatusName,
+  targetIndex: number,
+  statuses?: readonly WorkflowStatusName[],
+): BoardState {
+  let next = moveIssueLocally(board, leadIdentifier, targetStatus, targetIndex, statuses);
+  for (const memberIdentifier of memberIdentifiers) {
+    const leadIndex = (next[targetStatus] ?? []).findIndex((issue) => issue.identifier === leadIdentifier);
+    const insertAt = leadIndex >= 0 ? leadIndex + 1 : (next[targetStatus]?.length ?? 0);
+    next = moveIssueLocally(next, memberIdentifier, targetStatus, insertAt, statuses);
+  }
+  return next;
+}
+
 export function flattenBoardState(board: BoardState): Issue[] {
   return Object.keys(board).flatMap((status) => board[status]);
 }
@@ -169,8 +212,6 @@ export function upsertIssue(issues: readonly Issue[], issue: Issue): Issue[] {
   if (index === -1) return [...issues, issue];
   return issues.map((item, itemIndex) => (itemIndex === index ? issue : item));
 }
-
-export const GROUP_DRAG_PREFIX = "group:";
 
 /** Where a reorder drop would land, rendered as a line above/below a card. */
 export interface DropIndicator {

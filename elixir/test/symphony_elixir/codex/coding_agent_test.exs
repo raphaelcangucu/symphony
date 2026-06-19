@@ -156,6 +156,29 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     end
   end
 
+  describe "tool call resilience" do
+    test "a crashing client tool does not abort the run; the failure is reported back" do
+      with_fake_tool_server(fn workspace, issue ->
+        test_pid = self()
+        on_message = fn message -> send(test_pid, {:codex_event, message}) end
+
+        log =
+          capture_log(fn ->
+            assert {:ok, result} =
+                     AppServer.run(workspace, "Build the feature", issue,
+                       tool_executor: fn _tool, _arguments -> raise "boom tool" end,
+                       on_message: on_message
+                     )
+
+            assert result[:result] == :turn_completed
+          end)
+
+        assert_received {:codex_event, %{event: :tool_call_failed, result: %{"success" => false}}}
+        assert log =~ "boom tool"
+      end)
+    end
+  end
+
   describe "transient error handling" do
     test "fails the turn when an error event precedes completion with no agent message" do
       with_fake_error_server([emit_agent_message: false], fn workspace, issue ->
@@ -214,6 +237,73 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     after
       File.rm_rf(test_root)
     end
+  end
+
+  defp with_fake_tool_server(fun) when is_function(fun, 2) do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-coding-agent-tool-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-TOOL")
+      codex_binary = Path.join(test_root, "fake-codex")
+
+      File.mkdir_p!(workspace)
+      write_tool_fake_codex!(codex_binary)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-tool",
+        identifier: "MT-TOOL",
+        title: "Tool resilience",
+        description: "Exercise Codex client tool crash handling",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-TOOL",
+        labels: ["backend"]
+      }
+
+      fun.(workspace, issue)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  # Emits a single client tool call during the turn, then completes the turn once
+  # Symphony sends the tool result back. This exercises the inline tool-call path
+  # so a crashing executor must not take down the run.
+  defp write_tool_fake_codex!(codex_binary) do
+    File.write!(codex_binary, """
+    #!/bin/sh
+    while IFS= read -r line; do
+      case "$line" in
+        *'"method":"initialize"'*)
+          printf '%s\\n' '{"id":1,"result":{}}'
+          ;;
+        *'"method":"thread/start"'*)
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-tool"}}}'
+          ;;
+        *'"method":"turn/start"'*)
+          printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-tool"}}}'
+          printf '%s\\n' '{"id":"call-1","method":"item/tool/call","params":{"tool":"boom","arguments":{}}}'
+          ;;
+        *'"id":"call-1"'*)
+          printf '%s\\n' '{"method":"turn/completed"}'
+          exit 0
+          ;;
+        *)
+          ;;
+      esac
+    done
+    """)
+
+    File.chmod!(codex_binary, 0o755)
   end
 
   defp with_fake_error_server(opts, fun) when is_function(fun, 2) do
