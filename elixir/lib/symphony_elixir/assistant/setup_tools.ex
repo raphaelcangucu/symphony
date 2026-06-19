@@ -53,31 +53,69 @@ defmodule SymphonyElixir.Assistant.SetupTools do
   def execute("scan_project_setup", project_slug, arguments, opts) when is_binary(project_slug) and is_map(arguments) do
     scanner = Keyword.get(opts, :scanner, &RepositoryScanner.scan/1)
 
-    with {:ok, repositories} <- repositories_for_scan(project_slug, arguments),
-         scans <- scan_repositories(repositories, scanner) do
-      {:ok,
-       %{
-         tool: "scan_project_setup",
-         message: "Scanned #{length(scans)} repository(ies).",
-         data: %{scans: scans}
-       }}
+    with {:ok, repositories} <- repositories_for_scan(project_slug, arguments) do
+      if repositories == [] do
+        {:ok, needs_repositories_result("scan_project_setup", %{scans: []})}
+      else
+        scans = scan_repositories(repositories, scanner)
+
+        {:ok,
+         %{
+           tool: "scan_project_setup",
+           message: "Scanned #{length(scans)} repository(ies).",
+           data: %{scans: scans}
+         }}
+      end
     end
   end
 
   def execute("suggest_project_setup", project_slug, arguments, opts) when is_binary(project_slug) and is_map(arguments) do
-    with {:ok, repositories} <- repositories_for_suggest(project_slug, arguments),
-         {:ok, scans} <- scans_for_suggest(project_slug, arguments, opts),
-         {:ok, suggestion} <- WorkflowSuggester.suggest(%{repositories: repositories, scans: scans}) do
-      {:ok,
-       %{
-         tool: "suggest_project_setup",
-         message: "Generated setup suggestions for #{length(repositories)} repository(ies).",
-         data: suggestion
-       }}
+    with {:ok, repositories} <- repositories_for_suggest(project_slug, arguments) do
+      if repositories == [] do
+        {:ok, needs_repositories_result("suggest_project_setup", %{})}
+      else
+        with {:ok, scans} <- scans_for_suggest(project_slug, arguments, opts),
+             {:ok, suggestion} <- WorkflowSuggester.suggest(%{repositories: repositories, scans: scans}) do
+          {:ok,
+           %{
+             tool: "suggest_project_setup",
+             message: "Generated setup suggestions for #{length(repositories)} repository(ies).",
+             data: suggestion
+           }}
+        end
+      end
     end
   end
 
   def execute(_tool, _project_slug, _arguments, _opts), do: {:error, {:unsupported_tool, :setup}}
+
+  # When a project has no repositories to scan, setup cannot infer anything — the
+  # missing data (which repos to use) can only come from the user. Mirror the
+  # warm-up remediation shape so the assistant ASKS instead of inventing repos.
+  defp needs_repositories_result(tool, base_data) do
+    %{
+      tool: tool,
+      message:
+        "No repositories are linked to this project — ASK the user which repositories to use " <>
+          "(do not invent them), then re-run #{tool}.",
+      data: Map.put(base_data, :remediation, no_repositories_remediation())
+    }
+  end
+
+  defp no_repositories_remediation do
+    %{
+      needs_user_input: true,
+      summary:
+        "This project has no linked repositories, so setup cannot infer the stack, workflow, or dev-env steps. The user must say which repositories to use.",
+      ask: [
+        "Which repositories should this project use? (GitHub full name, e.g. org/repo)",
+        "What is each repository's role? (e.g. primary, backend, frontend)",
+        "What workspace path should each repository check out to?"
+      ],
+      apply:
+        "Do NOT invent repositories. After the user lists them, link them to the project (or pass them as the repositories argument) and re-run scan_project_setup / suggest_project_setup."
+    }
+  end
 
   defp repositories_for_scan(project_slug, arguments) do
     case Map.get(arguments, "repositories") do

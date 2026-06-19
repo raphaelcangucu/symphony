@@ -82,6 +82,40 @@ defmodule SymphonyElixir.Assistant.SetupToolsTest do
     assert result.data.workflow_markdown =~ "tracker:"
   end
 
+  test "scan_project_setup asks the user when the project has no repositories" do
+    {:ok, _} =
+      Context.create_workspace_project(%{
+        "name" => "No Repos",
+        "slug" => "no-repos",
+        "workflow_statuses" => [%{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false}],
+        "repositories" => [],
+        "setup" => %{}
+      })
+
+    assert {:ok, result} = SetupTools.execute("scan_project_setup", "no-repos", %{})
+
+    assert result.data.scans == []
+    assert result.data.remediation.needs_user_input == true
+    assert result.data.remediation.ask != []
+    assert result.message =~ "ASK the user"
+  end
+
+  test "suggest_project_setup asks the user when the project has no repositories" do
+    {:ok, _} =
+      Context.create_workspace_project(%{
+        "name" => "No Repos Suggest",
+        "slug" => "no-repos-suggest",
+        "workflow_statuses" => [%{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false}],
+        "repositories" => [],
+        "setup" => %{}
+      })
+
+    assert {:ok, result} = SetupTools.execute("suggest_project_setup", "no-repos-suggest", %{})
+
+    assert result.data.remediation.needs_user_input == true
+    assert result.message =~ "ASK the user"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
