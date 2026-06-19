@@ -1,6 +1,7 @@
 import { FileText, GitBranch, ScrollText, TerminalSquare, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { DevEnvPanel } from "@/components/devenv/DevEnvPanel";
@@ -17,7 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { orderStepsByRepository } from "@/lib/devEnvGroups";
 import { initialWorkflowMarkdown } from "@/lib/workflowMarkdown";
 import { readAgentKind, writeAgentKind } from "@/lib/workflowFrontMatter";
-import { DEFAULT_PROJECT_SETTINGS_TAB, type ProjectSettingsTab } from "@/lib/workspaceRoutes";
+import { buildWarmUpBootstrapPrompt, stashProjectAssistantHandoff } from "@/lib/previewAssistantHandoff";
+import { assistantPath, DEFAULT_PROJECT_SETTINGS_TAB, type ProjectSettingsTab } from "@/lib/workspaceRoutes";
 import { listDevEnvSteps, saveDevEnvSteps } from "@/services/devEnv";
 import { fetchSettings } from "@/services/settings";
 import { updateProject, updateProjectRepositories, updateProjectSetup } from "@/services/projects";
@@ -58,8 +60,18 @@ interface ProjectConfigEditorProps {
 
 export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onTabChange }: ProjectConfigEditorProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [internalTab, setInternalTab] = useState<ProjectSettingsTab>(activeTab ?? DEFAULT_PROJECT_SETTINGS_TAB);
   const currentTab = activeTab ?? internalTab;
+
+  function handlePrepareEnv() {
+    stashProjectAssistantHandoff({
+      projectSlug: project.slug,
+      message: buildWarmUpBootstrapPrompt(project.slug),
+      createdAt: Date.now(),
+    });
+    navigate(assistantPath(project.slug));
+  }
 
   function handleTabChange(next: string) {
     const tab = next as ProjectSettingsTab;
@@ -258,6 +270,7 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
                   repositories={repositories}
                   steps={devSteps ?? []}
                   onStepsChange={setDevSteps}
+                  onPrepareEnv={handlePrepareEnv}
                 />
               </CardContent>
             </Card>

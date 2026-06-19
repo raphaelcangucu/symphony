@@ -15,9 +15,10 @@ interface DevEnvPanelProps {
   steps: DevEnvStep[];
   onStepsChange: (next: DevEnvStep[]) => void;
   repositories?: WorkspaceRepository[];
+  onPrepareEnv?: () => void;
 }
 
-export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories }: DevEnvPanelProps) {
+export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories, onPrepareEnv }: DevEnvPanelProps) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const repos = repositories ?? [];
@@ -64,9 +65,16 @@ export function DevEnvPanel({ projectSlug, steps, onStepsChange, repositories }:
     <section className="space-y-4">
       <header className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">{t("project.config.devenv.hint")}</p>
-        <Button type="button" size="sm" variant="secondary" onClick={handlePropose} disabled={busy}>
-          {t("project.config.devenv.proposeSteps")}
-        </Button>
+        <div className="flex items-center gap-2">
+          {onPrepareEnv ? (
+            <Button type="button" size="sm" variant="outline" onClick={onPrepareEnv}>
+              Preparar ambiente
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" variant="secondary" onClick={handlePropose} disabled={busy}>
+            {t("project.config.devenv.proposeSteps")}
+          </Button>
+        </div>
       </header>
 
       <div className="space-y-5">

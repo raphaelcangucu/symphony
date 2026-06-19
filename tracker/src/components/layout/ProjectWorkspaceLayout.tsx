@@ -9,9 +9,11 @@ import { BoardQuickFilters } from "@/components/board/BoardQuickFilters";
 import { ProjectAssistantMenu } from "@/components/layout/ProjectAssistantMenu";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { WorkspaceProvider, useWorkspace } from "@/components/layout/WorkspaceContext";
+import { WarmUpBanner } from "@/components/devenv/WarmUpBanner";
 import { Button } from "@/components/ui/button";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
-import { isBoardPath, projectSettingsPath } from "@/lib/workspaceRoutes";
+import { buildWarmUpBootstrapPrompt, stashProjectAssistantHandoff } from "@/lib/previewAssistantHandoff";
+import { assistantPath, isBoardPath, projectSettingsPath } from "@/lib/workspaceRoutes";
 
 export function ProjectWorkspaceLayout() {
   const { projectSlug = "" } = useParams();
@@ -32,6 +34,17 @@ function WorkspaceChrome() {
   const navigate = useNavigate();
   const location = useLocation();
   const showBoardFilters = isBoardPath(location.pathname);
+  const warmUpStatus = project?.warmUpStatus ?? "never";
+  const showWarmUpBanner = Boolean(project) && warmUpStatus !== "succeeded";
+
+  const handlePrepareEnv = () => {
+    stashProjectAssistantHandoff({
+      projectSlug,
+      message: buildWarmUpBootstrapPrompt(projectSlug),
+      createdAt: Date.now(),
+    });
+    navigate(assistantPath(projectSlug));
+  };
 
   return (
     <div className="min-h-screen">
@@ -64,6 +77,9 @@ function WorkspaceChrome() {
       />
       {showBoardFilters ? <BoardPaletteShortcuts /> : null}
       {showBoardFilters ? <BoardQuickFilters /> : null}
+      {showWarmUpBanner ? (
+        <WarmUpBanner status={warmUpStatus} onPrepare={handlePrepareEnv} className="mx-4 mt-3" />
+      ) : null}
       <Outlet />
     </div>
   );
