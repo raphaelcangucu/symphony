@@ -39,6 +39,13 @@ export function jiraAttachmentUrl(projectSlug: string, attachmentId: string): st
 }
 
 /**
+ * Deletes a JIRA issue attachment by id.
+ */
+export async function deleteJiraAttachment(projectSlug: string, attachmentId: string): Promise<void> {
+  await http.delete(jiraAttachmentUrl(projectSlug, attachmentId));
+}
+
+/**
  * True when a URL points at the local tracker attachment endpoint, which
  * requires an Authorization header and therefore cannot be rendered by a
  * plain <img src>.

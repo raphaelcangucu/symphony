@@ -85,6 +85,7 @@ interface IssueDrawerProps {
   onArchive?: (issue: Issue) => void | Promise<void>;
   onDelete?: (issue: Issue) => void | Promise<void>;
   onForceSync?: (issue: Issue) => void | Promise<void>;
+  onRemoveAttachment?: (attachmentId: string) => Promise<boolean>;
   onIssueUpdated?: (updated: Issue) => void;
   group?: ResolvedIssueGroup | null;
   onOpenIssue?: (identifier: string) => void;
@@ -104,6 +105,7 @@ export function IssueDrawer({
   onArchive,
   onDelete,
   onForceSync,
+  onRemoveAttachment,
   onIssueUpdated,
   group = null,
   onOpenIssue,
@@ -418,6 +420,7 @@ export function IssueDrawer({
                       const updated = await issueUpdater.save({ agent });
                       return updated !== null;
                     }}
+                    onRemoveAttachment={onRemoveAttachment}
                   />
                 </TabsContent>
                 <TabsContent value="pr">

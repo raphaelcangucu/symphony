@@ -15,6 +15,7 @@ import {
   type IssueTab,
 } from "@/lib/workspaceRoutes";
 import { archiveIssue, deleteIssue, forceSyncIssue, getIssue } from "@/services/issues";
+import { deleteJiraAttachment } from "@/services/attachments";
 import type { Issue } from "@/types/issue";
 
 export function IssueDetailRoute() {
@@ -92,6 +93,20 @@ export function IssueDetailRoute() {
     }
   }
 
+  async function handleRemoveAttachment(attachmentId: string): Promise<boolean> {
+    if (!issue) return false;
+    try {
+      await deleteJiraAttachment(projectSlug, attachmentId);
+      const refreshed = await getIssue(projectSlug, issue.identifier);
+      handleIssueUpdated(refreshed);
+      toast.success(t("issue.route.attachmentRemoved"));
+      return true;
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.attachmentRemoveFailed"));
+      return false;
+    }
+  }
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -160,6 +175,7 @@ export function IssueDetailRoute() {
       onArchive={handleArchive}
       onDelete={handleDelete}
       onForceSync={trackerKind === "local" ? undefined : handleForceSync}
+      onRemoveAttachment={trackerKind === "jira" ? handleRemoveAttachment : undefined}
       onIssueUpdated={handleIssueUpdated}
       group={group}
       onOpenIssue={(targetIdentifier) => {

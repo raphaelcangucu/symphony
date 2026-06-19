@@ -5,9 +5,11 @@ import { useTranslation } from "react-i18next";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { EvidenceCommentBody } from "@/components/issues/issue-detail/EvidenceCommentBody";
+import { WorkpadCommentBody } from "@/components/issues/issue-detail/WorkpadCommentBody";
 import { Markdown } from "@/components/ui/markdown";
 import { i18n } from "@/i18n";
 import { isEvidenceComment } from "@/lib/evidenceComment";
+import { isWorkpadComment } from "@/lib/workpadComment";
 import { cn, formatDateTime } from "@/lib/utils";
 
 interface CommentCardProps {
@@ -58,6 +60,8 @@ export function CommentCard({ author, body, createdAt, url, kind, badge, highlig
         {body.trim() ? (
           isEvidenceComment(body, kind) ? (
             <EvidenceCommentBody body={body} />
+          ) : isWorkpadComment(body, kind) ? (
+            <WorkpadCommentBody body={body} />
           ) : (
             <Markdown>{body}</Markdown>
           )

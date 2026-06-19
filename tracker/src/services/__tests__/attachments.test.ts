@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  deleteJiraAttachment,
   isEvidenceArtifactUrl,
   isInternalAttachmentUrl,
   isJiraAttachmentUrl,
@@ -10,6 +11,15 @@ import {
   jiraAttachmentUrl,
   projectAttachmentUrl,
 } from "@/services/attachments";
+
+const httpDeleteMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/http", () => ({
+  http: {
+    delete: (...args: unknown[]) => httpDeleteMock(...args),
+  },
+  trackerPath: (path: string) => `/api/tracker/v1${path}`,
+}));
 
 describe("projectAttachmentUrl", () => {
   it("builds an authenticated tracker API path for a stored attachment", () => {
@@ -139,5 +149,17 @@ describe("isVideoAttachmentSource", () => {
   it("rejects other extensions", () => {
     expect(isVideoAttachmentSource("/uploads/shot.png")).toBe(false);
     expect(isVideoAttachmentSource("")).toBe(false);
+  });
+});
+
+describe("deleteJiraAttachment", () => {
+  it("calls the JIRA attachment delete endpoint", async () => {
+    httpDeleteMock.mockResolvedValue(undefined);
+
+    await deleteJiraAttachment("advising", "10501");
+
+    expect(httpDeleteMock).toHaveBeenCalledWith(
+      "/api/tracker/v1/projects/advising/jira/attachments/10501",
+    );
   });
 });

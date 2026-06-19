@@ -378,7 +378,14 @@
         },
         "workpad": "Workpad",
         "evidence": "Evidence",
-        "evidenceArtifactsHint": "Full artifacts (videos, reports, traces): open the Evidence tab."
+        "evidenceArtifactsHint": "Full artifacts (videos, reports, traces): open the Evidence tab.",
+        "workpadSectionEmpty": "No notes yet.",
+        "workpadPullRequests": "Linked pull requests",
+        "workpadRegistryHint": "Auto-synced registry",
+        "workpadPrStatus": {
+          "active": "Active",
+          "closed_superseded_unlinked": "Superseded"
+        }
       }
     },
     "priority": {
@@ -682,7 +689,8 @@
       "identifierPlaceholder": "MAC-123"
     },
     "attachmentsSection": {
-      "title": "Attachments"
+      "title": "Attachments",
+      "removeAttachment": "Remove {{name}}"
     },
     "returnToAgent": {
       "resumeValidation": "Resume validation",
@@ -730,7 +738,9 @@
       "deleted": "{{identifier}} deleted",
       "deleteFailed": "Failed to delete issue",
       "synced": "{{identifier}} synced from remote",
-      "syncFailed": "Failed to sync issue from remote"
+      "syncFailed": "Failed to sync issue from remote",
+      "attachmentRemoved": "Attachment removed",
+      "attachmentRemoveFailed": "Failed to remove attachment"
     },
     "attachments": {
       "imageUnavailable": "Image uploads are not available here.",

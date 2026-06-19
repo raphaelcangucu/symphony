@@ -51,6 +51,7 @@ interface SummaryTabProps {
   onSavePriority?: (priority: IssuePriority | null) => Promise<boolean>;
   onSaveAssignee?: (assigneeIds: string[]) => Promise<boolean>;
   onSaveAgent?: (agent: AgentKind | null) => Promise<boolean>;
+  onRemoveAttachment?: (attachmentId: string) => Promise<boolean>;
 }
 
 function issueLinkLabel(url: string, t: TFunction): string {
@@ -73,6 +74,7 @@ export function SummaryTab({
   onSavePriority,
   onSaveAssignee,
   onSaveAgent,
+  onRemoveAttachment,
 }: SummaryTabProps) {
   const { t } = useTranslation();
   const [labelOptions, setLabelOptions] = useState<IssueLabelOption[]>([]);
@@ -190,7 +192,11 @@ export function SummaryTab({
             <p className="text-sm text-muted-foreground">{t("issue.summary.noDescription")}</p>
           )}
         </section>
-        <IssueAttachments attachments={issue.attachments} projectSlug={projectSlug || issue.projectSlug} />
+        <IssueAttachments
+          attachments={issue.attachments}
+          projectSlug={projectSlug || issue.projectSlug}
+          onRemoveAttachment={onRemoveAttachment}
+        />
         {workpad ? (
           <section className="space-y-2">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

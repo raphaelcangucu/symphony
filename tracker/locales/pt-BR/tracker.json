@@ -378,7 +378,14 @@
         },
         "workpad": "Workpad",
         "evidence": "Evidência",
-        "evidenceArtifactsHint": "Artefatos completos (vídeos, relatórios, traces): abra a aba Evidência."
+        "evidenceArtifactsHint": "Artefatos completos (vídeos, relatórios, traces): abra a aba Evidência.",
+        "workpadSectionEmpty": "Sem notas ainda.",
+        "workpadPullRequests": "Pull requests vinculados",
+        "workpadRegistryHint": "Registro sincronizado",
+        "workpadPrStatus": {
+          "active": "Ativo",
+          "closed_superseded_unlinked": "Substituído"
+        }
       }
     },
     "priority": {
@@ -682,7 +689,8 @@
       "identifierPlaceholder": "MAC-123"
     },
     "attachmentsSection": {
-      "title": "Anexos"
+      "title": "Anexos",
+      "removeAttachment": "Remover {{name}}"
     },
     "returnToAgent": {
       "resumeValidation": "Retomar validação",
@@ -730,7 +738,9 @@
       "deleted": "{{identifier}} excluída",
       "deleteFailed": "Falha ao excluir issue",
       "synced": "{{identifier}} sincronizada do remoto",
-      "syncFailed": "Falha ao sincronizar issue do remoto"
+      "syncFailed": "Falha ao sincronizar issue do remoto",
+      "attachmentRemoved": "Anexo removido",
+      "attachmentRemoveFailed": "Falha ao remover anexo"
     },
     "attachments": {
       "imageUnavailable": "Upload de imagens não está disponível aqui.",

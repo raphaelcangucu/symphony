@@ -103,6 +103,7 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/assistant/attachments", AssistantController, :upload_attachment)
     get("/projects/:project_slug/assistant/attachments/*path", AssistantController, :show_attachment)
     get("/projects/:project_slug/jira/attachments/:id", JiraAttachmentController, :show)
+    delete("/projects/:project_slug/jira/attachments/:id", JiraAttachmentController, :delete)
     post("/projects/:project_slug/assistant/messages", AssistantController, :create)
     resources("/projects/:project_slug/issues", IssueController, only: [:index, :create, :show, :update])
     get("/projects/:project_slug/issues/:identifier/documents", IssueDocumentController, :index)
