@@ -18,7 +18,8 @@ defmodule SymphonyElixir.Evidence.GateTest do
         command: "npx playwright test",
         status: "passed",
         screenshots: ["s.png"],
-        videos: ["v.webm"]
+        videos: ["v.webm"],
+        navigations: ["http://localhost:3000/app"]
       },
       Map.new(extra)
     )
@@ -142,6 +143,29 @@ defmodule SymphonyElixir.Evidence.GateTest do
     test "fully green with visual capture is satisfied" do
       d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e()])} end)
       assert :satisfied = Gate.evaluate("/ws", @config, d)
+    end
+  end
+
+  describe "e2e realness (Layer A)" do
+    test "e2e with only synthetic navigation is rejected" do
+      d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e("frontend", navigations: ["about:blank"])])} end)
+      assert {:violations, [%{kind: :synthetic_e2e, repo: "frontend"}]} = Gate.evaluate("/ws", @config, d)
+    end
+
+    test "e2e with empty navigation is rejected" do
+      d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e("frontend", navigations: [])])} end)
+      assert {:violations, [%{kind: :synthetic_e2e, repo: "frontend"}]} = Gate.evaluate("/ws", @config, d)
+    end
+
+    test "e2e with a real navigation is satisfied" do
+      d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e("frontend", navigations: ["http://localhost:3000/app"])])} end)
+      assert :satisfied = Gate.evaluate("/ws", @config, d)
+    end
+
+    test "require_url_pattern rejects a real but off-pattern navigation" do
+      config = put_in(@config, [:repos, "frontend", :e2e, :require_url_pattern], "^https?://[^/]+\\.localhost")
+      d = deps(read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e("frontend", navigations: ["http://localhost:3000/app"])])} end)
+      assert {:violations, [%{kind: :e2e_url_mismatch, repo: "frontend"}]} = Gate.evaluate("/ws", config, d)
     end
   end
 

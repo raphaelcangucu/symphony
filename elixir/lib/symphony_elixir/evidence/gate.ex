@@ -79,7 +79,7 @@ defmodule SymphonyElixir.Evidence.Gate do
     violations =
       unit_violations(manifest, changed) ++
         impact_violations ++
-        e2e_violations(manifest, required_ui) ++
+        e2e_violations(manifest, required_ui, repos) ++
         audit_violations(manifest, workspace, deps)
 
     case violations do
@@ -165,11 +165,11 @@ defmodule SymphonyElixir.Evidence.Gate do
     {required, impact_violations}
   end
 
-  defp e2e_violations(manifest, required_ui) do
-    Enum.flat_map(required_ui, &e2e_violation_for(manifest, &1))
+  defp e2e_violations(manifest, required_ui, repos) do
+    Enum.flat_map(required_ui, &e2e_violation_for(manifest, &1, repos))
   end
 
-  defp e2e_violation_for(manifest, repo) do
+  defp e2e_violation_for(manifest, repo, repos) do
     case Enum.find(manifest.runs, &(&1.kind == "e2e" and &1.repo == repo and &1.status == "passed")) do
       nil ->
         case blocked_run(manifest, "e2e", repo) do
@@ -178,19 +178,66 @@ defmodule SymphonyElixir.Evidence.Gate do
         end
 
       run ->
-        if run.screenshots != [] and run.videos != [] do
-          []
-        else
-          [
-            %{
-              kind: :visual_capture_missing,
-              repo: repo,
-              detail: "e2e run for #{repo} must include at least 1 screenshot and 1 video"
-            }
-          ]
-        end
+        visual_violation(run, repo) ++ synthetic_violation(run, repo) ++ url_pattern_violation(run, repo, repos)
     end
   end
+
+  defp visual_violation(run, repo) do
+    if run.screenshots != [] and run.videos != [] do
+      []
+    else
+      [
+        %{
+          kind: :visual_capture_missing,
+          repo: repo,
+          detail: "e2e run for #{repo} must include at least 1 screenshot and 1 video"
+        }
+      ]
+    end
+  end
+
+  # Layer A: a passing e2e that never loaded a real page (empty navigations, or
+  # only about:/data: URLs from page.setContent) is synthetic, not real proof.
+  defp synthetic_violation(run, repo) do
+    if Enum.any?(run.navigations, &real_navigation?/1) do
+      []
+    else
+      [
+        %{
+          kind: :synthetic_e2e,
+          repo: repo,
+          detail:
+            "e2e run for #{repo} recorded no real page navigation " <>
+              "(page.setContent/about:blank/data: do not count); drive the real flow with page.goto"
+        }
+      ]
+    end
+  end
+
+  # Optional per-project strictness: a real navigation must match the configured
+  # URL pattern (e.g. advising's `<tenant>.localhost`). Ignored when unset.
+  defp url_pattern_violation(run, repo, repos) do
+    case get_in(repos, [repo, :e2e, :require_url_pattern]) do
+      pattern when is_binary(pattern) and pattern != "" ->
+        regex = Regex.compile!(pattern)
+
+        if Enum.any?(run.navigations, &(real_navigation?(&1) and Regex.match?(regex, &1))) do
+          []
+        else
+          [%{kind: :e2e_url_mismatch, repo: repo, detail: "e2e for #{repo} must navigate a URL matching #{pattern}"}]
+        end
+
+      _ ->
+        []
+    end
+  end
+
+  defp real_navigation?(url) when is_binary(url) do
+    trimmed = String.trim(url)
+    trimmed != "" and not String.starts_with?(trimmed, "about:") and not String.starts_with?(trimmed, "data:")
+  end
+
+  defp real_navigation?(_url), do: false
 
   # A required `unit`/`e2e` run the agent explicitly marked as unrunnable in this
   # workspace environment. Distinct from a `failed` (code) run: it never
