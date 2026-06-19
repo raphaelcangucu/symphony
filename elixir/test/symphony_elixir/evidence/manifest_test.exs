@@ -155,6 +155,41 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     assert "artifacts/videos/flow.webm" in paths
   end
 
+  test "parses navigations and proof on an e2e run", %{tmp_dir: ws} do
+    manifest =
+      valid_manifest()
+      |> update_in(["runs"], fn [unit, e2e] ->
+        [unit, Map.merge(e2e, %{"navigations" => ["http://cwu.localhost:4302/students"], "proof" => %{"title" => "Student Groups"}})]
+      end)
+
+    write_manifest!(ws, manifest)
+    touch_artifacts!(ws)
+
+    assert {:ok, %{runs: [_unit, e2e]}} = Manifest.read(ws)
+    assert e2e.navigations == ["http://cwu.localhost:4302/students"]
+    assert e2e.proof == %{"title" => "Student Groups"}
+  end
+
+  test "navigations defaults to [] and proof to %{} when absent", %{tmp_dir: ws} do
+    write_manifest!(ws, valid_manifest())
+    touch_artifacts!(ws)
+
+    assert {:ok, %{runs: [_unit, e2e]}} = Manifest.read(ws)
+    assert e2e.navigations == []
+    assert e2e.proof == %{}
+  end
+
+  test "navigations must be a list of strings", %{tmp_dir: ws} do
+    manifest =
+      valid_manifest()
+      |> update_in(["runs"], fn [unit, e2e] -> [unit, Map.put(e2e, "navigations", "nope")] end)
+
+    write_manifest!(ws, manifest)
+
+    assert {:error, {:manifest_invalid, reasons}} = Manifest.read(ws)
+    assert Enum.any?(reasons, &(&1 =~ "navigations"))
+  end
+
   defp build_valid_in_tmp do
     ws = Path.join(System.tmp_dir!(), "manifest-#{System.unique_integer([:positive])}")
     File.mkdir_p!(ws)

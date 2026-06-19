@@ -24,7 +24,9 @@ defmodule SymphonyElixir.Evidence.Manifest do
       :blocked_reason,
       screenshots: [],
       videos: [],
-      trace: nil
+      trace: nil,
+      navigations: [],
+      proof: %{}
     ]
 
     @type t :: %__MODULE__{}
@@ -139,12 +141,23 @@ defmodule SymphonyElixir.Evidence.Manifest do
   end
 
   defp run_issues(run) when is_map(run) do
-    @required_run_fields
-    |> Enum.reject(&is_binary(run[&1]))
-    |> Enum.map(&"run missing required field: #{&1}")
+    field_issues =
+      @required_run_fields
+      |> Enum.reject(&is_binary(run[&1]))
+      |> Enum.map(&"run missing required field: #{&1}")
+
+    field_issues ++ navigations_issues(run["navigations"])
   end
 
   defp run_issues(_run), do: ["run entries must be objects"]
+
+  defp navigations_issues(nil), do: []
+
+  defp navigations_issues(list) when is_list(list) do
+    if Enum.all?(list, &is_binary/1), do: [], else: ["run navigations must be a list of strings"]
+  end
+
+  defp navigations_issues(_other), do: ["run navigations must be a list of strings"]
 
   defp to_run(run) do
     %Run{
@@ -158,7 +171,9 @@ defmodule SymphonyElixir.Evidence.Manifest do
       blocked_reason: run["blocked_reason"],
       screenshots: List.wrap(run["screenshots"]),
       videos: List.wrap(run["videos"]),
-      trace: run["trace"]
+      trace: run["trace"],
+      navigations: List.wrap(run["navigations"]),
+      proof: if(is_map(run["proof"]), do: run["proof"], else: %{})
     }
   end
 
