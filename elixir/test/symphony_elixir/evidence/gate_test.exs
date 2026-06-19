@@ -211,6 +211,32 @@ defmodule SymphonyElixir.Evidence.GateTest do
     end
   end
 
+  describe "CDE-1139 regression (synthetic preview-health e2e)" do
+    test "fake e2e (setContent only, no navigation) is rejected by Layer A" do
+      fake_e2e = e2e("frontend", navigations: [])
+
+      d =
+        deps(
+          read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), fake_e2e])} end,
+          judge_verdict: fn _ws -> :pass end
+        )
+
+      assert {:violations, violations} = Gate.evaluate("/ws", @config, d)
+      assert Enum.any?(violations, &(&1.kind == :synthetic_e2e))
+    end
+
+    test "even a navigated run is vetoed when the judge says tests miss the change" do
+      d =
+        deps(
+          read_manifest: fn _ws -> {:ok, manifest([unit("frontend"), e2e()])} end,
+          judge_verdict: fn _ws -> {:fail, ["e2e never asserts the grantee email lookup changed by the diff"]} end
+        )
+
+      assert {:violations, violations} = Gate.evaluate("/ws", @config, d)
+      assert Enum.any?(violations, &(&1.kind == :judge_rejected))
+    end
+  end
+
   describe "backend internal change (gray zone, agent decides)" do
     test "agent dismissal with rationale is satisfied" do
       d =
