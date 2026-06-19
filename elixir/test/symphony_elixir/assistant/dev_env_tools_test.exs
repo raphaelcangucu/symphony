@@ -92,6 +92,26 @@ defmodule SymphonyElixir.Assistant.DevEnvToolsTest do
     assert result.message =~ "image_pull_auth"
   end
 
+  test "warm_up tells the agent to ASK the user when remediation needs user input" do
+    warm = fn _slug, _opts ->
+      {:ok,
+       %{
+         run_id: 3,
+         status: "failed",
+         failure_class: "image_pull_auth",
+         port: nil,
+         output: "403",
+         remediation: %{needs_user_input: true, summary: "creds", ask: ["AWS_ACCESS_KEY_ID?"], apply: "…"}
+       }}
+    end
+
+    assert {:ok, result} =
+             DevEnvTools.execute("dev-env-test", %{"action" => "warm_up"}, warm_up: warm)
+
+    assert result.message =~ "ASK the user"
+    assert result.data.remediation.needs_user_input == true
+  end
+
   test "coding agents are denied warm_up" do
     assert {:error, :action_not_allowed} =
              DevEnvTools.execute("dev-env-test", %{"action" => "warm_up"}, coding_agent: true)

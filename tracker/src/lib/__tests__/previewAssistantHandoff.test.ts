@@ -84,4 +84,12 @@ describe("previewAssistantHandoff", () => {
     expect(prompt).toContain("manage_dev_env");
     expect(prompt).toContain("warm_up");
   });
+
+  it("instructs the agent to ask the user for missing credentials instead of guessing", () => {
+    const prompt = buildWarmUpBootstrapPrompt("adv");
+    expect(prompt).toContain("ASK THE USER");
+    expect(prompt).toContain("needs_user_input");
+    expect(prompt).toMatch(/never invent, guess/i);
+    expect(prompt).toContain("AWS credentials");
+  });
 });

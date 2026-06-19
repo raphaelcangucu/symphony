@@ -80,8 +80,18 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.WarmUpTest do
 
       assert result.status == "failed"
       assert result.failure_class == "image_pull_auth"
+      assert result.remediation.needs_user_input == true
+      assert result.remediation.ask != []
       assert {:ok, project} = Context.get_project("adv")
       assert project.warm_up_status == "failed"
+    end
+
+    test "a successful warm-up carries no remediation" do
+      base = tmp_repo(with_serve: true)
+      exec = fn _dir, _cmd, _opts -> {"Preview is healthy", 0} end
+
+      {:ok, result} = DevEnv.warm_up("adv", base: base, exec: exec)
+      assert result.remediation == nil
     end
 
     test "runs under an isolated <slug>-warmup compose project with the tenant" do

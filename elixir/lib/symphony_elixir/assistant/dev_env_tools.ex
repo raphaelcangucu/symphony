@@ -13,6 +13,9 @@ defmodule SymphonyElixir.Assistant.DevEnvTools do
   @description """
   List, propose, save, or run project dev-environment setup/serve steps.
   Coding agents may only list or run existing steps (optionally filter category_filter=serve).
+  When an action returns a result whose data.remediation.needs_user_input is true (e.g. warm_up
+  failing on missing credentials), ASK the user for the listed values instead of guessing, apply
+  them, then re-run the action.
   """
 
   @spec assistant_tool_spec() :: map()
@@ -73,7 +76,16 @@ defmodule SymphonyElixir.Assistant.DevEnvTools do
   end
 
   defp warm_up_message(%{status: "succeeded"}), do: "Dev environment warm-up succeeded."
-  defp warm_up_message(%{failure_class: class}), do: "Warm-up failed (#{class}). See data for remediation."
+
+  defp warm_up_message(%{failure_class: class, remediation: %{needs_user_input: true}}) do
+    "Warm-up failed (#{class}) — it needs data only the user can provide (e.g. credentials). " <>
+      "ASK the user for the values in data.remediation.ask (never guess or fabricate secrets), apply them, then call warm_up again."
+  end
+
+  defp warm_up_message(%{failure_class: class}) do
+    "Warm-up failed (#{class}). Use data.remediation to fix it in this thread, then call warm_up again."
+  end
+
   defp warm_up_message(_data), do: "Warm-up finished."
 
   defp execute_action(:list_steps, project_slug, _arguments, _propose, list_steps, _save, _runs, _start, _finish, _run_step) do

@@ -181,7 +181,82 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
     {:ok, _finished} = finish_run(run)
     {:ok, _project} = Context.update_warm_up_state(project_slug, %{status: status, run_id: run.id})
 
-    {:ok, %{run_id: run.id, status: status, failure_class: failure, port: port, output: output}}
+    {:ok,
+     %{
+       run_id: run.id,
+       status: status,
+       failure_class: failure,
+       port: port,
+       output: output,
+       remediation: warm_up_remediation(failure)
+     }}
+  end
+
+  # Structured, per-failure guidance the assistant reads from the tool result.
+  # `needs_user_input: true` means the fix requires data only the user can
+  # provide (credentials/secrets) — the assistant must ASK the user (never guess).
+  defp warm_up_remediation(nil), do: nil
+
+  defp warm_up_remediation("image_pull_auth") do
+    %{
+      needs_user_input: true,
+      summary:
+        "The app image could not be pulled from the private ECR registry (HTTP 403 / not authorized). Valid AWS credentials are required and must come from the user.",
+      ask: [
+        "What is the AWS_ACCESS_KEY_ID for the ECR registry?",
+        "What is the AWS_SECRET_ACCESS_KEY for that key?",
+        "Which AWS region hosts the registry? (default: us-east-1)"
+      ],
+      apply:
+        "Do NOT invent or guess credentials. After the user provides them, configure an AWS profile (aws configure set aws_access_key_id/aws_secret_access_key/region --profile advising) or write AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY into docker/.env, then call manage_dev_env warm_up again."
+    }
+  end
+
+  defp warm_up_remediation("needs_scaffold") do
+    %{
+      needs_user_input: false,
+      summary: "The repository has no .symphony/ scripts (or no dev-env steps).",
+      ask: [],
+      apply:
+        "Scaffold the .symphony/ scripts from the canonical template, adapt them to this repo (scan_project_setup / suggest_project_setup), propose a commit, then call warm_up again. Ask the user only if a project-specific command or secret is required."
+    }
+  end
+
+  defp warm_up_remediation("container_name_conflict") do
+    %{
+      needs_user_input: false,
+      summary: "A shared container name is already in use by another Compose project.",
+      ask: [],
+      apply: "Inspect `docker ps`, free or adopt the conflicting shared container, then call warm_up again."
+    }
+  end
+
+  defp warm_up_remediation("port_allocation") do
+    %{
+      needs_user_input: false,
+      summary: "A host port needed by the stack is already allocated.",
+      ask: [],
+      apply: "Re-resolve to a free host port (the scripts remap shared ports) and call warm_up again."
+    }
+  end
+
+  defp warm_up_remediation("health_timeout") do
+    %{
+      needs_user_input: false,
+      summary: "The stack booted but /health for the default tenant did not become healthy in time.",
+      ask: [],
+      apply:
+        "Read the app logs (docker logs) to find the cause; if the default-tenant DB is missing/unseeded, seed it. Ask the user only if a decision or secret is required."
+    }
+  end
+
+  defp warm_up_remediation(_other) do
+    %{
+      needs_user_input: false,
+      summary: "Warm-up failed for an unrecognized reason.",
+      ask: [],
+      apply: "Read the warm-up output/logs to determine the cause; ask the user if you need data only they can provide."
+    }
   end
 
   # Transient (non-persisted) step carrying only description/command for the
