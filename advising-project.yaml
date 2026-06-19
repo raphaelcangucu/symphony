@@ -114,7 +114,7 @@ setup:
           e2e:
             command: "cd automation/playwright && npx playwright test"
     agent:
-      max_turns: 20
+      max_turns: 30
     codex:
       approval_policy: never
       thread_sandbox: danger-full-access

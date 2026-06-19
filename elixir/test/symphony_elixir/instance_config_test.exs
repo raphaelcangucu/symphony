@@ -37,7 +37,7 @@ defmodule SymphonyElixir.InstanceConfigTest do
     # limit). Update both together if the module default changes.
     assert InstanceConfig.poll_interval_ms() == 60_000
     assert InstanceConfig.max_concurrent_agents() == 10
-    assert InstanceConfig.default_max_turns() == 20
+    assert InstanceConfig.default_max_turns() == 30
     assert InstanceConfig.server_port() == 4_000
     assert InstanceConfig.editor_enabled?() == false
     assert InstanceConfig.editor_port() == 4_002

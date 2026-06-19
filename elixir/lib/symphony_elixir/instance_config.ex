@@ -16,7 +16,7 @@ defmodule SymphonyElixir.InstanceConfig do
   @default_tracker_sync_min_pull_ms 60_000
   @default_tracker_pr_sync_ttl_ms 300_000
   @default_max_concurrent_agents 10
-  @default_max_turns 20
+  @default_max_turns 30
   @default_max_retry_backoff_ms 300_000
   @default_turn_timeout_ms 3_600_000
   @default_read_timeout_ms 5_000
