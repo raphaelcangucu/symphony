@@ -108,7 +108,22 @@ config :symphony_elixir,
 
 config :symphony_elixir, SymphonyElixir.Repo,
   database: local_tracker_database,
-  pool_size: String.to_integer(System.get_env("SYMPHONY_LOCAL_TRACKER_POOL_SIZE") || "5"),
+  # SINGLE WRITER. SQLite permits exactly one writer at a time, so a pool of N
+  # connections does not buy write parallelism — it only lets N connections fight
+  # over the one write lock. Under a burst of board moves (each of which fans out
+  # into several independent write transactions: the atomic move, per-member
+  # `mark_dirty` updates, and outbox inserts) that contention surfaced two ways:
+  # `database is locked`/`Database busy` (lock loser) and, worse, pool starvation
+  # ("connection not available ... dropped from queue") because a loser *holds* its
+  # pooled connection while blocked. Collapsing the pool to one connection turns
+  # the DBConnection checkout queue itself into a clean FIFO writer queue: requests
+  # serialize instead of erroring, and SQLITE_BUSY between app connections becomes
+  # impossible. This is safe here because (a) no code path checks out a second
+  # connection while holding one (no `Task`+`Repo` nesting inside a transaction),
+  # and (b) the sync engine performs its remote HTTP push OUTSIDE any transaction,
+  # so it never pins the connection across network I/O. WAL still keeps reads fast.
+  # Override with SYMPHONY_LOCAL_TRACKER_POOL_SIZE if a future workload needs it.
+  pool_size: String.to_integer(System.get_env("SYMPHONY_LOCAL_TRACKER_POOL_SIZE") || "1"),
   # SQLite permits only one writer at a time. Under the default DEFERRED mode a
   # transaction that reads first and writes later (tracker sync's
   # `upsert_remote_issue/2`, assistant `append_message_once/2`, the outbox claim)
@@ -118,23 +133,20 @@ config :symphony_elixir, SymphonyElixir.Repo,
   # write lock up front so concurrent writers queue (honoring `busy_timeout`)
   # instead of crashing the sync/assistant task.
   default_transaction_mode: :immediate,
-  # `busy_timeout` is how long a writer that loses the single-writer lock race will
-  # *block its pooled connection* before raising. A large value (we used to run
-  # 5000ms) means a stalled writer holds one of `pool_size` connections hostage,
-  # which under a burst of board moves starves the DBConnection pool itself —
-  # surfacing as "connection not available ... dropped from queue", NOT
-  # "database is locked". We keep it just above a typical move transaction so a
-  # writer waits out a single in-flight transaction (no churn) but releases its
-  # connection quickly when the queue is deep, letting the app-level retry
-  # (`LocalTracker.Context.with_write_retry/1`) re-queue with backoff instead.
+  # With a single writer connection the app never contends with itself, so
+  # `busy_timeout` only matters against an *external* writer (a `sqlite3` CLI, a
+  # backup). Keep it modest so such a rare collision can't freeze the whole app
+  # for long; the app-level retry (`LocalTracker.Context.with_write_retry/1`)
+  # backstops it.
   busy_timeout: String.to_integer(System.get_env("SYMPHONY_LOCAL_TRACKER_BUSY_TIMEOUT_MS") || "1000"),
-  # DBConnection sheds load ("dropped from queue") when checkout waits exceed
-  # `queue_target` across a `queue_interval` window. The defaults (50ms / 1000ms)
-  # are far too tight for SQLite's serialized writes under a concurrent burst, so
-  # legitimate moves were 500ing while merely waiting their turn. Tolerate multi-
-  # second queueing instead; the hard cap is still the per-call `timeout`.
-  queue_target: 5_000,
-  queue_interval: 5_000,
+  # With one connection, concurrent requests queue at DBConnection checkout. The
+  # default overload guard (queue_target 50ms / queue_interval 1000ms) sheds load
+  # ("connection not available ... dropped from queue") far too eagerly for a
+  # serialized writer under a burst, so legitimate moves 500'd while simply waiting
+  # their turn. Tolerate multi-second queueing; `timeout` is the real hard cap.
+  queue_target: 10_000,
+  queue_interval: 10_000,
+  timeout: 30_000,
   # SQLite concurrency best practices (https://sqlite.org/wal.html). Most of these
   # already match ecto_sqlite3's defaults; we set them explicitly so the
   # concurrency contract is visible and cannot silently regress on a dep bump:
@@ -144,14 +156,13 @@ config :symphony_elixir, SymphonyElixir.Repo,
   #                             holds the write lock for less time
   #   * temp_store :memory    — keep temp b-trees out of the locked main DB file
   #   * cache_size -64000     — 64 MB page cache → fewer disk hits under load
-  #   * mmap_size 256 MB      — memory-mapped reads shorten read transactions, which
-  #                             frees the writer sooner (this is the one addition
-  #                             over the defaults)
+  #   * custom_pragmas mmap   — 256 MB memory-mapped reads shorten read paths
+  #     (ecto_sqlite3 has no first-class `mmap_size`, so it goes via :custom_pragmas)
   journal_mode: :wal,
   synchronous: :normal,
   temp_store: :memory,
   cache_size: -64_000,
-  mmap_size: 268_435_456,
+  custom_pragmas: [mmap_size: 268_435_456],
   foreign_keys: :on,
   stacktrace: Mix.env() in [:dev, :test],
   show_sensitive_data_on_connection_error: Mix.env() in [:dev, :test]
