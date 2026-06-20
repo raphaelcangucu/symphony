@@ -79,6 +79,7 @@ export interface Issue {
   createdAt: string;
   updatedAt: string;
   agentKind?: AgentKind | null;
+  agentGoal?: string | null;
   attachments: IssueAttachment[];
   groupLeadIdentifier: string | null;
   groupMemberIdentifiers: string[];

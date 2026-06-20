@@ -181,6 +181,8 @@ export interface BackendIssueDto {
   branchName?: string | null;
   agent_kind?: string | null;
   agentKind?: string | null;
+  agent_goal?: string | null;
+  agentGoal?: string | null;
   group_lead_identifier?: string | null;
   groupLeadIdentifier?: string | null;
   group_member_identifiers?: string[] | null;
@@ -278,12 +280,19 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     url: dto.url ?? null,
     branchName: dto.branchName ?? dto.branch_name ?? null,
     agentKind,
+    agentGoal: normalizeAgentGoal(dto.agentGoal ?? dto.agent_goal),
     attachments: (dto.attachments ?? []).flatMap(normalizeIssueAttachment),
     groupLeadIdentifier: dto.groupLeadIdentifier ?? dto.group_lead_identifier ?? null,
     groupMemberIdentifiers: dto.groupMemberIdentifiers ?? dto.group_member_identifiers ?? [],
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };
+}
+
+function normalizeAgentGoal(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function normalizeIssueAttachment(dto: BackendIssueAttachmentDto): IssueAttachment[] {

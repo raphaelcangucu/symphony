@@ -5,7 +5,7 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { AudioLines, Bot, Clock, FileText, ImageIcon, SendHorizontal, X } from "lucide-react";
+import { AudioLines, Bot, Clock, FileText, ImageIcon, SendHorizontal, Target, X } from "lucide-react";
 import type { TFunction } from "i18next";
 import { i18n } from "@/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -138,6 +138,12 @@ export function ProjectAssistantPanel({
     null,
   );
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
+  // Tab-scoped Authoring goal: a Codex goal running directly in this chat (no orchestrator).
+  // It is independent from the issue's Execution goal owned by the Execution tab.
+  const [authoringGoal, setAuthoringGoal] = useState<{ active: boolean; objective: string | null }>({
+    active: false,
+    objective: null,
+  });
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
@@ -218,6 +224,7 @@ export function ProjectAssistantPanel({
     pendingIssueModeRef.current = null;
     lastConfirmedGoalModeRef.current = null;
     pendingGoalModeRef.current = null;
+    setAuthoringGoal({ active: false, objective: null });
 
     const socket = createTrackerSocket();
     socket.connect();
@@ -303,6 +310,10 @@ export function ProjectAssistantPanel({
         const hydratedGoalMode = goalModeFromResponse(response) ?? false;
         lastConfirmedGoalModeRef.current = hydratedGoalMode;
         if (hydratedGoalMode) onIssueGoalModeChanged?.(true);
+        setAuthoringGoal({
+          active: hydratedGoalMode,
+          objective: hydratedGoalMode ? goalObjectiveFromResponse(response) : null,
+        });
       }
 
       const agent = effectiveAgentFromResponse(response);
@@ -443,8 +454,64 @@ export function ProjectAssistantPanel({
     channel.push("steer_turn", { message: text });
   }, []);
 
+  const enableGoalCommand = useCallback(
+    (submit: AssistantComposerSubmit) => {
+      const channel = channelRef.current;
+      if (!channel) {
+        setConnectionError(t("assistant.panel.channelNotConnected"));
+        return;
+      }
+
+      if (!issueIdentifier) {
+        setMessages((current) =>
+          appendMessage(current, assistantMessage(`goal-help-${crypto.randomUUID()}`, t("assistant.panel.goalRequiresIssue"))),
+        );
+        return;
+      }
+
+      const objective = submit.message.trim();
+
+      // Authoring goal: persist the chat goal + objective so this turn (and the next ones) run
+      // Codex native goal mode directly in the conversation. This never dispatches the orchestrator
+      // and never changes the issue's status or Execution goal.
+      const goalPush = channel.push("set_goal_mode", {
+        goal_mode: true,
+        ...(objective.length > 0 ? { objective } : {}),
+      });
+      goalPush.receive("ok", (response) => {
+        const enabled = goalModeFromResponse(response) ?? true;
+        lastConfirmedGoalModeRef.current = enabled;
+        onIssueGoalModeChanged?.(enabled);
+        setAuthoringGoal({
+          active: enabled,
+          objective: goalObjectiveFromResponse(response) ?? (objective.length > 0 ? objective : null),
+        });
+      });
+      goalPush.receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
+      goalPush.receive("timeout", () => onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout")));
+
+      const framed =
+        objective.length > 0
+          ? t("assistant.panel.goalCommandWithObjective", { objective })
+          : t("assistant.panel.goalCommandDefault");
+      const framedSubmit: AssistantComposerSubmit = { ...submit, kind: "message", message: framed };
+
+      if (isRunning) {
+        setQueued((current) => [...current, { id: crypto.randomUUID(), payload: framedSubmit }]);
+      } else {
+        dispatchSend(framedSubmit);
+      }
+    },
+    [dispatchSend, isRunning, issueIdentifier, onIssueGoalModeChanged, onIssueGoalModeError, t],
+  );
+
   const sendMessage = useCallback(
     (submit: AssistantComposerSubmit) => {
+      if (submit.kind === "goal") {
+        enableGoalCommand(submit);
+        return;
+      }
+
       const trimmed = submit.message.trim();
       const hasAttachments = submit.attachments.length > 0;
       if (!trimmed && !hasAttachments) return;
@@ -485,7 +552,7 @@ export function ProjectAssistantPanel({
 
       dispatchSend(submit);
     },
-    [dispatchSend, isRunning, steerTurn, t],
+    [dispatchSend, enableGoalCommand, isRunning, steerTurn, t],
   );
 
   const wasRunningRef = useRef(false);
@@ -668,6 +735,11 @@ export function ProjectAssistantPanel({
       />
     ) : null;
 
+  const authoringGoalBanner =
+    issueIdentifier && authoringGoal.active ? (
+      <AuthoringGoalBanner objective={authoringGoal.objective} running={isRunning} />
+    ) : null;
+
   if (isPanelMode) {
     return (
       <AssistantRuntimeProvider runtime={runtime}>
@@ -703,6 +775,8 @@ export function ProjectAssistantPanel({
               </p>
             )}
           </div>
+
+          {authoringGoalBanner}
 
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
             <div
@@ -806,6 +880,36 @@ export function ProjectAssistantPanel({
         <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
       ) : null}
     </AssistantRuntimeProvider>
+  );
+}
+
+function AuthoringGoalBanner({ objective, running }: { objective: string | null; running: boolean }) {
+  const { t } = useTranslation();
+  const label = running
+    ? t("assistant.authoring.goalRunning")
+    : t("assistant.authoring.goalActive");
+  const trimmed = objective?.trim();
+
+  return (
+    <div className="shrink-0 border-b border-border/60 bg-muted/20 px-4 pb-3 pt-3">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label={t("assistant.authoring.goalBannerAria")}
+        title={trimmed || label}
+        className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-slate-50 shadow-[0_12px_30px_-18px_rgba(15,23,42,0.9)]"
+      >
+        <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
+          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-violet-200">
+            <Target className="h-3.5 w-3.5" />
+          </span>
+          <span className="truncate">{label}</span>
+        </div>
+        <p className="mt-2 line-clamp-2 text-sm font-medium leading-5 text-white/95">
+          {trimmed || t("assistant.authoring.goalNoObjective")}
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -1126,6 +1230,14 @@ function goalModeFromResponse(response: unknown): boolean | null {
   if (!response || typeof response !== "object") return null;
   const value = (response as Record<string, unknown>).goal_mode;
   return typeof value === "boolean" ? value : null;
+}
+
+function goalObjectiveFromResponse(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+  const value = (response as Record<string, unknown>).goal_objective;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function effectiveAgentFromResponse(response: unknown): AgentKind | null {

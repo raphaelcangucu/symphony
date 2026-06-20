@@ -65,10 +65,13 @@ export function ProjectHeader({
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
-      <div>
-        <h1 className="text-base font-semibold">{title ?? projectSlug}</h1>
-        <p className="text-xs text-muted-foreground">{projectSlug}</p>
-      </div>
+      <NavLink
+        to={workspaceBasePath(projectSlug, "board")}
+        className="group rounded-md outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
+        <h1 className="text-base font-semibold group-hover:underline">{title ?? projectSlug}</h1>
+        <p className="text-xs text-muted-foreground group-hover:text-primary">{projectSlug}</p>
+      </NavLink>
       <div className="flex items-center gap-2">
         {refreshing ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">

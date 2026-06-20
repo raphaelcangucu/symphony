@@ -37,6 +37,29 @@ describe("tracker DTO mappers", () => {
     });
   });
 
+  it("maps the saved execution goal (agent_goal) for the unambiguous Execution tab state", () => {
+    const withGoal = normalizeIssue({
+      id: 9,
+      identifier: "MAC-9",
+      project_slug: "macro-markets",
+      title: "Saved goal",
+      agent_goal: "  Implement the auth module  ",
+    });
+    expect(withGoal.agentGoal).toBe("Implement the auth module");
+
+    const blankGoal = normalizeIssue({
+      id: 10,
+      identifier: "MAC-10",
+      project_slug: "macro-markets",
+      title: "Blank goal",
+      agent_goal: "   ",
+    });
+    expect(blankGoal.agentGoal).toBeNull();
+
+    const noGoal = normalizeIssue({ id: 11, identifier: "MAC-11", project_slug: "macro-markets", title: "No goal" });
+    expect(noGoal.agentGoal).toBeNull();
+  });
+
   it("normalizes issue attachments and drops entries without an id", () => {
     const issue = normalizeIssue({
       id: 123,

@@ -213,6 +213,56 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("prefer the simpler fix")).toBeTruthy();
   });
 
+  it("runs an authoring goal in the chat and shows its banner when /goal is submitted", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+
+    fireEvent.change(textarea, { target: { value: "/goal ship the feature" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("set_goal_mode", { goal_mode: true, objective: "ship the feature" }),
+    );
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({ message: expect.stringContaining("ship the feature") }),
+      ),
+    );
+    // The framed instruction is authoring-only: it explicitly tells Codex NOT to dispatch the
+    // orchestrator and to run the goal directly in the conversation.
+    const goalSend = push.mock.calls.find(
+      ([event, payload]) =>
+        event === "send_message" &&
+        typeof (payload as { message?: string })?.message === "string" &&
+        (payload as { message: string }).message.includes("ship the feature"),
+    );
+    const goalSendMessage = (goalSend?.[1] as { message: string }).message;
+    expect(goalSendMessage).toMatch(/authoring goal/i);
+    expect(goalSendMessage).toMatch(/do not dispatch the orchestrator/i);
+
+    // Resolving the set_goal_mode push surfaces the Authoring goal banner.
+    const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
+    pushReceives[goalCallIndex]?.ok?.({ goal_mode: true, goal_objective: "ship the feature" });
+
+    const banner = await screen.findByRole("status", { name: "Authoring goal" });
+    expect(banner).toHaveTextContent("ship the feature");
+  });
+
+  it("rehydrates the authoring goal banner from the join response", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({ goal_mode: true, goal_objective: "Audit the auth module", thread_id: 1 })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    const banner = await screen.findByRole("status", { name: "Authoring goal" });
+    expect(banner).toHaveTextContent("Audit the auth module");
+  });
+
   it("opens an overlay and streams the answer when /btw is submitted", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
     const textarea = await screen.findByPlaceholderText("Write a message...");

@@ -94,6 +94,18 @@ export async function fetchEditorTargets(projectSlug: string, identifier: string
   return { browser, cursorDesktop };
 }
 
+export async function fetchProjectEditorTargets(projectSlug: string): Promise<EditorTargets> {
+  const slug = requireProjectSlug(projectSlug);
+
+  const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/editor`));
+
+  const dto = unwrapData<BackendEditorDto>(response);
+  const browser = mapEditorTarget(dto);
+  const cursorDesktop = resolveCursorDesktop(dto, browser);
+
+  return { browser, cursorDesktop };
+}
+
 /** @deprecated Use fetchEditorTargets — returns the browser (code-server) target only. */
 export async function fetchEditorTarget(projectSlug: string, identifier: string): Promise<EditorTarget> {
   const targets = await fetchEditorTargets(projectSlug, identifier);

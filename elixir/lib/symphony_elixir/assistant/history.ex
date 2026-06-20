@@ -157,11 +157,12 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   @doc """
-  Persists whether Codex Goal mode is enabled for an issue authoring thread.
+  Persists whether the Authoring (chat) goal is enabled for an issue authoring thread.
 
-  Goal mode is an opt-in, Codex-only dispatch preference: when enabled, the authoring assistant
-  is instructed to dispatch Codex with a long-running `goal` derived from the issue artifacts
-  (spec/plan/handoff). The flag lives in the thread metadata map alongside `mode` (no migration).
+  This is the tab-scoped Authoring goal: when enabled, the issue assistant runs Codex native
+  goal mode directly inside this conversation (no orchestrator dispatch, no issue status change).
+  The flag lives in the thread metadata map alongside `mode` (no migration). It is independent
+  from the Execution goal, which lives on the issue (`agent_goal`) and runs via the orchestrator.
   """
   @spec set_goal_mode(Thread.t(), boolean()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def set_goal_mode(%Thread{metadata: metadata} = thread, enabled) when is_boolean(enabled) do
@@ -170,13 +171,51 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   @doc """
-  Returns whether Codex Goal mode is enabled on a thread's metadata. Defaults to `false`.
+  Persists the Authoring goal flag together with its objective in a single update.
+
+  Passing a blank/`nil` objective clears the stored objective. Used by the `/goal` command so the
+  authoring conversation runs Codex goal mode toward an explicit objective.
+  """
+  @spec set_goal_mode(Thread.t(), boolean(), String.t() | nil) ::
+          {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def set_goal_mode(%Thread{metadata: metadata} = thread, enabled, objective)
+      when is_boolean(enabled) do
+    next =
+      (metadata || %{})
+      |> Map.put("goal_mode", enabled)
+      |> put_goal_objective_meta(objective)
+
+    update_thread(thread, %{metadata: next})
+  end
+
+  defp put_goal_objective_meta(metadata, objective) when is_binary(objective) do
+    case String.trim(objective) do
+      "" -> Map.delete(metadata, "goal_objective")
+      trimmed -> Map.put(metadata, "goal_objective", trimmed)
+    end
+  end
+
+  defp put_goal_objective_meta(metadata, _objective), do: Map.delete(metadata, "goal_objective")
+
+  @doc """
+  Returns whether the Authoring (chat) goal is enabled on a thread's metadata. Defaults to `false`.
   """
   @spec thread_goal_mode(Thread.t()) :: boolean()
   def thread_goal_mode(%Thread{metadata: metadata}) do
     case metadata do
       %{"goal_mode" => enabled} when is_boolean(enabled) -> enabled
       _ -> false
+    end
+  end
+
+  @doc """
+  Returns the Authoring goal objective persisted on a thread's metadata, or `nil` when unset.
+  """
+  @spec thread_goal_objective(Thread.t()) :: String.t() | nil
+  def thread_goal_objective(%Thread{metadata: metadata}) do
+    case metadata do
+      %{"goal_objective" => objective} when is_binary(objective) and objective != "" -> objective
+      _ -> nil
     end
   end
 

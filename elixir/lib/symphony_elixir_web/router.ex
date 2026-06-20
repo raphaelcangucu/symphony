@@ -178,6 +178,7 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/stop", DevServerController, :stop_server)
     post("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/restart", DevServerController, :restart_server)
     post("/tunnel/start", TunnelController, :start)
+    get("/projects/:project_slug/editor", EditorController, :show)
     get("/projects/:project_slug/issues/:identifier/editor", EditorController, :show)
     get("/projects/:project_slug/dev_env/steps", DevEnvController, :index)
     put("/projects/:project_slug/dev_env/steps", DevEnvController, :save)

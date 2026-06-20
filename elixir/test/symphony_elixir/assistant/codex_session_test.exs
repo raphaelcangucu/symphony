@@ -443,6 +443,62 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       refute prompt =~ "Do not start writing feature code"
     end
 
+    test "brainstorm intent upgrades the thread to complex and loads the methodology skills", %{thread: thread} do
+      assert History.thread_mode(thread) == "triage"
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "vamos fazer um brainstorming", %{}, runner: runner)
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "MODE: COMPLEX"
+      assert prompt =~ "brainstorming"
+      assert prompt =~ "docs/superpowers/specs"
+
+      persisted = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
+      assert History.thread_mode(persisted) == "complex"
+    end
+
+    test "plain chat without brainstorm/spec intent stays in triage", %{thread: thread} do
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "what does this issue cover?", %{}, runner: runner)
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "MODE: TRIAGE"
+
+      persisted = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
+      assert History.thread_mode(persisted) == "triage"
+    end
+
+    test "issue prompt instructs dispatching through chat via dispatch_codex", %{thread: thread} do
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "hello", %{}, runner: runner)
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "dispatch_codex"
+      assert prompt =~ "In Progress"
+      assert prompt =~ "Never dispatch on your own"
+    end
+
     test "complex prompt instructs writing handoff.md", %{thread: thread} do
       {:ok, thread} = History.set_mode(thread, "complex")
       test_pid = self()
@@ -467,37 +523,48 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert prompt_text =~ "current state"
     end
 
-    test "goal mode injects dispatch goal instructions into the prompt", %{thread: thread} do
-      {:ok, thread} = History.set_goal_mode(thread, true)
+    test "authoring goal injects an authoring (not dispatch) goal section with the objective",
+         %{thread: thread} do
+      {:ok, thread} = History.set_goal_mode(thread, true, "Audit the auth module")
       test_pid = self()
 
-      runner = fn _workspace, prompt, _issue, _opts ->
-        send(test_pid, {:prompt, prompt})
+      runner = fn _workspace, prompt, _issue, opts ->
+        send(test_pid, {:prompt, prompt, opts})
         {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
       end
 
       assert {:ok, _result} =
                CodexSession.send_message_to_issue_thread(thread, "ship it", %{}, runner: runner)
 
-      assert_receive {:prompt, prompt}
-      assert prompt =~ "GOAL MODE: ENABLED"
-      assert prompt =~ "dispatch_codex"
-      assert prompt =~ "goal"
+      assert_receive {:prompt, prompt, opts}
+      # Authoring goal runs Codex goal mode directly in the conversation...
+      assert prompt =~ "AUTHORING GOAL: ACTIVE"
+      assert prompt =~ "Audit the auth module"
+      # ...and never frames the turn as an orchestrator dispatch.
+      refute prompt =~ "GOAL MODE: ENABLED"
+      assert prompt =~ "do NOT dispatch the orchestrator"
+
+      # Codex sessions receive the objective as the native :goal opt.
+      if Keyword.get(opts, :agent_kind) in [nil, :codex] do
+        assert Keyword.get(opts, :goal) == "Audit the auth module"
+      end
     end
 
-    test "goal mode off omits the goal dispatch instructions", %{thread: thread} do
+    test "authoring goal off omits the authoring goal section and the native goal opt",
+         %{thread: thread} do
       test_pid = self()
 
-      runner = fn _workspace, prompt, _issue, _opts ->
-        send(test_pid, {:prompt, prompt})
+      runner = fn _workspace, prompt, _issue, opts ->
+        send(test_pid, {:prompt, prompt, opts})
         {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
       end
 
       assert {:ok, _result} =
                CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
 
-      assert_receive {:prompt, prompt}
-      refute prompt =~ "GOAL MODE: ENABLED"
+      assert_receive {:prompt, prompt, opts}
+      refute prompt =~ "AUTHORING GOAL: ACTIVE"
+      refute Keyword.has_key?(opts, :goal)
     end
 
     test "documents_changed fires on_documents_changed when a turn writes a doc", %{thread: thread} do

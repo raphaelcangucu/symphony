@@ -11,6 +11,11 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   @history_limit 20
 
+  # Brainstorm / spec / plan intent upgrades an authoring thread to complex so the
+  # next prompt dynamically loads the superpowers methodology skills. Matching is
+  # intentionally narrow (word-anchored) to avoid false positives like "respect".
+  @complex_mode_trigger_regex ~r/(\bbrainstorm)|(\bspecs?\b)|(\bdesign\s+docs?\b)|(\bimplementation\s+plans?\b)|(\bplano\s+de\s+implementa)|(\bespecifica)/iu
+
   @type turn_result :: %{
           required(:assistant_message) => String.t(),
           required(:tool_calls) => [map()],
@@ -139,12 +144,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     # Reload so that agent_thread_ids written by a prior turn are visible even
     # when the caller holds a frozen struct from an earlier socket assign.
     thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
+    # Conversation can drive the authoring depth: a brainstorm/spec/plan request
+    # upgrades the thread to complex so this turn loads the methodology skills.
+    thread = maybe_upgrade_issue_mode(thread, message)
     agent_kind = resolve_thread_agent(thread, context)
 
     opts =
       opts
       |> Keyword.put(:agent_kind, agent_kind)
       |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+      |> maybe_put_authoring_goal(thread, agent_kind)
 
     with {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_issue_workspace(thread),
@@ -508,11 +517,13 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   defp build_issue_prompt(%{metadata: metadata, issue_identifier: identifier, project_slug: project_slug}, message, context, history) do
     mode = Map.get(metadata || %{}, "mode", "triage")
     goal_mode = Map.get(metadata || %{}, "goal_mode", false) == true
+    goal_objective = Map.get(metadata || %{}, "goal_objective")
 
     base = """
     You are the Symphony issue authoring assistant for `#{project_slug}`, working on issue `#{identifier}`.
     You are running inside the issue's working tree (the project repositories are cloned here).
-    Answer in the user's language. Do not dispatch Codex unless asked.
+    Answer in the user's language.
+    Dispatching happens through this chat: only when the user explicitly asks to dispatch, start, or hand off the work, call the dispatch_codex tool for `#{identifier}` with concrete instructions. That moves the issue to In Progress so the orchestrator executes it (the orchestrator carries the issue's execution goal). Never dispatch on your own.
     Do not post issue comments — your replies are shown to the user directly in this chat.
     Persist stable issue fields (title, description, status, assignees) with update_issue, not add_comment.
 
@@ -571,24 +582,81 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           """
 
         _ ->
-          "\n\nMODE: TRIAGE. Collect the title and a short description, then help decide simple vs complex."
+          """
+
+          MODE: TRIAGE. Collect the title and a short description, then settle the authoring depth with the user in conversation (no UI toggle needed):
+          - SIMPLE for a polished brief / enriched issue description — no spec or plan files.
+          - COMPLEX when the user wants to brainstorm or design, or needs a spec and implementation plan.
+          If the user asks to brainstorm, or mentions a spec, plan, or design, treat the task as complex.
+          State which path you are taking and proceed.
+          """
       end
 
-    String.trim(base <> mode_section <> goal_mode_section(goal_mode, identifier))
+    String.trim(base <> mode_section <> goal_mode_section(goal_mode, identifier, goal_objective))
   end
 
-  defp goal_mode_section(false, _identifier), do: ""
+  defp maybe_upgrade_issue_mode(%{} = thread, message) when is_binary(message) do
+    if History.thread_mode(thread) != "complex" and complex_intent?(message) do
+      case History.set_mode(thread, "complex") do
+        {:ok, updated} -> updated
+        _ -> thread
+      end
+    else
+      thread
+    end
+  end
 
-  defp goal_mode_section(true, identifier) do
+  defp maybe_upgrade_issue_mode(thread, _message), do: thread
+
+  defp complex_intent?(message) when is_binary(message),
+    do: Regex.match?(@complex_mode_trigger_regex, message)
+
+  defp complex_intent?(_message), do: false
+
+  defp goal_mode_section(false, _identifier, _objective), do: ""
+
+  defp goal_mode_section(true, _identifier, objective) do
+    objective_line =
+      case normalize_goal_objective(objective) do
+        nil ->
+          "Derive the objective from the issue artifacts in this working tree (the executive " <>
+            "summary, the spec's constraints, and the plan's verification steps)."
+
+        text ->
+          "Objective: #{text}"
+      end
+
     """
 
-    GOAL MODE: ENABLED (Codex long-running). When the user asks you to dispatch Codex for
-    `#{identifier}`, call the dispatch_codex tool WITH a `goal` argument. Derive the goal from the
-    issue artifacts in this working tree (the executive summary as the objective, the plan's
-    verification steps as the checks, and the spec's constraints), plus a clear stopping condition
-    (stop when complete or blocked). Keep the goal concise and self-contained so the orchestrator
-    can follow it across multiple turns. Do not dispatch on your own — only when the user asks.
+    AUTHORING GOAL: ACTIVE (Codex long-running, in this conversation). You are pursuing a chat
+    goal directly inside this authoring thread — keep working toward the objective across turns
+    until the artifact is ready for review or you are blocked. #{objective_line}
+    This is authoring only: do NOT dispatch the orchestrator and do NOT change the issue's status,
+    labels, or execution goal. Produce the spec/plan/analysis artifacts the objective calls for.
     """
+  end
+
+  defp normalize_goal_objective(objective) when is_binary(objective) do
+    case String.trim(objective) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_goal_objective(_), do: nil
+
+  defp maybe_put_authoring_goal(opts, thread, agent_kind) do
+    cond do
+      agent_kind not in [nil, :codex] ->
+        opts
+
+      not History.thread_goal_mode(thread) ->
+        opts
+
+      true ->
+        objective = History.thread_goal_objective(thread) || "Complete the authoring objective for this issue."
+        Keyword.put(opts, :goal, objective)
+    end
   end
 
   defp default_runner(workspace, prompt, issue, opts) do

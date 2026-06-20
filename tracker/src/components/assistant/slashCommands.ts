@@ -10,6 +10,7 @@ export interface SlashCommandDef {
 }
 
 const SLASH_COMMAND_SPECS = [
+  { name: "/goal", kind: "goal", descriptionKey: "assistant.slash.goal" },
   { name: "/infer", kind: "infer", descriptionKey: "assistant.slash.infer" },
   { name: "/btw", kind: "btw", descriptionKey: "assistant.slash.btw" },
 ] as const satisfies ReadonlyArray<{

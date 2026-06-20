@@ -8,7 +8,9 @@ defmodule SymphonyElixir.Editor do
   """
 
   alias SymphonyElixir.Config
+  alias SymphonyElixir.Assistant.ProjectExploreWorkspace
   alias SymphonyElixir.Editor.Server
+  alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Workspace
   alias SymphonyElixir.WorkspaceSkills
 
@@ -38,6 +40,23 @@ defmodule SymphonyElixir.Editor do
     end
   end
 
+  @spec project_editor_target(String.t()) :: {:ok, String.t()} | {:error, reason()}
+  def project_editor_target(project_slug) when is_binary(project_slug) do
+    with :ok <- ensure_enabled(),
+         :ok <- ensure_ready(),
+         {:ok, path} <- ensure_browser_project_workspace(project_slug) do
+      {:ok, build_browser_url(path)}
+    end
+  end
+
+  @spec project_cursor_desktop_target(String.t()) :: {:ok, String.t()} | {:error, reason()}
+  def project_cursor_desktop_target(project_slug) when is_binary(project_slug) do
+    case ensure_project_workspace_path(project_slug) do
+      {:ok, path} -> {:ok, build_cursor_url(path)}
+      {:error, _} = error -> error
+    end
+  end
+
   defp ensure_enabled do
     if Config.editor_enabled?(), do: :ok, else: {:error, :disabled}
   end
@@ -60,6 +79,17 @@ defmodule SymphonyElixir.Editor do
     end
   end
 
+  defp ensure_project_workspace_path(project_slug) do
+    slug = String.trim(project_slug)
+    workspace_path = ProjectExploreWorkspace.path(slug)
+
+    if File.dir?(workspace_path) do
+      {:ok, resolve_project_editor_folder(slug, workspace_path)}
+    else
+      {:error, :workspace_missing}
+    end
+  end
+
   defp ensure_browser_workspace(issue_identifier) do
     workspace_path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
 
@@ -72,6 +102,23 @@ defmodule SymphonyElixir.Editor do
 
       true ->
         Logger.warning("Editor workspace skills preparation failed workspace=#{workspace_path}")
+        {:error, :workspace_skills_unavailable}
+    end
+  end
+
+  defp ensure_browser_project_workspace(project_slug) do
+    slug = String.trim(project_slug)
+    workspace_path = ProjectExploreWorkspace.path(slug)
+
+    cond do
+      not File.dir?(workspace_path) ->
+        {:error, :workspace_missing}
+
+      WorkspaceSkills.prepare(workspace_path) == :ok ->
+        {:ok, resolve_project_editor_folder(slug, workspace_path)}
+
+      true ->
+        Logger.warning("Editor project workspace skills preparation failed workspace=#{workspace_path}")
         {:error, :workspace_skills_unavailable}
     end
   end
@@ -104,6 +151,25 @@ defmodule SymphonyElixir.Editor do
 
       [] ->
         workspace_path
+    end
+  end
+
+  defp resolve_project_editor_folder(project_slug, workspace_path) do
+    project_roots =
+      project_slug
+      |> Context.list_repositories()
+      |> Enum.map(fn repo -> {repo.workspace_path, Path.join(workspace_path, repo.workspace_path)} end)
+      |> Enum.filter(fn {_name, path} -> File.dir?(path) end)
+
+    case project_roots do
+      [{_name, single_path}] ->
+        single_path
+
+      multiple when length(multiple) > 1 ->
+        write_multi_root_workspace(workspace_path, multiple)
+
+      [] ->
+        resolve_editor_folder(workspace_path)
     end
   end
 

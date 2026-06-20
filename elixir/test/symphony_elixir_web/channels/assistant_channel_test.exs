@@ -414,6 +414,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     assert payload.mode == "triage"
     assert payload.goal_mode == false
+    assert payload.goal_objective == nil
   end
 
   test "set_goal_mode persists the flag and the join rehydrates it", %{socket: socket} do
@@ -430,6 +431,23 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
       |> subscribe_and_join("assistant:issue:macro-markets:MAC-1", %{})
 
     assert payload.goal_mode == true
+  end
+
+  test "set_goal_mode persists the authoring objective and the join rehydrates it", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit the auth module"})
+    assert_reply(ref, :ok, %{goal_mode: true, goal_objective: "Audit the auth module"})
+
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.metadata["goal_objective"] == "Audit the auth module"
+
+    {:ok, payload, _rejoined} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join("assistant:issue:macro-markets:MAC-1", %{})
+
+    assert payload.goal_mode == true
+    assert payload.goal_objective == "Audit the auth module"
   end
 
   test "set_goal_mode rejects non-issue assistant threads", %{socket: socket} do
@@ -462,6 +480,24 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert issue.status.name == "In Progress"
     assert is_binary(issue.agent_goal)
     assert issue.agent_goal =~ "MAC-1"
+  end
+
+  test "dispatch_codex does not carry an execution goal just because the authoring goal is enabled",
+       %{socket: socket} do
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Dispatch me", "status" => "Todo"})
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    # Enabling the Authoring (chat) goal must NOT auto-promote into an orchestrator execution goal.
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit only"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    # A plain dispatch (no explicit goal_mode) stays decoupled from the authoring goal.
+    ref = push(socket, "dispatch_codex", %{})
+    assert_reply(ref, :ok, %{goal_mode: false})
+
+    assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    assert issue.status.name == "In Progress"
+    assert issue.agent_goal in [nil, ""]
   end
 
   test "dispatch_codex rejects non-issue assistant threads", %{socket: socket} do

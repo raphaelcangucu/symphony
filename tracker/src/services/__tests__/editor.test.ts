@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildCursorUrlFromCodeServerUrl } from "@/services/editor";
+import { buildCursorUrlFromCodeServerUrl, fetchProjectEditorTargets } from "@/services/editor";
+import { http } from "@/services/http";
 
 describe("buildCursorUrlFromCodeServerUrl", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("derives cursor:// from a code-server folder URL", () => {
     const codeServer =
       "http://127.0.0.1:4002/?folder=%2Fhome%2Fuser%2Fworkspaces%2FMAC-1";
@@ -14,5 +17,28 @@ describe("buildCursorUrlFromCodeServerUrl", () => {
 
   it("returns null when the code-server URL has no folder", () => {
     expect(buildCursorUrlFromCodeServerUrl("http://127.0.0.1:4002/")).toBeNull();
+  });
+
+  it("fetches project-level editor targets", async () => {
+    vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: {
+        data: {
+          available: false,
+          url: null,
+          reason: "disabled",
+          cursor_desktop: {
+            available: true,
+            url: "cursor://file//tmp/macro-markets",
+            reason: null,
+          },
+        },
+      },
+    });
+
+    await expect(fetchProjectEditorTargets("macro-markets")).resolves.toEqual({
+      browser: { available: false, url: null, reason: "disabled" },
+      cursorDesktop: { available: true, url: "cursor://file//tmp/macro-markets", reason: null },
+    });
+    expect(http.get).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/editor");
   });
 });

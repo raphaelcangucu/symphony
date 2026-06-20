@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
@@ -9,10 +9,16 @@ import { issueAssistantPath } from "@/lib/workspaceRoutes";
 export function IssueAssistantRoute() {
   const { issueId } = useParams();
   const navigate = useNavigate();
-  const { agentExecutions, projectSlug, view } = useWorkspace();
+  const { issues, projectSlug, view } = useWorkspace();
   const identifier = issueId?.trim() ? issueId : undefined;
   const normalizedIdentifier = normalizeIssueIdentifier(identifier);
-  const execution = normalizedIdentifier ? agentExecutions.get(normalizedIdentifier) : undefined;
+  const issue = useMemo(
+    () =>
+      normalizedIdentifier
+        ? issues.find((candidate) => normalizeIssueIdentifier(candidate.identifier) === normalizedIdentifier) ?? null
+        : null,
+    [issues, normalizedIdentifier],
+  );
 
   const handleIssueCreated = useCallback(
     (issue: { identifier: string }) => {
@@ -25,7 +31,7 @@ export function IssueAssistantRoute() {
     <IssueAuthoringPanel
       projectSlug={projectSlug}
       identifier={identifier}
-      execution={execution}
+      issue={issue}
       view={view}
       onIssueCreated={handleIssueCreated}
     />

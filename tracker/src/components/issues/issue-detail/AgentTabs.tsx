@@ -105,7 +105,7 @@ export function AgentTabs({
         value="authoring"
         className="mt-0 flex min-h-[min(640px,calc(100dvh-13rem))] flex-col overflow-hidden"
       >
-        <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} execution={execution} compact />
+        <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} compact />
       </TabsContent>
       <TabsContent value="execution" className="mt-0">
         <AgentTab

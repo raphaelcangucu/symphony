@@ -199,6 +199,15 @@ export function AgentTab({
               </div>
             ) : null}
           </dl>
+        ) : issue.agentGoal ? (
+          <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <div className="flex items-center gap-2 text-xs font-medium text-foreground/90">
+              <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
+              {t("issue.agent.tab.executionGoalSaved")}
+            </div>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground/90">{issue.agentGoal}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t("issue.agent.tab.executionGoalSavedHint")}</p>
+          </div>
         ) : (
           <p className="mt-3 text-muted-foreground">{t("issue.agent.tab.noExecution")}</p>
         )}

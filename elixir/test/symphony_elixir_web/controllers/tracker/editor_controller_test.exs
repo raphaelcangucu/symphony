@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.EditorControllerTest do
   import Plug.Conn
 
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Assistant.ProjectExploreWorkspace
   alias SymphonyElixir.Repo
   alias SymphonyElixir.TestSupport
   alias SymphonyElixir.Workflow
@@ -83,6 +84,75 @@ defmodule SymphonyElixirWeb.Tracker.EditorControllerTest do
 
     assert json_response(conn, 404) == %{
              "error" => %{"code" => "issue_not_found", "message" => "Issue not found"}
+           }
+  end
+
+  test "returns editor targets for the project explore workspace" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    workspace = ProjectExploreWorkspace.path("macro-markets")
+    File.rm_rf(workspace)
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf(workspace) end)
+
+    previous_wsl = System.get_env("WSL_DISTRO_NAME")
+    System.delete_env("WSL_DISTRO_NAME")
+    on_exit(fn -> restore_env("WSL_DISTRO_NAME", previous_wsl) end)
+
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/macro-markets/editor")
+
+    assert json_response(conn, 200) == %{
+             "data" => %{
+               "available" => false,
+               "url" => nil,
+               "reason" => "disabled",
+               "cursor_desktop" => %{
+                 "available" => true,
+                 "url" => "cursor://file/" <> URI.encode(Path.expand(workspace)),
+                 "reason" => nil
+               }
+             }
+           }
+  end
+
+  test "opens the configured project repository root for project editor targets" do
+    slug = "editor-repo-root-#{System.unique_integer([:positive])}"
+
+    {:ok, _project} =
+      Context.create_workspace_project(%{
+        name: "Editor Repo Root",
+        slug: slug,
+        repositories: [
+          %{
+            github_full_name: "acme/app",
+            workspace_path: "app",
+            role: "app"
+          }
+        ]
+      })
+
+    workspace = ProjectExploreWorkspace.path(slug)
+    repo = Path.join(workspace, "app")
+    File.rm_rf(workspace)
+    File.mkdir_p!(repo)
+    on_exit(fn -> File.rm_rf(workspace) end)
+
+    previous_wsl = System.get_env("WSL_DISTRO_NAME")
+    System.delete_env("WSL_DISTRO_NAME")
+    on_exit(fn -> restore_env("WSL_DISTRO_NAME", previous_wsl) end)
+
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/#{slug}/editor")
+
+    assert %{"data" => %{"cursor_desktop" => %{"available" => true, "url" => cursor_url}}} =
+             json_response(conn, 200)
+
+    assert cursor_url == "cursor://file/" <> URI.encode(Path.expand(repo))
+  end
+
+  test "returns 404 for an unknown project editor target" do
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/missing-project/editor")
+
+    assert json_response(conn, 404) == %{
+             "error" => %{"code" => "project_not_found", "message" => "Project not found"}
            }
   end
 

@@ -1,9 +1,10 @@
-import { AudioLines, ChevronDown, FileText, Mic, Plus, Square, X } from "lucide-react";
+import { AudioLines, ChevronDown, FileText, Mic, Plus, Send, Square, X } from "lucide-react";
 import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -57,7 +58,7 @@ function eventHasFiles(event: DragEvent<HTMLElement>): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
 }
 
-export type AssistantComposerSubmitKind = "message" | "infer" | "btw";
+export type AssistantComposerSubmitKind = "message" | "infer" | "btw" | "goal";
 
 export interface AssistantComposerSubmit {
   kind: AssistantComposerSubmitKind;
@@ -107,6 +108,7 @@ export function AssistantComposer({
   const dragDepthRef = useRef(0);
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(bundle));
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recordingRef = useRef(false);
   const speech = useSpeechRecognition();
   const {
@@ -169,6 +171,13 @@ export function AssistantComposer({
   useEffect(() => {
     recordingRef.current = recording;
   }, [recording]);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.scrollTop = textarea.scrollHeight;
+  }, [input]);
 
   const canSend = !recording && !uploadingImage && (input.trim().length > 0 || attachments.length > 0);
 
@@ -358,7 +367,9 @@ export function AssistantComposer({
     if (!canSend) return;
 
     const parsed = parseSlashCommand(input, t);
-    if (parsed.kind !== "message" && parsed.argument.length === 0) return;
+    // `/goal` may be issued with no objective (the assistant derives it from the
+    // issue artifacts); every other command requires an argument.
+    if (parsed.kind !== "message" && parsed.kind !== "goal" && parsed.argument.length === 0) return;
 
     onSubmit({
       kind: parsed.kind,
@@ -479,7 +490,6 @@ export function AssistantComposer({
               if (attachment.type === "file" && attachment.previewUrl && isVideoMediaType(attachment.mediaType)) {
                 return (
                   <div key={attachment.id} className="group relative">
-                    {/* eslint-disable-next-line jsx-a11y/media-has-caption -- composer preview has no captions */}
                     <video
                       src={attachment.previewUrl}
                       controls
@@ -540,6 +550,7 @@ export function AssistantComposer({
         ) : null}
 
         <Textarea
+          ref={textareaRef}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
@@ -628,6 +639,17 @@ export function AssistantComposer({
                 {t("assistant.composer.recording")}
               </span>
             ) : null}
+            <Button
+              type="submit"
+              variant="default"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              disabled={!canSend}
+              aria-label={t("assistant.composer.sendMessage")}
+              title={t("assistant.composer.sendMessage")}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>

@@ -78,6 +78,27 @@ describe("AssistantComposer", () => {
     );
   });
 
+  it("sends with the send button", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "Hello from button" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "message",
+        message: "Hello from button",
+        settings: expect.objectContaining({ model: "gpt-5.3-codex", effort: "low" }),
+        attachments: [],
+      }),
+    );
+  });
+
   it("submits a default kind of 'message' with the typed text", () => {
     const onSubmit = vi.fn();
     render(
@@ -106,6 +127,34 @@ describe("AssistantComposer", () => {
     );
   });
 
+  it("submits kind 'goal' with its objective when the message starts with /goal", () => {
+    const onSubmit = vi.fn();
+    render(
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "/goal ship the feature" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "goal", message: "ship the feature" }),
+    );
+  });
+
+  it("submits kind 'goal' even without an objective", () => {
+    const onSubmit = vi.fn();
+    render(
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "/goal" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: "goal", message: "" }));
+  });
+
   it("shows the slash-command palette when the input starts with a slash", () => {
     render(
       <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
@@ -113,6 +162,7 @@ describe("AssistantComposer", () => {
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "/" } });
 
+    expect(screen.getByText("/goal")).toBeInTheDocument();
     expect(screen.getByText("/infer")).toBeInTheDocument();
     expect(screen.getByText("/btw")).toBeInTheDocument();
   });
@@ -190,6 +240,22 @@ describe("AssistantComposer", () => {
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true, code: "Enter" });
 
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps the textarea scrolled to the bottom as text grows", () => {
+    render(
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...") as HTMLTextAreaElement;
+    Object.defineProperty(textarea, "scrollHeight", { configurable: true, value: 1200 });
+    textarea.scrollTop = 0;
+
+    fireEvent.change(textarea, {
+      target: { value: Array.from({ length: 40 }, (_, index) => `Line ${index}`).join("\n") },
+    });
+
+    expect(textarea.scrollTop).toBe(1200);
   });
 
   it("does not stop voice dictation on unrelated re-render", () => {

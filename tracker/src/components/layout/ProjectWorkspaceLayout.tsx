@@ -7,11 +7,12 @@ import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
 import { BoardQuickFilters } from "@/components/board/BoardQuickFilters";
 import { ProjectAssistantMenu } from "@/components/layout/ProjectAssistantMenu";
+import { ProjectEditorMenu } from "@/components/layout/ProjectEditorMenu";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { WorkspaceProvider, useWorkspace } from "@/components/layout/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
-import { isBoardPath, projectSettingsPath } from "@/lib/workspaceRoutes";
+import { isBoardPath, projectExploreAssistantPath, projectSettingsPath } from "@/lib/workspaceRoutes";
 
 export function ProjectWorkspaceLayout() {
   const { projectSlug = "" } = useParams();
@@ -32,6 +33,7 @@ function WorkspaceChrome() {
   const navigate = useNavigate();
   const location = useLocation();
   const showBoardFilters = isBoardPath(location.pathname);
+  const showProjectEditor = location.pathname === projectExploreAssistantPath(projectSlug);
 
   return (
     <div className="min-h-screen">
@@ -51,6 +53,7 @@ function WorkspaceChrome() {
             >
               <Settings className="h-4 w-4" />
             </Button>
+            {showProjectEditor ? <ProjectEditorMenu projectSlug={projectSlug} /> : null}
             <ProjectAssistantMenu projectSlug={projectSlug} />
             {showBoardFilters ? <BoardFiltersTrigger /> : null}
           </>

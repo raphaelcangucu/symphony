@@ -25,6 +25,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         thread_id: thread.id,
         mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
+        goal_objective: History.thread_goal_objective(thread),
         # Issue task labels are NOT consulted here (would need a tracker fetch at join);
         # dispatch resolves them — composer badge may differ for label-pinned issues.
         effective_agent: thread_effective_agent(thread)
@@ -49,6 +50,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         thread_id: thread.id,
         mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
+        goal_objective: History.thread_goal_objective(thread),
         effective_agent: thread_effective_agent(thread)
       }
 
@@ -70,6 +72,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
+        goal_objective: History.thread_goal_objective(thread),
         effective_agent: thread_effective_agent(thread)
       }
 
@@ -130,10 +133,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_in("set_mode", _payload, socket), do: {:reply, {:error, %{reason: "mode is required"}}, socket}
 
-  def handle_in("set_goal_mode", %{"goal_mode" => enabled}, socket) when is_boolean(enabled) do
+  def handle_in("set_goal_mode", %{"goal_mode" => enabled} = payload, socket)
+      when is_boolean(enabled) do
+    objective = normalize_goal_objective(Map.get(payload, "objective"))
+
     with {:ok, thread} <- issue_thread(socket),
-         {:ok, updated_thread} <- History.set_goal_mode(thread, enabled) do
-      {:reply, {:ok, %{goal_mode: enabled}}, assign(socket, :thread, updated_thread)}
+         {:ok, updated_thread} <- History.set_goal_mode(thread, enabled, objective) do
+      {:reply,
+       {:ok, %{goal_mode: enabled, goal_objective: History.thread_goal_objective(updated_thread)}},
+       assign(socket, :thread, updated_thread)}
     else
       {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
     end
@@ -681,10 +689,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp issue_thread(%Socket{assigns: %{thread: %{scope: "issue"} = thread}}), do: {:ok, thread}
   defp issue_thread(_socket), do: {:error, :issue_thread_required}
 
-  defp dispatch_goal_mode(payload, thread) when is_map(payload) do
+  # Execution dispatch is decoupled from the Authoring (chat) goal: an orchestrator dispatch only
+  # carries an execution goal when the dispatch request explicitly opts in via `goal_mode`. The
+  # thread's authoring goal stays in the assistant conversation and never auto-promotes to execution.
+  defp dispatch_goal_mode(payload, _thread) when is_map(payload) do
     case Map.get(payload, "goal_mode") do
       enabled when is_boolean(enabled) -> enabled
-      _ -> History.thread_goal_mode(thread)
+      _ -> false
     end
   end
 
@@ -694,6 +705,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       _ -> nil
     end
   end
+
+  defp normalize_goal_objective(objective) when is_binary(objective) do
+    case String.trim(objective) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_goal_objective(_), do: nil
 
   defp dispatch_arguments(identifier, goal_mode, agent) do
     base = %{"identifier" => identifier, "instructions" => dispatch_instructions(identifier)}
