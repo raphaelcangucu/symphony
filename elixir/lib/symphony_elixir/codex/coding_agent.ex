@@ -378,25 +378,27 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   defp start_port(workspace, codex_section) do
-    executable = System.find_executable("bash")
+    case System.find_executable("bash") do
+      nil ->
+        {:error, :bash_not_found}
 
-    if is_nil(executable) do
-      {:error, :bash_not_found}
-    else
-      port =
-        Port.open(
-          {:spawn_executable, String.to_charlist(executable)},
-          [
-            :binary,
-            :exit_status,
-            :stderr_to_stdout,
-            args: [~c"-lc", String.to_charlist(CodexConfig.command(codex_section))],
-            cd: String.to_charlist(workspace),
-            line: @port_line_bytes
-          ]
-        )
+      bash ->
+        command = CodexConfig.command(codex_section)
 
-      {:ok, port}
+        port =
+          Port.open(
+            {:spawn_executable, String.to_charlist(bash)},
+            [
+              :binary,
+              :exit_status,
+              :stderr_to_stdout,
+              args: [~c"-lc", String.to_charlist(command)],
+              cd: String.to_charlist(workspace),
+              line: @port_line_bytes
+            ]
+          )
+
+        {:ok, port}
     end
   end
 
@@ -1621,6 +1623,25 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   defp stop_port(port) when is_port(port) do
+    case :erlang.port_info(port, :os_pid) do
+      {:os_pid, os_pid} -> kill_process_group(os_pid)
+      _ -> :ok
+    end
+
+    close_port(port)
+  end
+
+  defp kill_process_group(os_pid) do
+    pid_str = to_string(os_pid)
+
+    # Reap the whole Codex subtree before closing the port. pkill -P walks direct
+    # children; under an Erlang Port the app-server workload is a child of this pid.
+    System.cmd("pkill", ["-9", "-P", pid_str], stderr_to_stdout: true)
+    System.cmd("kill", ["-9", pid_str], stderr_to_stdout: true)
+    :ok
+  end
+
+  defp close_port(port) when is_port(port) do
     case :erlang.port_info(port) do
       :undefined ->
         :ok
