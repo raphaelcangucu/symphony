@@ -1,10 +1,16 @@
 import type { Channel } from "phoenix";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
 import { i18n } from "@/i18n";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import { sessionLogTopic } from "@/services/session-log";
 import { payloadEntries, type SessionLogEntry } from "@/types/session-log";
+
+export interface AgentSteerPayload {
+  message: string;
+  attachments: AssistantOutgoingAttachment[];
+}
 
 interface UseSessionLogChannelArgs {
   projectSlug: string;
@@ -21,7 +27,7 @@ interface UseSessionLogChannelResult {
   logAgentKind: string | null;
   preferredAgentKind: string | null;
   logFallback: boolean;
-  steerTurn: (message: string) => void;
+  steerTurn: (payload: AgentSteerPayload) => void;
   steerError: string | null;
   steerPending: boolean;
 }
@@ -127,19 +133,21 @@ export function useSessionLogChannel({
     };
   }, [agentKind, enabled, issueIdentifier, projectSlug]);
 
-  const steerTurn = useCallback((message: string) => {
+  const steerTurn = useCallback((payload: AgentSteerPayload) => {
     const channel = channelRef.current;
-    const trimmed = message.trim();
-    if (!channel || !trimmed) return;
+    const trimmed = payload.message.trim();
+    if (!channel || (trimmed.length === 0 && payload.attachments.length === 0)) return;
 
     setSteerPending(true);
     setSteerError(null);
-    channel.push("steer_turn", { message: trimmed }).receive("error", (reason) => {
-      setSteerPending(false);
-      const record = reason as Record<string, unknown>;
-      const replyReason = typeof record.reason === "string" ? record.reason : "steer_failed";
-      setSteerError(replyReason);
-    });
+    channel
+      .push("steer_turn", { message: trimmed, attachments: payload.attachments })
+      .receive("error", (reason) => {
+        setSteerPending(false);
+        const record = reason as Record<string, unknown>;
+        const replyReason = typeof record.reason === "string" ? record.reason : "steer_failed";
+        setSteerError(replyReason);
+      });
   }, []);
 
   return {

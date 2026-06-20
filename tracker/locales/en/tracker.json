@@ -119,6 +119,7 @@
       "goalObjective": "Goal objective",
       "sendGoalAria": "Send goal on resume or restart",
       "queuedGuidance": "Queued guidance · sent on next resume",
+      "queuedAttachments": "{{count}} attachment(s)",
       "removeQueuedAria": "Remove queued guidance",
       "remove": "Remove",
       "placeholderSteer": "/infer focus on the failing test first",
@@ -570,7 +571,26 @@
         "videos": "Videos",
         "reportLink": "{{kind}} report ({{repo}})",
         "traceLink": "{{kind}} trace ({{repo}})",
-        "runSummary": "{{passed}}/{{total}} passed, {{failed}} failed"
+        "runSummary": "{{passed}}/{{total}} passed, {{failed}} failed",
+        "openExternal": "Open in new tab",
+        "runSection": {
+          "e2eTitle": "End-to-end test — {{repo}}",
+          "unitTitle": "Unit tests — {{repo}}",
+          "genericTitle": "{{kind}} — {{repo}}",
+          "objective": "What was tested",
+          "command": "Command",
+          "blockedReason": "Blocked because",
+          "navigations": "Pages visited",
+          "noSummary": "No result summary",
+          "multipleSpecs": "{{count}} specs"
+        },
+        "artifactVideoAria": "Video evidence: {{name}}",
+        "textViewer": {
+          "loading": "Loading file…",
+          "loadError": "Could not load this file.",
+          "retry": "Retry",
+          "openAria": "View {{name}}"
+        }
       },
       "errors": {
         "loadFailed": "Could not load evidence."

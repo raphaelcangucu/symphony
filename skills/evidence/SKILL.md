@@ -135,6 +135,50 @@ For each repo you changed that declares `impacts: [<ui repos>]`:
   `impacts_ui: false` and a concrete rationale. If you neither run the e2e nor
   record a decision, the gate fails with `impact_assessment_missing`.
 
+### Visual artifact naming (screenshots + videos)
+
+Each screenshot and video must answer **"what evidence is this?"** for a human
+reviewer. Use the **Playwright test title** (or Cypress `it(...)` string) as the
+source of truth:
+
+1. **Filename** — kebab-case, issue-prefixed, under `.symphony/evidence/artifacts/`:
+   - `artifacts/screens/{ISSUE}-{test-intent-slug}.png`
+   - `artifacts/videos/{ISSUE}-{test-intent-slug}.webm`
+   - Example: `artifacts/videos/cde-1142-long-share-dialog-header-real-app.webm`
+     for a test titled `long share dialog header real app`.
+   - Never leave generic names like `video.webm` or `screenshot.png`.
+
+2. **Manifest entry** — prefer labeled objects (plain path strings still work,
+   but objects are required when one e2e command runs multiple specs):
+
+```json
+"videos": [
+  {
+    "path": "artifacts/videos/cde-1142-long-share-dialog-header-real-app.webm",
+    "label": "long share dialog header real app",
+    "navigations": [
+      "http://cwu.localhost:4300/health",
+      "http://cwu.localhost:4300/login",
+      "http://cwu.localhost:4300/advisor/9006610/get-assigned-advisors"
+    ]
+  }
+]
+```
+
+3. **Per-test navigations** — copy from `test-results/symphony-navigations.json`
+   (keyed by Playwright `testInfo.titlePath`) into each artifact's
+   `navigations`, not only at the run level. The Evidence tab shows intent +
+   page flow per screenshot/video.
+
+4. **Screenshots in specs** — pass the same slug when calling `page.screenshot`:
+
+```ts
+await page.screenshot({
+  path: ".symphony/evidence/artifacts/screens/cde-1142-long-share-dialog-header-real-app.png",
+  fullPage: true,
+});
+```
+
 ## Manifest format
 
 Write `.symphony/evidence/manifest.json` in the workspace root, with all
@@ -163,9 +207,23 @@ be the UI repo it exercises:
       "status": "passed",
       "summary": { "total": 4, "passed": 4, "failed": 0 },
       "report": "artifacts/playwright-report/",
-      "screenshots": ["artifacts/screens/settings.png"],
-      "videos": ["artifacts/videos/settings-flow.webm"],
-      "trace": "artifacts/trace.zip"
+      "screenshots": [
+        {
+          "path": "artifacts/screens/gam-5-settings.png",
+          "label": "settings page renders for tenant admin",
+          "navigations": ["http://gam.localhost:4300/settings"]
+        }
+      ],
+      "videos": [
+        {
+          "path": "artifacts/videos/gam-5-settings-flow.webm",
+          "label": "settings page renders for tenant admin",
+          "navigations": ["http://gam.localhost:4300/settings"]
+        }
+      ],
+      "trace": "artifacts/trace.zip",
+      "navigations": ["http://gam.localhost:4300/settings"],
+      "proof": { "title": "settings page renders for tenant admin" }
     }
   ],
   "impact": [

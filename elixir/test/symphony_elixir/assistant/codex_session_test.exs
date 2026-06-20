@@ -405,6 +405,22 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
              }
     end
 
+    test "issue authoring prompt defers update_issue during exploration", %{thread: thread} do
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "explore", %{}, runner: runner)
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "Do NOT call update_issue during"
+      assert prompt =~ "live investigation log"
+    end
+
     test "complex mode injects superpowers methodology into the prompt", %{thread: thread} do
       {:ok, thread} = History.set_mode(thread, "complex")
       test_pid = self()

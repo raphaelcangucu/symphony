@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 interface AttachmentVideoProps {
   src: string;
   label: string;
+  description?: string;
   className?: string;
 }
 
@@ -21,7 +22,7 @@ function needsAuthenticatedFetch(src: string): boolean {
   return isTrackerAuthenticatedMediaUrl(src);
 }
 
-export function AttachmentVideo({ src, label, className }: AttachmentVideoProps) {
+export function AttachmentVideo({ src, label, description, className }: AttachmentVideoProps) {
   const { t } = useTranslation();
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
@@ -73,14 +74,22 @@ export function AttachmentVideo({ src, label, className }: AttachmentVideoProps)
   }
 
   return (
-    // eslint-disable-next-line jsx-a11y/media-has-caption -- attachment previews have no captions
-    <video
-      src={state.url}
-      controls
-      playsInline
-      preload="metadata"
-      aria-label={label}
-      className={cn("bg-black/5", className)}
-    />
+    <figure className="space-y-1.5">
+      {description ? (
+        <figcaption className="text-sm font-medium leading-snug">{description}</figcaption>
+      ) : null}
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption -- attachment previews have no captions */}
+      <video
+        src={state.url}
+        controls
+        playsInline
+        preload="metadata"
+        aria-label={label}
+        className={cn("bg-black/5", className)}
+      />
+      <figcaption className="truncate text-[11px] text-muted-foreground" title={label}>
+        {label}
+      </figcaption>
+    </figure>
   );
 }

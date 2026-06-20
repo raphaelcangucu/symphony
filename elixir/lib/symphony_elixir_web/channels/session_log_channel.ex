@@ -53,18 +53,34 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   def join(_topic, _payload, _socket), do: {:error, %{reason: "invalid_topic"}}
 
   @impl true
-  def handle_in("steer_turn", %{"message" => message}, socket) when is_binary(message) do
-    case SymphonyElixir.Orchestrator.steer(socket.assigns.issue_identifier, message, self()) do
-      :ok ->
-        {:reply, :ok, assign(socket, :last_steer_text, String.trim(message))}
+  def handle_in("steer_turn", payload, socket) when is_map(payload) do
+    message = Map.get(payload, "message", "")
+    attachments = Map.get(payload, "attachments", [])
+    trimmed = if is_binary(message), do: String.trim(message), else: ""
 
-      {:error, reason} ->
-        push(socket, "steer_failed", %{
-          reason: steer_error_reason(reason),
-          message: String.trim(message)
-        })
+    cond do
+      trimmed == "" and attachments == [] ->
+        {:reply, {:error, %{reason: "message is required"}}, socket}
 
-        {:reply, {:error, %{reason: steer_error_reason(reason)}}, socket}
+      true ->
+        case SymphonyElixir.Orchestrator.steer(
+               socket.assigns.issue_identifier,
+               message,
+               self(),
+               attachments: attachments,
+               project_slug: socket.assigns.project_slug
+             ) do
+          :ok ->
+            {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
+
+          {:error, reason} ->
+            push(socket, "steer_failed", %{
+              reason: steer_error_reason(reason),
+              message: trimmed
+            })
+
+            {:reply, {:error, %{reason: steer_error_reason(reason)}}, socket}
+        end
     end
   end
 
@@ -154,6 +170,7 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
 
   defp steer_error_reason(:ActiveTurnNotSteerable), do: "ActiveTurnNotSteerable"
   defp steer_error_reason(:empty_message), do: "message is required"
+  defp steer_error_reason(:attachment_processing_failed), do: "attachment_processing_failed"
   defp steer_error_reason(:unavailable), do: "orchestrator_unavailable"
   defp steer_error_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp steer_error_reason(%{"message" => message}) when is_binary(message), do: message

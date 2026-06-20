@@ -1,8 +1,25 @@
-import { Eraser, Pause, Play, RotateCcw, Send, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { AudioLines, Eraser, FileText, Pause, Play, Plus, RotateCcw, Send, X } from "lucide-react";
+import {
+  type DragEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import {
+  type AssistantAttachment,
+  type AssistantOutgoingAttachment,
+  createAttachmentPreview,
+  revokeAttachmentPreviews,
+  serializeAttachments,
+  validateAttachmentFile,
+} from "@/components/assistant/assistantAttachments";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
 import { agentKindLabel } from "@/components/shared/AgentChip";
@@ -42,10 +59,20 @@ import {
   type AssistantEffort,
 } from "@/lib/assistantSettings";
 import { agentEnterHintLabel, deriveAgentControl } from "@/lib/agentExecutionDisplay";
-import { fetchAssistantCatalogBundle } from "@/services/assistant";
+import { enrichGuidanceWithAttachments, maybeReadInlineFileText } from "@/lib/enrichComposerGuidance";
+import { extractFilesFromClipboard } from "@/lib/clipboardImages";
+import { fetchAssistantCatalogBundle, uploadAssistantAttachment } from "@/services/assistant";
+import { isVideoMediaType } from "@/services/attachments";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
+import type { AgentSteerPayload } from "@/hooks/useSessionLogChannel";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AgentKind, Issue } from "@/types/issue";
+
+interface QueuedGuidanceItem {
+  text: string;
+  attachments: AssistantOutgoingAttachment[];
+  fileTexts: Record<string, string>;
+}
 
 interface ExecutionControlComposerProps {
   projectSlug: string;
@@ -56,8 +83,12 @@ interface ExecutionControlComposerProps {
   steerPending?: boolean;
   steerError?: string | null;
   seedMessage?: string | null;
-  onSteer: (message: string) => void;
+  onSteer: (payload: AgentSteerPayload) => void;
   onIssueUpdated?: (issue: Issue) => void;
+}
+
+function eventHasFiles(event: DragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
 }
 
 export function ExecutionControlComposer({
@@ -74,7 +105,13 @@ export function ExecutionControlComposer({
 }: ExecutionControlComposerProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");
-  const [queued, setQueued] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
+  const [fileTexts, setFileTexts] = useState<Record<string, string>>({});
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [queued, setQueued] = useState<QueuedGuidanceItem[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragDepthRef = useRef(0);
   const [bundle, setBundle] = useState<AssistantCatalogBundle>(fallbackCatalogBundle());
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(fallbackCatalogBundle()));
   const [goalMode, setGoalMode] = useState(() => execution?.goal?.kind === "goal");
@@ -107,9 +144,78 @@ export function ExecutionControlComposer({
         : "start";
   const primaryLabel = control.primaryLabel;
   const queuedGuidance = useMemo(
-    () => queued.filter((entry) => entry.trim().length > 0),
+    () => queued.filter((entry) => entry.text.trim().length > 0 || entry.attachments.length > 0),
     [queued],
   );
+
+  const serializedAttachments = useMemo(() => serializeAttachments(attachments), [attachments]);
+  const hasComposerContent = input.trim().length > 0 || attachments.length > 0;
+
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      if (!projectSlug.trim()) {
+        toast.error(t("assistant.composer.attachmentsUnavailable"));
+        return;
+      }
+
+      for (const file of files) {
+        try {
+          validateAttachmentFile(file);
+          setUploadingAttachment(true);
+          const uploaded = await uploadAssistantAttachment(projectSlug, file);
+          const attachment = createAttachmentPreview(file, uploaded);
+          const inlineText = await maybeReadInlineFileText(file);
+          setAttachments((current) => [...current, attachment]);
+          if (inlineText && attachment.type !== "audio" && attachment.path) {
+            setFileTexts((current) => ({ ...current, [attachment.path]: inlineText }));
+          }
+        } catch (cause) {
+          toast.error(cause instanceof Error ? cause.message : t("assistant.composer.uploadFailed"));
+        } finally {
+          setUploadingAttachment(false);
+        }
+      }
+    },
+    [projectSlug, t],
+  );
+
+  function removeAttachment(id: string) {
+    setAttachments((current) => {
+      const target = current.find((attachment) => attachment.id === id);
+      if (target) {
+        revokeAttachmentPreviews([target]);
+        if (target.type !== "audio" && target.path) {
+          setFileTexts((texts) => {
+            const next = { ...texts };
+            delete next[target.path];
+            return next;
+          });
+        }
+      }
+      return current.filter((attachment) => attachment.id !== id);
+    });
+  }
+
+  function clearComposerAttachments() {
+    revokeAttachmentPreviews(attachments);
+    setAttachments([]);
+    setFileTexts((current) => {
+      const next = { ...current };
+      for (const attachment of attachments) {
+        if (attachment.type !== "audio" && attachment.path) delete next[attachment.path];
+      }
+      return next;
+    });
+  }
+
+  function guidanceFromComposer(text: string): string {
+    return enrichGuidanceWithAttachments(text, serializedAttachments, projectSlug, fileTexts);
+  }
+
+  function guidanceFromQueued(entry: QueuedGuidanceItem): string {
+    return enrichGuidanceWithAttachments(entry.text, entry.attachments, projectSlug, entry.fileTexts);
+  }
 
   useEffect(() => {
     if (!seedMessage?.trim()) return;
@@ -196,19 +302,71 @@ export function ExecutionControlComposer({
   function combinedGuidance(): string {
     const parsed = parseSlashCommand(input, t);
     const typed = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
-    return [...queuedGuidance, typed].filter((entry) => entry.length > 0).join("\n\n");
+    const parts = [
+      ...queuedGuidance.map((entry) => guidanceFromQueued(entry)),
+      guidanceFromComposer(typed),
+    ].filter((entry) => entry.length > 0);
+    return parts.join("\n\n");
   }
 
   function enqueueGuidance() {
     const parsed = parseSlashCommand(input, t);
     const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
-    if (!text) return;
-    setQueued((current) => [...current, text]);
+    if (!text && attachments.length === 0) return;
+    setQueued((current) => [
+      ...current,
+      {
+        text,
+        attachments: serializedAttachments,
+        fileTexts: { ...fileTexts },
+      },
+    ]);
     setInput("");
+    clearComposerAttachments();
   }
 
   function removeQueued(index: number) {
     setQueued((current) => current.filter((_, i) => i !== index));
+  }
+
+  async function handleFilePick(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    await uploadFiles(files);
+  }
+
+  function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const files = extractFilesFromClipboard(event);
+    if (files.length === 0) return;
+    event.preventDefault();
+    void uploadFiles(files);
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLFormElement>) {
+    if (!eventHasFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setDragActive(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLFormElement>) {
+    if (!eventHasFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLFormElement>) {
+    if (!eventHasFiles(event)) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragActive(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLFormElement>) {
+    if (!eventHasFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setDragActive(false);
+    void uploadFiles(Array.from(event.dataTransfer.files ?? []));
   }
 
   async function runDispatch(action: "resume" | "restart" | "hard_reset" | "stop") {
@@ -231,6 +389,7 @@ export function ExecutionControlComposer({
       if (action !== "stop") {
         setInput("");
         setQueued([]);
+        clearComposerAttachments();
       }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : t("issue.agent.dispatchFailed");
@@ -245,9 +404,10 @@ export function ExecutionControlComposer({
   function submitSteer() {
     const parsed = parseSlashCommand(input, t);
     const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
-    if (!text) return;
-    onSteer(text);
+    if (!text && attachments.length === 0) return;
+    onSteer({ message: text, attachments: serializedAttachments });
     setInput("");
+    clearComposerAttachments();
   }
 
   // Single entry point for Enter / the send button: steer a live turn, queue
@@ -275,10 +435,10 @@ export function ExecutionControlComposer({
     submitComposer();
   }
 
-  const controlsDisabled = dispatchPending !== null;
+  const controlsDisabled = dispatchPending !== null || uploadingAttachment;
   const sendDisabled =
     controlsDisabled ||
-    !input.trim() ||
+    !hasComposerContent ||
     (canSteer && (!sessionConnected || steerPending));
   const primaryDisabled = controlsDisabled || (!agentRunActive && !canResume);
 
@@ -353,10 +513,19 @@ export function ExecutionControlComposer({
           <ul className="mt-2 flex flex-col gap-1.5">
             {queuedGuidance.map((entry, index) => (
               <li
-                key={`${index}-${entry}`}
+                key={`${index}-${entry.text}`}
                 className="flex items-start justify-between gap-2 rounded-md bg-background/70 px-2 py-1.5 text-xs"
               >
-                <span className="min-w-0 whitespace-pre-wrap break-words text-foreground/90">{entry}</span>
+                <div className="min-w-0 space-y-1">
+                  {entry.text ? (
+                    <span className="block whitespace-pre-wrap break-words text-foreground/90">{entry.text}</span>
+                  ) : null}
+                  {entry.attachments.length > 0 ? (
+                    <span className="block text-muted-foreground">
+                      {t("issue.agent.queuedAttachments", { count: entry.attachments.length })}
+                    </span>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   aria-label={t("issue.agent.removeQueuedAria")}
@@ -373,11 +542,37 @@ export function ExecutionControlComposer({
         </div>
       ) : null}
 
-      <form className="mt-3 space-y-3" onSubmit={handleSubmit}>
+      <form
+        className="relative mt-3 space-y-3"
+        onSubmit={handleSubmit}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {dragActive ? (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/85 text-sm font-medium text-primary">
+            {t("assistant.composer.dropFiles")}
+          </div>
+        ) : null}
+
+        {attachments.length > 0 ? (
+          <div className="flex flex-wrap gap-2 rounded-lg border border-border/60 bg-muted/20 p-2">
+            {attachments.map((attachment) => (
+              <ComposerAttachmentChip
+                key={attachment.id}
+                attachment={attachment}
+                onRemove={() => removeAttachment(attachment.id)}
+              />
+            ))}
+          </div>
+        ) : null}
+
         <Textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={
             canSteer
               ? t("issue.agent.placeholderSteer")
@@ -394,6 +589,24 @@ export function ExecutionControlComposer({
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => void handleFilePick(event)}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={controlsDisabled}
+              aria-label={t("assistant.composer.attachFile")}
+              title={t("assistant.composer.attachFile")}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -495,6 +708,76 @@ export function ExecutionControlComposer({
         </DialogContent>
       </Dialog>
     </section>
+  );
+}
+
+function ComposerAttachmentChip({
+  attachment,
+  onRemove,
+}: {
+  attachment: AssistantAttachment;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+
+  if (attachment.type === "image") {
+    return (
+      <div className="group relative">
+        <img
+          src={attachment.previewUrl}
+          alt={attachment.name}
+          className="h-14 w-14 rounded-md border object-cover"
+        />
+        <button
+          type="button"
+          aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
+          onClick={onRemove}
+          className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
+
+  if (attachment.type === "file" && attachment.previewUrl && isVideoMediaType(attachment.mediaType)) {
+    return (
+      <div className="group relative">
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption -- composer preview has no captions */}
+        <video
+          src={attachment.previewUrl}
+          controls
+          playsInline
+          preload="metadata"
+          aria-label={attachment.name}
+          className="h-20 w-32 rounded-md border bg-black/5 object-contain"
+        />
+        <button
+          type="button"
+          aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
+          onClick={onRemove}
+          className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
+
+  const Icon = attachment.type === "audio" ? AudioLines : FileText;
+  return (
+    <div className="flex items-center gap-2 rounded-md border bg-background/80 px-2 py-1 text-xs">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="max-w-[10rem] truncate">{attachment.name}</span>
+      <button
+        type="button"
+        aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
+        onClick={onRemove}
+        className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
   );
 }
 

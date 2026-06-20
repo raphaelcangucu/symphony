@@ -170,6 +170,41 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     assert e2e.proof == %{"title" => "Student Groups"}
   end
 
+  test "parses labeled screenshot and video artifact refs", %{tmp_dir: ws} do
+    manifest =
+      valid_manifest()
+      |> update_in(["runs"], fn [unit, e2e] ->
+        [
+          unit,
+          Map.merge(e2e, %{
+            "screenshots" => [
+              %{
+                "path" => "artifacts/screens/home.png",
+                "label" => "long share dialog header real app",
+                "navigations" => ["http://localhost:4300/health", "http://localhost:4300/login"]
+              }
+            ],
+            "videos" => [
+              %{
+                "path" => "artifacts/videos/flow.webm",
+                "label" => "save group shares real app"
+              }
+            ]
+          })
+        ]
+      end)
+
+    write_manifest!(ws, manifest)
+    touch_artifacts!(ws)
+
+    assert {:ok, %{runs: [_unit, e2e]}} = Manifest.read(ws)
+    assert [%Manifest.ArtifactRef{path: "artifacts/screens/home.png", label: "long share dialog header real app", navigations: navs}] =
+             e2e.screenshots
+
+    assert navs == ["http://localhost:4300/health", "http://localhost:4300/login"]
+    assert [%Manifest.ArtifactRef{path: "artifacts/videos/flow.webm", label: "save group shares real app"}] = e2e.videos
+  end
+
   test "navigations defaults to [] and proof to %{} when absent", %{tmp_dir: ws} do
     write_manifest!(ws, valid_manifest())
     touch_artifacts!(ws)

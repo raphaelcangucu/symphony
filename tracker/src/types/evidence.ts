@@ -5,6 +5,12 @@ export interface EvidenceRunSummary {
   reason?: string;
 }
 
+export interface EvidenceArtifactRef {
+  path: string;
+  label?: string | null;
+  navigations?: string[];
+}
+
 export interface EvidenceRun {
   kind: "unit" | "e2e" | string;
   repo: string;
@@ -12,10 +18,13 @@ export interface EvidenceRun {
   status: "passed" | "failed" | string;
   summary?: EvidenceRunSummary | null;
   report?: string | null;
-  screenshots?: string[];
-  videos?: string[];
+  screenshots?: EvidenceArtifactRef[];
+  videos?: EvidenceArtifactRef[];
   trace?: string | null;
   duration_ms?: number | null;
+  blocked_reason?: string | null;
+  navigations?: string[];
+  proof?: Record<string, unknown> | null;
 }
 
 export interface EvidenceRecord {

@@ -10,10 +10,26 @@ import type { EvidenceRecord } from "@/types/evidence";
 import type { Issue } from "@/types/issue";
 
 vi.mock("@/components/shared/AttachmentVideo", () => ({
-  AttachmentVideo: ({ src, label }: { src: string; label: string }) => (
-    <div data-testid="attachment-video" data-src={src}>
+  AttachmentVideo: ({
+    src,
+    label,
+    description,
+  }: {
+    src: string;
+    label: string;
+    description?: string;
+  }) => (
+    <div data-testid="attachment-video" data-src={src} data-description={description ?? ""}>
       {label}
     </div>
+  ),
+}));
+
+vi.mock("@/components/issues/issue-detail/EvidenceTextViewer", () => ({
+  EvidenceTextViewerTrigger: ({ label, url }: { label: string; url: string }) => (
+    <button data-testid="evidence-text-trigger" data-url={url} type="button">
+      {label}
+    </button>
   ),
 }));
 
@@ -200,7 +216,7 @@ describe("EvidenceTab", () => {
     confirmSpy.mockRestore();
   });
 
-  it("renders run rows, screenshots and videos for a record", () => {
+  it("renders run sections, screenshots, videos, and text report triggers", () => {
     renderTab(
       <EvidenceTab
         {...baseProps}
@@ -225,9 +241,22 @@ describe("EvidenceTab", () => {
                 status: "passed",
                 summary: { total: 1, passed: 1, failed: 0 },
                 report: null,
-                screenshots: ["artifacts/screens/home.png"],
-                videos: ["artifacts/videos/flow.webm"],
+                screenshots: [
+                  {
+                    path: "artifacts/screens/home.png",
+                    label: "Home page flow",
+                    navigations: ["http://localhost:4302/home"],
+                  },
+                ],
+                videos: [
+                  {
+                    path: "artifacts/videos/flow.webm",
+                    label: "Home page flow",
+                  },
+                ],
                 trace: "artifacts/trace.zip",
+                proof: { title: "Home page flow" },
+                navigations: ["http://localhost:4302/home"],
               },
             ],
           }),
@@ -235,9 +264,10 @@ describe("EvidenceTab", () => {
       />,
     );
 
-    expect(screen.getByText("unit")).toBeInTheDocument();
-    expect(screen.getByText("e2e")).toBeInTheDocument();
-    expect(screen.getByText("npm test")).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.evidence.tab.runSection.unitTitle", { repo: "frontend" }))).toBeInTheDocument();
+    expect(screen.getByText(/Teste end-to-end — frontend/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Home page flow/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("npm test").length).toBeGreaterThan(0);
     expect(screen.getByText(i18n.t("issue.evidence.tab.runSummary", { passed: 3, total: 3, failed: 0 }))).toBeInTheDocument();
     expect(screen.getByText(i18n.t("issue.evidence.tab.uiChange"))).toBeInTheDocument();
 
@@ -245,15 +275,20 @@ describe("EvidenceTab", () => {
     expect(image.getAttribute("src")).toContain(
       "/projects/advising/issues/CDE-1131/evidence/20260610-1/artifacts/artifacts/screens/home.png",
     );
-    expect(image).toHaveAttribute("alt", "home.png");
+    expect(image).toHaveAttribute("alt", "/home — Home page flow");
 
     const video = screen.getByTestId("attachment-video");
     expect(video.getAttribute("data-src")).toContain("artifacts/videos/flow.webm");
-    expect(video).toHaveTextContent("flow.webm");
+    expect(video.getAttribute("data-description")).toBe("");
+    expect(screen.getByText("flow.webm")).toBeInTheDocument();
 
-    const traceLink = screen.getByRole("link", {
-      name: i18n.t("issue.evidence.tab.traceLink", { kind: "e2e", repo: "frontend" }),
-    });
+    const reportTrigger = screen.getByTestId("evidence-text-trigger");
+    expect(reportTrigger).toHaveTextContent(
+      i18n.t("issue.evidence.tab.reportLink", { kind: "unit", repo: "frontend" }),
+    );
+    expect(reportTrigger.getAttribute("data-url")).toContain("artifacts/unit.txt");
+
+    const traceLink = screen.getByRole("link", { name: /trace e2e \(frontend\)/i });
     expect(traceLink.getAttribute("href")).toContain("artifacts/trace.zip");
   });
 

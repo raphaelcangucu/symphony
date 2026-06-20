@@ -1,4 +1,4 @@
-import { ClipboardCheck, RefreshCw, Trash2 } from "lucide-react";
+import { ClipboardCheck, ExternalLink, RefreshCw, Trash2 } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,6 +7,7 @@ import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { CommitEvidenceSection } from "@/components/issues/issue-detail/CommitEvidenceSection";
 import { EvidenceStatusPill } from "@/components/issues/issue-detail/EvidenceStatusPill";
+import { EvidenceTextViewerTrigger } from "@/components/issues/issue-detail/EvidenceTextViewer";
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,17 @@ import {
   type EvidenceAttention,
 } from "@/lib/evidenceStatus";
 import {
+  artifactCaption,
+  artifactDisplayTitle,
+  artifactIntent,
+  artifactNavigations,
+  isExternalArtifact,
+  isPreviewableTextArtifact,
+  runNavigations,
+  runObjective,
+  runProofText,
+} from "@/lib/evidenceArtifacts";
+import {
   clearFailedIssueEvidence,
   clearIssueEvidence,
   deleteEvidenceRun,
@@ -24,7 +36,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { WorkflowTrackerConfig } from "@/lib/workflowTracker";
 import type { CommitEvidenceSummary, CommitEvidenceWorkspace } from "@/types/commitEvidence";
-import type { EvidenceRecord, EvidenceRun } from "@/types/evidence";
+import type { EvidenceArtifactRef, EvidenceRecord, EvidenceRun } from "@/types/evidence";
 import type { Issue } from "@/types/issue";
 
 interface EvidenceTabProps {
@@ -210,11 +222,8 @@ function EvidenceCard({
   const artifactUrl = (relative: string) =>
     evidenceArtifactUrl(projectSlug, identifier, record.runId, relative);
 
-  const screenshots = record.runs.flatMap((run) => run.screenshots ?? []);
-  const videos = record.runs.flatMap((run) => run.videos ?? []);
-
   return (
-    <div className="space-y-3 rounded-lg border p-3" data-testid={`evidence-${record.runId}`}>
+    <div className="space-y-4 rounded-lg border p-3" data-testid={`evidence-${record.runId}`}>
       <div className="flex flex-wrap items-center gap-2">
         <EvidenceStatusPill status={record.status} />
         <span className="font-mono text-xs text-muted-foreground">{record.runId}</span>
@@ -238,117 +247,294 @@ function EvidenceCard({
       </div>
 
       {record.runs.length > 0 ? (
-        <table className="w-full text-left text-xs">
-          <thead className="text-muted-foreground">
-            <tr>
-              <th className="py-1 pr-2 font-medium">{t("issue.evidence.tab.columns.kind")}</th>
-              <th className="py-1 pr-2 font-medium">{t("issue.evidence.tab.columns.repo")}</th>
-              <th className="py-1 pr-2 font-medium">{t("issue.evidence.tab.columns.command")}</th>
-              <th className="py-1 pr-2 font-medium">{t("issue.evidence.tab.columns.status")}</th>
-              <th className="py-1 font-medium">{t("issue.evidence.tab.columns.summary")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {record.runs.map((run, index) => (
-              <tr className="border-t" key={`${run.kind}-${run.repo}-${index}`}>
-                <td className="py-1.5 pr-2">{run.kind}</td>
-                <td className="py-1.5 pr-2">{run.repo}</td>
-                <td className="py-1.5 pr-2">
-                  <code className="rounded bg-muted px-1 py-0.5">{run.command}</code>
-                </td>
-                <td className="py-1.5 pr-2">
-                  <EvidenceStatusPill status={run.status} />
-                </td>
-                <td className="py-1.5">{summaryText(run, t)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : null}
-
-      {screenshots.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {t("issue.evidence.tab.screenshots")}
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {screenshots.map((relative) => {
-            const filename = relative.split("/").pop() ?? relative;
-            return (
-              <AttachmentImage
-                key={relative}
-                alt={filename}
-                layout="thumbnail"
-                showCaption
-                src={artifactUrl(relative)}
-              />
-            );
-          })}
-          </div>
-        </div>
-      ) : null}
-
-      {videos.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {t("issue.evidence.tab.videos")}
-          </p>
-          <div className="space-y-3">
-          {videos.map((relative) => (
-            <AttachmentVideo
-              key={relative}
-              className="w-full rounded border"
-              label={relative.split("/").pop() ?? relative}
-              src={artifactUrl(relative)}
+        <div className="space-y-4">
+          {record.runs.map((run, index) => (
+            <EvidenceRunSection
+              artifactUrl={artifactUrl}
+              index={index}
+              key={`${run.kind}-${run.repo}-${index}`}
+              run={run}
             />
           ))}
-          </div>
         </div>
       ) : null}
-
-      <ArtifactLinks artifactUrl={artifactUrl} runs={record.runs} t={t} />
     </div>
   );
 }
 
-function ArtifactLinks({
-  runs,
+function VisualArtifactCard({
+  run,
+  ref: artifactRef,
   artifactUrl,
-  t,
+  type,
 }: {
-  runs: EvidenceRun[];
-  artifactUrl: (relative: string) => string;
-  t: TFunction;
+  run: EvidenceRun;
+  ref: EvidenceArtifactRef;
+  artifactUrl: string;
+  type: "screenshot" | "video";
 }) {
-  const links = runs.flatMap((run) =>
-    [
-      run.report ? { label: t("issue.evidence.tab.reportLink", { kind: run.kind, repo: run.repo }), relative: run.report } : null,
-      run.trace ? { label: t("issue.evidence.tab.traceLink", { kind: run.kind, repo: run.repo }), relative: run.trace } : null,
-    ].filter((link): link is { label: string; relative: string } => link !== null),
-  );
-
-  if (links.length === 0) return null;
+  const { t } = useTranslation();
+  const intent = artifactIntent(run, artifactRef);
+  const navigations = artifactNavigations(run, artifactRef);
+  const filename = artifactCaption(run, artifactRef);
+  const alt = artifactDisplayTitle(run, artifactRef);
 
   return (
-    <div className="flex flex-wrap gap-3 text-xs">
-      {links.map((link) => (
-        <a
-          className="text-primary underline-offset-2 hover:underline"
-          href={artifactUrl(link.relative)}
-          key={`${link.label}-${link.relative}`}
-          rel="noreferrer"
-          target="_blank"
-        >
-          {link.label}
-        </a>
-      ))}
-    </div>
+    <article className="space-y-2 rounded-md border border-border/50 bg-background/60 p-2.5">
+      <div className="space-y-1">
+        <p className="text-sm font-medium leading-snug">{intent}</p>
+        {navigations ? (
+          <p className="font-mono text-[11px] leading-relaxed text-muted-foreground">{navigations}</p>
+        ) : null}
+        <p className="truncate text-[11px] text-muted-foreground" title={filename}>
+          {filename}
+        </p>
+      </div>
+
+      {type === "screenshot" ? (
+        <AttachmentImage alt={alt} layout="thumbnail" showCaption={false} src={artifactUrl} />
+      ) : (
+        <AttachmentVideo
+          className="w-full rounded border"
+          description={undefined}
+          label={t("issue.evidence.tab.artifactVideoAria", { name: intent })}
+          src={artifactUrl}
+        />
+      )}
+    </article>
   );
+}
+
+function EvidenceRunSection({
+  run,
+  index,
+  artifactUrl,
+}: {
+  run: EvidenceRun;
+  index: number;
+  artifactUrl: (relative: string) => string;
+}) {
+  const { t } = useTranslation();
+  const objective = runObjective(run);
+  const navigations = runNavigations(run);
+  const screenshots = run.screenshots ?? [];
+  const videos = run.videos ?? [];
+  const hasVisuals = screenshots.length > 0 || videos.length > 0;
+  const hasMultipleVisuals = screenshots.length + videos.length > 1;
+  const artifacts = collectRunArtifacts(run);
+
+  return (
+    <section className="space-y-3 rounded-md border border-border/60 bg-muted/10 p-3">
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="text-sm font-medium">
+            {runSectionTitle(run, t)}
+          </h4>
+          <EvidenceStatusPill status={run.status} />
+        </div>
+
+        {objective && !hasMultipleVisuals ? (
+          <p className="text-sm text-foreground/90">
+            <span className="font-medium text-muted-foreground">
+              {t("issue.evidence.tab.runSection.objective")}:{" "}
+            </span>
+            {objective}
+          </p>
+        ) : null}
+
+        <p className="text-xs text-muted-foreground">
+          <span className="font-medium">{t("issue.evidence.tab.runSection.command")}: </span>
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">{run.command}</code>
+        </p>
+
+        {run.blocked_reason ? (
+          <p className="text-xs text-amber-800 dark:text-amber-200">
+            <span className="font-medium">{t("issue.evidence.tab.runSection.blockedReason")}: </span>
+            {run.blocked_reason}
+          </p>
+        ) : null}
+
+        {navigations.length > 0 && !hasMultipleVisuals ? (
+          <div className="text-xs text-muted-foreground">
+            <span className="font-medium">{t("issue.evidence.tab.runSection.navigations")}: </span>
+            <span className="font-mono">{navigations.join(" → ")}</span>
+          </div>
+        ) : null}
+
+        <p className="text-xs text-muted-foreground">{summaryText(run, t)}</p>
+      </div>
+
+      {hasVisuals ? (
+        <div className="space-y-3">
+          {screenshots.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("issue.evidence.tab.screenshots")}
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {screenshots.map((ref) => (
+                  <VisualArtifactCard
+                    artifactUrl={artifactUrl(ref.path)}
+                    key={`${index}-${ref.path}`}
+                    ref={ref}
+                    run={run}
+                    type="screenshot"
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {videos.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("issue.evidence.tab.videos")}
+              </p>
+              <div className="space-y-4">
+                {videos.map((ref) => (
+                  <VisualArtifactCard
+                    artifactUrl={artifactUrl(ref.path)}
+                    key={`${index}-${ref.path}`}
+                    ref={ref}
+                    run={run}
+                    type="video"
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {artifacts.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {artifacts.map((artifact) => (
+            <RunArtifactLink
+              artifact={artifact}
+              artifactUrl={artifactUrl}
+              key={artifact.relative}
+              run={run}
+              t={t}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+interface RunArtifact {
+  relative: string;
+  title: string;
+  kind: "text" | "external";
+  artifactKind: "report" | "trace";
+}
+
+function collectRunArtifacts(run: EvidenceRun): RunArtifact[] {
+  const artifacts: RunArtifact[] = [];
+
+  if (run.report) {
+    artifacts.push({
+      relative: run.report,
+      title: run.report.split("/").pop() ?? run.report,
+      artifactKind: "report",
+      kind: isPreviewableTextArtifact(run.report) ? "text" : "external",
+    });
+  }
+
+  if (run.trace) {
+    artifacts.push({
+      relative: run.trace,
+      title: run.trace.split("/").pop() ?? run.trace,
+      artifactKind: "trace",
+      kind: isExternalArtifact(run.trace) ? "external" : "text",
+    });
+  }
+
+  return artifacts;
+}
+
+function RunArtifactLink({
+  artifact,
+  artifactUrl,
+  run,
+  t,
+}: {
+  artifact: RunArtifact;
+  artifactUrl: (relative: string) => string;
+  run: EvidenceRun;
+  t: TFunction;
+}) {
+  const url = artifactUrl(artifact.relative);
+  const label =
+    artifact.artifactKind === "report"
+      ? t("issue.evidence.tab.reportLink", { kind: run.kind, repo: run.repo })
+      : t("issue.evidence.tab.traceLink", { kind: run.kind, repo: run.repo });
+
+  if (artifact.kind === "text") {
+    return (
+      <EvidenceTextViewerTrigger
+        label={label}
+        title={artifact.title}
+        url={url}
+      />
+    );
+  }
+
+  return (
+    <a
+      className="inline-flex max-w-full items-center gap-1 rounded-md border bg-muted/30 px-2 py-1 text-xs text-primary transition hover:bg-muted/60"
+      href={url}
+      rel="noreferrer"
+      target="_blank"
+    >
+      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">{label}</span>
+      <span className="sr-only">{t("issue.evidence.tab.openExternal")}</span>
+    </a>
+  );
+}
+
+function runSectionTitle(run: EvidenceRun, t: TFunction): string {
+  const scope = runScopeLabel(run, t);
+  const scopeSuffix = scope ? ` (${scope})` : "";
+
+  if (run.kind === "e2e") {
+    return `${t("issue.evidence.tab.runSection.e2eTitle", { repo: run.repo })}${scopeSuffix}`;
+  }
+
+  if (run.kind === "unit") {
+    return `${t("issue.evidence.tab.runSection.unitTitle", { repo: run.repo })}${scopeSuffix}`;
+  }
+
+  return `${t("issue.evidence.tab.runSection.genericTitle", { kind: run.kind, repo: run.repo })}${scopeSuffix}`;
+}
+
+function runScopeLabel(run: EvidenceRun, t: TFunction): string | null {
+  const proofText = runProofText(run);
+  if (proofText) return proofText;
+
+  const quoted = run.command.match(/['"]([^'"]+\.(?:test|spec)\.[a-z]+)['"]/i);
+  if (quoted?.[1]) return quoted[1].split("/").slice(-2).join("/");
+
+  const playwrightSpec = [...run.command.matchAll(/(\S+\.spec\.[a-z]+)/gi)].map((match) => match[1]);
+  if (playwrightSpec.length === 1) {
+    return playwrightSpec[0]!.split("/").slice(-1)[0] ?? playwrightSpec[0]!;
+  }
+
+  if (playwrightSpec.length > 1) {
+    return t("issue.evidence.tab.runSection.multipleSpecs", { count: playwrightSpec.length });
+  }
+
+  const testPath = run.command.match(/\b(?:tests?\/\S+|components\/\S+\.test\.\w+)\b/i);
+  if (testPath?.[0]) return testPath[0].split("/").slice(-2).join("/");
+
+  return null;
 }
 
 function summaryText(run: EvidenceRun, t: TFunction): string {
   const summary = run.summary;
-  if (!summary) return "-";
+  if (!summary) return t("issue.evidence.tab.runSection.noSummary");
 
   if (typeof summary === "object" && "reason" in summary) {
     const reason = (summary as { reason?: unknown }).reason;
@@ -367,7 +553,7 @@ function summaryText(run: EvidenceRun, t: TFunction): string {
     });
   }
 
-  return "-";
+  return t("issue.evidence.tab.runSection.noSummary");
 }
 
 export type { EvidenceAttention };

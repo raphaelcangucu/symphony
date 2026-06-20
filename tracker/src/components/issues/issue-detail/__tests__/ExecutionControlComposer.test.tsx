@@ -13,8 +13,11 @@ vi.mock("@/services/issueDispatch", () => ({
   dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
 }));
 
+const uploadAssistantAttachmentMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/services/assistant", () => ({
   fetchAssistantCatalogBundle: (...args: unknown[]) => fetchAssistantCatalogBundleMock(...args),
+  uploadAssistantAttachment: (...args: unknown[]) => uploadAssistantAttachmentMock(...args),
 }));
 
 const issue = {
@@ -65,6 +68,7 @@ const interruptedExecution = makeExecution({
 describe("ExecutionControlComposer", () => {
   beforeEach(() => {
     dispatchIssueAgentMock.mockReset();
+    uploadAssistantAttachmentMock.mockReset();
     fetchAssistantCatalogBundleMock.mockResolvedValue({
       agents: [
         {
@@ -96,7 +100,10 @@ describe("ExecutionControlComposer", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^steer$/i }));
 
-    expect(onSteer).toHaveBeenCalledWith("prefer the simpler fix");
+    expect(onSteer).toHaveBeenCalledWith({
+      message: "prefer the simpler fix",
+      attachments: [],
+    });
   });
 
   it("resumes a stalled run", async () => {
@@ -301,6 +308,49 @@ describe("ExecutionControlComposer", () => {
       ),
     );
     expect(onIssueUpdated).toHaveBeenCalledWith(issue);
+  });
+
+  it("steers with pasted image attachments", async () => {
+    uploadAssistantAttachmentMock.mockResolvedValue({
+      type: "image",
+      name: "shot.png",
+      mediaType: "image/png",
+      path: "uploads/shot.png",
+    });
+
+    const onSteer = vi.fn();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "live" })}
+        sessionConnected
+        canSteer
+        onSteer={onSteer}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText(/focus on the failing test/i);
+    const file = new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" });
+
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+        files: [file],
+      },
+    });
+
+    await waitFor(() => expect(screen.getByRole("img", { name: "shot.png" })).toBeInTheDocument());
+
+    fireEvent.change(textarea, { target: { value: "/infer check this screenshot" } });
+    fireEvent.click(screen.getByRole("button", { name: /^steer$/i }));
+
+    expect(onSteer).toHaveBeenCalledWith({
+      message: "check this screenshot",
+      attachments: [
+        expect.objectContaining({ type: "image", name: "shot.png", path: "uploads/shot.png" }),
+      ],
+    });
   });
 
   it("shows a friendly steer error when no turn is steerable", () => {

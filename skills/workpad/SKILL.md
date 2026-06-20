@@ -61,6 +61,12 @@ tracker (Jira / Linear / GitHub) in the background — so they work the same way
 regardless of which tracker backs the project. Do NOT reach for
 `linear_graphql` on a non-Linear (e.g. Jira) project, and do not hunt for a CLI.
 
+**Authoring vs execution:** The issue authoring assistant (`/assistant/issue/:id`)
+updates the issue **description** via `update_issue` only when plan/AC are stable
+or a discovery changes approach — not during open-ended exploration. This skill
+applies to the **coding agent** after dispatch: use the workpad comment for plan,
+acceptance criteria, validation, and outcome — not the issue body.
+
 - **Create** the workpad with `add_comment` (body must start with
   `## Codex Workpad`). Keep the returned comment `id`.
 - **Update in place**: call `list_comments` to find the existing

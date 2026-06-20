@@ -1126,10 +1126,13 @@ defmodule SymphonyElixir.Orchestrator do
 
     screenshots =
       runs
-      |> Enum.flat_map(&List.wrap(&1["screenshots"]))
+      |> Enum.flat_map(fn run -> List.wrap(run["screenshots"]) end)
       |> Enum.take(4)
-      |> Enum.map_join("\n", fn rel ->
-        "![#{markdown_image_alt(rel)}](#{evidence_artifact_url(record, issue, rel, base_url)})"
+      |> Enum.map_join("\n", fn entry ->
+        path = SymphonyElixir.Evidence.Manifest.artifact_path(entry)
+        alt = SymphonyElixir.Evidence.Manifest.artifact_label(entry) || path
+
+        "![#{markdown_image_alt(alt)}](#{evidence_artifact_url(record, issue, path, base_url)})"
       end)
 
     ui_note = if record.ui_change, do: " (UI change: e2e + visual capture required)", else: ""
@@ -1164,9 +1167,8 @@ defmodule SymphonyElixir.Orchestrator do
     "#{base_url}/api/tracker/v1/projects/#{issue.project_slug}/issues/#{issue.identifier}/evidence/#{record.run_id}/artifacts/#{encoded_rel}"
   end
 
-  defp markdown_image_alt(rel) do
-    rel
-    |> Path.basename()
+  defp markdown_image_alt(label) when is_binary(label) do
+    label
     |> String.replace("\\", "\\\\")
     |> String.replace("[", "\\[")
     |> String.replace("]", "\\]")
@@ -1729,15 +1731,16 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  @spec steer(String.t(), String.t(), pid() | nil) :: :ok | {:error, term()}
-  def steer(identifier, message, reply_to \\ nil) do
-    steer(__MODULE__, identifier, message, reply_to)
+  @spec steer(String.t(), String.t(), pid() | nil, keyword()) :: :ok | {:error, term()}
+  def steer(identifier, message, reply_to \\ nil, opts \\ []) do
+    steer(__MODULE__, identifier, message, reply_to, opts)
   end
 
-  @spec steer(GenServer.server(), String.t(), String.t(), pid() | nil) :: :ok | {:error, term()}
-  def steer(server, identifier, message, reply_to) do
+  @spec steer(GenServer.server(), String.t(), String.t(), pid() | nil, keyword()) ::
+          :ok | {:error, term()}
+  def steer(server, identifier, message, reply_to, opts \\ []) do
     if Process.whereis(server) do
-      GenServer.call(server, {:steer, identifier, message, reply_to})
+      GenServer.call(server, {:steer, identifier, message, reply_to, opts})
     else
       {:error, :unavailable}
     end
@@ -1897,19 +1900,37 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  def handle_call({:steer, identifier, message, reply_to}, _from, state) do
+  def handle_call({:steer, identifier, message, reply_to, opts}, _from, state) when is_list(opts) do
+    alias SymphonyElixir.Assistant.Payload
+
     trimmed = if is_binary(message), do: String.trim(message), else: ""
+    raw_attachments = Keyword.get(opts, :attachments, [])
+    project_slug = Keyword.get(opts, :project_slug, "")
 
-    case find_running_by_identifier(state, identifier) do
-      %{pid: pid} when is_pid(pid) and trimmed != "" ->
-        send(pid, {:codex_steer, [%{"type" => "text", "text" => trimmed}], reply_to})
-        {:reply, :ok, state}
+    normalized =
+      if is_binary(project_slug) and project_slug != "" do
+        Payload.normalize_attachments(raw_attachments, project_slug)
+      else
+        []
+      end
 
-      %{pid: pid} when is_pid(pid) ->
+    enriched = Payload.enrich_message(trimmed, normalized)
+    input = Payload.turn_input_items(enriched, normalized)
+
+    cond do
+      find_running_by_identifier(state, identifier) == nil ->
+        {:reply, {:error, :ActiveTurnNotSteerable}, state}
+
+      enriched == "" and normalized == [] ->
         {:reply, {:error, :empty_message}, state}
 
-      _other ->
-        {:reply, {:error, :ActiveTurnNotSteerable}, state}
+      trimmed != "" and raw_attachments != [] and normalized == [] ->
+        {:reply, {:error, :attachment_processing_failed}, state}
+
+      true ->
+        %{pid: pid} = find_running_by_identifier(state, identifier)
+        send(pid, {:codex_steer, input, reply_to})
+        {:reply, :ok, state}
     end
   end
 

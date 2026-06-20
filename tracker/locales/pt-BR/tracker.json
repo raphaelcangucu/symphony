@@ -119,6 +119,7 @@
       "goalObjective": "Objetivo da meta",
       "sendGoalAria": "Enviar meta no resume ou restart",
       "queuedGuidance": "Orientação enfileirada · enviada no próximo resume",
+      "queuedAttachments": "{{count}} anexo(s)",
       "removeQueuedAria": "Remover orientação enfileirada",
       "remove": "Remover",
       "placeholderSteer": "/infer foque no teste que falhou primeiro",
@@ -570,7 +571,26 @@
         "videos": "Vídeos",
         "reportLink": "relatório {{kind}} ({{repo}})",
         "traceLink": "trace {{kind}} ({{repo}})",
-        "runSummary": "{{passed}}/{{total}} passou, {{failed}} falhou"
+        "runSummary": "{{passed}}/{{total}} passou, {{failed}} falhou",
+        "openExternal": "Abrir em nova aba",
+        "runSection": {
+          "e2eTitle": "Teste end-to-end — {{repo}}",
+          "unitTitle": "Testes unitários — {{repo}}",
+          "genericTitle": "{{kind}} — {{repo}}",
+          "objective": "O que foi testado",
+          "command": "Comando",
+          "blockedReason": "Bloqueado porque",
+          "navigations": "Páginas visitadas",
+          "noSummary": "Sem resumo de resultado",
+          "multipleSpecs": "{{count}} specs"
+        },
+        "artifactVideoAria": "Vídeo de evidência: {{name}}",
+        "textViewer": {
+          "loading": "Carregando arquivo…",
+          "loadError": "Não foi possível carregar este arquivo.",
+          "retry": "Tentar novamente",
+          "openAria": "Ver {{name}}"
+        }
       },
       "errors": {
         "loadFailed": "Não foi possível carregar a evidência."
