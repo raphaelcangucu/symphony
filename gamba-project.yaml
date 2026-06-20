@@ -203,6 +203,7 @@ setup:
       active_states:
         - Todo
         - In Progress
+        - Human Review
         - Rework
         - Merging
       dispatch_states:
