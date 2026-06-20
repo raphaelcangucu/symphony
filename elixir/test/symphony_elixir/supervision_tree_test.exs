@@ -18,12 +18,18 @@ defmodule SymphonyElixir.SupervisionTreeTest do
     assert {Task.Supervisor, name: SymphonyElixir.TaskSupervisor} in SharedSupervisor.child_specs()
   end
 
-  test "orchestrator subtree owns the Codex TaskSupervisor, not the shared one" do
-    specs = OrchestratorSupervisor.child_specs()
-    ids = ids(specs)
-    assert SymphonyElixir.Orchestrator in ids
-    assert {Task.Supervisor, name: SymphonyElixir.Orchestrator.TaskSupervisor} in specs
-    refute {Task.Supervisor, name: SymphonyElixir.TaskSupervisor} in specs
+  test "orchestrator subtree pairs the Orchestrator and its Codex TaskSupervisor" do
+    assert SymphonyElixir.Orchestrator.RunnerSupervisor in ids(OrchestratorSupervisor.child_specs())
+
+    runner_specs = SymphonyElixir.Orchestrator.RunnerSupervisor.child_specs()
+    assert SymphonyElixir.Orchestrator in ids(runner_specs)
+    assert {Task.Supervisor, name: SymphonyElixir.Orchestrator.TaskSupervisor} in runner_specs
+    refute {Task.Supervisor, name: SymphonyElixir.Orchestrator.TaskSupervisor} in OrchestratorSupervisor.child_specs()
+  end
+
+  test "runner subtree restarts the Orchestrator and TaskSupervisor together (one_for_all)" do
+    assert {:ok, {flags, _children}} = SymphonyElixir.Orchestrator.RunnerSupervisor.init([])
+    assert flags.strategy == :one_for_all
   end
 
   test "web subtree owns the HTTP server and dashboard only" do

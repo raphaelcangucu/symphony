@@ -21,8 +21,7 @@ defmodule SymphonyElixir.OrchestratorSupervisor do
   @spec child_specs() :: [Supervisor.child_spec() | {module(), term()} | module()]
   def child_specs do
     [
-      {Task.Supervisor, name: SymphonyElixir.Orchestrator.TaskSupervisor},
-      SymphonyElixir.Orchestrator,
+      SymphonyElixir.Orchestrator.RunnerSupervisor,
       SymphonyElixir.DevServer.Manager,
       SymphonyElixir.DevServer.Reconciler,
       SymphonyElixir.PullRequestMonitor.Reconciler,
