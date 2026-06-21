@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Assistant.CodexSession do
   @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
 
-  alias SymphonyElixir.Assistant.{History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolCallPresenter, ToolExecutor}
+  alias SymphonyElixir.Assistant.{FileActivityPresenter, History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolCallPresenter, ToolExecutor}
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.CodingAgent, as: RootCodingAgent
   alias SymphonyElixir.Config
@@ -765,8 +765,22 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   defp relay_codex_event(message, collector, opts) when is_map(message) do
     payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
     method = Map.get(payload, "method") || Map.get(payload, :method)
+    file_activity = FileActivityPresenter.from_event(message)
 
     cond do
+      match?({:started, _}, file_activity) ->
+        {:started, tool_call} = file_activity
+        maybe_call(opts, :on_tool_call_started, tool_call)
+
+      match?({:completed, _}, file_activity) ->
+        {:completed, tool_call} = file_activity
+
+        Agent.update(collector, fn state ->
+          %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, Map.get(tool_call, :id), tool_call)}
+        end)
+
+        maybe_call(opts, :on_tool_call_completed, tool_call)
+
       method == "item/agentMessage/delta" ->
         case extract_delta(payload) do
           delta when is_binary(delta) and delta != "" ->
