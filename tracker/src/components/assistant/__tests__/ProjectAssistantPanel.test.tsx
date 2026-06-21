@@ -661,4 +661,28 @@ describe("ProjectAssistantPanel", () => {
 
     expect(onDocumentChanged).toHaveBeenCalledWith({ identifier: "MAC-1" });
   });
+
+  it("renders file-edit tool calls as a file-activity card and keeps other tools generic", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["assistant_completed"]).toEqual(expect.any(Function)));
+
+    channelHandlers["assistant_completed"]({
+      message: {
+        id: 42,
+        role: "assistant",
+        content: "Done.",
+        tool_calls: [
+          { name: "apply_patch", status: "complete", result: { paths: ["lib/foo.ex"], additions: 12, deletions: 3, diff: "@@\n+a" } },
+          { name: "list_issues", status: "complete", result: { issues: [] } },
+        ],
+      },
+    });
+
+    expect(await screen.findByText("lib/foo.ex")).toBeInTheDocument();
+    expect(screen.getByText("+12")).toBeInTheDocument();
+    expect(screen.getByText("−3")).toBeInTheDocument();
+    // Non-file tool call still uses the generic block.
+    expect(screen.getByText("List issues")).toBeInTheDocument();
+  });
 });

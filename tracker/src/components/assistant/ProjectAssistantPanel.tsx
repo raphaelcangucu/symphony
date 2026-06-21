@@ -29,6 +29,8 @@ import { useTranslation } from "react-i18next";
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
+import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
+import { FileActivityCard } from "@/components/assistant/FileActivityCard";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
@@ -1280,9 +1282,14 @@ function AssistantBubble({
         )}
         {message.toolCalls.length ? (
           <div className={cn("mt-3 space-y-2 border-t pt-2", isUser && "border-white/20")}>
-            {message.toolCalls.map((toolCall, index) => (
-              <ToolCallBlock view={assistantToolCallToView(toolCall)} key={`${toolCall.name}-${index}`} />
-            ))}
+            {message.toolCalls.map((toolCall, index) => {
+              const activity = fileActivityFromToolCall(toolCall);
+              return activity ? (
+                <FileActivityCard view={activity} key={`fa-${toolCall.name}-${index}`} />
+              ) : (
+                <ToolCallBlock view={assistantToolCallToView(toolCall)} key={`${toolCall.name}-${index}`} />
+              );
+            })}
           </div>
         ) : null}
       </article>
