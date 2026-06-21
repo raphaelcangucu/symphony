@@ -884,3 +884,187 @@ git commit -m "feat(assistant): add FileActivityPresenter for codex file ops"
 ```
 
 ---
+
+## Task 6: Relay Codex file ops through the chat channel
+
+Delegate to the presenter at the top of `relay_codex_event/3`; on a completed op, merge it into the collector (so it persists in the assistant message) and fire the existing tool-call callbacks (so it renders live and pushes via the channel). The pushed payload uses the already-wired `tool_call_started` / `tool_call_completed` channel events (`assistant_channel.ex:548-549`, `:999-1000`) — no channel changes.
+
+**Files:**
+- Modify: `elixir/lib/symphony_elixir/assistant/codex_session.ex` (alias at `:4`; `relay_codex_event/3` at `:765-767`)
+- Test: `tracker/src/services/__tests__/assistant.test.ts` (add a normalize test proving the structured fields survive the wire)
+
+- [ ] **Step 1: Add the alias**
+
+In `elixir/lib/symphony_elixir/assistant/codex_session.ex`, extend the assistant alias (`:4`):
+
+```elixir
+  alias SymphonyElixir.Assistant.{
+    FileActivityPresenter,
+    History,
+    IssueDocuments,
+    ProjectExploreWorkspace,
+    ThreadDocuments,
+    ToolCallPresenter,
+    ToolExecutor
+  }
+```
+
+- [ ] **Step 2: Delegate to the presenter in the relay**
+
+Replace the head of `relay_codex_event/3` (`:765-769`):
+
+```elixir
+  defp relay_codex_event(message, collector, opts) when is_map(message) do
+    payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
+    method = Map.get(payload, "method") || Map.get(payload, :method)
+
+    cond do
+      method == "item/agentMessage/delta" ->
+```
+
+with (insert the `file_activity` binding and two new `cond` clauses **before** the `item/agentMessage/delta` clause):
+
+```elixir
+  defp relay_codex_event(message, collector, opts) when is_map(message) do
+    payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
+    method = Map.get(payload, "method") || Map.get(payload, :method)
+    file_activity = FileActivityPresenter.from_event(message)
+
+    cond do
+      match?({:started, _}, file_activity) ->
+        {:started, tool_call} = file_activity
+        maybe_call(opts, :on_tool_call_started, tool_call)
+
+      match?({:completed, _}, file_activity) ->
+        {:completed, tool_call} = file_activity
+
+        Agent.update(collector, fn state ->
+          %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, Map.get(tool_call, :id), tool_call)}
+        end)
+
+        maybe_call(opts, :on_tool_call_completed, tool_call)
+
+      method == "item/agentMessage/delta" ->
+```
+
+(Leave the rest of the `cond` unchanged. The two new clauses sit at the top; everything from `item/agentMessage/delta` down is untouched.)
+
+- [ ] **Step 3: Run the existing Elixir suite for the session to confirm no regression**
+
+Run: `cd elixir && mix test test/symphony_elixir/assistant/codex_session_test.exs`
+Expected: PASS (existing tests unaffected; the new clauses return `:ignore`-fast for every non-file event).
+
+- [ ] **Step 4: Write the failing frontend normalize test**
+
+In `tracker/src/services/__tests__/assistant.test.ts`, add the import and a new describe block:
+
+```ts
+import { normalizeToolCall } from "@/services/assistant";
+
+describe("normalizeToolCall file activity", () => {
+  it("preserves apply_patch diff/counts/paths and command args over the wire", () => {
+    const edit = normalizeToolCall({
+      name: "apply_patch",
+      status: "complete",
+      arguments: { paths: ["lib/foo.ex"], file_count: 1 },
+      result: { diff: "@@\n+a", additions: 1, deletions: 0, paths: ["lib/foo.ex"] },
+    });
+    expect(edit.name).toBe("apply_patch");
+    expect(edit.result.diff).toBe("@@\n+a");
+    expect(edit.result.additions).toBe(1);
+    expect(edit.result.paths).toEqual(["lib/foo.ex"]);
+    expect(edit.arguments).toEqual({ paths: ["lib/foo.ex"], file_count: 1 });
+
+    const cmd = normalizeToolCall({
+      name: "shell",
+      status: "complete",
+      arguments: { command: "mix test" },
+      output: "1 passed",
+      result: { exit_code: 0 },
+    });
+    expect(cmd.arguments).toEqual({ command: "mix test" });
+    expect(cmd.output).toBe("1 passed");
+    expect(cmd.result.exit_code).toBe(0);
+  });
+});
+```
+
+- [ ] **Step 5: Run the normalize test**
+
+Run: `cd tracker && npm test -- src/services/__tests__/assistant.test.ts -t "file activity"`
+Expected: PASS (the existing `normalizeToolCall` already spreads unknown `result` keys and copies `arguments`/`output`, so this should pass immediately — it locks the data contract against future regressions).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add elixir/lib/symphony_elixir/assistant/codex_session.ex tracker/src/services/__tests__/assistant.test.ts
+git commit -m "feat(assistant): relay codex file ops as tool calls in the chat"
+```
+
+---
+
+## Task 7: Full gates, manual smoke, and docs
+
+**Files:**
+- Modify (if needed): `elixir/README.md` (one line under the assistant section noting file-activity cards)
+
+- [ ] **Step 1: Run the full frontend suite**
+
+Run: `cd tracker && npm test`
+Expected: PASS (all suites, including the new `fileActivity`, `FileActivityCard`, panel, and normalize tests).
+
+- [ ] **Step 2: Run the frontend type/lint build**
+
+Run: `cd tracker && npm run build`
+Expected: `tsc -b` and `vite build` succeed with no type errors.
+
+- [ ] **Step 3: Run the Elixir gate**
+
+Run: `cd elixir && make all`
+Expected: format check, lint, coverage, and dialyzer pass; `mix specs.check` passes (covered by `make all` or run separately).
+
+- [ ] **Step 4: Manual smoke (UI)**
+
+Start the dev serve, open `http://localhost:4000/tracker/projects/:project/assistant/issue/:id`, and prompt the assistant to read a file and make a small edit (e.g. "read README.md lines 1-20, then add a trailing newline"). Confirm:
+- A read renders as `Read README.md · L1–20`, expandable to the content.
+- An edit renders as `Edited <file> · +N −M`, expandable to a tinted diff.
+- A shell command renders as `Ran <command>`, expandable to output.
+- Non-file tool calls (e.g. `list_issues`) still render as the generic block.
+- Refreshing the page keeps the completed cards (persisted via `tool_calls`).
+
+If a card is missing or empty, capture the Codex event (`~/.codex/sessions/**/rollout-*.jsonl` or the app-server log) and adjust the `get/2` fallback key lists in `FileActivityPresenter` to match the real field names; re-run Task 5's tests.
+
+- [ ] **Step 5: Add a docs note (only if behavior is worth documenting)**
+
+In `elixir/README.md`, under the assistant section, add a short line:
+
+```markdown
+- Assistant file activity (Codex reads, edits, and shell commands) renders as
+  compact, expandable cards in the chat, surfaced by relaying Codex item events
+  through the existing tool-call pipeline.
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add elixir/README.md
+git commit -m "docs(assistant): note file-activity cards in the chat"
+```
+
+---
+
+## Self-Review
+
+**Spec coverage:**
+- §4 (relay command + file change) → Task 5 (presenter) + Task 6 (relay wiring). Reads need no backend (already MCP tool calls) → handled by Task 2/4.
+- §4.1 `turn/diff/updated` enrichment → intentionally deferred to Phase 2 (documented in the header note); per-item completion diff covers v1.
+- §5 (classifier + view model) → Task 2.
+- §6 (`FileActivityCard`) → Task 3; bubble wiring → Task 4.
+- §8 (i18n) → Task 1.
+- §9 (error handling/edge cases: missing diff, multi-file, big output, dedup by id, classifier miss, history reload) → covered by Task 2 (null-safe view), Task 3 (collapse/empty body), Task 5 (defensive `get`/diff), Task 6 (`upsert_tool_call_by_id`).
+- §10 (testing) → Tasks 2,3,4,5,6 tests; §11 file map matches the files created/modified across tasks; §12 build order matches Task order (reads-first → presenter → relay).
+
+**Placeholder scan:** No TBD/TODO; every code step has complete code; the one "confirm field shapes" note is an explicit, bounded verification step with a concrete fallback location, not a missing implementation.
+
+**Type consistency:** `FileActivityView` fields (`kind`, `title`, `path`, `lineRange`, `additions`, `deletions`, `status`, `body`) are identical in Task 2 (definition), Task 3 (test + component), and Task 4 (usage). `fileActivityFromToolCall` and `FileActivityCard` names are consistent across tasks. The presenter `from_event/1` return shape (`{:started|:completed, tool_call}` / `:ignore`) matches the relay consumption in Task 6, and the tool-call atom keys (`:id/:name/:status/:arguments/:output/:result`) match what `upsert_tool_call_by_id/3` and the channel push expect.
+
