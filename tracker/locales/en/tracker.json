@@ -284,6 +284,7 @@
       },
       "tools": {
         "add_comment": "Add comment",
+        "apply_patch": "Edit files",
         "check_handoff_gate": "Check handoff gate",
         "create_draft_issue": "Create draft issue",
         "create_github_tracker_project": "Create GitHub tracker project",
@@ -313,6 +314,7 @@
         "provision_github_project": "Provision GitHub project",
         "read_workspace_file": "Read workspace file",
         "scan_project_setup": "Scan project setup",
+        "shell": "Run command",
         "suggest_project_setup": "Suggest project setup",
         "update_comment": "Update comment",
         "update_issue": "Update issue",
@@ -321,7 +323,16 @@
       },
       "input": "IN",
       "output": "OUT",
-      "showMore": "… show more"
+      "showMore": "… show more",
+      "fileActivity": {
+        "read": "Read",
+        "edited": "Edited",
+        "command": "Ran",
+        "files_one": "{{count}} file",
+        "files_other": "{{count}} files",
+        "running": "Working…",
+        "expand": "Toggle details"
+      }
     },
     "inlineMarkdown": {
       "placeholder": "Add a description…",
