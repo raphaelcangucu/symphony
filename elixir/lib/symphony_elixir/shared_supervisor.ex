@@ -28,6 +28,8 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.Claude.AppServer.ToolGateway,
       SymphonyElixir.Observability.Registry,
       SymphonyElixir.Repo,
+      SymphonyElixir.Assistant.TurnManager.registry_child_spec(),
+      SymphonyElixir.Assistant.TurnManager,
       SymphonyElixir.LocalTracker.CloneSupervisor,
       %{
         id: :seed_builtin_templates,
