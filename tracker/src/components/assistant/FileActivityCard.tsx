@@ -30,7 +30,6 @@ export function FileActivityCard({ view }: { view: FileActivityView }) {
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-busy={running}
-        aria-label={t("issue.toolCall.fileActivity.expand")}
       >
         <span className="shrink-0 text-muted-foreground">
           {running ? <Loader2 className="size-3.5 animate-spin" /> : <ActivityIcon kind={view.kind} />}
