@@ -104,6 +104,25 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert is_binary(turn["finished_at"])
   end
 
+  test "turn_payload exposes the channel/UI shape with can_resume", %{thread: thread} do
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "x"})
+    {:ok, thread} = History.note_turn_codex(thread, %{codex_thread_id: "ct", turn_id: "tn"})
+    {:ok, thread} = History.interrupt_turn_state(thread, "serve_restart")
+
+    payload = History.turn_payload(thread)
+    assert payload.status == "interrupted"
+    assert payload.session_id == "ct-tn"
+    assert payload.can_resume == true
+    assert is_binary(payload.started_at)
+
+    assert History.turn_payload(nil) == nil
+  end
+
+  test "current_turn is nil before any turn starts", %{thread: thread} do
+    assert History.current_turn(thread) == nil
+    refute History.turn_running?(thread)
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
