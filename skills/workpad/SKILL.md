@@ -1,6 +1,6 @@
 ---
 name: workpad
-description:
+description: >-
   Create and maintain the single `## Codex Workpad` comment on the tracked
   issue: plan, acceptance criteria, validation results, and outcome. Use at
   the start of every issue run and whenever progress changes.

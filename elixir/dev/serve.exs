@@ -16,6 +16,7 @@ defmodule Symphony.DevServe do
   alias SymphonyElixir.DevServe
 
   def run do
+    DevServe.load_dotenv!()
     ensure_single_instance!()
     override_port!()
 

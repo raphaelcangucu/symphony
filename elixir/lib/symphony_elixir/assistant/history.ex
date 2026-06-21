@@ -65,6 +65,27 @@ defmodule SymphonyElixir.Assistant.History do
   """
   @spec issue_workspace_path(String.t()) :: String.t() | nil
   def issue_workspace_path(issue_identifier) when is_binary(issue_identifier) do
+    case issue_workspace_context(issue_identifier) do
+      %{workspace_path: path} when is_binary(path) and path != "" -> path
+      _ -> nil
+    end
+  rescue
+    _error -> nil
+  catch
+    :exit, _reason -> nil
+  end
+
+  @doc """
+  Returns the persisted workspace context for an active issue authoring thread.
+  """
+  @spec issue_workspace_context(String.t()) ::
+          %{
+            thread_id: integer(),
+            project_slug: String.t() | nil,
+            workspace_path: String.t()
+          }
+          | nil
+  def issue_workspace_context(issue_identifier) when is_binary(issue_identifier) do
     case String.trim(issue_identifier) do
       "" ->
         nil
@@ -73,8 +94,11 @@ defmodule SymphonyElixir.Assistant.History do
         Thread
         |> Repo.get_by(issue_identifier: identifier, scope: "issue", status: "active")
         |> case do
-          %Thread{workspace_path: path} when is_binary(path) and path != "" -> path
-          _ -> nil
+          %Thread{id: id, workspace_path: path, project_slug: slug} when is_binary(path) and path != "" ->
+            %{thread_id: id, project_slug: slug, workspace_path: path}
+
+          _ ->
+            nil
         end
     end
   rescue

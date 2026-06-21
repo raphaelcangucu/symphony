@@ -5,10 +5,25 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { AudioLines, Bot, Clock, FileText, ImageIcon, SendHorizontal, Target, X } from "lucide-react";
+import {
+  AudioLines,
+  Bot,
+  Check,
+  Clock,
+  FileText,
+  ImageIcon,
+  Loader2,
+  Pause,
+  Pencil,
+  Play,
+  SendHorizontal,
+  Target,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { TFunction } from "i18next";
 import { i18n } from "@/i18n";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
@@ -43,9 +58,16 @@ import {
   assistantThreadTopic,
   assistantTopic,
   bindAssistantEvents,
+  clearAuthoringGoal,
   dispatchCodingAgent,
+  normalizeGoalStatus,
+  pauseAuthoringGoal,
+  requestGoalStatus,
+  resumeAuthoringGoal,
+  setAuthoringGoalObjective,
   submitUserInput,
   type AssistantDocumentChangedPayload,
+  type AuthoringGoalStatus,
   type AssistantIssueCreatedPayload,
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
@@ -56,6 +78,32 @@ import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 
 export type IssueAssistantMode = "triage" | "simple" | "complex";
+
+interface AuthoringGoalState {
+  enabled: boolean;
+  objective: string | null;
+  native: boolean;
+  status: string | null;
+  timeUsedSeconds: number | null;
+}
+
+const emptyAuthoringGoal: AuthoringGoalState = {
+  enabled: false,
+  objective: null,
+  native: false,
+  status: null,
+  timeUsedSeconds: null,
+};
+
+function mergeGoalStatus(prev: AuthoringGoalState, status: AuthoringGoalStatus): AuthoringGoalState {
+  return {
+    enabled: status.enabled,
+    objective: status.objective ?? prev.objective,
+    native: status.native,
+    status: status.goal?.status ?? (status.native ? prev.status : null),
+    timeUsedSeconds: status.goal?.timeUsedSeconds ?? prev.timeUsedSeconds,
+  };
+}
 
 export interface DraftIssueCreated {
   identifier: string;
@@ -138,12 +186,11 @@ export function ProjectAssistantPanel({
     null,
   );
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
-  // Tab-scoped Authoring goal: a Codex goal running directly in this chat (no orchestrator).
-  // It is independent from the issue's Execution goal owned by the Execution tab.
-  const [authoringGoal, setAuthoringGoal] = useState<{ active: boolean; objective: string | null }>({
-    active: false,
-    objective: null,
-  });
+  // Tab-scoped Authoring goal: a native Codex goal running directly in this chat (no orchestrator).
+  // It is independent from the issue's Execution goal owned by the Execution tab. `native` reflects
+  // whether a native Codex goal exists yet (established by a turn); `status`/`timeUsedSeconds` come
+  // from the native goal so the pill shows truthful state instead of just the enabled flag.
+  const [authoringGoal, setAuthoringGoal] = useState<AuthoringGoalState>(emptyAuthoringGoal);
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
@@ -224,7 +271,7 @@ export function ProjectAssistantPanel({
     pendingIssueModeRef.current = null;
     lastConfirmedGoalModeRef.current = null;
     pendingGoalModeRef.current = null;
-    setAuthoringGoal({ active: false, objective: null });
+    setAuthoringGoal(emptyAuthoringGoal);
 
     const socket = createTrackerSocket();
     socket.connect();
@@ -293,6 +340,17 @@ export function ProjectAssistantPanel({
         setBtw((current) => (current && current.id === btwId ? { ...current, answer: message, status: "complete" } : current)),
       onBtwError: ({ btwId, message }) =>
         setBtw((current) => (current && current.id === btwId ? { ...current, answer: message, status: "error" } : current)),
+      onGoalStatus: (status) => {
+        setAuthoringGoal((current) => mergeGoalStatus(current, status));
+        // In a goal-enabled thread every turn is a goal turn, so the status push is
+        // authoritative for whether the assistant is busy: running:true reattaches a
+        // tab to a run already in flight (e.g. after a refresh); running:false means
+        // idle (covers paused-cancel where no assistant_completed/error is emitted).
+        setIsRunning(status.running);
+      },
+      onGoalRunning: (running) => {
+        if (running) setIsRunning(true);
+      },
     });
 
     const joinPush = channel.join();
@@ -310,10 +368,21 @@ export function ProjectAssistantPanel({
         const hydratedGoalMode = goalModeFromResponse(response) ?? false;
         lastConfirmedGoalModeRef.current = hydratedGoalMode;
         if (hydratedGoalMode) onIssueGoalModeChanged?.(true);
+        // Reattach to a goal turn already in flight (e.g. started before this
+        // refresh): seed the pill timer from the server's run-elapsed and mark the
+        // assistant running so the pill renders "executing" immediately.
+        const goalRunning = hydratedGoalMode && goalRunningFromResponse(response);
         setAuthoringGoal({
-          active: hydratedGoalMode,
+          ...emptyAuthoringGoal,
+          enabled: hydratedGoalMode,
           objective: hydratedGoalMode ? goalObjectiveFromResponse(response) : null,
+          status: goalRunning ? "active" : null,
+          timeUsedSeconds: goalRunning ? goalRunElapsedFromResponse(response) : null,
         });
+        if (goalRunning) setIsRunning(true);
+        // Pull the native goal (status + timer) asynchronously; the channel pushes
+        // "goal_status" back. Cheap no-op server-side when the goal isn't enabled.
+        if (hydratedGoalMode) requestGoalStatus(channel);
       }
 
       const agent = effectiveAgentFromResponse(response);
@@ -482,10 +551,11 @@ export function ProjectAssistantPanel({
         const enabled = goalModeFromResponse(response) ?? true;
         lastConfirmedGoalModeRef.current = enabled;
         onIssueGoalModeChanged?.(enabled);
-        setAuthoringGoal({
-          active: enabled,
-          objective: goalObjectiveFromResponse(response) ?? (objective.length > 0 ? objective : null),
-        });
+        setAuthoringGoal((current) => ({
+          ...current,
+          enabled,
+          objective: goalObjectiveFromResponse(response) ?? (objective.length > 0 ? objective : current.objective),
+        }));
       });
       goalPush.receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
       goalPush.receive("timeout", () => onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout")));
@@ -503,6 +573,50 @@ export function ProjectAssistantPanel({
       }
     },
     [dispatchSend, isRunning, issueIdentifier, onIssueGoalModeChanged, onIssueGoalModeError, t],
+  );
+
+  const pauseGoal = useCallback(() => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    // Optimistic: mark paused immediately; the reply carries the authoritative state.
+    setAuthoringGoal((current) => ({ ...current, status: "paused" }));
+    pauseAuthoringGoal(channel).receive("ok", (response) => {
+      setAuthoringGoal((current) => mergeGoalStatus(current, normalizeGoalStatus(response)));
+    });
+  }, []);
+
+  const resumeGoal = useCallback(() => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    setAuthoringGoal((current) => ({ ...current, status: "active" }));
+    setIsRunning(true);
+    resumeAuthoringGoal(channel).receive("error", (reason) => {
+      setIsRunning(false);
+      onIssueGoalModeError?.(errorMessage(reason, t));
+    });
+  }, [onIssueGoalModeError, t]);
+
+  const removeGoal = useCallback(() => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    clearAuthoringGoal(channel).receive("ok", (response) => {
+      setAuthoringGoal((current) => mergeGoalStatus(current, normalizeGoalStatus(response)));
+      lastConfirmedGoalModeRef.current = false;
+      onIssueGoalModeChanged?.(false);
+    });
+  }, [onIssueGoalModeChanged]);
+
+  const editGoalObjective = useCallback(
+    (objective: string) => {
+      const channel = channelRef.current;
+      const trimmed = objective.trim();
+      if (!channel || trimmed.length === 0) return;
+      setAuthoringGoal((current) => ({ ...current, objective: trimmed }));
+      setAuthoringGoalObjective(channel, trimmed).receive("ok", (response) => {
+        setAuthoringGoal((current) => mergeGoalStatus(current, normalizeGoalStatus(response)));
+      });
+    },
+    [],
   );
 
   const sendMessage = useCallback(
@@ -719,25 +833,35 @@ export function ProjectAssistantPanel({
     </div>
   ) : null;
 
+  // Docks flush inside the composer card (passed as its `header`) so the goal
+  // reads as the top of the message box — one piece, no separating line.
+  const authoringGoalPill =
+    issueIdentifier && authoringGoal.enabled ? (
+      <AuthoringGoalPill
+        goal={authoringGoal}
+        running={isRunning}
+        onPause={pauseGoal}
+        onResume={resumeGoal}
+        onRemove={removeGoal}
+        onEditObjective={editGoalObjective}
+      />
+    ) : null;
+
   const composerNode =
     bundle || catalogError ? (
       <AssistantComposer
         projectSlug={projectSlug ?? ""}
         bundle={bundle ?? fallbackCatalogBundle()}
         disabled={isRunning}
-        floating={isFullPageProjectAssistant}
+        floating={isPageMode}
         hasQueued={queued.length > 0}
         seedMessage={composerSeedMessage}
+        header={authoringGoalPill}
         onForceQueued={forceSendOldestQueued}
         onSubmit={sendMessage}
         onAgentChange={handleComposerAgentChange}
         dropTargetRef={panelRef}
       />
-    ) : null;
-
-  const authoringGoalBanner =
-    issueIdentifier && authoringGoal.active ? (
-      <AuthoringGoalBanner objective={authoringGoal.objective} running={isRunning} />
     ) : null;
 
   if (isPanelMode) {
@@ -776,8 +900,6 @@ export function ProjectAssistantPanel({
             )}
           </div>
 
-          {authoringGoalBanner}
-
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
             <div
               className={cn(
@@ -809,7 +931,7 @@ export function ProjectAssistantPanel({
               </div>
             </div>
           ) : isPageMode ? (
-            <div ref={composerDockRef} className="shrink-0 border-t bg-background">
+            <div ref={composerDockRef} className="shrink-0 bg-background">
               <div className="mx-auto w-full max-w-4xl px-4 py-2">
                 {queuedChips}
                 {questionsNode}
@@ -883,33 +1005,233 @@ export function ProjectAssistantPanel({
   );
 }
 
-function AuthoringGoalBanner({ objective, running }: { objective: string | null; running: boolean }) {
+function formatGoalClock(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  const s = safe % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+type AuthoringGoalPhase = "running" | "paused" | "stalled" | "completed" | "pending";
+
+function authoringGoalPhase(goal: AuthoringGoalState, running: boolean): AuthoringGoalPhase {
+  if (running) return "running";
+  switch (goal.status) {
+    case "paused":
+      return "paused";
+    case "completed":
+    case "complete":
+    case "done":
+    case "satisfied":
+      return "completed";
+    case "blocked":
+    case "failed":
+    case "cancelled":
+    case "canceled":
+      return "stalled";
+    default:
+      // native + active-but-not-running reads as stalled (resumable); no native goal yet = pending.
+      return goal.native ? "stalled" : "pending";
+  }
+}
+
+/**
+ * Discreet, Codex-style authoring-goal indicator that docks right above the
+ * composer. Shows the live phase + elapsed time and exposes inline pause/resume,
+ * edit, and remove controls. The native Codex goal is the source of truth; this
+ * only renders state and forwards control intents.
+ */
+function AuthoringGoalPill({
+  goal,
+  running,
+  onPause,
+  onResume,
+  onRemove,
+  onEditObjective,
+}: {
+  goal: AuthoringGoalState;
+  running: boolean;
+  onPause: () => void;
+  onResume: () => void;
+  onRemove: () => void;
+  onEditObjective: (objective: string) => void;
+}) {
   const { t } = useTranslation();
-  const label = running
-    ? t("assistant.authoring.goalRunning")
-    : t("assistant.authoring.goalActive");
-  const trimmed = objective?.trim();
+  const phase = authoringGoalPhase(goal, running);
+  const trimmed = goal.objective?.trim() || null;
+
+  // Live timer: while running, tick up from the last known native time-used
+  // baseline; when idle, freeze on the native value.
+  const [tick, setTick] = useState(() => Date.now());
+  const runStartRef = useRef<number | null>(null);
+  const baseRef = useRef<number>(goal.timeUsedSeconds ?? 0);
+
+  useEffect(() => {
+    if (running) {
+      if (runStartRef.current == null) {
+        runStartRef.current = Date.now();
+        baseRef.current = goal.timeUsedSeconds ?? baseRef.current;
+      }
+    } else {
+      runStartRef.current = null;
+      baseRef.current = goal.timeUsedSeconds ?? baseRef.current;
+    }
+  }, [running, goal.timeUsedSeconds]);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [running]);
+
+  const elapsedSeconds =
+    running && runStartRef.current != null
+      ? baseRef.current + (tick - runStartRef.current) / 1000
+      : goal.timeUsedSeconds;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(trimmed ?? "");
+
+  const label =
+    phase === "running"
+      ? t("assistant.authoring.goalRunning")
+      : phase === "paused"
+        ? t("assistant.authoring.goalPaused")
+        : phase === "completed"
+          ? t("assistant.authoring.goalCompleted")
+          : phase === "pending"
+            ? t("assistant.authoring.goalPending")
+            : t("assistant.authoring.goalStalled");
+
+  const dotClass =
+    phase === "running"
+      ? "bg-emerald-400"
+      : phase === "paused"
+        ? "bg-amber-400"
+        : phase === "completed"
+          ? "bg-sky-400"
+          : phase === "pending"
+            ? "bg-slate-400"
+            : "bg-orange-400";
+
+  function commitEdit() {
+    const next = draft.trim();
+    if (next.length > 0 && next !== trimmed) onEditObjective(next);
+    setEditing(false);
+  }
 
   return (
-    <div className="shrink-0 border-b border-border/60 bg-muted/20 px-4 pb-3 pt-3">
-      <div
-        role="status"
-        aria-live="polite"
-        aria-label={t("assistant.authoring.goalBannerAria")}
-        title={trimmed || label}
-        className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-slate-50 shadow-[0_12px_30px_-18px_rgba(15,23,42,0.9)]"
-      >
-        <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
-          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-violet-200">
-            <Target className="h-3.5 w-3.5" />
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={t("assistant.authoring.goalBannerAria")}
+      className="bg-muted/40 px-3 py-2 text-xs"
+    >
+      <div className="flex items-center gap-2">
+        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-background text-violet-500">
+          {phase === "running" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Target className="h-3 w-3" />}
+        </span>
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} aria-hidden />
+        <span className="shrink-0 font-medium text-foreground">{label}</span>
+
+        {editing ? null : (
+          <span className="min-w-0 flex-1 truncate text-muted-foreground" title={trimmed || undefined}>
+            {trimmed || t("assistant.authoring.goalNoObjective")}
           </span>
-          <span className="truncate">{label}</span>
-        </div>
-        <p className="mt-2 line-clamp-2 text-sm font-medium leading-5 text-white/95">
-          {trimmed || t("assistant.authoring.goalNoObjective")}
-        </p>
+        )}
+
+        {editing ? null : (
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            {elapsedSeconds != null ? (
+              <span className="inline-flex items-center gap-1 tabular-nums text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                {formatGoalClock(elapsedSeconds)}
+              </span>
+            ) : null}
+
+            {phase === "running" ? (
+              <GoalPillButton label={t("assistant.authoring.goalPause")} onClick={onPause}>
+                <Pause className="h-3.5 w-3.5" />
+              </GoalPillButton>
+            ) : (
+              <GoalPillButton label={t("assistant.authoring.goalResume")} onClick={onResume}>
+                <Play className="h-3.5 w-3.5" />
+              </GoalPillButton>
+            )}
+
+            <GoalPillButton
+              label={t("assistant.authoring.goalEdit")}
+              onClick={() => {
+                setDraft(trimmed ?? "");
+                setEditing(true);
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </GoalPillButton>
+
+            <GoalPillButton label={t("assistant.authoring.goalRemove")} onClick={onRemove}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </GoalPillButton>
+          </span>
+        )}
       </div>
+
+      {editing ? (
+        <div className="mt-2 flex items-start gap-2">
+          <textarea
+            autoFocus
+            rows={2}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                commitEdit();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setEditing(false);
+              }
+            }}
+            placeholder={t("assistant.authoring.goalObjectivePlaceholder")}
+            className="min-h-0 flex-1 resize-none rounded-lg border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+          />
+          <div className="flex shrink-0 flex-col gap-1">
+            <GoalPillButton label={t("assistant.authoring.goalEditSave")} onClick={commitEdit}>
+              <Check className="h-3.5 w-3.5" />
+            </GoalPillButton>
+            <GoalPillButton label={t("assistant.authoring.goalEditCancel")} onClick={() => setEditing(false)}>
+              <X className="h-3.5 w-3.5" />
+            </GoalPillButton>
+          </div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function GoalPillButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -1238,6 +1560,17 @@ function goalObjectiveFromResponse(response: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function goalRunningFromResponse(response: unknown): boolean {
+  if (!response || typeof response !== "object") return false;
+  return (response as Record<string, unknown>).goal_running === true;
+}
+
+function goalRunElapsedFromResponse(response: unknown): number | null {
+  if (!response || typeof response !== "object") return null;
+  const value = (response as Record<string, unknown>).goal_run_elapsed_seconds;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function effectiveAgentFromResponse(response: unknown): AgentKind | null {

@@ -179,6 +179,61 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
+  @authoring_goal_continuation_prompt "Continue pursuing the authoring goal for this issue. Review the progress so far in this working tree, keep producing the spec/plan/analysis artifacts the objective calls for, and stop when the artifact is ready for review or you are blocked. This is authoring only: do NOT dispatch the orchestrator and do NOT change the issue's status, labels, or execution goal."
+
+  @doc """
+  Runs an autonomous authoring-goal continuation batch on an issue thread.
+
+  Unlike `send_message_to_issue_thread/4` this does NOT append a user message: it
+  resumes the thread's Codex goal and continues pursuing the objective, streaming
+  each turn through the same callbacks. Used by the "resume" control so a stalled
+  authoring goal can keep going without the operator typing a prompt.
+  """
+  @spec continue_issue_goal(SymphonyElixir.Assistant.Thread.t(), map(), keyword()) ::
+          {:ok, turn_result()} | {:error, term()}
+  def continue_issue_goal(
+        %{scope: "issue", id: thread_id, project_slug: project_slug, issue_identifier: identifier} = thread,
+        context,
+        opts \\ []
+      )
+      when is_map(context) and is_list(opts) do
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
+    agent_kind = resolve_thread_agent(thread, context)
+
+    cond do
+      not History.thread_goal_mode(thread) ->
+        {:error, :goal_mode_disabled}
+
+      agent_kind not in [nil, "codex", :codex] ->
+        {:error, :goal_not_native}
+
+      true ->
+        opts =
+          opts
+          |> Keyword.put(:agent_kind, agent_kind)
+          |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+          |> maybe_put_authoring_goal(thread, agent_kind)
+
+        with {:ok, workspace} <- ensure_issue_workspace(thread),
+             docs_before <- doc_fingerprint(identifier),
+             history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+             prompt <- build_issue_prompt(thread, @authoring_goal_continuation_prompt, context, history),
+             {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, identifier, opts),
+             {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
+             {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result),
+             :ok <- maybe_notify_documents(identifier, docs_before, opts) do
+          {:ok,
+           %{
+             assistant_message: assistant_message.content,
+             tool_calls: assistant_message.tool_calls,
+             codex_thread_id: Map.get(runner_result, :codex_thread_id),
+             turn_id: Map.get(runner_result, :turn_id),
+             assistant_chat_message: History.message_payload(assistant_message)
+           }}
+        end
+    end
+  end
+
   @spec freeform_workspace(integer() | String.t(), keyword()) :: Path.t()
   def freeform_workspace(thread_id, opts \\ []) do
     root = opts |> Keyword.get(:workspace_root, Config.workspace_root()) |> Path.expand()
@@ -645,9 +700,13 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   defp normalize_goal_objective(_), do: nil
 
+  # Native Codex goals only apply to the codex agent. `agent_kind` arrives as a
+  # string ("codex") from AgentPreference.normalize/1, so we must accept the
+  # string form here — comparing against the bare `:codex` atom silently skipped
+  # injection and left the authoring goal "enabled" without ever running.
   defp maybe_put_authoring_goal(opts, thread, agent_kind) do
     cond do
-      agent_kind not in [nil, :codex] ->
+      agent_kind not in [nil, "codex", :codex] ->
         opts
 
       not History.thread_goal_mode(thread) ->

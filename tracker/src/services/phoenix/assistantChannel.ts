@@ -11,6 +11,8 @@ import {
   type BackendAssistantChatMessageDto,
   type UserQuestionsRequest,
 } from "@/services/assistant";
+import { normalizeGoal } from "@/services/agentExecutions";
+import type { AgentExecutionGoal } from "@/types/agent-execution";
 import type { AgentKind } from "@/types/issue";
 
 export interface AssistantChannelHandlers {
@@ -28,6 +30,41 @@ export interface AssistantChannelHandlers {
   onBtwDelta?: (payload: { btwId: string; delta: string }) => void;
   onBtwCompleted?: (payload: { btwId: string; message: string }) => void;
   onBtwError?: (payload: { btwId: string; message: string }) => void;
+  onGoalStatus?: (status: AuthoringGoalStatus) => void;
+  onGoalRunning?: (running: boolean) => void;
+}
+
+/**
+ * Normalized authoring-goal status pushed by the channel. `goal` carries the
+ * native Codex goal (status + timer) when one exists; `enabled`/`objective`
+ * mirror the thread metadata so the pill can render before a turn establishes
+ * the native goal.
+ */
+export interface AuthoringGoalStatus {
+  enabled: boolean;
+  objective: string | null;
+  native: boolean;
+  goal: AgentExecutionGoal | null;
+  running: boolean;
+}
+
+interface BackendGoalStatusPayload {
+  enabled?: boolean | null;
+  objective?: string | null;
+  native?: boolean | null;
+  goal?: Record<string, unknown> | null;
+  running?: boolean | null;
+}
+
+export function normalizeGoalStatus(payload: unknown): AuthoringGoalStatus {
+  const data = (payload ?? {}) as BackendGoalStatusPayload;
+  return {
+    enabled: data.enabled === true,
+    objective: typeof data.objective === "string" && data.objective.trim() !== "" ? data.objective : null,
+    native: data.native === true,
+    goal: normalizeGoal(data.goal ?? null),
+    running: data.running === true,
+  };
 }
 
 export interface AssistantDocumentChangedPayload {
@@ -175,6 +212,34 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     const data = payload as { btw_id?: string | null; message?: string | null };
     if (data.btw_id) handlers.onBtwError?.({ btwId: data.btw_id, message: data.message ?? "Side question failed" });
   });
+
+  channel.on("goal_status", (payload) => {
+    handlers.onGoalStatus?.(normalizeGoalStatus(payload as BackendGoalStatusPayload));
+  });
+
+  channel.on("goal_running", (payload) => {
+    handlers.onGoalRunning?.((payload as { running?: boolean | null }).running === true);
+  });
+}
+
+export function requestGoalStatus(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("goal_status", {});
+}
+
+export function pauseAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("goal_pause", {});
+}
+
+export function resumeAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("goal_resume", {});
+}
+
+export function clearAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("goal_clear", {});
+}
+
+export function setAuthoringGoalObjective(channel: Channel, objective: string): ReturnType<Channel["push"]> {
+  return channel.push("goal_set_objective", { objective });
 }
 
 export function submitUserInput(

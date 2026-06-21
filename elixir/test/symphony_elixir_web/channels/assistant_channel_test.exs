@@ -3,6 +3,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   import Phoenix.ChannelTest
 
+  alias SymphonyElixir.Assistant.GoalRun
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -455,6 +456,102 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     ref = push(socket, "set_goal_mode", %{"goal_mode" => true})
     assert_reply(ref, :error, %{reason: "this action is only supported for issue assistant threads"})
+  end
+
+  test "goal_clear removes the authoring goal", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    ref = push(socket, "goal_clear", %{})
+    assert_reply(ref, :ok, %{enabled: false})
+
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.metadata["goal_mode"] == false
+    refute Map.has_key?(thread.metadata, "goal_objective")
+  end
+
+  test "goal_set_objective updates the authoring objective", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    ref = push(socket, "goal_set_objective", %{"objective" => "Audit the admin UI"})
+    assert_reply(ref, :ok, %{enabled: true, objective: "Audit the admin UI"})
+
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.metadata["goal_objective"] == "Audit the admin UI"
+  end
+
+  test "goal controls require an enabled authoring goal", %{socket: socket} do
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "goal_clear", %{})
+    assert_reply(ref, :error, %{})
+  end
+
+  test "goal_resume kicks an autonomous continuation batch that streams into the chat", %{socket: socket} do
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_assistant_delta).("Continuing the goal")
+
+      {:ok,
+       %{
+         assistant_message: "Continued the authoring goal.",
+         codex_thread_id: "thread-goal",
+         turn_id: "turn-goal",
+         tool_calls: []
+       }}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :assistant_runner) end)
+
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    ref = push(socket, "goal_resume", %{})
+    assert_reply(ref, :ok)
+
+    assert_push("assistant_delta", %{delta: "Continuing the goal"})
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "Continued the authoring goal."}})
+  end
+
+  test "goal_resume requires an enabled authoring goal", %{socket: socket} do
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "goal_resume", %{})
+    assert_reply(ref, :error, %{})
+  end
+
+  test "join reattaches to a goal run already in flight for the thread", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    # Simulate a run that started before a page refresh: a live process owns the
+    # registry entry for this thread (here, the test process itself).
+    GoalRun.track(thread_id)
+    on_exit(fn -> GoalRun.untrack(thread_id) end)
+
+    {:ok, payload, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join("assistant:issue:macro-markets:MAC-1", %{})
+
+    assert payload.goal_running == true
+    assert is_integer(payload.goal_run_elapsed_seconds)
+    assert payload.goal_run_elapsed_seconds >= 0
+  end
+
+  test "join reports no goal run when the thread is idle", %{socket: socket} do
+    {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    assert payload.goal_running == false
+    assert payload.goal_run_elapsed_seconds == nil
   end
 
   test "dispatch_codex moves the bound issue to In Progress without a goal by default", %{socket: socket} do

@@ -3,6 +3,7 @@ import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -75,6 +76,12 @@ interface AssistantComposerProps {
   floating?: boolean;
   hasQueued?: boolean;
   seedMessage?: string | null;
+  /**
+   * Optional element rendered flush inside the composer card, above the input
+   * (e.g. the authoring-goal pill). Sharing the card makes it read as one piece
+   * with the message box instead of a detached banner.
+   */
+  header?: ReactNode;
   onForceQueued?: () => void;
   onSubmit: (payload: AssistantComposerSubmit) => void;
   /** Reports the currently selected agent (on mount and on every change). */
@@ -94,6 +101,7 @@ export function AssistantComposer({
   floating = false,
   hasQueued = false,
   seedMessage = null,
+  header,
   onForceQueued,
   onSubmit,
   onAgentChange,
@@ -459,11 +467,13 @@ export function AssistantComposer({
         : dropOverlay}
       <div
         className={cn(
-          "rounded-2xl border bg-card transition-shadow",
+          "overflow-hidden rounded-2xl border bg-card transition-shadow",
           floating ? "shadow-lg" : "shadow-sm",
           recording && "ring-2 ring-primary/30",
         )}
       >
+        {header ?? null}
+
         {attachments.length > 0 ? (
           <div className="flex flex-wrap gap-2 border-b px-3 py-2">
             {attachments.map((attachment) => {

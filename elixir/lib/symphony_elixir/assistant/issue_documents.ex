@@ -2,7 +2,8 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
   @moduledoc "Sandboxed read access to docs/superpowers/* inside an issue working tree."
 
   alias SymphonyElixir.Assistant.History
-  alias SymphonyElixir.Workspace
+  alias SymphonyElixir.LocalTracker.{Context, Project, Repository}
+  alias SymphonyElixir.{Repo, Workspace}
 
   @doc_root "docs/superpowers"
   @kind_dirs [{"specs", "spec"}, {"plans", "plan"}]
@@ -19,11 +20,14 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
 
   @spec list(String.t()) :: %{available: boolean(), reason: String.t() | nil, documents: [document()]}
   def list(identifier) when is_binary(identifier) do
-    workspace = resolve_workspace(identifier)
-    base = Path.join(workspace, @doc_root)
+    with {:ok, workspace, base} <- resolve_document_workspace(identifier) do
+      documents =
+        base
+        |> collect(workspace)
+        |> Kernel.++(handoff(base))
+        |> filter_referenced_documents(identifier)
 
-    with :ok <- safe_directory(base, workspace) do
-      %{available: true, reason: nil, documents: collect(base, workspace) ++ handoff(base)}
+      %{available: true, reason: nil, documents: documents}
     else
       {:error, _reason} -> %{available: false, reason: "workspace_missing", documents: []}
     end
@@ -31,9 +35,8 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
 
   @spec read(String.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
   def read(identifier, rel_path) when is_binary(identifier) and is_binary(rel_path) do
-    workspace = resolve_workspace(identifier)
-
-    with {:ok, abs} <- safe_join(workspace, rel_path),
+    with {:ok, workspace, _base} <- resolve_document_workspace(identifier),
+         {:ok, abs} <- safe_join(workspace, rel_path),
          {:ok, %File.Stat{size: size}} when size <= @max_bytes <- File.stat(abs),
          {:ok, body} <- File.read(abs) do
       {:ok, body}
@@ -53,9 +56,96 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
   # unexpanded tilde makes reads land on a stray `~/...` tree instead of the real workspace, so
   # the viewer reports `workspace_missing` even though the documents exist on disk.
   defp resolve_workspace(identifier) do
-    case History.issue_workspace_path(identifier) do
-      path when is_binary(path) and path != "" -> Path.expand(path)
+    case issue_context(identifier) do
+      %{workspace_path: path} when is_binary(path) and path != "" -> Path.expand(path)
       _ -> Path.expand(Workspace.path_for_issue(identifier))
+    end
+  end
+
+  defp resolve_document_workspace(identifier) do
+    root = resolve_workspace(identifier)
+
+    identifier
+    |> candidate_workspaces(root)
+    |> Enum.find_value(fn workspace ->
+      base = Path.join(workspace, @doc_root)
+
+      case safe_directory(base, workspace) do
+        :ok -> {:ok, workspace, base}
+        {:error, _reason} -> nil
+      end
+    end)
+    |> case do
+      {:ok, _workspace, _base} = ok -> ok
+      nil -> {:error, :workspace_missing}
+    end
+  end
+
+  defp candidate_workspaces(identifier, root) do
+    [root | repository_workspaces(identifier, root)]
+    |> Enum.map(&Path.expand/1)
+    |> Enum.uniq()
+  end
+
+  defp repository_workspaces(identifier, root) do
+    identifier
+    |> project_slug()
+    |> case do
+      slug when is_binary(slug) and slug != "" ->
+        slug
+        |> repositories_for_project()
+        |> Enum.map(&Path.join(root, &1.workspace_path))
+        |> Enum.filter(&safe_child_directory?(&1, root))
+
+      _ ->
+        []
+    end
+  end
+
+  defp project_slug(identifier) do
+    case issue_context(identifier) do
+      %{project_slug: slug} when is_binary(slug) and slug != "" -> slug
+      _ -> Context.find_project_slug(identifier)
+    end
+  end
+
+  defp issue_context(identifier) do
+    case History.issue_workspace_context(identifier) do
+      %{workspace_path: _path} = context -> context
+      _ -> nil
+    end
+  end
+
+  defp repositories_for_project(slug) do
+    case Repo.get_by(Project, slug: slug) do
+      %Project{} = project ->
+        project
+        |> Repo.preload(:repositories)
+        |> Map.fetch!(:repositories)
+        |> Enum.sort_by(&repository_sort_key/1)
+
+      _ ->
+        []
+    end
+  rescue
+    _error -> []
+  catch
+    :exit, _reason -> []
+  end
+
+  defp repository_sort_key(%Repository{role: "primary", workspace_path: path}), do: {0, path}
+  defp repository_sort_key(%Repository{workspace_path: path}), do: {1, path}
+
+  defp safe_child_directory?(candidate, root) do
+    candidate = Path.expand(candidate)
+    root = Path.expand(root)
+
+    with :ok <- ensure_inside(candidate, root),
+         :ok <- ensure_no_symlink_components(candidate, root),
+         {:ok, %File.Stat{type: :directory}} <- File.lstat(candidate) do
+      true
+    else
+      _ -> false
     end
   end
 
@@ -66,6 +156,65 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
       |> list_markdown(workspace)
       |> Enum.map(&to_document(&1, kind, Path.join([@doc_root, dir, Path.basename(&1)])))
     end)
+  end
+
+  defp filter_referenced_documents(documents, identifier) do
+    case issue_context(identifier) do
+      %{thread_id: thread_id} when is_integer(thread_id) ->
+        %{paths: referenced_paths, basenames: referenced_basenames} = referenced_documents(thread_id)
+        issue_token = issue_filename_token(identifier)
+
+        Enum.filter(documents, fn document ->
+          MapSet.member?(referenced_paths, document.path) or
+            MapSet.member?(referenced_basenames, Path.basename(document.path)) or
+            filename_matches_issue?(document.path, issue_token)
+        end)
+
+      _ ->
+        documents
+    end
+  end
+
+  defp referenced_documents(thread_id) when is_integer(thread_id) do
+    references =
+      thread_id
+      |> History.list_messages_for_thread()
+      |> Enum.flat_map(&extract_document_references(&1.content))
+
+    %{
+      paths: references |> Enum.filter(&String.starts_with?(&1, @doc_root <> "/")) |> MapSet.new(),
+      basenames: references |> Enum.map(&Path.basename/1) |> MapSet.new()
+    }
+  rescue
+    _error -> %{paths: MapSet.new(), basenames: MapSet.new()}
+  catch
+    :exit, _reason -> %{paths: MapSet.new(), basenames: MapSet.new()}
+  end
+
+  defp extract_document_references(content) when is_binary(content) do
+    ~r/(?:docs\/superpowers\/(?:(?:specs|plans)\/[A-Za-z0-9._\/-]+\.md|handoff\.md)|[A-Za-z0-9._-]+\.md)/
+    |> Regex.scan(content)
+    |> Enum.map(fn [reference] -> reference end)
+  end
+
+  defp extract_document_references(_content), do: []
+
+  defp issue_filename_token(identifier) when is_binary(identifier) do
+    identifier
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, "-")
+    |> String.trim("-")
+  end
+
+  defp issue_filename_token(_identifier), do: ""
+
+  defp filename_matches_issue?(_path, ""), do: false
+
+  defp filename_matches_issue?(path, issue_token) do
+    path
+    |> Path.basename()
+    |> String.downcase()
+    |> String.contains?(issue_token)
   end
 
   defp handoff(base) do

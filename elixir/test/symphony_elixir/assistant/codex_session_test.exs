@@ -544,10 +544,12 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       refute prompt =~ "GOAL MODE: ENABLED"
       assert prompt =~ "do NOT dispatch the orchestrator"
 
-      # Codex sessions receive the objective as the native :goal opt.
-      if Keyword.get(opts, :agent_kind) in [nil, :codex] do
-        assert Keyword.get(opts, :goal) == "Audit the auth module"
-      end
+      # Codex sessions receive the objective as the native :goal opt. agent_kind
+      # arrives as the string "codex" from AgentPreference.normalize/1, so the
+      # injection guard must accept the string form (regression: comparing only
+      # against the :codex atom silently skipped injection).
+      assert Keyword.get(opts, :agent_kind) in [nil, "codex", :codex]
+      assert Keyword.get(opts, :goal) == "Audit the auth module"
     end
 
     test "authoring goal off omits the authoring goal section and the native goal opt",

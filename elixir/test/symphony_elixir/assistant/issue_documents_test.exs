@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
 
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.Assistant.IssueDocuments
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.{Context, Repository}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workflow
 
@@ -162,8 +162,14 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
     File.mkdir_p!(specs_dir)
     File.write!(Path.join(specs_dir, "design.md"), "# Persisted Design\n\nbody")
 
-    {:ok, _thread} =
+    {:ok, thread} =
       History.ensure_issue_thread("macro", "MAC-PERSISTED", %{workspace_path: persisted_root})
+
+    {:ok, _message} =
+      History.append_message(thread, %{
+        role: "assistant",
+        content: "Spec written to `docs/superpowers/specs/design.md`."
+      })
 
     assert persisted_root != SymphonyElixir.Workspace.path_for_issue("MAC-PERSISTED")
 
@@ -172,6 +178,160 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
 
     assert {:ok, "# Persisted Design\n\nbody"} =
              IssueDocuments.read("MAC-PERSISTED", "docs/superpowers/specs/design.md")
+  end
+
+  test "list/1 returns no docs for an issue thread when root workspace docs are not referenced", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+
+    persisted_root = Path.join(workspace_root, "unreferenced-root-docs")
+    specs_dir = Path.join([persisted_root, "docs", "superpowers", "specs"])
+    File.mkdir_p!(specs_dir)
+    File.write!(Path.join(specs_dir, "project-history.md"), "# Project History\n\nbody")
+
+    {:ok, thread} =
+      History.ensure_issue_thread("macro", "MAC-UNREFERENCED", %{workspace_path: persisted_root})
+
+    {:ok, _message} =
+      History.append_message(thread, %{role: "assistant", content: "Investigated existing docs, no authored spec yet."})
+
+    assert %{available: true, documents: []} = IssueDocuments.list("MAC-UNREFERENCED")
+  end
+
+  test "list/1 reads only referenced docs from a configured repository inside the persisted workspace", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, project} = Context.ensure_project(%{name: "Distribution Machine", slug: "distributionmachine"})
+
+    Repo.insert!(
+      Repository.changeset(%Repository{}, %{
+        project_id: project.id,
+        github_full_name: "clouapp/distributionmachine",
+        workspace_path: "distributionmachine",
+        role: "primary"
+      })
+    )
+
+    issue_root = Path.join(workspace_root, "DIS-6")
+    repo_root = Path.join(issue_root, "distributionmachine")
+    specs_dir = Path.join([repo_root, "docs", "superpowers", "specs"])
+
+    File.mkdir_p!(specs_dir)
+    File.write!(Path.join(specs_dir, "admin-i18n.md"), "# Admin i18n\n\nbody")
+    File.write!(Path.join(specs_dir, "unrelated-project-doc.md"), "# Unrelated Project Doc\n\nbody")
+
+    {:ok, thread} =
+      History.ensure_issue_thread("distributionmachine", "DIS-6", %{workspace_path: issue_root})
+
+    {:ok, _message} =
+      History.append_message(thread, %{
+        role: "assistant",
+        content: "Spec escrito em `docs/superpowers/specs/admin-i18n.md`."
+      })
+
+    assert %{available: true, documents: [%{title: "Admin i18n", kind: "spec"}]} =
+             IssueDocuments.list("DIS-6")
+
+    assert {:ok, "# Admin i18n\n\nbody"} =
+             IssueDocuments.read("DIS-6", "docs/superpowers/specs/admin-i18n.md")
+  end
+
+  test "list/1 returns no docs for an issue thread when nested repository docs are not referenced", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, project} = Context.ensure_project(%{name: "Distribution Machine", slug: "distributionmachine"})
+
+    Repo.insert!(
+      Repository.changeset(%Repository{}, %{
+        project_id: project.id,
+        github_full_name: "clouapp/distributionmachine",
+        workspace_path: "distributionmachine",
+        role: "primary"
+      })
+    )
+
+    issue_root = Path.join(workspace_root, "DIS-1")
+    specs_dir = Path.join([issue_root, "distributionmachine", "docs", "superpowers", "specs"])
+
+    File.mkdir_p!(specs_dir)
+    File.write!(Path.join(specs_dir, "clip-machine.md"), "# Clip Machine\n\nbody")
+
+    {:ok, thread} =
+      History.ensure_issue_thread("distributionmachine", "DIS-1", %{workspace_path: issue_root})
+
+    {:ok, _message} =
+      History.append_message(thread, %{role: "assistant", content: "Busquei nas docs existentes para contexto."})
+
+    assert %{available: true, documents: []} = IssueDocuments.list("DIS-1")
+  end
+
+  test "list/1 matches a referenced markdown filename inside nested repository docs", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, project} = Context.ensure_project(%{name: "Distribution Machine", slug: "distributionmachine"})
+
+    Repo.insert!(
+      Repository.changeset(%Repository{}, %{
+        project_id: project.id,
+        github_full_name: "clouapp/distributionmachine",
+        workspace_path: "distributionmachine",
+        role: "primary"
+      })
+    )
+
+    issue_root = Path.join(workspace_root, "DIS-1-FILENAME")
+    specs_dir = Path.join([issue_root, "distributionmachine", "docs", "superpowers", "specs"])
+
+    File.mkdir_p!(specs_dir)
+    File.write!(Path.join(specs_dir, "2026-05-17-clip-machine-design.md"), "# Clip Machine\n\nbody")
+    File.write!(Path.join(specs_dir, "unrelated-project-doc.md"), "# Unrelated Project Doc\n\nbody")
+
+    {:ok, thread} =
+      History.ensure_issue_thread("distributionmachine", "DIS-1-FILENAME", %{workspace_path: issue_root})
+
+    {:ok, _message} =
+      History.append_message(thread, %{
+        role: "user",
+        content: "2026-05-17-clip-machine-design.md avalie no projeto o que já foi feito."
+      })
+
+    assert %{available: true, documents: [%{title: "Clip Machine", kind: "spec"}]} =
+             IssueDocuments.list("DIS-1-FILENAME")
+  end
+
+  test "list/1 matches docs whose filenames contain the issue identifier", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, project} = Context.ensure_project(%{name: "Distribution Machine", slug: "distributionmachine"})
+
+    Repo.insert!(
+      Repository.changeset(%Repository{}, %{
+        project_id: project.id,
+        github_full_name: "clouapp/distributionmachine",
+        workspace_path: "distributionmachine",
+        role: "primary"
+      })
+    )
+
+    issue_root = Path.join(workspace_root, "DIS-7")
+    specs_dir = Path.join([issue_root, "distributionmachine", "docs", "superpowers", "specs"])
+    plans_dir = Path.join([issue_root, "distributionmachine", "docs", "superpowers", "plans"])
+
+    File.mkdir_p!(specs_dir)
+    File.mkdir_p!(plans_dir)
+    File.write!(Path.join(specs_dir, "2026-06-21-dis-7-admin-i18n-design.md"), "# DIS-7 Design\n\nbody")
+    File.write!(Path.join(plans_dir, "2026-06-21-dis-7-admin-i18n-plan.md"), "# DIS-7 Plan\n\nsteps")
+    File.write!(Path.join(specs_dir, "2026-06-21-dis-8-other-design.md"), "# Other Design\n\nbody")
+
+    {:ok, thread} =
+      History.ensure_issue_thread("distributionmachine", "DIS-7", %{workspace_path: issue_root})
+
+    {:ok, _message} =
+      History.append_message(thread, %{role: "assistant", content: "Started authoring docs for this task."})
+
+    assert %{available: true, documents: documents} = IssueDocuments.list("DIS-7")
+    assert Enum.map(documents, & &1.title) == ["DIS-7 Design", "DIS-7 Plan"]
   end
 
   test "list/1 expands a persisted workspace path that uses ~ so reads land on the real tree" do
@@ -184,8 +344,14 @@ defmodule SymphonyElixir.Assistant.IssueDocumentsTest do
     File.write!(Path.join(specs_dir, "design.md"), "# Tilde Design\n\nbody")
     on_exit(fn -> File.rm_rf!(home_root) end)
 
-    {:ok, _thread} =
+    {:ok, thread} =
       History.ensure_issue_thread("tilde", "MAC-TILDE", %{workspace_path: Path.join("~", unique)})
+
+    {:ok, _message} =
+      History.append_message(thread, %{
+        role: "assistant",
+        content: "Spec written to `docs/superpowers/specs/design.md`."
+      })
 
     assert %{available: true, documents: [%{title: "Tilde Design", kind: "spec"}]} =
              IssueDocuments.list("MAC-TILDE")

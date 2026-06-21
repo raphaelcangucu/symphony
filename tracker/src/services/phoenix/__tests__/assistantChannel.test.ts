@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { assistantIssueTopic, assistantThreadTopic, assistantTopic, bindAssistantEvents } from "../assistantChannel";
+import {
+  assistantIssueTopic,
+  assistantThreadTopic,
+  assistantTopic,
+  bindAssistantEvents,
+  clearAuthoringGoal,
+  normalizeGoalStatus,
+  pauseAuthoringGoal,
+  requestGoalStatus,
+  resumeAuthoringGoal,
+  setAuthoringGoalObjective,
+} from "../assistantChannel";
 
 describe("assistantThreadTopic", () => {
   it("builds a thread topic from a numeric id", () => {
@@ -154,5 +165,66 @@ describe("assistant channel binding", () => {
 
   it("fails fast for blank project slugs", () => {
     expect(() => assistantTopic(" ")).toThrow("projectSlug is required");
+  });
+});
+
+describe("authoring goal channel", () => {
+  it("normalizes goal_status payloads and the native goal", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onGoalStatus = vi.fn();
+    const onGoalRunning = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onGoalStatus,
+      onGoalRunning,
+    });
+
+    handlers["goal_status"]({
+      enabled: true,
+      objective: "Audit the admin UI",
+      native: true,
+      goal: { kind: "goal", source: "native", status: "paused", timeUsedSeconds: 73, token_budget: 200000 },
+      running: false,
+    });
+    handlers["goal_running"]({ running: true });
+
+    expect(onGoalStatus).toHaveBeenCalledWith({
+      enabled: true,
+      objective: "Audit the admin UI",
+      native: true,
+      goal: expect.objectContaining({ status: "paused", timeUsedSeconds: 73, tokenBudget: 200000 }),
+      running: false,
+    });
+    expect(onGoalRunning).toHaveBeenCalledWith(true);
+  });
+
+  it("treats a blank objective and missing goal as empty", () => {
+    const status = normalizeGoalStatus({ enabled: true, objective: "  ", native: false, goal: null });
+    expect(status).toEqual({ enabled: true, objective: null, native: false, goal: null, running: false });
+  });
+
+  it("pushes goal control intents with empty payloads", () => {
+    const push = vi.fn();
+    const channel = { push } as never;
+
+    requestGoalStatus(channel);
+    pauseAuthoringGoal(channel);
+    resumeAuthoringGoal(channel);
+    clearAuthoringGoal(channel);
+    setAuthoringGoalObjective(channel, "Finish the spec");
+
+    expect(push).toHaveBeenCalledWith("goal_status", {});
+    expect(push).toHaveBeenCalledWith("goal_pause", {});
+    expect(push).toHaveBeenCalledWith("goal_resume", {});
+    expect(push).toHaveBeenCalledWith("goal_clear", {});
+    expect(push).toHaveBeenCalledWith("goal_set_objective", { objective: "Finish the spec" });
   });
 });
