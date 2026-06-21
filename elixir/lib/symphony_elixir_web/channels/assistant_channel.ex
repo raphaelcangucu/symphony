@@ -4,7 +4,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   use Phoenix.Channel
 
   alias Phoenix.Socket
-  alias SymphonyElixir.Assistant.{AuthoringGoalControl, CodexSession, GoalRun, History, Payload, SideQuery, ToolExecutor}
+  alias SymphonyElixir.Assistant.{
+    AuthoringGoalControl,
+    CodexSession,
+    GoalRun,
+    History,
+    Payload,
+    SideQuery,
+    ToolExecutor,
+    TurnManager
+  }
   alias SymphonyElixir.Config
   alias SymphonyElixirWeb.TrackerAuth
   alias SymphonyElixir.{AgentPreference, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
@@ -24,7 +33,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       # before a page refresh): subscribe to the thread's run topic and surface the
       # running state + elapsed time in the join payload so the pill renders
       # "executing" with a live timer immediately, without waiting for a turn.
-      GoalRun.subscribe(thread.id)
+      TurnManager.subscribe(thread.id)
 
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
@@ -34,6 +43,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         goal_objective: History.thread_goal_objective(thread),
         goal_running: GoalRun.running?(thread.id),
         goal_run_elapsed_seconds: GoalRun.elapsed_seconds(thread.id),
+        last_turn: History.turn_payload(thread),
+        turn_running: TurnManager.running?(thread.id),
+        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
         # Issue task labels are NOT consulted here (would need a tracker fetch at join);
         # dispatch resolves them — composer badge may differ for label-pinned issues.
         effective_agent: thread_effective_agent(thread)
@@ -53,12 +65,17 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     with true <- authorized?(socket),
          {:ok, project_slug} <- decode_required_topic_segment(raw_project_slug, :project_slug),
          {:ok, thread} <- History.ensure_project_explore_thread(project_slug) do
+      TurnManager.subscribe(thread.id)
+
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
         mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
         goal_objective: History.thread_goal_objective(thread),
+        last_turn: History.turn_payload(thread),
+        turn_running: TurnManager.running?(thread.id),
+        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
         effective_agent: thread_effective_agent(thread)
       }
 
@@ -76,11 +93,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     with true <- authorized?(socket),
          {:ok, id} <- parse_id(raw_id),
          {:ok, thread} <- History.get_thread(id) do
+      TurnManager.subscribe(thread.id)
+
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
         goal_objective: History.thread_goal_objective(thread),
+        last_turn: History.turn_payload(thread),
+        turn_running: TurnManager.running?(thread.id),
+        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
         effective_agent: thread_effective_agent(thread)
       }
 
@@ -432,6 +454,26 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:noreply, socket}
   end
 
+  # Turn lifecycle fanned out by TurnManager over the thread topic. The socket that
+  # started the turn streams + reconciles via {:assistant_turn_finished}; only
+  # reattached/other tabs (not currently running the turn) surface turn_status.
+  def handle_info({:turn_status, :running, payload}, socket) do
+    if socket.assigns[:turn_status] != :running do
+      push(socket, "turn_status", Map.put(normalize_turn_payload(payload), :status, "running"))
+    end
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:turn_status, status, payload}, socket)
+      when status in [:finished, :failed, :interrupted] do
+    if socket.assigns[:turn_status] != :running do
+      push(socket, "turn_status", normalize_turn_payload(payload))
+    end
+
+    {:noreply, socket}
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
 
   defp ensure_btw_thread(%Socket{assigns: %{thread: %{} = thread}}), do: thread
@@ -514,6 +556,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     |> assign(:pending_user_inputs, %{})
   end
 
+  defp normalize_turn_payload(payload) when is_map(payload), do: payload
+  defp normalize_turn_payload(_payload), do: %{}
+
   defp do_send_message(message, payload, socket) do
     project_slug = socket.assigns[:project_slug]
     thread = socket.assigns[:thread]
@@ -553,39 +598,108 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> Keyword.put(:on_thread_documents_changed, fn thread_id ->
             push(socket, "assistant_document_changed", %{thread_id: thread_id})
           end)
-          |> Keyword.put(:on_turn_started, fn turn_id -> send(channel_pid, {:assistant_turn_started, turn_id}) end)
+          |> Keyword.put(:on_turn_started, fn turn_id ->
+            send(channel_pid, {:assistant_turn_started, turn_id})
+
+            if is_map(thread) and is_integer(Map.get(thread, :id)),
+              do: TurnManager.note_codex_turn(thread.id, nil, turn_id)
+          end)
           |> Keyword.put(:interactive_user_input, true)
           |> Keyword.put(:on_user_input_required, fn request ->
             send(channel_pid, {:assistant_user_input_required, request})
           end)
 
-        goal_run? = goal_thread?(thread)
+        if is_map(thread) and is_integer(Map.get(thread, :id)) do
+          start_tracked_turn(thread, project_slug, trimmed, context, opts, socket)
+        else
+          start_legacy_turn(thread, project_slug, trimmed, context, opts, socket)
+        end
+    end
+  end
 
-        {:ok, pid} =
-          Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
-            if goal_run?, do: GoalRun.track(thread.id)
-            result = run_send_turn(thread, project_slug, trimmed, context, opts)
+  # Durable threads route through TurnManager so it owns the metadata.current_turn
+  # lifecycle + the cross-channel pid registry (steer/interrupt + re-attach after a
+  # refresh). Live streaming still flows over the originating socket via `opts`.
+  defp start_tracked_turn(thread, project_slug, trimmed, context, opts, socket) do
+    channel_pid = self()
+    goal_run? = goal_thread?(thread)
 
-            if goal_run? do
-              GoalRun.untrack(thread.id)
-              GoalRun.broadcast_from(channel_pid, thread.id, {:goal_run_finished, finished_message(result)})
-            end
+    run_builder = fn prompt_text ->
+      fn ->
+        if goal_run?, do: GoalRun.track(thread.id)
+        result = run_send_turn(thread, project_slug, prompt_text, context, opts)
 
-            send(channel_pid, {:assistant_turn_finished, result})
-          end)
+        if goal_run? do
+          GoalRun.untrack(thread.id)
+          GoalRun.broadcast_from(channel_pid, thread.id, {:goal_run_finished, finished_message(result)})
+        end
 
-        ref = Process.monitor(pid)
+        result
+      end
+    end
+
+    start_opts = [
+      run: run_builder.(trimmed),
+      run_builder: run_builder,
+      reply_to: channel_pid,
+      trigger: "user",
+      agent_kind: turn_agent_kind(context),
+      model: Map.get(context, "model"),
+      effort: Map.get(context, "effort")
+    ]
+
+    case TurnManager.start_turn(thread.id, trimmed, start_opts) do
+      {:ok, %{pid: pid}} ->
         if goal_run?, do: GoalRun.broadcast_from(self(), thread.id, {:goal_run_started})
 
         socket =
           socket
           |> assign(:turn_status, :running)
           |> assign(:turn_pid, pid)
-          |> assign(:turn_ref, ref)
           |> assign(:codex_turn_id, nil)
 
         {:reply, :ok, socket}
+
+      {:error, :turn_in_progress} ->
+        steer_or_queue(thread, trimmed, start_opts, socket)
+
+      {:error, _reason} ->
+        {:reply, {:error, %{reason: "assistant could not start the turn"}}, socket}
     end
+  end
+
+  # Project-scoped sends (no durable thread) keep the original channel-owned
+  # spawn + monitor lifecycle since there is no thread metadata to track.
+  defp start_legacy_turn(thread, project_slug, trimmed, context, opts, socket) do
+    channel_pid = self()
+
+    {:ok, pid} =
+      Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
+        result = run_send_turn(thread, project_slug, trimmed, context, opts)
+        send(channel_pid, {:assistant_turn_finished, result})
+      end)
+
+    ref = Process.monitor(pid)
+
+    socket =
+      socket
+      |> assign(:turn_status, :running)
+      |> assign(:turn_pid, pid)
+      |> assign(:turn_ref, ref)
+      |> assign(:codex_turn_id, nil)
+
+    {:reply, :ok, socket}
+  end
+
+  defp turn_agent_kind(context) when is_map(context) do
+    AgentPreference.normalize(Map.get(context, "agent") || Map.get(context, :agent))
+  end
+
+  defp turn_agent_kind(_context), do: nil
+
+  # Stub: a busy durable thread will steer or queue in a follow-up task.
+  defp steer_or_queue(_thread, _trimmed, _start_opts, socket) do
+    {:reply, {:error, %{reason: "assistant is busy"}}, socket}
   end
 
   defp resolve_attachments(_payload, %{scope: "freeform"}, _project_slug), do: {[], []}

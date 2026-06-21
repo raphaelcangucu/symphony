@@ -554,6 +554,38 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert payload.goal_run_elapsed_seconds == nil
   end
 
+  test "join exposes last_turn and a reloaded tab re-attaches a running turn" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-attach")
+      send(test_pid, {:runner_started, self()})
+      receive do: (:finish -> :ok)
+      {:ok, %{assistant_message: "ok", codex_thread_id: "ct-attach", turn_id: "turn-attach", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-1"
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner_started, runner_pid}, 2_000
+
+    {:ok, join_payload, _socket2} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    assert %{last_turn: %{status: "running"}} = join_payload
+    assert join_payload.turn_running == true
+
+    send(runner_pid, :finish)
+    assert_push("assistant_completed", %{message: %{role: "assistant"}})
+  end
+
   test "dispatch_codex moves the bound issue to In Progress without a goal by default", %{socket: socket} do
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Dispatch me", "status" => "Todo"})
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
