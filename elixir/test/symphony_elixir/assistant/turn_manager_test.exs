@@ -133,11 +133,43 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert_receive {:second, "second"}, 1_000
   end
 
+  test "enqueue with no running turn starts immediately", %{thread: thread} do
+    test_pid = self()
+
+    builder = fn prompt ->
+      fn ->
+        send(test_pid, {:ran, prompt})
+        {:ok, %{}}
+      end
+    end
+
+    TurnManager.enqueue(thread.id, "solo", run_builder: builder, reply_to: self())
+
+    assert_receive {:ran, "solo"}, 1_000
+    assert_receive {:assistant_turn_finished, {:ok, _}}, 1_000
+    wait_until(fn -> not TurnManager.running?(thread.id) end)
+    refute TurnManager.running?(thread.id)
+  end
+
+  test "start_turn without a run fn errors and does not strand running", %{thread: thread} do
+    assert {:error, :invalid_start_opts} = TurnManager.start_turn(thread.id, "x", reply_to: self())
+
+    {:ok, reloaded} = History.get_thread(thread.id)
+    refute History.turn_running?(reloaded)
+    refute TurnManager.running?(thread.id)
+  end
+
   defp wait_until(fun, attempts \\ 100) do
     cond do
-      attempts <= 0 -> flunk("condition not met in time")
-      fun.() -> :ok
-      true -> Process.sleep(10); wait_until(fun, attempts - 1)
+      attempts <= 0 ->
+        flunk("condition not met in time")
+
+      fun.() ->
+        :ok
+
+      true ->
+        Process.sleep(10)
+        wait_until(fun, attempts - 1)
     end
   end
 

@@ -174,8 +174,15 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   def handle_cast({:enqueue, thread_id, prompt, opts}, state) do
-    queued = Map.get(state, {:queue, thread_id}, [])
-    {:noreply, Map.put(state, {:queue, thread_id}, queued ++ [%{prompt: prompt, opts: opts}])}
+    if Map.has_key?(state, {:turn, thread_id}) do
+      queued = Map.get(state, {:queue, thread_id}, [])
+      {:noreply, Map.put(state, {:queue, thread_id}, queued ++ [%{prompt: prompt, opts: opts}])}
+    else
+      case do_start_turn(thread_id, prompt, ensure_run(opts, prompt), state) do
+        {:reply, {:ok, _}, new_state} -> {:noreply, new_state}
+        {:reply, _err, new_state} -> {:noreply, new_state}
+      end
+    end
   end
 
   @impl true
@@ -198,21 +205,40 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   # --- internals -------------------------------------------------------------
 
   defp do_start_turn(thread_id, prompt, opts, state) do
-    with {:ok, thread} <- History.get_thread(thread_id),
-         {:ok, _updated} <- History.start_turn_state(thread, start_attrs(prompt, opts)),
-         run when is_function(run, 0) <- Keyword.get(opts, :run),
-         {:ok, pid} <- spawn_worker(thread_id, run, Keyword.get(opts, :reply_to)) do
-      ref = Process.monitor(pid)
-      register(thread_id, {pid, nil})
+    run = Keyword.get(opts, :run)
 
-      {:ok, refreshed} = History.get_thread(thread_id)
-      broadcast_from(self(), thread_id, {:turn_status, :running, History.turn_payload(refreshed)})
+    if is_function(run, 0) do
+      with {:ok, thread} <- History.get_thread(thread_id),
+           {:ok, _updated} <- History.start_turn_state(thread, start_attrs(prompt, opts)),
+           {:ok, pid} <- spawn_worker(thread_id, run, Keyword.get(opts, :reply_to)) do
+        ref = Process.monitor(pid)
+        register(thread_id, {pid, nil})
 
-      state = Map.put(state, {:turn, thread_id}, %{monitor_ref: ref, pid: pid})
-      {:reply, {:ok, %{pid: pid}}, state}
+        {:ok, refreshed} = History.get_thread(thread_id)
+        broadcast_from(self(), thread_id, {:turn_status, :running, History.turn_payload(refreshed)})
+
+        state = Map.put(state, {:turn, thread_id}, %{monitor_ref: ref, pid: pid})
+        {:reply, {:ok, %{pid: pid}}, state}
+      else
+        {:error, reason} ->
+          rollback_failed_start(thread_id, reason)
+          {:reply, {:error, reason}, state}
+
+        _ ->
+          rollback_failed_start(thread_id, :invalid_start_opts)
+          {:reply, {:error, :invalid_start_opts}, state}
+      end
     else
-      {:error, reason} -> {:reply, {:error, reason}, state}
-      _ -> {:reply, {:error, :invalid_start_opts}, state}
+      {:reply, {:error, :invalid_start_opts}, state}
+    end
+  end
+
+  defp rollback_failed_start(thread_id, reason) do
+    with {:ok, thread} <- History.get_thread(thread_id),
+         true <- History.turn_running?(thread) do
+      History.fail_turn_state(thread, reason)
+    else
+      _ -> :ok
     end
   end
 
@@ -268,18 +294,22 @@ defmodule SymphonyElixir.Assistant.TurnManager do
             do: Map.delete(state, {:queue, thread_id}),
             else: Map.put(state, {:queue, thread_id}, rest)
 
-        opts =
-          case Keyword.get(next.opts, :run_builder) do
-            builder when is_function(builder, 1) ->
-              Keyword.put(next.opts, :run, builder.(next.prompt))
-
-            _ ->
-              next.opts
-          end
-
-        case do_start_turn(thread_id, next.prompt, opts, state) do
+        case do_start_turn(thread_id, next.prompt, ensure_run(next.opts, next.prompt), state) do
           {:reply, {:ok, _}, new_state} -> new_state
-          {:reply, _err, new_state} -> new_state
+          {:reply, _err, new_state} -> drain_queue(thread_id, new_state)
+        end
+    end
+  end
+
+  defp ensure_run(opts, prompt) do
+    case Keyword.get(opts, :run) do
+      run when is_function(run, 0) ->
+        opts
+
+      _ ->
+        case Keyword.get(opts, :run_builder) do
+          builder when is_function(builder, 1) -> Keyword.put(opts, :run, builder.(prompt))
+          _ -> opts
         end
     end
   end
@@ -292,16 +322,20 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   defp broadcast_finish(thread_id, result) do
-    status = if match?({:ok, _}, result), do: :finished, else: :failed
-
     payload =
       case History.get_thread(thread_id) do
         {:ok, thread} -> History.turn_payload(thread)
         _ -> nil
       end
 
-    broadcast_from(self(), thread_id, {:turn_status, status, payload})
+    broadcast_from(self(), thread_id, {:turn_status, finish_status(payload, result), payload})
   end
+
+  defp finish_status(%{status: "completed"}, _result), do: :finished
+  defp finish_status(%{status: "interrupted"}, _result), do: :interrupted
+  defp finish_status(%{status: "failed"}, _result), do: :failed
+  defp finish_status(_payload, {:ok, _}), do: :finished
+  defp finish_status(_payload, _result), do: :failed
 
   defp register(thread_id, value),
     do: safe_registry(fn -> Registry.register(@registry, thread_id, value) end)
@@ -328,6 +362,8 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   defp safe_reconcile do
     History.reconcile_orphaned_turns()
   rescue
-    _ -> :error
+    error ->
+      Logger.warning("assistant turns: boot reconcile failed: #{inspect(error)}")
+      :error
   end
 end
