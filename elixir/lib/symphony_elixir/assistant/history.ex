@@ -9,6 +9,8 @@ defmodule SymphonyElixir.Assistant.History do
 
   @type attrs :: map()
 
+  @current_turn_key "current_turn"
+
   @spec ensure_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
   def ensure_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
     with {:ok, normalized_slug} <- normalize_required_string(project_slug, :project_slug),
@@ -243,6 +245,128 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
+  @doc "Write a fresh `running` current_turn onto the thread's metadata."
+  @spec start_turn_state(Thread.t(), map()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def start_turn_state(%Thread{metadata: metadata} = thread, attrs) when is_map(attrs) do
+    turn = %{
+      "status" => "running",
+      "trigger" => Map.get(attrs, :trigger, "user"),
+      "prompt" => to_string(Map.get(attrs, :prompt, "")),
+      "agent_kind" => stringify(Map.get(attrs, :agent_kind)),
+      "model" => stringify(Map.get(attrs, :model)),
+      "effort" => stringify(Map.get(attrs, :effort)),
+      "codex_thread_id" => stringify(Map.get(attrs, :codex_thread_id)),
+      "turn_id" => nil,
+      "session_id" => nil,
+      "error" => nil,
+      "interrupted_reason" => nil,
+      "started_at" => now_iso(),
+      "finished_at" => nil
+    }
+
+    update_thread(thread, %{metadata: Map.put(metadata || %{}, @current_turn_key, turn)})
+  end
+
+  @doc "Fill the Codex thread/turn ids (and composed session_id) on the current turn."
+  @spec note_turn_codex(Thread.t(), map()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def note_turn_codex(%Thread{} = thread, attrs) when is_map(attrs) do
+    patch_current_turn(thread, fn turn -> merge_codex(turn, attrs) end)
+  end
+
+  @doc "Transition the current turn to completed."
+  @spec complete_turn_state(Thread.t(), map()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def complete_turn_state(%Thread{} = thread, attrs) when is_map(attrs) do
+    patch_current_turn(thread, fn turn ->
+      turn
+      |> merge_codex(attrs)
+      |> Map.put("status", "completed")
+      |> Map.put("finished_at", now_iso())
+    end)
+  end
+
+  @doc "Transition the current turn to failed with an error string."
+  @spec fail_turn_state(Thread.t(), term()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def fail_turn_state(%Thread{} = thread, reason) do
+    patch_current_turn(thread, fn turn ->
+      turn
+      |> Map.put("status", "failed")
+      |> Map.put("error", turn_error_text(reason))
+      |> Map.put("finished_at", now_iso())
+    end)
+  end
+
+  @doc "Transition the current turn to interrupted with a reason."
+  @spec interrupt_turn_state(Thread.t(), String.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def interrupt_turn_state(%Thread{} = thread, reason) when is_binary(reason) do
+    patch_current_turn(thread, fn turn ->
+      turn
+      |> Map.put("status", "interrupted")
+      |> Map.put("interrupted_reason", reason)
+      |> Map.put("finished_at", now_iso())
+    end)
+  end
+
+  @doc "The current turn map stored on the thread metadata, or nil."
+  @spec current_turn(Thread.t()) :: map() | nil
+  def current_turn(%Thread{metadata: %{@current_turn_key => turn}}) when is_map(turn), do: turn
+  def current_turn(%Thread{}), do: nil
+
+  @doc "True when the thread's current turn is running."
+  @spec turn_running?(Thread.t()) :: boolean()
+  def turn_running?(%Thread{} = thread) do
+    match?(%{"status" => "running"}, current_turn(thread))
+  end
+
+  @doc "Whole seconds the running turn has been executing, or nil when not running."
+  @spec turn_elapsed_seconds(Thread.t()) :: non_neg_integer() | nil
+  def turn_elapsed_seconds(%Thread{} = thread) do
+    with %{"status" => "running", "started_at" => started} when is_binary(started) <-
+           current_turn(thread),
+         {:ok, dt, _offset} <- DateTime.from_iso8601(started) do
+      max(0, DateTime.diff(DateTime.utc_now(), dt, :second))
+    else
+      _ -> nil
+    end
+  end
+
+  @doc "Normalized current-turn payload for the channel/UI, or nil."
+  @spec turn_payload(Thread.t() | map() | nil) :: map() | nil
+  def turn_payload(nil), do: nil
+  def turn_payload(%Thread{} = thread), do: turn_payload(current_turn(thread))
+
+  def turn_payload(turn) when is_map(turn) do
+    %{
+      status: turn["status"],
+      trigger: turn["trigger"],
+      session_id: turn["session_id"],
+      codex_thread_id: turn["codex_thread_id"],
+      turn_id: turn["turn_id"],
+      started_at: turn["started_at"],
+      finished_at: turn["finished_at"],
+      can_resume: turn["status"] == "interrupted"
+    }
+  end
+
+  @doc "On boot: flip every thread whose current turn is still `running` to interrupted(serve_restart)."
+  @spec reconcile_orphaned_turns() :: {:ok, non_neg_integer()}
+  def reconcile_orphaned_turns do
+    count =
+      Thread
+      |> Repo.all()
+      |> Enum.reduce(0, fn thread, acc ->
+        if turn_running?(thread) do
+          case interrupt_turn_state(thread, "serve_restart") do
+            {:ok, _} -> acc + 1
+            _ -> acc
+          end
+        else
+          acc
+        end
+      end)
+
+    {:ok, count}
+  end
+
   @spec update_thread(Thread.t(), attrs()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def update_thread(%Thread{} = thread, attrs) when is_map(attrs) do
     thread
@@ -382,6 +506,38 @@ defmodule SymphonyElixir.Assistant.History do
       inserted_at: message.inserted_at
     }
   end
+
+  defp patch_current_turn(%Thread{metadata: metadata} = thread, fun) do
+    case current_turn(thread) do
+      nil -> {:ok, thread}
+      turn -> update_thread(thread, %{metadata: Map.put(metadata || %{}, @current_turn_key, fun.(turn))})
+    end
+  end
+
+  defp merge_codex(turn, attrs) do
+    codex_thread_id = stringify(Map.get(attrs, :codex_thread_id)) || turn["codex_thread_id"]
+    turn_id = stringify(Map.get(attrs, :turn_id)) || turn["turn_id"]
+
+    turn
+    |> Map.put("codex_thread_id", codex_thread_id)
+    |> Map.put("turn_id", turn_id)
+    |> Map.put("session_id", compose_session_id(codex_thread_id, turn_id) || turn["session_id"])
+  end
+
+  defp compose_session_id(thread_id, turn_id)
+       when is_binary(thread_id) and is_binary(turn_id),
+       do: "#{thread_id}-#{turn_id}"
+
+  defp compose_session_id(_thread_id, _turn_id), do: nil
+
+  defp now_iso, do: DateTime.utc_now() |> DateTime.to_iso8601()
+
+  defp stringify(nil), do: nil
+  defp stringify(value) when is_binary(value), do: value
+  defp stringify(value), do: to_string(value)
+
+  defp turn_error_text(reason) when is_binary(reason), do: reason
+  defp turn_error_text(reason), do: inspect(reason)
 
   defp active_thread(project_slug) do
     Repo.get_by(Thread, project_slug: project_slug, scope: "project", status: "active")
