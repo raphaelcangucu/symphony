@@ -4,6 +4,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   use Phoenix.Channel
 
   alias Phoenix.Socket
+
   alias SymphonyElixir.Assistant.{
     AuthoringGoalControl,
     CodexSession,
@@ -14,6 +15,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     ToolExecutor,
     TurnManager
   }
+
   alias SymphonyElixir.Config
   alias SymphonyElixirWeb.TrackerAuth
   alias SymphonyElixir.{AgentPreference, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
@@ -171,9 +173,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
     with {:ok, thread} <- issue_thread(socket),
          {:ok, updated_thread} <- History.set_goal_mode(thread, enabled, objective) do
-      {:reply,
-       {:ok, %{goal_mode: enabled, goal_objective: History.thread_goal_objective(updated_thread)}},
-       assign(socket, :thread, updated_thread)}
+      {:reply, {:ok, %{goal_mode: enabled, goal_objective: History.thread_goal_objective(updated_thread)}}, assign(socket, :thread, updated_thread)}
     else
       {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
     end
@@ -634,12 +634,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> Keyword.put(:on_thread_documents_changed, fn thread_id ->
             push(socket, "assistant_document_changed", %{thread_id: thread_id})
           end)
-          |> Keyword.put(:on_turn_started, fn turn_id ->
-            send(channel_pid, {:assistant_turn_started, turn_id})
-
-            if is_map(thread) and is_integer(Map.get(thread, :id)),
-              do: TurnManager.note_codex_turn(thread.id, nil, turn_id)
-          end)
+          |> Keyword.put(:on_turn_started, fn turn_id -> notify_turn_started(channel_pid, thread, turn_id) end)
           |> Keyword.put(:interactive_user_input, true)
           |> Keyword.put(:on_user_input_required, fn request ->
             send(channel_pid, {:assistant_user_input_required, request})
@@ -715,17 +710,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     goal_run? = goal_thread?(thread)
 
     run_builder = fn prompt_text ->
-      fn ->
-        if goal_run?, do: GoalRun.track(thread.id)
-        result = run_send_turn(thread, project_slug, prompt_text, context, opts)
-
-        if goal_run? do
-          GoalRun.untrack(thread.id)
-          GoalRun.broadcast_from(channel_pid, thread.id, {:goal_run_finished, finished_message(result)})
-        end
-
-        result
-      end
+      fn -> run_tracked_turn(thread, project_slug, prompt_text, context, opts, goal_run?, channel_pid) end
     end
 
     start_opts = [
@@ -786,6 +771,29 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   defp turn_agent_kind(_context), do: nil
+
+  # Worker-side body of a tracked turn. Goal threads keep their track/untrack +
+  # finished broadcast bookkeeping; everything runs on the channel topic via `channel_pid`.
+  defp run_tracked_turn(thread, project_slug, prompt_text, context, opts, goal_run?, channel_pid) do
+    if goal_run?, do: GoalRun.track(thread.id)
+    result = run_send_turn(thread, project_slug, prompt_text, context, opts)
+    if goal_run?, do: finish_goal_run(thread.id, result, channel_pid)
+    result
+  end
+
+  defp finish_goal_run(thread_id, result, channel_pid) do
+    GoalRun.untrack(thread_id)
+    GoalRun.broadcast_from(channel_pid, thread_id, {:goal_run_finished, finished_message(result)})
+  end
+
+  # Channel-side turn-started fan-out: notify the originating socket and record the
+  # codex turn id on the durable thread so a reloaded/other tab can steer it.
+  defp notify_turn_started(channel_pid, thread, turn_id) do
+    send(channel_pid, {:assistant_turn_started, turn_id})
+
+    if is_map(thread) and is_integer(Map.get(thread, :id)),
+      do: TurnManager.note_codex_turn(thread.id, nil, turn_id)
+  end
 
   # A send arrived while a turn is running. Prefer steering the live turn; if there
   # is no steerable worker, queue it so it runs next. Either way the message is

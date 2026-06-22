@@ -353,18 +353,18 @@ defmodule SymphonyElixir.Assistant.History do
     count =
       Thread
       |> Repo.all()
-      |> Enum.reduce(0, fn thread, acc ->
-        if turn_running?(thread) do
-          case interrupt_turn_state(thread, "serve_restart") do
-            {:ok, _} -> acc + 1
-            _ -> acc
-          end
-        else
-          acc
-        end
-      end)
+      |> Enum.reduce(0, fn thread, acc -> acc + reconcile_orphaned_turn(thread) end)
 
     {:ok, count}
+  end
+
+  defp reconcile_orphaned_turn(thread) do
+    with true <- turn_running?(thread),
+         {:ok, _} <- interrupt_turn_state(thread, "serve_restart") do
+      1
+    else
+      _ -> 0
+    end
   end
 
   @spec update_thread(Thread.t(), attrs()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
