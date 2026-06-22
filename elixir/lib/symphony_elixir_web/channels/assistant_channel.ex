@@ -142,7 +142,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   @impl true
   def handle_in("send_message", %{"message" => message} = payload, socket) when is_binary(message) do
-    if socket.assigns[:turn_status] == :running do
+    thread = socket.assigns[:thread]
+
+    if is_nil(thread) and socket.assigns[:turn_status] == :running do
       {:reply, {:error, %{reason: "assistant is busy"}}, socket}
     else
       do_send_message(message, payload, socket)
@@ -273,18 +275,17 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("steer_turn", %{"message" => message}, socket) when is_binary(message) do
     trimmed = String.trim(message)
 
-    cond do
-      trimmed == "" ->
+    case {trimmed, steer_target(socket)} do
+      {"", _} ->
         {:reply, {:error, %{reason: "message is required"}}, socket}
 
-      socket.assigns[:turn_status] != :running or not is_pid(socket.assigns[:turn_pid]) or
-          is_nil(socket.assigns[:codex_turn_id]) ->
-        {:reply, {:error, %{reason: "ActiveTurnNotSteerable"}}, socket}
-
-      true ->
+      {_text, {:ok, pid, _codex_turn_id}} ->
         maybe_persist_steer(socket, trimmed)
-        send(socket.assigns.turn_pid, {:codex_steer, [%{"type" => "text", "text" => trimmed}], self()})
+        send(pid, {:codex_steer, [%{"type" => "text", "text" => trimmed}], self()})
         {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
+
+      {_text, :error} ->
+        {:reply, {:error, %{reason: "ActiveTurnNotSteerable"}}, socket}
     end
   end
 
@@ -556,6 +557,26 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     |> assign(:pending_user_inputs, %{})
   end
 
+  # Resolve the live worker for steering: prefer the always-on TurnManager registry
+  # (works cross-channel / post-refresh); fall back to this socket's own assigns.
+  defp steer_target(%Socket{assigns: %{thread: %{id: id}}} = socket) when is_integer(id) do
+    case TurnManager.steer_target(id) do
+      {:ok, pid, codex_turn_id} -> {:ok, pid, codex_turn_id}
+      :error -> local_steer_target(socket)
+    end
+  end
+
+  defp steer_target(socket), do: local_steer_target(socket)
+
+  defp local_steer_target(%Socket{assigns: assigns}) do
+    if assigns[:turn_status] == :running and is_pid(assigns[:turn_pid]) and
+         not is_nil(assigns[:codex_turn_id]) do
+      {:ok, assigns[:turn_pid], assigns[:codex_turn_id]}
+    else
+      :error
+    end
+  end
+
   defp normalize_turn_payload(payload) when is_map(payload), do: payload
   defp normalize_turn_payload(_payload), do: %{}
 
@@ -697,9 +718,21 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp turn_agent_kind(_context), do: nil
 
-  # Stub: a busy durable thread will steer or queue in a follow-up task.
-  defp steer_or_queue(_thread, _trimmed, _start_opts, socket) do
-    {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+  # A send arrived while a turn is running. Prefer steering the live turn; if there
+  # is no steerable worker, queue it so it runs next. Either way the message is
+  # persisted to history so it is never lost.
+  defp steer_or_queue(thread, trimmed, start_opts, socket) do
+    case TurnManager.steer_target(thread.id) do
+      {:ok, pid, _codex_turn_id} ->
+        maybe_persist_steer(socket, trimmed)
+        send(pid, {:codex_steer, [%{"type" => "text", "text" => trimmed}], self()})
+        {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
+
+      :error ->
+        maybe_persist_steer(socket, trimmed)
+        TurnManager.enqueue(thread.id, trimmed, start_opts)
+        {:reply, {:ok, %{queued: true}}, socket}
+    end
   end
 
   defp resolve_attachments(_payload, %{scope: "freeform"}, _project_slug), do: {[], []}

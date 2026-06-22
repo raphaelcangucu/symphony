@@ -146,6 +146,78 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
   end
 
+  test "steer_turn works from a different channel than the one that started the turn" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-steer")
+      send(test_pid, {:runner, self()})
+
+      receive do
+        {:codex_steer, input, reply_to} ->
+          send(test_pid, {:steered, input})
+          send(reply_to, {:steer_ok, %{}})
+      after
+        2_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "ok", codex_thread_id: "ct-steer", turn_id: "turn-steer", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-2"
+
+    {:ok, _join, socket_a} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref = push(socket_a, "send_message", %{"message" => "go", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner, _runner_pid}, 2_000
+
+    {:ok, _join, socket_b} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref2 = push(socket_b, "steer_turn", %{"message" => "actually do Y"})
+    assert_reply(ref2, :ok, %{})
+    assert_receive {:steered, [%{"type" => "text", "text" => "actually do Y"}]}, 2_000
+  end
+
+  test "a send while running steers the live turn instead of starting a second one" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-busy")
+      send(test_pid, {:runner, self()})
+
+      receive do
+        {:codex_steer, input, reply_to} ->
+          send(test_pid, {:steered, input})
+          send(reply_to, {:steer_ok, %{}})
+      after
+        2_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "ok", codex_thread_id: "ct-busy", turn_id: "turn-busy", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-3"
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref = push(socket, "send_message", %{"message" => "first", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner, _pid}, 2_000
+
+    ref2 = push(socket, "send_message", %{"message" => "second", "context" => %{}})
+    assert_reply(ref2, :ok, %{})
+    assert_receive {:steered, [%{"type" => "text", "text" => "second"}]}, 2_000
+  end
+
   test "btw runs an ephemeral side query and streams answer without persisting" do
     side_runner = fn _workspace, _prompt, _issue, opts ->
       Keyword.fetch!(opts, :on_assistant_delta).("Yes")
