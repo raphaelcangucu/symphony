@@ -1582,6 +1582,8 @@
       "sendNow": "Enviar agora",
       "removeQueued": "Remover mensagem enfileirada",
       "remove": "Remover",
+      "turnInterrupted": "O turno anterior foi interrompido.",
+      "resume": "Retomar",
       "attachmentFallback": {
         "audio": "Veja o áudio anexado.",
         "image": "Veja a imagem anexada.",

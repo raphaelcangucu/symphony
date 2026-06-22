@@ -1582,6 +1582,8 @@
       "sendNow": "Send now",
       "removeQueued": "Remove queued message",
       "remove": "Remove",
+      "turnInterrupted": "The previous turn was interrupted.",
+      "resume": "Resume",
       "attachmentFallback": {
         "audio": "See the attached audio.",
         "image": "See the attached image.",
