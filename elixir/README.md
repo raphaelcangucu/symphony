@@ -646,6 +646,26 @@ Symphony's dynamic tools (`set_issue_status`, `github_graphql`, ...) are exposed
 MCP gateway: the session merges a `symphony` server entry into `<workspace>/.cursor/mcp.json`
 (restored on session stop) and the run passes `--approve-mcps`.
 
+### Assistant turn tracking & Resume
+
+Each assistant chat turn is tracked durably so the UI can recover after a refresh or a full serve
+restart. Design spec: `docs/superpowers/specs/2026-06-21-assistant-turn-session-tracking-design.md`.
+
+- **Durable state, no new table.** The thread's latest turn lives in `assistant_threads.metadata`
+  under `current_turn` (status, prompt, Codex thread/turn ids, timing) — written through
+  `SymphonyElixir.Assistant.History`. Full per-turn history stays in `log/symphony.log`.
+- **`Assistant.TurnManager`** is an always-on GenServer (started by `SharedSupervisor` after
+  `Repo`, independent of the web server). It owns the turn lifecycle: it spawns + monitors the
+  worker, holds the live worker pid in a `:unique` registry keyed by `thread_id`, and streams
+  lifecycle over the per-thread PubSub topic. On boot it reconciles any turn still marked `running`
+  to `interrupted (serve_restart)`.
+- **Re-attach after refresh.** The channel join exposes `last_turn` + `turn_running`, so a reloaded
+  tab immediately shows the running indicator (or an **Interrupted** banner with a **Resume** button
+  that re-dispatches the saved prompt, continuing the same Codex thread).
+- **Steer-then-queue.** A new message sent while a turn runs steers the live turn (cross-channel via
+  the registry) instead of starting a second Codex session; if it cannot steer, it is queued and run
+  next. Project-scoped chats (no durable thread) keep the legacy single-turn busy guard.
+
 ### Local Tracker Development
 
 The local tracker runs from the same Phoenix server as the API and stores data in the SQLite path
