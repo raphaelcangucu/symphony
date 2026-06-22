@@ -834,9 +834,10 @@ conversational only in v1 (no tracker tools). The thread model carries a `scope`
 (`project`|`freeform`|`issue`) with `issue_identifier`/`title`, and `project_slug` is nullable.
 Assistant tool calls record IN/OUT arguments and output for debugging in the chat transcript.
 
-- Assistant file activity (Codex reads, edits, and shell commands) renders as
-  compact, expandable cards in the chat, surfaced by relaying Codex item events
-  through the existing tool-call pipeline.
+- Assistant file activity renders as compact, expandable cards in the chat:
+  file reads come from the existing MCP read-tool calls, while Codex's native
+  edits and shell commands are surfaced by relaying its item events through the
+  tool-call pipeline.
 
 Issue authoring uses the same assistant surface as the primary **New issue** path. The assistant
 creates a draft issue in `assistant.draft_status`, redirects to
