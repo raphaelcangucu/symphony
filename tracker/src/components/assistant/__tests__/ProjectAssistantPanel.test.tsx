@@ -263,6 +263,21 @@ describe("ProjectAssistantPanel", () => {
     expect(banner).toHaveTextContent("Audit the auth module");
   });
 
+  it("shows a Resume button when the last turn was interrupted and pushes resume_turn on click", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({ messages: [], thread_id: 1, last_turn: { status: "interrupted", can_resume: true } })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    const button = await screen.findByRole("button", { name: /resume/i });
+    fireEvent.click(button);
+    expect(push).toHaveBeenCalledWith("resume_turn", {});
+  });
+
   it("requests native goal status on join and shows pause while a goal is running", async () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>

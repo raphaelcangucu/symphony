@@ -7,9 +7,12 @@ import {
   bindAssistantEvents,
   clearAuthoringGoal,
   normalizeGoalStatus,
+  normalizeTurnStatus,
   pauseAuthoringGoal,
+  readLastTurn,
   requestGoalStatus,
   resumeAuthoringGoal,
+  resumeTurn,
   setAuthoringGoalObjective,
 } from "../assistantChannel";
 
@@ -226,5 +229,73 @@ describe("authoring goal channel", () => {
     expect(push).toHaveBeenCalledWith("goal_resume", {});
     expect(push).toHaveBeenCalledWith("goal_clear", {});
     expect(push).toHaveBeenCalledWith("goal_set_objective", { objective: "Finish the spec" });
+  });
+});
+
+describe("turn status channel", () => {
+  it("invokes onTurnStatus when the channel pushes turn_status", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onTurnStatus = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onTurnStatus,
+    });
+
+    handlers["turn_status"]({ status: "interrupted", session_id: "ct-tn", can_resume: true });
+
+    expect(onTurnStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "interrupted", sessionId: "ct-tn", canResume: true }),
+    );
+  });
+
+  it("normalizes a turn_status payload and falls back for missing fields", () => {
+    expect(
+      normalizeTurnStatus({
+        status: "running",
+        session_id: "ct-1",
+        started_at: "2026-06-22T12:00:00Z",
+        finished_at: null,
+        can_resume: false,
+      }),
+    ).toEqual({
+      status: "running",
+      sessionId: "ct-1",
+      startedAt: "2026-06-22T12:00:00Z",
+      finishedAt: null,
+      canResume: false,
+    });
+
+    expect(normalizeTurnStatus(null)).toEqual({
+      status: "unknown",
+      sessionId: null,
+      startedAt: null,
+      finishedAt: null,
+      canResume: false,
+    });
+  });
+
+  it("reads last_turn from a join payload, or null when absent", () => {
+    expect(readLastTurn({ last_turn: { status: "interrupted", can_resume: true } })).toEqual(
+      expect.objectContaining({ status: "interrupted", canResume: true }),
+    );
+    expect(readLastTurn({})).toBeNull();
+    expect(readLastTurn(null)).toBeNull();
+  });
+
+  it("pushes resume_turn with an empty payload", () => {
+    const push = vi.fn();
+    const channel = { push } as never;
+
+    resumeTurn(channel);
+
+    expect(push).toHaveBeenCalledWith("resume_turn", {});
   });
 });

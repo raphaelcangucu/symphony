@@ -32,6 +32,7 @@ export interface AssistantChannelHandlers {
   onBtwError?: (payload: { btwId: string; message: string }) => void;
   onGoalStatus?: (status: AuthoringGoalStatus) => void;
   onGoalRunning?: (running: boolean) => void;
+  onTurnStatus?: (status: AssistantTurnStatus) => void;
 }
 
 /**
@@ -65,6 +66,43 @@ export function normalizeGoalStatus(payload: unknown): AuthoringGoalStatus {
     goal: normalizeGoal(data.goal ?? null),
     running: data.running === true,
   };
+}
+
+/**
+ * Normalized lifecycle status for the thread's current/last turn. `canResume` is
+ * only ever true when the backend reports an interrupted turn that can be
+ * re-dispatched via `resumeTurn`.
+ */
+export interface AssistantTurnStatus {
+  status: string;
+  sessionId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  canResume: boolean;
+}
+
+interface BackendTurnStatusPayload {
+  status?: string | null;
+  session_id?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  can_resume?: boolean | null;
+}
+
+export function normalizeTurnStatus(payload: unknown): AssistantTurnStatus {
+  const data = (payload ?? {}) as BackendTurnStatusPayload;
+  return {
+    status: typeof data.status === "string" ? data.status : "unknown",
+    sessionId: typeof data.session_id === "string" ? data.session_id : null,
+    startedAt: typeof data.started_at === "string" ? data.started_at : null,
+    finishedAt: typeof data.finished_at === "string" ? data.finished_at : null,
+    canResume: data.can_resume === true,
+  };
+}
+
+export function readLastTurn(joinPayload: unknown): AssistantTurnStatus | null {
+  const data = (joinPayload ?? {}) as { last_turn?: unknown };
+  return data.last_turn ? normalizeTurnStatus(data.last_turn) : null;
 }
 
 export interface AssistantDocumentChangedPayload {
@@ -220,6 +258,10 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   channel.on("goal_running", (payload) => {
     handlers.onGoalRunning?.((payload as { running?: boolean | null }).running === true);
   });
+
+  channel.on("turn_status", (payload) => {
+    handlers.onTurnStatus?.(normalizeTurnStatus(payload));
+  });
 }
 
 export function requestGoalStatus(channel: Channel): ReturnType<Channel["push"]> {
@@ -236,6 +278,10 @@ export function resumeAuthoringGoal(channel: Channel): ReturnType<Channel["push"
 
 export function clearAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
   return channel.push("goal_clear", {});
+}
+
+export function resumeTurn(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("resume_turn", {});
 }
 
 export function setAuthoringGoalObjective(channel: Channel, objective: string): ReturnType<Channel["push"]> {

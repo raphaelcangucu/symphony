@@ -64,11 +64,14 @@ import {
   dispatchCodingAgent,
   normalizeGoalStatus,
   pauseAuthoringGoal,
+  readLastTurn,
   requestGoalStatus,
   resumeAuthoringGoal,
+  resumeTurn,
   setAuthoringGoalObjective,
   submitUserInput,
   type AssistantDocumentChangedPayload,
+  type AssistantTurnStatus,
   type AuthoringGoalStatus,
   type AssistantIssueCreatedPayload,
 } from "@/services/phoenix/assistantChannel";
@@ -193,6 +196,8 @@ export function ProjectAssistantPanel({
   // whether a native Codex goal exists yet (established by a turn); `status`/`timeUsedSeconds` come
   // from the native goal so the pill shows truthful state instead of just the enabled flag.
   const [authoringGoal, setAuthoringGoal] = useState<AuthoringGoalState>(emptyAuthoringGoal);
+  // The thread's last turn lifecycle state; an interrupted turn surfaces a Resume affordance.
+  const [lastTurn, setLastTurn] = useState<AssistantTurnStatus | null>(null);
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
@@ -274,6 +279,7 @@ export function ProjectAssistantPanel({
     lastConfirmedGoalModeRef.current = null;
     pendingGoalModeRef.current = null;
     setAuthoringGoal(emptyAuthoringGoal);
+    setLastTurn(null);
 
     const socket = createTrackerSocket();
     socket.connect();
@@ -353,12 +359,26 @@ export function ProjectAssistantPanel({
       onGoalRunning: (running) => {
         if (running) setIsRunning(true);
       },
+      // Observer/reattached tabs receive turn_status fan-out (the originating tab
+      // reconciles via assistant_completed/error). Mirror the running indicator and
+      // remember the latest turn so an interrupted turn can offer Resume.
+      onTurnStatus: (status) => {
+        setLastTurn(status);
+        setIsRunning(status.status === "running");
+      },
     });
 
     const joinPush = channel.join();
     joinPush.receive("ok", (response) => {
       setConnectionError(null);
       setChannelReady(true);
+
+      // Reconcile the last turn on a freshly joined (e.g. reloaded) tab: surface the
+      // Resume affordance for an interrupted turn and reattach the running indicator
+      // when a turn is still in flight.
+      const joinedLastTurn = readLastTurn(response);
+      setLastTurn(joinedLastTurn);
+      if (joinedLastTurn?.status === "running") setIsRunning(true);
 
       const hydratedMode = modeFromResponse(response);
       if (issueIdentifier && hydratedMode && hydratedMode !== "triage") {
@@ -835,6 +855,30 @@ export function ProjectAssistantPanel({
     </div>
   ) : null;
 
+  // An interrupted turn can be re-dispatched; offer Resume while no turn is running.
+  const resumeBanner =
+    lastTurn?.canResume && !isRunning ? (
+      <div className="px-4 pb-2">
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/30 dark:bg-amber-950/40 dark:text-amber-300">
+          <span className="min-w-0 flex-1">The previous turn was interrupted.</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0 px-2 text-xs"
+            onClick={() => {
+              const channel = channelRef.current;
+              if (!channel) return;
+              void resumeTurn(channel);
+              setLastTurn(null);
+            }}
+          >
+            Resume
+          </Button>
+        </div>
+      </div>
+    ) : null;
+
   // Docks flush inside the composer card (passed as its `header`) so the goal
   // reads as the top of the message box — one piece, no separating line.
   const authoringGoalPill =
@@ -919,6 +963,7 @@ export function ProjectAssistantPanel({
               <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
               <div className="pointer-events-auto bg-background">
                 <div className="mx-auto w-full max-w-4xl px-4 pb-2 pt-1">
+                  {resumeBanner}
                   {queuedChips}
                   {questionsNode}
                   {composerNode ?? (
@@ -935,6 +980,7 @@ export function ProjectAssistantPanel({
           ) : isPageMode ? (
             <div ref={composerDockRef} className="shrink-0 bg-background">
               <div className="mx-auto w-full max-w-4xl px-4 py-2">
+                {resumeBanner}
                 {queuedChips}
                 {questionsNode}
                 {composerNode ?? (
@@ -989,6 +1035,7 @@ export function ProjectAssistantPanel({
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">{messageItems}</div>
+            {resumeBanner}
             {queuedChips}
             {questionsNode}
             {composerNode ?? (
