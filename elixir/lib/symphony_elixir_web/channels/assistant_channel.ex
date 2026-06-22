@@ -292,6 +292,21 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("steer_turn", _payload, socket),
     do: {:reply, {:error, %{reason: "message is required"}}, socket}
 
+  def handle_in("resume_turn", _payload, socket) do
+    with %{id: thread_id} when is_integer(thread_id) <- socket.assigns[:thread],
+         {:ok, reloaded} <- History.get_thread(thread_id),
+         %{"status" => "interrupted"} = turn <- History.current_turn(reloaded),
+         false <- TurnManager.running?(thread_id) do
+      do_resume_turn(reloaded, turn, socket)
+    else
+      true -> {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+      %{"status" => _other} -> {:reply, {:error, %{reason: "turn is not interrupted"}}, socket}
+      nil -> {:reply, {:error, %{reason: "no turn to resume"}}, socket}
+      {:error, _} -> {:reply, {:error, %{reason: "cannot resume"}}, socket}
+      _ -> {:reply, {:error, %{reason: "cannot resume"}}, socket}
+    end
+  end
+
   def handle_in("submit_user_input", %{"request_id" => request_id, "answers" => answers}, socket)
       when is_map(answers) do
     if socket.assigns[:turn_status] != :running or not is_pid(socket.assigns[:turn_pid]) do
@@ -635,6 +650,60 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         else
           start_legacy_turn(thread, project_slug, trimmed, context, opts, socket)
         end
+    end
+  end
+
+  # Re-dispatches a thread's interrupted current turn as a brand-new turn that
+  # re-uses the saved prompt + codex_thread_id. Codex continuity is automatic:
+  # run_send_turn -> CodexSession reloads the thread and continues the persisted
+  # agent conversation; the codex_thread_id here is for display/trace only.
+  defp do_resume_turn(thread, turn, socket) do
+    channel_pid = self()
+    context = normalize_context(%{})
+    prompt = turn["prompt"] || ""
+    codex_thread_id = turn["codex_thread_id"]
+
+    opts =
+      []
+      |> maybe_put_runner()
+      |> Keyword.put(:on_message_created, fn message -> push(socket, "message_created", %{message: message}) end)
+      |> Keyword.put(:on_assistant_delta, fn delta -> push(socket, "assistant_delta", %{delta: delta}) end)
+      |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
+      |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
+      |> Keyword.put(:on_turn_started, fn turn_id ->
+        send(channel_pid, {:assistant_turn_started, turn_id})
+        TurnManager.note_codex_turn(thread.id, codex_thread_id, turn_id)
+      end)
+      |> Keyword.put(:interactive_user_input, true)
+      |> Keyword.put(:on_user_input_required, fn request ->
+        send(channel_pid, {:assistant_user_input_required, request})
+      end)
+
+    start_opts = [
+      run: fn -> run_send_turn(thread, thread.project_slug, prompt, context, opts) end,
+      reply_to: channel_pid,
+      trigger: "resume",
+      codex_thread_id: codex_thread_id,
+      agent_kind: turn["agent_kind"],
+      model: turn["model"],
+      effort: turn["effort"]
+    ]
+
+    case TurnManager.start_turn(thread.id, prompt, start_opts) do
+      {:ok, %{pid: pid}} ->
+        socket =
+          socket
+          |> assign(:turn_status, :running)
+          |> assign(:turn_pid, pid)
+          |> assign(:codex_turn_id, nil)
+
+        {:reply, :ok, socket}
+
+      {:error, :turn_in_progress} ->
+        {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+
+      {:error, _reason} ->
+        {:reply, {:error, %{reason: "could not resume the turn"}}, socket}
     end
   end
 

@@ -857,6 +857,53 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert {:error, %{reason: _}} = subscribe_and_join(socket, "assistant:thread:999999999", %{})
   end
 
+  test "resume_turn re-dispatches the interrupted current turn as a resume turn" do
+    test_pid = self()
+
+    runner = fn _workspace, prompt, _issue, opts ->
+      send(test_pid, {:resumed_prompt, prompt})
+      Keyword.fetch!(opts, :on_turn_started).("turn-resumed")
+      {:ok, %{assistant_message: "resumed ok", codex_thread_id: "ct-r", turn_id: "turn-resumed", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-4"
+
+    {:ok, join_payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    thread_id = join_payload.thread_id
+    {:ok, thread} = History.get_thread(thread_id)
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "original work"})
+    {:ok, _interrupted} = History.interrupt_turn_state(thread, "serve_restart")
+
+    ref = push(socket, "resume_turn", %{})
+    assert_reply(ref, :ok, %{})
+
+    assert_receive {:resumed_prompt, prompt}, 2_000
+    assert prompt =~ "original work"
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "resumed ok"}})
+
+    {:ok, after_thread} = History.get_thread(thread_id)
+    assert History.current_turn(after_thread)["trigger"] == "resume"
+  end
+
+  test "resume_turn rejects when the current turn is not interrupted" do
+    topic = "assistant:issue:macro-markets:DIS-5"
+
+    {:ok, join_payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    {:ok, thread} = History.get_thread(join_payload.thread_id)
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "done"})
+    {:ok, _completed} = History.complete_turn_state(thread, %{})
+
+    ref = push(socket, "resume_turn", %{})
+    assert_reply(ref, :error, %{reason: _})
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
