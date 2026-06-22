@@ -937,7 +937,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp doc_fingerprint(identifier) do
-    case IssueDocuments.list(identifier) do
+    case IssueDocuments.list_all(identifier) do
       %{documents: documents} when is_list(documents) ->
         documents
         |> Enum.map(fn document ->

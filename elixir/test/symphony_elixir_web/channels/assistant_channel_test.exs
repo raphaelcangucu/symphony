@@ -727,7 +727,14 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
       {:ok, %{assistant_message: "freeform reply", tool_calls: []}}
     end)
 
-    {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: System.tmp_dir!()})
+    # Scope the freeform workspace to a unique empty dir. Passing the shared
+    # `System.tmp_dir!()` root makes ThreadDocuments fingerprint the entire /tmp
+    # tree, which stalls the turn and the assistant_completed push never lands.
+    workspace_path = Path.join(System.tmp_dir!(), "symphony-assistant-freeform-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(workspace_path)
+    on_exit(fn -> File.rm_rf!(workspace_path) end)
+
+    {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: workspace_path})
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
 
     ref = push(socket, "send_message", %{"message" => "hi"})

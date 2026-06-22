@@ -1732,8 +1732,6 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   @spec steer(String.t(), String.t(), pid() | nil, keyword()) :: :ok | {:error, term()}
-  @spec steer(GenServer.server(), String.t(), String.t(), pid() | nil, keyword()) ::
-          :ok | {:error, term()}
   def steer(identifier, message, reply_to \\ nil, opts \\ [])
 
   def steer(identifier, message, reply_to, opts) when is_binary(identifier) and is_list(opts) do
@@ -1744,6 +1742,8 @@ defmodule SymphonyElixir.Orchestrator do
     steer(server, identifier, message, reply_to, [])
   end
 
+  @spec steer(GenServer.server(), String.t(), String.t(), pid() | nil, keyword()) ::
+          :ok | {:error, term()}
   def steer(server, identifier, message, reply_to, opts)
       when is_binary(identifier) and is_list(opts) do
     if Process.whereis(server) do

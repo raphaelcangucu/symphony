@@ -20,16 +20,31 @@ defmodule SymphonyElixir.Assistant.IssueDocuments do
 
   @spec list(String.t()) :: %{available: boolean(), reason: String.t() | nil, documents: [document()]}
   def list(identifier) when is_binary(identifier) do
-    with {:ok, workspace, base} <- resolve_document_workspace(identifier) do
-      documents =
-        base
-        |> collect(workspace)
-        |> Kernel.++(handoff(base))
-        |> filter_referenced_documents(identifier)
+    collect_documents(identifier, &filter_referenced_documents(&1, identifier))
+  end
 
-      %{available: true, reason: nil, documents: documents}
-    else
-      {:error, _reason} -> %{available: false, reason: "workspace_missing", documents: []}
+  # Lists every doc under the issue working tree, bypassing the viewer's
+  # referenced-document filter. Change detection (doc fingerprinting) needs the
+  # full set: a turn that writes a brand-new, not-yet-referenced doc must still
+  # register as a change so the UI gets told to refresh.
+  @spec list_all(String.t()) :: %{available: boolean(), reason: String.t() | nil, documents: [document()]}
+  def list_all(identifier) when is_binary(identifier) do
+    collect_documents(identifier, &Function.identity/1)
+  end
+
+  defp collect_documents(identifier, filter) when is_function(filter, 1) do
+    case resolve_document_workspace(identifier) do
+      {:ok, workspace, base} ->
+        documents =
+          base
+          |> collect(workspace)
+          |> Kernel.++(handoff(base))
+          |> filter.()
+
+        %{available: true, reason: nil, documents: documents}
+
+      {:error, _reason} ->
+        %{available: false, reason: "workspace_missing", documents: []}
     end
   end
 
