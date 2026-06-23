@@ -239,7 +239,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
       :group_lead,
       :group_members,
       :labels,
-      comments: from(comment in Comment, order_by: [asc: comment.inserted_at, asc: comment.id]),
+      comments: from(comment in Comment, order_by: [desc: comment.inserted_at, desc: comment.id]),
       source_relations:
         from(relation in IssueRelation,
           where: relation.type == "blocked_by",

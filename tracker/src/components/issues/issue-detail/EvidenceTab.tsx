@@ -221,6 +221,7 @@ function EvidenceCard({
   const { t } = useTranslation();
   const artifactUrl = (relative: string) =>
     evidenceArtifactUrl(projectSlug, identifier, record.runId, relative);
+  const runGroups = groupRunsByTask(record.runs, t);
 
   return (
     <div className="space-y-4 rounded-lg border p-3" data-testid={`evidence-${record.runId}`}>
@@ -248,18 +249,60 @@ function EvidenceCard({
 
       {record.runs.length > 0 ? (
         <div className="space-y-4">
-          {record.runs.map((run, index) => (
-            <EvidenceRunSection
-              artifactUrl={artifactUrl}
-              index={index}
-              key={`${run.kind}-${run.repo}-${index}`}
-              run={run}
-            />
+          {runGroups.map((group) => (
+            <section className="space-y-3 rounded-md border border-border/60 bg-muted/10 p-3" key={group.key}>
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold">{group.title}</h3>
+                <p className="text-xs text-muted-foreground">
+                  {t("issue.evidence.tab.taskGroup.runCount", { count: group.runs.length })}
+                </p>
+              </div>
+              <div className="space-y-3">
+                {group.runs.map(({ run, index }) => (
+                  <EvidenceRunSection
+                    artifactUrl={artifactUrl}
+                    index={index}
+                    key={`${run.kind}-${run.repo}-${index}`}
+                    run={run}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       ) : null}
     </div>
   );
+}
+
+interface EvidenceRunGroup {
+  key: string;
+  title: string;
+  runs: Array<{ run: EvidenceRun; index: number }>;
+}
+
+function groupRunsByTask(runs: EvidenceRun[], t: TFunction): EvidenceRunGroup[] {
+  const groups = new Map<string, EvidenceRunGroup>();
+  const ungroupedTitle = t("issue.evidence.tab.taskGroup.ungrouped");
+
+  runs.forEach((run, index) => {
+    const title = run.task_title?.trim() || ungroupedTitle;
+    const key = run.task_id?.trim() || `ungrouped:${title}`;
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.runs.push({ run, index });
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      title,
+      runs: [{ run, index }],
+    });
+  });
+
+  return [...groups.values()];
 }
 
 function VisualArtifactCard({
@@ -324,7 +367,7 @@ function EvidenceRunSection({
   const artifacts = collectRunArtifacts(run);
 
   return (
-    <section className="space-y-3 rounded-md border border-border/60 bg-muted/10 p-3">
+    <section className="space-y-3 rounded-md border border-border/40 bg-background p-3">
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <h4 className="text-sm font-medium">

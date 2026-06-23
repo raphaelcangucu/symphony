@@ -590,6 +590,10 @@
         "traceLink": "{{kind}} trace ({{repo}})",
         "runSummary": "{{passed}}/{{total}} passed, {{failed}} failed",
         "openExternal": "Open in new tab",
+        "taskGroup": {
+          "ungrouped": "Evidence without linked task",
+          "runCount": "{{count}} run(s)"
+        },
         "runSection": {
           "e2eTitle": "End-to-end test — {{repo}}",
           "unitTitle": "Unit tests — {{repo}}",

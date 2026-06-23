@@ -292,6 +292,51 @@ describe("EvidenceTab", () => {
     expect(traceLink.getAttribute("href")).toContain("artifacts/trace.zip");
   });
 
+  it("groups evidence runs by plan task title", () => {
+    renderTab(
+      <EvidenceTab
+        {...baseProps}
+        records={[
+          record({
+            runs: [
+              {
+                task_id: "task-3",
+                task_title: "Task 3: Add Tasks, Review, And Runs Namespace",
+                kind: "unit",
+                repo: "admin",
+                command: "bun run test -- tasks",
+                status: "passed",
+                summary: { total: 2, passed: 2, failed: 0 },
+              },
+              {
+                task_id: "task-3",
+                task_title: "Task 3: Add Tasks, Review, And Runs Namespace",
+                kind: "e2e",
+                repo: "admin",
+                command: "npx playwright test tasks.spec.js",
+                status: "passed",
+                summary: { total: 1, passed: 1, failed: 0 },
+              },
+              {
+                kind: "unit",
+                repo: "backend",
+                command: ".venv/bin/python -m pytest tests/test_modules.py",
+                status: "passed",
+                summary: { total: 6, passed: 6, failed: 0 },
+              },
+            ],
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Task 3: Add Tasks, Review, And Runs Namespace")).toBeInTheDocument();
+    expect(screen.getByText("Evidência sem tarefa vinculada")).toBeInTheDocument();
+    expect(screen.getByText("bun run test -- tasks")).toBeInTheDocument();
+    expect(screen.getByText("npx playwright test tasks.spec.js")).toBeInTheDocument();
+    expect(screen.getByText(".venv/bin/python -m pytest tests/test_modules.py")).toBeInTheDocument();
+  });
+
   it("renders agent commits and opens the diff sheet on click", async () => {
     getCommitEvidenceMock.mockResolvedValue({
       repo: "advising",

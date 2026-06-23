@@ -102,6 +102,26 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     assert run.blocked_reason == "Docker daemon unreachable in sandbox"
   end
 
+  test "parses optional task metadata on runs", %{tmp_dir: ws} do
+    write_manifest!(ws, %{
+      "issue" => "GAM-9",
+      "runs" => [
+        %{
+          "task_id" => "task-3",
+          "task_title" => "Task 3: Add Tasks, Review, And Runs Namespace",
+          "kind" => "unit",
+          "repo" => "admin",
+          "command" => "bun run test -- tasks",
+          "status" => "passed"
+        }
+      ]
+    })
+
+    assert {:ok, %{runs: [run]}} = Manifest.read(ws)
+    assert run.task_id == "task-3"
+    assert run.task_title == "Task 3: Add Tasks, Review, And Runs Namespace"
+  end
+
   test "referenced artifact missing on disk", %{tmp_dir: ws} do
     write_manifest!(ws, valid_manifest())
     assert {:error, {:artifacts_missing, missing}} = Manifest.read(ws)
@@ -198,6 +218,7 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     touch_artifacts!(ws)
 
     assert {:ok, %{runs: [_unit, e2e]}} = Manifest.read(ws)
+
     assert [%Manifest.ArtifactRef{path: "artifacts/screens/home.png", label: "long share dialog header real app", navigations: navs}] =
              e2e.screenshots
 

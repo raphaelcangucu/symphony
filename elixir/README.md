@@ -534,6 +534,29 @@ acceptance criteria, validation, outcome — see the `workpad` skill). A missing
 workpad triggers one corrective turn; if it is still missing the run continues
 with a logged warning (the plan gate never strands implementation work).
 
+Plan-driven runs also use the workpad as a machine-readable execution contract:
+
+```markdown
+### Plan
+source_plan: docs/superpowers/plans/2026-06-23-dis-6-admin-i18n-complete-plan.md
+mode: full-plan
+scope_status: in_progress
+final_validate_allowed: false
+final_publish_allowed: false
+
+- [x] Task 1: Stabilize existing first slice
+- [~] Task 2: Add Tasks namespace
+- [ ] Task 3: Add Distribution namespace
+```
+
+`Workpad.ExecutionContract` parses this single Plan block. While any plan item
+is `[ ]` or `[~]`, Symphony treats the issue as scope-incomplete: final VALIDATE
+and publish corrective turns are skipped, goal-mode continuation is not stopped
+just because a turn ended, and an open PR is treated as a checkpoint rather than
+completion. Once every task is `[x]`, the agent sets `scope_status: complete`
+and flips `final_validate_allowed` / `final_publish_allowed` to `true`, allowing
+the final evidence and publish gates to run.
+
 Workpads are first-class in sync:
 
 - Locally authored comments are classified by body (`Tracker.Workpad`) and start
@@ -565,8 +588,10 @@ evidence:
   required: true
 ```
 
-When `required: true` and the run changed any repo, the VALIDATE gate runs
-before the publish gate. The agent (guided by the `evidence` skill) must write
+When `required: true` and the run changed any repo, the final VALIDATE gate runs
+before the publish gate only after the execution contract says the plan scope is
+complete. Earlier test runs are slice evidence: useful for the current task
+slice, but not a handoff signal. The agent (guided by the `evidence` skill) must write
 `.symphony/evidence/manifest.json` with its test runs and artifacts. The
 orchestrator verifies — never trusting the agent's judgment — that:
 

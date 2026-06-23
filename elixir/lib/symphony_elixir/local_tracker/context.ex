@@ -694,17 +694,25 @@ defmodule SymphonyElixir.LocalTracker.Context do
   @spec latest_comment_of_kind(String.t(), String.t(), String.t()) ::
           {:ok, Comment.t()} | {:error, :not_found | missing_error()}
   def latest_comment_of_kind(project_slug, identifier, kind) do
-    with {:ok, comments} <- list_comments(project_slug, identifier) do
-      comments
-      |> Enum.filter(&(&1.kind == kind))
-      |> List.last()
-      |> case do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      comment =
+        Comment
+        |> where([comment], comment.issue_id == ^issue.id and comment.kind == ^kind)
+        |> order_by([comment], desc: comment.inserted_at, desc: comment.id)
+        |> limit(1)
+        |> Repo.one()
+
+      case comment do
         nil -> {:error, :not_found}
         comment -> {:ok, comment}
       end
     end
   end
 
+  @doc """
+  Lists issue comments, newest first.
+  """
   @spec list_comments(String.t(), String.t()) :: {:ok, [Comment.t()]} | {:error, missing_error()}
   def list_comments(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
     with {:ok, project} <- fetch_project(project_slug),
@@ -712,7 +720,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       comments =
         Comment
         |> where([comment], comment.issue_id == ^issue.id)
-        |> order_by([comment], asc: comment.inserted_at, asc: comment.id)
+        |> order_by([comment], desc: comment.inserted_at, desc: comment.id)
         |> Repo.all()
 
       {:ok, comments}

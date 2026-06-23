@@ -42,6 +42,11 @@ defmodule SymphonyElixir.IssueDispatchTest do
 
     {:ok, updated} = Context.get_issue("pref", issue.identifier)
     assert updated.status.name == "In Progress"
+
+    {:ok, comments} = Context.list_comments("pref", issue.identifier)
+    resume_comment = Enum.find(comments, &String.contains?(&1.body, "## Resume agent run"))
+    assert resume_comment.body =~ "### Plan"
+    assert resume_comment.body =~ "slice evidence"
   end
 
   test "Codex resume routes the goal natively and never caches agent_goal", %{issue: issue} do
@@ -137,6 +142,11 @@ defmodule SymphonyElixir.IssueDispatchTest do
 
     {:ok, updated} = Context.get_issue("pref", issue.identifier)
     assert updated.status.name == "In Progress"
+
+    {:ok, comments} = Context.list_comments("pref", issue.identifier)
+    continue_comment = Enum.find(comments, &String.contains?(&1.body, "## Continue agent work"))
+    assert continue_comment.body =~ "### Plan"
+    assert continue_comment.body =~ "every plan item is `[x]`"
   end
 
   defp migrate_repo do

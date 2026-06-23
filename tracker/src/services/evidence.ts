@@ -54,6 +54,8 @@ function normalizeRun(raw: unknown): EvidenceRun {
     repo: typeof run.repo === "string" ? run.repo : "",
     command: typeof run.command === "string" ? run.command : "",
     status: typeof run.status === "string" ? run.status : "unknown",
+    task_id: typeof run.task_id === "string" && run.task_id.trim() ? run.task_id.trim() : null,
+    task_title: typeof run.task_title === "string" && run.task_title.trim() ? run.task_title.trim() : null,
     summary: (run.summary as EvidenceRun["summary"]) ?? null,
     report: typeof run.report === "string" ? run.report : null,
     screenshots: normalizeArtifactList(run.screenshots),

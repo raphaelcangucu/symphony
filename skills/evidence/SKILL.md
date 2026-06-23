@@ -15,6 +15,22 @@ description:
 - When the change touches UI paths, prove it visually: e2e run with at least
   1 screenshot AND 1 video (plus trace) of the affected flow.
 
+## Slice Evidence vs Final Evidence
+
+For long plan-driven issues, read the `## Codex Workpad` first. If the
+`### Plan` checklist still has any `[ ]` or `[~]` task, the scope is not
+complete:
+
+- You may record **slice evidence** for the task slice you just changed.
+- Do not treat slice evidence as final handoff evidence.
+- Do not set `final_validate_allowed: true`, `final_publish_allowed: true`, or
+  `scope_status: complete`.
+- Resume implementation at the next incomplete `### Plan` item after the slice
+  evidence is recorded.
+
+Run **final evidence** only after every plan task is `[x]` and the workpad's
+execution contract says `scope_status: complete`.
+
 ## Focused testing (agent validation vs CI)
 
 During VALIDATE, **run only checks that cover what you changed** — not full-repo
@@ -47,6 +63,9 @@ manifest.
   `manifest.json`.
 - One entry per `{kind, repo}` is enough (the passing scoped command).
 - Record the **actual scoped command** in the `command` field.
+- For plan-driven workpads, include `task_id` and `task_title` on each run,
+  using the current `### Plan` checklist item. This lets the Evidence tab group
+  slice evidence by task instead of showing one long chronological list.
 - Decide cross-repo impact: when you change a back-end/service repo that the
   config says can impact a UI repo, either run that UI repo's e2e OR record a
   justified `impacts_ui: false` decision in the manifest. Silent skips are a
@@ -192,6 +211,8 @@ be the UI repo it exercises:
   "ui_change": true,
   "runs": [
     {
+      "task_id": "task-3",
+      "task_title": "Task 3: Add Tasks, Review, And Runs Namespace",
       "kind": "unit",
       "repo": "backend",
       "command": "./vibe test",

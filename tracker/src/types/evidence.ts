@@ -16,6 +16,8 @@ export interface EvidenceRun {
   repo: string;
   command: string;
   status: "passed" | "failed" | string;
+  task_id?: string | null;
+  task_title?: string | null;
   summary?: EvidenceRunSummary | null;
   report?: string | null;
   screenshots?: EvidenceArtifactRef[];

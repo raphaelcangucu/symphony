@@ -120,11 +120,11 @@ defmodule SymphonyElixir.IssueDispatch do
           A previous agent run was interrupted or stalled. Resume from the current workspace and session log — do not restart from scratch unless the workspace is empty.
 
           **Priority on resume:**
-          1. Finish remaining **implementation** first (code, commits, push, PR).
+          1. Read the workpad `### Plan` checklist and continue the next incomplete `[ ]` or `[~]` item first.
           2. Do **not** front-load full test/evidence runs unless implementation is already complete and only validation was blocked.
           3. Run VALIDATE/evidence (`evidence` skill) when handoff is ready — after deliverables exist and before moving to review.
 
-          Stale `targeted tests:` lines in the workpad describe a previous attempt; retry them only after the ticket work itself is done.
+          Stale `targeted tests:` lines in the workpad describe a previous attempt; retry them only after the current plan item is implemented. Evidence before all plan items are `[x]` is slice evidence, not final handoff evidence.
           """
 
         :restart ->
@@ -149,8 +149,8 @@ defmodule SymphonyElixir.IssueDispatch do
 
           **Priority:**
           1. Follow the human/tracker instructions first.
-          2. Finish any remaining implementation before full VALIDATE runs unless the instructions say otherwise.
-          3. Run VALIDATE/evidence (`evidence` skill) when handoff is ready.
+          2. Read the workpad `### Plan` checklist and continue the next incomplete `[ ]` or `[~]` item.
+          3. Run final VALIDATE/evidence (`evidence` skill) only when every plan item is `[x]`.
           """
       end
 

@@ -22,12 +22,18 @@ export interface UseIssueCommentsResult {
 }
 
 function sortByCreatedAt(comments: Comment[]): Comment[] {
-  return [...comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return [...comments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 function latestWorkpad(comments: Comment[]): Comment | null {
-  const workpads = comments.filter((comment) => comment.kind === "workpad");
-  return workpads.length > 0 ? workpads[workpads.length - 1] : null;
+  let latest: Comment | null = null;
+  for (const comment of comments) {
+    if (comment.kind !== "workpad") continue;
+    if (!latest || comment.createdAt.localeCompare(latest.createdAt) > 0) {
+      latest = comment;
+    }
+  }
+  return latest;
 }
 
 /**

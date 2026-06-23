@@ -21,8 +21,20 @@ description: >-
 ## Codex Workpad
 
 ### Plan
-- [ ] step 1
-- [ ] step 2
+source_plan: docs/superpowers/plans/YYYY-MM-DD-feature-plan.md
+mode: full-plan
+scope_status: in_progress
+final_validate_allowed: false
+final_publish_allowed: false
+
+- [ ] Task 1: first plan task
+  validation: pending
+  evidence: pending
+  commit: pending
+- [ ] Task 2: second plan task
+  validation: pending
+  evidence: pending
+  commit: pending
 
 ### Acceptance criteria
 - criterion 1
@@ -33,6 +45,34 @@ description: >-
 ### Outcome
 (one of: `in-progress`, `done — PR <url>`, or `no-op — <justification>`)
 ```
+
+For runs that execute a written implementation plan, `### Plan` is both the
+human checklist and the machine-readable runtime contract the orchestrator uses
+to avoid treating a partial slice as final completion.
+
+Rules:
+- `source_plan` is the repo-relative plan path being executed.
+- `mode` is usually `full-plan` for long plan execution.
+- `scope_status` is `in_progress` until every plan task is complete.
+- `final_validate_allowed` and `final_publish_allowed` stay `false` until
+  `scope_status: complete`.
+- In the `Plan` checklist, use `[x]` for complete, `[ ]` for not started, and
+  `[~]` for partial. A `[~]` task must include a short `remaining:` list or note.
+- Every implementation task tracks three independent gates under the checklist
+  item:
+  - `validation`: `pending`, `passed`, `failed`, `blocked`, or `n/a`
+  - `evidence`: `pending`, `done`, `blocked`, or `n/a`
+  - `commit`: `pending`, `done`, or `n/a`
+- Do not mark a task `[x]` until its implementation is done, focused validation
+  has passed, a task-scoped evidence manifest exists when applicable, and a
+  task commit exists when applicable.
+- Tests passing do NOT mean `evidence: done`. Evidence is done only after a
+  fresh `.symphony/evidence/manifest.json` records runs for the current task
+  with `task_id` and `task_title`.
+- Do not set `scope_status: complete` while any task is `[ ]` or `[~]`, or while
+  any `[x]` task has missing/non-terminal validation, evidence, or commit gates.
+- Evidence before scope completion is slice evidence only; final evidence runs
+  after all plan items are `[x]`.
 
 ## PR registry block (machine-readable)
 
@@ -97,4 +137,5 @@ recorded.
 
 Symphony verifies after your first turn that a comment whose body starts with
 `## Codex Workpad` exists on the issue, containing a Plan and Acceptance
-criteria. Create it BEFORE writing any code.
+criteria. Plan-driven runs also require contract metadata and a task checklist
+inside `### Plan`. Create it BEFORE writing any code.
