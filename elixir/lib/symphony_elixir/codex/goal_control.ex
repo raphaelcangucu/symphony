@@ -2,21 +2,21 @@ defmodule SymphonyElixir.Codex.GoalControl do
   @moduledoc """
   Operator goal controls mapped onto the native Codex `thread/goal/*` API.
 
-  Every control resolves the issue's workspace and project Codex config, then
-  drives `SymphonyElixir.Codex.CodingAgent.manage_goal/3`. The goal persisted in
-  the Codex thread stays the single source of truth — Symphony does not maintain
-  a parallel goal abstraction. The issue's `agent_goal` field is treated only as
-  a cached objective for display, so it is mirrored on edit/clear but never used
-  as operational state.
+  The goal persisted in the Codex thread is the single source of truth. Symphony
+  does not maintain a parallel goal abstraction and never synthesizes a goal from
+  the issue's `agent_goal` column. Defining a goal (`set_objective/3`) ensures the
+  issue workspace and a durable Codex thread exist, then sets the goal natively
+  and persists the thread id as the issue's `agent_session_id`; all other controls
+  operate on that native thread.
 
   Mapping of controls to native calls:
 
     * `pause/2`        → `thread/goal/set` with `status: "paused"`
     * `resume/2`       → `thread/goal/set` with `status: "active"`
-    * `clear/2`        → `thread/goal/clear` (+ clears the cached objective)
-    * `set_objective/3`→ `thread/goal/set` with a new `objective` (resets native accounting)
+    * `clear/2`        → `thread/goal/clear`
+    * `set_objective/3`→ ensure thread + `thread/goal/set` with a new `objective`
     * `set_budget/3`   → `thread/goal/set` with `tokenBudget` (`nil` removes the budget)
-    * `get/2`          → `thread/goal/get`
+    * `get/2`          → `thread/goal/get` (`{:ok, nil}` when no thread exists yet)
   """
 
   require Logger
@@ -30,7 +30,10 @@ defmodule SymphonyElixir.Codex.GoalControl do
 
   @spec get(Project.t(), String.t()) :: goal_result()
   def get(%Project{} = project, identifier) when is_binary(identifier) do
-    with_goal(project, identifier, :get)
+    case with_goal(project, identifier, :get) do
+      {:error, :no_codex_thread} -> {:ok, nil}
+      other -> other
+    end
   end
 
   @spec pause(Project.t(), String.t()) :: goal_result()
@@ -46,9 +49,13 @@ defmodule SymphonyElixir.Codex.GoalControl do
   @spec clear(Project.t(), String.t()) :: goal_result()
   def clear(%Project{} = project, identifier) when is_binary(identifier) do
     case with_goal(project, identifier, :clear) do
-      {:ok, :cleared} = ok ->
-        cache_objective(project, identifier, nil)
-        ok
+      {:ok, :cleared} ->
+        clear_cached_objective(project, identifier)
+        {:ok, :cleared}
+
+      {:error, :no_codex_thread} ->
+        clear_cached_objective(project, identifier)
+        {:ok, :cleared}
 
       other ->
         other
@@ -56,8 +63,10 @@ defmodule SymphonyElixir.Codex.GoalControl do
   end
 
   @doc """
-  Replaces the goal objective. Per the Codex contract this creates a new goal and
-  resets native accounting; the cached objective is updated to match.
+  Sets the goal objective, creating the issue workspace and a durable Codex
+  thread first when none exists yet. Per the Codex contract this creates/replaces
+  the native goal and resets native accounting. The resolved thread id is
+  persisted as the issue's `agent_session_id`; no parallel objective is cached.
   """
   @spec set_objective(Project.t(), String.t(), String.t()) :: goal_result()
   def set_objective(%Project{} = project, identifier, objective)
@@ -67,14 +76,7 @@ defmodule SymphonyElixir.Codex.GoalControl do
         {:error, :empty_objective}
 
       trimmed ->
-        case with_goal(project, identifier, {:set, %{objective: trimmed, status: "active"}}) do
-          {:ok, _goal} = ok ->
-            cache_objective(project, identifier, trimmed)
-            ok
-
-          other ->
-            other
-        end
+        ensure_native_goal(project, identifier, %{objective: trimmed, status: "active"})
     end
   end
 
@@ -88,76 +90,51 @@ defmodule SymphonyElixir.Codex.GoalControl do
     with_goal(project, identifier, {:set, %{token_budget: budget}})
   end
 
-  @cache_goal_fallback_errors [:no_codex_thread, :goals_disabled]
-
+  # Operate on the issue's existing native Codex thread. Returns
+  # `{:error, :no_codex_thread}` when the issue has no durable thread yet; the
+  # public functions translate that into the right caller-facing result rather
+  # than synthesizing a goal from any local cache.
   defp with_goal(%Project{} = project, identifier, command) do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
       issue_ref = issue_ref(project, issue)
       workspace = Workspace.path_for_issue(issue_ref)
+      CodingAgent.manage_goal(workspace, command, goal_opts(project, issue_ref))
+    end
+  end
 
-      case CodingAgent.manage_goal(workspace, command, goal_opts(project, issue_ref)) do
-        {:ok, result} ->
-          {:ok, result}
+  # Ensure the issue workspace and a durable Codex thread exist, set the goal
+  # natively, and persist the thread id as the issue's `agent_session_id`. The
+  # goals-enabled gate runs before any workspace creation so a disabled project
+  # is a clean no-op with no filesystem side effects.
+  defp ensure_native_goal(%Project{} = project, identifier, attrs) do
+    with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      issue_ref = issue_ref(project, issue)
+      opts = goal_opts(project, issue_ref)
 
-        {:error, reason} when reason in @cache_goal_fallback_errors ->
-          cached_goal_command(project, issue, command)
-
-        {:error, _} = error ->
-          error
+      if CodingAgent.goals_enabled?(opts) do
+        with {:ok, workspace} <- Workspace.create_for_issue(issue_ref),
+             {:ok, %{goal: goal, thread_id: thread_id}} <-
+               CodingAgent.ensure_goal(workspace, attrs, opts) do
+          persist_session_id(project, identifier, thread_id)
+          {:ok, goal}
+        end
+      else
+        {:error, :goals_disabled}
       end
     end
   end
 
-  defp cached_goal_command(_project, issue, :get) do
-    case cached_objective(issue) do
-      nil -> {:ok, nil}
-      objective -> {:ok, cached_goal_map(objective)}
-    end
+  defp persist_session_id(%Project{} = project, identifier, thread_id)
+       when is_binary(thread_id) and thread_id != "" do
+    Context.set_agent_session_id(project.slug, identifier, thread_id)
+    :ok
+  rescue
+    error ->
+      Logger.debug("Skipping agent_session_id persistence identifier=#{identifier} reason=#{inspect(error)}")
+      :ok
   end
 
-  defp cached_goal_command(%Project{} = project, issue, :clear) do
-    cache_objective(project, Map.get(issue, :identifier), nil)
-    {:ok, :cleared}
-  end
-
-  defp cached_goal_command(%Project{} = project, issue, {:set, %{objective: objective}}) when is_binary(objective) do
-    case String.trim(objective) do
-      "" ->
-        {:error, :empty_objective}
-
-      trimmed ->
-        cache_objective(project, Map.get(issue, :identifier), trimmed)
-        {:ok, cached_goal_map(trimmed)}
-    end
-  end
-
-  defp cached_goal_command(_project, _issue, _command), do: {:error, :no_codex_thread}
-
-  defp cached_objective(issue) do
-    case Map.get(issue, :agent_goal) do
-      goal when is_binary(goal) ->
-        case String.trim(goal) do
-          "" -> nil
-          trimmed -> trimmed
-        end
-
-      _ ->
-        nil
-    end
-  end
-
-  defp cached_goal_map(objective) when is_binary(objective) do
-    %{
-      "kind" => "goal",
-      "source" => "native",
-      "objective" => objective,
-      "status" => "pending",
-      "capabilities" => ["get", "edit", "clear"],
-      "token_budget" => nil,
-      "tokens_used" => nil,
-      "time_used_seconds" => nil
-    }
-  end
+  defp persist_session_id(_project, _identifier, _thread_id), do: :ok
 
   defp goal_opts(%Project{} = project, issue_ref) do
     config = project |> Repo.preload(:setup) |> ProjectConfig.resolve()
@@ -182,12 +159,15 @@ defmodule SymphonyElixir.Codex.GoalControl do
     }
   end
 
-  defp cache_objective(%Project{} = project, identifier, objective) do
-    Context.set_agent_goal(project.slug, identifier, objective)
+  # Drop any legacy `agent_goal` value when a Codex goal is cleared so a stale
+  # objective cannot resurface in non-execution surfaces. The Codex thread, not
+  # this column, is the source of truth.
+  defp clear_cached_objective(%Project{} = project, identifier) do
+    Context.set_agent_goal(project.slug, identifier, nil)
     :ok
   rescue
     error ->
-      Logger.debug("Skipping agent_goal cache update identifier=#{identifier} reason=#{inspect(error)}")
+      Logger.debug("Skipping agent_goal clear identifier=#{identifier} reason=#{inspect(error)}")
       :ok
   end
 end

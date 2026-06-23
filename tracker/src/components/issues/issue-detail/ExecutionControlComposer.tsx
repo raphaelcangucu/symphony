@@ -74,13 +74,15 @@ export function ExecutionControlComposer({
   const [composerResetToken, setComposerResetToken] = useState(0);
   const composerSnapshotRef = useRef<ComposerSnapshot>({ input: "", attachments: [] });
 
-  const trimmedGoalObjective = execution?.goal?.objective?.trim() || issue.agentGoal?.trim() || "";
+  // Codex goals are sourced solely from the live execution snapshot (the native
+  // Codex thread), never from the cached issue.agentGoal column.
+  const trimmedGoalObjective = execution?.goal?.objective?.trim() || "";
   const goalObjective = trimmedGoalObjective.length > 0 ? trimmedGoalObjective : null;
   const showGoalPill = !goalDismissed && goalObjective != null;
 
   useEffect(() => {
-    if (!issue.agentGoal?.trim()) setGoalDismissed(false);
-  }, [issue.agentGoal]);
+    if (!goalObjective) setGoalDismissed(false);
+  }, [goalObjective]);
 
   const control = deriveAgentControl(execution, t);
   const agentRunActive = control.isActive;
@@ -160,7 +162,10 @@ export function ExecutionControlComposer({
 
     const guidance =
       action === "stop" ? "" : (overrides?.instructions?.trim() || combinedGuidance());
-    const dispatchGoal = overrides?.goal ?? goalObjective;
+    // Normal resume/restart must not re-send a cached objective; only explicit
+    // goal actions set the Codex goal (via controlIssueGoal). Resetting the same
+    // objective would reset native goal accounting.
+    const dispatchGoal = overrides?.goal ?? null;
 
     try {
       const result = await dispatchIssueAgent(projectSlug, issue.identifier, {
@@ -200,7 +205,6 @@ export function ExecutionControlComposer({
           objective,
         });
         setGoalDismissed(false);
-        onIssueUpdated?.({ ...issue, agentGoal: objective });
       } catch (cause) {
         toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
         return;
@@ -226,7 +230,8 @@ export function ExecutionControlComposer({
       }
 
       if (!dispatchPending) {
-        await runDispatch("resume", { goal: objective, instructions: framedInstructions });
+        // Goal already set natively above; resume only starts the worker.
+        await runDispatch("resume", { instructions: framedInstructions });
       }
     },
     [
@@ -319,11 +324,8 @@ export function ExecutionControlComposer({
 
   async function handleGoalRemove() {
     try {
-      const result = await controlIssueGoal(projectSlug, issue.identifier, { action: "clear" });
+      await controlIssueGoal(projectSlug, issue.identifier, { action: "clear" });
       setGoalDismissed(true);
-      if (result.cleared || !result.goal) {
-        onIssueUpdated?.({ ...issue, agentGoal: null });
-      }
       toast.success(t("issue.agent.goalControls.clearDone"));
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
@@ -333,7 +335,7 @@ export function ExecutionControlComposer({
   async function handleGoalEdit(objective: string) {
     try {
       await controlIssueGoal(projectSlug, issue.identifier, { action: "set_objective", objective });
-      onIssueUpdated?.({ ...issue, agentGoal: objective });
+      setGoalDismissed(false);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
     }

@@ -44,6 +44,28 @@ defmodule SymphonyElixir.IssueDispatchTest do
     assert updated.status.name == "In Progress"
   end
 
+  test "Codex resume routes the goal natively and never caches agent_goal", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{agent: "codex", goal: "Drive the native goal"})
+
+    {:ok, updated} = Context.get_issue("pref", issue.identifier)
+    assert updated.agent_goal in [nil, ""]
+  end
+
+  test "non-Codex resume keeps caching agent_goal as workflow guidance", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{agent: "claude", goal: "Follow the workflow"})
+
+    {:ok, updated} = Context.get_issue("pref", issue.identifier)
+    assert updated.agent_goal == "Follow the workflow"
+  end
+
   test "restart keeps active issues in place", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
     {:ok, project} = Context.get_project("pref")

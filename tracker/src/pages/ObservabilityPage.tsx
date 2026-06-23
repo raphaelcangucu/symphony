@@ -1,4 +1,4 @@
-import { Eraser, Pause, RotateCcw } from "lucide-react";
+import { Eraser, Loader2, Pause, RotateCcw, Target } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,11 +15,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAgentExecutions } from "@/hooks/useAgentExecutions";
 import { useObservability } from "@/hooks/useObservability";
 import { usePrMonitorObservability } from "@/hooks/usePrMonitorObservability";
-import { issuePath, withAgentSection } from "@/lib/workspaceRoutes";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { cn } from "@/lib/utils";
+import { issuePath, withAgentSection, workspaceBasePath } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent, type IssueDispatchAction } from "@/services/issueDispatch";
 import { listProjects } from "@/services/projects";
+import type { AgentExecution } from "@/types/agent-execution";
 import type {
   GlobalRunningRow,
   PrMonitorEvaluation,
@@ -118,6 +122,7 @@ export function ObservabilityPage() {
   const { t } = useTranslation();
   const { runtimes, loading } = useObservability();
   const { data: prMonitor } = usePrMonitorObservability();
+  const { executions } = useAgentExecutions();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState(ALL_PROJECTS);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -201,37 +206,7 @@ export function ObservabilityPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {visibleRuntimeViews.map(({ runtime, project }) => (
-          <article key={runtime.runtimeId} className="rounded-lg border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <h2 className="truncate font-medium">{project.label}</h2>
-              <span
-                className={
-                  runtime.status === "online"
-                    ? "rounded-full bg-green-500/15 px-2 py-0.5 text-xs text-green-600"
-                    : "rounded-full bg-amber-500/15 px-2 py-0.5 text-xs text-amber-600"
-                }
-              >
-                {runtime.status}
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {runtime.trackerKind ?? "?"} · {runtime.agentKind ?? "?"}
-            </p>
-            <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("observability.running")}</dt>
-                <dd className="font-medium tabular-nums">{runtime.counts.running}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("observability.retrying")}</dt>
-                <dd className="font-medium tabular-nums">{runtime.counts.retrying}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("observability.totalTokens")}</dt>
-                <dd className="font-medium tabular-nums">{runtime.agentTotals.totalTokens.toLocaleString()}</dd>
-              </div>
-            </dl>
-          </article>
+          <RuntimeSummaryCard key={runtime.runtimeId} runtime={runtime} project={project} />
         ))}
       </div>
 
@@ -249,6 +224,7 @@ export function ObservabilityPage() {
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="p-2">{t("observability.table.project")}</th>
                   <th className="p-2">{t("observability.table.issue")}</th>
+                  <th className="p-2">{t("observability.table.goal")}</th>
                   <th className="p-2">{t("observability.table.state")}</th>
                   <th className="p-2">{t("observability.table.runtimeTurns")}</th>
                   <th className="p-2">{t("observability.table.agentUpdate")}</th>
@@ -276,6 +252,9 @@ export function ObservabilityPage() {
                         row.issueIdentifier
                       )}
                     </td>
+                    <td className="p-2">
+                      <GoalCell execution={executions.get(normalizeIssueIdentifier(row.issueIdentifier))} />
+                    </td>
                     <td className="p-2">{row.state ?? "--"}</td>
                     <td className="p-2 tabular-nums">
                       {formatRuntime(row.startedAt, nowMs)}
@@ -296,6 +275,85 @@ export function ObservabilityPage() {
 
       <PrMonitorSection heartbeat={prMonitor?.heartbeat ?? null} evaluations={prMonitorEvaluations} nowMs={nowMs} />
     </div>
+  );
+}
+
+function RuntimeSummaryCard({ runtime, project }: RuntimeView) {
+  const { t } = useTranslation();
+
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="truncate font-medium">{project.label}</h2>
+        <span
+          className={
+            runtime.status === "online"
+              ? "rounded-full bg-green-500/15 px-2 py-0.5 text-xs text-green-600"
+              : "rounded-full bg-amber-500/15 px-2 py-0.5 text-xs text-amber-600"
+          }
+        >
+          {runtime.status}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {runtime.trackerKind ?? "?"} · {runtime.agentKind ?? "?"}
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+        <div>
+          <dt className="text-xs text-muted-foreground">{t("observability.running")}</dt>
+          <dd className="font-medium tabular-nums">{runtime.counts.running}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">{t("observability.retrying")}</dt>
+          <dd className="font-medium tabular-nums">{runtime.counts.retrying}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">{t("observability.totalTokens")}</dt>
+          <dd className="font-medium tabular-nums">{runtime.agentTotals.totalTokens.toLocaleString()}</dd>
+        </div>
+      </dl>
+    </>
+  );
+
+  const cardClassName = "rounded-lg border bg-card p-4";
+
+  if (!project.slug) {
+    return <article className={cardClassName}>{body}</article>;
+  }
+
+  return (
+    <Link
+      to={workspaceBasePath(project.slug, "board")}
+      title={t("observability.openBoard")}
+      className={cn(
+        cardClassName,
+        "block transition hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+    >
+      {body}
+    </Link>
+  );
+}
+
+function GoalCell({ execution }: { execution?: AgentExecution }) {
+  const { t } = useTranslation();
+  const objective = execution?.goal?.objective?.trim();
+  if (!objective) return <span className="text-muted-foreground">--</span>;
+
+  const running = execution?.status === "live" || execution?.status === "retrying";
+
+  return (
+    <span
+      title={t("observability.pursuingGoal", { objective })}
+      className="inline-flex max-w-[18rem] items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-300"
+    >
+      {running ? (
+        <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+      ) : (
+        <Target className="h-3 w-3 shrink-0" />
+      )}
+      <span className="truncate">{objective}</span>
+    </span>
   );
 }
 

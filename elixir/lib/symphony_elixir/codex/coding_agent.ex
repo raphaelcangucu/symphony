@@ -64,8 +64,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section),
            {:ok, thread_id, origin} <-
              do_start_session(port, expanded_workspace, session_policies, opts, goals_section) do
-        goal_state = establish_goal(port, thread_id, origin, opts, goals_section)
+        {goal_state, goal_map} = establish_goal(port, thread_id, origin, opts, goals_section)
         Session.write(expanded_workspace, thread_id)
+        maybe_mirror_session_goal(expanded_workspace, goal_map)
 
         {:ok,
          %{
@@ -123,12 +124,67 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         with {:ok, session_policies} <- session_policies(Path.expand(workspace), codex_section),
              :ok <- send_initialize(port),
              {:ok, _resumed_id} <- resume_thread(port, thread_id, session_policies, opts) do
-          apply_goal_command(port, thread_id, command, goals_section)
+          mirror_command_result(
+            apply_goal_command(port, thread_id, command, goals_section),
+            Path.expand(workspace)
+          )
         end
       after
         stop_port(port)
       end
     end
+  end
+
+  @doc """
+  Ensure the issue's Codex thread exists and set a goal on it without running a
+  turn.
+
+  Resolves and resumes the durable thread (sidecar/opts), or starts a fresh
+  durable thread when the issue has none yet, then applies a native
+  `thread/goal/set`. Writes the workspace session sidecar so future runs resume
+  the same thread, mirrors the native goal into the sidecar for dormant display,
+  and returns the resolved/created `thread_id` so callers can persist the
+  issue's `agent_session_id`. This is how defining a goal creates the Codex
+  thread it lives on.
+  """
+  @spec ensure_goal(Path.t(), map(), keyword()) ::
+          {:ok, %{goal: map() | nil, thread_id: String.t(), origin: :started | :resumed}}
+          | {:error, term()}
+  def ensure_goal(workspace, attrs, opts \\ []) when is_map(attrs) do
+    codex_section = codex_section(opts)
+    goals_section = goals_section(opts)
+
+    if CodexConfig.goals_enabled?(goals_section) do
+      with :ok <- validate_workspace_cwd(workspace, opts),
+           {:ok, port} <- start_port(workspace, codex_section) do
+        expanded_workspace = Path.expand(workspace)
+
+        try do
+          with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section),
+               :ok <- send_initialize(port),
+               {:ok, thread_id, origin} <-
+                 ensure_control_thread(port, expanded_workspace, session_policies, opts),
+               {:ok, goal} <- request_goal_set(port, thread_id, attrs) do
+            Session.write(expanded_workspace, thread_id)
+            Session.put_goal(expanded_workspace, goal)
+            {:ok, %{goal: goal, thread_id: thread_id, origin: origin}}
+          end
+        after
+          stop_port(port)
+        end
+      end
+    else
+      {:error, :goals_disabled}
+    end
+  end
+
+  @doc """
+  Whether Codex Goal mode is enabled for the given run opts (merging the global
+  `codex:` section with any per-project `codex_config`).
+  """
+  @spec goals_enabled?(keyword()) :: boolean()
+  def goals_enabled?(opts) do
+    opts |> goals_section() |> CodexConfig.goals_enabled?()
   end
 
   @spec run_turn(session(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
@@ -292,7 +348,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
   defp ensure_goal_active(%{port: port, thread_id: thread_id} = session, opts) do
     section = Map.get(session, :goals_section) || default_goals_section()
-    maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section) == :active
+    {goal_state, _goal} = maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
+    goal_state == :active
   end
 
   defp ensure_goal_active(_session, _opts), do: false
@@ -529,10 +586,11 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   defp goal_opt?(opts) do
-    case Keyword.get(opts, :goal) do
-      goal when is_binary(goal) -> String.trim(goal) != ""
-      _ -> false
-    end
+    Keyword.get(opts, :goal_mode, false) == true or
+      case Keyword.get(opts, :goal) do
+        goal when is_binary(goal) -> String.trim(goal) != ""
+        _ -> false
+      end
   end
 
   defp start_thread(port, workspace, %{approval_policy: approval_policy, thread_sandbox: thread_sandbox}, opts) do
@@ -584,6 +642,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   # the persisted goal first and only seed an objective when the thread does not
   # already have one — avoiding an accidental objective replacement that would
   # reset native usage accounting.
+  # Returns `{goal_state, goal_map_or_nil}`. The goal map is the native goal
+  # already returned by the underlying get/set, so callers can mirror it into the
+  # session sidecar without issuing an extra `thread/goal/get`.
   defp establish_goal(port, thread_id, :started, opts, section) do
     maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
   end
@@ -591,7 +652,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   defp establish_goal(port, thread_id, :resumed, opts, section) do
     case request_goal_get(port, thread_id) do
       {:ok, %{} = goal} ->
-        goal_state_from_status(goal_status_value(goal))
+        {goal_state_from_status(goal_status_value(goal)), goal}
 
       {:ok, nil} ->
         maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
@@ -605,11 +666,11 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp maybe_set_goal(_port, _thread_id, nil, _section), do: :not_requested
+  defp maybe_set_goal(_port, _thread_id, nil, _section), do: {:not_requested, nil}
 
   defp maybe_set_goal(port, thread_id, goal, section) when is_binary(goal) do
     case String.trim(goal) do
-      "" -> :inactive
+      "" -> {:inactive, nil}
       trimmed -> set_goal(port, thread_id, %{objective: trimmed, status: "active"}, section)
     end
   end
@@ -617,27 +678,28 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   defp maybe_set_goal(_port, thread_id, _goal, _section) do
     Logger.warning("Codex goal option must be a string; continuing with single-turn session thread_id=#{thread_id}")
 
-    :inactive
+    {:inactive, nil}
   end
 
-  # Session-start goal set: gated on `goals_enabled` and reduced to a goal_active
-  # state for the turn loop. Control-plane mutations use `request_goal_set/3`.
+  # Session-start goal set: gated on `goals_enabled` and reduced to a
+  # `{goal_state, goal_map}` pair for the turn loop and sidecar mirror. Control-
+  # plane mutations use `request_goal_set/3`.
   defp set_goal(port, thread_id, attrs, section) do
     if CodexConfig.goals_enabled?(section) do
       case request_goal_set(port, thread_id, attrs) do
         {:ok, goal} ->
           status = goal_status_value(goal) || Map.get(attrs, :status) || "active"
-          goal_state_from_status(status)
+          {goal_state_from_status(status), goal}
 
         {:error, reason} ->
           Logger.warning("Codex failed to set thread goal; continuing with single-turn session thread_id=#{thread_id}: #{inspect(reason)}")
 
-          :inactive
+          {:inactive, nil}
       end
     else
       Logger.warning("Codex goal provided but goal mode is disabled; continuing with single-turn session thread_id=#{thread_id}")
 
-      :inactive
+      {:inactive, nil}
     end
   end
 
@@ -653,6 +715,66 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         end
     end
   end
+
+  # Resolve and resume the durable control thread, or start a fresh durable
+  # thread when the issue has none yet. Lets `ensure_goal/3` create the thread a
+  # newly-defined goal lives on.
+  defp ensure_control_thread(port, workspace, session_policies, opts) do
+    case control_thread_id(workspace, opts) do
+      {:ok, thread_id} ->
+        case resume_thread(port, thread_id, session_policies, opts) do
+          {:ok, resumed_id} ->
+            {:ok, resumed_id, :resumed}
+
+          {:error, reason} ->
+            Logger.warning(
+              "Codex control thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}"
+            )
+
+            start_control_thread(port, workspace, session_policies, opts)
+        end
+
+      {:error, :no_codex_thread} ->
+        start_control_thread(port, workspace, session_policies, opts)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp start_control_thread(port, workspace, session_policies, opts) do
+    case start_thread(port, workspace, session_policies, opts) do
+      {:ok, thread_id} -> {:ok, thread_id, :started}
+      other -> other
+    end
+  end
+
+  # Mirror the native goal established for this session into the workspace
+  # sidecar so dormant execution views (no live worker) can surface the Codex
+  # goal without opening a fresh app-server connection. Reuses the goal already
+  # returned by `establish_goal` (no extra RPC). Only writes when a goal exists;
+  # explicit clears go through GoalControl / hard reset.
+  defp maybe_mirror_session_goal(workspace, %{} = goal), do: Session.put_goal(workspace, goal)
+  defp maybe_mirror_session_goal(_workspace, _goal), do: :ok
+
+  # Keep the sidecar goal mirror in sync with control-plane goal operations so
+  # dormant display reflects the latest native goal/clear.
+  defp mirror_command_result({:ok, %{} = _goal} = result, workspace) do
+    Session.put_goal(workspace, elem(result, 1))
+    result
+  end
+
+  defp mirror_command_result({:ok, :cleared} = result, workspace) do
+    Session.put_goal(workspace, nil)
+    result
+  end
+
+  defp mirror_command_result({:ok, nil} = result, workspace) do
+    Session.put_goal(workspace, nil)
+    result
+  end
+
+  defp mirror_command_result(other, _workspace), do: other
 
   defp apply_goal_command(port, thread_id, :get, _section), do: request_goal_get(port, thread_id)
 

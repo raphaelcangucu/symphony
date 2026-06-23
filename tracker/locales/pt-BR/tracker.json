@@ -1432,9 +1432,12 @@
     "runningSessions": "Sessões em execução",
     "runningSessionsHint": "Todas as sessões ativas nos runtimes.",
     "noActiveSessions": "Nenhuma sessão ativa.",
+    "openBoard": "Abrir board",
+    "pursuingGoal": "Perseguindo a goal: {{objective}}",
     "table": {
       "project": "Projeto",
       "issue": "Issue",
+      "goal": "Goal",
       "state": "Estado",
       "runtimeTurns": "Runtime / turnos",
       "agentUpdate": "Atualização do agente",

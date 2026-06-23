@@ -2,6 +2,8 @@ defmodule SymphonyElixir.AgentExecutionTest do
   use ExUnit.Case, async: true
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Workspace
 
   defp running_entry(overrides) do
     Map.merge(
@@ -40,13 +42,22 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.long_running_label == nil
     end
 
-    test "marks Codex goal executions as pursuing a goal" do
-      snapshot = %{running: [running_entry(%{agent_kind: "codex", agent_goal: "Ship the issue"})], retrying: []}
+    test "marks Codex goal executions as pursuing a goal from native goal data" do
+      goal = %{
+        kind: "goal",
+        source: "native",
+        status: "active",
+        objective: "Ship the issue",
+        capabilities: ["get", "edit", "clear"]
+      }
+
+      snapshot = %{running: [running_entry(%{agent_kind: "codex", goal: goal})], retrying: []}
 
       assert [execution] = AgentExecution.from_snapshot(snapshot)
       assert execution.long_running
       assert execution.long_running_kind == "goal"
       assert execution.long_running_label == "Pursuing goal"
+      assert execution.goal.objective == "Ship the issue"
     end
 
     test "marks Claude goal executions as pursuing a workflow" do
@@ -58,18 +69,36 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.long_running_label == "Pursuing workflow"
     end
 
-    test "fallback Codex goals omit native pause/resume so the UI dispatches instead" do
+    test "Codex running entries ignore the cached agent_goal (Codex thread is the source of truth)" do
       snapshot = %{running: [running_entry(%{agent_kind: "codex", agent_goal: "Ship the issue"})], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      # No native goal data (no orchestrator goal, no workspace mirror), so the
+      # cached agent_goal must NOT be surfaced as a Codex goal.
+      assert execution.goal == nil
+      refute execution.long_running
+    end
+
+    test "Codex running entries surface the native goal mirror from the workspace sidecar" do
+      identifier = "SYM-MIRROR-1"
+      issue_ref = %{identifier: identifier, project_slug: nil}
+      workspace = Workspace.path_for_issue(issue_ref)
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      :ok = CodexSession.put_goal(workspace, %{"objective" => "Pursue the native goal", "status" => "active"})
+
+      entry = running_entry(%{identifier: identifier, agent_kind: "codex", issue: issue_ref})
+      snapshot = %{running: [entry], retrying: []}
 
       assert [execution] = AgentExecution.from_snapshot(snapshot)
       assert execution.goal.kind == "goal"
       assert execution.goal.source == "native"
-      # No live Codex thread backs this projection, so native pause/resume (which
-      # require a resolvable thread) must not be advertised; only the cached
-      # controls GoalControl can satisfy are exposed.
+      assert execution.goal.objective == "Pursue the native goal"
+      # Projected (non-live-thread) capabilities only — native pause/resume require
+      # a live resolvable thread the UI dispatches into instead.
       assert execution.goal.capabilities == ["get", "edit", "clear"]
-      refute "pause" in execution.goal.capabilities
-      refute "resume" in execution.goal.capabilities
+      assert execution.long_running
+      assert execution.long_running_label == "Pursuing goal"
     end
 
     test "marks running issues with stale activity as idle" do

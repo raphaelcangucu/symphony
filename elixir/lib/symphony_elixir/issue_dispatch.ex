@@ -7,7 +7,8 @@ defmodule SymphonyElixir.IssueDispatch do
   pick the issue up again.
   """
 
-  alias SymphonyElixir.{Orchestrator, ProjectConfig, Repo, Workspace}
+  alias SymphonyElixir.{AgentPreference, Orchestrator, ProjectConfig, Repo, Workspace}
+  alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
@@ -80,8 +81,10 @@ defmodule SymphonyElixir.IssueDispatch do
   defp dispatch(%Project{} = project, identifier, action, opts)
        when action in [:resume, :restart, :hard_reset, :continue_work] do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
+         agent_kind = effective_agent_kind(project, issue, opts),
          {:ok, _comment} <- maybe_add_comment(project, identifier, action, opts),
-         {:ok, _} <- maybe_update_agent(project, identifier, opts),
+         {:ok, _} <- maybe_update_agent(project, identifier, opts, agent_kind),
+         :ok <- maybe_route_codex_goal(project, identifier, opts, agent_kind),
          :ok <- maybe_hard_reset(project, identifier, issue, action),
          {:ok, _} <- maybe_move_for_action(project, issue, action, opts),
          :ok <- cancel_retry(identifier),
@@ -159,19 +162,63 @@ defmodule SymphonyElixir.IssueDispatch do
     end
   end
 
-  defp maybe_update_agent(project, identifier, opts) do
+  # Codex goals are the Codex thread's responsibility (routed via
+  # `maybe_route_codex_goal/4`), so only persist `agent_goal` as workflow
+  # guidance for non-Codex agents.
+  defp maybe_update_agent(project, identifier, opts, agent_kind) do
     agent = normalize_agent(Map.get(opts, :agent))
     goal = normalize_optional_string(Map.get(opts, :goal))
+    goal_attr = if agent_kind == "codex", do: nil, else: goal
 
     attrs =
       %{}
       |> maybe_put("agent", agent)
-      |> maybe_put("agent_goal", goal)
+      |> maybe_put("agent_goal", goal_attr)
 
     if attrs == %{} do
       {:ok, nil}
     else
       IssueAdapter.dispatch(project, :update_issue, [identifier, attrs])
+    end
+  end
+
+  # When a Codex dispatch supplies a goal, establish it on the native Codex
+  # thread rather than caching it on the issue. Best-effort so a transient Codex
+  # failure never blocks resume/restart.
+  defp maybe_route_codex_goal(project, identifier, opts, "codex") do
+    case normalize_optional_string(Map.get(opts, :goal)) do
+      nil ->
+        :ok
+
+      objective ->
+        case GoalControl.set_objective(project, identifier, objective) do
+          {:ok, _goal} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.debug("Skipping Codex goal routing on dispatch identifier=#{identifier} reason=#{inspect(reason)}")
+            :ok
+        end
+    end
+  end
+
+  defp maybe_route_codex_goal(_project, _identifier, _opts, _agent_kind), do: :ok
+
+  # Effective agent kind for this dispatch: an explicit `opts[:agent]` override
+  # wins, otherwise resolve task labels over the project default.
+  defp effective_agent_kind(project, %IssueDTO{labels: labels}, opts) do
+    case normalize_agent(Map.get(opts, :agent)) do
+      agent when is_binary(agent) ->
+        agent
+
+      _ ->
+        project_kind =
+          project
+          |> Repo.preload(:setup)
+          |> ProjectConfig.resolve()
+          |> Map.get(:agent_kind)
+
+        AgentPreference.resolve(labels || [], project_kind)
     end
   end
 

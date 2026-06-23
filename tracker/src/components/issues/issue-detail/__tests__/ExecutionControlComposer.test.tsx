@@ -414,16 +414,57 @@ describe("ExecutionControlComposer", () => {
       });
     });
 
+    // The goal is set natively via controlIssueGoal; the resume dispatch must NOT
+    // re-send the objective (doing so would reset native goal accounting). The
+    // objective only survives as framing in the resume instructions.
     await waitFor(() => {
       expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
         "advising",
         "CDE-1132",
         expect.objectContaining({
           action: "resume",
-          goal: "ship i18n",
+          goal: null,
           instructions: expect.stringContaining("ship i18n"),
         }),
       );
     });
+  });
+
+  it("renders the goal pill from execution.goal only, not issue.agentGoal", () => {
+    const issueWithCachedGoal = {
+      ...issue,
+      agentGoal: "stale cached objective",
+    } as unknown as Issue;
+
+    const { rerender } = render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issueWithCachedGoal}
+        execution={makeExecution({ goal: null })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("stale cached objective")).not.toBeInTheDocument();
+
+    rerender(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issueWithCachedGoal}
+        execution={makeExecution({
+          goal: {
+            kind: "goal",
+            source: "native",
+            objective: "native objective",
+            status: "active",
+            capabilities: [],
+          } as unknown as AgentExecution["goal"],
+        })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("native objective")).toBeInTheDocument();
+    expect(screen.queryByText("stale cached objective")).not.toBeInTheDocument();
   });
 });

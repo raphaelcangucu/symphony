@@ -141,22 +141,29 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp resolve_project_config(_issue), do: nil
 
+  # Goal mode is driven by the durable native Codex goal thread, not by a cached
+  # objective. A Codex issue that owns a goal thread (`agent_session_id`) runs in
+  # goal mode so the run resumes that thread and pursues its native goal; an
+  # explicit `opts[:goal]` still forces goal mode for direct/ad-hoc runs.
   defp issue_goal_opts(opts, issue, agent_kind) do
-    if Keyword.has_key?(opts, :goal) do
-      opts
-    else
-      maybe_put_issue_goal(opts, agent_kind, Map.get(issue, :agent_goal))
+    cond do
+      Keyword.has_key?(opts, :goal) ->
+        Keyword.put_new(opts, :goal_mode, true)
+
+      agent_kind == "codex" and codex_goal_thread?(issue) ->
+        Keyword.put(opts, :goal_mode, true)
+
+      true ->
+        opts
     end
   end
 
-  defp maybe_put_issue_goal(opts, "codex", goal) when is_binary(goal) do
-    case String.trim(goal) do
-      "" -> opts
-      trimmed -> Keyword.put(opts, :goal, trimmed)
+  defp codex_goal_thread?(issue) do
+    case Map.get(issue, :agent_session_id) do
+      id when is_binary(id) and id != "" -> true
+      _ -> false
     end
   end
-
-  defp maybe_put_issue_goal(opts, _agent_kind, _goal), do: opts
 
   defp send_codex_update(recipient, %Issue{id: issue_id}, message)
        when is_binary(issue_id) and is_pid(recipient) do
@@ -182,7 +189,8 @@ defmodule SymphonyElixir.AgentRunner do
       [workspace_root: workspace_root]
       |> maybe_put_codex_config(Keyword.get(opts, :project_config))
       |> maybe_put_claude_tools(agent_kind, issue)
-      |> maybe_put_resume_thread_id(opts, issue, agent_kind)
+      |> maybe_put_resume_thread_id(opts, agent_kind, issue)
+      |> maybe_put_goal_mode(opts, agent_kind)
 
     with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, session_opts) do
       maybe_persist_goal_thread(session, issue, agent_kind, opts)
@@ -673,10 +681,11 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp goal_mode?(opts) do
-    case Keyword.get(opts, :goal) do
-      goal when is_binary(goal) -> String.trim(goal) != ""
-      _goal -> false
-    end
+    Keyword.get(opts, :goal_mode, false) == true or
+      case Keyword.get(opts, :goal) do
+        goal when is_binary(goal) -> String.trim(goal) != ""
+        _goal -> false
+      end
   end
 
   defp wait_state?(state_name, project_config) when is_binary(state_name) do
@@ -748,6 +757,20 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp maybe_put_resume_thread_id(session_opts, _opts, _agent_kind, _issue), do: session_opts
+
+  # Propagate goal mode into the session so `CodingAgent` resumes the durable
+  # Codex thread (via `resume_thread_id`/sidecar) instead of starting a fresh
+  # one. Without this flag the session would ignore the resume pointer and lose
+  # the native goal state across dispatches.
+  defp maybe_put_goal_mode(session_opts, opts, "codex") do
+    if goal_mode?(opts) do
+      Keyword.put(session_opts, :goal_mode, true)
+    else
+      session_opts
+    end
+  end
+
+  defp maybe_put_goal_mode(session_opts, _opts, _agent_kind), do: session_opts
 
   defp issue_session_thread_id(%Issue{agent_session_id: id}) when is_binary(id) and id != "", do: id
   defp issue_session_thread_id(_issue), do: nil

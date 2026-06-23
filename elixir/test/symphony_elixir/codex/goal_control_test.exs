@@ -13,38 +13,35 @@ defmodule SymphonyElixir.Codex.GoalControlTest do
     {:ok, project: project, issue: issue}
   end
 
-  test "get returns a cached goal from agent_goal when no Codex thread exists yet", %{
+  test "get returns nil when no Codex thread exists yet, ignoring agent_goal", %{
     project: project,
     issue: issue
   } do
+    # A legacy cached objective must NOT be surfaced as if it were a native goal:
+    # the Codex thread is the only source of truth.
     {:ok, _} = Context.set_agent_goal(project.slug, issue.identifier, "Ship the admin i18n plan")
 
-    assert {:ok, goal} = GoalControl.get(project, issue.identifier)
-    assert goal["objective"] == "Ship the admin i18n plan"
-    assert goal["status"] == "pending"
-    assert goal["capabilities"] == ["get", "edit", "clear"]
+    assert {:ok, nil} = GoalControl.get(project, issue.identifier)
   end
 
-  test "set_objective updates the cached agent_goal without a Codex thread", %{project: project, issue: issue} do
-    assert {:ok, goal} =
+  test "set_objective never caches agent_goal and requires Codex goal mode", %{project: project, issue: issue} do
+    # With Codex goal mode disabled (test default) there is no native thread to
+    # write to, and the legacy agent_goal column must stay untouched.
+    assert {:error, :goals_disabled} =
              GoalControl.set_objective(project, issue.identifier, "Implement phase 1 of the plan")
 
-    assert goal["objective"] == "Implement phase 1 of the plan"
     assert {:ok, reloaded} = Context.get_issue(project.slug, issue.identifier)
-    assert reloaded.agent_goal == "Implement phase 1 of the plan"
+    assert reloaded.agent_goal in [nil, ""]
   end
 
-  test "clear removes the cached agent_goal when Codex goal mode is disabled", %{project: project, issue: issue} do
+  test "clear reports cleared and removes any legacy agent_goal when no Codex thread exists", %{
+    project: project,
+    issue: issue
+  } do
     {:ok, _} = Context.set_agent_goal(project.slug, issue.identifier, "Temporary goal")
 
-    # Simulate a persisted Codex session without enabling native goal controls.
-    {:ok, updated} =
-      issue
-      |> SymphonyElixir.LocalTracker.IssueRecord.changeset(%{agent_session_id: "thread-resume"})
-      |> SymphonyElixir.Repo.update()
-
-    assert {:ok, :cleared} = GoalControl.clear(project, updated.identifier)
-    assert {:ok, reloaded} = Context.get_issue(project.slug, updated.identifier)
+    assert {:ok, :cleared} = GoalControl.clear(project, issue.identifier)
+    assert {:ok, reloaded} = Context.get_issue(project.slug, issue.identifier)
     assert reloaded.agent_goal in [nil, ""]
   end
 

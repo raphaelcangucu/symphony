@@ -22,6 +22,48 @@ defmodule SymphonyElixir.Codex.SessionTest do
   end
 
   @tag :tmp_dir
+  test "put_goal mirrors a native goal and write preserves it", %{tmp_dir: tmp_dir} do
+    workspace = Path.join(tmp_dir, "workspace")
+    File.mkdir_p!(workspace)
+
+    assert :ok = Session.write(workspace, @thread_id)
+
+    assert :ok =
+             Session.put_goal(workspace, %{
+               "objective" => "  Ship it  ",
+               "status" => "active",
+               "tokensUsed" => 5
+             })
+
+    assert {:ok, goal} = Session.read_goal(workspace)
+    assert goal["objective"] == "Ship it"
+    assert goal["status"] == "active"
+    assert goal["tokensUsed"] == 5
+
+    # A subsequent thread write must not clobber the mirrored goal, and the
+    # thread id must still resolve from the same sidecar.
+    assert :ok = Session.write(workspace, @thread_id)
+    assert {:ok, %{"objective" => "Ship it"}} = Session.read_goal(workspace)
+    assert {:ok, @thread_id} = Session.resolve(workspace)
+  end
+
+  @tag :tmp_dir
+  test "put_goal nil and blank objectives remove the mirror", %{tmp_dir: tmp_dir} do
+    workspace = Path.join(tmp_dir, "workspace")
+    File.mkdir_p!(workspace)
+
+    assert :ok = Session.write(workspace, @thread_id)
+    assert :ok = Session.put_goal(workspace, %{"objective" => "Ship it"})
+    assert {:ok, _} = Session.read_goal(workspace)
+
+    assert :ok = Session.put_goal(workspace, nil)
+    assert :error = Session.read_goal(workspace)
+
+    assert :ok = Session.put_goal(workspace, %{"objective" => "   "})
+    assert :error = Session.read_goal(workspace)
+  end
+
+  @tag :tmp_dir
   test "clear removes the sidecar so resolve no longer finds the thread", %{tmp_dir: tmp_dir} do
     workspace = Path.join(tmp_dir, "workspace")
     File.mkdir_p!(workspace)

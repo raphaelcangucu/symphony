@@ -3,6 +3,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   use Phoenix.Controller, formats: [:json]
 
+  require Logger
+
   alias Plug.Conn
   alias SymphonyElixir.{AgentPreference, IssueDispatch, Orchestrator, ProjectConfig, Repo}
   alias SymphonyElixir.Codex.GoalControl
@@ -55,12 +57,49 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
            |> normalize_create_attrs(project)
            |> maybe_inject_creator(),
          {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]) do
+      maybe_establish_codex_goal(project, issue, params)
+
       conn
       |> put_status(:created)
-      |> json(%{data: TrackerPresenter.issue(issue)})
+      |> json(%{data: TrackerPresenter.issue(reload_issue(project, issue))})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
       {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  # Codex goals live on the native Codex thread, not on `agent_goal`. When an
+  # issue is created with a Codex goal, establish the native thread + goal now so
+  # the UI and future runs read it from Codex. Best-effort: never fails issue
+  # creation (e.g. when goal mode is disabled or the workspace is unavailable).
+  defp maybe_establish_codex_goal(project, issue, params) do
+    with "codex" <- Map.get(params, "agent"),
+         goal when is_binary(goal) <- Map.get(params, "goal"),
+         trimmed when trimmed != "" <- String.trim(goal),
+         identifier when is_binary(identifier) <- Map.get(issue, :identifier) do
+      case GoalControl.set_objective(project, identifier, trimmed) do
+        {:ok, _goal} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.debug("Skipping Codex goal establishment on create identifier=#{identifier} reason=#{inspect(reason)}")
+          :ok
+      end
+    else
+      _ -> :ok
+    end
+  end
+
+  defp reload_issue(project, issue) do
+    case Map.get(issue, :identifier) do
+      identifier when is_binary(identifier) ->
+        case IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+          {:ok, reloaded} -> reloaded
+          _ -> issue
+        end
+
+      _ ->
+        issue
     end
   end
 
@@ -365,8 +404,10 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   defp maybe_put_agent(attrs, agent) when agent in ["codex", "claude", "cursor"], do: Map.put(attrs, "agent", agent)
   defp maybe_put_agent(attrs, _agent), do: attrs
 
-  # Codex stores this as a native goal; Claude/Cursor consume it as workflow guidance.
-  defp maybe_put_agent_goal(attrs, agent, goal) when agent in ["codex", "claude", "cursor"] and is_binary(goal) do
+  # Claude/Cursor consume `agent_goal` as workflow guidance. Codex goals are not
+  # stored here — they live on the native Codex thread and are established via
+  # `maybe_establish_codex_goal/3` after the issue exists.
+  defp maybe_put_agent_goal(attrs, agent, goal) when agent in ["claude", "cursor"] and is_binary(goal) do
     case String.trim(goal) do
       "" -> attrs
       trimmed -> Map.put(attrs, "agent_goal", trimmed)
