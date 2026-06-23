@@ -707,7 +707,10 @@
         "updated": "Updated · {{status}}",
         "issueUpdated": "Issue updated",
         "commentAdded": "Comment added",
-        "blockerUpdated": "Blocker updated"
+        "blockerUpdated": "Blocker updated",
+        "agentDispatchRequested": "Agent dispatch requested",
+        "agentRestartRequested": "Agent restart requested",
+        "agentHardResetRequested": "Agent hard reset requested"
       }
     },
     "terminal": {

@@ -80,6 +80,27 @@ defmodule SymphonyElixir.IssueDispatchTest do
 
     {:ok, updated} = Context.get_issue("pref", issue.identifier)
     assert updated.status.name == "In Progress"
+
+    {:ok, comments} = Context.list_comments("pref", issue.identifier)
+    refute Enum.any?(comments, &String.contains?(&1.body, "## Restart agent run"))
+
+    {:ok, events} = Context.list_activity_events("pref", issue.identifier)
+
+    assert Enum.any?(events, fn event ->
+             event.event_type == "agent_dispatch_requested" and
+               event.metadata["action"] == "restart"
+           end)
+  end
+
+  test "restart with instructions keeps a guidance comment", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} = IssueDispatch.restart(project, issue.identifier, %{instructions: "Use the new plan"})
+
+    {:ok, comments} = Context.list_comments("pref", issue.identifier)
+    restart_comment = Enum.find(comments, &String.contains?(&1.body, "## Restart agent run"))
+    assert restart_comment.body =~ "Use the new plan"
   end
 
   test "hard reset clears the persisted agent session and keeps the issue dispatchable", %{issue: issue} do
@@ -97,6 +118,16 @@ defmodule SymphonyElixir.IssueDispatchTest do
 
     {:ok, updated} = Context.get_issue("pref", issue.identifier)
     assert updated.status.name == "In Progress"
+
+    {:ok, comments} = Context.list_comments("pref", issue.identifier)
+    refute Enum.any?(comments, &String.contains?(&1.body, "## Hard reset agent run"))
+
+    {:ok, events} = Context.list_activity_events("pref", issue.identifier)
+
+    assert Enum.any?(events, fn event ->
+             event.event_type == "agent_dispatch_requested" and
+               event.metadata["action"] == "hard_reset"
+           end)
   end
 
   test "stop pauses the run but preserves the agent session and status", %{issue: issue} do

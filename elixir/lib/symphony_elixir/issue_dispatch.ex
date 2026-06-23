@@ -88,7 +88,8 @@ defmodule SymphonyElixir.IssueDispatch do
          :ok <- maybe_hard_reset(project, identifier, issue, action),
          {:ok, _} <- maybe_move_for_action(project, issue, action, opts),
          :ok <- cancel_retry(identifier),
-         :ok <- nudge_manual_dispatch(identifier) do
+         :ok <- nudge_manual_dispatch(identifier),
+         :ok <- maybe_record_dispatch_activity(project, identifier, action, opts) do
       {:ok, reloaded} = IssueAdapter.dispatch(project, :get_issue, [identifier])
 
       {:ok,
@@ -101,14 +102,39 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   defp maybe_add_comment(project, identifier, action, opts) do
-    body = comment_body(action, Map.get(opts, :instructions))
+    if comment_required?(action, Map.get(opts, :instructions)) do
+      body = comment_body(action, Map.get(opts, :instructions))
 
-    if body == "" do
-      {:ok, nil}
-    else
       IssueAdapter.dispatch(project, :add_comment, [identifier, body, %{"author" => "tracker"}])
+    else
+      {:ok, nil}
     end
   end
+
+  defp comment_required?(action, instructions) when action in [:restart, :hard_reset] do
+    not is_nil(normalize_optional_string(instructions))
+  end
+
+  defp comment_required?(_action, _instructions), do: true
+
+  defp maybe_record_dispatch_activity(project, identifier, action, opts) when action in [:restart, :hard_reset] do
+    if comment_required?(action, Map.get(opts, :instructions)) do
+      :ok
+    else
+      metadata = %{"action" => Atom.to_string(action)}
+
+      case Context.record_activity_event(project.slug, identifier, "agent_dispatch_requested", metadata) do
+        {:ok, _event} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.debug("Skipping dispatch activity identifier=#{identifier} reason=#{inspect(reason)}")
+          :ok
+      end
+    end
+  end
+
+  defp maybe_record_dispatch_activity(_project, _identifier, _action, _opts), do: :ok
 
   defp comment_body(action, instructions) do
     base =

@@ -746,6 +746,19 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @doc """
+  Appends a tracker activity event without creating a user-visible comment.
+  """
+  @spec record_activity_event(String.t(), String.t(), String.t(), map()) ::
+          {:ok, ActivityEvent.t()} | {:error, Ecto.Changeset.t() | missing_error()}
+  def record_activity_event(project_slug, identifier, event_type, metadata \\ %{})
+      when is_binary(project_slug) and is_binary(identifier) and is_binary(event_type) and is_map(metadata) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      insert_event(issue.id, event_type, metadata)
+    end
+  end
+
   @spec add_blocker(String.t(), String.t(), String.t(), String.t()) ::
           {:ok, IssueRelation.t()} | {:error, Ecto.Changeset.t() | missing_error()}
   def add_blocker(project_slug, source_identifier, target_identifier, type \\ "blocked_by")

@@ -4,6 +4,7 @@ import {
   CirclePlus,
   MessageSquare,
   Pencil,
+  RotateCcw,
   ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -33,6 +34,12 @@ interface EventMeta {
 function metaString(metadata: Record<string, unknown>, key: string): string | null {
   const value = metadata[key];
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function agentDispatchSummary(action: string | null, t: TFunction): string {
+  if (action === "restart") return t("issue.activity.events.agentRestartRequested");
+  if (action === "hard_reset") return t("issue.activity.events.agentHardResetRequested");
+  return t("issue.activity.events.agentDispatchRequested");
 }
 
 function eventMeta(event: ActivityEvent, t: TFunction = i18n.t.bind(i18n) as TFunction): EventMeta {
@@ -67,6 +74,12 @@ function eventMeta(event: ActivityEvent, t: TFunction = i18n.t.bind(i18n) as TFu
         Icon: ShieldAlert,
         className: "text-amber-600 dark:text-amber-400",
         summary: t("issue.activity.events.blockerUpdated"),
+      };
+    case "agent_dispatch_requested":
+      return {
+        Icon: RotateCcw,
+        className: "text-cyan-600 dark:text-cyan-400",
+        summary: agentDispatchSummary(metaString(event.metadata, "action"), t),
       };
     default:
       return {

@@ -11,6 +11,10 @@ defmodule SymphonyElixir.AgentRunnerPromptTest do
     [struct!(RepoState, %{path: "/w/frontend", name: "frontend", branch: "docs/gam-3", ahead_count: 3, upstream?: false})]
   end
 
+  defp clean_published_states do
+    [struct!(RepoState, %{path: "/w/frontend", name: "frontend", branch: "docs/gam-3", upstream?: true})]
+  end
+
   test "resume_section lists prior work and forbids restart" do
     text = AgentRunner.resume_section(states_with_work())
     assert text =~ "Resume notice"
@@ -35,6 +39,15 @@ defmodule SymphonyElixir.AgentRunnerPromptTest do
 
     assert text =~ "Next incomplete plan task"
     assert text =~ "Task 2: Not done"
+  end
+
+  test "continuation_prompt prioritizes the incomplete workpad task before final validate" do
+    text = AgentRunner.continuation_prompt(5, 20, clean_published_states(), execution_contract: incomplete_contract())
+
+    assert text =~ "Execution focus: WORKPAD_TASK"
+    assert text =~ "Act on the next incomplete workpad task now."
+    assert text =~ "Final VALIDATE/evidence is not the next action while the workpad scope is incomplete."
+    refute text =~ "you are in **VALIDATE-only** mode"
   end
 
   test "handoff_ready_outcome continues when publish work remains" do

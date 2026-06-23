@@ -760,6 +760,8 @@ defmodule SymphonyElixir.AgentRunner do
   @doc false
   @spec continuation_prompt(pos_integer(), pos_integer(), [RunContract.RepoState.t()], keyword()) :: String.t()
   def continuation_prompt(turn_number, max_turns, repo_states, opts) do
+    execution_contract = execution_contract_from_opts(opts)
+
     """
     Continuation guidance:
 
@@ -769,24 +771,60 @@ defmodule SymphonyElixir.AgentRunner do
     - The original task instructions and prior turn context are already present in this thread, so do not restate them before acting.
     - Focus on the remaining ticket work and do not end the turn while the issue stays active unless you are truly blocked.
     - Do not front-load the full VALIDATE/evidence matrix while implementation or PR work is still missing.
-    - When deliverables below show no commits ahead and no uncommitted changes, you are in **VALIDATE-only** mode: read and follow the `evidence` skill now. Run focused tests from the git diff and write a fresh `.symphony/evidence/manifest.json` for this session. Updating the workpad alone is not progress.
+    #{validate_mode_guidance(execution_contract)}
     - On continuation turns, do **not** loop on `git status` + manifest parse + "Continuação #N" workpad notes. Either execute missing evidence commands or end the turn if this session already recorded the outcome (including `blocked` after a real retry).
     - If rework asked for fresh evidence, delete the old manifest and artifacts before re-running checks.
     - If a prior manifest marks runs as `blocked`, retry each required command **once** in this turn before recording `blocked` again. After one retry still blocked, stop — document in Validation and end the turn.
     - A plan task is not complete until its `### Plan` item has terminal validation/evidence/commit metadata: validation `passed` or `n/a`, evidence `done` or `n/a`, and commit `done` or `n/a`. Tests passing alone do not make `evidence: done`.
 
+    #{execution_focus_section(execution_contract)}
+
     Deliverable state (computed by the orchestrator from the workspace):
 
     #{RunContract.summary_text(repo_states)}
 
-    #{next_incomplete_task_section(opts)}
+    #{next_incomplete_task_section(execution_contract)}
 
     Any repo with commits ahead must end with a pushed branch and an open pull request (follow the `push` skill). Run the `evidence` skill only when handoff is ready.
     """
   end
 
-  defp next_incomplete_task_section(opts) do
-    case execution_contract_from_opts(opts) do
+  defp validate_mode_guidance(%ExecutionContract{scope_complete?: false}) do
+    "- Final VALIDATE/evidence is not the next action while the workpad scope is incomplete."
+  end
+
+  defp validate_mode_guidance(_contract) do
+    "- When deliverables below show no commits ahead and no uncommitted changes, you are in **VALIDATE-only** mode: read and follow the `evidence` skill now. Run focused tests from the git diff and write a fresh `.symphony/evidence/manifest.json` for this session. Updating the workpad alone is not progress."
+  end
+
+  defp execution_focus_section(%ExecutionContract{scope_complete?: false, next_incomplete: %{title: title} = task})
+       when is_binary(title) do
+    """
+    Execution focus: WORKPAD_TASK
+
+    Act on the next incomplete workpad task now. Finish any pending implementation for this item first, then close its task-scoped gates before moving on:
+    - validation: #{task_gate(task, :validation)}
+    - evidence: #{task_gate(task, :evidence)}
+    - commit: #{task_gate(task, :commit)}
+    """
+  end
+
+  defp execution_focus_section(%ExecutionContract{scope_complete?: true, final_validate_allowed?: true}) do
+    """
+    Execution focus: FINAL_VALIDATE
+
+    The workpad scope is complete and final validation is allowed. Run final VALIDATE/evidence only after publish deliverables are ready.
+    """
+  end
+
+  defp execution_focus_section(_contract), do: "Execution focus: DELIVERABLES\n"
+
+  defp task_gate(task, key) do
+    Map.get(task, key) || "pending"
+  end
+
+  defp next_incomplete_task_section(execution_contract) do
+    case execution_contract do
       %ExecutionContract{next_incomplete: %{title: title, remaining: remaining}} when is_binary(title) ->
         remaining_text =
           case remaining do
