@@ -419,10 +419,10 @@ defmodule SymphonyElixir.AgentExecution do
 
       %{
         kind: kind,
-        source: if(kind == "goal", do: "native", else: "prompt"),
+        source: goal_source(kind),
         status: "interrupted",
         objective: objective,
-        capabilities: if(kind == "goal", do: ["get", "edit", "pause", "resume", "clear"], else: ["view"])
+        capabilities: goal_capabilities(kind)
       }
     end
   end
@@ -481,7 +481,12 @@ defmodule SymphonyElixir.AgentExecution do
   defp goal_source("goal"), do: "native"
   defp goal_source("workflow"), do: "prompt"
 
-  defp goal_capabilities("goal"), do: ["get", "edit", "pause", "resume", "clear"]
+  # Capabilities for goals projected without a live Codex app-server connection
+  # (saved/not-loaded, interrupted, and fallback states). Native pause/resume
+  # require a resolvable thread, which a dormant goal does not have, so we only
+  # advertise the controls `GoalControl` can satisfy from the cached objective.
+  # The UI falls back to dispatch (start/stop the worker) for resume/pause.
+  defp goal_capabilities("goal"), do: ["get", "edit", "clear"]
   defp goal_capabilities("workflow"), do: ["view"]
   defp goal_capabilities(_kind), do: []
 

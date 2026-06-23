@@ -58,6 +58,20 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.long_running_label == "Pursuing workflow"
     end
 
+    test "fallback Codex goals omit native pause/resume so the UI dispatches instead" do
+      snapshot = %{running: [running_entry(%{agent_kind: "codex", agent_goal: "Ship the issue"})], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.goal.kind == "goal"
+      assert execution.goal.source == "native"
+      # No live Codex thread backs this projection, so native pause/resume (which
+      # require a resolvable thread) must not be advertised; only the cached
+      # controls GoalControl can satisfy are exposed.
+      assert execution.goal.capabilities == ["get", "edit", "clear"]
+      refute "pause" in execution.goal.capabilities
+      refute "resume" in execution.goal.capabilities
+    end
+
     test "marks running issues with stale activity as idle" do
       stale = DateTime.add(DateTime.utc_now(), -10 * 60, :second)
       snapshot = %{running: [running_entry(%{last_codex_timestamp: stale})], retrying: []}
