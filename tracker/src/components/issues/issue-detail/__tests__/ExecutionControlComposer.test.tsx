@@ -8,9 +8,14 @@ import type { Issue } from "@/types/issue";
 
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
 const fetchAssistantCatalogBundleMock = vi.hoisted(() => vi.fn());
+const controlIssueGoalMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issueDispatch", () => ({
   dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
+}));
+
+vi.mock("@/services/goalControl", () => ({
+  controlIssueGoal: (...args: unknown[]) => controlIssueGoalMock(...args),
 }));
 
 const uploadAssistantAttachmentMock = vi.hoisted(() => vi.fn());
@@ -68,6 +73,7 @@ const interruptedExecution = makeExecution({
 describe("ExecutionControlComposer", () => {
   beforeEach(() => {
     dispatchIssueAgentMock.mockReset();
+    controlIssueGoalMock.mockReset();
     uploadAssistantAttachmentMock.mockReset();
     fetchAssistantCatalogBundleMock.mockResolvedValue({
       agents: [
@@ -75,8 +81,15 @@ describe("ExecutionControlComposer", () => {
           agent: "codex",
           agentLabel: "Codex",
           command: "codex",
-          models: [{ id: "gpt-5", model: "gpt-5", label: "GPT-5" }],
-          efforts: [{ id: "high", label: "High" }],
+          models: [
+            {
+              id: "gpt-5",
+              model: "gpt-5",
+              label: "GPT-5",
+              defaultEffort: "high",
+              efforts: [{ id: "high", label: "High" }],
+            },
+          ],
         },
       ],
     });
@@ -367,5 +380,50 @@ describe("ExecutionControlComposer", () => {
     );
 
     expect(screen.getByText(/use resume to pick the run back up/i)).toBeInTheDocument();
+  });
+
+  it("sets an execution goal and dispatches when /goal is submitted", async () => {
+    controlIssueGoalMock.mockResolvedValue({
+      action: "set_objective",
+      cleared: false,
+      goal: { kind: "goal", source: "native", objective: "ship i18n", status: "pending", capabilities: [] },
+    });
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resume requested",
+      issue,
+    });
+
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText(/optional guidance/i);
+    fireEvent.change(textarea, { target: { value: "/goal ship i18n" } });
+    fireEvent.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() => {
+      expect(controlIssueGoalMock).toHaveBeenCalledWith("advising", "CDE-1132", {
+        action: "set_objective",
+        objective: "ship i18n",
+      });
+    });
+
+    await waitFor(() => {
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({
+          action: "resume",
+          goal: "ship i18n",
+          instructions: expect.stringContaining("ship i18n"),
+        }),
+      );
+    });
   });
 });

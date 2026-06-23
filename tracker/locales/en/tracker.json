@@ -117,6 +117,10 @@
       "hintStart": "Start the agent on this issue. Add optional guidance before you do.",
       "workflowObjective": "Workflow objective",
       "goalObjective": "Goal objective",
+      "goalDefaultObjective": "Implement per spec and plan",
+      "goalCommandWithObjective": "Pursue this execution goal via the orchestrator. Objective: {{objective}}. Keep working toward it across turns until the issue is done or you are blocked.",
+      "goalCommandDefault": "Pursue an execution goal via the orchestrator. Derive the objective from the existing spec/plan/handoff, then keep working toward it across turns until the issue is done or you are blocked.",
+      "goalSetDone": "Execution goal saved",
       "sendGoalAria": "Send goal on resume or restart",
       "queuedGuidance": "Queued guidance · sent on next resume",
       "queuedAttachments": "{{count}} attachment(s)",
@@ -1602,6 +1606,7 @@
     },
     "slash": {
       "goal": "Run an authoring goal directly in this chat (no orchestrator dispatch)",
+      "goalExecution": "Set an execution goal and dispatch via the orchestrator",
       "infer": "Steer the running agent without waiting",
       "btw": "Ask a quick side question (read-only, not saved)"
     },

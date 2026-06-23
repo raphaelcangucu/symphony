@@ -21,7 +21,7 @@ import {
   validateAttachmentFile,
 } from "@/components/assistant/assistantAttachments";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
-import { matchingSlashCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
+import { matchingSlashCommands, parseSlashCommand, type SlashCommandContext } from "@/components/assistant/slashCommands";
 import { agentKindLabel } from "@/components/shared/AgentChip";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { isVideoMediaType } from "@/services/attachments";
@@ -69,6 +69,11 @@ export interface AssistantComposerSubmit {
   attachments: ReturnType<typeof serializeAttachments>;
 }
 
+export interface ComposerSnapshot {
+  input: string;
+  attachments: ReturnType<typeof serializeAttachments>;
+}
+
 interface AssistantComposerProps {
   projectSlug: string;
   bundle: AssistantCatalogBundle;
@@ -76,14 +81,30 @@ interface AssistantComposerProps {
   floating?: boolean;
   hasQueued?: boolean;
   seedMessage?: string | null;
+  slashContext?: SlashCommandContext;
+  placeholder?: string;
+  /** When `null`, the footer hint is hidden. */
+  hint?: string | null;
+  resetToken?: number;
+  composerDisabled?: boolean;
+  agentMenuDisabled?: boolean;
+  canSubmit?: boolean;
+  /** Allow submit (and the default send affordance) with an empty input. */
+  allowEmptySubmit?: boolean;
   /**
    * Optional element rendered flush inside the composer card, above the input
    * (e.g. the authoring-goal pill). Sharing the card makes it read as one piece
    * with the message box instead of a detached banner.
    */
   header?: ReactNode;
+  toolbarAfterAttach?: ReactNode;
+  submitActions?: ReactNode;
+  footer?: ReactNode;
   onForceQueued?: () => void;
+  /** Called when Enter is pressed with an empty input (no attachments). */
+  onEmptySubmit?: () => void;
   onSubmit: (payload: AssistantComposerSubmit) => void;
+  onComposerSnapshot?: (snapshot: ComposerSnapshot) => void;
   /** Reports the currently selected agent (on mount and on every change). */
   onAgentChange?: (agent: AgentKind) => void;
   /**
@@ -101,9 +122,22 @@ export function AssistantComposer({
   floating = false,
   hasQueued = false,
   seedMessage = null,
+  slashContext = "authoring",
+  placeholder,
+  hint,
+  resetToken,
+  composerDisabled = false,
+  agentMenuDisabled = false,
+  canSubmit,
+  allowEmptySubmit = false,
   header,
+  toolbarAfterAttach,
+  submitActions,
+  footer,
   onForceQueued,
+  onEmptySubmit,
   onSubmit,
+  onComposerSnapshot,
   onAgentChange,
   dropTargetRef,
 }: AssistantComposerProps) {
@@ -187,9 +221,31 @@ export function AssistantComposer({
     textarea.scrollTop = textarea.scrollHeight;
   }, [input]);
 
-  const canSend = !recording && !uploadingImage && (input.trim().length > 0 || attachments.length > 0);
+  useEffect(() => {
+    if (resetToken === undefined) return;
+    setInput("");
+    setAttachments([]);
+  }, [resetToken]);
 
-  const paletteCommands = matchingSlashCommands(input, t);
+  useEffect(() => {
+    onComposerSnapshot?.({
+      input,
+      attachments: serializeAttachments(attachments),
+    });
+  }, [attachments, input, onComposerSnapshot]);
+
+  const parsedInput = parseSlashCommand(input, t, slashContext);
+  const hasComposerContent =
+    parsedInput.kind === "goal" || input.trim().length > 0 || attachments.length > 0;
+  const canSend =
+    !recording &&
+    !uploadingImage &&
+    (hasComposerContent || allowEmptySubmit) &&
+    (canSubmit ?? true) &&
+    !composerDisabled &&
+    !disabled;
+
+  const paletteCommands = matchingSlashCommands(input, t, slashContext);
   const showPalette = paletteCommands.length > 0 && input.trim().split(" ").length === 1;
 
   function updateAgent(agent: AgentKind) {
@@ -374,7 +430,7 @@ export function AssistantComposer({
   function submitCurrent() {
     if (!canSend) return;
 
-    const parsed = parseSlashCommand(input, t);
+    const parsed = parseSlashCommand(input, t, slashContext);
     // `/goal` may be issued with no objective (the assistant derives it from the
     // issue artifacts); every other command requires an argument.
     if (parsed.kind !== "message" && parsed.kind !== "goal" && parsed.argument.length === 0) return;
@@ -416,7 +472,11 @@ export function AssistantComposer({
         submitCurrent();
         return;
       }
-      if (hasQueued) onForceQueued?.();
+      if (hasQueued) {
+        onForceQueued?.();
+        return;
+      }
+      onEmptySubmit?.();
       return;
     }
 
@@ -565,7 +625,7 @@ export function AssistantComposer({
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={t("assistant.composer.placeholder")}
+          placeholder={placeholder ?? t("assistant.composer.placeholder")}
           className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
         />
 
@@ -583,25 +643,26 @@ export function AssistantComposer({
               variant="ghost"
               size="icon"
               className="h-8 w-8 rounded-full"
-              disabled={disabled || uploadingImage}
+              disabled={disabled || composerDisabled || uploadingImage}
               aria-label={t("assistant.composer.attachFile")}
               onClick={() => fileInputRef.current?.click()}
             >
               <Plus className="h-4 w-4" />
             </Button>
+            {toolbarAfterAttach}
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-1">
             <AgentMenu
               bundle={bundle}
               agent={composerState.agent}
-              disabled={disabled}
+              disabled={disabled || agentMenuDisabled}
               onChange={updateAgent}
             />
             <ModelMenu
               catalog={catalog}
               model={settings.model}
-              disabled={disabled}
+              disabled={disabled || composerDisabled}
               onChange={updateModel}
             />
             {effortOptions.length > 0 ? (
@@ -610,7 +671,7 @@ export function AssistantComposer({
                 model={settings.model}
                 effort={settings.effort}
                 options={effortOptions}
-                disabled={disabled}
+                disabled={disabled || composerDisabled}
                 onChange={updateEffort}
               />
             ) : null}
@@ -623,7 +684,7 @@ export function AssistantComposer({
                 recording &&
                   "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50",
               )}
-              disabled={disabled}
+              disabled={disabled || composerDisabled}
               aria-label={recording ? t("assistant.composer.stopRecording") : t("assistant.composer.recordAudio")}
               onClick={() => void toggleRecording()}
             >
@@ -649,25 +710,32 @@ export function AssistantComposer({
                 {t("assistant.composer.recording")}
               </span>
             ) : null}
-            <Button
-              type="submit"
-              variant="default"
-              size="icon"
-              className="h-8 w-8 rounded-full"
-              disabled={!canSend}
-              aria-label={t("assistant.composer.sendMessage")}
-              title={t("assistant.composer.sendMessage")}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+            {submitActions ?? (
+              <Button
+                type="submit"
+                variant="default"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                disabled={!canSend}
+                aria-label={t("assistant.composer.sendMessage")}
+                title={t("assistant.composer.sendMessage")}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
-      <p className={cn("text-xs text-muted-foreground", floating ? "mt-1.5" : "mt-2")}>
-        {t("assistant.composer.hint", { command: catalog.command })}
-        {speechError ? <span className="text-destructive">{t("assistant.composer.voiceUnavailable", { error: speechError })}</span> : null}
-      </p>
+      {hint === null ? null : (
+        <p className={cn("text-xs text-muted-foreground", floating ? "mt-1.5" : "mt-2")}>
+          {hint ?? t("assistant.composer.hint", { command: catalog.command })}
+          {speechError ? (
+            <span className="text-destructive">{t("assistant.composer.voiceUnavailable", { error: speechError })}</span>
+          ) : null}
+        </p>
+      )}
+      {footer}
     </form>
   );
 }

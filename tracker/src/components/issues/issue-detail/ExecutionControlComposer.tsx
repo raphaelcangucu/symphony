@@ -1,28 +1,15 @@
-import { AudioLines, Eraser, FileText, Pause, Play, Plus, RotateCcw, Send, X } from "lucide-react";
-import {
-  type DragEvent,
-  type FormEvent,
-  type KeyboardEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Eraser, Pause, Play, RotateCcw, Send, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import {
-  type AssistantAttachment,
-  type AssistantOutgoingAttachment,
-  createAttachmentPreview,
-  revokeAttachmentPreviews,
-  serializeAttachments,
-  validateAttachmentFile,
-} from "@/components/assistant/assistantAttachments";
-import { ModelMenu } from "@/components/assistant/ModelMenu";
+  AssistantComposer,
+  type AssistantComposerSubmit,
+  type ComposerSnapshot,
+} from "@/components/assistant/AssistantComposer";
+import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
-import { agentKindLabel } from "@/components/shared/AgentChip";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,37 +21,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  catalogFor,
-  defaultComposerSettings,
-  effortLabel,
-  effortsForModel,
-  fallbackCatalogBundle,
-  loadComposerState,
-  normalizeEffort,
-  saveComposerState,
-  type AssistantAgentCatalog,
-  type AssistantCatalogBundle,
-  type AssistantComposerSettings,
-  type AssistantComposerState,
-  type AssistantEffort,
-} from "@/lib/assistantSettings";
 import { agentEnterHintLabel, canResumeExecution, deriveAgentControl } from "@/lib/agentExecutionDisplay";
-import { enrichGuidanceWithAttachments, maybeReadInlineFileText } from "@/lib/enrichComposerGuidance";
-import { cn } from "@/lib/utils";
-import { extractFilesFromClipboard } from "@/lib/clipboardImages";
-import { fetchAssistantCatalogBundle, uploadAssistantAttachment } from "@/services/assistant";
-import { isVideoMediaType } from "@/services/attachments";
+import { enrichGuidanceWithAttachments } from "@/lib/enrichComposerGuidance";
+import { catalogFor, fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { controlIssueGoal } from "@/services/goalControl";
 import type { AgentSteerPayload } from "@/hooks/useSessionLogChannel";
@@ -90,10 +50,6 @@ interface ExecutionControlComposerProps {
   onIssueUpdated?: (issue: Issue) => void;
 }
 
-function eventHasFiles(event: DragEvent<HTMLElement>): boolean {
-  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
-}
-
 export function ExecutionControlComposer({
   projectSlug,
   issue,
@@ -107,27 +63,16 @@ export function ExecutionControlComposer({
   onIssueUpdated,
 }: ExecutionControlComposerProps) {
   const { t } = useTranslation();
-  const [input, setInput] = useState("");
-  const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
-  const [fileTexts, setFileTexts] = useState<Record<string, string>>({});
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
   const [queued, setQueued] = useState<QueuedGuidanceItem[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const dragDepthRef = useRef(0);
-  const [bundle, setBundle] = useState<AssistantCatalogBundle>(fallbackCatalogBundle());
-  const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(fallbackCatalogBundle()));
+  const [bundle, setBundle] = useState(fallbackCatalogBundle());
+  const [agent, setAgent] = useState<AgentKind>(issue.agentKind ?? bundle.defaultAgent);
   const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | "hard_reset" | "stop" | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [hardResetOpen, setHardResetOpen] = useState(false);
   const [goalDismissed, setGoalDismissed] = useState(false);
-
-  const agent: AgentKind = composerState.agent;
-  const catalog = catalogFor(bundle, agent);
-  const settings: AssistantComposerSettings =
-    composerState.byAgent[agent] ?? defaultComposerSettings(catalog);
-  const effortOptions = effortsForModel(catalog, settings.model);
+  const [composerResetToken, setComposerResetToken] = useState(0);
+  const composerSnapshotRef = useRef<ComposerSnapshot>({ input: "", attachments: [] });
 
   const trimmedGoalObjective = execution?.goal?.objective?.trim() || issue.agentGoal?.trim() || "";
   const goalObjective = trimmedGoalObjective.length > 0 ? trimmedGoalObjective : null;
@@ -141,8 +86,6 @@ export function ExecutionControlComposer({
   const agentRunActive = control.isActive;
   const canResume = control.canResume;
   const canRestart = control.canResume;
-  // `canSteer` (prop) is the authoritative steer gate from the parent; the rest
-  // of the lifecycle (pause/resume/start, labels) comes from the execution.
   const enterIntent = canSteer
     ? "steer"
     : control.isActive
@@ -151,96 +94,22 @@ export function ExecutionControlComposer({
         ? "resume"
         : "start";
   const primaryLabel = control.primaryLabel;
+
   const queuedGuidance = useMemo(
     () => queued.filter((entry) => entry.text.trim().length > 0 || entry.attachments.length > 0),
     [queued],
   );
 
-  const serializedAttachments = useMemo(() => serializeAttachments(attachments), [attachments]);
-  const hasComposerContent = input.trim().length > 0 || attachments.length > 0;
-
-  const uploadFiles = useCallback(
-    async (files: File[]) => {
-      if (files.length === 0) return;
-      if (!projectSlug.trim()) {
-        toast.error(t("assistant.composer.attachmentsUnavailable"));
-        return;
-      }
-
-      for (const file of files) {
-        try {
-          validateAttachmentFile(file);
-          setUploadingAttachment(true);
-          const uploaded = await uploadAssistantAttachment(projectSlug, file);
-          const attachment = createAttachmentPreview(file, uploaded);
-          const inlineText = await maybeReadInlineFileText(file);
-          setAttachments((current) => [...current, attachment]);
-          if (inlineText && attachment.type !== "audio" && attachment.path) {
-            setFileTexts((current) => ({ ...current, [attachment.path]: inlineText }));
-          }
-        } catch (cause) {
-          toast.error(cause instanceof Error ? cause.message : t("assistant.composer.uploadFailed"));
-        } finally {
-          setUploadingAttachment(false);
-        }
-      }
-    },
-    [projectSlug, t],
-  );
-
-  function removeAttachment(id: string) {
-    setAttachments((current) => {
-      const target = current.find((attachment) => attachment.id === id);
-      if (target) {
-        revokeAttachmentPreviews([target]);
-        if (target.type !== "audio" && target.path) {
-          setFileTexts((texts) => {
-            const next = { ...texts };
-            delete next[target.path];
-            return next;
-          });
-        }
-      }
-      return current.filter((attachment) => attachment.id !== id);
-    });
-  }
-
-  function clearComposerAttachments() {
-    revokeAttachmentPreviews(attachments);
-    setAttachments([]);
-    setFileTexts((current) => {
-      const next = { ...current };
-      for (const attachment of attachments) {
-        if (attachment.type !== "audio" && attachment.path) delete next[attachment.path];
-      }
-      return next;
-    });
-  }
-
-  function guidanceFromComposer(text: string): string {
-    return enrichGuidanceWithAttachments(text, serializedAttachments, projectSlug, fileTexts);
-  }
-
-  function guidanceFromQueued(entry: QueuedGuidanceItem): string {
-    return enrichGuidanceWithAttachments(entry.text, entry.attachments, projectSlug, entry.fileTexts);
-  }
-
-  useEffect(() => {
-    if (!seedMessage?.trim()) return;
-    setInput(seedMessage);
-  }, [seedMessage]);
+  const controlsDisabled = dispatchPending !== null;
 
   useEffect(() => {
     let cancelled = false;
     void fetchAssistantCatalogBundle(projectSlug)
       .then((next) => {
-        if (cancelled) return;
-        setBundle(next);
-        setComposerState(loadComposerState(next));
+        if (!cancelled) setBundle(next);
       })
       .catch(() => {
-        if (cancelled) return;
-        setBundle(fallbackCatalogBundle());
+        if (!cancelled) setBundle(fallbackCatalogBundle());
       });
     return () => {
       cancelled = true;
@@ -248,55 +117,8 @@ export function ExecutionControlComposer({
   }, [projectSlug]);
 
   useEffect(() => {
-    if (issue.agentKind) {
-      setComposerState((current) => ({ ...current, agent: issue.agentKind! }));
-    }
+    if (issue.agentKind) setAgent(issue.agentKind);
   }, [issue.agentKind]);
-
-  const persistComposer = useCallback(
-    (next: AssistantComposerState) => {
-      setComposerState(next);
-      saveComposerState(next);
-    },
-    [],
-  );
-
-  const setAgent = useCallback(
-    (nextAgent: AgentKind) => {
-      persistComposer({ ...composerState, agent: nextAgent });
-    },
-    [composerState, persistComposer],
-  );
-
-  const setModel = useCallback(
-    (model: string) => {
-      const nextCatalog = catalogFor(bundle, agent);
-      const modelOption = nextCatalog.models.find((entry) => entry.model === model) ?? nextCatalog.models[0];
-      if (!modelOption) return;
-      const effort = normalizeEffort(modelOption, settings.effort);
-      persistComposer({
-        ...composerState,
-        byAgent: {
-          ...composerState.byAgent,
-          [agent]: { model: modelOption.model, effort },
-        },
-      });
-    },
-    [agent, bundle, composerState, persistComposer, settings.effort],
-  );
-
-  const setEffort = useCallback(
-    (effort: AssistantEffort) => {
-      persistComposer({
-        ...composerState,
-        byAgent: {
-          ...composerState.byAgent,
-          [agent]: { ...settings, effort },
-        },
-      });
-    },
-    [agent, composerState, persistComposer, settings],
-  );
 
   const dispatchProgressLabel: Record<"resume" | "restart" | "hard_reset" | "stop", string> = {
     resume: t("issue.agent.dispatchResume"),
@@ -305,99 +127,53 @@ export function ExecutionControlComposer({
     stop: t("issue.agent.dispatchStop"),
   };
 
-  // Guidance the agent should receive on the next resume/restart: anything the
-  // user queued while the run was busy, plus whatever is currently typed.
-  function combinedGuidance(): string {
-    const parsed = parseSlashCommand(input, t);
-    const typed = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
-    const parts = [
-      ...queuedGuidance.map((entry) => guidanceFromQueued(entry)),
-      guidanceFromComposer(typed),
-    ].filter((entry) => entry.length > 0);
-    return parts.join("\n\n");
+  function guidanceFromQueued(entry: QueuedGuidanceItem): string {
+    return enrichGuidanceWithAttachments(entry.text, entry.attachments, projectSlug, entry.fileTexts);
   }
 
-  function enqueueGuidance() {
-    const parsed = parseSlashCommand(input, t);
-    const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
-    if (!text && attachments.length === 0) return;
-    setQueued((current) => [
-      ...current,
-      {
-        text,
-        attachments: serializedAttachments,
-        fileTexts: { ...fileTexts },
-      },
-    ]);
-    setInput("");
-    clearComposerAttachments();
+  function guidanceFromSnapshot(snapshot: ComposerSnapshot): string {
+    const parsed = parseSlashCommand(snapshot.input, t, "execution");
+    const typed =
+      parsed.kind === "infer" || parsed.kind === "goal" ? parsed.argument.trim() : snapshot.input.trim();
+    return enrichGuidanceWithAttachments(typed, snapshot.attachments, projectSlug, {});
+  }
+
+  function combinedGuidance(): string {
+    const parts = [
+      ...queuedGuidance.map((entry) => guidanceFromQueued(entry)),
+      guidanceFromSnapshot(composerSnapshotRef.current),
+    ].filter((entry) => entry.length > 0);
+    return parts.join("\n\n");
   }
 
   function removeQueued(index: number) {
     setQueued((current) => current.filter((_, i) => i !== index));
   }
 
-  async function handleFilePick(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
-    await uploadFiles(files);
-  }
-
-  function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const files = extractFilesFromClipboard(event);
-    if (files.length === 0) return;
-    event.preventDefault();
-    void uploadFiles(files);
-  }
-
-  function handleDragEnter(event: DragEvent<HTMLFormElement>) {
-    if (!eventHasFiles(event)) return;
-    event.preventDefault();
-    dragDepthRef.current += 1;
-    setDragActive(true);
-  }
-
-  function handleDragOver(event: DragEvent<HTMLFormElement>) {
-    if (!eventHasFiles(event)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLFormElement>) {
-    if (!eventHasFiles(event)) return;
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setDragActive(false);
-  }
-
-  function handleDrop(event: DragEvent<HTMLFormElement>) {
-    if (!eventHasFiles(event)) return;
-    event.preventDefault();
-    dragDepthRef.current = 0;
-    setDragActive(false);
-    void uploadFiles(Array.from(event.dataTransfer.files ?? []));
-  }
-
-  async function runDispatch(action: "resume" | "restart" | "hard_reset" | "stop") {
+  async function runDispatch(
+    action: "resume" | "restart" | "hard_reset" | "stop",
+    overrides?: { goal?: string | null; instructions?: string | null },
+  ) {
     setDispatchPending(action);
     setDispatchError(null);
     setDispatchStatus(dispatchProgressLabel[action]);
 
-    // Pausing keeps the typed/queued guidance around for the next resume.
-    const guidance = action === "stop" ? "" : combinedGuidance();
+    const guidance =
+      action === "stop" ? "" : (overrides?.instructions?.trim() || combinedGuidance());
+    const dispatchGoal = overrides?.goal ?? goalObjective;
 
     try {
       const result = await dispatchIssueAgent(projectSlug, issue.identifier, {
         action,
         agent,
-        goal: goalObjective,
+        goal: dispatchGoal,
         instructions: guidance || null,
       });
       onIssueUpdated?.(result.issue);
       setDispatchStatus(result.message);
       if (action !== "stop") {
-        setInput("");
         setQueued([]);
-        clearComposerAttachments();
+        setComposerResetToken((token) => token + 1);
       }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : t("issue.agent.dispatchFailed");
@@ -409,45 +185,107 @@ export function ExecutionControlComposer({
     }
   }
 
-  function submitSteer() {
-    const parsed = parseSlashCommand(input, t);
-    const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
-    if (!text && attachments.length === 0) return;
-    onSteer({ message: text, attachments: serializedAttachments });
-    setInput("");
-    clearComposerAttachments();
-  }
+  const submitExecutionGoal = useCallback(
+    async (objectiveArg: string) => {
+      const trimmed = objectiveArg.trim();
+      const objective = trimmed.length > 0 ? trimmed : t("issue.agent.goalDefaultObjective");
+      const framedInstructions =
+        trimmed.length > 0
+          ? t("issue.agent.goalCommandWithObjective", { objective: trimmed })
+          : t("issue.agent.goalCommandDefault");
 
-  // Single entry point for Enter / the send button: steer a live turn, queue
-  // guidance for a busy-but-not-steerable run, or resume/start when stopped.
-  function submitComposer() {
-    if (canSteer) {
-      submitSteer();
-      return;
-    }
-    if (control.isActive) {
-      enqueueGuidance();
-      return;
-    }
-    if (canResume && !dispatchPending) void runDispatch("resume");
-  }
+      try {
+        await controlIssueGoal(projectSlug, issue.identifier, {
+          action: "set_objective",
+          objective,
+        });
+        setGoalDismissed(false);
+        onIssueUpdated?.({ ...issue, agentGoal: objective });
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+        return;
+      }
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    submitComposer();
-  }
+      toast.success(t("issue.agent.goalSetDone"));
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== "Enter" || event.shiftKey) return;
-    event.preventDefault();
-    submitComposer();
-  }
+      if (canSteer) {
+        onSteer({ message: framedInstructions, attachments: [] });
+        return;
+      }
 
-  const controlsDisabled = dispatchPending !== null || uploadingAttachment;
+      if (control.isActive) {
+        setQueued((current) => [
+          ...current,
+          {
+            text: framedInstructions,
+            attachments: [],
+            fileTexts: {},
+          },
+        ]);
+        return;
+      }
+
+      if (!dispatchPending) {
+        await runDispatch("resume", { goal: objective, instructions: framedInstructions });
+      }
+    },
+    [
+      canSteer,
+      control.isActive,
+      dispatchPending,
+      issue,
+      onIssueUpdated,
+      onSteer,
+      projectSlug,
+      t,
+    ],
+  );
+
+  const handleComposerSubmit = useCallback(
+    (submit: AssistantComposerSubmit) => {
+      if (submit.kind === "goal") {
+        void submitExecutionGoal(submit.message);
+        return;
+      }
+      if (submit.kind === "btw") return;
+
+      const text = submit.message.trim();
+      const hasAttachments = submit.attachments.length > 0;
+
+      if (canSteer) {
+        if (!text && !hasAttachments) return;
+        onSteer({ message: text, attachments: submit.attachments });
+        return;
+      }
+
+      if (control.isActive) {
+        if (!text && !hasAttachments) return;
+        setQueued((current) => [
+          ...current,
+          {
+            text,
+            attachments: submit.attachments,
+            fileTexts: {},
+          },
+        ]);
+        return;
+      }
+
+      if (!dispatchPending) {
+        const instructions = enrichGuidanceWithAttachments(text, submit.attachments, projectSlug, {});
+        void runDispatch("resume", { instructions });
+      }
+    },
+    [canSteer, control.isActive, dispatchPending, onSteer, projectSlug, submitExecutionGoal],
+  );
+
+  const handleEmptySubmit = useCallback(() => {
+    if (canSteer || control.isActive || dispatchPending) return;
+    if (canResume) void runDispatch("resume");
+  }, [canResume, canSteer, control.isActive, dispatchPending]);
+
   const sendDisabled =
-    controlsDisabled ||
-    !hasComposerContent ||
-    (canSteer && (!sessionConnected || steerPending));
+    controlsDisabled || (canSteer && (!sessionConnected || steerPending));
   const primaryDisabled = controlsDisabled || (!agentRunActive && !canResume);
 
   const goalPhase = executionGoalPhase(agentRunActive, showGoalPill, execution);
@@ -501,42 +339,42 @@ export function ExecutionControlComposer({
     }
   }
 
+  const composerPlaceholder = canSteer
+    ? t("issue.agent.placeholderSteer")
+    : agentRunActive
+      ? t("issue.agent.placeholderQueue")
+      : control.hasRun
+        ? t("issue.agent.placeholderResume")
+        : t("issue.agent.placeholderStart");
+
+  const goalPill = showGoalPill ? (
+    <GoalPill
+      phase={goalPhase}
+      objective={goalObjective}
+      running={agentRunActive}
+      timeUsedSeconds={goalTimeUsedSeconds}
+      onPause={() => void handleGoalPause()}
+      onResume={() => void handleGoalResume()}
+      onRemove={() => void handleGoalRemove()}
+      onEditObjective={(objective) => void handleGoalEdit(objective)}
+    />
+  ) : null;
+
   return (
     <section className="rounded-xl border border-border/70 bg-card/40 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {t("issue.agent.controlTitle")}
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {canSteer
-              ? t("issue.agent.hintSteer")
-              : agentRunActive
-                ? t("issue.agent.hintBusy")
-                : control.hasRun
-                  ? t("issue.agent.hintResume")
-                  : t("issue.agent.hintStart")}
-          </p>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {t("issue.agent.controlTitle")}
         </div>
-        <div className="flex flex-wrap items-center gap-1">
-          <AgentMenu bundle={bundle} agent={agent} disabled={controlsDisabled || agentRunActive} onChange={setAgent} />
-          <ModelMenu
-            catalog={catalog}
-            model={settings.model}
-            disabled={controlsDisabled}
-            onChange={setModel}
-            triggerVariant="outline"
-            showChevron={false}
-          />
-          <EffortMenu
-            catalog={catalog}
-            model={settings.model}
-            effort={settings.effort}
-            options={effortOptions}
-            disabled={controlsDisabled}
-            onChange={setEffort}
-          />
-        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {canSteer
+            ? t("issue.agent.hintSteer")
+            : agentRunActive
+              ? t("issue.agent.hintBusy")
+              : control.hasRun
+                ? t("issue.agent.hintResume")
+                : t("issue.agent.hintStart")}
+        </p>
       </div>
 
       {queuedGuidance.length > 0 ? (
@@ -576,155 +414,109 @@ export function ExecutionControlComposer({
         </div>
       ) : null}
 
-      <form
-        className="relative mt-3 space-y-3"
-        onSubmit={handleSubmit}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {dragActive ? (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/85 text-sm font-medium text-primary">
-            {t("assistant.composer.dropFiles")}
-          </div>
-        ) : null}
-
-        {attachments.length > 0 ? (
-          <div className="flex flex-wrap gap-2 rounded-lg border border-border/60 bg-muted/20 p-2">
-            {attachments.map((attachment) => (
-              <ComposerAttachmentChip
-                key={attachment.id}
-                attachment={attachment}
-                onRemove={() => removeAttachment(attachment.id)}
-              />
-            ))}
-          </div>
-        ) : null}
-
-        {showGoalPill ? (
-          <GoalPill
-            phase={goalPhase}
-            objective={goalObjective}
-            running={agentRunActive}
-            timeUsedSeconds={goalTimeUsedSeconds}
-            onPause={() => void handleGoalPause()}
-            onResume={() => void handleGoalResume()}
-            onRemove={() => void handleGoalRemove()}
-            onEditObjective={(objective) => void handleGoalEdit(objective)}
-          />
-        ) : null}
-
-        <Textarea
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder={
-            canSteer
-              ? t("issue.agent.placeholderSteer")
-              : agentRunActive
-                ? t("issue.agent.placeholderQueue")
-                : control.hasRun
-                  ? t("issue.agent.placeholderResume")
-                  : t("issue.agent.placeholderStart")
-          }
-          disabled={controlsDisabled || (canSteer && (!sessionConnected || steerPending))}
-          rows={3}
-          className={cn("min-h-0 resize-none text-sm", showGoalPill && "rounded-t-none border-t-0")}
-        />
-
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(event) => void handleFilePick(event)}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={controlsDisabled}
-              aria-label={t("assistant.composer.attachFile")}
-              title={t("assistant.composer.attachFile")}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!canRestart || controlsDisabled}
-              title={
-                canRestart ? t("issue.agent.restartTitle") : t("issue.agent.restartPauseFirst")
-              }
-              onClick={() => void runDispatch("restart")}
-            >
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-              {dispatchPending === "restart" ? t("issue.agent.restarting") : t("issue.agent.restart")}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="text-destructive hover:text-destructive"
-              disabled={controlsDisabled}
-              title={t("issue.agent.hardResetTitle")}
-              onClick={() => setHardResetOpen(true)}
-            >
-              <Eraser className="mr-1.5 h-3.5 w-3.5" />
-              {dispatchPending === "hard_reset" ? t("issue.agent.resetting") : t("issue.agent.hardReset")}
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="hidden text-xs text-muted-foreground sm:inline">
-              {steerPending ? t("issue.agent.sendingSteer") : agentEnterHintLabel(enterIntent, t)}
-            </span>
-            {agentRunActive ? (
-              <Button type="submit" size="sm" variant="default" disabled={sendDisabled}>
-                <Send className="mr-1.5 h-3.5 w-3.5" />
-                {canSteer ? t("issue.agent.steer") : t("issue.agent.queue")}
-              </Button>
-            ) : null}
-            {agentRunActive ? (
+      <div className="mt-3">
+        <AssistantComposer
+          projectSlug={projectSlug}
+          bundle={bundle}
+          floating
+          slashContext="execution"
+          placeholder={composerPlaceholder}
+          hint={null}
+          seedMessage={seedMessage}
+          resetToken={composerResetToken}
+          composerDisabled={controlsDisabled || (canSteer && (!sessionConnected || steerPending))}
+          agentMenuDisabled={controlsDisabled || agentRunActive}
+          allowEmptySubmit={!canSteer && !agentRunActive && canResume}
+          canSubmit={sendDisabled ? false : undefined}
+          header={goalPill}
+          onComposerSnapshot={(snapshot) => {
+            composerSnapshotRef.current = snapshot;
+          }}
+          onEmptySubmit={handleEmptySubmit}
+          onSubmit={handleComposerSubmit}
+          onAgentChange={setAgent}
+          toolbarAfterAttach={
+            <>
               <Button
                 type="button"
+                variant="ghost"
                 size="sm"
-                variant="outline"
-                disabled={controlsDisabled}
-                title={t("issue.agent.pauseTitle")}
-                onClick={() => void runDispatch("stop")}
+                className="h-8 gap-1 px-2 text-xs"
+                disabled={!canRestart || controlsDisabled}
+                title={canRestart ? t("issue.agent.restartTitle") : t("issue.agent.restartPauseFirst")}
+                onClick={() => void runDispatch("restart")}
               >
-                <Pause className="mr-1.5 h-3.5 w-3.5" />
-                {dispatchPending === "stop" ? t("issue.agent.dispatchStop") : t("issue.agent.primaryPause")}
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">
+                  {dispatchPending === "restart" ? t("issue.agent.restarting") : t("issue.agent.restart")}
+                </span>
               </Button>
-            ) : (
-              <Button type="submit" size="sm" variant="secondary" disabled={primaryDisabled}>
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-                {dispatchPending === "resume"
-                  ? control.primaryAction === "start"
-                    ? t("issue.agent.starting")
-                    : t("issue.agent.resuming")
-                  : primaryLabel}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 px-2 text-xs text-destructive hover:text-destructive"
+                disabled={controlsDisabled}
+                title={t("issue.agent.hardResetTitle")}
+                onClick={() => setHardResetOpen(true)}
+              >
+                <Eraser className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">
+                  {dispatchPending === "hard_reset" ? t("issue.agent.resetting") : t("issue.agent.hardReset")}
+                </span>
               </Button>
-            )}
-          </div>
-        </div>
-
-        {dispatchError ? <p className="text-xs text-destructive">{dispatchError}</p> : null}
-        {dispatchStatus ? <p className="text-xs text-muted-foreground">{dispatchStatus}</p> : null}
-        {steerError ? (
-          <p className="text-xs text-destructive">{formatSteerError(steerError, t)}</p>
-        ) : null}
-        <p className="text-[11px] text-muted-foreground">
-          {t("issue.agent.modelsHint", { command: catalog.command, agent: agentKindLabel(agent, t) })}
-        </p>
-      </form>
+            </>
+          }
+          submitActions={
+            <>
+              <span className="hidden text-xs text-muted-foreground lg:inline">
+                {steerPending ? t("issue.agent.sendingSteer") : agentEnterHintLabel(enterIntent, t)}
+              </span>
+              {agentRunActive ? (
+                <Button type="submit" size="sm" variant="default" disabled={sendDisabled} className="h-8 gap-1">
+                  <Send className="h-3.5 w-3.5" />
+                  {canSteer ? t("issue.agent.steer") : t("issue.agent.queue")}
+                </Button>
+              ) : null}
+              {agentRunActive ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1"
+                  disabled={controlsDisabled}
+                  title={t("issue.agent.pauseTitle")}
+                  onClick={() => void runDispatch("stop")}
+                >
+                  <Pause className="h-3.5 w-3.5" />
+                  {dispatchPending === "stop" ? t("issue.agent.dispatchStop") : t("issue.agent.primaryPause")}
+                </Button>
+              ) : (
+                <Button type="submit" size="sm" variant="secondary" className="h-8 gap-1" disabled={primaryDisabled}>
+                  <Play className="h-3.5 w-3.5" />
+                  {dispatchPending === "resume"
+                    ? control.primaryAction === "start"
+                      ? t("issue.agent.starting")
+                      : t("issue.agent.resuming")
+                    : primaryLabel}
+                </Button>
+              )}
+            </>
+          }
+          footer={
+            <div className="mt-2 space-y-1">
+              {dispatchError ? <p className="text-xs text-destructive">{dispatchError}</p> : null}
+              {dispatchStatus ? <p className="text-xs text-muted-foreground">{dispatchStatus}</p> : null}
+              {steerError ? (
+                <p className="text-xs text-destructive">{formatSteerError(steerError, t)}</p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                {t("assistant.composer.hint", { command: catalogFor(bundle, agent).command })}
+              </p>
+            </div>
+          }
+        />
+      </div>
 
       <Dialog open={hardResetOpen} onOpenChange={setHardResetOpen}>
         <DialogContent>
@@ -776,151 +568,6 @@ function executionGoalPhase(
   if (execution && canResumeExecution(execution)) return "stalled";
   if (hasGoal) return "pending";
   return "pending";
-}
-
-function ComposerAttachmentChip({
-  attachment,
-  onRemove,
-}: {
-  attachment: AssistantAttachment;
-  onRemove: () => void;
-}) {
-  const { t } = useTranslation();
-
-  if (attachment.type === "image") {
-    return (
-      <div className="group relative">
-        <img
-          src={attachment.previewUrl}
-          alt={attachment.name}
-          className="h-14 w-14 rounded-md border object-cover"
-        />
-        <button
-          type="button"
-          aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
-          onClick={onRemove}
-          className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-    );
-  }
-
-  if (attachment.type === "file" && attachment.previewUrl && isVideoMediaType(attachment.mediaType)) {
-    return (
-      <div className="group relative">
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption -- composer preview has no captions */}
-        <video
-          src={attachment.previewUrl}
-          controls
-          playsInline
-          preload="metadata"
-          aria-label={attachment.name}
-          className="h-20 w-32 rounded-md border bg-black/5 object-contain"
-        />
-        <button
-          type="button"
-          aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
-          onClick={onRemove}
-          className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-    );
-  }
-
-  const Icon = attachment.type === "audio" ? AudioLines : FileText;
-  return (
-    <div className="flex items-center gap-2 rounded-md border bg-background/80 px-2 py-1 text-xs">
-      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <span className="max-w-[10rem] truncate">{attachment.name}</span>
-      <button
-        type="button"
-        aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
-        onClick={onRemove}
-        className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </div>
-  );
-}
-
-function AgentMenu({
-  bundle,
-  agent,
-  disabled,
-  onChange,
-}: {
-  bundle: AssistantCatalogBundle;
-  agent: AgentKind;
-  disabled?: boolean;
-  onChange: (agent: AgentKind) => void;
-}) {
-  const { t } = useTranslation();
-  const current = catalogFor(bundle, agent);
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {agentKindLabel(current.agent, t)}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t("issue.agent.agentMenu")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={agent} onValueChange={(value) => onChange(value as AgentKind)}>
-          {bundle.agents.map((entry) => (
-            <DropdownMenuRadioItem key={entry.agent} value={entry.agent}>
-              {agentKindLabel(entry.agent, t)}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function EffortMenu({
-  catalog,
-  model,
-  effort,
-  options,
-  disabled,
-  onChange,
-}: {
-  catalog: AssistantAgentCatalog;
-  model: string;
-  effort: AssistantEffort;
-  options: ReturnType<typeof effortsForModel>;
-  disabled?: boolean;
-  onChange: (effort: AssistantEffort) => void;
-}) {
-  const { t } = useTranslation();
-  if (options.length === 0) return null;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {effortLabel(catalog, model, effort)}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t("issue.agent.effort")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={effort} onValueChange={(value) => onChange(value as AssistantEffort)}>
-          {options.map((option) => (
-            <DropdownMenuRadioItem key={option.id} value={option.id}>
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
 }
 
 function formatSteerError(reason: string, t: (key: string) => string): string {

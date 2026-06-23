@@ -117,6 +117,10 @@
       "hintStart": "Inicie o agente nesta issue. Adicione orientação opcional antes.",
       "workflowObjective": "Objetivo do workflow",
       "goalObjective": "Objetivo da meta",
+      "goalDefaultObjective": "Implementar conforme spec e plano",
+      "goalCommandWithObjective": "Persiga este goal de execução via o orquestrador. Objetivo: {{objective}}. Continue trabalhando nele ao longo dos turnos até a issue estar pronta ou você ficar bloqueado.",
+      "goalCommandDefault": "Persiga um goal de execução via o orquestrador. Derive o objetivo a partir do spec/plano/handoff existentes e continue trabalhando nele ao longo dos turnos até a issue estar pronta ou você ficar bloqueado.",
+      "goalSetDone": "Goal de execução salvo",
       "sendGoalAria": "Enviar meta no resume ou restart",
       "queuedGuidance": "Orientação enfileirada · enviada no próximo resume",
       "queuedAttachments": "{{count}} anexo(s)",
@@ -1627,6 +1631,7 @@
     },
     "slash": {
       "goal": "Rode um goal de authoring direto neste chat (sem despachar o orquestrador)",
+      "goalExecution": "Defina um goal de execução e despache via o orquestrador",
       "infer": "Direcione o agente em execução sem esperar",
       "btw": "Faça uma pergunta rápida (somente leitura, não salva)"
     },
