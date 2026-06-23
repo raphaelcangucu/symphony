@@ -75,6 +75,8 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert_receive {:worker, ^worker}, 1_000
     send(worker, :boom)
 
+    assert_receive {:assistant_turn_finished, {:error, {:turn_crashed, _}}}, 1_000
+
     wait_until(fn ->
       {:ok, t} = History.get_thread(thread.id)
       History.current_turn(t)["status"] == "interrupted"

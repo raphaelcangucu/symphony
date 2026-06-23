@@ -188,10 +188,12 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
     case find_turn_by_ref(state, ref) do
-      {thread_id, _entry} ->
+      {thread_id, entry} ->
         maybe_interrupt_running(thread_id, reason)
         unregister(thread_id)
-        broadcast_finish(thread_id, {:error, {:turn_crashed, reason}})
+        result = {:error, {:turn_crashed, reason}}
+        notify_reply_to(entry, result)
+        broadcast_finish(thread_id, result)
         {_popped, rest} = Map.pop(state, {:turn, thread_id})
         {:noreply, drain_queue(thread_id, rest)}
 
@@ -217,7 +219,15 @@ defmodule SymphonyElixir.Assistant.TurnManager do
         {:ok, refreshed} = History.get_thread(thread_id)
         broadcast_from(self(), thread_id, {:turn_status, :running, History.turn_payload(refreshed)})
 
-        state = Map.put(state, {:turn, thread_id}, %{monitor_ref: ref, pid: pid})
+        reply_to = Keyword.get(opts, :reply_to)
+
+        state =
+          Map.put(state, {:turn, thread_id}, %{
+            monitor_ref: ref,
+            pid: pid,
+            reply_to: reply_to
+          })
+
         {:reply, {:ok, %{pid: pid}}, state}
       else
         {:error, reason} ->
@@ -366,4 +376,10 @@ defmodule SymphonyElixir.Assistant.TurnManager do
       Logger.warning("assistant turns: boot reconcile failed: #{inspect(error)}")
       :error
   end
+
+  defp notify_reply_to(%{reply_to: reply_to}, result) when is_pid(reply_to) do
+    send(reply_to, {:assistant_turn_finished, result})
+  end
+
+  defp notify_reply_to(_entry, _result), do: :ok
 end

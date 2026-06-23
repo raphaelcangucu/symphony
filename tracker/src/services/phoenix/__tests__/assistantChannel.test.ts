@@ -47,6 +47,32 @@ describe("assistantIssueTopic", () => {
 });
 
 describe("assistant channel binding", () => {
+  it("forwards last_turn from history_loaded to onTurnStatus", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onTurnStatus = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onTurnStatus,
+    });
+
+    handlers["history_loaded"]({
+      messages: [],
+      last_turn: { status: "interrupted", can_resume: true },
+    });
+
+    expect(onTurnStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "interrupted", canResume: true }),
+    );
+  });
+
   it("normalizes history, streaming deltas, tool calls, completion, and errors", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
     const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;

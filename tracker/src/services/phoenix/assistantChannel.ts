@@ -172,8 +172,12 @@ export function assistantIssueTopic(projectSlug: string, identifier: string): st
 
 export function bindAssistantEvents(channel: Channel, handlers: AssistantChannelHandlers): void {
   channel.on("history_loaded", (payload) => {
-    const messages = ((payload as HistoryLoadedPayload).messages ?? []).map(normalizeAssistantChatMessage);
+    const data = payload as HistoryLoadedPayload & { last_turn?: unknown };
+    const messages = (data.messages ?? []).map(normalizeAssistantChatMessage);
     handlers.onHistoryLoaded(messages);
+
+    const joinedLastTurn = readLastTurn(data);
+    if (joinedLastTurn) handlers.onTurnStatus?.(joinedLastTurn);
   });
 
   channel.on("message_created", (payload) => {

@@ -482,7 +482,23 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_info({:turn_status, status, payload}, socket)
-      when status in [:finished, :failed, :interrupted] do
+      when status in [:failed, :interrupted] do
+    normalized = normalize_turn_payload(payload)
+
+    socket =
+      if socket.assigns[:turn_status] == :running do
+        # Abnormal worker exits notify reply_to via TurnManager, but always push
+        # turn_status + reset so the originating tab can offer Resume and unblock
+        # the composer even if that message is delayed or lost.
+        socket |> push("turn_status", normalized) |> reset_turn()
+      else
+        push(socket, "turn_status", normalized)
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:turn_status, :finished, payload}, socket) do
     if socket.assigns[:turn_status] != :running do
       push(socket, "turn_status", normalize_turn_payload(payload))
     end

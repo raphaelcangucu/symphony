@@ -29,7 +29,7 @@ export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallVi
     status: mapStatus(toolCall.status),
     input: input ? { value: input, language: "json" } : null,
     output: toolCall.output ? { value: toolCall.output, language: "text" } : null,
-    defaultCollapsed: !action,
+    defaultCollapsed: true,
   };
 }
 

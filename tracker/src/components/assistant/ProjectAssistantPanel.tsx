@@ -365,6 +365,9 @@ export function ProjectAssistantPanel({
       onTurnStatus: (status) => {
         setLastTurn(status);
         setIsRunning(status.status === "running");
+        if (status.status === "interrupted" || status.status === "failed") {
+          setPendingQuestions(null);
+        }
       },
     });
 
