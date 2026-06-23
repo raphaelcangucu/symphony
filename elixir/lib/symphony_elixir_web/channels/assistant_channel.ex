@@ -155,6 +155,11 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_in("send_message", _payload, socket), do: {:reply, {:error, %{reason: "message is required"}}, socket}
 
+  def handle_in("sync_history", _payload, socket) do
+    push_history_sync(socket)
+    {:reply, :ok, socket}
+  end
+
   def handle_in("set_mode", %{"mode" => mode}, socket) when is_binary(mode) do
     with {:ok, normalized_mode} <- normalize_issue_mode(mode),
          {:ok, thread} <- issue_thread(socket),
@@ -386,7 +391,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_info({:assistant_turn_finished, {:ok, result}}, socket) do
     push(socket, "assistant_completed", %{message: result.assistant_chat_message})
-    maybe_push_created_issue(result, socket)
+    socket = push_history_sync(socket)
+    _ = maybe_push_created_issue(result, socket)
     push_goal_status_async(socket, false)
     {:noreply, socket |> clear_goal_paused() |> reset_turn()}
   end
@@ -484,24 +490,32 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_info({:turn_status, status, payload}, socket)
       when status in [:failed, :interrupted] do
     normalized = normalize_turn_payload(payload)
+    push(socket, "turn_status", normalized)
+    socket = push_history_sync(socket)
 
     socket =
       if socket.assigns[:turn_status] == :running do
         # Abnormal worker exits notify reply_to via TurnManager, but always push
         # turn_status + reset so the originating tab can offer Resume and unblock
         # the composer even if that message is delayed or lost.
-        socket |> push("turn_status", normalized) |> reset_turn()
+        reset_turn(socket)
       else
-        push(socket, "turn_status", normalized)
+        socket
       end
 
     {:noreply, socket}
   end
 
   def handle_info({:turn_status, :finished, payload}, socket) do
-    if socket.assigns[:turn_status] != :running do
-      push(socket, "turn_status", normalize_turn_payload(payload))
-    end
+    push(socket, "turn_status", normalize_turn_payload(payload))
+    socket = push_history_sync(socket)
+
+    socket =
+      if socket.assigns[:turn_status] == :running do
+        reset_turn(socket)
+      else
+        socket
+      end
 
     {:noreply, socket}
   end
@@ -610,6 +624,24 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp normalize_turn_payload(payload) when is_map(payload), do: payload
   defp normalize_turn_payload(_payload), do: %{}
+
+  # Reconcile the client transcript from durable history. Pushed after every
+  # terminal turn_status fan-out and on explicit sync_history so reattached tabs
+  # recover when streaming/completion events targeted a dead channel process.
+  defp push_history_sync(%Socket{} = socket) do
+    case thread_id_from_socket(socket) do
+      id when is_integer(id) ->
+        messages = id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1)
+        push(socket, "history_synced", %{messages: messages})
+        socket
+
+      _ ->
+        socket
+    end
+  end
+
+  defp thread_id_from_socket(%Socket{assigns: %{thread: %{id: id}}}) when is_integer(id), do: id
+  defp thread_id_from_socket(_socket), do: nil
 
   defp do_send_message(message, payload, socket) do
     project_slug = socket.assigns[:project_slug]

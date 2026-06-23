@@ -102,7 +102,7 @@ setup:
         Rework: Human Review
         Todo: Human Review
       max_concurrent_agents: 5
-      max_turns: 20
+      max_turns: 40
     assistant:
       draft_status: Planning
     claude:
@@ -229,15 +229,26 @@ setup:
       root: ~/code/gamba-workspaces
     ---
     
-    You are working on GitHub issue `{{ issue.identifier }}` in the **Gamba** board (`GambaLabs/frontend`).
+    You are working on issue `{{ issue.identifier }}` in the **Gamba** board.
+    
+    **Canonical issue (source of truth):** {{ issue.url }}
+    
+    The owning GitHub repository is determined by that URL (e.g. `GambaLabs/backend` or `GambaLabs/frontend`).
+    Do **not** assume every issue lives in `GambaLabs/frontend` — the board aggregates issues from multiple repos.
     
     Read and follow **`AGENTS.md`** in the workspace root and each repository's local guidance when present.
     
     Symphony injects **recent issue and PR comments** into your prompt when available. On **Rework**, those comments and the workpad define what you must do next.
     
+    ## Tracker / issue metadata (local-first)
+    
+    - Use Symphony's issue-bound tools first: `set_issue_status`, `list_comments`, `add_comment`, `update_comment`.
+    - Title, description, and synced comments come from the local tracker mirror — do not re-fetch the issue from GitHub MCP unless local data is missing or stale.
+    - If you need the GitHub repo for an API call, derive it from `{{ issue.url }}`, not from `tracker.config.repo` or this workflow file.
+    
     ## Repositories
     
-    This is a **multi-repository** workspace. Issues and the Project board live on `GambaLabs/frontend`, but a single issue may require changes in frontend, backend, goapi, or any combination of them.
+    This is a **multi-repository** workspace on a single GitHub Project. Each issue has its own canonical URL (`{{ issue.url }}`) pointing to the repo where it was filed (frontend, backend, or another linked repo). Implementation may still touch frontend, backend, goapi, or any combination.
     
     | Repo | Path | Integration branch | PR base |
     |------|------|--------------------|---------|
@@ -401,7 +412,7 @@ setup:
     | Merging | Merge approved PRs using the correct base per repo |
     | Done / Cancelled / Duplicate | Terminal |
     
-    Use a single `## Codex Workpad` comment for progress. Blockers: `Blocked by #N` or `Depends on GambaLabs/frontend#N`.
+    Use a single `## Codex Workpad` comment for progress. Blockers: `Blocked by #N` or `Depends on <owner>/<repo>#N` (use the target issue's canonical URL/repo, not a hardcoded frontend reference).
     
     Raw GitHub GraphQL: `github_graphql`.
     

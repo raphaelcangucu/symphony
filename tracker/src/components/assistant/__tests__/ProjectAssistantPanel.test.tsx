@@ -700,4 +700,27 @@ describe("ProjectAssistantPanel", () => {
     // Non-file tool call still uses the generic block.
     expect(screen.getByText("List issues")).toBeInTheDocument();
   });
+
+  it("replaces the transcript when history_synced arrives after a terminal turn_status", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["history_synced"]).toEqual(expect.any(Function)));
+
+    channelHandlers["history_loaded"]({
+      messages: [{ id: 1, role: "user", content: "go", tool_calls: [] }],
+    });
+
+    channelHandlers["turn_status"]({ status: "completed" });
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("sync_history", {}));
+
+    channelHandlers["history_synced"]({
+      messages: [
+        { id: 1, role: "user", content: "go", tool_calls: [] },
+        { id: 2, role: "assistant", content: "done without refresh", tool_calls: [] },
+      ],
+    });
+
+    expect(await screen.findByText("done without refresh")).toBeInTheDocument();
+  });
 });

@@ -116,7 +116,7 @@ setup:
             # Tenants are served on <tenant>.localhost; a real e2e must navigate there.
             require_url_pattern: "^https?://[^/]+\\.localhost"
     agent:
-      max_turns: 30
+      max_turns: 40
     codex:
       approval_policy: never
       thread_sandbox: danger-full-access

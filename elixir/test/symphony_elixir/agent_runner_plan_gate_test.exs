@@ -26,6 +26,9 @@ defmodule SymphonyElixir.AgentRunnerPlanGateTest do
       assert prompt =~ "workpad"
       assert prompt =~ "execution contract metadata"
       assert prompt =~ "### Plan"
+      assert prompt =~ "docs/superpowers/"
+      assert prompt =~ "Do not fetch the issue from GitHub to discover scope"
+      assert prompt =~ "you are looking in the wrong place"
       :ok
     end
 

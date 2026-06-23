@@ -10,6 +10,7 @@ import {
   isVideoMediaType,
   jiraAttachmentUrl,
   projectAttachmentUrl,
+  toSameOriginTrackerRequestUrl,
 } from "@/services/attachments";
 
 const httpDeleteMock = vi.hoisted(() => vi.fn());
@@ -102,6 +103,28 @@ describe("isJiraAttachmentUrl", () => {
     expect(isJiraAttachmentUrl("/api/tracker/v1/projects/advising/issues/CDE-1139")).toBe(false);
     expect(isJiraAttachmentUrl("")).toBe(false);
     expect(isJiraAttachmentUrl(null)).toBe(false);
+  });
+});
+
+describe("toSameOriginTrackerRequestUrl", () => {
+  it("rewrites absolute tracker API URLs to same-origin paths", () => {
+    expect(
+      toSameOriginTrackerRequestUrl(
+        "http://127.0.0.1:4000/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png",
+      ),
+    ).toBe("/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png");
+  });
+
+  it("leaves relative tracker paths unchanged", () => {
+    expect(
+      toSameOriginTrackerRequestUrl(
+        "/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png",
+      ),
+    ).toBe("/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png");
+  });
+
+  it("leaves external URLs unchanged", () => {
+    expect(toSameOriginTrackerRequestUrl("https://example.com/x.png")).toBe("https://example.com/x.png");
   });
 });
 

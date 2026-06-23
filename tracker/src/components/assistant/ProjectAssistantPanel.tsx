@@ -60,8 +60,10 @@ import {
   pauseAuthoringGoal,
   readLastTurn,
   requestGoalStatus,
+  requestHistorySync,
   resumeAuthoringGoal,
   resumeTurn,
+  isTerminalTurnStatus,
   setAuthoringGoalObjective,
   submitUserInput,
   type AssistantDocumentChangedPayload,
@@ -291,6 +293,11 @@ export function ProjectAssistantPanel({
 
     bindAssistantEvents(channel, {
       onHistoryLoaded: (history) => setMessages(history),
+      onHistorySynced: (history) => {
+        setMessages(history);
+        setIsRunning(false);
+        setPendingQuestions(null);
+      },
       onMessageCreated: (message) => setMessages((current) => appendMessage(current, message)),
       onAssistantDelta: (delta) => {
         setIsRunning(true);
@@ -355,12 +362,15 @@ export function ProjectAssistantPanel({
       },
       // Observer/reattached tabs receive turn_status fan-out (the originating tab
       // reconciles via assistant_completed/error). Mirror the running indicator and
-      // remember the latest turn so an interrupted turn can offer Resume.
+      // remember the latest turn so an interrupted turn can offer Resume. Request a
+      // durable history sync on terminal status so tabs recover when streaming events
+      // targeted a dead channel process.
       onTurnStatus: (status) => {
         setLastTurn(status);
         setIsRunning(status.status === "running");
-        if (status.status === "interrupted" || status.status === "failed") {
+        if (isTerminalTurnStatus(status.status)) {
           setPendingQuestions(null);
+          requestHistorySync(channel);
         }
       },
     });

@@ -32,6 +32,27 @@ defmodule SymphonyElixir.PromptBuilderTest do
     refute prompt =~ "Brainstorming Ideas Into Designs"
   end
 
+  test "injects a workpad-first bootstrap that sources scope from the local issue" do
+    issue = %Issue{
+      identifier: "MAC-10",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    prompt = PromptBuilder.build_prompt(issue)
+
+    assert prompt =~ "## Workpad first (Symphony)"
+    assert prompt =~ "Before writing any code"
+    assert prompt =~ "## Codex Workpad"
+    assert prompt =~ "spec or plan under `docs/superpowers/`"
+    assert prompt =~ "from the issue title and"
+    assert prompt =~ "Do not fetch the issue from GitHub to discover scope"
+    assert prompt =~ "you are looking in the wrong place"
+    assert prompt =~ "`workpad`"
+  end
+
   test "execution methodology appears before authoring artifacts in the prompt" do
     root = temporary_workspace_root!("pb-exec-order")
     File.mkdir_p!(Path.join([root, "docs", "superpowers", "plans"]))

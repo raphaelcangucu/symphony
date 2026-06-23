@@ -468,6 +468,13 @@ defmodule SymphonyElixir.AgentRunner do
     `final_publish_allowed`. The same `### Plan` section must track every plan
     task with `[ ]`, `[~]`, or `[x]` before implementation continues.
 
+    Build the Plan from the scope Symphony already gave you: derive from a spec or
+    plan under `docs/superpowers/` when present, otherwise from the issue title and
+    description in this thread. Do not fetch the issue from GitHub to discover scope,
+    and do not look up a same-numbered issue in another repository. If you think the
+    scope is missing, you are looking in the wrong place — re-read the injected issue
+    context and build the Plan instead of stalling.
+
     Do nothing else in this turn.
     """
   end

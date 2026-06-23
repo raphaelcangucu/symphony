@@ -34,6 +34,7 @@ defmodule SymphonyElixir.PromptBuilder do
 
     rendered <>
       execution_methodology_section() <>
+      workpad_bootstrap_section() <>
       workflow_guidance_section(issue, Keyword.get(opts, :agent_kind)) <>
       group_members_section(Keyword.get(opts, :members, [])) <>
       validate_section(config) <>
@@ -96,6 +97,38 @@ defmodule SymphonyElixir.PromptBuilder do
   end
 
   defp workflow_guidance_section(_issue, _agent_kind), do: ""
+
+  # The workpad must exist before any code — and its scope must come from the
+  # context Symphony already injected (authoring spec/plan first, then the issue
+  # description), never from a GitHub lookup (which previously fetched a
+  # same-numbered issue in the wrong repo and left the agent without scope). The
+  # self-correction note stops the "no scope, no-op" spinning we saw on GAM-4018.
+  # Runs on the first turn only (build_prompt is turn 1).
+  defp workpad_bootstrap_section do
+    """
+
+    ## Workpad first (Symphony)
+
+    Before writing any code, create the single `## Codex Workpad` comment for this
+    issue (follow the `workpad` skill), then derive its `### Plan` and
+    `### Acceptance criteria` from the scope Symphony already gave you here:
+
+    - When authoring artifacts (a spec or plan under `docs/superpowers/`) appear
+      below, derive the Plan from those — they are the source of truth for scope.
+    - Otherwise derive the Plan and Acceptance criteria from the issue title and
+      description above.
+    - Do not fetch the issue from GitHub to discover scope, and do not look up a
+      same-numbered issue in another repository — the canonical scope is embedded above.
+    - Use the issue-bound comment tools (`add_comment` / `list_comments` /
+      `update_comment`); keep exactly one workpad and edit it in place.
+
+    Self-correct instead of stalling: if you conclude there is "no scope", "no
+    issue description", or "no plan artifact", you are looking in the wrong place
+    (such as a GitHub lookup), not facing missing scope. Re-read the spec/plan and
+    issue description in this prompt and build the Plan from them — never burn turns
+    spinning on missing scope or record a no-op for it.
+    """
+  end
 
   # Orchestrator dispatches are execution runs — not issue authoring. Inject the
   # vendored subagent-driven-development skill (same pattern as complex-mode

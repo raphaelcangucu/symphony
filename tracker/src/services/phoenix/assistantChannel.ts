@@ -33,6 +33,7 @@ export interface AssistantChannelHandlers {
   onGoalStatus?: (status: AuthoringGoalStatus) => void;
   onGoalRunning?: (running: boolean) => void;
   onTurnStatus?: (status: AssistantTurnStatus) => void;
+  onHistorySynced?: (messages: AssistantChatMessage[]) => void;
 }
 
 /**
@@ -180,6 +181,12 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     if (joinedLastTurn) handlers.onTurnStatus?.(joinedLastTurn);
   });
 
+  channel.on("history_synced", (payload) => {
+    const data = payload as HistoryLoadedPayload;
+    const messages = (data.messages ?? []).map(normalizeAssistantChatMessage);
+    handlers.onHistorySynced?.(messages);
+  });
+
   channel.on("message_created", (payload) => {
     const message = (payload as MessagePayload).message;
     if (message) handlers.onMessageCreated(normalizeAssistantChatMessage(message));
@@ -286,6 +293,14 @@ export function clearAuthoringGoal(channel: Channel): ReturnType<Channel["push"]
 
 export function resumeTurn(channel: Channel): ReturnType<Channel["push"]> {
   return channel.push("resume_turn", {});
+}
+
+export function requestHistorySync(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("sync_history", {});
+}
+
+export function isTerminalTurnStatus(status: string): boolean {
+  return status === "completed" || status === "failed" || status === "interrupted";
 }
 
 export function setAuthoringGoalObjective(channel: Channel, objective: string): ReturnType<Channel["push"]> {

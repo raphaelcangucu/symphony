@@ -144,7 +144,7 @@ setup:
         gh repo clone clouapp/distributionmachine distributionmachine -- --depth 1
     agent:
       max_concurrent_agents: 5
-      max_turns: 20
+      max_turns: 40
       completion_transitions:
         Todo: Human Review
         In Progress: Human Review

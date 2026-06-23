@@ -108,6 +108,44 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
   end
 
+  test "issue thread completion pushes history_synced for transcript reconciliation" do
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_assistant_delta).("synced reply")
+      {:ok, %{assistant_message: "synced reply", codex_thread_id: "ct-sync", turn_id: "turn-sync", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, _payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-SYNC")
+
+    assert_push("history_loaded", %{})
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{"view" => "board"}})
+    assert_reply(ref, :ok, %{})
+
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "synced reply"}})
+    assert_push("history_synced", %{messages: messages})
+    assert Enum.map(messages, & &1.content) == ["go", "synced reply"]
+  end
+
+  test "sync_history replies ok and pushes history_synced for durable threads" do
+    {:ok, %{thread_id: thread_id}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-SYNC2")
+
+    assert_push("history_loaded", %{})
+
+    {:ok, thread} = History.get_thread(thread_id)
+    {:ok, _message} = History.append_message(thread, %{role: "user", content: "hello"})
+
+    ref = push(socket, "sync_history", %{})
+    assert_reply(ref, :ok, %{})
+
+    assert_push("history_synced", %{messages: [%{role: "user", content: "hello"}]})
+  end
+
   test "steer_turn persists a steer message and forwards to the running turn" do
     test_pid = self()
 

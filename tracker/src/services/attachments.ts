@@ -109,6 +109,23 @@ export function isVideoAttachmentSource(src: string | null | undefined): boolean
 const objectUrlCache = new Map<string, Promise<string>>();
 
 /**
+ * Absolute tracker API URLs may use a different loopback hostname than the page
+ * (127.0.0.1 vs localhost). Rewriting them to a same-origin path avoids CORS
+ * preflight on bearer-authenticated media fetches.
+ */
+export function toSameOriginTrackerRequestUrl(src: string): string {
+  if (!/^https?:\/\//i.test(src)) return src;
+
+  try {
+    const url = new URL(src);
+    if (!url.pathname.startsWith(`${API_PREFIX}/`)) return src;
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return src;
+  }
+}
+
+/**
  * Fetches an attachment with the tracker bearer token and returns a blob object
  * URL suitable for an <img src>. Results are cached per source so repeated
  * renders reuse a single object URL for the lifetime of the page.
@@ -120,7 +137,7 @@ export function fetchAttachmentObjectUrl(src: string): Promise<string> {
   if (cached) return cached;
 
   const pending = http
-    .get(src, { responseType: "blob" })
+    .get(toSameOriginTrackerRequestUrl(src), { responseType: "blob" })
     .then((response) => URL.createObjectURL(response.data as Blob))
     .catch((cause) => {
       objectUrlCache.delete(src);
