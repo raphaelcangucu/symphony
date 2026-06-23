@@ -23,6 +23,7 @@ import {
 import { ModelMenu } from "@/components/assistant/ModelMenu";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
 import { agentKindLabel } from "@/components/shared/AgentChip";
+import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -58,12 +59,14 @@ import {
   type AssistantComposerState,
   type AssistantEffort,
 } from "@/lib/assistantSettings";
-import { agentEnterHintLabel, deriveAgentControl } from "@/lib/agentExecutionDisplay";
+import { agentEnterHintLabel, canResumeExecution, deriveAgentControl } from "@/lib/agentExecutionDisplay";
 import { enrichGuidanceWithAttachments, maybeReadInlineFileText } from "@/lib/enrichComposerGuidance";
+import { cn } from "@/lib/utils";
 import { extractFilesFromClipboard } from "@/lib/clipboardImages";
 import { fetchAssistantCatalogBundle, uploadAssistantAttachment } from "@/services/assistant";
 import { isVideoMediaType } from "@/services/attachments";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
+import { controlIssueGoal } from "@/services/goalControl";
 import type { AgentSteerPayload } from "@/hooks/useSessionLogChannel";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AgentKind, Issue } from "@/types/issue";
@@ -114,11 +117,11 @@ export function ExecutionControlComposer({
   const dragDepthRef = useRef(0);
   const [bundle, setBundle] = useState<AssistantCatalogBundle>(fallbackCatalogBundle());
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(fallbackCatalogBundle()));
-  const [goalMode, setGoalMode] = useState(() => execution?.goal?.kind === "goal");
   const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | "hard_reset" | "stop" | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [hardResetOpen, setHardResetOpen] = useState(false);
+  const [goalDismissed, setGoalDismissed] = useState(false);
 
   const agent: AgentKind = composerState.agent;
   const catalog = catalogFor(bundle, agent);
@@ -126,8 +129,13 @@ export function ExecutionControlComposer({
     composerState.byAgent[agent] ?? defaultComposerSettings(catalog);
   const effortOptions = effortsForModel(catalog, settings.model);
 
-  const trimmedGoalObjective = execution?.goal?.objective?.trim();
-  const goalObjective = trimmedGoalObjective ? trimmedGoalObjective : null;
+  const trimmedGoalObjective = execution?.goal?.objective?.trim() || issue.agentGoal?.trim() || "";
+  const goalObjective = trimmedGoalObjective.length > 0 ? trimmedGoalObjective : null;
+  const showGoalPill = !goalDismissed && goalObjective != null;
+
+  useEffect(() => {
+    if (!issue.agentGoal?.trim()) setGoalDismissed(false);
+  }, [issue.agentGoal]);
 
   const control = deriveAgentControl(execution, t);
   const agentRunActive = control.isActive;
@@ -381,7 +389,7 @@ export function ExecutionControlComposer({
       const result = await dispatchIssueAgent(projectSlug, issue.identifier, {
         action,
         agent,
-        goal: goalMode ? goalObjective : null,
+        goal: goalObjective,
         instructions: guidance || null,
       });
       onIssueUpdated?.(result.issue);
@@ -442,6 +450,57 @@ export function ExecutionControlComposer({
     (canSteer && (!sessionConnected || steerPending));
   const primaryDisabled = controlsDisabled || (!agentRunActive && !canResume);
 
+  const goalPhase = executionGoalPhase(agentRunActive, showGoalPill, execution);
+  const goalTimeUsedSeconds =
+    execution?.goal?.timeUsedSeconds ?? (agentRunActive ? execution?.runtimeSeconds : null) ?? null;
+  const nativeGoal = execution?.goal?.source === "native" && execution?.goal?.kind === "goal";
+
+  async function handleGoalPause() {
+    if (nativeGoal && execution?.goal?.capabilities.includes("pause")) {
+      try {
+        await controlIssueGoal(projectSlug, issue.identifier, { action: "pause" });
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+      }
+      return;
+    }
+    if (agentRunActive) void runDispatch("stop");
+  }
+
+  async function handleGoalResume() {
+    if (nativeGoal && execution?.goal?.capabilities.includes("resume") && !agentRunActive) {
+      try {
+        await controlIssueGoal(projectSlug, issue.identifier, { action: "resume" });
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+      }
+      return;
+    }
+    if (!agentRunActive && !dispatchPending) void runDispatch("resume");
+  }
+
+  async function handleGoalRemove() {
+    try {
+      const result = await controlIssueGoal(projectSlug, issue.identifier, { action: "clear" });
+      setGoalDismissed(true);
+      if (result.cleared || !result.goal) {
+        onIssueUpdated?.({ ...issue, agentGoal: null });
+      }
+      toast.success(t("issue.agent.goalControls.clearDone"));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+    }
+  }
+
+  async function handleGoalEdit(objective: string) {
+    try {
+      await controlIssueGoal(projectSlug, issue.identifier, { action: "set_objective", objective });
+      onIssueUpdated?.({ ...issue, agentGoal: objective });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+    }
+  }
+
   return (
     <section className="rounded-xl border border-border/70 bg-card/40 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -479,31 +538,6 @@ export function ExecutionControlComposer({
           />
         </div>
       </div>
-
-      {goalObjective ? (
-        <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-          <label className="flex cursor-pointer items-start justify-between gap-3">
-            <span className="min-w-0">
-              <span className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {execution?.goal?.kind === "workflow"
-                  ? t("issue.agent.workflowObjective")
-                  : t("issue.agent.goalObjective")}
-              </span>
-              <span className="mt-1 block whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">
-                {goalObjective}
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={goalMode}
-              disabled={controlsDisabled}
-              aria-label={t("issue.agent.sendGoalAria")}
-              onChange={(event) => setGoalMode(event.target.checked)}
-              className="mt-1 h-4 w-4 shrink-0 accent-primary"
-            />
-          </label>
-        </div>
-      ) : null}
 
       {queuedGuidance.length > 0 ? (
         <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
@@ -568,6 +602,19 @@ export function ExecutionControlComposer({
           </div>
         ) : null}
 
+        {showGoalPill ? (
+          <GoalPill
+            phase={goalPhase}
+            objective={goalObjective}
+            running={agentRunActive}
+            timeUsedSeconds={goalTimeUsedSeconds}
+            onPause={() => void handleGoalPause()}
+            onResume={() => void handleGoalResume()}
+            onRemove={() => void handleGoalRemove()}
+            onEditObjective={(objective) => void handleGoalEdit(objective)}
+          />
+        ) : null}
+
         <Textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
@@ -584,7 +631,7 @@ export function ExecutionControlComposer({
           }
           disabled={controlsDisabled || (canSteer && (!sessionConnected || steerPending))}
           rows={3}
-          className="min-h-0 resize-none text-sm"
+          className={cn("min-h-0 resize-none text-sm", showGoalPill && "rounded-t-none border-t-0")}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -709,6 +756,26 @@ export function ExecutionControlComposer({
       </Dialog>
     </section>
   );
+}
+
+function executionGoalPhase(
+  agentRunActive: boolean,
+  hasGoal: boolean,
+  execution?: AgentExecution,
+): GoalPillPhase {
+  if (agentRunActive) return "running";
+  if (execution?.goal?.status === "paused") return "paused";
+  if (
+    execution?.goal?.status === "completed" ||
+    execution?.goal?.status === "complete" ||
+    execution?.goal?.status === "done" ||
+    execution?.goal?.status === "satisfied"
+  ) {
+    return "completed";
+  }
+  if (execution && canResumeExecution(execution)) return "stalled";
+  if (hasGoal) return "pending";
+  return "pending";
 }
 
 function ComposerAttachmentChip({

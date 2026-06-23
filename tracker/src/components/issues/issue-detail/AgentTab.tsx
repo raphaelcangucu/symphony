@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
-import { GoalControls } from "@/components/issues/issue-detail/GoalControls";
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
 import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
@@ -15,7 +14,6 @@ import { formatDateTime } from "@/lib/utils";
 import {
   canResumeExecution,
   canSteerExecution,
-  goalStatusLabel,
   resolveDisplayStatus,
 } from "@/lib/agentExecutionDisplay";
 import { assessEvidenceAttention, type EvidenceAttention } from "@/lib/evidenceStatus";
@@ -140,74 +138,7 @@ export function AgentTab({
                 <dd className="mt-1">#{execution.retryAttempt}</dd>
               </div>
             ) : null}
-            {execution.goal ? (
-              <div className="col-span-2">
-                <dt className="text-xs text-muted-foreground">
-                  {execution.goal.kind === "workflow"
-                    ? t("issue.agent.workflowObjective")
-                    : t("issue.agent.goalObjective")}
-                </dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground/90">
-                  {execution.goal.objective ?? "-"}
-                </dd>
-                <dd className="mt-2 text-xs text-muted-foreground">
-                  {t("issue.agent.tab.goalSource", {
-                    source:
-                      execution.goal.source === "native"
-                        ? t("issue.agent.tab.goalSourceNative")
-                        : t("issue.agent.tab.goalSourcePrompt"),
-                  })}
-                  {execution.goal.capabilities.length > 0
-                    ? ` · ${t("issue.agent.tab.goalCapabilities", { list: execution.goal.capabilities.join(", ") })}`
-                    : ""}
-                </dd>
-                <dl className="mt-3 grid grid-cols-3 gap-3 text-xs">
-                  <div>
-                    <dt className="text-muted-foreground">{t("issue.agent.tab.goalStatus")}</dt>
-                    <dd className="mt-1 font-medium text-foreground/90">
-                      {goalStatusLabel(execution.goal.status, t) ?? "-"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">{t("issue.agent.tab.goalTokensUsed")}</dt>
-                    <dd className="mt-1 font-medium text-foreground/90">
-                      {execution.goal.tokensUsed != null ? execution.goal.tokensUsed.toLocaleString() : "-"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">{t("issue.agent.tab.goalBudget")}</dt>
-                    <dd className="mt-1 font-medium text-foreground/90">
-                      {execution.goal.tokenBudget != null
-                        ? execution.goal.tokenBudget.toLocaleString()
-                        : t("issue.agent.tab.goalBudgetUnlimited")}
-                    </dd>
-                  </div>
-                  {execution.goal.timeUsedSeconds != null ? (
-                    <div>
-                      <dt className="text-muted-foreground">{t("issue.agent.tab.goalTimeUsed")}</dt>
-                      <dd className="mt-1 font-medium text-foreground/90">
-                        {t("issue.agent.tab.goalSeconds", { seconds: execution.goal.timeUsedSeconds })}
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-                <GoalControls
-                  projectSlug={projectSlug}
-                  issueIdentifier={issue.identifier}
-                  goal={execution.goal}
-                />
-              </div>
-            ) : null}
           </dl>
-        ) : issue.agentGoal ? (
-          <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-foreground/90">
-              <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
-              {t("issue.agent.tab.executionGoalSaved")}
-            </div>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground/90">{issue.agentGoal}</p>
-            <p className="mt-2 text-xs text-muted-foreground">{t("issue.agent.tab.executionGoalSavedHint")}</p>
-          </div>
         ) : (
           <p className="mt-3 text-muted-foreground">{t("issue.agent.tab.noExecution")}</p>
         )}

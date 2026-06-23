@@ -8,22 +8,15 @@ import type { Channel } from "phoenix";
 import {
   AudioLines,
   Bot,
-  Check,
   Clock,
   FileText,
   ImageIcon,
-  Loader2,
-  Pause,
-  Pencil,
-  Play,
   SendHorizontal,
-  Target,
-  Trash2,
   X,
 } from "lucide-react";
 import type { TFunction } from "i18next";
 import { i18n } from "@/i18n";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
@@ -35,6 +28,7 @@ import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
+import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
@@ -886,9 +880,11 @@ export function ProjectAssistantPanel({
   // reads as the top of the message box — one piece, no separating line.
   const authoringGoalPill =
     issueIdentifier && authoringGoal.enabled ? (
-      <AuthoringGoalPill
-        goal={authoringGoal}
+      <GoalPill
+        phase={authoringGoalPhase(authoringGoal, isRunning)}
+        objective={authoringGoal.objective}
         running={isRunning}
+        timeUsedSeconds={authoringGoal.timeUsedSeconds}
         onPause={pauseGoal}
         onResume={resumeGoal}
         onRemove={removeGoal}
@@ -1057,19 +1053,7 @@ export function ProjectAssistantPanel({
   );
 }
 
-function formatGoalClock(seconds: number): string {
-  const safe = Math.max(0, Math.floor(seconds));
-  const h = Math.floor(safe / 3600);
-  const m = Math.floor((safe % 3600) / 60);
-  const s = safe % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-type AuthoringGoalPhase = "running" | "paused" | "stalled" | "completed" | "pending";
-
-function authoringGoalPhase(goal: AuthoringGoalState, running: boolean): AuthoringGoalPhase {
+function authoringGoalPhase(goal: AuthoringGoalState, running: boolean): GoalPillPhase {
   if (running) return "running";
   switch (goal.status) {
     case "paused":
@@ -1088,203 +1072,6 @@ function authoringGoalPhase(goal: AuthoringGoalState, running: boolean): Authori
       // native + active-but-not-running reads as stalled (resumable); no native goal yet = pending.
       return goal.native ? "stalled" : "pending";
   }
-}
-
-/**
- * Discreet, Codex-style authoring-goal indicator that docks right above the
- * composer. Shows the live phase + elapsed time and exposes inline pause/resume,
- * edit, and remove controls. The native Codex goal is the source of truth; this
- * only renders state and forwards control intents.
- */
-function AuthoringGoalPill({
-  goal,
-  running,
-  onPause,
-  onResume,
-  onRemove,
-  onEditObjective,
-}: {
-  goal: AuthoringGoalState;
-  running: boolean;
-  onPause: () => void;
-  onResume: () => void;
-  onRemove: () => void;
-  onEditObjective: (objective: string) => void;
-}) {
-  const { t } = useTranslation();
-  const phase = authoringGoalPhase(goal, running);
-  const trimmed = goal.objective?.trim() || null;
-
-  // Live timer: while running, tick up from the last known native time-used
-  // baseline; when idle, freeze on the native value.
-  const [tick, setTick] = useState(() => Date.now());
-  const runStartRef = useRef<number | null>(null);
-  const baseRef = useRef<number>(goal.timeUsedSeconds ?? 0);
-
-  useEffect(() => {
-    if (running) {
-      if (runStartRef.current == null) {
-        runStartRef.current = Date.now();
-        baseRef.current = goal.timeUsedSeconds ?? baseRef.current;
-      }
-    } else {
-      runStartRef.current = null;
-      baseRef.current = goal.timeUsedSeconds ?? baseRef.current;
-    }
-  }, [running, goal.timeUsedSeconds]);
-
-  useEffect(() => {
-    if (!running) return;
-    const id = window.setInterval(() => setTick(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [running]);
-
-  const elapsedSeconds =
-    running && runStartRef.current != null
-      ? baseRef.current + (tick - runStartRef.current) / 1000
-      : goal.timeUsedSeconds;
-
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(trimmed ?? "");
-
-  const label =
-    phase === "running"
-      ? t("assistant.authoring.goalRunning")
-      : phase === "paused"
-        ? t("assistant.authoring.goalPaused")
-        : phase === "completed"
-          ? t("assistant.authoring.goalCompleted")
-          : phase === "pending"
-            ? t("assistant.authoring.goalPending")
-            : t("assistant.authoring.goalStalled");
-
-  const dotClass =
-    phase === "running"
-      ? "bg-emerald-400"
-      : phase === "paused"
-        ? "bg-amber-400"
-        : phase === "completed"
-          ? "bg-sky-400"
-          : phase === "pending"
-            ? "bg-slate-400"
-            : "bg-orange-400";
-
-  function commitEdit() {
-    const next = draft.trim();
-    if (next.length > 0 && next !== trimmed) onEditObjective(next);
-    setEditing(false);
-  }
-
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-label={t("assistant.authoring.goalBannerAria")}
-      className="bg-muted/40 px-3 py-2 text-xs"
-    >
-      <div className="flex items-center gap-2">
-        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-background text-violet-500">
-          {phase === "running" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Target className="h-3 w-3" />}
-        </span>
-        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} aria-hidden />
-        <span className="shrink-0 font-medium text-foreground">{label}</span>
-
-        {editing ? null : (
-          <span className="min-w-0 flex-1 truncate text-muted-foreground" title={trimmed || undefined}>
-            {trimmed || t("assistant.authoring.goalNoObjective")}
-          </span>
-        )}
-
-        {editing ? null : (
-          <span className="ml-auto flex shrink-0 items-center gap-1">
-            {elapsedSeconds != null ? (
-              <span className="inline-flex items-center gap-1 tabular-nums text-muted-foreground">
-                <Clock className="h-3 w-3" />
-                {formatGoalClock(elapsedSeconds)}
-              </span>
-            ) : null}
-
-            {phase === "running" ? (
-              <GoalPillButton label={t("assistant.authoring.goalPause")} onClick={onPause}>
-                <Pause className="h-3.5 w-3.5" />
-              </GoalPillButton>
-            ) : (
-              <GoalPillButton label={t("assistant.authoring.goalResume")} onClick={onResume}>
-                <Play className="h-3.5 w-3.5" />
-              </GoalPillButton>
-            )}
-
-            <GoalPillButton
-              label={t("assistant.authoring.goalEdit")}
-              onClick={() => {
-                setDraft(trimmed ?? "");
-                setEditing(true);
-              }}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </GoalPillButton>
-
-            <GoalPillButton label={t("assistant.authoring.goalRemove")} onClick={onRemove}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </GoalPillButton>
-          </span>
-        )}
-      </div>
-
-      {editing ? (
-        <div className="mt-2 flex items-start gap-2">
-          <textarea
-            autoFocus
-            rows={2}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                event.preventDefault();
-                commitEdit();
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setEditing(false);
-              }
-            }}
-            placeholder={t("assistant.authoring.goalObjectivePlaceholder")}
-            className="min-h-0 flex-1 resize-none rounded-lg border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
-          />
-          <div className="flex shrink-0 flex-col gap-1">
-            <GoalPillButton label={t("assistant.authoring.goalEditSave")} onClick={commitEdit}>
-              <Check className="h-3.5 w-3.5" />
-            </GoalPillButton>
-            <GoalPillButton label={t("assistant.authoring.goalEditCancel")} onClick={() => setEditing(false)}>
-              <X className="h-3.5 w-3.5" />
-            </GoalPillButton>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function GoalPillButton({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-    >
-      {children}
-    </button>
-  );
 }
 
 function AssistantBubble({

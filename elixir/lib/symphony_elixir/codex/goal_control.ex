@@ -88,12 +88,75 @@ defmodule SymphonyElixir.Codex.GoalControl do
     with_goal(project, identifier, {:set, %{token_budget: budget}})
   end
 
+  @cache_goal_fallback_errors [:no_codex_thread, :goals_disabled]
+
   defp with_goal(%Project{} = project, identifier, command) do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
       issue_ref = issue_ref(project, issue)
       workspace = Workspace.path_for_issue(issue_ref)
-      CodingAgent.manage_goal(workspace, command, goal_opts(project, issue_ref))
+
+      case CodingAgent.manage_goal(workspace, command, goal_opts(project, issue_ref)) do
+        {:ok, result} ->
+          {:ok, result}
+
+        {:error, reason} when reason in @cache_goal_fallback_errors ->
+          cached_goal_command(project, issue, command)
+
+        {:error, _} = error ->
+          error
+      end
     end
+  end
+
+  defp cached_goal_command(_project, issue, :get) do
+    case cached_objective(issue) do
+      nil -> {:ok, nil}
+      objective -> {:ok, cached_goal_map(objective)}
+    end
+  end
+
+  defp cached_goal_command(%Project{} = project, issue, :clear) do
+    cache_objective(project, Map.get(issue, :identifier), nil)
+    {:ok, :cleared}
+  end
+
+  defp cached_goal_command(%Project{} = project, issue, {:set, %{objective: objective}}) when is_binary(objective) do
+    case String.trim(objective) do
+      "" ->
+        {:error, :empty_objective}
+
+      trimmed ->
+        cache_objective(project, Map.get(issue, :identifier), trimmed)
+        {:ok, cached_goal_map(trimmed)}
+    end
+  end
+
+  defp cached_goal_command(_project, _issue, _command), do: {:error, :no_codex_thread}
+
+  defp cached_objective(issue) do
+    case Map.get(issue, :agent_goal) do
+      goal when is_binary(goal) ->
+        case String.trim(goal) do
+          "" -> nil
+          trimmed -> trimmed
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp cached_goal_map(objective) when is_binary(objective) do
+    %{
+      "kind" => "goal",
+      "source" => "native",
+      "objective" => objective,
+      "status" => "pending",
+      "capabilities" => ["get", "edit", "clear"],
+      "token_budget" => nil,
+      "tokens_used" => nil,
+      "time_used_seconds" => nil
+    }
   end
 
   defp goal_opts(%Project{} = project, issue_ref) do
