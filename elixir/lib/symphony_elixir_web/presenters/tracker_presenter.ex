@@ -248,9 +248,18 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       long_running: Map.get(execution, :long_running),
       long_running_kind: Map.get(execution, :long_running_kind),
       long_running_label: Map.get(execution, :long_running_label),
+      parent_identifier: Map.get(execution, :parent_identifier),
+      bundle_role: bundle_role_to_string(Map.get(execution, :bundle_role)),
+      unit_id: Map.get(execution, :unit_id),
+      repo: Map.get(execution, :repo),
+      child_identifiers: Map.get(execution, :child_identifiers, []),
       tokens: execution.tokens
     }
   end
+
+  defp bundle_role_to_string(role) when is_atom(role) and not is_nil(role), do: Atom.to_string(role)
+  defp bundle_role_to_string(role) when is_binary(role), do: role
+  defp bundle_role_to_string(_role), do: "standalone"
 
   @spec assistant_thread(map()) :: map()
   def assistant_thread(thread) when is_map(thread) do

@@ -140,5 +140,36 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
     assert json.turn_count == 3
     assert json.tokens == %{input: 10, output: 20, total: 30}
     assert json.last_event_at == "2026-05-28T00:00:00Z"
+    assert json.bundle_role == "standalone"
+    assert json.child_identifiers == []
+  end
+
+  test "agent_execution/1 serializes parent/child bundle context" do
+    execution = %{
+      issue_identifier: "SYM-2",
+      status: :live,
+      session_id: nil,
+      last_event: nil,
+      last_message: nil,
+      last_event_at: nil,
+      turn_count: 0,
+      runtime_seconds: nil,
+      started_at: nil,
+      retry_attempt: 0,
+      error: nil,
+      parent_identifier: "SYM-1",
+      bundle_role: :child,
+      unit_id: "be",
+      repo: "macro/be",
+      child_identifiers: [],
+      tokens: nil
+    }
+
+    json = TrackerPresenter.agent_execution(execution)
+
+    assert json.parent_identifier == "SYM-1"
+    assert json.bundle_role == "child"
+    assert json.unit_id == "be"
+    assert json.repo == "macro/be"
   end
 end

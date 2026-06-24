@@ -42,6 +42,47 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.long_running_label == nil
     end
 
+    test "defaults bundle role to standalone for ordinary runs" do
+      snapshot = %{running: [running_entry(%{})], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.bundle_role == :standalone
+      assert execution.parent_identifier == nil
+      assert execution.unit_id == nil
+      assert execution.repo == nil
+      assert execution.child_identifiers == []
+    end
+
+    test "projects parent coordinator bundle context" do
+      entry = running_entry(%{bundle_role: :parent, child_identifiers: ["SYM-2", "SYM-3"]})
+      snapshot = %{running: [entry], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.bundle_role == :parent
+      assert execution.child_identifiers == ["SYM-2", "SYM-3"]
+      assert execution.parent_identifier == nil
+    end
+
+    test "projects child run bundle context" do
+      entry =
+        running_entry(%{
+          identifier: "SYM-2",
+          bundle_role: :child,
+          parent_identifier: "SYM-1",
+          unit_id: "be",
+          repo: "macro/be"
+        })
+
+      snapshot = %{running: [entry], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.bundle_role == :child
+      assert execution.parent_identifier == "SYM-1"
+      assert execution.unit_id == "be"
+      assert execution.repo == "macro/be"
+      assert execution.child_identifiers == []
+    end
+
     test "marks Codex goal executions as pursuing a goal from native goal data" do
       goal = %{
         kind: "goal",
