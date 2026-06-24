@@ -794,6 +794,31 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @doc """
+  Lists the identifiers of issues that are subtasks (sub_issue_of) of the given
+  parent within a project. Returns `{:ok, [identifier]}` or a missing error.
+  """
+  @spec list_subtask_children(String.t(), String.t()) :: {:ok, [String.t()]} | {:error, missing_error()}
+  def list_subtask_children(project_slug, parent_identifier)
+      when is_binary(project_slug) and is_binary(parent_identifier) do
+    subtask_type = IssueRelation.subtask_type()
+
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, parent} <- fetch_project_issue(project.id, parent_identifier) do
+      identifiers =
+        IssueRelation
+        |> where([relation], relation.target_issue_id == ^parent.id and relation.type == ^subtask_type)
+        |> preload([:source_issue])
+        |> Repo.all()
+        |> Enum.flat_map(fn
+          %IssueRelation{source_issue: %IssueRecord{identifier: identifier}} -> [identifier]
+          _relation -> []
+        end)
+
+      {:ok, identifiers}
+    end
+  end
+
   @spec delete_blocker(String.t(), String.t(), String.t(), String.t()) ::
           {:ok, IssueRelation.t()} | {:error, Ecto.Changeset.t() | missing_error()}
   def delete_blocker(project_slug, source_identifier, target_identifier, type \\ "blocked_by")

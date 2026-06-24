@@ -101,6 +101,52 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
     end
   end
 
+  describe "set_issue_parent" do
+    setup do
+      {:ok, a} = Context.create_issue("macro-markets", %{"title" => "Parent A", "status" => "Backlog"})
+      {:ok, b} = Context.create_issue("macro-markets", %{"title" => "Child B", "status" => "Backlog"})
+      {:ok, c} = Context.create_issue("macro-markets", %{"title" => "Other C", "status" => "Backlog"})
+      {:ok, _relation} = Context.add_blocker("macro-markets", b.identifier, a.identifier, "sub_issue_of")
+      %{a: a, b: b, c: c}
+    end
+
+    test "rejects creating a cycle", %{a: a, b: b} do
+      assert {:error, {:reparent_cycle, parent}} =
+               ToolExecutor.execute("macro-markets", "set_issue_parent", %{
+                 "identifier" => a.identifier,
+                 "parent_identifier" => b.identifier
+               })
+
+      assert parent == b.identifier
+    end
+
+    test "reparents a subtask to a new parent", %{b: b, c: c} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "set_issue_parent", %{
+                 "identifier" => b.identifier,
+                 "parent_identifier" => c.identifier
+               })
+
+      assert result.data.parent == c.identifier
+
+      {:ok, child} = Context.get_issue("macro-markets", b.identifier)
+      assert SymphonyElixir.LocalTracker.IssueAdapter.to_dto(child).parent_identifier == c.identifier
+    end
+
+    test "detaches a subtask when parent_identifier is null", %{b: b} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "set_issue_parent", %{
+                 "identifier" => b.identifier,
+                 "parent_identifier" => nil
+               })
+
+      assert result.data.parent == nil
+
+      {:ok, child} = Context.get_issue("macro-markets", b.identifier)
+      assert SymphonyElixir.LocalTracker.IssueAdapter.to_dto(child).parent_identifier == nil
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

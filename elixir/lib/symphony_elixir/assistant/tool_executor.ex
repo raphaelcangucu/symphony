@@ -65,6 +65,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     steer_agent
     classify_execution_unit
     create_subtask
+    set_issue_parent
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
@@ -280,6 +281,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
             "consumes" => string_list_schema("Optional shared-contract ids this subtask consumes."),
             "depends_on" => string_list_schema("Optional unit ids this subtask depends on."),
             "deliverable" => string_schema("Optional: 'pr' for an independently shippable unit.")
+          }
+        }
+      ),
+      tool_spec(
+        "set_issue_parent",
+        "Change or clear a subtask's parent. Omit parent_identifier (or pass null) to detach to standalone. Rejects cycles; moves the unit between parent execution bundles.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["identifier"],
+          "properties" => %{
+            "identifier" => string_schema("Subtask issue identifier, e.g. MAC-101."),
+            "parent_identifier" => %{
+              "type" => ["string", "null"],
+              "description" => "New parent identifier, or null to detach."
+            }
           }
         }
       )
@@ -844,7 +861,95 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
+  defp do_execute(project, "set_issue_parent", arguments, _opts) do
+    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
+         new_parent <- normalize_optional_string(Map.get(arguments, "parent_identifier")),
+         :ok <- reject_reparent_cycle(project, identifier, new_parent) do
+      reparent_subtask(project, identifier, new_parent)
+    end
+  end
+
   defp do_execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
+
+  # A new parent must not be the issue itself nor one of its descendants.
+  defp reject_reparent_cycle(_project, _identifier, nil), do: :ok
+
+  defp reject_reparent_cycle(_project, identifier, identifier), do: {:error, {:reparent_cycle, identifier}}
+
+  defp reject_reparent_cycle(project, identifier, new_parent) do
+    if new_parent in descendant_identifiers(project, identifier, MapSet.new()) do
+      {:error, {:reparent_cycle, new_parent}}
+    else
+      :ok
+    end
+  end
+
+  defp descendant_identifiers(project, identifier, seen) do
+    if MapSet.member?(seen, identifier) do
+      []
+    else
+      seen = MapSet.put(seen, identifier)
+
+      case Context.list_subtask_children(project_slug(project), identifier) do
+        {:ok, children} ->
+          children ++ Enum.flat_map(children, &descendant_identifiers(project, &1, seen))
+
+        _error ->
+          []
+      end
+    end
+  end
+
+  defp reparent_subtask(project, identifier, new_parent) do
+    alias SymphonyElixir.LocalTracker.IssueRelation
+    alias SymphonyElixir.Workpad.ExecutionBundle.Store
+
+    slug = project_slug(project)
+    subtask_type = IssueRelation.subtask_type()
+
+    {:ok, child} = IssueAdapter.dispatch(project, :get_issue, [identifier])
+    old_parent = child.parent_identifier
+
+    if old_parent do
+      Context.delete_blocker(slug, identifier, old_parent, subtask_type)
+      remove_bundle_unit(project, old_parent, identifier, Store)
+    end
+
+    if new_parent do
+      Context.add_blocker(slug, identifier, new_parent, subtask_type)
+      {:ok, parent} = IssueAdapter.dispatch(project, :get_issue, [new_parent])
+
+      type =
+        case resolve_unit_type(%{}, child.repository_full_name, parent.repository_full_name) do
+          {:ok, resolved} -> resolved
+          _ -> :workpad_task
+        end
+
+      upsert_bundle_unit(project, parent, child, child.repository_full_name, type, %{})
+    end
+
+    {:ok,
+     %{
+       tool: "set_issue_parent",
+       message: reparent_message(identifier, new_parent),
+       data: %{subtask: identifier, parent: new_parent}
+     }}
+  end
+
+  defp reparent_message(identifier, nil), do: "Detached #{identifier} to standalone."
+  defp reparent_message(identifier, parent), do: "Reparented #{identifier} under #{parent}."
+
+  defp remove_bundle_unit(project, parent_identifier, unit_id, store) do
+    alias SymphonyElixir.Tracker.Workpad
+
+    with {:ok, comments} <- IssueAdapter.dispatch(project, :list_comments, [parent_identifier]),
+         comment when not is_nil(comment) <- Enum.find(comments, &Workpad.workpad?(workpad_body(&1))),
+         {:ok, body} <- store.remove_unit(workpad_body(comment), unit_id) do
+      IssueAdapter.dispatch(project, :update_comment, [parent_identifier, workpad_comment_id(comment), body])
+    else
+      _ -> {:ok, :noop}
+    end
+  end
 
   defp build_subtask_attrs(arguments, title) do
     %{"title" => title}

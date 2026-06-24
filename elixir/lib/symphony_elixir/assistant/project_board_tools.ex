@@ -35,6 +35,7 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     steer_agent
     classify_execution_unit
     create_subtask
+    set_issue_parent
   )
 
   @tools @scoped_tools ++ ~w(create_tracker_project)

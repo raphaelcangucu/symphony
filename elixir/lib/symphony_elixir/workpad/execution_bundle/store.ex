@@ -11,6 +11,18 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.Store do
     end
   end
 
+  @spec remove_unit(String.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def remove_unit(workpad, unit_id) when is_binary(workpad) and is_binary(unit_id) do
+    case ExecutionBundle.parse(workpad) do
+      {:ok, bundle} ->
+        units = bundle.units |> serialize_units() |> Enum.reject(&(&1["id"] == unit_id))
+        render(workpad, %{bundle | units: units})
+
+      :absent ->
+        {:ok, workpad}
+    end
+  end
+
   @spec upsert_contract(String.t(), map()) :: {:ok, String.t()} | {:error, term()}
   def upsert_contract(workpad, contract) when is_binary(workpad) and is_map(contract) do
     with {:ok, bundle} <- existing_or_empty(workpad) do
