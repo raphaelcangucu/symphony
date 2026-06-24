@@ -40,6 +40,67 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
     assert "classify_execution_unit" in names
   end
 
+  describe "create_subtask" do
+    setup do
+      {:ok, parent} = Context.create_issue("macro-markets", %{"title" => "Lottery wheel", "status" => "Backlog"})
+      %{parent: parent}
+    end
+
+    test "auto-classifies an independent deliverable as a child_run", %{parent: parent} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "create_subtask", %{
+                 "parent_identifier" => parent.identifier,
+                 "title" => "Backend wheel API",
+                 "repo" => "macro-markets/backend",
+                 "deliverable" => "pr"
+               })
+
+      assert result.tool == "create_subtask"
+      assert result.data.unit_type == "child_run"
+      assert result.data.parent == parent.identifier
+    end
+
+    test "auto-classifies a same-repo subtask as a workpad_task", %{parent: parent} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "create_subtask", %{
+                 "parent_identifier" => parent.identifier,
+                 "title" => "Tweak copy",
+                 "repo" => "macro-markets/app"
+               })
+
+      assert result.data.unit_type == "workpad_task"
+    end
+
+    test "links the child under the parent and surfaces parent_identifier", %{parent: parent} do
+      {:ok, result} =
+        ToolExecutor.execute("macro-markets", "create_subtask", %{
+          "parent_identifier" => parent.identifier,
+          "title" => "Child issue",
+          "repo" => "macro-markets/app"
+        })
+
+      {:ok, child} = Context.get_issue("macro-markets", result.data.subtask)
+      child_dto = SymphonyElixir.LocalTracker.IssueAdapter.to_dto(child)
+      assert child_dto.parent_identifier == parent.identifier
+    end
+
+    test "writes the unit into the parent's workpad execution bundle", %{parent: parent} do
+      {:ok, result} =
+        ToolExecutor.execute("macro-markets", "create_subtask", %{
+          "parent_identifier" => parent.identifier,
+          "title" => "Child issue",
+          "repo" => "macro-markets/backend",
+          "deliverable" => "pr"
+        })
+
+      {:ok, comments} = Context.list_comments("macro-markets", parent.identifier)
+      workpad = Enum.find(comments, &SymphonyElixir.Tracker.Workpad.workpad?(&1.body))
+      assert workpad
+      {:ok, bundle} = SymphonyElixir.Workpad.ExecutionBundle.parse(workpad.body)
+      assert Enum.any?(bundle.units, &(&1.id == result.data.subtask))
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

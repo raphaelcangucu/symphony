@@ -64,6 +64,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     list_running_agents
     steer_agent
     classify_execution_unit
+    create_subtask
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
@@ -259,6 +260,26 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
             "produces" => string_list_schema("Optional shared-contract ids this unit produces."),
             "consumes" => string_list_schema("Optional shared-contract ids this unit consumes."),
             "depends_on" => string_list_schema("Optional unit ids this unit depends on.")
+          }
+        }
+      ),
+      tool_spec(
+        "create_subtask",
+        "Create a child issue under a parent and attach it to the parent's execution bundle. Omit unit_type to auto-classify (workpad_task inline vs child_run with its own PR/worktree). Use for breaking a task into subtasks.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier", "title"],
+          "properties" => %{
+            "parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42."),
+            "title" => string_schema("Subtask title."),
+            "description" => string_schema("Optional subtask description."),
+            "repo" => string_schema("Target repository full name; defaults to the parent's primary repo."),
+            "unit_type" => string_schema("Optional: 'workpad_task' or 'child_run'. Omit to auto-classify."),
+            "produces" => string_list_schema("Optional shared-contract ids this subtask produces."),
+            "consumes" => string_list_schema("Optional shared-contract ids this subtask consumes."),
+            "depends_on" => string_list_schema("Optional unit ids this subtask depends on."),
+            "deliverable" => string_schema("Optional: 'pr' for an independently shippable unit.")
           }
         }
       )
@@ -799,7 +820,95 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
      }}
   end
 
+  defp do_execute(project, "create_subtask", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, title} <- normalize_required_string(Map.get(arguments, "title"), :title),
+         {:ok, parent} <- IssueAdapter.dispatch(project, :get_issue, [parent_id]),
+         repo <- normalize_optional_string(Map.get(arguments, "repo")) || parent.repository_full_name,
+         {:ok, type} <- resolve_unit_type(arguments, repo, parent.repository_full_name),
+         attrs <- build_subtask_attrs(arguments, title),
+         {:ok, child} <- IssueAdapter.dispatch(project, :create_issue, [attrs]),
+         :ok <- link_subtask_parent(project, parent, child),
+         {:ok, _comment} <- upsert_bundle_unit(project, parent, child, repo, type, arguments) do
+      {:ok,
+       %{
+         tool: "create_subtask",
+         message: "Created #{type} subtask #{child.identifier} under #{parent.identifier}.",
+         data: %{
+           parent: parent.identifier,
+           subtask: child.identifier,
+           unit_type: to_string(type),
+           repo: repo
+         }
+       }}
+    end
+  end
+
   defp do_execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
+
+  defp build_subtask_attrs(arguments, title) do
+    %{"title" => title}
+    |> maybe_put_attr("description", normalize_optional_string(Map.get(arguments, "description")))
+  end
+
+  defp resolve_unit_type(%{"unit_type" => t}, _repo, _parent_repo) when t in ["workpad_task", "child_run"],
+    do: {:ok, String.to_existing_atom(t)}
+
+  defp resolve_unit_type(arguments, repo, parent_repo) do
+    unit = %{
+      repo: repo,
+      deliverable: normalize_optional_string(Map.get(arguments, "deliverable")),
+      produces: normalize_string_list(Map.get(arguments, "produces")),
+      consumes: normalize_string_list(Map.get(arguments, "consumes")),
+      depends_on: normalize_string_list(Map.get(arguments, "depends_on"))
+    }
+
+    case SymphonyElixir.Workpad.ExecutionBundle.Classifier.classify(unit, parent_repo: parent_repo) do
+      {:ok, type, _rule} -> {:ok, type}
+      {:ambiguous, reason} -> {:error, {:ambiguous_classification, reason}}
+    end
+  end
+
+  # Records a local parent relation (source = child, target = parent). Works for
+  # local projects and mirrors the relationship locally for synced trackers.
+  defp link_subtask_parent(project, parent, child) do
+    case Context.add_blocker(
+           project_slug(project),
+           child.identifier,
+           parent.identifier,
+           SymphonyElixir.LocalTracker.IssueRelation.subtask_type()
+         ) do
+      {:ok, _relation} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp upsert_bundle_unit(project, parent, child, repo, type, _arguments) do
+    alias SymphonyElixir.Tracker.Workpad
+    alias SymphonyElixir.Workpad.ExecutionBundle.Store
+
+    unit = %{id: child.identifier, type: type, issue: child.identifier, repo: repo}
+
+    with {:ok, comments} <- IssueAdapter.dispatch(project, :list_comments, [parent.identifier]) do
+      case Enum.find(comments, &Workpad.workpad?(workpad_body(&1))) do
+        nil ->
+          {:ok, body} = Store.upsert_unit("## Codex Workpad\n", unit)
+          IssueAdapter.dispatch(project, :add_comment, [parent.identifier, body, %{"author" => "assistant"}])
+
+        comment ->
+          {:ok, body} = Store.upsert_unit(workpad_body(comment), unit)
+          IssueAdapter.dispatch(project, :update_comment, [parent.identifier, workpad_comment_id(comment), body])
+      end
+    end
+  end
+
+  defp workpad_body(%{body: body}), do: body
+  defp workpad_body(comment) when is_map(comment), do: Map.get(comment, :body) || Map.get(comment, "body")
+  defp workpad_body(_comment), do: nil
+
+  defp workpad_comment_id(%{id: id}), do: id
+  defp workpad_comment_id(comment) when is_map(comment), do: Map.get(comment, :id) || Map.get(comment, "id")
+  defp workpad_comment_id(_comment), do: nil
 
   defp bind_tool_spec_identifier(%{"name" => "get_issue", "inputSchema" => schema} = spec, identifier) do
     schema =

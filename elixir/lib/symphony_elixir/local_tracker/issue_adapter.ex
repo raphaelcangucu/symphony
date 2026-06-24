@@ -5,7 +5,7 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
 
   import Ecto.Query
 
-  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, IssueRelation, Project, WorkflowStatus}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueDTO
   alias SymphonyElixir.Tracker.LabelResolver
@@ -169,9 +169,21 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
       created_at: iso8601(issue.inserted_at),
       updated_at: iso8601(issue.updated_at),
       group_lead_identifier: group_lead_identifier(issue.group_lead),
-      group_member_identifiers: group_member_identifiers(issue.group_members)
+      group_member_identifiers: group_member_identifiers(issue.group_members),
+      parent_identifier: subtask_parent_identifier(issue.source_relations)
     })
   end
+
+  defp subtask_parent_identifier(relations) when is_list(relations) do
+    subtask_type = IssueRelation.subtask_type()
+
+    Enum.find_value(relations, fn
+      %IssueRelation{type: ^subtask_type, target_issue: %IssueRecord{identifier: identifier}} -> identifier
+      _relation -> nil
+    end)
+  end
+
+  defp subtask_parent_identifier(_relations), do: nil
 
   defp status_to_map(%WorkflowStatus{} = status) do
     %{name: status.name, category: status.category, position: status.position, is_terminal: status.is_terminal}
