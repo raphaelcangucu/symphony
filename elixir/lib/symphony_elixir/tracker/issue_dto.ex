@@ -25,7 +25,10 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
             created_at: nil,
             updated_at: nil,
             group_lead_identifier: nil,
-            group_member_identifiers: []
+            group_member_identifiers: [],
+            repository_full_name: nil,
+            parent_identifier: nil,
+            sub_issue_summary: nil
 
   @type status :: %{
           name: String.t(),
@@ -64,7 +67,10 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
           created_at: String.t() | nil,
           updated_at: String.t() | nil,
           group_lead_identifier: String.t() | nil,
-          group_member_identifiers: [String.t()]
+          group_member_identifiers: [String.t()],
+          repository_full_name: String.t() | nil,
+          parent_identifier: String.t() | nil,
+          sub_issue_summary: %{total: integer(), completed: integer(), percent_completed: integer()} | nil
         }
 
   @spec build(map()) :: t()
