@@ -108,6 +108,12 @@
     }
   },
   "issue": {
+    "bundle": {
+      "title": "Execution bundle",
+      "contracts": "Shared contracts",
+      "dependsOn": "depends on {{units}}",
+      "consumes": "consumes {{contracts}}"
+    },
     "agent": {
       "advancedControls": "Advanced controls",
       "controlTitle": "Agent control",
