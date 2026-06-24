@@ -187,6 +187,12 @@ export interface BackendIssueDto {
   groupLeadIdentifier?: string | null;
   group_member_identifiers?: string[] | null;
   groupMemberIdentifiers?: string[] | null;
+  repository_full_name?: string | null;
+  repositoryFullName?: string | null;
+  parent_identifier?: string | null;
+  parentIdentifier?: string | null;
+  sub_issue_summary?: { total: number; completed: number; percent_completed: number } | null;
+  subIssueSummary?: { total: number; completed: number; percentCompleted: number } | null;
   attachments?: BackendIssueAttachmentDto[] | null;
   inserted_at?: string | null;
   created_at?: string | null;
@@ -284,9 +290,20 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     attachments: (dto.attachments ?? []).flatMap(normalizeIssueAttachment),
     groupLeadIdentifier: dto.groupLeadIdentifier ?? dto.group_lead_identifier ?? null,
     groupMemberIdentifiers: dto.groupMemberIdentifiers ?? dto.group_member_identifiers ?? [],
+    repositoryFullName: dto.repositoryFullName ?? dto.repository_full_name ?? null,
+    parentIdentifier: dto.parentIdentifier ?? dto.parent_identifier ?? null,
+    subIssueSummary: normalizeSubIssueSummary(dto),
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
   };
+}
+
+function normalizeSubIssueSummary(dto: BackendIssueDto): Issue["subIssueSummary"] {
+  const camel = dto.subIssueSummary;
+  if (camel) return camel;
+  const snake = dto.sub_issue_summary;
+  if (!snake) return null;
+  return { total: snake.total, completed: snake.completed, percentCompleted: snake.percent_completed };
 }
 
 function normalizeAgentGoal(value: string | null | undefined): string | null {
