@@ -63,6 +63,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     sync_issue
     list_running_agents
     steer_agent
+    classify_execution_unit
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
@@ -244,7 +245,23 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "instructions" => string_schema("Concrete coding instructions for Codex."),
           "goal" => string_schema("Optional long-running Codex goal to persist for the orchestrator.")
         }
-      })
+      }),
+      tool_spec(
+        "classify_execution_unit",
+        "Deterministically classify a planned subtask as workpad_task (inline) or child_run (own run/worktree/PR). Preview only; no writes.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "properties" => %{
+            "repo" => string_schema("Target repo full name (owner/name) for the unit."),
+            "parent_repo" => string_schema("The parent task's repo full name (owner/name)."),
+            "deliverable" => string_schema("Optional deliverable hint, e.g. 'pr' for an independent shippable unit."),
+            "produces" => string_list_schema("Optional shared-contract ids this unit produces."),
+            "consumes" => string_list_schema("Optional shared-contract ids this unit consumes."),
+            "depends_on" => string_list_schema("Optional unit ids this unit depends on.")
+          }
+        }
+      )
     ] ++
       [HandoffTools.assistant_tool_spec(), EvidenceTools.assistant_tool_spec(), PreviewTools.assistant_tool_spec()] ++
       SetupTools.tool_specs() ++
@@ -755,6 +772,31 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          data: presented
        }}
     end
+  end
+
+  defp do_execute(_project, "classify_execution_unit", arguments, _opts) do
+    unit = %{
+      repo: normalize_optional_string(Map.get(arguments, "repo")),
+      deliverable: normalize_optional_string(Map.get(arguments, "deliverable")),
+      produces: normalize_string_list(Map.get(arguments, "produces")),
+      consumes: normalize_string_list(Map.get(arguments, "consumes")),
+      depends_on: normalize_string_list(Map.get(arguments, "depends_on"))
+    }
+
+    parent_repo = normalize_optional_string(Map.get(arguments, "parent_repo"))
+
+    {classification, rule} =
+      case SymphonyElixir.Workpad.ExecutionBundle.Classifier.classify(unit, parent_repo: parent_repo) do
+        {:ok, type, rule} -> {to_string(type), to_string(rule)}
+        {:ambiguous, reason} -> {"ambiguous", to_string(reason)}
+      end
+
+    {:ok,
+     %{
+       tool: "classify_execution_unit",
+       message: "Classified as #{classification} (#{rule}).",
+       data: %{classification: classification, rule: rule}
+     }}
   end
 
   defp do_execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
