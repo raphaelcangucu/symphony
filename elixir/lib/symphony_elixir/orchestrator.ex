@@ -741,16 +741,17 @@ defmodule SymphonyElixir.Orchestrator do
     recipient = self()
     issue = Tracker.enrich_issue(issue)
     agent_kind = AgentRunner.issue_agent_kind(issue)
+    bundle_ctx = bundle_run_context(issue)
 
     case Task.Supervisor.start_child(SymphonyElixir.Orchestrator.TaskSupervisor, fn ->
-           AgentRunner.run(issue, recipient, attempt: attempt, members: members)
+           AgentRunner.run(issue, recipient, [attempt: attempt, members: members] ++ bundle_ctx.run_opts)
          end) do
       {:ok, pid} ->
         ref = Process.monitor(pid)
 
-        Logger.info("Dispatching #{if members == [], do: "issue", else: "group"} to agent: #{issue_context(issue)} members=#{length(members)} pid=#{inspect(pid)} attempt=#{inspect(attempt)}")
+        Logger.info("Dispatching #{if members == [], do: "issue", else: "group"} to agent: #{issue_context(issue)} members=#{length(members)} pid=#{inspect(pid)} attempt=#{inspect(attempt)} role=#{bundle_ctx.role}")
 
-        running = Map.put(state.running, issue.id, dispatch_running_entry(pid, ref, issue, agent_kind, attempt, members))
+        running = Map.put(state.running, issue.id, dispatch_running_entry(pid, ref, issue, agent_kind, attempt, members, bundle_ctx))
 
         claimed =
           issue
@@ -771,7 +772,7 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  defp dispatch_running_entry(pid, ref, %Issue{} = issue, agent_kind, attempt, members) do
+  defp dispatch_running_entry(pid, ref, %Issue{} = issue, agent_kind, attempt, members, bundle_ctx) do
     %{
       pid: pid,
       ref: ref,
@@ -794,9 +795,80 @@ defmodule SymphonyElixir.Orchestrator do
       codex_last_reported_total_tokens: 0,
       turn_count: 0,
       retry_attempt: normalize_retry_attempt(attempt),
-      started_at: DateTime.utc_now()
+      started_at: DateTime.utc_now(),
+      bundle_role: bundle_ctx.role,
+      parent_identifier: bundle_ctx.parent_identifier,
+      unit_id: bundle_ctx.unit_id,
+      repo: bundle_ctx.repo,
+      child_identifiers: bundle_ctx.child_identifiers
     }
   end
+
+  @typedoc """
+  Bundle execution context computed for an issue at dispatch time, used to route
+  child runs into isolated worktrees and to tag the running entry for the
+  hierarchical observability view.
+  """
+  @type bundle_context :: %{
+          role: :child | :standalone,
+          parent_identifier: String.t() | nil,
+          unit_id: String.t() | nil,
+          repo: String.t() | nil,
+          child_identifiers: [String.t()],
+          run_opts: keyword()
+        }
+
+  @doc """
+  Computes the bundle execution context for an issue at dispatch time.
+
+  A subtask (an issue carrying a `parent_identifier`) runs as a `:child` in a git
+  worktree branched off its parent's checkout when that checkout is a git repo,
+  so siblings never share a working tree; otherwise it gracefully falls back to
+  the standard per-issue workspace. Non-subtask issues are `:standalone` and run
+  unchanged. The workspace resolver and git-repo probe are injectable for tests.
+  """
+  @spec bundle_run_context(Issue.t(), keyword()) :: bundle_context()
+  def bundle_run_context(issue, opts \\ [])
+
+  def bundle_run_context(%Issue{parent_identifier: parent, identifier: identifier} = issue, opts)
+      when is_binary(parent) and parent != "" do
+    workspace_resolver = Keyword.get(opts, :workspace_resolver, &Workspace.path_for_issue/1)
+    git_repo? = Keyword.get(opts, :git_repo?, &git_repo?/1)
+
+    base = workspace_resolver.(parent)
+
+    run_opts =
+      if is_binary(base) and git_repo?.(base) do
+        [
+          worktree: true,
+          worktree_repo: base,
+          worktree_branch: "feat/" <> safe_unit_slug(identifier),
+          unit_id: identifier,
+          parent_identifier: parent
+        ]
+      else
+        []
+      end
+
+    %{
+      role: :child,
+      parent_identifier: parent,
+      unit_id: identifier,
+      repo: issue.repository_full_name,
+      child_identifiers: [],
+      run_opts: run_opts
+    }
+  end
+
+  def bundle_run_context(%Issue{}, _opts) do
+    %{role: :standalone, parent_identifier: nil, unit_id: nil, repo: nil, child_identifiers: [], run_opts: []}
+  end
+
+  defp git_repo?(path) when is_binary(path), do: File.dir?(Path.join(path, ".git"))
+  defp git_repo?(_path), do: false
+
+  defp safe_unit_slug(value) when is_binary(value), do: String.replace(value, ~r/[^A-Za-z0-9_.-]+/, "-")
+  defp safe_unit_slug(_value), do: "child"
 
   defp revalidate_issue_for_dispatch(%Issue{id: issue_id}, issue_fetcher)
        when is_binary(issue_id) and is_function(issue_fetcher, 1) do
