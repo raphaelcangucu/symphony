@@ -640,12 +640,6 @@ defmodule SymphonyElixir.GitHub.Client do
     end
   end
 
-  @doc false
-  @spec normalize_project_item_for_test(map(), String.t()) :: Issue.t() | nil
-  def normalize_project_item_for_test(item, status_field_name) do
-    normalize_project_item(item, status_field_name)
-  end
-
   defp build_issue_from_content(content, item, status_field_name, default_repo, assignee_filter) do
     raw_labels = extract_raw_label_names(content)
     assignee_login = extract_first_assignee_login(content)
