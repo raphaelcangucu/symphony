@@ -30,6 +30,23 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
     assert json.project_slug == "remote"
   end
 
+  test "issue/1 serializes repository, parent, and sub-issue summary" do
+    dto =
+      IssueDTO.build(%{
+        identifier: "2",
+        title: "Aplicativo IOS",
+        repository_full_name: "xipcash/ios",
+        parent_identifier: "1",
+        sub_issue_summary: %{total: 4, completed: 4, percent_completed: 100}
+      })
+
+    payload = TrackerPresenter.issue(dto)
+
+    assert payload.repository_full_name == "xipcash/ios"
+    assert payload.parent_identifier == "1"
+    assert payload.sub_issue_summary == %{total: 4, completed: 4, percent_completed: 100}
+  end
+
   test "project/1 includes tracker_kind and tracker_config" do
     project = %SymphonyElixir.LocalTracker.Project{
       id: 1,

@@ -129,7 +129,10 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       inserted_at: dto.created_at,
       updated_at: dto.updated_at,
       group_lead_identifier: dto.group_lead_identifier,
-      group_member_identifiers: dto.group_member_identifiers
+      group_member_identifiers: dto.group_member_identifiers,
+      repository_full_name: dto.repository_full_name,
+      parent_identifier: dto.parent_identifier,
+      sub_issue_summary: dto.sub_issue_summary
     }
   end
 
