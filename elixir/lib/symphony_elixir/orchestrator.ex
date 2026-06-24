@@ -1039,7 +1039,39 @@ defmodule SymphonyElixir.Orchestrator do
         complete_issue(state, issue_id)
 
       _other ->
-        apply_gated_successful_completion(state, running_entry, issue_id)
+        if parent_completion_held?(running_entry.issue) do
+          Logger.info("Holding parent completion; child runs incomplete for #{issue_context(running_entry.issue)}")
+
+          complete_issue(state, issue_id)
+        else
+          apply_gated_successful_completion(state, running_entry, issue_id)
+        end
+    end
+  end
+
+  @doc false
+  @spec parent_completion_held_for_test(Issue.t(), keyword()) :: boolean()
+  def parent_completion_held_for_test(%Issue{} = issue, opts) do
+    parent_completion_held?(issue, opts)
+  end
+
+  # A coordinator parent must not transition to a terminal state until all of its
+  # child_run units are done. We re-load the parent's own execution bundle and
+  # check sibling terminal state; on completion the parent is cleared from the
+  # running map (no transition) so the next poll re-dispatches it to re-check,
+  # and it finalises once every child is done. Graceful: a parent whose bundle
+  # cannot be resolved, or that owns no child runs, completes normally.
+  defp parent_completion_held?(%Issue{} = issue, opts \\ []) do
+    bundle_loader = Keyword.get(opts, :bundle_loader, &load_parent_bundle/1)
+    done_resolver = Keyword.get(opts, :done_units, &resolve_done_units/1)
+
+    case bundle_loader.(issue.identifier) do
+      {:ok, %ExecutionBundle{} = bundle} ->
+        BundleCoordinator.coordinator?(bundle) and
+          not BundleCoordinator.children_all_done?(bundle, done_resolver.(bundle))
+
+      _ ->
+        false
     end
   end
 

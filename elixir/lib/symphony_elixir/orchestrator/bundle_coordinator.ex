@@ -79,4 +79,16 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinator do
     |> ExecutionBundle.child_units()
     |> Enum.all?(&(Map.get(child_states, &1.id) == :done))
   end
+
+  @doc """
+  True when every `child_run` unit id is present in `done_units` (the set of
+  unit ids whose issue has reached a terminal state). A bundle with no
+  `child_run` units is trivially complete.
+  """
+  @spec children_all_done?(ExecutionBundle.t(), MapSet.t()) :: boolean()
+  def children_all_done?(%ExecutionBundle{} = bundle, %MapSet{} = done_units) do
+    bundle
+    |> ExecutionBundle.child_units()
+    |> Enum.all?(&MapSet.member?(done_units, &1.id))
+  end
 end

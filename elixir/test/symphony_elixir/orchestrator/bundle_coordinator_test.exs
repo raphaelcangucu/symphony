@@ -50,4 +50,14 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinatorTest do
     refute BundleCoordinator.children_complete?(bundle(), %{"be" => :done})
     assert BundleCoordinator.children_complete?(bundle(), %{"be" => :done, "fe" => :done})
   end
+
+  test "children_all_done? checks every child_run unit id against the done set" do
+    refute BundleCoordinator.children_all_done?(bundle(), MapSet.new(["be"]))
+    assert BundleCoordinator.children_all_done?(bundle(), MapSet.new(["be", "fe"]))
+  end
+
+  test "children_all_done? is true for a bundle with no child_run units" do
+    workpad_only = %ExecutionBundle{mode: "bundle", units: [%{id: "x", type: :workpad_task, issue: nil, repo: nil, produces: [], consumes: [], depends_on: [], deliverable: nil}]}
+    assert BundleCoordinator.children_all_done?(workpad_only, MapSet.new())
+  end
 end
