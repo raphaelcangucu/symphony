@@ -2,8 +2,10 @@ defmodule SymphonyElixir.Codex.GoalControlTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.Codex.GoalControl
+  alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workspace
 
   setup do
     migrate_repo()
@@ -41,6 +43,30 @@ defmodule SymphonyElixir.Codex.GoalControlTest do
     {:ok, _} = Context.set_agent_goal(project.slug, issue.identifier, "Temporary goal")
 
     assert {:ok, :cleared} = GoalControl.clear(project, issue.identifier)
+    assert {:ok, reloaded} = Context.get_issue(project.slug, issue.identifier)
+    assert reloaded.agent_goal in [nil, ""]
+  end
+
+  test "clear succeeds when goal mode is disabled but a mirrored workspace goal exists", %{
+    project: project,
+    issue: issue
+  } do
+    issue_ref = %{id: issue.id, identifier: issue.identifier, project_slug: project.slug}
+    workspace = Workspace.path_for_issue(issue_ref)
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf!(workspace) end)
+
+    # Simulate a durable thread + mirrored goal left by authoring handoff while
+    # the project keeps Codex goal mode disabled (the default in tests).
+    CodexSession.write(workspace, "thread-handoff")
+    :ok = CodexSession.put_goal(workspace, %{"objective" => "Stale objective", "status" => "active"})
+    {:ok, _} = Context.set_agent_session_id(project.slug, issue.identifier, "thread-handoff")
+
+    assert {:ok, %{"objective" => "Stale objective"}} = CodexSession.read_goal(workspace)
+
+    assert {:ok, :cleared} = GoalControl.clear(project, issue.identifier)
+
+    assert CodexSession.read_goal(workspace) == :error
     assert {:ok, reloaded} = Context.get_issue(project.slug, issue.identifier)
     assert reloaded.agent_goal in [nil, ""]
   end

@@ -151,6 +151,7 @@ setup:
         Rework: Human Review
         Merging: Done
     codex:
+      goals_enabled: true
       command: codex --config shell_environment_policy.inherit=all app-server
       approval_policy: never
       thread_sandbox: danger-full-access

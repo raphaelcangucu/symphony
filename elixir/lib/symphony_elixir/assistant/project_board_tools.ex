@@ -33,6 +33,7 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     sync_issue
     list_running_agents
     steer_agent
+    manage_codex_goal
   )
 
   @tools @scoped_tools ++ ~w(create_tracker_project)

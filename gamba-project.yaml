@@ -108,6 +108,7 @@ setup:
     claude:
       command: symphony-claude
     codex:
+      goals_enabled: true
       approval_policy: never
       command: codex --config shell_environment_policy.inherit=all app-server
       thread_sandbox: danger-full-access

@@ -271,7 +271,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     For orchestrator/dispatch questions: call get_workflow and read tracker.dispatch_states (queue for new auto-runs), active_states (polled), terminal_states, wait_states in data.config — not board status categories from get_project. Follow the workflow skill when editing workflow YAML.
     #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
-    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (start/stop/restart/status), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (start/stop/restart/status), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, manage_codex_goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
     Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview URLs, configure serve steps with manage_dev_env then manage_preview (start|status).
     To explain why an issue is or isn't auto-dispatched, call explain_dispatch_eligibility; for live running/retry/idle state call get_issue_orchestrator_state. To see every agent executing right now call list_running_agents, and steer_agent to inject a message into a running agent's turn. After opening a PR call link_pull_request. Manage dependencies with manage_blockers; pull external tracker edits with sync_issue.
     If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
@@ -543,7 +543,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status,
     manage_preview (action: status|start|stop|restart), manage_dev_env, scan_project_setup, suggest_project_setup,
     dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility,
-    list_running_agents, steer_agent, manage_blockers,
+    list_running_agents, steer_agent, manage_codex_goal, manage_blockers,
     sync_issue, get_project, list_project_repositories, get_workflow, read_workspace_file,
     update_project_workflow, update_project_repositories.
 
@@ -579,6 +579,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     You are running inside the issue's working tree (the project repositories are cloned here).
     Answer in the user's language.
     Dispatching happens through this chat: only when the user explicitly asks to dispatch, start, or hand off the work, call the dispatch_codex tool for `#{identifier}` with concrete instructions. That moves the issue to In Progress so the orchestrator executes it (the orchestrator carries the issue's execution goal). Never dispatch on your own.
+    Use manage_codex_goal (context authoring) to set, adjust, pause, resume, or clear the chat goal; use context execution only when the user explicitly asks to change the orchestrator execution goal.
     Do not post issue comments — your replies are shown to the user directly in this chat.
     Persist stable issue fields (title, description, status, assignees) with update_issue, not add_comment.
 

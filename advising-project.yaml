@@ -118,6 +118,7 @@ setup:
     agent:
       max_turns: 40
     codex:
+      goals_enabled: true
       approval_policy: never
       thread_sandbox: danger-full-access
       turn_sandbox_policy:

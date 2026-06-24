@@ -22,6 +22,7 @@ defmodule SymphonyElixir.Codex.GoalControl do
   require Logger
 
   alias SymphonyElixir.Codex.CodingAgent
+  alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.{InstanceConfig, ProjectConfig, Repo, Workspace}
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Tracker.IssueAdapter
@@ -48,17 +49,36 @@ defmodule SymphonyElixir.Codex.GoalControl do
 
   @spec clear(Project.t(), String.t()) :: goal_result()
   def clear(%Project{} = project, identifier) when is_binary(identifier) do
-    case with_goal(project, identifier, :clear) do
-      {:ok, :cleared} ->
-        clear_cached_objective(project, identifier)
-        {:ok, :cleared}
+    with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      issue_ref = issue_ref(project, issue)
+      opts = goal_opts(project, issue_ref)
 
-      {:error, :no_codex_thread} ->
-        clear_cached_objective(project, identifier)
-        {:ok, :cleared}
+      native_result =
+        if CodingAgent.goals_enabled?(opts) do
+          CodingAgent.manage_goal(Workspace.path_for_issue(issue_ref), :clear, opts)
+        else
+          {:error, :goals_disabled}
+        end
 
-      other ->
-        other
+      case native_result do
+        {:ok, :cleared} ->
+          clear_persisted_goal_artifacts(project, identifier)
+          {:ok, :cleared}
+
+        {:error, :no_codex_thread} ->
+          clear_persisted_goal_artifacts(project, identifier)
+          {:ok, :cleared}
+
+        # Goal mode may be disabled while a mirrored objective still exists in the
+        # workspace sidecar (e.g. after handoff from the authoring assistant).
+        # Clearing is always a local cleanup operation, not a goal-mode dispatch.
+        {:error, :goals_disabled} ->
+          clear_persisted_goal_artifacts(project, identifier)
+          {:ok, :cleared}
+
+        other ->
+          other
+      end
     end
   end
 
@@ -159,15 +179,35 @@ defmodule SymphonyElixir.Codex.GoalControl do
     }
   end
 
-  # Drop any legacy `agent_goal` value when a Codex goal is cleared so a stale
-  # objective cannot resurface in non-execution surfaces. The Codex thread, not
-  # this column, is the source of truth.
+  # Drop any legacy `agent_goal` value and the workspace goal mirror when a Codex
+  # goal is cleared so a stale objective cannot resurface in execution surfaces.
+  # The Codex thread is the source of truth when goal mode is enabled; when it is
+  # not, local artifacts are all that remain to wipe.
+  defp clear_persisted_goal_artifacts(%Project{} = project, identifier) do
+    clear_cached_objective(project, identifier)
+    clear_mirrored_goal(project, identifier)
+    :ok
+  end
+
   defp clear_cached_objective(%Project{} = project, identifier) do
     Context.set_agent_goal(project.slug, identifier, nil)
     :ok
   rescue
     error ->
       Logger.debug("Skipping agent_goal clear identifier=#{identifier} reason=#{inspect(error)}")
+      :ok
+  end
+
+  defp clear_mirrored_goal(%Project{} = project, identifier) do
+    with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      issue_ref = issue_ref(project, issue)
+      CodexSession.put_goal(Workspace.path_for_issue(issue_ref), nil)
+    else
+      _ -> :ok
+    end
+  rescue
+    error ->
+      Logger.debug("Skipping goal mirror clear identifier=#{identifier} reason=#{inspect(error)}")
       :ok
   end
 end

@@ -13,6 +13,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     DispatchTools,
     EvidenceTools,
     GitHubTools,
+    GoalTools,
     HandoffTools,
     OrchestratorTools,
     PreviewTools,
@@ -63,6 +64,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     sync_issue
     list_running_agents
     steer_agent
+    manage_codex_goal
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
@@ -72,7 +74,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   # Routine assistant chat replies should not be mirrored as issue comments; use
   # `add_comment` only when the user asks to record a comment on the issue.
   @issue_bound_mutable_tools ~w(update_issue move_issue dispatch_coding_agent dispatch_codex)
-  @issue_bound_supported_tools ~w(list_issues get_issue read_workspace_file update_issue move_issue get_agent_executions dispatch_coding_agent dispatch_codex)
+  @issue_bound_supported_tools ~w(list_issues get_issue read_workspace_file update_issue move_issue get_agent_executions dispatch_coding_agent dispatch_codex manage_codex_goal)
   @in_progress_state "In Progress"
 
   @type result :: %{
@@ -256,7 +258,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         BlockerTools.assistant_tool_spec(),
         SyncTools.assistant_tool_spec(),
         RunningAgentsTools.assistant_tool_spec(),
-        SteerTools.assistant_tool_spec()
+        SteerTools.assistant_tool_spec(),
+        GoalTools.assistant_tool_spec()
       ] ++
       ReadTools.tool_specs() ++ GitHubTools.tool_specs()
   end
@@ -351,6 +354,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
     build_tool_specs()
     |> Enum.filter(&(Map.get(&1, "name") in @issue_bound_supported_tools))
+    |> Enum.reject(&(&1["name"] == "manage_codex_goal"))
+    |> Kernel.++([GoalTools.issue_bound_tool_spec()])
     |> ToolText.localize_specs()
     |> Enum.map(&bind_tool_spec_identifier(&1, identifier))
   end
@@ -677,6 +682,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     SteerTools.execute(project_slug(project), arguments, opts)
   end
 
+  defp do_execute(project, "manage_codex_goal", arguments, opts) do
+    case GoalTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, goal_tool_error(reason)}
+    end
+  end
+
   defp do_execute(project, "update_project_workflow", arguments, _opts) do
     slug = project_slug(project)
 
@@ -967,6 +979,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
+  defp goal_tool_error(reason) when is_binary(reason), do: reason
+  defp goal_tool_error(reason), do: reason
+
   defp codex_success_response(result) do
     payload = stringify_keys(%{tool: result.tool, message: result.message, data: result.data})
 
@@ -1035,6 +1050,30 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp codex_failure_response({:missing_required_field, field}) do
     codex_failure_response("Missing required field: #{field}.")
+  end
+
+  defp codex_failure_response(:missing_action) do
+    codex_failure_response("action is required for manage_codex_goal.")
+  end
+
+  defp codex_failure_response(:invalid_context) do
+    codex_failure_response("context must be authoring or execution.")
+  end
+
+  defp codex_failure_response(:empty_objective) do
+    codex_failure_response("objective is required for set_objective.")
+  end
+
+  defp codex_failure_response(:invalid_budget) do
+    codex_failure_response("token_budget must be a positive integer or null.")
+  end
+
+  defp codex_failure_response(:goals_disabled) do
+    codex_failure_response("Codex goal mode is disabled for this project.")
+  end
+
+  defp codex_failure_response({:invalid_action, action}) do
+    codex_failure_response("Invalid manage_codex_goal action: #{inspect(action)}.")
   end
 
   defp codex_failure_response(reason) do
