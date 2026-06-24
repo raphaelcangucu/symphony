@@ -111,6 +111,12 @@ vi.mock("@/components/assistant/IssueAuthoringPanel", () => ({
   ),
 }));
 
+vi.mock("@/components/assistant/IssueDocumentsDrawer", () => ({
+  IssueDocumentsDrawer: ({ projectSlug, identifier }: { projectSlug: string; identifier: string }) => (
+    <button type="button">{`Documents ${projectSlug}:${identifier}`}</button>
+  ),
+}));
+
 vi.mock("@/components/issues/issue-detail/AgentTab", () => ({
   AgentTab: ({ issue, execution }: { issue: Issue; execution?: AgentExecution }) => (
     <div data-testid="agent-execution-panel">
@@ -196,6 +202,7 @@ describe("IssueDrawer Agent tab", () => {
     expect(screen.getByRole("tab", { name: /authoring/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /execution/i })).toBeInTheDocument();
     expect(screen.getByRole("tablist", { name: /agent sections/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /documents macro-markets:MAC-1/i })).toBeInTheDocument();
     expect(screen.getByTestId("issue-authoring-panel")).toHaveTextContent(
       "Authoring panel for macro-markets:MAC-1:list:compact",
     );
@@ -204,6 +211,7 @@ describe("IssueDrawer Agent tab", () => {
     await user.click(screen.getByRole("tab", { name: /execution/i }));
 
     expect(screen.getByTestId("agent-execution-panel")).toHaveTextContent("Execution panel for MAC-1:live");
+    expect(screen.getByRole("button", { name: /documents macro-markets:MAC-1/i })).toBeInTheDocument();
     expect(screen.queryByTestId("issue-authoring-panel")).not.toBeInTheDocument();
   });
 
@@ -222,6 +230,7 @@ describe("IssueDrawer Agent tab", () => {
     );
 
     expect(screen.getByTestId("agent-execution-panel")).toHaveTextContent("Execution panel for MAC-1:live");
+    expect(screen.getByRole("button", { name: /documents macro-markets:MAC-1/i })).toBeInTheDocument();
     expect(screen.queryByTestId("issue-authoring-panel")).not.toBeInTheDocument();
   });
 

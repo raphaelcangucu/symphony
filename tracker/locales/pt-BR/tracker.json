@@ -1708,6 +1708,9 @@
     "authoring": {
       "chatAria": "Chat de authoring da issue",
       "documentsAria": "Documentos de authoring da issue",
+      "documentsDrawerTitle": "Documentos de authoring",
+      "documentsDrawerDescription": "Specs, planos e handoffs vinculados a esta issue.",
+      "openDocuments": "Documentos",
       "documentsEmpty": "Documentos de rascunho aparecem aqui depois que o assistente cria ou vincula uma issue. Peça ao assistente do projeto para rascunhar a issue e abra a rota de authoring quando houver um identificador.",
       "taskLabel": "Tarefa",
       "titleLoading": "Carregando título da issue…",

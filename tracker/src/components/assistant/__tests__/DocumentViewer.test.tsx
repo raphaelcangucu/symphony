@@ -89,6 +89,17 @@ describe("DocumentViewer", () => {
     expect(screen.getByRole("button", { name: /Handoff Public preview tunnel handoff/i })).toBeTruthy();
   });
 
+  it("uses a stacked layout with full-width reading area when requested", async () => {
+    readIssueDocument.mockResolvedValueOnce("# Generated Spec\n\nReadable paragraph.");
+
+    renderViewer({ layout: "stacked" });
+
+    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(screen.getByRole("article")).toHaveClass("flex-1", "overflow-auto");
+    expect(await screen.findByRole("heading", { name: "Generated Spec" })).toBeTruthy();
+    expect(screen.getByText("Readable paragraph.")).toBeTruthy();
+  });
+
   it("fills bounded parent containers so document content can scroll internally", async () => {
     readIssueDocument.mockResolvedValueOnce("# Spec");
 

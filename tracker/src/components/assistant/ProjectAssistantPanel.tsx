@@ -203,6 +203,7 @@ export function ProjectAssistantPanel({
   const bundleRef = useRef<AssistantCatalogBundle | null>(null);
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollBehaviorRef = useRef<"initial" | "smooth">("initial");
   const panelRef = useRef<HTMLElement | null>(null);
   const lastConfirmedIssueModeRef = useRef<IssueAssistantMode | null>(null);
   const pendingIssueModeRef = useRef<{ mode: IssueAssistantMode; requestId: number } | null>(null);
@@ -223,6 +224,10 @@ export function ProjectAssistantPanel({
   const isExploreMode = resolvedAssistantMode === "explore";
 
   bundleRef.current = bundle;
+
+  useEffect(() => {
+    scrollBehaviorRef.current = "initial";
+  }, [issueIdentifier, threadId]);
 
   useEffect(() => {
     setRunningStartedAt((current) => {
@@ -776,7 +781,13 @@ export function ProjectAssistantPanel({
     if (!isPanelMode) return;
     const scroller = scrollRef.current;
     if (!scroller) return;
-    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+
+    const behavior = scrollBehaviorRef.current === "initial" ? "auto" : "smooth";
+    scrollBehaviorRef.current = "smooth";
+
+    requestAnimationFrame(() => {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior });
+    });
   }, [isPanelMode, visibleMessages, isRunning]);
 
   const runtime = useExternalStoreRuntime<AssistantChatMessage>(
@@ -931,17 +942,17 @@ export function ProjectAssistantPanel({
           )}
           aria-label={t("assistant.panel.ariaLabel")}
         >
-          <div
-            className={cn("border-b", isPageMode ? "px-6 py-3.5" : isEmbeddedMode ? "px-4 py-2" : "px-4 py-3")}
-          >
-            <h2 className={cn("font-semibold leading-tight", isEmbeddedMode ? "text-sm" : "text-base")}>
-              {isExploreMode
-                ? t("assistant.panel.exploreTitle")
-                : projectSlug
-                  ? t("assistant.panel.projectTitle")
-                  : t("assistant.panel.freeformTitle")}
-            </h2>
-            {isEmbeddedMode ? null : (
+          {isEmbeddedMode ? null : (
+            <div
+              className={cn("border-b", isPageMode ? "px-6 py-3.5" : "px-4 py-3")}
+            >
+              <h2 className="text-base font-semibold leading-tight">
+                {isExploreMode
+                  ? t("assistant.panel.exploreTitle")
+                  : projectSlug
+                    ? t("assistant.panel.projectTitle")
+                    : t("assistant.panel.freeformTitle")}
+              </h2>
               <p className="text-xs text-muted-foreground">
                 {isExploreMode
                   ? t("assistant.panel.exploreDescription", { slug: projectSlug })
@@ -952,8 +963,8 @@ export function ProjectAssistantPanel({
                   ? t("assistant.panel.modelsFrom", { command: catalogFor(bundle, bundle.defaultAgent).command })
                   : null}
               </p>
-            )}
-          </div>
+            </div>
+          )}
 
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
             <div

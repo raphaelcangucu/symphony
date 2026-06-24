@@ -807,6 +807,9 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           questions: Map.get(message, :questions) || []
         })
 
+      match?(%{}, goal = goal_from_codex_event(message)) ->
+        maybe_call(opts, :on_goal_updated, goal)
+
       # The Claude adapter streams partial assistant text as item/progress deltas.
       # Forward them for live token streaming in the UI. The persisted message is
       # assembled from the final item/created text item below, so we don't accumulate
@@ -866,6 +869,31 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp relay_codex_event(_message, _collector, _opts), do: :ok
+
+  defp goal_from_codex_event(message) when is_map(message) do
+    payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
+    method = Map.get(payload, "method") || Map.get(payload, :method)
+
+    goal =
+      case method do
+        "thread/goal/updated" ->
+          get_in(payload, ["params", "goal"]) || get_in(payload, [:params, :goal])
+
+        "turn/completed" ->
+          get_in(payload, ["params", "goal"]) || get_in(payload, [:params, :goal])
+
+        _ ->
+          if Map.get(message, :event) == :turn_completed do
+            get_in(payload, ["params", "goal"]) || get_in(payload, [:params, :goal])
+          else
+            nil
+          end
+      end
+
+    if is_map(goal), do: goal, else: nil
+  end
+
+  defp goal_from_codex_event(_message), do: nil
 
   defp maybe_forward_turn_started(message, opts) when is_map(message) do
     if Map.get(message, :event) == :session_started do

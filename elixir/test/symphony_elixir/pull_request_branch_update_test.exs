@@ -27,6 +27,16 @@ defmodule SymphonyElixir.PullRequestBranchUpdateTest do
       assert_received {:put, "/repos/acme/app/pulls/509/update-branch"}
     end
 
+    test "uses an explicit repo override for multi-repo projects" do
+      assert {:ok, :accepted} =
+               PullRequestBranchUpdate.update(github_project(), 509,
+                 client_module: AcceptedClient,
+                 repo: "acme/backend"
+               )
+
+      assert_received {:put, "/repos/acme/backend/pulls/509/update-branch"}
+    end
+
     test "maps a 422 to :update_branch_conflict" do
       assert {:error, :update_branch_conflict} =
                PullRequestBranchUpdate.update(github_project(), 509, client_module: ConflictClient)

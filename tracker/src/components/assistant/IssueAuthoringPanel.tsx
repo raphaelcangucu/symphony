@@ -28,6 +28,7 @@ interface IssueAuthoringPanelProps {
   compact?: boolean;
   onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
   onIssueCreated?: (issue: AssistantIssueCreatedPayload) => void;
+  onDocumentsChanged?: () => void;
 }
 
 export function IssueAuthoringPanel({
@@ -39,6 +40,7 @@ export function IssueAuthoringPanel({
   compact = false,
   onDraftIssueCreated,
   onIssueCreated,
+  onDocumentsChanged,
 }: IssueAuthoringPanelProps) {
   const { t } = useTranslation();
   const normalizedIdentifier = useMemo(() => normalizeIssueIdentifier(identifier) || null, [identifier]);
@@ -49,7 +51,7 @@ export function IssueAuthoringPanel({
   const issueDocuments = useIssueDocuments({
     projectSlug,
     identifier: normalizedIdentifier,
-    enabled: normalizedIdentifier !== null,
+    enabled: normalizedIdentifier !== null && !compact,
     refreshKey,
   });
 
@@ -68,8 +70,9 @@ export function IssueAuthoringPanel({
       if (normalizeIssueIdentifier(payload.identifier) !== normalizedIdentifier) return;
 
       setRefreshKey((current) => current + 1);
+      onDocumentsChanged?.();
     },
-    [normalizedIdentifier],
+    [normalizedIdentifier, onDocumentsChanged],
   );
 
   const assistantPanel = (
@@ -122,6 +125,7 @@ export function IssueAuthoringPanel({
       documents={issueDocuments.documents}
       available={issueDocuments.available}
       reason={issueDocuments.reason}
+      layout="split"
     />
   ) : (
     <div className="rounded-2xl border border-dashed border-border/70 bg-card/60 px-6 py-10 text-center text-sm text-muted-foreground shadow-sm backdrop-blur-sm">
@@ -159,14 +163,10 @@ export function IssueAuthoringPanel({
 
   if (compact) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden bg-gradient-to-b from-muted/30 to-muted/10 p-2">
-        <section className="flex min-h-0 flex-[2.4] overflow-hidden" aria-label={t("assistant.authoring.chatAria")}>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-b from-muted/30 to-muted/10 p-2">
+        <section className="flex min-h-0 flex-1 overflow-hidden" aria-label={t("assistant.authoring.chatAria")}>
           {assistantPanel}
         </section>
-
-        <aside className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden" aria-label={t("assistant.authoring.documentsAria")}>
-          {documentsPanel}
-        </aside>
       </div>
     );
   }

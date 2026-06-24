@@ -55,8 +55,10 @@ describe("IssueAuthoringPanel", () => {
     expect(screen.getByRole("region", { name: /issue authoring chat/i })).toHaveClass(
       "flex",
       "min-h-0",
+      "flex-1",
       "overflow-hidden",
     );
+    expect(screen.queryByRole("button", { name: /documents/i })).not.toBeInTheDocument();
   });
 
   it("uses the full-page layout when not compact", () => {

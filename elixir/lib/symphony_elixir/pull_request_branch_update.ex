@@ -11,7 +11,7 @@ defmodule SymphonyElixir.PullRequestBranchUpdate do
   @spec update(Project.t(), pos_integer(), keyword()) :: {:ok, :accepted} | {:error, term()}
   def update(%Project{} = project, number, opts \\ [])
       when is_integer(number) and number > 0 and is_list(opts) do
-    with {:ok, repo} <- PullRequests.resolve_repo(project),
+    with {:ok, repo} <- resolve_repo(project, opts),
          {:ok, {owner, name}} <- RepoSpec.split(repo) do
       client = Keyword.get(opts, :client_module, default_client())
       rest_opts = Keyword.take(opts, [:request_fun])
@@ -22,6 +22,13 @@ defmodule SymphonyElixir.PullRequestBranchUpdate do
         {:error, {:github_api_status, 422}} -> {:error, :update_branch_conflict}
         {:error, reason} -> {:error, reason}
       end
+    end
+  end
+
+  defp resolve_repo(project, opts) do
+    case Keyword.get(opts, :repo) do
+      repo when is_binary(repo) and repo != "" -> {:ok, repo}
+      _ -> PullRequests.resolve_repo(project)
     end
   end
 

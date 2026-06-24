@@ -630,6 +630,65 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "Continued the authoring goal."}})
   end
 
+  test "goal turn pushes native goal updates and fans streaming to observer tabs", %{socket: socket} do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(test_pid, {:runner_started, self()})
+
+      receive do
+        :stream -> Keyword.fetch!(opts, :on_assistant_delta).("Live goal output")
+        :finish -> :ok
+      end
+
+      Keyword.fetch!(opts, :on_goal_updated).(%{
+        "objective" => "Audit",
+        "status" => "active",
+        "timeUsedSeconds" => 42,
+        "tokensUsed" => 1000
+      })
+
+      {:ok,
+       %{
+         assistant_message: "Done",
+         codex_thread_id: "thread-goal",
+         turn_id: "turn-goal",
+         tool_calls: [],
+         assistant_chat_message: %{role: "assistant", content: "Done", tool_calls: []}
+       }}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :assistant_runner) end)
+
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    ref = push(socket, "send_message", %{"message" => "Start audit", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+
+    assert_receive {:runner_started, runner_pid}, 2_000
+
+    {:ok, _join_payload, _observer} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-1")
+
+    send(runner_pid, :stream)
+    assert_push("assistant_delta", %{delta: "Live goal output"})
+    assert_push("assistant_delta", %{delta: "Live goal output"})
+
+    send(runner_pid, :finish)
+
+    assert_push("goal_status", %{running: true, goal: %{timeUsedSeconds: 42, tokensUsed: 1000}})
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "Done"}})
+    assert_push("history_synced", %{messages: _})
+
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "Done"}})
+    assert_push("history_synced", %{messages: _})
+  end
+
   test "goal_resume requires an enabled authoring goal", %{socket: socket} do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 

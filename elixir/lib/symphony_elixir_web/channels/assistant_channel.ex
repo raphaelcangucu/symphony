@@ -172,6 +172,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_in("set_mode", _payload, socket), do: {:reply, {:error, %{reason: "mode is required"}}, socket}
 
+  def handle_in("set_goal_mode", %{"goal_mode" => false}, socket) do
+    with {:ok, thread} <- issue_thread(socket),
+         {:ok, _payload, updated_thread} <- AuthoringGoalControl.clear(thread) do
+      {:reply, {:ok, %{goal_mode: false, goal_objective: nil}}, assign(socket, :thread, updated_thread)}
+    else
+      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
   def handle_in("set_goal_mode", %{"goal_mode" => enabled} = payload, socket)
       when is_boolean(enabled) do
     objective = normalize_goal_objective(Map.get(payload, "objective"))
@@ -469,8 +478,35 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     # A tab running the turn itself reconciles via {:assistant_turn_finished};
     # only tabs that merely observed the run (reattached after a refresh) act here.
     if socket.assigns[:turn_status] != :running do
-      if is_map(message), do: push(socket, "message_created", %{message: message})
+      if is_map(message) do
+        push(socket, "assistant_completed", %{message: message})
+        push_history_sync(socket)
+      end
+
       push_goal_status_async(socket, false)
+    end
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:authoring_goal_updated, native_goal}, socket) do
+    socket = push_live_goal_status(socket, native_goal)
+    {:noreply, socket}
+  end
+
+  def handle_info({:goal_status_updated, status_payload}, socket) do
+    if authoring_goal_active?(socket) do
+      push(socket, "goal_status", status_payload)
+    end
+
+    {:noreply, socket}
+  end
+
+  # Goal-turn streaming fanned out to reloaded/other tabs (the originating tab
+  # receives events directly from the run Task's callbacks).
+  def handle_info({:goal_stream, event, payload}, socket) do
+    if socket.assigns[:turn_status] != :running and is_binary(event) and is_map(payload) do
+      push(socket, event, payload)
     end
 
     {:noreply, socket}
@@ -668,25 +704,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> Map.put("agent", Map.get(context, "agent") || Map.get(context, :agent))
 
         opts =
-          []
-          |> maybe_put_runner()
-          |> Keyword.merge(Payload.model_opts(context))
+          turn_stream_opts(socket, thread, channel_pid, context)
           |> Keyword.put(:attachments, attachments)
-          |> Keyword.put(:on_message_created, fn message -> push(socket, "message_created", %{message: message}) end)
-          |> Keyword.put(:on_assistant_delta, fn delta -> push(socket, "assistant_delta", %{delta: delta}) end)
-          |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
-          |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
-          |> Keyword.put(:on_documents_changed, fn identifier ->
-            push(socket, "assistant_document_changed", %{identifier: identifier})
-          end)
-          |> Keyword.put(:on_thread_documents_changed, fn thread_id ->
-            push(socket, "assistant_document_changed", %{thread_id: thread_id})
-          end)
-          |> Keyword.put(:on_turn_started, fn turn_id -> notify_turn_started(channel_pid, thread, turn_id) end)
-          |> Keyword.put(:interactive_user_input, true)
-          |> Keyword.put(:on_user_input_required, fn request ->
-            send(channel_pid, {:assistant_user_input_required, request})
-          end)
 
         if is_map(thread) and is_integer(Map.get(thread, :id)) do
           start_tracked_turn(thread, project_slug, trimmed, context, opts, socket)
@@ -707,19 +726,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     codex_thread_id = turn["codex_thread_id"]
 
     opts =
-      []
-      |> maybe_put_runner()
-      |> Keyword.put(:on_message_created, fn message -> push(socket, "message_created", %{message: message}) end)
-      |> Keyword.put(:on_assistant_delta, fn delta -> push(socket, "assistant_delta", %{delta: delta}) end)
-      |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
-      |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
+      turn_stream_opts(socket, thread, channel_pid, %{})
       |> Keyword.put(:on_turn_started, fn turn_id ->
-        send(channel_pid, {:assistant_turn_started, turn_id})
+        notify_turn_started(channel_pid, thread, turn_id)
         TurnManager.note_codex_turn(thread.id, codex_thread_id, turn_id)
-      end)
-      |> Keyword.put(:interactive_user_input, true)
-      |> Keyword.put(:on_user_input_required, fn request ->
-        send(channel_pid, {:assistant_user_input_required, request})
       end)
 
     start_opts = [
@@ -1220,6 +1230,64 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp patch_goal_runtime(goal, _elapsed), do: goal
 
+  # Shared streaming callbacks for assistant turns. Goal threads also fan out
+  # deltas/tool events over the thread PubSub topic so a reloaded tab keeps
+  # receiving live output, and forward native goal updates to the pill.
+  defp turn_stream_opts(%Socket{} = socket, thread, channel_pid, context) when is_map(context) do
+    goal_thread = goal_thread?(thread)
+    thread_id = if is_map(thread), do: Map.get(thread, :id), else: nil
+
+    push_stream = fn event, payload ->
+      push(socket, event, payload)
+
+      if goal_thread and is_integer(thread_id) do
+        GoalRun.broadcast_from(channel_pid, thread_id, {:goal_stream, event, payload})
+      end
+    end
+
+    opts =
+      []
+      |> maybe_put_runner()
+      |> Keyword.merge(Payload.model_opts(context))
+      |> Keyword.put(:on_message_created, fn message -> push_stream.("message_created", %{message: message}) end)
+      |> Keyword.put(:on_assistant_delta, fn delta -> push_stream.("assistant_delta", %{delta: delta}) end)
+      |> Keyword.put(:on_tool_call_started, fn tool_call -> push_stream.("tool_call_started", %{tool_call: tool_call}) end)
+      |> Keyword.put(:on_tool_call_completed, fn tool_call ->
+        push_stream.("tool_call_completed", %{tool_call: tool_call})
+      end)
+      |> Keyword.put(:on_documents_changed, fn identifier ->
+        push(socket, "assistant_document_changed", %{identifier: identifier})
+      end)
+      |> Keyword.put(:on_thread_documents_changed, fn tid ->
+        push(socket, "assistant_document_changed", %{thread_id: tid})
+      end)
+      |> Keyword.put(:on_turn_started, fn turn_id -> notify_turn_started(channel_pid, thread, turn_id) end)
+      |> Keyword.put(:interactive_user_input, true)
+      |> Keyword.put(:on_user_input_required, fn request ->
+        send(channel_pid, {:assistant_user_input_required, request})
+      end)
+
+    if goal_thread and match?(%{scope: "issue"}, thread) do
+      Keyword.put(opts, :on_goal_updated, fn native_goal ->
+        send(channel_pid, {:authoring_goal_updated, native_goal})
+      end)
+    else
+      opts
+    end
+  end
+
+  defp push_live_goal_status(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket, native_goal)
+       when is_integer(id) and is_map(native_goal) do
+    payload = AuthoringGoalControl.payload_from_native_update(thread, native_goal)
+    elapsed = GoalRun.elapsed_seconds(id)
+    status = goal_status_payload(payload, goal_running?(socket), elapsed)
+    push(socket, "goal_status", status)
+    GoalRun.broadcast_from(self(), id, {:goal_status_updated, status})
+    socket
+  end
+
+  defp push_live_goal_status(socket, _native_goal), do: socket
+
   # The authoritative "is a goal turn executing" signal: either this socket is
   # running the turn, or the durable registry shows a run in flight for the thread
   # (covers a tab that reattached after a refresh).
@@ -1262,22 +1330,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # each turn into the chat exactly like a normal send.
   defp start_goal_continuation(thread, socket) do
     channel_pid = self()
-
-    opts =
-      []
-      |> maybe_put_runner()
-      |> Keyword.put(:on_message_created, fn message -> push(socket, "message_created", %{message: message}) end)
-      |> Keyword.put(:on_assistant_delta, fn delta -> push(socket, "assistant_delta", %{delta: delta}) end)
-      |> Keyword.put(:on_tool_call_started, fn tool_call -> push(socket, "tool_call_started", %{tool_call: tool_call}) end)
-      |> Keyword.put(:on_tool_call_completed, fn tool_call -> push(socket, "tool_call_completed", %{tool_call: tool_call}) end)
-      |> Keyword.put(:on_documents_changed, fn identifier ->
-        push(socket, "assistant_document_changed", %{identifier: identifier})
-      end)
-      |> Keyword.put(:on_turn_started, fn turn_id -> send(channel_pid, {:assistant_turn_started, turn_id}) end)
-      |> Keyword.put(:interactive_user_input, true)
-      |> Keyword.put(:on_user_input_required, fn request ->
-        send(channel_pid, {:assistant_user_input_required, request})
-      end)
+    opts = turn_stream_opts(socket, thread, channel_pid, %{})
 
     thread_id = thread.id
 

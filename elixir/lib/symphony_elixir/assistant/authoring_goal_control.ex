@@ -22,6 +22,8 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
 
   alias SymphonyElixir.Assistant.{History, Thread}
   alias SymphonyElixir.Codex.CodingAgent
+  alias SymphonyElixir.Codex.GoalControl
+  alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.{InstanceConfig, ProjectConfig, Repo, Workspace}
   alias SymphonyElixir.LocalTracker.Context
 
@@ -36,6 +38,20 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
         }
 
   @type result :: {:ok, payload(), Thread.t()} | {:error, term()}
+
+  @doc """
+  Builds a goal-status payload from a native Codex goal map already received
+  during a turn (e.g. `thread/goal/updated`). Avoids a blocking `thread/goal/get`
+  round-trip while a goal batch is streaming.
+  """
+  @spec payload_from_native_update(Thread.t(), map()) :: payload()
+  def payload_from_native_update(%Thread{} = thread, native_goal) when is_map(native_goal) do
+    build_payload(
+      History.thread_goal_mode(thread),
+      History.thread_goal_objective(thread),
+      native_goal
+    )
+  end
 
   @doc "Reads the current authoring goal state (native goal when available, else metadata-only)."
   @spec status(Thread.t()) :: result()
@@ -70,6 +86,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   @spec clear(Thread.t()) :: result()
   def clear(%Thread{} = thread) do
     _ = safe_manage(thread, :clear)
+    clear_persisted_goal_artifacts(thread)
 
     case History.set_goal_mode(thread, false, nil) do
       {:ok, updated} -> {:ok, build_payload(false, nil, nil), updated}
@@ -233,6 +250,51 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   end
 
   defp codex_config(_slug), do: InstanceConfig.codex_section()
+
+  # Authoring and execution share the issue workspace sidecar mirror
+  # (`.symphony/codex-session.json`). Clearing only the assistant-thread native
+  # goal is not enough: the execution tab reads the mirror via
+  # `CodexSession.read_goal/1`, so a stale objective leaks into execution after
+  # handoff unless we wipe local artifacts here too.
+  defp clear_persisted_goal_artifacts(%Thread{} = thread) do
+    case workspace_for_thread(thread) do
+      workspace when is_binary(workspace) -> CodexSession.put_goal(workspace, nil)
+      _ -> :ok
+    end
+
+    case issue_ref(thread) do
+      %{project_slug: slug, identifier: identifier} ->
+        _ = Context.set_agent_goal(slug, identifier, nil)
+
+        case Context.get_project(slug) do
+          {:ok, project} ->
+            case GoalControl.clear(project, identifier) do
+              {:ok, _} -> :ok
+              {:error, reason} ->
+                Logger.debug(
+                  "AuthoringGoalControl execution goal clear skipped identifier=#{identifier} reason=#{inspect(reason)}"
+                )
+            end
+
+          _ ->
+            :ok
+        end
+
+      _ ->
+        :ok
+    end
+
+    :ok
+  end
+
+  defp workspace_for_thread(%Thread{workspace_path: path}) when is_binary(path) and path != "", do: path
+
+  defp workspace_for_thread(%Thread{} = thread) do
+    ref = issue_ref(thread)
+    Workspace.path_for_issue(ref)
+  rescue
+    _ -> nil
+  end
 
   defp build_payload(enabled, objective, goal) do
     %{

@@ -386,7 +386,14 @@ export function IssueDrawer({
                   </TabsTrigger>
                 ))}
               </TabsList>
-              <div className={cn("min-h-0 flex-1 overflow-auto px-6 py-5", SCROLLBAR_THIN)}>
+              <div
+                className={cn(
+                  "min-h-0 flex-1",
+                  tab === "agent"
+                    ? "flex flex-col overflow-hidden px-4 py-3 sm:px-6"
+                    : cn("overflow-auto px-6 py-5", SCROLLBAR_THIN),
+                )}
+              >
                 <TabsContent value="summary">
                   <SummaryTab
                     issue={issue}
@@ -465,7 +472,7 @@ export function IssueDrawer({
                     trackerConfig={trackerConfig}
                   />
                 </TabsContent>
-                <TabsContent value="agent">
+                <TabsContent value="agent" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
                   <AgentTabs
                     issue={issue}
                     projectSlug={projectSlug}

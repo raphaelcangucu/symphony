@@ -2,6 +2,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.Assistant.{AuthoringGoalControl, History, Thread}
+  alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workflow
@@ -84,6 +85,45 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
     assert payload.objective == "Audit the admin UI"
     assert payload.native == false
     assert payload.goal == nil
+  end
+
+  test "payload_from_native_update shapes a live Codex goal for the UI", %{thread: thread} do
+    {:ok, enabled} = History.set_goal_mode(thread, true, "Audit the admin UI")
+
+    payload =
+      AuthoringGoalControl.payload_from_native_update(enabled, %{
+        "objective" => "Audit the admin UI",
+        "status" => "active",
+        "timeUsedSeconds" => 90,
+        "tokensUsed" => 12_000,
+        "tokenBudget" => 50_000
+      })
+
+    assert payload.enabled == true
+    assert payload.native == true
+    assert payload.goal.status == "active"
+    assert payload.goal.timeUsedSeconds == 90
+    assert payload.goal.tokensUsed == 12_000
+    assert payload.goal.tokenBudget == 50_000
+  end
+
+  test "clear removes a mirrored workspace goal so execution cannot read a stale objective", %{
+    thread: thread
+  } do
+    workspace = thread.workspace_path
+    assert is_binary(workspace)
+
+    :ok =
+      CodexSession.put_goal(workspace, %{
+        "objective" => "Stale authoring objective",
+        "status" => "active"
+      })
+
+    assert {:ok, %{"objective" => "Stale authoring objective"}} = CodexSession.read_goal(workspace)
+
+    assert {:ok, payload, _updated} = AuthoringGoalControl.clear(thread)
+    assert payload.enabled == false
+    assert CodexSession.read_goal(workspace) == :error
   end
 
   test "pause requires a native Codex goal", %{thread: thread} do

@@ -1708,6 +1708,9 @@
     "authoring": {
       "chatAria": "Issue authoring chat",
       "documentsAria": "Issue authoring documents",
+      "documentsDrawerTitle": "Authoring documents",
+      "documentsDrawerDescription": "Specs, plans, and handoffs linked to this issue.",
+      "openDocuments": "Documents",
       "documentsEmpty": "Draft documents appear here after the assistant creates or links an issue. Start by asking the project assistant to draft the issue, then open the issue authoring route once an identifier exists.",
       "taskLabel": "Task",
       "titleLoading": "Loading issue title…",

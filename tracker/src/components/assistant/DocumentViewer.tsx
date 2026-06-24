@@ -15,6 +15,7 @@ export interface DocumentViewerProps {
   documents: IssueDocument[];
   available: boolean;
   reason: string | null;
+  layout?: "split" | "stacked";
 }
 
 interface DocumentKindConfig {
@@ -45,6 +46,7 @@ export function DocumentViewer({
   documents,
   available,
   reason,
+  layout = "split",
 }: DocumentViewerProps) {
   const { t } = useTranslation();
   const visibleDocuments = useMemo(() => documents.filter(hasReadablePath), [documents]);
@@ -126,6 +128,34 @@ export function DocumentViewer({
     return <DocumentViewerEmptyState>{t("assistant.documents.empty")}</DocumentViewerEmptyState>;
   }
 
+  const contentPanel = (
+    <DocumentContentPanel
+      content={content}
+      loading={loading}
+      loadError={loadError}
+      layout={layout}
+      onRetry={retrySelectedDocument}
+    />
+  );
+
+  if (layout === "stacked") {
+    return (
+      <section
+        className="flex h-full min-h-0 flex-col overflow-hidden bg-background"
+        aria-label={t("assistant.documents.ariaLabel")}
+      >
+        <StackedDocumentPicker
+          groupedDocuments={groupedDocuments}
+          selectedPath={selectedPath}
+          onSelect={setSelectedPath}
+        />
+        <article className="min-h-0 flex-1 overflow-auto px-6 py-5 sm:px-8" aria-live="polite">
+          {contentPanel}
+        </article>
+      </section>
+    );
+  }
+
   return (
     <section
       className="flex h-full min-h-0 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-14px_rgba(0,0,0,0.1)] ring-1 ring-black/[0.02]"
@@ -154,27 +184,96 @@ export function DocumentViewer({
       </aside>
 
       <article className="min-w-0 flex-1 overflow-auto bg-background/40 p-6" aria-live="polite">
-        {loading ? <DocumentContentState>{t("assistant.documents.loading")}</DocumentContentState> : null}
-
-        {!loading && loadError ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
-            <p className="text-sm font-medium text-destructive">{t("assistant.documents.loadError")}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{t("assistant.documents.loadErrorHint")}</p>
-            <Button type="button" variant="outline" size="sm" className="mt-3 rounded-lg" onClick={retrySelectedDocument}>
-              {t("assistant.documents.retry")}
-            </Button>
-          </div>
-        ) : null}
-
-        {!loading && !loadError && content ? (
-          <Markdown className="mx-auto max-w-3xl text-sm leading-7">{content}</Markdown>
-        ) : null}
-
-        {!loading && !loadError && !content ? (
-          <DocumentContentState>{t("assistant.documents.noContent")}</DocumentContentState>
-        ) : null}
+        {contentPanel}
       </article>
     </section>
+  );
+}
+
+function StackedDocumentPicker({
+  groupedDocuments,
+  selectedPath,
+  onSelect,
+}: {
+  groupedDocuments: Array<{ kind: IssueDocumentKind; documents: IssueDocument[] }>;
+  selectedPath: string | null;
+  onSelect: (path: string) => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      className="shrink-0 border-b border-border/60 bg-muted/20 px-4 py-3"
+      aria-label={t("assistant.documents.listAria")}
+    >
+      <div className="space-y-3">
+        {groupedDocuments.map((group) => (
+          <div key={group.kind}>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+              {documentKindConfig(group.kind, t).groupLabel}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {group.documents.map((document) => (
+                <DocumentListItem
+                  key={document.path}
+                  document={document}
+                  selected={document.path === selectedPath}
+                  onSelect={() => onSelect(document.path)}
+                  compact
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DocumentContentPanel({
+  content,
+  loading,
+  loadError,
+  layout,
+  onRetry,
+}: {
+  content: string | null;
+  loading: boolean;
+  loadError: boolean;
+  layout: "split" | "stacked";
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <>
+      {loading ? <DocumentContentState>{t("assistant.documents.loading")}</DocumentContentState> : null}
+
+      {!loading && loadError ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
+          <p className="text-sm font-medium text-destructive">{t("assistant.documents.loadError")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("assistant.documents.loadErrorHint")}</p>
+          <Button type="button" variant="outline" size="sm" className="mt-3 rounded-lg" onClick={onRetry}>
+            {t("assistant.documents.retry")}
+          </Button>
+        </div>
+      ) : null}
+
+      {!loading && !loadError && content ? (
+        <Markdown
+          className={cn(
+            "mx-auto w-full text-foreground",
+            layout === "stacked" ? "max-w-4xl text-[15px] leading-8" : "max-w-3xl text-sm leading-7",
+          )}
+        >
+          {content}
+        </Markdown>
+      ) : null}
+
+      {!loading && !loadError && !content ? (
+        <DocumentContentState>{t("assistant.documents.noContent")}</DocumentContentState>
+      ) : null}
+    </>
   );
 }
 
@@ -227,13 +326,35 @@ function DocumentListItem({
   document,
   selected,
   onSelect,
+  compact = false,
 }: {
   document: IssueDocument;
   selected: boolean;
   onSelect: () => void;
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   const { Icon, label } = documentKindConfig(document.kind, t);
+
+  if (compact) {
+    return (
+      <Button
+        type="button"
+        variant={selected ? "default" : "outline"}
+        size="sm"
+        className={cn(
+          "h-auto max-w-full shrink-0 justify-start gap-2 rounded-full px-3 py-1.5 text-left",
+          !selected && "bg-background/80",
+        )}
+        aria-current={selected ? "true" : undefined}
+        aria-label={t("assistant.documents.itemAria", { label, title: document.title })}
+        onClick={onSelect}
+      >
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate text-sm font-medium">{document.title}</span>
+      </Button>
+    );
+  }
 
   return (
     <Button
