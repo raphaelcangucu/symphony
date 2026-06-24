@@ -36,6 +36,10 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     classify_execution_unit
     create_subtask
     set_issue_parent
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
   )
 
   @tools @scoped_tools ++ ~w(create_tracker_project)

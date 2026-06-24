@@ -147,6 +147,89 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
     end
   end
 
+  describe "bundle inspection and contracts" do
+    setup do
+      {:ok, parent} = Context.create_issue("macro-markets", %{"title" => "Coordinator", "status" => "Backlog"})
+
+      workpad = """
+      ## Codex Workpad
+
+      ### Execution bundle
+
+      ```yaml
+      version: 1
+      mode: bundle
+      parent: macro-markets#1
+      units:
+        - id: frontend
+          type: child_run
+          repo: macro-markets/frontend
+          consumes: [lottery-api]
+      ```
+      """
+
+      {:ok, _comment} = Context.add_comment("macro-markets", parent.identifier, workpad, %{"author" => "assistant"})
+      %{parent: parent}
+    end
+
+    test "get_execution_bundle returns the parsed units", %{parent: parent} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "get_execution_bundle", %{"parent_identifier" => parent.identifier})
+
+      assert Enum.any?(result.data.units, &(&1.id == "frontend"))
+    end
+
+    test "preview_execution_plan reports a consumer without a producer", %{parent: parent} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "preview_execution_plan", %{"parent_identifier" => parent.identifier})
+
+      assert result.data.ok == false
+      assert Enum.any?(result.data.warnings, &(&1.code == :missing_contract_producer))
+    end
+
+    test "define_shared_contract adds the contract to the bundle", %{parent: parent} do
+      assert {:ok, _result} =
+               ToolExecutor.execute("macro-markets", "define_shared_contract", %{
+                 "parent_identifier" => parent.identifier,
+                 "id" => "lottery-api",
+                 "owner_unit" => "backend",
+                 "kind" => "graphql_mutation",
+                 "consumers" => ["frontend"]
+               })
+
+      {:ok, bundle_result} =
+        ToolExecutor.execute("macro-markets", "get_execution_bundle", %{"parent_identifier" => parent.identifier})
+
+      contract = Enum.find(bundle_result.data.shared_contracts, &(&1.id == "lottery-api"))
+      assert contract
+      assert contract.owner_unit == "backend"
+    end
+
+    test "update_shared_contract flips a ready contract to changing on body change", %{parent: parent} do
+      ToolExecutor.execute("macro-markets", "define_shared_contract", %{
+        "parent_identifier" => parent.identifier,
+        "id" => "lottery-api",
+        "owner_unit" => "backend",
+        "kind" => "graphql_mutation"
+      })
+
+      ToolExecutor.execute("macro-markets", "update_shared_contract", %{
+        "parent_identifier" => parent.identifier,
+        "id" => "lottery-api",
+        "status" => "ready"
+      })
+
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "update_shared_contract", %{
+                 "parent_identifier" => parent.identifier,
+                 "id" => "lottery-api",
+                 "body" => "type Mutation { spinWheel: Prize }"
+               })
+
+      assert result.data.status == "changing"
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

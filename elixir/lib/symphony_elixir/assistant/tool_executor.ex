@@ -33,6 +33,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
+  alias SymphonyElixir.Tracker.Workpad
+  alias SymphonyElixir.Workpad.ExecutionBundle
+  alias SymphonyElixir.Workpad.ExecutionBundle.{Classifier, Store, Validator}
   alias SymphonyElixirWeb.TrackerPresenter
 
   @tracker_tools ~w(
@@ -66,6 +69,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     classify_execution_unit
     create_subtask
     set_issue_parent
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
@@ -297,6 +304,59 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
               "type" => ["string", "null"],
               "description" => "New parent identifier, or null to detach."
             }
+          }
+        }
+      ),
+      tool_spec(
+        "get_execution_bundle",
+        "Read the parent's execution bundle (units, shared contracts, dependencies) from its workpad. Read-only.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier"],
+          "properties" => %{"parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42.")}
+        }
+      ),
+      tool_spec(
+        "preview_execution_plan",
+        "Validate the parent's execution bundle (dependency cycles, contracts consumed but never produced, cross-repo inline units). Returns ok + warnings. Read-only.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier"],
+          "properties" => %{"parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42.")}
+        }
+      ),
+      tool_spec(
+        "define_shared_contract",
+        "Define a shared contract (e.g. an API schema) in the parent bundle to coordinate child_run units across repos. Owner is the producing unit; consumers depend on it.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier", "id", "owner_unit", "kind"],
+          "properties" => %{
+            "parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42."),
+            "id" => string_schema("Contract id (slug), e.g. lottery-wheel-api."),
+            "owner_unit" => string_schema("Unit id that produces the contract."),
+            "kind" => string_schema("Contract kind, e.g. graphql_mutation, rest_endpoint, event_schema."),
+            "consumers" => string_list_schema("Unit ids that consume the contract."),
+            "body" => string_schema("Optional contract body to append to the parent workpad."),
+            "artifact_path" => string_schema("Optional path to the contract artifact in the repo.")
+          }
+        }
+      ),
+      tool_spec(
+        "update_shared_contract",
+        "Update a shared contract's body or status. Changing the body of an already-ready contract flips it to 'changing' so consumers re-sync.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier", "id"],
+          "properties" => %{
+            "parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42."),
+            "id" => string_schema("Contract id to update."),
+            "body" => string_schema("Optional new contract body."),
+            "status" => string_schema("Optional status: draft, ready, or changing.")
           }
         }
       )
@@ -869,7 +929,143 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
+  defp do_execute(project, "get_execution_bundle", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, _comment, body} <- read_parent_workpad(project, parent_id) do
+      bundle = parsed_bundle(body)
+
+      {:ok,
+       %{
+         tool: "get_execution_bundle",
+         message: "Bundle for #{parent_id}: #{length(bundle.units)} unit(s), #{length(bundle.shared_contracts)} contract(s).",
+         data: bundle_data(bundle)
+       }}
+    end
+  end
+
+  defp do_execute(project, "preview_execution_plan", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, parent} <- IssueAdapter.dispatch(project, :get_issue, [parent_id]),
+         {:ok, _comment, body} <- read_parent_workpad(project, parent_id) do
+      bundle = parsed_bundle(body)
+
+      {ok?, warnings} =
+        case Validator.validate(bundle, parent_repo: parent.repository_full_name) do
+          :ok -> {true, []}
+          {:error, warns} -> {false, warns}
+        end
+
+      {:ok,
+       %{
+         tool: "preview_execution_plan",
+         message: if(ok?, do: "Execution plan is valid.", else: "Execution plan has #{length(warnings)} warning(s)."),
+         data: %{ok: ok?, warnings: warnings}
+       }}
+    end
+  end
+
+  defp do_execute(project, "define_shared_contract", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, id} <- normalize_required_string(Map.get(arguments, "id"), :id),
+         {:ok, owner_unit} <- normalize_required_string(Map.get(arguments, "owner_unit"), :owner_unit),
+         {:ok, kind} <- normalize_required_string(Map.get(arguments, "kind"), :kind),
+         {:ok, comment, body} <- read_parent_workpad(project, parent_id) do
+      contract = %{
+        id: id,
+        kind: kind,
+        owner_unit: owner_unit,
+        consumers: normalize_string_list(Map.get(arguments, "consumers")),
+        artifact: normalize_optional_string(Map.get(arguments, "artifact_path")),
+        status: :draft
+      }
+
+      with {:ok, updated} <- Store.upsert_contract(body, contract),
+           updated <- append_contract_body(updated, id, normalize_optional_string(Map.get(arguments, "body"))),
+           {:ok, _comment} <- write_parent_workpad(project, parent_id, comment, updated) do
+        {:ok,
+         %{
+           tool: "define_shared_contract",
+           message: "Defined shared contract #{id} (owner #{owner_unit}).",
+           data: %{id: id, owner_unit: owner_unit, status: "draft"}
+         }}
+      end
+    end
+  end
+
+  defp do_execute(project, "update_shared_contract", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, id} <- normalize_required_string(Map.get(arguments, "id"), :id),
+         {:ok, comment, body} <- read_parent_workpad(project, parent_id) do
+      bundle = parsed_bundle(body)
+      existing = Enum.find(bundle.shared_contracts, &(&1.id == id))
+      new_body = normalize_optional_string(Map.get(arguments, "body"))
+      requested_status = normalize_optional_string(Map.get(arguments, "status"))
+      status = resolve_contract_status(existing, requested_status, new_body)
+
+      contract =
+        %{
+          id: id,
+          kind: contract_field(existing, :kind),
+          owner_unit: contract_field(existing, :owner_unit),
+          consumers: contract_field(existing, :consumers) || [],
+          artifact: contract_field(existing, :artifact),
+          status: status
+        }
+
+      with {:ok, updated} <- Store.upsert_contract(body, contract),
+           updated <- append_contract_body(updated, id, new_body),
+           {:ok, _comment} <- write_parent_workpad(project, parent_id, comment, updated) do
+        {:ok,
+         %{
+           tool: "update_shared_contract",
+           message: "Updated shared contract #{id} (status #{status}).",
+           data: %{id: id, status: to_string(status)}
+         }}
+      end
+    end
+  end
+
   defp do_execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
+
+  defp parsed_bundle(body) do
+    case ExecutionBundle.parse(body) do
+      {:ok, bundle} -> bundle
+      :absent -> %ExecutionBundle{version: 1, mode: "bundle", units: [], shared_contracts: []}
+    end
+  end
+
+  defp bundle_data(%ExecutionBundle{} = bundle) do
+    %{
+      parent: bundle.parent,
+      mode: bundle.mode,
+      units: bundle.units,
+      shared_contracts: bundle.shared_contracts
+    }
+  end
+
+  # A body change to an already-ready contract flips it back to :changing so
+  # consumers know to re-sync; otherwise honor the requested status.
+  defp resolve_contract_status(%{status: :ready}, _requested, body) when is_binary(body), do: :changing
+  defp resolve_contract_status(_existing, "ready", _body), do: :ready
+  defp resolve_contract_status(_existing, "changing", _body), do: :changing
+  defp resolve_contract_status(_existing, "draft", _body), do: :draft
+  defp resolve_contract_status(%{status: status}, nil, _body) when not is_nil(status), do: status
+  defp resolve_contract_status(_existing, _requested, _body), do: :draft
+
+  defp contract_field(nil, _key), do: nil
+  defp contract_field(contract, key), do: Map.get(contract, key)
+
+  defp append_contract_body(workpad, _id, nil), do: workpad
+
+  defp append_contract_body(workpad, id, body) do
+    section = "### Shared contract: #{id}\n\n#{body}\n"
+
+    if String.contains?(workpad, "### Shared contract: #{id}") do
+      workpad
+    else
+      String.trim_trailing(workpad) <> "\n\n" <> section
+    end
+  end
 
   # A new parent must not be the issue itself nor one of its descendants.
   defp reject_reparent_cycle(_project, _identifier, nil), do: :ok
@@ -901,18 +1097,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp reparent_subtask(project, identifier, new_parent) do
-    alias SymphonyElixir.LocalTracker.IssueRelation
-    alias SymphonyElixir.Workpad.ExecutionBundle.Store
-
     slug = project_slug(project)
-    subtask_type = IssueRelation.subtask_type()
+    subtask_type = SymphonyElixir.LocalTracker.IssueRelation.subtask_type()
 
     {:ok, child} = IssueAdapter.dispatch(project, :get_issue, [identifier])
     old_parent = child.parent_identifier
 
     if old_parent do
       Context.delete_blocker(slug, identifier, old_parent, subtask_type)
-      remove_bundle_unit(project, old_parent, identifier, Store)
+      remove_bundle_unit(project, old_parent, identifier)
     end
 
     if new_parent do
@@ -939,13 +1132,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   defp reparent_message(identifier, nil), do: "Detached #{identifier} to standalone."
   defp reparent_message(identifier, parent), do: "Reparented #{identifier} under #{parent}."
 
-  defp remove_bundle_unit(project, parent_identifier, unit_id, store) do
-    alias SymphonyElixir.Tracker.Workpad
-
-    with {:ok, comments} <- IssueAdapter.dispatch(project, :list_comments, [parent_identifier]),
-         comment when not is_nil(comment) <- Enum.find(comments, &Workpad.workpad?(workpad_body(&1))),
-         {:ok, body} <- store.remove_unit(workpad_body(comment), unit_id) do
-      IssueAdapter.dispatch(project, :update_comment, [parent_identifier, workpad_comment_id(comment), body])
+  defp remove_bundle_unit(project, parent_identifier, unit_id) do
+    with {:ok, comment, body} when not is_nil(comment) <- read_parent_workpad(project, parent_identifier),
+         {:ok, updated} <- Store.remove_unit(body, unit_id) do
+      write_parent_workpad(project, parent_identifier, comment, updated)
     else
       _ -> {:ok, :noop}
     end
@@ -968,7 +1158,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       depends_on: normalize_string_list(Map.get(arguments, "depends_on"))
     }
 
-    case SymphonyElixir.Workpad.ExecutionBundle.Classifier.classify(unit, parent_repo: parent_repo) do
+    case Classifier.classify(unit, parent_repo: parent_repo) do
       {:ok, type, _rule} -> {:ok, type}
       {:ambiguous, reason} -> {:error, {:ambiguous_classification, reason}}
     end
@@ -988,23 +1178,41 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp upsert_bundle_unit(project, parent, child, repo, type, _arguments) do
-    alias SymphonyElixir.Tracker.Workpad
-    alias SymphonyElixir.Workpad.ExecutionBundle.Store
+  defp upsert_bundle_unit(project, parent, child, repo, type, arguments) do
+    unit = %{
+      id: child.identifier,
+      type: type,
+      issue: child.identifier,
+      repo: repo,
+      produces: normalize_string_list(Map.get(arguments, "produces")),
+      consumes: normalize_string_list(Map.get(arguments, "consumes")),
+      depends_on: normalize_string_list(Map.get(arguments, "depends_on")),
+      deliverable: normalize_optional_string(Map.get(arguments, "deliverable"))
+    }
 
-    unit = %{id: child.identifier, type: type, issue: child.identifier, repo: repo}
+    with {:ok, comment, body} <- read_parent_workpad(project, parent.identifier),
+         {:ok, updated} <- Store.upsert_unit(body, unit) do
+      write_parent_workpad(project, parent.identifier, comment, updated)
+    end
+  end
 
-    with {:ok, comments} <- IssueAdapter.dispatch(project, :list_comments, [parent.identifier]) do
+  # Returns `{:ok, comment_or_nil, body}` for the parent's `## Codex Workpad`
+  # comment, defaulting to a blank workpad body when none exists yet.
+  defp read_parent_workpad(project, parent_identifier) do
+    with {:ok, comments} <- IssueAdapter.dispatch(project, :list_comments, [parent_identifier]) do
       case Enum.find(comments, &Workpad.workpad?(workpad_body(&1))) do
-        nil ->
-          {:ok, body} = Store.upsert_unit("## Codex Workpad\n", unit)
-          IssueAdapter.dispatch(project, :add_comment, [parent.identifier, body, %{"author" => "assistant"}])
-
-        comment ->
-          {:ok, body} = Store.upsert_unit(workpad_body(comment), unit)
-          IssueAdapter.dispatch(project, :update_comment, [parent.identifier, workpad_comment_id(comment), body])
+        nil -> {:ok, nil, "## Codex Workpad\n"}
+        comment -> {:ok, comment, workpad_body(comment)}
       end
     end
+  end
+
+  defp write_parent_workpad(project, parent_identifier, nil, body) do
+    IssueAdapter.dispatch(project, :add_comment, [parent_identifier, body, %{"author" => "assistant"}])
+  end
+
+  defp write_parent_workpad(project, parent_identifier, comment, body) do
+    IssueAdapter.dispatch(project, :update_comment, [parent_identifier, workpad_comment_id(comment), body])
   end
 
   defp workpad_body(%{body: body}), do: body
