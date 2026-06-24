@@ -1928,6 +1928,12 @@
       "disband": "Ungroup all",
       "runningLocked": "Can't change the group while it's running"
     },
+    "subtasks": {
+      "count": "{{count}} subtasks",
+      "expand": "Show subtasks",
+      "collapse": "Hide subtasks",
+      "empty": "Open the parent to view its subtasks"
+    },
     "issueCard": {
       "openOnTracker": "Open on tracker",
       "agentStatus": "Agent: {{status}}",

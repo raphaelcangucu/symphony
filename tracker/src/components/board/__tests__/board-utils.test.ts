@@ -35,6 +35,9 @@ function issue(overrides: Partial<Issue>): Issue {
     attachments: overrides.attachments ?? [],
     groupLeadIdentifier: overrides.groupLeadIdentifier ?? null,
     groupMemberIdentifiers: overrides.groupMemberIdentifiers ?? [],
+    repositoryFullName: overrides.repositoryFullName ?? null,
+    parentIdentifier: overrides.parentIdentifier ?? null,
+    subIssueSummary: overrides.subIssueSummary ?? null,
   };
 }
 
@@ -192,6 +195,33 @@ describe("groupIssuesIntoUnits", () => {
       { kind: "group", id: "group:MAC-1", lead, members: [member] },
       { kind: "issue", id: "issue:MAC-3", issue: solo },
     ]);
+  });
+});
+
+describe("groupIssuesIntoUnits parent/subtask", () => {
+  it("emits a parent unit and keeps subtasks as their own issue units", () => {
+    const parent = issue({ identifier: "2", subIssueSummary: { total: 2, completed: 1, percentCompleted: 50 } });
+    const childA = issue({ identifier: "3", parentIdentifier: "2" });
+    const childB = issue({ identifier: "4", parentIdentifier: "2" });
+
+    const units = groupIssuesIntoUnits([parent, childA, childB]);
+
+    const parentUnit = units.find((unit) => unit.kind === "parent");
+    expect(parentUnit).toBeTruthy();
+    if (parentUnit?.kind === "parent") {
+      expect(parentUnit.issue.identifier).toBe("2");
+      expect(parentUnit.subtasks.map((subtask) => subtask.identifier)).toEqual(["3", "4"]);
+    }
+    // Subtasks are NOT absorbed: they still render as their own issue units.
+    expect(
+      units.filter((unit) => unit.kind === "issue").map((unit) => (unit.kind === "issue" ? unit.issue.identifier : "")),
+    ).toEqual(["3", "4"]);
+  });
+
+  it("emits a plain issue unit when there are no subtasks", () => {
+    const units = groupIssuesIntoUnits([issue({ identifier: "9" })]);
+    expect(units).toHaveLength(1);
+    expect(units[0].kind).toBe("issue");
   });
 });
 

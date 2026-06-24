@@ -1928,6 +1928,12 @@
       "disband": "Desfazer grupo",
       "runningLocked": "Não dá para alterar o grupo enquanto ele está rodando"
     },
+    "subtasks": {
+      "count": "{{count}} subtarefas",
+      "expand": "Mostrar subtarefas",
+      "collapse": "Ocultar subtarefas",
+      "empty": "Abra a tarefa pai para ver as subtarefas"
+    },
     "issueCard": {
       "openOnTracker": "Abrir no tracker",
       "agentStatus": "Agente: {{status}}",

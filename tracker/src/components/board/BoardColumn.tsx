@@ -23,6 +23,7 @@ import type { WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflo
 
 import { GroupCard } from "./GroupCard";
 import { IssueCard } from "./IssueCard";
+import { SubtaskParentCard } from "./SubtaskParentCard";
 import { groupIssuesIntoUnits, type DropIndicator } from "./board-utils";
 import { getStatusMeta } from "./status-meta";
 
@@ -224,6 +225,16 @@ export function BoardColumn({
                   onRemoveMember={onRemoveMember}
                   onDisband={onDisband}
                   agentExecutions={agentExecutions}
+                  mergeActive={mergeTargetId === unit.id}
+                  dropEdge={dropIndicator?.unitId === unit.id ? dropIndicator.edge : null}
+                />
+              ) : unit.kind === "parent" ? (
+                <SubtaskParentCard
+                  key={unit.id}
+                  issue={unit.issue}
+                  subtasks={unit.subtasks}
+                  onSelectIssue={onSelectIssue}
+                  agent={agentExecutions?.get(unit.issue.identifier)}
                   mergeActive={mergeTargetId === unit.id}
                   dropEdge={dropIndicator?.unitId === unit.id ? dropIndicator.edge : null}
                 />

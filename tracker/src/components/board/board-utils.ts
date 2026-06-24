@@ -221,7 +221,8 @@ export interface DropIndicator {
 
 export type BoardUnit =
   | { kind: "issue"; id: string; issue: Issue }
-  | { kind: "group"; id: string; lead: Issue; members: Issue[] };
+  | { kind: "group"; id: string; lead: Issue; members: Issue[] }
+  | { kind: "parent"; id: string; issue: Issue; subtasks: Issue[] };
 
 export function groupIssuesIntoUnits(issues: readonly Issue[]): BoardUnit[] {
   const byIdentifier = new Map(issues.map((issue) => [issue.identifier, issue]));
@@ -229,6 +230,15 @@ export function groupIssuesIntoUnits(issues: readonly Issue[]): BoardUnit[] {
   for (const issue of issues) {
     if (issue.groupMemberIdentifiers.length > 0) {
       for (const memberId of issue.groupMemberIdentifiers) absorbed.add(memberId);
+    }
+  }
+
+  const subtasksByParent = new Map<string, Issue[]>();
+  for (const issue of issues) {
+    if (issue.parentIdentifier) {
+      const list = subtasksByParent.get(issue.parentIdentifier) ?? [];
+      list.push(issue);
+      subtasksByParent.set(issue.parentIdentifier, list);
     }
   }
 
@@ -241,6 +251,18 @@ export function groupIssuesIntoUnits(issues: readonly Issue[]): BoardUnit[] {
         .map((id) => byIdentifier.get(id))
         .filter((member): member is Issue => Boolean(member));
       units.push({ kind: "group", id: `${GROUP_DRAG_PREFIX}${issue.identifier}`, lead: issue, members });
+      continue;
+    }
+
+    const subtasks = subtasksByParent.get(issue.identifier) ?? [];
+    const hasSubtasks = subtasks.length > 0 || (issue.subIssueSummary?.total ?? 0) > 0;
+
+    if (hasSubtasks) {
+      // Additive (not absorbing): the parent renders an expandable subtask list,
+      // but each subtask still gets its own issue unit below (it may live in a
+      // different column/repo). The drag id stays the plain issue id so the
+      // parent reorders/moves like a normal card.
+      units.push({ kind: "parent", id: issueDragId(issue.identifier), issue, subtasks });
     } else {
       units.push({ kind: "issue", id: issueDragId(issue.identifier), issue });
     }
