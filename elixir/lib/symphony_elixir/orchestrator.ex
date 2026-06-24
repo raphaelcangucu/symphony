@@ -23,7 +23,9 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, Repository}
-  alias SymphonyElixir.Orchestrator.Grouping
+  alias SymphonyElixir.Orchestrator.{BundleCoordinator, BundleGate, Grouping}
+  alias SymphonyElixir.Tracker.Workpad
+  alias SymphonyElixir.Workpad.ExecutionBundle
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -510,19 +512,24 @@ defmodule SymphonyElixir.Orchestrator do
   defp terminate_task(_pid), do: :ok
 
   defp choose_issues(issues, state) do
-    issues
-    |> Grouping.dispatch_candidates()
-    |> sort_issues_for_dispatch()
-    |> Enum.reduce(state, fn issue, acc -> maybe_dispatch_candidate(acc, issue, issues) end)
+    candidates =
+      issues
+      |> Grouping.dispatch_candidates()
+      |> sort_issues_for_dispatch()
+
+    held = held_child_issue_ids(candidates)
+
+    Enum.reduce(candidates, state, fn issue, acc -> maybe_dispatch_candidate(acc, issue, issues, held) end)
   end
 
-  defp maybe_dispatch_candidate(state, issue, all_issues) do
+  defp maybe_dispatch_candidate(state, issue, all_issues, held) do
     case dispatch_decision(issue) do
       {:ok, sets} ->
         members = Grouping.members_for(issue, all_issues)
 
         if should_dispatch_issue?(issue, state, dispatch_set(sets), terminal_set(sets)) and
-             not any_member_blocked?(members, terminal_set(sets)) do
+             not any_member_blocked?(members, terminal_set(sets)) and
+             not MapSet.member?(held, issue.id) do
           dispatch_issue(state, issue, nil, members)
         else
           state
@@ -533,6 +540,107 @@ defmodule SymphonyElixir.Orchestrator do
         state
     end
   end
+
+  @doc false
+  @spec held_child_issue_ids_for_test([Issue.t()], keyword()) :: MapSet.t()
+  def held_child_issue_ids_for_test(candidates, opts) when is_list(candidates) do
+    held_child_issue_ids(candidates, opts)
+  end
+
+  # Bundle-aware dispatch gate: a child_run unit is held until its sibling
+  # dependencies are done and the shared contracts it consumes are ready. The
+  # parent's execution bundle is loaded once per parent per poll cycle (local
+  # tracker only); remote-only parents cannot be resolved here and are left
+  # un-gated (the coordinator prompt still orders them). Liveness: a candidate
+  # whose bundle/units cannot be resolved is never added to the held set.
+  defp held_child_issue_ids(candidates, opts \\ []) do
+    bundle_loader = Keyword.get(opts, :bundle_loader, &load_parent_bundle/1)
+    done_resolver = Keyword.get(opts, :done_units, &resolve_done_units/1)
+
+    candidates
+    |> Enum.filter(&child_candidate?/1)
+    |> Enum.group_by(& &1.parent_identifier)
+    |> Enum.reduce(MapSet.new(), fn {parent_identifier, children}, acc ->
+      case bundle_loader.(parent_identifier) do
+        {:ok, %ExecutionBundle{} = bundle} ->
+          done_units = done_resolver.(bundle)
+          contract_status = BundleCoordinator.contract_status(bundle)
+
+          Enum.reduce(children, acc, fn child, inner ->
+            if BundleGate.held?(bundle, child.identifier, done_units, contract_status) do
+              Logger.info("Holding child dispatch (bundle gate): #{issue_context(child)} parent=#{parent_identifier}")
+              MapSet.put(inner, child.id)
+            else
+              inner
+            end
+          end)
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  defp child_candidate?(%Issue{parent_identifier: parent, id: id})
+       when is_binary(parent) and parent != "" and is_binary(id),
+       do: true
+
+  defp child_candidate?(_issue), do: false
+
+  # Loads and parses the `### Execution bundle` from a parent's local workpad.
+  # Returns `:error` for remote-only parents (no local workpad), which leaves the
+  # child un-gated rather than blocking it.
+  defp load_parent_bundle(parent_identifier) when is_binary(parent_identifier) do
+    with slug when is_binary(slug) <- Context.find_project_slug(parent_identifier),
+         {:ok, comments} <- Context.list_comments(slug, parent_identifier),
+         body when is_binary(body) <- workpad_body_from_comments(comments),
+         {:ok, %ExecutionBundle{} = bundle} <- ExecutionBundle.parse(body) do
+      {:ok, bundle}
+    else
+      _ -> :error
+    end
+  end
+
+  defp load_parent_bundle(_parent_identifier), do: :error
+
+  defp workpad_body_from_comments(comments) when is_list(comments) do
+    Enum.find_value(comments, fn comment ->
+      body = comment_body(comment)
+      if is_binary(body) and Workpad.workpad?(body), do: body
+    end)
+  end
+
+  defp workpad_body_from_comments(_comments), do: nil
+
+  defp comment_body(%{body: body}), do: body
+  defp comment_body(comment) when is_map(comment), do: Map.get(comment, :body) || Map.get(comment, "body")
+  defp comment_body(_comment), do: nil
+
+  # A child_run unit counts as "done" only when its issue resolves to a terminal
+  # state. Unresolved units are treated as not-done so a dependent stays held
+  # (never released on missing data); this keeps the gate conservative for the
+  # local bundles it applies to.
+  defp resolve_done_units(%ExecutionBundle{} = bundle) do
+    bundle
+    |> ExecutionBundle.child_units()
+    |> Enum.reduce(MapSet.new(), fn unit, acc ->
+      if unit_done?(unit), do: MapSet.put(acc, unit.id), else: acc
+    end)
+  end
+
+  defp unit_done?(%{issue: identifier}) when is_binary(identifier) and identifier != "" do
+    with slug when is_binary(slug) <- Context.find_project_slug(identifier),
+         {:ok, record} <- Context.get_issue(slug, identifier) do
+      terminal_record_state?(record)
+    else
+      _ -> false
+    end
+  end
+
+  defp unit_done?(_unit), do: false
+
+  defp terminal_record_state?(%{status: %{is_terminal: terminal}}) when is_boolean(terminal), do: terminal
+  defp terminal_record_state?(_record), do: false
 
   defp any_member_blocked?(members, terminal_states) when is_list(members) do
     Enum.any?(members, &issue_blocked_by_non_terminal?(&1, terminal_states))
