@@ -1439,6 +1439,11 @@
     "runningSessions": "Running sessions",
     "runningSessionsHint": "All active sessions across runtimes.",
     "noActiveSessions": "No active sessions.",
+    "childRuns": {
+      "count": "{{count}} child runs",
+      "show": "Show child runs",
+      "hide": "Hide child runs"
+    },
     "openBoard": "Open board",
     "pursuingGoal": "Pursuing goal: {{objective}}",
     "table": {

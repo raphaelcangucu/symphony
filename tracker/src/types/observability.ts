@@ -6,6 +6,8 @@ export interface RuntimeTokens {
   totalTokens: number;
 }
 
+export type BundleRole = "parent" | "child" | "standalone";
+
 export interface RunningSession {
   issueIdentifier: string;
   state: string | null;
@@ -16,6 +18,11 @@ export interface RunningSession {
   startedAt: string | null;
   lastEventAt: string | null;
   tokens: RuntimeTokens;
+  parentIdentifier?: string | null;
+  bundleRole?: BundleRole;
+  unitId?: string | null;
+  repo?: string | null;
+  childIdentifiers?: string[];
 }
 
 export interface RetryEntry {
