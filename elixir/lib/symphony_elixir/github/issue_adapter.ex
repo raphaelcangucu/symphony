@@ -7,6 +7,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   alias SymphonyElixir.GitHub.Client
   alias SymphonyElixir.GitHub.IssueAdapter.Query
   alias SymphonyElixir.GitHub.IssueComments
+  alias SymphonyElixir.GitHub.IssueCreateRepo
   alias SymphonyElixir.GitHub.IssueRepo
   alias SymphonyElixir.GitHub.RepoSpec
   alias SymphonyElixir.LocalTracker.{Context, Project}
@@ -105,7 +106,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   def create_issue(%Project{} = project, attrs) when is_map(attrs) do
     cfg = config(project)
 
-    with {:ok, {owner, name}} <- RepoSpec.split(cfg.repo),
+    with {:ok, repo} <- IssueCreateRepo.resolve(project, attrs),
+         {:ok, {owner, name}} <- RepoSpec.split(repo),
          {:ok, title} <- require_title(attrs),
          {:ok, meta} <- fetch_repo_metadata(owner, name),
          label_ids = resolve_label_ids(meta.labels, attrs),
@@ -967,6 +969,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   defp map_error({:error, reason}), do: map_error(reason)
   defp map_error({:remote_validation, _details} = error), do: error
+  defp map_error({:invalid_repository, message}), do: {:remote_validation, %{repository: [message]}}
   defp map_error(:issue_not_found), do: :issue_not_found
   defp map_error({:invalid_issue_identifier, _identifier}), do: :issue_not_found
   defp map_error(:status_not_found), do: :status_not_found

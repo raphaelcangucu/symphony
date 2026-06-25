@@ -1,3 +1,6 @@
+import type { TFunction } from "i18next";
+
+import { i18n } from "@/i18n";
 import type { EvidenceRecord, EvidenceRun } from "@/types/evidence";
 
 export type EvidenceAttentionKind = "none" | "missing" | "failed";
@@ -14,13 +17,32 @@ export function assessEvidenceAttention(records: EvidenceRecord[]): EvidenceAtte
   }
 
   const latestRecord = records[0];
-  const failedRuns = latestRecord.runs.filter((run) => run.status !== "passed");
+  const failedRuns = canonicalRuns(latestRecord.runs).filter((run) => run.status !== "passed");
 
   if (latestRecord.status !== "passed" || failedRuns.length > 0) {
     return { kind: "failed", latestRecord, failedRuns };
   }
 
   return { kind: "none", latestRecord, failedRuns: [] };
+}
+
+function canonicalRuns(runs: EvidenceRun[]): EvidenceRun[] {
+  const groups = new Map<string, EvidenceRun[]>();
+
+  for (const run of runs) {
+    const key = `${run.kind}:${run.repo}`;
+    const list = groups.get(key) ?? [];
+    list.push(run);
+    groups.set(key, list);
+  }
+
+  return [...groups.values()].map((group) => {
+    return (
+      group.find((run) => run.status === "passed") ??
+      group.find((run) => run.status === "blocked") ??
+      group[0]
+    );
+  });
 }
 
 export function evidenceNeedsAttention(records: EvidenceRecord[]): boolean {
@@ -36,9 +58,12 @@ function runFailureDetail(run: EvidenceRun): string {
   return run.status;
 }
 
-export function evidenceAttentionSummary(attention: EvidenceAttention): string {
+export function evidenceAttentionSummary(
+  attention: EvidenceAttention,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): string {
   if (attention.kind === "missing") {
-    return "Nenhuma evidência registrada no tracker.";
+    return t("issue.evidence.missing");
   }
 
   if (attention.kind === "failed" && attention.failedRuns.length > 0) {
@@ -46,22 +71,27 @@ export function evidenceAttentionSummary(attention: EvidenceAttention): string {
       .slice(0, 3)
       .map((run) => `${run.repo} (${run.kind}): ${runFailureDetail(run)}`);
     const suffix = attention.failedRuns.length > 3 ? "…" : "";
-    return `Validação incompleta — ${details.join("; ")}${suffix}`;
+    return t("issue.evidence.incomplete", { details: details.join("; "), suffix });
   }
 
   if (attention.kind === "failed") {
-    return `Última evidência com status "${attention.latestRecord?.status ?? "failed"}".`;
+    return t("issue.evidence.failedStatus", {
+      status: attention.latestRecord?.status ?? "failed",
+    });
   }
 
   return "";
 }
 
-export function evidenceAttentionInstructions(attention: EvidenceAttention): string | null {
+export function evidenceAttentionInstructions(
+  attention: EvidenceAttention,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): string | null {
   if (attention.kind !== "failed" || attention.failedRuns.length === 0) return null;
 
   const lines = attention.failedRuns.map(
     (run) => `- ${run.repo} / ${run.kind}: ${run.command} → ${runFailureDetail(run)}`,
   );
 
-  return ["Runs que falharam ou ficaram bloqueados na última tentativa:", ...lines].join("\n");
+  return [t("issue.evidence.failedRunsHeader"), ...lines].join("\n");
 }

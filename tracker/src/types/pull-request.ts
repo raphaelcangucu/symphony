@@ -2,6 +2,7 @@ import type { Issue } from "./issue";
 
 export type PullRequestState = "open" | "closed" | "merged" | "draft" | "unknown";
 export type PullRequestMergeMethod = "merge" | "squash" | "rebase";
+export type PullRequestMergeable = "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
 
 export type CheckStatus = "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "PENDING" | "WAITING" | string | null;
 
@@ -80,6 +81,9 @@ export interface PullRequest {
   createdAt: string | null;
   updatedAt: string | null;
   mergedAt: string | null;
+  // GitHub mergeability: "CONFLICTING" means the branch conflicts with its base.
+  // May be "UNKNOWN"/null while GitHub computes it (resolves on a later refresh).
+  mergeable: PullRequestMergeable | string | null;
   checksState: string | null;
   pipelines: PullRequestPipeline[];
   statuses: PullRequestStatusContext[];

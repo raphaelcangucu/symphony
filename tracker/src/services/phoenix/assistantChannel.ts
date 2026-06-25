@@ -1,5 +1,7 @@
 import type { Channel } from "phoenix";
 
+import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
+
 import {
   normalizeAssistantChatMessage,
   normalizeToolCall,
@@ -9,6 +11,8 @@ import {
   type BackendAssistantChatMessageDto,
   type UserQuestionsRequest,
 } from "@/services/assistant";
+import { normalizeGoal } from "@/services/agentExecutions";
+import type { AgentExecutionGoal } from "@/types/agent-execution";
 import type { AgentKind } from "@/types/issue";
 
 export interface AssistantChannelHandlers {
@@ -26,6 +30,80 @@ export interface AssistantChannelHandlers {
   onBtwDelta?: (payload: { btwId: string; delta: string }) => void;
   onBtwCompleted?: (payload: { btwId: string; message: string }) => void;
   onBtwError?: (payload: { btwId: string; message: string }) => void;
+  onGoalStatus?: (status: AuthoringGoalStatus) => void;
+  onGoalRunning?: (running: boolean) => void;
+  onTurnStatus?: (status: AssistantTurnStatus) => void;
+  onHistorySynced?: (messages: AssistantChatMessage[]) => void;
+}
+
+/**
+ * Normalized authoring-goal status pushed by the channel. `goal` carries the
+ * native Codex goal (status + timer) when one exists; `enabled`/`objective`
+ * mirror the thread metadata so the pill can render before a turn establishes
+ * the native goal.
+ */
+export interface AuthoringGoalStatus {
+  enabled: boolean;
+  objective: string | null;
+  native: boolean;
+  goal: AgentExecutionGoal | null;
+  running: boolean;
+}
+
+interface BackendGoalStatusPayload {
+  enabled?: boolean | null;
+  objective?: string | null;
+  native?: boolean | null;
+  goal?: Record<string, unknown> | null;
+  running?: boolean | null;
+}
+
+export function normalizeGoalStatus(payload: unknown): AuthoringGoalStatus {
+  const data = (payload ?? {}) as BackendGoalStatusPayload;
+  return {
+    enabled: data.enabled === true,
+    objective: typeof data.objective === "string" && data.objective.trim() !== "" ? data.objective : null,
+    native: data.native === true,
+    goal: normalizeGoal(data.goal ?? null),
+    running: data.running === true,
+  };
+}
+
+/**
+ * Normalized lifecycle status for the thread's current/last turn. `canResume` is
+ * only ever true when the backend reports an interrupted turn that can be
+ * re-dispatched via `resumeTurn`.
+ */
+export interface AssistantTurnStatus {
+  status: string;
+  sessionId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  canResume: boolean;
+}
+
+interface BackendTurnStatusPayload {
+  status?: string | null;
+  session_id?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  can_resume?: boolean | null;
+}
+
+export function normalizeTurnStatus(payload: unknown): AssistantTurnStatus {
+  const data = (payload ?? {}) as BackendTurnStatusPayload;
+  return {
+    status: typeof data.status === "string" ? data.status : "unknown",
+    sessionId: typeof data.session_id === "string" ? data.session_id : null,
+    startedAt: typeof data.started_at === "string" ? data.started_at : null,
+    finishedAt: typeof data.finished_at === "string" ? data.finished_at : null,
+    canResume: data.can_resume === true,
+  };
+}
+
+export function readLastTurn(joinPayload: unknown): AssistantTurnStatus | null {
+  const data = (joinPayload ?? {}) as { last_turn?: unknown };
+  return data.last_turn ? normalizeTurnStatus(data.last_turn) : null;
 }
 
 export interface AssistantDocumentChangedPayload {
@@ -72,37 +150,41 @@ interface IssueCreatedPayload {
 }
 
 export function assistantTopic(projectSlug: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
+  const slug = requireProjectSlug(projectSlug);
   return `assistant:${slug}`;
 }
 
 export function assistantExploreTopic(projectSlug: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
+  const slug = requireProjectSlug(projectSlug);
   return `assistant:explore:${encodeURIComponent(slug)}`;
 }
 
 export function assistantThreadTopic(threadId: number | string): string {
-  const id = String(threadId).trim();
-  if (!id) throw new Error("threadId is required");
+  const id = requireNonBlank(String(threadId), "threadId");
   return `assistant:thread:${id}`;
 }
 
 export function assistantIssueTopic(projectSlug: string, identifier: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
-
-  const issueIdentifier = identifier.trim();
-  if (!issueIdentifier) throw new Error("identifier is required");
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(identifier, "identifier");
 
   return `assistant:issue:${encodeURIComponent(slug)}:${encodeURIComponent(issueIdentifier)}`;
 }
 
 export function bindAssistantEvents(channel: Channel, handlers: AssistantChannelHandlers): void {
   channel.on("history_loaded", (payload) => {
-    const messages = ((payload as HistoryLoadedPayload).messages ?? []).map(normalizeAssistantChatMessage);
+    const data = payload as HistoryLoadedPayload & { last_turn?: unknown };
+    const messages = (data.messages ?? []).map(normalizeAssistantChatMessage);
     handlers.onHistoryLoaded(messages);
+
+    const joinedLastTurn = readLastTurn(data);
+    if (joinedLastTurn) handlers.onTurnStatus?.(joinedLastTurn);
+  });
+
+  channel.on("history_synced", (payload) => {
+    const data = payload as HistoryLoadedPayload;
+    const messages = (data.messages ?? []).map(normalizeAssistantChatMessage);
+    handlers.onHistorySynced?.(messages);
   });
 
   channel.on("message_created", (payload) => {
@@ -179,6 +261,50 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     const data = payload as { btw_id?: string | null; message?: string | null };
     if (data.btw_id) handlers.onBtwError?.({ btwId: data.btw_id, message: data.message ?? "Side question failed" });
   });
+
+  channel.on("goal_status", (payload) => {
+    handlers.onGoalStatus?.(normalizeGoalStatus(payload as BackendGoalStatusPayload));
+  });
+
+  channel.on("goal_running", (payload) => {
+    handlers.onGoalRunning?.((payload as { running?: boolean | null }).running === true);
+  });
+
+  channel.on("turn_status", (payload) => {
+    handlers.onTurnStatus?.(normalizeTurnStatus(payload));
+  });
+}
+
+export function requestGoalStatus(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("goal_status", {});
+}
+
+export function pauseAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("goal_pause", {});
+}
+
+export function resumeAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("goal_resume", {});
+}
+
+export function clearAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("goal_clear", {});
+}
+
+export function resumeTurn(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("resume_turn", {});
+}
+
+export function requestHistorySync(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("sync_history", {});
+}
+
+export function isTerminalTurnStatus(status: string): boolean {
+  return status === "completed" || status === "failed" || status === "interrupted";
+}
+
+export function setAuthoringGoalObjective(channel: Channel, objective: string): ReturnType<Channel["push"]> {
+  return channel.push("goal_set_objective", { objective });
 }
 
 export function submitUserInput(

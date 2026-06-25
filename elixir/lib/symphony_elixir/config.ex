@@ -13,7 +13,7 @@ defmodule SymphonyElixir.Config do
   @default_workspace_root Path.join(System.tmp_dir!(), "symphony_workspaces")
   @default_hook_timeout_ms 60_000
   @default_max_concurrent_agents 10
-  @default_agent_max_turns 20
+  @default_agent_max_turns 30
   @default_max_retry_backoff_ms 300_000
   @default_agent_turn_timeout_ms 3_600_000
   @default_agent_read_timeout_ms 5_000
@@ -30,6 +30,7 @@ defmodule SymphonyElixir.Config do
   @default_editor_port 4002
   @default_editor_auth "none"
   @default_dev_server_enabled false
+  @default_dev_server_reclaim_ports false
   @default_dev_server_port_range [4100, 4199]
   @default_dev_server_max_concurrent 3
   @default_dev_server_idle_timeout_ms 1_800_000
@@ -254,7 +255,14 @@ defmodule SymphonyElixir.Config do
                                default: %{},
                                keys: [
                                  enabled: [type: :boolean, default: @default_dev_server_enabled],
-                                 port_range: [type: {:list, :pos_integer}, default: @default_dev_server_port_range],
+                                 reclaim_ports: [
+                                   type: :boolean,
+                                   default: @default_dev_server_reclaim_ports
+                                 ],
+                                 port_range: [
+                                   type: {:or, [{:list, :pos_integer}, nil]},
+                                   default: nil
+                                 ],
                                  max_concurrent: [type: :pos_integer, default: @default_dev_server_max_concurrent],
                                  idle_timeout_ms: [type: :pos_integer, default: @default_dev_server_idle_timeout_ms],
                                  auto_start_on: [
@@ -465,6 +473,30 @@ defmodule SymphonyElixir.Config do
   # Sections that must NOT appear in a per-project `workflow_markdown`: connection
   # identity (form/DB-owned) and process-level settings (env/runtime-owned).
   @forbidden_per_project_sections ~w(github linear local server observability polling editor)
+
+  @doc """
+  Strips process/connection-owned sections from workflow markdown so bundles
+  round-trip through import/export. Connection identity lives in the project
+  `tracker` field; runtime settings belong in process config.
+  """
+  @spec portable_workflow_markdown(String.t()) :: String.t()
+  def portable_workflow_markdown(markdown) when is_binary(markdown) do
+    case SymphonyElixir.Workflow.parse_string(markdown) do
+      {:ok, %{config: raw, prompt: body}} when is_map(raw) ->
+        filtered =
+          Map.reject(raw, fn {key, _value} ->
+            key
+            |> to_string()
+            |> String.downcase()
+            |> then(&(&1 in @forbidden_per_project_sections))
+          end)
+
+        SymphonyElixir.Workflow.to_markdown(filtered, body || "")
+
+      _ ->
+        markdown
+    end
+  end
 
   @doc """
   Parses per-project WORKFLOW markdown (YAML front matter + prompt body).
@@ -799,6 +831,15 @@ defmodule SymphonyElixir.Config do
   @spec editor_base_url() :: String.t()
   def editor_base_url, do: InstanceConfig.editor_base_url()
 
+  @spec preview_pool_range() :: [pos_integer()]
+  def preview_pool_range, do: InstanceConfig.preview_pool_range()
+
+  @spec preview_slots_per_project() :: pos_integer()
+  def preview_slots_per_project, do: InstanceConfig.preview_slots_per_project()
+
+  @spec preview_ports_per_slot() :: pos_integer()
+  def preview_ports_per_slot, do: InstanceConfig.preview_ports_per_slot()
+
   @spec dev_server_enabled?() :: boolean()
   def dev_server_enabled? do
     get_in(validated_workflow_options(), [:dev_server, :enabled])
@@ -806,7 +847,8 @@ defmodule SymphonyElixir.Config do
 
   @spec dev_server_port_range() :: [pos_integer()]
   def dev_server_port_range do
-    get_in(validated_workflow_options(), [:dev_server, :port_range])
+    get_in(validated_workflow_options(), [:dev_server, :port_range]) ||
+      @default_dev_server_port_range
   end
 
   @spec dev_server_max_concurrent() :: pos_integer()
@@ -1033,6 +1075,7 @@ defmodule SymphonyElixir.Config do
   defp extract_dev_server_options(section) do
     %{}
     |> put_if_present(:enabled, boolean_value(Map.get(section, "enabled")))
+    |> put_if_present(:reclaim_ports, boolean_value(Map.get(section, "reclaim_ports")))
     |> put_if_present(:port_range, integer_list_value(Map.get(section, "port_range")))
     |> put_if_present(:max_concurrent, positive_integer_value(Map.get(section, "max_concurrent")))
     |> put_if_present(:idle_timeout_ms, positive_integer_value(Map.get(section, "idle_timeout_ms")))
@@ -1096,7 +1139,13 @@ defmodule SymphonyElixir.Config do
 
   defp parse_repo_config(_cfg), do: %{}
 
-  defp parse_e2e(%{} = e2e), do: e2e_command_map(scalar_string_value(Map.get(e2e, "command")))
+  defp parse_e2e(%{} = e2e) do
+    case e2e_command_map(scalar_string_value(Map.get(e2e, "command"))) do
+      :omit -> :omit
+      map -> put_if_present(map, :require_url_pattern, scalar_string_value(Map.get(e2e, "require_url_pattern")))
+    end
+  end
+
   defp parse_e2e(command) when is_binary(command), do: e2e_command_map(scalar_string_value(command))
   defp parse_e2e(_e2e), do: :omit
 

@@ -1,5 +1,6 @@
 import { Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { TemplateList } from "@/components/templates/TemplateList";
@@ -9,6 +10,7 @@ import { deleteTemplate, importTemplate, listTemplates } from "@/services/templa
 import type { WorkspaceTemplate } from "@/types/template";
 
 export function TemplateListPage() {
+  const { t } = useTranslation();
   const [templates, setTemplates] = useState<WorkspaceTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -18,7 +20,7 @@ export function TemplateListPage() {
       const items = await listTemplates();
       setTemplates(items);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Unable to load templates");
+      toast.error(cause instanceof Error ? cause.message : t("project.templates.list.toasts.loadFailed"));
     }
   };
 
@@ -31,7 +33,9 @@ export function TemplateListPage() {
         if (active) setTemplates(items);
       })
       .catch((cause: unknown) => {
-        if (active) toast.error(cause instanceof Error ? cause.message : "Unable to load templates");
+        if (active) {
+          toast.error(cause instanceof Error ? cause.message : t("project.templates.list.toasts.loadFailed"));
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -40,18 +44,18 @@ export function TemplateListPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   const handleDelete = async (slug: string) => {
-    const confirmed = window.confirm(`Delete template "${slug}" permanently? This cannot be undone.`);
+    const confirmed = window.confirm(t("project.templates.list.deleteConfirm", { slug }));
     if (!confirmed) return;
 
     try {
       await deleteTemplate(slug);
       setTemplates((current) => current.filter((template) => template.slug !== slug));
-      toast.success("Template deleted");
+      toast.success(t("project.templates.list.toasts.deleted"));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Unable to delete template");
+      toast.error(cause instanceof Error ? cause.message : t("project.templates.list.toasts.deleteFailed"));
     }
   };
 
@@ -64,9 +68,9 @@ export function TemplateListPage() {
       const text = await file.text();
       await importTemplate(text);
       await loadTemplates();
-      toast.success("Template imported");
+      toast.success(t("project.templates.list.toasts.imported"));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Unable to import template");
+      toast.error(cause instanceof Error ? cause.message : t("project.templates.list.toasts.importFailed"));
     }
   };
 
@@ -74,8 +78,8 @@ export function TemplateListPage() {
     <div className="min-h-screen p-6">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Templates</h1>
-          <p className="text-sm text-muted-foreground">Reusable workspace blueprints.</p>
+          <h1 className="text-xl font-semibold">{t("project.templates.list.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("project.templates.list.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -87,13 +91,17 @@ export function TemplateListPage() {
           />
           <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-4 w-4" />
-            Import
+            {t("project.templates.list.import")}
           </Button>
         </div>
       </div>
 
       <main className="min-w-0">
-        {loading ? <Skeleton className="h-40" /> : <TemplateList templates={templates} onDelete={(slug) => void handleDelete(slug)} />}
+        {loading ? (
+          <Skeleton className="h-40" />
+        ) : (
+          <TemplateList templates={templates} onDelete={(slug) => void handleDelete(slug)} />
+        )}
       </main>
     </div>
   );

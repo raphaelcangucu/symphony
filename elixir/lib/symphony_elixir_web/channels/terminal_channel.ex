@@ -2,10 +2,12 @@ defmodule SymphonyElixirWeb.TerminalChannel do
   @moduledoc "Issue-scoped terminal channel for local tracker tmux sessions."
 
   use Phoenix.Channel
+  use Gettext, backend: SymphonyElixirWeb.Gettext
 
+  alias Gettext, as: GettextCore
   alias Phoenix.Socket
   alias SymphonyElixir.Config
-  alias SymphonyElixir.Terminal.Registry
+  alias SymphonyElixir.Terminal.{ErrorMessages, Registry}
   alias SymphonyElixirWeb.TrackerAuth
 
   @capture_delays_ms [50, 250, 750]
@@ -22,7 +24,7 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
       {:ok, %{session: session_payload(session)}, socket}
     else
-      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+      {:error, reason} -> {:error, %{reason: error_reason(socket, reason)}}
     end
   end
 
@@ -38,7 +40,7 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
       {:ok, %{session: session_payload(session)}, socket}
     else
-      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+      {:error, reason} -> {:error, %{reason: error_reason(socket, reason)}}
     end
   end
 
@@ -54,7 +56,7 @@ defmodule SymphonyElixirWeb.TerminalChannel do
         {:noreply, socket}
 
       {:error, message} ->
-        push(socket, "error", %{message: message})
+        push(socket, "error", %{message: present_error(socket, message)})
         {:noreply, socket}
     end
   end
@@ -70,13 +72,13 @@ defmodule SymphonyElixirWeb.TerminalChannel do
         {:noreply, socket}
 
       {:error, message} ->
-        push(socket, "error", %{message: message})
+        push(socket, "error", %{message: present_error(socket, message)})
         {:noreply, socket}
     end
   end
 
   def handle_in("input", _payload, socket) do
-    push(socket, "error", %{message: "terminal input data is required"})
+    push(socket, "error", %{message: localized_message(socket, "terminal input data is required")})
     {:noreply, socket}
   end
 
@@ -94,13 +96,13 @@ defmodule SymphonyElixirWeb.TerminalChannel do
         {:noreply, socket}
 
       {:error, message} ->
-        push(socket, "error", %{message: message})
+        push(socket, "error", %{message: present_error(socket, message)})
         {:noreply, socket}
     end
   end
 
   def handle_in("resize", _payload, socket) do
-    push(socket, "error", %{message: "terminal resize cols and rows are required"})
+    push(socket, "error", %{message: localized_message(socket, "terminal resize cols and rows are required")})
     {:noreply, socket}
   end
 
@@ -124,14 +126,14 @@ defmodule SymphonyElixirWeb.TerminalChannel do
   defp push_capture(socket, project_slug, issue_identifier) do
     case Registry.capture(project_slug, issue_identifier) do
       {:ok, output} -> push(socket, "output", %{data: output})
-      {:error, message} -> push(socket, "error", %{message: message})
+      {:error, message} -> push(socket, "error", %{message: present_error(socket, message)})
     end
   end
 
   defp push_devenv_capture(socket, project_slug) do
     case Registry.capture_project(project_slug) do
       {:ok, output} -> push(socket, "output", %{data: output})
-      {:error, message} -> push(socket, "error", %{message: message})
+      {:error, message} -> push(socket, "error", %{message: present_error(socket, message)})
     end
   end
 
@@ -146,8 +148,23 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     }
   end
 
-  defp error_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp error_reason(reason) when is_binary(reason), do: reason
+  defp error_reason(socket, reason), do: present_error(socket, reason)
+
+  defp present_error(socket, reason) do
+    ErrorMessages.localize(reason, Map.get(socket.assigns, :gettext_locale, "en"))
+  end
+
+  defp localized_message(socket, msgid, bindings \\ %{}) when is_binary(msgid) and is_map(bindings) do
+    localized_gettext(socket, msgid, bindings)
+  end
+
+  defp localized_gettext(socket, msgid, bindings) do
+    locale = Map.get(socket.assigns, :gettext_locale, "en")
+
+    GettextCore.with_locale(SymphonyElixirWeb.Gettext, locale, fn ->
+      GettextCore.dgettext(SymphonyElixirWeb.Gettext, "errors", msgid, bindings)
+    end)
+  end
 
   defp authorized?(%Socket{assigns: %{tracker_token_valid: true}}), do: true
 

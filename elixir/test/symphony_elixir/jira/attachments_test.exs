@@ -42,4 +42,29 @@ defmodule SymphonyElixir.Jira.AttachmentsTest do
                Attachments.download("1", base_url: "https://acme.atlassian.net", email: "x", api_token: nil)
     end
   end
+
+  describe "delete/2" do
+    test "deletes an attachment with basic auth" do
+      parent = self()
+
+      fun = fn url, headers ->
+        send(parent, {:delete_request, url, headers})
+        {:ok, %{status: 204}}
+      end
+
+      assert :ok = Attachments.delete("10501", @creds ++ [delete_request_fun: fun])
+
+      assert_received {:delete_request, url, headers}
+      assert url == "https://acme.atlassian.net/rest/api/3/attachment/10501"
+
+      expected = "Basic " <> Base.encode64("bot@acme.test:tok")
+      assert {"Authorization", ^expected} = List.keyfind(headers, "Authorization", 0)
+    end
+
+    test "maps non-success statuses to an error" do
+      fun = fn _url, _headers -> {:ok, %{status: 404}} end
+
+      assert {:error, {:jira_api_status, 404}} = Attachments.delete("1", @creds ++ [delete_request_fun: fun])
+    end
+  end
 end

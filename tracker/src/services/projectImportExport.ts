@@ -1,5 +1,7 @@
 import type { Project } from "@/types/project";
 
+import { requireProjectSlug } from "@/lib/serviceValidation";
+
 import { http, trackerPath, unwrapData } from "./http";
 import { type BackendProjectDto, normalizeProject } from "./mappers";
 
@@ -18,10 +20,4 @@ export async function importProjectConfig(projectSlug: string, yaml: string): Pr
   const slug = requireProjectSlug(projectSlug);
   const response = await http.post(trackerPath(`/projects/${encodeURIComponent(slug)}/import`), { yaml });
   return normalizeProject(unwrapData<BackendProjectDto>(response));
-}
-
-function requireProjectSlug(projectSlug: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
-  return slug;
 }

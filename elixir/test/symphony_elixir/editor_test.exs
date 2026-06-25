@@ -185,7 +185,7 @@ defmodule SymphonyElixir.EditorTest do
       path = SymphonyElixir.Workspace.path_for_issue("MAC-SKILLS")
       skills_root = Path.join(path, "_skills")
       File.mkdir_p!(path)
-      write_skill!(Path.join(skills_root, "superpowers"), "brainstorming")
+      write_skill!(Path.join(skills_root, "superpowers"), "subagent-driven-development")
       Application.put_env(:symphony_elixir, :skills_root, skills_root)
 
       on_exit(fn ->
@@ -197,8 +197,16 @@ defmodule SymphonyElixir.EditorTest do
         SymphonyElixir.Config.editor_base_url() <> "/?folder=" <> URI.encode_www_form(path)
 
       assert Editor.editor_target("project", "MAC-SKILLS") == {:ok, expected_url}
-      assert File.regular?(Path.join([path, ".codex", "skills", "brainstorming", "SKILL.md"]))
-      assert File.regular?(Path.join([path, ".claude", "skills", "brainstorming", "SKILL.md"]))
+
+      assert File.regular?(
+               Path.join([path, ".codex", "skills", "subagent-driven-development", "SKILL.md"])
+             )
+
+      assert File.regular?(
+               Path.join([path, ".claude", "skills", "subagent-driven-development", "SKILL.md"])
+             )
+
+      refute File.exists?(Path.join([path, ".codex", "skills", "brainstorming", "SKILL.md"]))
     end
   end
 

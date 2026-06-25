@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { discoverGitHubProjects, type GitHubProjectSummary } from "@/services/remoteTrackers";
 
 interface GitHubProjectPickerProps {
@@ -7,6 +9,7 @@ interface GitHubProjectPickerProps {
 }
 
 export function GitHubProjectPicker({ onSelect }: GitHubProjectPickerProps) {
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<GitHubProjectSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -15,15 +18,17 @@ export function GitHubProjectPicker({ onSelect }: GitHubProjectPickerProps) {
     setLoading(true);
     discoverGitHubProjects()
       .then((items) => active && setProjects(items))
-      .catch((cause) => toast.error(cause instanceof Error ? cause.message : "Failed to load GitHub projects"))
+      .catch((cause) =>
+        toast.error(cause instanceof Error ? cause.message : t("project.tracker.github.loadFailed")),
+      )
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading GitHub projects…</p>;
-  if (projects.length === 0) return <p className="text-sm text-muted-foreground">No GitHub Projects v2 boards found.</p>;
+  if (loading) return <p className="text-sm text-muted-foreground">{t("project.tracker.github.loading")}</p>;
+  if (projects.length === 0) return <p className="text-sm text-muted-foreground">{t("project.tracker.github.empty")}</p>;
 
   return (
     <div className="grid gap-2">

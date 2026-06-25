@@ -5,12 +5,14 @@ import {
   buildBoardState,
   findIssueStatus,
   flattenBoardState,
-  moveIssueLocally,
+  moveGroupLocally,
+  resolveGroupMoveLead,
   upsertIssue,
 } from "@/components/board/board-utils";
 import type { IssueFilters } from "@/lib/issueFilters";
 import { applyIssueFilters, emptyFilters } from "@/lib/issueFilters";
-import { listIssues, moveIssue } from "@/services/issues";
+import { i18n } from "@/i18n";
+import { groupIssue, listIssues, moveIssue, ungroupIssue } from "@/services/issues";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
@@ -27,6 +29,8 @@ export interface UseIssueBoardResult {
   refreshing: boolean;
   refetch: () => Promise<void>;
   moveIssueOptimistically: (identifier: string, status: WorkflowStatusName, position: number) => Promise<void>;
+  groupIssueOptimistically: (memberIdentifier: string, leadIdentifier: string) => Promise<void>;
+  ungroupIssueOptimistically: (identifier: string) => Promise<void>;
   setIssues: React.Dispatch<React.SetStateAction<Issue[]>>;
 }
 
@@ -55,7 +59,7 @@ export function useIssueBoard(
       hasLoadedRef.current = true;
       toast.dismiss(loadErrorToastId);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Failed to load issues";
+      const message = cause instanceof Error ? cause.message : i18n.t("issue.board.loadFailed");
       toast.error(message, { id: loadErrorToastId });
     } finally {
       setLoading(false);
@@ -85,19 +89,54 @@ export function useIssueBoard(
       const sourceStatus = findIssueStatus(previousBoard, identifier, statuses);
       if (!sourceStatus) return;
 
-      const nextBoard = moveIssueLocally(previousBoard, identifier, status, position, statuses);
+      // A group moves as one unit: resolve lead when a member is dragged or when
+      // status changes from the issue drawer so every card stays in sync.
+      const { leadIdentifier, memberIdentifiers } = resolveGroupMoveLead(issues, identifier);
+      const nextBoard = moveGroupLocally(
+        previousBoard,
+        leadIdentifier,
+        memberIdentifiers,
+        status,
+        position,
+        statuses,
+      );
       setIssues(flattenBoardState(nextBoard));
 
       try {
-        const persisted = await moveIssue(projectSlug, identifier, { status, position });
-        setIssues((current) => upsertIssue(current, persisted));
+        await moveIssue(projectSlug, leadIdentifier, { status, position });
       } catch (cause) {
         setIssues(flattenBoardState(previousBoard));
-        const message = cause instanceof Error ? cause.message : "Failed to move issue";
+        const message = cause instanceof Error ? cause.message : i18n.t("issue.board.moveFailed");
         toast.error(message);
       }
     },
     [issues, projectSlug, statuses],
+  );
+
+  const groupIssueOptimistically = useCallback(
+    async (memberIdentifier: string, leadIdentifier: string) => {
+      try {
+        await groupIssue(projectSlug, memberIdentifier, leadIdentifier);
+        await refetch();
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : i18n.t("issue.board.moveFailed");
+        toast.error(message);
+      }
+    },
+    [projectSlug, refetch],
+  );
+
+  const ungroupIssueOptimistically = useCallback(
+    async (identifier: string) => {
+      try {
+        await ungroupIssue(projectSlug, identifier);
+        await refetch();
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : i18n.t("issue.board.moveFailed");
+        toast.error(message);
+      }
+    },
+    [projectSlug, refetch],
   );
 
   useProjectChannel(projectSlug, (event, payload) => {
@@ -114,5 +153,16 @@ export function useIssueBoard(
     void refetch();
   });
 
-  return { issues, filteredIssues, board, loading, refreshing, refetch, moveIssueOptimistically, setIssues };
+  return {
+    issues,
+    filteredIssues,
+    board,
+    loading,
+    refreshing,
+    refetch,
+    moveIssueOptimistically,
+    groupIssueOptimistically,
+    ungroupIssueOptimistically,
+    setIssues,
+  };
 }

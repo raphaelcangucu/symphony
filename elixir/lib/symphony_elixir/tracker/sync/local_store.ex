@@ -10,7 +10,9 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   import Ecto.Query
 
-  alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, Label, Project, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, IssueRelation, Label, Project, WorkflowStatus}
+  alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
+  alias SymphonyElixir.PushNotifications.MentionNotifier
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.{Merge, PullRequestRecord, UserRecord}
 
@@ -59,8 +61,9 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
     :ok = maybe_upsert_labels!(project, issue, Map.get(remote, :labels, []))
     :ok = upsert_comments!(issue, Map.get(remote, :comments, []))
+    :ok = maybe_upsert_remote_parent_relation!(project.id, issue, remote[:parent_identifier])
 
-    Repo.preload(issue, [:status, :labels, :comments], force: true)
+    Repo.preload(issue, [:status, :labels, :comments, source_relations: :target_issue], force: true)
   end
 
   @doc """
@@ -391,9 +394,18 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
         {:error, :not_found}
 
       comment ->
-        comment
-        |> Ecto.Changeset.change(%{sync_status: status, last_synced_at: sync_timestamp(status)})
-        |> Repo.update()
+        previous_status = comment.sync_status
+
+        with {:ok, updated} <-
+               comment
+               |> Ecto.Changeset.change(%{sync_status: status, last_synced_at: sync_timestamp(status)})
+               |> Repo.update() do
+          if previous_status == "pending" and status == "synced" do
+            MentionNotifier.deliver_if_needed(updated, :after_remote_sync)
+          end
+
+          {:ok, updated}
+        end
     end
   end
 
@@ -421,29 +433,34 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   # -- issue insert/update -----------------------------------------------------
 
   defp insert_issue!(project, remote, status_id) do
-    %IssueRecord{}
-    |> IssueRecord.changeset(%{
-      project_id: project.id,
-      status_id: status_id,
-      identifier: to_string(remote[:identifier]),
-      title: remote[:title],
-      description: remote[:description],
-      priority: remote[:priority],
-      position: remote[:position] || 0,
-      assignee_id: remote[:assignee_id],
-      assignee_remote_id: remote[:assignee_remote_id],
-      creator: remote[:creator],
-      branch_name: remote[:branch_name],
-      url: remote[:remote_url],
-      remote_id: remote[:remote_id],
-      remote_number: remote[:remote_number],
-      remote_url: remote[:remote_url],
-      sync_status: "synced",
-      remote_updated_at: remote[:remote_updated_at],
-      last_synced_at: DateTime.utc_now(),
-      dirty_fields: %{}
-    })
-    |> Repo.insert!()
+    issue =
+      %IssueRecord{}
+      |> IssueRecord.changeset(%{
+        project_id: project.id,
+        status_id: status_id,
+        identifier: to_string(remote[:identifier]),
+        title: remote[:title],
+        description: remote[:description],
+        priority: remote[:priority],
+        position: remote[:position] || 0,
+        assignee_id: remote[:assignee_id],
+        assignee_remote_id: remote[:assignee_remote_id],
+        creator: remote[:creator],
+        branch_name: remote[:branch_name],
+        url: remote[:remote_url],
+        remote_id: remote[:remote_id],
+        remote_number: remote[:remote_number],
+        remote_url: remote[:remote_url],
+        sync_status: "synced",
+        remote_updated_at: remote[:remote_updated_at],
+        last_synced_at: DateTime.utc_now(),
+        dirty_fields: %{}
+      })
+      |> Repo.insert!()
+      |> Repo.preload(:project)
+
+    PushDispatcher.issue_assigned(issue, nil)
+    issue
   end
 
   defp update_issue!(%IssueRecord{} = current, remote, status_id) do
@@ -470,7 +487,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
         sync_status: if(merged.conflict?, do: "conflict", else: "synced")
       }
       # Only move status when the local `state` is not a pending local edit.
-      |> maybe_put_status_id(merged.dirty_fields, status_id)
+      |> maybe_put_status_id(merged.dirty_fields, status_id, current)
       |> Map.merge(merged.attrs)
 
     # Skip the write entirely when the pull changes nothing. The mirror is
@@ -481,15 +498,40 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     if issue_unchanged?(current, desired) do
       current
     else
-      current
-      |> IssueRecord.changeset(Map.put(desired, :last_synced_at, DateTime.utc_now()))
-      |> Repo.update!()
+      previous_assignee = %{
+        assignee_id: current.assignee_id,
+        assignee_remote_id: current.assignee_remote_id
+      }
+
+      updated =
+        current
+        |> IssueRecord.changeset(Map.put(desired, :last_synced_at, DateTime.utc_now()))
+        |> Repo.update!()
+        |> Repo.preload(:project)
+
+      PushDispatcher.issue_assigned(updated, previous_assignee)
+      sync_group_member_statuses!(updated)
+      updated
     end
   end
 
-  defp maybe_put_status_id(attrs, dirty_fields, status_id) do
+  # Group members follow the lead's local column; remote Jira statuses are
+  # independent and must not overwrite a member's mirrored status on pull.
+  defp maybe_put_status_id(attrs, _dirty_fields, _status_id, %IssueRecord{group_lead_id: lead_id})
+       when not is_nil(lead_id),
+       do: attrs
+
+  defp maybe_put_status_id(attrs, dirty_fields, status_id, _current) do
     if Map.has_key?(dirty_fields, "state"), do: attrs, else: Map.put(attrs, :status_id, status_id)
   end
+
+  defp sync_group_member_statuses!(%IssueRecord{group_lead_id: nil, id: lead_id, status_id: status_id}) do
+    IssueRecord
+    |> where([i], i.group_lead_id == ^lead_id and i.status_id != ^status_id)
+    |> Repo.update_all(set: [status_id: status_id, updated_at: DateTime.utc_now()])
+  end
+
+  defp sync_group_member_statuses!(_issue), do: :ok
 
   defp issue_unchanged?(%IssueRecord{} = current, desired) do
     Enum.all?(desired, fn {field, value} -> field_equal?(Map.get(current, field), value) end)
@@ -501,6 +543,49 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   defp existing_issue(project_id, remote_id) do
     IssueRecord
     |> where([i], i.project_id == ^project_id and i.remote_id == ^remote_id)
+    |> Repo.one()
+  end
+
+  defp maybe_upsert_remote_parent_relation!(project_id, %IssueRecord{} = issue, parent_identifier)
+       when is_binary(parent_identifier) and parent_identifier != "" do
+    case existing_issue_by_identifier(project_id, parent_identifier) do
+      %IssueRecord{id: parent_id} when parent_id != issue.id ->
+        attrs = %{
+          source_issue_id: issue.id,
+          target_issue_id: parent_id,
+          type: IssueRelation.subtask_type(),
+          remote_origin: true
+        }
+
+        case existing_relation(issue.id, parent_id, IssueRelation.subtask_type()) do
+          nil -> %IssueRelation{}
+          %IssueRelation{} = relation -> relation
+        end
+        |> IssueRelation.changeset(attrs)
+        |> Repo.insert_or_update!()
+
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp maybe_upsert_remote_parent_relation!(_project_id, _issue, _parent_identifier), do: :ok
+
+  defp existing_issue_by_identifier(project_id, identifier) do
+    IssueRecord
+    |> where([i], i.project_id == ^project_id and i.identifier == ^identifier)
+    |> Repo.one()
+  end
+
+  defp existing_relation(source_issue_id, target_issue_id, type) do
+    IssueRelation
+    |> where(
+      [relation],
+      relation.source_issue_id == ^source_issue_id and relation.target_issue_id == ^target_issue_id and
+        relation.type == ^type
+    )
     |> Repo.one()
   end
 

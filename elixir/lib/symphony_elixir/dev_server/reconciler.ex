@@ -14,6 +14,7 @@ defmodule SymphonyElixir.DevServer.Reconciler do
   require Logger
 
   alias SymphonyElixir.{Config, Repo, Tracker}
+  alias SymphonyElixir.DevServer.LeaseStore
   alias SymphonyElixir.DevServer.Manager
   alias SymphonyElixir.GitHub.Config, as: GitHubConfig
   alias SymphonyElixir.GitHub.PullRequests
@@ -21,6 +22,7 @@ defmodule SymphonyElixir.DevServer.Reconciler do
   alias SymphonyElixir.ProjectConfig
 
   @fallback_poll_interval_ms 30_000
+  @slot_gc_grace_seconds 120
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) when is_list(opts) do
@@ -115,14 +117,101 @@ defmodule SymphonyElixir.DevServer.Reconciler do
   defp run_cycle do
     auto_start_on = configured_auto_start_triggers()
 
+    wait_state_issues = fetch_wait_state_issues()
+
     if known_trigger_requested?(auto_start_on) do
-      wait_state_issues = fetch_wait_state_issues()
       issue_index = issue_index(wait_state_issues)
 
       auto_start_on
       |> reconcile(candidates(auto_start_on, wait_state_issues))
       |> Enum.each(&start_candidate(&1, issue_index))
     end
+
+    gc_preview_slots(wait_state_issues)
+  end
+
+  @doc false
+  @spec slots_to_release([{String.t(), String.t(), DateTime.t()}], MapSet.t(), DateTime.t()) ::
+          [{String.t(), String.t()}]
+  def slots_to_release(leased, alive, now) when is_list(leased) and is_map(alive) do
+    leased
+    |> Enum.filter(fn {project_slug, identifier, inserted_at} ->
+      not MapSet.member?(alive, {project_slug, identifier}) and
+        DateTime.diff(now, inserted_at, :second) >= @slot_gc_grace_seconds
+    end)
+    |> Enum.map(fn {project_slug, identifier, _inserted_at} -> {project_slug, identifier} end)
+  end
+
+  defp gc_preview_slots(wait_state_issues) do
+    case LeaseStore.leased_issue_slots() do
+      [] -> :ok
+      leased -> sweep_leased_slots(leased, wait_state_issues)
+    end
+  rescue
+    exception -> Logger.debug("Dev server preview slot GC skipped reason=#{inspect(exception)}")
+  catch
+    kind, reason ->
+      Logger.debug("Dev server preview slot GC skipped reason=#{inspect({kind, reason})}")
+  end
+
+  defp sweep_leased_slots(leased, wait_state_issues) do
+    slugs_by_id = Map.new(Context.list_projects(), &{&1.id, &1.slug})
+    {orphaned, resolvable} = split_leases_by_project(leased, slugs_by_id)
+
+    # Slots whose project no longer exists are always released.
+    Enum.each(orphaned, fn {project_id, identifier} ->
+      LeaseStore.release_slot(project_id, identifier)
+    end)
+
+    release_stale_slots(resolvable, wait_state_issues)
+  end
+
+  defp split_leases_by_project(leased, slugs_by_id) do
+    {orphaned, resolvable} =
+      Enum.reduce(leased, {[], []}, fn {project_id, identifier, inserted_at}, {orphaned, resolvable} ->
+        case Map.get(slugs_by_id, project_id) do
+          nil -> {[{project_id, identifier} | orphaned], resolvable}
+          slug -> {orphaned, [{slug, identifier, inserted_at, project_id} | resolvable]}
+        end
+      end)
+
+    {Enum.reverse(orphaned), Enum.reverse(resolvable)}
+  end
+
+  defp release_stale_slots(resolvable, wait_state_issues) do
+    alive = alive_issue_keys(wait_state_issues)
+    now = DateTime.utc_now()
+    ids_by_slug_identifier = ids_by_slug_identifier(resolvable)
+
+    resolvable
+    |> Enum.map(fn {slug, identifier, inserted_at, _project_id} ->
+      {slug, identifier, inserted_at}
+    end)
+    |> slots_to_release(alive, now)
+    |> Enum.each(fn {_slug, identifier} = key ->
+      project_id = Map.fetch!(ids_by_slug_identifier, key)
+      LeaseStore.release_slot(project_id, identifier)
+    end)
+  end
+
+  defp ids_by_slug_identifier(resolvable) do
+    Map.new(resolvable, fn {slug, identifier, _inserted_at, project_id} ->
+      {{slug, identifier}, project_id}
+    end)
+  end
+
+  defp alive_issue_keys(wait_state_issues) do
+    from_issues =
+      Enum.flat_map(wait_state_issues, fn issue ->
+        with slug when is_binary(slug) <- project_slug_for(issue),
+             identifier when is_binary(identifier) <- issue_identifier(issue) do
+          [{slug, identifier}]
+        else
+          _missing -> []
+        end
+      end)
+
+    MapSet.union(MapSet.new(from_issues), Manager.running_issue_keys())
   end
 
   defp known_trigger_requested?(auto_start_on) when is_list(auto_start_on) do

@@ -3,7 +3,8 @@ defmodule SymphonyElixir.PromptBuilder do
   Builds agent prompts from issue data.
   """
 
-  alias SymphonyElixir.{ProjectConfig, Repo}
+  alias SymphonyElixir.{ProjectConfig, Repo, Skills}
+  alias SymphonyElixir.DevServer
   alias SymphonyElixir.LocalTracker.Context
 
   @render_opts [strict_filters: true]
@@ -16,13 +17,11 @@ defmodule SymphonyElixir.PromptBuilder do
 
   @spec build_prompt(SymphonyElixir.Issue.t(), keyword()) :: String.t()
   def build_prompt(issue, opts \\ []) do
-    template =
-      issue
-      |> resolve_template()
-      |> parse_template!()
+    config = resolve_config!(issue)
 
     rendered =
-      template
+      config.prompt_template
+      |> parse_template!()
       |> Solid.render!(
         %{
           "attempt" => Keyword.get(opts, :attempt),
@@ -34,9 +33,148 @@ defmodule SymphonyElixir.PromptBuilder do
       |> ensure_utf8()
 
     rendered <>
+      execution_methodology_section() <>
+      workpad_bootstrap_section() <>
       workflow_guidance_section(issue, Keyword.get(opts, :agent_kind)) <>
+      group_members_section(Keyword.get(opts, :members, [])) <>
+      bundle_coordinator_section(Keyword.get(opts, :bundle)) <>
+      child_unit_section(
+        Keyword.get(opts, :bundle_unit),
+        Keyword.get(opts, :parent_identifier),
+        Keyword.get(opts, :shared_contracts, [])
+      ) <>
+      validate_section(config) <>
+      preview_context_section(issue) <>
       discussion_section(issue) <>
       artifacts_section(Keyword.get(opts, :workspace))
+  end
+
+  @doc """
+  Parent coordinator section. When a run carries a parsed execution `bundle`, the
+  parent acts as a coordinator: it executes `workpad_task` units inline and
+  dispatches one child run per `child_run` unit. Returns "" for non-bundle runs.
+  """
+  @spec bundle_coordinator_section(SymphonyElixir.Workpad.ExecutionBundle.t() | nil) :: String.t()
+  def bundle_coordinator_section(%SymphonyElixir.Workpad.ExecutionBundle{units: units} = bundle)
+      when is_list(units) and units != [] do
+    unit_lines =
+      Enum.map_join(units, "\n", fn unit ->
+        deps = if unit.depends_on == [], do: "", else: " — depends on: #{Enum.join(unit.depends_on, ", ")}"
+        consumes = if unit.consumes == [], do: "", else: " — consumes: #{Enum.join(unit.consumes, ", ")}"
+        produces = if unit.produces == [], do: "", else: " — produces: #{Enum.join(unit.produces, ", ")}"
+        repo = if is_binary(unit.repo), do: " [#{unit.repo}]", else: ""
+        "- **#{unit.id}** (#{unit.type})#{repo}#{produces}#{consumes}#{deps}"
+      end)
+
+    contract_lines =
+      case bundle.shared_contracts do
+        [] ->
+          ""
+
+        contracts ->
+          lines =
+            Enum.map_join(contracts, "\n", fn contract ->
+              consumers = if contract.consumers == [], do: "", else: " → #{Enum.join(contract.consumers, ", ")}"
+              "- **#{contract.id}** (#{contract.kind || "contract"}, status: #{contract.status}) owned by #{contract.owner_unit}#{consumers}"
+            end)
+
+          "\n\nShared contracts:\n#{lines}"
+      end
+
+    """
+
+    ## Execution bundle (coordinator)
+
+    You are the **coordinator** for this parent task. The plan below is authoritative — do not re-derive it.
+
+    Units:
+    #{unit_lines}#{contract_lines}
+
+    Rules:
+    - Execute every `workpad_task` unit yourself, inline, in this workspace.
+    - **Do not implement `child_run` units yourself.** Each `child_run` is dispatched as its own run in an isolated worktree, branch, and PR.
+    - A unit that `consumes` a shared contract must wait until that contract is `ready`. Produce the contract (as its owner) before consumers start.
+    - The parent only completes once every `workpad_task` is done AND every `child_run` has reached a terminal state (PR opened or closed).
+    """
+  end
+
+  def bundle_coordinator_section(_bundle), do: ""
+
+  @doc """
+  Child-scoped section for a single `child_run` unit. Scopes the agent to its
+  unit, the shared contracts it touches, and a back-link to the parent.
+  Returns "" when there is no unit context.
+  """
+  @spec child_unit_section(map() | nil, String.t() | nil, [map()]) :: String.t()
+  def child_unit_section(unit, parent_identifier, shared_contracts)
+      when is_map(unit) do
+    repo = if is_binary(unit[:repo]), do: " in `#{unit[:repo]}`", else: ""
+    produces = if (unit[:produces] || []) == [], do: "", else: "\n- You **produce** shared contract(s): #{Enum.join(unit[:produces], ", ")}"
+    consumes = if (unit[:consumes] || []) == [], do: "", else: "\n- You **consume** shared contract(s): #{Enum.join(unit[:consumes], ", ")} (treat them as fixed inputs)"
+
+    parent_line =
+      if is_binary(parent_identifier),
+        do: "\n- Parent task: **#{parent_identifier}** (this run is one unit of its execution bundle).",
+        else: ""
+
+    relevant =
+      Enum.filter(shared_contracts, fn contract ->
+        contract.id in (unit[:produces] || []) or contract.id in (unit[:consumes] || [])
+      end)
+
+    contract_block =
+      case relevant do
+        [] ->
+          ""
+
+        contracts ->
+          lines =
+            Enum.map_join(contracts, "\n", fn contract ->
+              "- **#{contract.id}** (status: #{contract.status}) owned by #{contract[:owner_unit]}"
+            end)
+
+          "\n\nRelevant shared contracts:\n#{lines}"
+      end
+
+    """
+
+    ## Child run scope (unit `#{unit[:id]}`)
+
+    This run delivers a **single unit**#{repo} of a larger parent task. Stay within this unit's scope; open one focused PR for it.#{parent_line}#{produces}#{consumes}#{contract_block}
+    """
+  end
+
+  def child_unit_section(_unit, _parent_identifier, _shared_contracts), do: ""
+
+  @doc false
+  @spec group_members_section([SymphonyElixir.Issue.t()]) :: String.t()
+  def group_members_section([]), do: ""
+
+  def group_members_section(members) when is_list(members) do
+    items =
+      Enum.map_join(members, "\n", fn %SymphonyElixir.Issue{} = member ->
+        goal =
+          if is_binary(member.agent_goal) and String.trim(member.agent_goal) != "",
+            do: " — goal: #{String.trim(member.agent_goal)}",
+            else: ""
+
+        desc =
+          if is_binary(member.description) and String.trim(member.description) != "",
+            do: " — #{String.trim(member.description)}",
+            else: ""
+
+        "- **#{member.identifier}: #{member.title}**#{desc}#{goal}"
+      end)
+
+    """
+
+    ## Grouped tasks (Symphony)
+
+    This run covers a **group** of issues. Complete ALL of them in this single workspace and branch, then open ONE pull request. In the PR body include a `Symphony-Issue: <identifier>` marker line for the lead AND for every member task below.
+
+    Member tasks:
+    #{items}
+    """
   end
 
   # Codex receives the long-running objective as a native goal (set on the
@@ -63,15 +201,231 @@ defmodule SymphonyElixir.PromptBuilder do
 
   defp workflow_guidance_section(_issue, _agent_kind), do: ""
 
-  defp resolve_template(%SymphonyElixir.Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
+  # The workpad must exist before any code — and its scope must come from the
+  # context Symphony already injected (authoring spec/plan first, then the issue
+  # description), never from a GitHub lookup (which previously fetched a
+  # same-numbered issue in the wrong repo and left the agent without scope). The
+  # self-correction note stops the "no scope, no-op" spinning we saw on GAM-4018.
+  # Runs on the first turn only (build_prompt is turn 1).
+  defp workpad_bootstrap_section do
+    """
+
+    ## Workpad first (Symphony)
+
+    Before writing any code, create the single `## Codex Workpad` comment for this
+    issue (follow the `workpad` skill), then derive its `### Plan` and
+    `### Acceptance criteria` from the scope Symphony already gave you here:
+
+    - When authoring artifacts (a spec or plan under `docs/superpowers/`) appear
+      below, derive the Plan from those — they are the source of truth for scope.
+    - Otherwise derive the Plan and Acceptance criteria from the issue title and
+      description above.
+    - Do not fetch the issue from GitHub to discover scope, and do not look up a
+      same-numbered issue in another repository — the canonical scope is embedded above.
+    - Use the issue-bound comment tools (`add_comment` / `list_comments` /
+      `update_comment`); keep exactly one workpad and edit it in place.
+
+    Self-correct instead of stalling: if you conclude there is "no scope", "no
+    issue description", or "no plan artifact", you are looking in the wrong place
+    (such as a GitHub lookup), not facing missing scope. Re-read the spec/plan and
+    issue description in this prompt and build the Plan from them — never burn turns
+    spinning on missing scope or record a no-op for it.
+    """
+  end
+
+  # Orchestrator dispatches are execution runs — not issue authoring. Inject the
+  # vendored subagent-driven-development skill (same pattern as complex-mode
+  # authoring in Assistant.CodexSession) and tell the agent to skip design-first
+  # skills that are already satisfied by injected spec/plan artifacts.
+  @doc false
+  @spec execution_methodology_section() :: String.t()
+  def execution_methodology_section do
+    case Skills.load(["subagent-driven-development"]) do
+      "" ->
+        ""
+
+      skill_body ->
+        """
+
+        ## Symphony execution mode (orchestrator dispatch)
+
+        This is an **execution** run dispatched by Symphony — not issue authoring.
+        Design/spec work is already done (see authoring artifacts below when present).
+
+        - Do **NOT** use `brainstorming`, `writing-plans`, or `using-superpowers`.
+        - Do **NOT** restart design-first discovery or ask for spec approval.
+        - Follow the vendored execution methodology below exactly.
+        - When `docs/superpowers/plans/` artifacts appear below, treat them as the implementation plan.
+
+        #{skill_body}
+        """
+    end
+  end
+
+  # Pre-fills the VALIDATE/evidence guidance from the project's own `evidence:`
+  # config (repos, scoped unit/e2e commands, UI paths) so every dispatched prompt
+  # carries project-specific validation instructions instead of a hand-copied,
+  # tool-specific template. Renders nothing when the project declares no evidence
+  # repos.
+  @doc false
+  @spec validate_section(ProjectConfig.t()) :: String.t()
+  def validate_section(%ProjectConfig{evidence: evidence}) do
+    case evidence_repo_lines(evidence) do
+      [] ->
+        ""
+
+      repo_lines ->
+        """
+
+        ## VALIDATE — evidence gate (follow the `evidence` skill)
+
+        Before handoff, prove what you changed and write `.symphony/evidence/manifest.json` at the **workspace root** (not inside the git clone). Scope checks to the diff (`git diff --name-only origin/<integration-branch>...HEAD` per repo) — CI owns full regression.
+
+        Per-repo commands (from this project's `evidence` config):
+        #{Enum.join(repo_lines, "\n")}
+
+        When a UI repo's paths change, run its **configured** e2e command above with screenshot + video — never bare `npx playwright test` on ad-hoc ports. Call `manage_preview` (`status`/`start`) first. Preview is best-effort and non-blocking: if it won't reach `ready`, still write the e2e tests, run the unit suite, record the blocker in your workpad, and proceed (CI can run UI e2e) — do not stall on a stuck preview.
+
+        Manifest: one passing `unit` run per changed repo; for a changed UI repo, a passing `e2e` run with at least 1 screenshot and 1 video. Record only commands you ran this session, then end the turn — do not move the card.
+        """
+    end
+  end
+
+  def validate_section(_config), do: ""
+
+  defp evidence_repo_lines(%{repos: repos}) when is_map(repos) and map_size(repos) > 0 do
+    repos
+    |> Enum.sort_by(fn {name, _cfg} -> name end)
+    |> Enum.map(&evidence_repo_line/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp evidence_repo_lines(_evidence), do: []
+
+  defp evidence_repo_line({name, cfg}) when is_map(cfg) do
+    parts =
+      [
+        evidence_command_part("unit", Map.get(cfg, :unit_command)),
+        evidence_command_part("e2e", get_in(cfg, [:e2e, :command])),
+        evidence_list_part("UI paths", Map.get(cfg, :ui_paths)),
+        evidence_list_part("impacts", Map.get(cfg, :impacts))
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    case parts do
+      [] -> nil
+      parts -> "- `#{name}`: " <> Enum.join(parts, " · ")
+    end
+  end
+
+  defp evidence_repo_line(_entry), do: nil
+
+  defp evidence_command_part(label, command) when is_binary(command) and command != "",
+    do: "#{label} `#{command}`"
+
+  defp evidence_command_part(_label, _command), do: nil
+
+  defp evidence_list_part(label, values) when is_list(values) and values != [],
+    do: "#{label} `#{Enum.join(values, ", ")}`"
+
+  defp evidence_list_part(_label, _values), do: nil
+
+  @doc false
+  @spec preview_context_section(SymphonyElixir.Issue.t()) :: String.t()
+  def preview_context_section(%SymphonyElixir.Issue{project_slug: slug, identifier: id})
+      when is_binary(slug) and slug != "" and is_binary(id) and id != "" do
+    case DevServer.issue_targets(slug, id) do
+      {:ok, view} ->
+        format_preview_context(slug, id, view)
+
+      {:error, _reason} ->
+        ""
+    end
+  end
+
+  def preview_context_section(_issue), do: ""
+
+  defp format_preview_context(project_slug, identifier, view) when is_map(view) do
+    available = Map.get(view, :available, false)
+    reason = Map.get(view, :reason)
+    servers = Map.get(view, :servers, [])
+
+    server_lines =
+      servers
+      |> Enum.map(&preview_server_line/1)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+
+    availability =
+      if available do
+        "Preview is **available** for this issue."
+      else
+        "Preview is **not available**#{if reason, do: " (#{reason})", else: ""}."
+      end
+
+    """
+    ## Issue preview (Symphony)
+
+    #{availability}
+
+    Use the **`manage_preview`** tool (`action`: `status` | `start` | `restart`) before UI e2e evidence.
+    Do **not** run bare `npx playwright test` on random ports — use the project's configured
+    e2e command (see the `evidence` config / project workflow), which reuses the preview ports
+    below and the project's isolated e2e database.
+
+    Preview is **best-effort**: `manage_preview start` returns quickly even while a server is still
+    booting or after it crashed (read the result's `status`/`next_steps`). If preview does not reach
+    `ready`, do **not** block the run on it — keep writing the tests, run the unit suite, record the
+    preview blocker in your `## Codex Workpad`, and either poll `manage_preview status`/`restart` later
+    or proceed without UI e2e (CI can run it). Never retry a failing preview in a tight loop.
+
+    #{if server_lines == "", do: "_No preview servers registered yet — call `manage_preview` with `start`._", else: server_lines}
+
+    Project: `#{project_slug}` · Issue: `#{identifier}`
+    """
+  end
+
+  defp preview_server_line(server) when is_map(server) do
+    slug = Map.get(server, :slug) || Map.get(server, "slug") || "?"
+    status = Map.get(server, :status) || Map.get(server, "status") || "unknown"
+    port = Map.get(server, :port) || Map.get(server, "port")
+    primary = Map.get(server, :primary) || Map.get(server, "primary")
+    local_url = local_preview_url(server)
+
+    primary_tag = if primary, do: " (primary UI)", else: ""
+
+    "- `#{slug}`#{primary_tag}: status=#{status}, port=#{inspect(port)}, local=#{local_url}"
+  end
+
+  defp preview_server_line(_), do: ""
+
+  defp local_preview_url(server) when is_map(server) do
+    port = Map.get(server, :port) || Map.get(server, "port")
+    slug = to_string(Map.get(server, :slug) || Map.get(server, "slug") || "")
+
+    cond do
+      not is_integer(port) or port <= 0 ->
+        "n/a"
+
+      String.contains?(slug, "admin") ->
+        "http://127.0.0.1:#{port}/"
+
+      true ->
+        "http://127.0.0.1:#{port}/api/health"
+    end
+  end
+
+  defp local_preview_url(_), do: "n/a"
+
+  defp resolve_config!(%SymphonyElixir.Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
     case Context.get_project(slug) do
       {:ok, project} ->
         project
         |> Repo.preload(:setup)
         |> ProjectConfig.resolve_runnable()
         |> case do
-          {:ok, %ProjectConfig{prompt_template: prompt}} when is_binary(prompt) ->
-            prompt
+          {:ok, %ProjectConfig{} = config} ->
+            config
 
           {:skip, reason} ->
             raise RuntimeError, "prompt_unresolved: project=#{slug} reason=#{reason}"
@@ -82,7 +436,7 @@ defmodule SymphonyElixir.PromptBuilder do
     end
   end
 
-  defp resolve_template(%SymphonyElixir.Issue{} = issue) do
+  defp resolve_config!(%SymphonyElixir.Issue{} = issue) do
     raise RuntimeError, "prompt_unresolved: issue=#{inspect(issue.id)} reason=no project_slug"
   end
 

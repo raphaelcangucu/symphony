@@ -1,5 +1,6 @@
 import { ChevronDown, Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -37,22 +38,23 @@ export function NewIssueMenu({
   variant = "button",
   className,
 }: NewIssueMenuProps) {
+  const { t } = useTranslation();
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
   const assistantPath = newIssueAssistantPath(projectSlug);
-  const addLabel = status ? `Add issue to ${status}` : "Add issue";
+  const addLabel = status ? t("issue.create.addToStatus", { status }) : t("issue.create.add");
 
   const menuItems = (
     <DropdownMenuContent align="end" className="w-56">
       <DropdownMenuItem asChild>
         <Link to={assistantPath}>
           <Sparkles className="mr-2 h-4 w-4" />
-          New issue with assistant
+          {t("issue.create.withAssistant")}
         </Link>
       </DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setQuickCreateOpen(true)}>
         <Plus className="mr-2 h-4 w-4" />
-        Quick create
+        {t("issue.create.quickCreate")}
       </DropdownMenuItem>
     </DropdownMenuContent>
   );
@@ -76,7 +78,7 @@ export function NewIssueMenu({
             <button
               type="button"
               aria-label={addLabel}
-              title="New issue"
+              title={t("issue.create.trigger")}
               className={cn(
                 "flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                 className,
@@ -106,7 +108,7 @@ export function NewIssueMenu({
               )}
             >
               <Plus className="h-4 w-4" />
-              Add issue
+              {t("issue.create.add")}
             </button>
           </DropdownMenuTrigger>
           {menuItems}
@@ -122,7 +124,7 @@ export function NewIssueMenu({
         <Button size={size} className="rounded-r-none border-r border-primary-foreground/20" asChild>
           <Link to={assistantPath}>
             <Plus className="h-4 w-4" />
-            New issue
+            {t("issue.create.trigger")}
           </Link>
         </Button>
         <DropdownMenu>
@@ -130,7 +132,7 @@ export function NewIssueMenu({
             <Button
               type="button"
               size={size}
-              aria-label="New issue options"
+              aria-label={t("issue.create.optionsAria")}
               className="rounded-l-none px-2"
             >
               <ChevronDown className="h-4 w-4" />
@@ -139,7 +141,7 @@ export function NewIssueMenu({
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onSelect={() => setQuickCreateOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Quick create
+              {t("issue.create.quickCreate")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

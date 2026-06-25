@@ -47,6 +47,8 @@ defmodule SymphonyElixir.LocalTracker.IssueRecord do
     has_many(:pull_requests, SymphonyElixir.Tracker.Sync.PullRequestRecord, foreign_key: :issue_id)
     has_many(:source_relations, IssueRelation, foreign_key: :source_issue_id)
     has_many(:target_relations, IssueRelation, foreign_key: :target_issue_id)
+    belongs_to(:group_lead, __MODULE__, foreign_key: :group_lead_id)
+    has_many(:group_members, __MODULE__, foreign_key: :group_lead_id)
     many_to_many(:labels, Label, join_through: IssueLabel, join_keys: [issue_id: :id, label_id: :id])
 
     timestamps(type: :utc_datetime_usec)
@@ -81,7 +83,8 @@ defmodule SymphonyElixir.LocalTracker.IssueRecord do
       :last_synced_at,
       :dirty_fields,
       :last_sync_error,
-      :archived_at
+      :archived_at,
+      :group_lead_id
     ])
     |> validate_required([:project_id, :status_id, :identifier, :title, :position])
     |> validate_number(:priority, greater_than_or_equal_to: 0, less_than_or_equal_to: 4)

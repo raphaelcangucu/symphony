@@ -11,6 +11,7 @@ defmodule SymphonyElixir.PushNotifications.Subscription do
     field(:p256dh, :string)
     field(:auth, :string)
     field(:user_agent, :string)
+    field(:identity_keys, {:array, :string}, default: [])
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -18,7 +19,7 @@ defmodule SymphonyElixir.PushNotifications.Subscription do
   @spec changeset(t() | Ecto.Changeset.t(), map()) :: Ecto.Changeset.t()
   def changeset(subscription, attrs) do
     subscription
-    |> cast(attrs, [:endpoint, :p256dh, :auth, :user_agent])
+    |> cast(attrs, [:endpoint, :p256dh, :auth, :user_agent, :identity_keys])
     |> validate_required([:endpoint, :p256dh, :auth])
     |> unique_constraint(:endpoint)
   end

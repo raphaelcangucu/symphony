@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
+import { initTestI18n } from "@/i18n/testUtils";
 import {
   assessEvidenceAttention,
   evidenceAttentionInstructions,
@@ -22,6 +23,10 @@ function record(overrides: Partial<EvidenceRecord> = {}): EvidenceRecord {
 }
 
 describe("evidenceStatus", () => {
+  beforeEach(async () => {
+    await initTestI18n("pt-BR");
+  });
+
   it("marks missing evidence", () => {
     const attention = assessEvidenceAttention([]);
     expect(attention.kind).toBe("missing");
@@ -49,6 +54,32 @@ describe("evidenceStatus", () => {
     expect(evidenceNeedsAttention([record({ status: "failed", runs: [] })])).toBe(true);
     expect(evidenceAttentionSummary(attention)).toMatch(/Docker is not running/);
     expect(evidenceAttentionInstructions(attention)).toMatch(/Docker is not running/);
+  });
+
+  it("ignores a supplementary failed full-suite unit run when targeted unit passed", () => {
+    const attention = assessEvidenceAttention([
+      record({
+        status: "passed",
+        runs: [
+          {
+            kind: "unit",
+            repo: "frontend",
+            command: "CI=1 npm run test:unit",
+            status: "failed",
+            summary: { total: 580, passed: 573, failed: 1 },
+          },
+          {
+            kind: "unit",
+            repo: "frontend",
+            command: "CI=1 npm run test:unit -- tests/pages/foo.test.tsx",
+            status: "passed",
+            summary: { total: 5, passed: 5, failed: 0 },
+          },
+        ],
+      }),
+    ]);
+
+    expect(attention.kind).toBe("none");
   });
 
   it("treats passing record as no attention needed", () => {

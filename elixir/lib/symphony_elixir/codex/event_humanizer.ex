@@ -7,15 +7,23 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
 
   import SymphonyElixir.EventHumanizerHelpers
 
+  alias SymphonyElixir.EventHumanizer.Text, as: T
+
   @impl true
   def humanize_method("thread/started", payload) do
     thread_id = map_path(payload, ["params", "thread", "id"]) || map_path(payload, [:params, :thread, :id])
-    if is_binary(thread_id), do: "thread started (#{thread_id})", else: "thread started"
+
+    if is_binary(thread_id),
+      do: T.t("thread started (%{id})", id: thread_id),
+      else: T.t("thread started")
   end
 
   def humanize_method("turn/started", payload) do
     turn_id = map_path(payload, ["params", "turn", "id"]) || map_path(payload, [:params, :turn, :id])
-    if is_binary(turn_id), do: "turn started (#{turn_id})", else: "turn started"
+
+    if is_binary(turn_id),
+      do: T.t("turn started (%{id})", id: turn_id),
+      else: T.t("turn started")
   end
 
   def humanize_method("turn/completed", payload) do
@@ -37,7 +45,7 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
         usage_text -> " (#{usage_text})"
       end
 
-    "turn completed (#{status})#{usage_suffix}"
+    T.t("turn completed (%{status})%{usage_suffix}", status: status, usage_suffix: usage_suffix)
   end
 
   def humanize_method("turn/failed", payload) do
@@ -45,10 +53,12 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
       map_path(payload, ["params", "error", "message"]) ||
         map_path(payload, [:params, :error, :message])
 
-    if is_binary(error_message), do: "turn failed: #{error_message}", else: "turn failed"
+    if is_binary(error_message),
+      do: T.t("turn failed: %{message}", message: error_message),
+      else: T.t("turn failed")
   end
 
-  def humanize_method("turn/cancelled", _payload), do: "turn cancelled"
+  def humanize_method("turn/cancelled", _payload), do: T.t("turn cancelled")
 
   def humanize_method("turn/diff/updated", payload) do
     diff =
@@ -58,9 +68,9 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
 
     if is_binary(diff) and diff != "" do
       line_count = diff |> String.split("\n", trim: true) |> length()
-      "turn diff updated (#{line_count} lines)"
+      T.t("turn diff updated (%{count} lines)", count: line_count)
     else
-      "turn diff updated"
+      T.t("turn diff updated")
     end
   end
 
@@ -74,7 +84,9 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
         map_path(payload, [:params, :items]) ||
         []
 
-    if is_list(plan_entries), do: "plan updated (#{length(plan_entries)} steps)", else: "plan updated"
+    if is_list(plan_entries),
+      do: T.t("plan updated (%{count} steps)", count: length(plan_entries)),
+      else: T.t("plan updated")
   end
 
   def humanize_method("thread/tokenUsage/updated", payload) do
@@ -84,8 +96,8 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
         map_value(payload, ["usage", :usage])
 
     case format_usage_counts(usage) do
-      nil -> "thread token usage updated"
-      usage_text -> "thread token usage updated (#{usage_text})"
+      nil -> T.t("thread token usage updated")
+      usage_text -> T.t("thread token usage updated (%{usage})", usage: usage_text)
     end
   end
 
@@ -93,38 +105,41 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
   def humanize_method("item/completed", payload), do: humanize_item_lifecycle("completed", payload)
 
   def humanize_method("item/agentMessage/delta", payload),
-    do: humanize_streaming_event("agent message streaming", payload)
+    do: humanize_streaming_event(T.t("agent message streaming"), payload)
 
   def humanize_method("item/plan/delta", payload),
-    do: humanize_streaming_event("plan streaming", payload)
+    do: humanize_streaming_event(T.t("plan streaming"), payload)
 
   def humanize_method("item/reasoning/summaryTextDelta", payload),
-    do: humanize_streaming_event("reasoning summary streaming", payload)
+    do: humanize_streaming_event(T.t("reasoning summary streaming"), payload)
 
   def humanize_method("item/reasoning/summaryPartAdded", payload),
-    do: humanize_streaming_event("reasoning summary section added", payload)
+    do: humanize_streaming_event(T.t("reasoning summary section added"), payload)
 
   def humanize_method("item/reasoning/textDelta", payload),
-    do: humanize_streaming_event("reasoning text streaming", payload)
+    do: humanize_streaming_event(T.t("reasoning text streaming"), payload)
 
   def humanize_method("item/commandExecution/outputDelta", payload),
-    do: humanize_streaming_event("command output streaming", payload)
+    do: humanize_streaming_event(T.t("command output streaming"), payload)
 
   def humanize_method("item/fileChange/outputDelta", payload),
-    do: humanize_streaming_event("file change output streaming", payload)
+    do: humanize_streaming_event(T.t("file change output streaming"), payload)
 
   def humanize_method("item/commandExecution/requestApproval", payload) do
     command = extract_command(payload)
-    if is_binary(command), do: "command approval requested (#{command})", else: "command approval requested"
+
+    if is_binary(command),
+      do: T.t("command approval requested (%{command})", command: command),
+      else: T.t("command approval requested")
   end
 
   def humanize_method("item/fileChange/requestApproval", payload) do
     change_count = map_path(payload, ["params", "fileChangeCount"]) || map_path(payload, ["params", "changeCount"])
 
     if is_integer(change_count) and change_count > 0 do
-      "file change approval requested (#{change_count} files)"
+      T.t("file change approval requested (%{count} files)", count: change_count)
     else
-      "file change approval requested"
+      T.t("file change approval requested")
     end
   end
 
@@ -136,9 +151,9 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
         map_path(payload, [:params, :prompt])
 
     if is_binary(question) and String.trim(question) != "" do
-      "tool requires user input: #{inline_text(question)}"
+      T.t("tool requires user input: %{question}", question: inline_text(question))
     else
-      "tool requires user input"
+      T.t("tool requires user input")
     end
   end
 
@@ -149,9 +164,9 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
     auth_mode =
       map_path(payload, ["params", "authMode"]) ||
         map_path(payload, [:params, :authMode]) ||
-        "unknown"
+        T.t("unknown")
 
-    "account updated (auth #{auth_mode})"
+    T.t("account updated (auth %{mode})", mode: auth_mode)
   end
 
   def humanize_method("account/rateLimits/updated", payload) do
@@ -159,18 +174,19 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
       map_path(payload, ["params", "rateLimits"]) ||
         map_path(payload, [:params, :rateLimits])
 
-    "rate limits updated: #{format_rate_limits_summary(rate_limits)}"
+    T.t("rate limits updated: %{summary}", summary: format_rate_limits_summary(rate_limits))
   end
 
-  def humanize_method("account/chatgptAuthTokens/refresh", _payload), do: "account auth token refresh requested"
+  def humanize_method("account/chatgptAuthTokens/refresh", _payload),
+    do: T.t("account auth token refresh requested")
 
   def humanize_method("item/tool/call", payload) do
     tool = dynamic_tool_name(payload)
 
     if is_binary(tool) and String.trim(tool) != "" do
-      "dynamic tool call requested (#{tool})"
+      T.t("dynamic tool call requested (%{tool})", tool: tool)
     else
-      "dynamic tool call requested"
+      T.t("dynamic tool call requested")
     end
   end
 
@@ -183,10 +199,10 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
       map_path(payload, ["params", "msg", "type"]) ||
         map_path(payload, [:params, :msg, :type])
 
-    if is_binary(msg_type), do: "#{method} (#{msg_type})", else: method
+    if is_binary(msg_type),
+      do: T.t("%{method} (%{msg_type})", method: method, msg_type: msg_type),
+      else: method
   end
-
-  # -- Private helpers --------------------------------------------------------
 
   defp humanize_item_lifecycle(state, payload) do
     item =
@@ -203,9 +219,18 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
       |> append_if_present(short_id(item_id))
       |> append_if_present(humanize_status(item_status))
 
-    detail_suffix = if details == [], do: "", else: " (#{Enum.join(details, ", ")})"
-    "item #{state}: #{item_type}#{detail_suffix}"
+    detail_suffix =
+      if details == [],
+        do: "",
+        else: T.t(" (%{details})", details: Enum.join(details, ", "))
+
+    state_label = localize_lifecycle_state(state)
+    T.t("item %{state}: %{type}%{suffix}", state: state_label, type: item_type, suffix: detail_suffix)
   end
+
+  defp localize_lifecycle_state("started"), do: T.t("started")
+  defp localize_lifecycle_state("completed"), do: T.t("completed")
+  defp localize_lifecycle_state(other), do: other
 
   defp humanize_streaming_event(label, payload) do
     case extract_delta_preview(payload) do
@@ -316,9 +341,9 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
 
     parts =
       []
-      |> append_usage_part("in", input)
-      |> append_usage_part("out", output)
-      |> append_usage_part("total", total)
+      |> append_usage_part(T.t("in"), input)
+      |> append_usage_part(T.t("out"), output)
+      |> append_usage_part(T.t("total"), total)
 
     case parts do
       [] -> nil
@@ -331,7 +356,7 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
   defp append_usage_part(parts, _label, value) when not is_integer(value), do: parts
   defp append_usage_part(parts, label, value), do: parts ++ ["#{label} #{format_count(value)}"]
 
-  defp format_rate_limits_summary(nil), do: "n/a"
+  defp format_rate_limits_summary(nil), do: T.t("n/a")
 
   defp format_rate_limits_summary(rate_limits) when is_map(rate_limits) do
     primary = map_value(rate_limits, ["primary", :primary])
@@ -340,23 +365,35 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
     secondary_text = format_rate_limit_bucket(secondary)
 
     cond do
-      primary_text != nil and secondary_text != nil -> "primary #{primary_text}; secondary #{secondary_text}"
-      primary_text != nil -> "primary #{primary_text}"
-      secondary_text != nil -> "secondary #{secondary_text}"
-      true -> "n/a"
+      primary_text != nil and secondary_text != nil ->
+        T.t("primary %{primary}; secondary %{secondary}", primary: primary_text, secondary: secondary_text)
+
+      primary_text != nil ->
+        T.t("primary %{primary}", primary: primary_text)
+
+      secondary_text != nil ->
+        T.t("secondary %{secondary}", secondary: secondary_text)
+
+      true ->
+        T.t("n/a")
     end
   end
 
-  defp format_rate_limits_summary(_rate_limits), do: "n/a"
+  defp format_rate_limits_summary(_rate_limits), do: T.t("n/a")
 
   defp format_rate_limit_bucket(bucket) when is_map(bucket) do
     used_percent = map_value(bucket, ["usedPercent", :usedPercent])
     window_mins = map_value(bucket, ["windowDurationMins", :windowDurationMins])
 
     cond do
-      is_number(used_percent) and is_integer(window_mins) -> "#{used_percent}% / #{window_mins}m"
-      is_number(used_percent) -> "#{used_percent}% used"
-      true -> nil
+      is_number(used_percent) and is_integer(window_mins) ->
+        T.t("%{percent}% / %{mins}m", percent: used_percent, mins: window_mins)
+
+      is_number(used_percent) ->
+        T.t("%{percent}% used", percent: used_percent)
+
+      true ->
+        nil
     end
   end
 
@@ -414,8 +451,6 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
     ]
   end
 
-  # -- Codex wrapper events (codex/event/*) -----------------------------------
-
   defp humanize_wrapper_event("mcp_startup_update", payload) do
     server =
       map_path(payload, ["params", "msg", "server"]) ||
@@ -423,57 +458,57 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
 
     state =
       map_path(payload, ["params", "msg", "status", "state"]) ||
-        map_path(payload, [:params, :msg, :status, :state]) || "updated"
+        map_path(payload, [:params, :msg, :status, :state]) || T.t("updated")
 
-    "mcp startup: #{server} #{state}"
+    T.t("mcp startup: %{server} %{state}", server: server, state: state)
   end
 
-  defp humanize_wrapper_event("mcp_startup_complete", _payload), do: "mcp startup complete"
-  defp humanize_wrapper_event("task_started", _payload), do: "task started"
-  defp humanize_wrapper_event("user_message", _payload), do: "user message received"
+  defp humanize_wrapper_event("mcp_startup_complete", _payload), do: T.t("mcp startup complete")
+  defp humanize_wrapper_event("task_started", _payload), do: T.t("task started")
+  defp humanize_wrapper_event("user_message", _payload), do: T.t("user message received")
 
   defp humanize_wrapper_event("item_started", payload) do
     case wrapper_payload_type(payload) do
       "token_count" -> humanize_wrapper_event("token_count", payload)
-      type when is_binary(type) -> "item started (#{humanize_item_type(type)})"
-      _ -> "item started"
+      type when is_binary(type) -> T.t("item started (%{type})", type: humanize_item_type(type))
+      _ -> T.t("item started")
     end
   end
 
   defp humanize_wrapper_event("item_completed", payload) do
     case wrapper_payload_type(payload) do
       "token_count" -> humanize_wrapper_event("token_count", payload)
-      type when is_binary(type) -> "item completed (#{humanize_item_type(type)})"
-      _ -> "item completed"
+      type when is_binary(type) -> T.t("item completed (%{type})", type: humanize_item_type(type))
+      _ -> T.t("item completed")
     end
   end
 
   defp humanize_wrapper_event("agent_message_delta", payload),
-    do: humanize_streaming_event("agent message streaming", payload)
+    do: humanize_streaming_event(T.t("agent message streaming"), payload)
 
   defp humanize_wrapper_event("agent_message_content_delta", payload),
-    do: humanize_streaming_event("agent message content streaming", payload)
+    do: humanize_streaming_event(T.t("agent message content streaming"), payload)
 
   defp humanize_wrapper_event("agent_reasoning_delta", payload),
-    do: humanize_streaming_event("reasoning streaming", payload)
+    do: humanize_streaming_event(T.t("reasoning streaming"), payload)
 
   defp humanize_wrapper_event("reasoning_content_delta", payload),
-    do: humanize_streaming_event("reasoning content streaming", payload)
+    do: humanize_streaming_event(T.t("reasoning content streaming"), payload)
 
-  defp humanize_wrapper_event("agent_reasoning_section_break", _payload), do: "reasoning section break"
+  defp humanize_wrapper_event("agent_reasoning_section_break", _payload), do: T.t("reasoning section break")
 
   defp humanize_wrapper_event("agent_reasoning", payload) do
     value = extract_first_path(payload, reasoning_focus_paths())
 
     if is_binary(value) do
       trimmed = String.trim(value)
-      if trimmed == "", do: "reasoning update", else: "reasoning update: #{inline_text(trimmed)}"
+      if trimmed == "", do: T.t("reasoning update"), else: T.t("reasoning update: %{text}", text: inline_text(trimmed))
     else
-      "reasoning update"
+      T.t("reasoning update")
     end
   end
 
-  defp humanize_wrapper_event("turn_diff", _payload), do: "turn diff updated"
+  defp humanize_wrapper_event("turn_diff", _payload), do: T.t("turn diff updated")
 
   defp humanize_wrapper_event("exec_command_begin", payload) do
     command =
@@ -483,7 +518,7 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
         map_path(payload, [:params, :msg, :parsed_cmd])
 
     command = normalize_command(command)
-    if is_binary(command), do: command, else: "command started"
+    if is_binary(command), do: command, else: T.t("command started")
   end
 
   defp humanize_wrapper_event("exec_command_end", payload) do
@@ -493,19 +528,21 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
         map_path(payload, ["params", "msg", "exitCode"]) ||
         map_path(payload, [:params, :msg, :exitCode])
 
-    if is_integer(exit_code), do: "command completed (exit #{exit_code})", else: "command completed"
+    if is_integer(exit_code),
+      do: T.t("command completed (exit %{code})", code: exit_code),
+      else: T.t("command completed")
   end
 
-  defp humanize_wrapper_event("exec_command_output_delta", _payload), do: "command output streaming"
-  defp humanize_wrapper_event("mcp_tool_call_begin", _payload), do: "mcp tool call started"
-  defp humanize_wrapper_event("mcp_tool_call_end", _payload), do: "mcp tool call completed"
+  defp humanize_wrapper_event("exec_command_output_delta", _payload), do: T.t("command output streaming")
+  defp humanize_wrapper_event("mcp_tool_call_begin", _payload), do: T.t("mcp tool call started")
+  defp humanize_wrapper_event("mcp_tool_call_end", _payload), do: T.t("mcp tool call completed")
 
   defp humanize_wrapper_event("token_count", payload) do
     usage = extract_first_path(payload, token_usage_paths())
 
     case format_usage_counts(usage) do
-      nil -> "token count update"
-      usage_text -> "token count update (#{usage_text})"
+      nil -> T.t("token count update")
+      usage_text -> T.t("token count update (%{usage})", usage: usage_text)
     end
   end
 
@@ -514,7 +551,9 @@ defmodule SymphonyElixir.Codex.EventHumanizer do
       map_path(payload, ["params", "msg", "type"]) ||
         map_path(payload, [:params, :msg, :type])
 
-    if is_binary(msg_type), do: "#{other} (#{msg_type})", else: other
+    if is_binary(msg_type),
+      do: T.t("%{event} (%{msg_type})", event: other, msg_type: msg_type),
+      else: other
   end
 
   defp wrapper_payload_type(payload) do

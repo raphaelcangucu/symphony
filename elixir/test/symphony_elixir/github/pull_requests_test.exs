@@ -41,6 +41,7 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
         "title" => "Fix locale bug",
         "url" => "https://github.com/acme/app/pull/503",
         "state" => "OPEN",
+        "mergeable" => "CONFLICTING",
         "isDraft" => false,
         "merged" => false,
         "mergedAt" => nil,
@@ -135,6 +136,7 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
       assert result.head_ref == "mac-1-fix-locale"
       assert result.base_ref == "main"
       assert result.author == "codex-bot"
+      assert result.mergeable == "CONFLICTING"
       assert result.checks_state == "FAILURE"
 
       assert [%{name: "CI", jobs: jobs, url: "https://github.com/acme/app/actions/runs/100"}] =
@@ -153,6 +155,13 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
 
       assert PullRequests.parse_pr_node(pr_node(%{"isDraft" => true, "state" => "OPEN"})).state ==
                "draft"
+    end
+
+    test "passes through mergeable, defaulting to nil when absent" do
+      assert PullRequests.parse_pr_node(pr_node(%{"mergeable" => "MERGEABLE"})).mergeable ==
+               "MERGEABLE"
+
+      assert PullRequests.parse_pr_node(%{"number" => 7}).mergeable == nil
     end
 
     test "groups orphan check runs under Checks" do
@@ -501,6 +510,21 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
     test "rejects github projects without repo" do
       project = %Project{tracker_kind: "github", tracker_config: %{}}
       assert {:error, :missing_github_repo} = PullRequests.resolve_repo(project)
+    end
+  end
+
+  describe "all_merged?/1" do
+    test "returns false for an empty list" do
+      refute PullRequests.all_merged?([])
+    end
+
+    test "returns true only when every PR is merged" do
+      merged = %{state: "merged", merged: true}
+      open = %{state: "open", merged: false}
+
+      assert PullRequests.all_merged?([merged])
+      refute PullRequests.all_merged?([merged, open])
+      refute PullRequests.all_merged?([open])
     end
   end
 

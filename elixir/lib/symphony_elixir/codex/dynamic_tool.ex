@@ -5,8 +5,12 @@ defmodule SymphonyElixir.Codex.DynamicTool do
 
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.Issue
+  alias SymphonyElixir.Assistant.{EvidenceTools, GoalTools, HandoffTools, DevEnvTools, PreviewTools, PullRequestTools}
   alias SymphonyElixir.Linear.Client, as: LinearClient
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.AgentHandoffGate
+  alias SymphonyElixir.ProjectConfig
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueAdapter
 
   @linear_graphql_tool "linear_graphql"
@@ -15,6 +19,12 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @add_comment_tool "add_comment"
   @list_comments_tool "list_comments"
   @update_comment_tool "update_comment"
+  @check_handoff_gate_tool "check_handoff_gate"
+  @get_evidence_status_tool "get_evidence_status"
+  @manage_preview_tool "manage_preview"
+  @manage_dev_env_tool "manage_dev_env"
+  @link_pull_request_tool "link_pull_request"
+  @manage_codex_goal_tool "manage_codex_goal"
 
   @graphql_input_schema %{
     "type" => "object",
@@ -56,7 +66,9 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @set_issue_status_description """
   Move the issue you are currently working on to a workflow status on Symphony's local-first board.
 
-  The change is written to Symphony's local tracker immediately and synced to GitHub/Linear in the background, so it never blocks on their API rate limits. Use this to follow the workflow instructions, e.g. move from "Todo" to "In Progress" when you start work, or to "Human Review" when a PR is ready.
+  The change is written to Symphony's local tracker immediately and synced to GitHub/Linear in the background, so it never blocks on their API rate limits. Use this to follow the workflow instructions, e.g. move from "Todo" to "In Progress" when you start work.
+
+  Symphony blocks moves to **Human Review** (and other handoff/wait states) until the validate and publish gates pass — run evidence and open PRs first; the orchestrator will move the issue automatically when the run completes successfully.
   """
 
   @add_comment_input_schema %{
@@ -132,6 +144,24 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       @update_comment_tool ->
         execute_update_comment(arguments, opts)
 
+      @check_handoff_gate_tool ->
+        execute_bound_assistant_tool(HandoffTools, arguments, opts)
+
+      @get_evidence_status_tool ->
+        execute_bound_assistant_tool(EvidenceTools, arguments, opts)
+
+      @manage_preview_tool ->
+        execute_bound_assistant_tool(PreviewTools, arguments, opts)
+
+      @manage_dev_env_tool ->
+        execute_bound_assistant_tool(DevEnvTools, arguments, opts, coding_agent: true)
+
+      @manage_codex_goal_tool ->
+        execute_bound_assistant_tool(GoalTools, arguments, opts)
+
+      @link_pull_request_tool ->
+        execute_bound_assistant_tool(PullRequestTools, arguments, opts)
+
       other ->
         failure_response(%{
           "error" => %{
@@ -186,9 +216,66 @@ defmodule SymphonyElixir.Codex.DynamicTool do
           "name" => @update_comment_tool,
           "description" => @update_comment_description,
           "inputSchema" => @update_comment_input_schema
-        }
+        },
+        HandoffTools.issue_bound_tool_spec(),
+        EvidenceTools.issue_bound_tool_spec(),
+        PreviewTools.issue_bound_tool_spec(),
+        DevEnvTools.issue_bound_tool_spec(),
+        PullRequestTools.issue_bound_tool_spec(),
+        GoalTools.issue_bound_tool_spec()
       ]
   end
+
+  defp execute_bound_assistant_tool(module, arguments, opts, extra \\ []) do
+    with {:ok, issue} <- fetch_bound_issue(opts),
+         arguments <- normalize_tool_arguments(arguments),
+         executor_opts <- Keyword.merge([issue: issue], extra ++ opts),
+         {:ok, result} <- module.execute(issue.project_slug, arguments, executor_opts) do
+      bound_assistant_tool_success(result)
+    else
+      {:error, reason} -> failure_response(bound_assistant_tool_error_payload(reason))
+    end
+  end
+
+  defp normalize_tool_arguments(arguments) when is_map(arguments), do: stringify_keys(arguments)
+  defp normalize_tool_arguments(_arguments), do: %{}
+
+  defp bound_assistant_tool_success(%{tool: tool, message: message, data: data}) do
+    payload = stringify_keys(%{tool: tool, message: message, data: data})
+
+    %{
+      "success" => true,
+      "contentItems" => [%{"type" => "inputText", "text" => encode_payload(payload)}],
+      "toolResult" => payload
+    }
+  end
+
+  defp bound_assistant_tool_error_payload(reason) do
+    %{
+      "error" => %{
+        "message" => inspect(reason)
+      }
+    }
+  end
+
+  # Structs are maps in Elixir, so they must be handled before the `is_map`
+  # clause — otherwise `Map.new/2` tries to enumerate them and crashes (e.g.
+  # `Protocol.UndefinedError` for `DateTime`), taking down the agent turn.
+  defp stringify_keys(%DateTime{} = value), do: DateTime.to_iso8601(value)
+  defp stringify_keys(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)
+  defp stringify_keys(%Date{} = value), do: Date.to_iso8601(value)
+  defp stringify_keys(%Time{} = value), do: Time.to_iso8601(value)
+  defp stringify_keys(value) when is_struct(value), do: value
+
+  defp stringify_keys(value) when is_map(value) do
+    Map.new(value, fn
+      {key, nested} when is_atom(key) -> {Atom.to_string(key), stringify_keys(nested)}
+      {key, nested} when is_binary(key) -> {key, stringify_keys(nested)}
+    end)
+  end
+
+  defp stringify_keys(value) when is_list(value), do: Enum.map(value, &stringify_keys/1)
+  defp stringify_keys(value), do: value
 
   defp execute_linear_graphql(arguments, opts) do
     linear_client = Keyword.get(opts, :linear_client, &LinearClient.graphql/3)
@@ -218,11 +305,30 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     with {:ok, issue} <- fetch_bound_issue(opts),
          {:ok, status} <- normalize_status(arguments),
          {:ok, project} <- Context.get_project(issue.project_slug),
+         config <- project |> Repo.preload(:setup) |> ProjectConfig.resolve(),
+         :ok <- assert_handoff_allowed(status, config, issue),
          {:ok, _moved} <-
            IssueAdapter.dispatch(project, :move_issue, [issue.identifier, %{"status" => status}]) do
       set_issue_status_success(issue.identifier, status)
     else
       {:error, reason} -> failure_response(set_issue_status_error_payload(reason, opts))
+    end
+  end
+
+  defp assert_handoff_allowed(status, config, issue) do
+    if AgentHandoffGate.handoff_status?(status, config) do
+      case AgentHandoffGate.check(issue, config) do
+        :ok ->
+          :ok
+
+        {:error, :validate_gate, violations} ->
+          {:error, {:validate_gate, violations}}
+
+        {:error, :publish_gate, violations} ->
+          {:error, {:publish_gate, violations}}
+      end
+    else
+      :ok
     end
   end
 
@@ -576,6 +682,34 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       "error" => %{
         "message" => "GitHub GraphQL tool execution failed.",
         "reason" => inspect(reason)
+      }
+    }
+  end
+
+  defp set_issue_status_error_payload({:validate_gate, violations}, _opts) do
+    lines =
+      Enum.map_join(violations, "\n", fn v ->
+        "- #{v.kind}: #{v.detail}"
+      end)
+
+    %{
+      "error" => %{
+        "message" =>
+          "Cannot move to a handoff status yet — the validate gate is not satisfied. " <>
+            "Run tests, write `.symphony/evidence/manifest.json`, then let Symphony move the issue when the run completes.\n\n#{lines}"
+      }
+    }
+  end
+
+  defp set_issue_status_error_payload({:publish_gate, violations}, _opts) do
+    lines =
+      Enum.map_join(violations, "\n", fn v ->
+        "- #{v.repo}: #{v.detail}"
+      end)
+
+    %{
+      "error" => %{
+        "message" => "Cannot move to a handoff status yet — the publish gate is not satisfied (open PRs / pushed branches required).\n\n#{lines}"
       }
     }
   end

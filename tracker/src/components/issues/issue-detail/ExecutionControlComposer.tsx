@@ -1,10 +1,16 @@
 import { Eraser, Pause, Play, RotateCcw, Send, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { ModelMenu } from "@/components/assistant/ModelMenu";
+import {
+  AssistantComposer,
+  type AssistantComposerSubmit,
+  type ComposerSnapshot,
+} from "@/components/assistant/AssistantComposer";
+import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
-import { AGENT_LABELS } from "@/components/shared/AgentChip";
+import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,36 +21,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  catalogFor,
-  defaultComposerSettings,
-  effortLabel,
-  effortsForModel,
-  fallbackCatalogBundle,
-  loadComposerState,
-  normalizeEffort,
-  saveComposerState,
-  type AssistantAgentCatalog,
-  type AssistantCatalogBundle,
-  type AssistantComposerSettings,
-  type AssistantComposerState,
-  type AssistantEffort,
-} from "@/lib/assistantSettings";
-import { agentEnterHintLabel, deriveAgentControl } from "@/lib/agentExecutionDisplay";
+import { agentEnterHintLabel, canResumeExecution, deriveAgentControl } from "@/lib/agentExecutionDisplay";
+import { enrichGuidanceWithAttachments } from "@/lib/enrichComposerGuidance";
+import { catalogFor, fallbackCatalogBundle } from "@/lib/assistantSettings";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
+import { controlIssueGoal } from "@/services/goalControl";
+import type { AgentSteerPayload } from "@/hooks/useSessionLogChannel";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AgentKind, Issue } from "@/types/issue";
+
+interface QueuedGuidanceItem {
+  text: string;
+  attachments: AssistantOutgoingAttachment[];
+  fileTexts: Record<string, string>;
+}
 
 interface ExecutionControlComposerProps {
   projectSlug: string;
@@ -55,7 +46,7 @@ interface ExecutionControlComposerProps {
   steerPending?: boolean;
   steerError?: string | null;
   seedMessage?: string | null;
-  onSteer: (message: string) => void;
+  onSteer: (payload: AgentSteerPayload) => void;
   onIssueUpdated?: (issue: Issue) => void;
 }
 
@@ -71,31 +62,32 @@ export function ExecutionControlComposer({
   onSteer,
   onIssueUpdated,
 }: ExecutionControlComposerProps) {
-  const [input, setInput] = useState("");
-  const [queued, setQueued] = useState<string[]>([]);
-  const [bundle, setBundle] = useState<AssistantCatalogBundle>(fallbackCatalogBundle());
-  const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(fallbackCatalogBundle()));
-  const [goalMode, setGoalMode] = useState(() => execution?.goal?.kind === "goal");
+  const { t } = useTranslation();
+  const [queued, setQueued] = useState<QueuedGuidanceItem[]>([]);
+  const [bundle, setBundle] = useState(fallbackCatalogBundle());
+  const [agent, setAgent] = useState<AgentKind>(issue.agentKind ?? bundle.defaultAgent);
   const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | "hard_reset" | "stop" | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [hardResetOpen, setHardResetOpen] = useState(false);
+  const [goalDismissed, setGoalDismissed] = useState(false);
+  const [composerResetToken, setComposerResetToken] = useState(0);
+  const composerSnapshotRef = useRef<ComposerSnapshot>({ input: "", attachments: [] });
 
-  const agent: AgentKind = composerState.agent;
-  const catalog = catalogFor(bundle, agent);
-  const settings: AssistantComposerSettings =
-    composerState.byAgent[agent] ?? defaultComposerSettings(catalog);
-  const effortOptions = effortsForModel(catalog, settings.model);
+  // Codex goals are sourced solely from the live execution snapshot (the native
+  // Codex thread), never from the cached issue.agentGoal column.
+  const trimmedGoalObjective = execution?.goal?.objective?.trim() || "";
+  const goalObjective = trimmedGoalObjective.length > 0 ? trimmedGoalObjective : null;
+  const showGoalPill = !goalDismissed && goalObjective != null;
 
-  const trimmedGoalObjective = execution?.goal?.objective?.trim();
-  const goalObjective = trimmedGoalObjective ? trimmedGoalObjective : null;
+  useEffect(() => {
+    if (!goalObjective) setGoalDismissed(false);
+  }, [goalObjective]);
 
-  const control = deriveAgentControl(execution);
+  const control = deriveAgentControl(execution, t);
   const agentRunActive = control.isActive;
   const canResume = control.canResume;
   const canRestart = control.canResume;
-  // `canSteer` (prop) is the authoritative steer gate from the parent; the rest
-  // of the lifecycle (pause/resume/start, labels) comes from the execution.
   const enterIntent = canSteer
     ? "steer"
     : control.isActive
@@ -104,27 +96,22 @@ export function ExecutionControlComposer({
         ? "resume"
         : "start";
   const primaryLabel = control.primaryLabel;
+
   const queuedGuidance = useMemo(
-    () => queued.filter((entry) => entry.trim().length > 0),
+    () => queued.filter((entry) => entry.text.trim().length > 0 || entry.attachments.length > 0),
     [queued],
   );
 
-  useEffect(() => {
-    if (!seedMessage?.trim()) return;
-    setInput(seedMessage);
-  }, [seedMessage]);
+  const controlsDisabled = dispatchPending !== null;
 
   useEffect(() => {
     let cancelled = false;
     void fetchAssistantCatalogBundle(projectSlug)
       .then((next) => {
-        if (cancelled) return;
-        setBundle(next);
-        setComposerState(loadComposerState(next));
+        if (!cancelled) setBundle(next);
       })
       .catch(() => {
-        if (cancelled) return;
-        setBundle(fallbackCatalogBundle());
+        if (!cancelled) setBundle(fallbackCatalogBundle());
       });
     return () => {
       cancelled = true;
@@ -132,106 +119,69 @@ export function ExecutionControlComposer({
   }, [projectSlug]);
 
   useEffect(() => {
-    if (issue.agentKind) {
-      setComposerState((current) => ({ ...current, agent: issue.agentKind! }));
-    }
+    if (issue.agentKind) setAgent(issue.agentKind);
   }, [issue.agentKind]);
 
-  const persistComposer = useCallback(
-    (next: AssistantComposerState) => {
-      setComposerState(next);
-      saveComposerState(next);
-    },
-    [],
-  );
-
-  const setAgent = useCallback(
-    (nextAgent: AgentKind) => {
-      persistComposer({ ...composerState, agent: nextAgent });
-    },
-    [composerState, persistComposer],
-  );
-
-  const setModel = useCallback(
-    (model: string) => {
-      const nextCatalog = catalogFor(bundle, agent);
-      const modelOption = nextCatalog.models.find((entry) => entry.model === model) ?? nextCatalog.models[0];
-      if (!modelOption) return;
-      const effort = normalizeEffort(modelOption, settings.effort);
-      persistComposer({
-        ...composerState,
-        byAgent: {
-          ...composerState.byAgent,
-          [agent]: { model: modelOption.model, effort },
-        },
-      });
-    },
-    [agent, bundle, composerState, persistComposer, settings.effort],
-  );
-
-  const setEffort = useCallback(
-    (effort: AssistantEffort) => {
-      persistComposer({
-        ...composerState,
-        byAgent: {
-          ...composerState.byAgent,
-          [agent]: { ...settings, effort },
-        },
-      });
-    },
-    [agent, composerState, persistComposer, settings],
-  );
-
   const dispatchProgressLabel: Record<"resume" | "restart" | "hard_reset" | "stop", string> = {
-    resume: "Resuming agent…",
-    restart: "Restarting agent…",
-    hard_reset: "Hard resetting session…",
-    stop: "Pausing agent…",
+    resume: t("issue.agent.dispatchResume"),
+    restart: t("issue.agent.dispatchRestart"),
+    hard_reset: t("issue.agent.dispatchHardReset"),
+    stop: t("issue.agent.dispatchStop"),
   };
 
-  // Guidance the agent should receive on the next resume/restart: anything the
-  // user queued while the run was busy, plus whatever is currently typed.
-  function combinedGuidance(): string {
-    const parsed = parseSlashCommand(input);
-    const typed = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
-    return [...queuedGuidance, typed].filter((entry) => entry.length > 0).join("\n\n");
+  function guidanceFromQueued(entry: QueuedGuidanceItem): string {
+    return enrichGuidanceWithAttachments(entry.text, entry.attachments, projectSlug, entry.fileTexts);
   }
 
-  function enqueueGuidance() {
-    const parsed = parseSlashCommand(input);
-    const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
-    if (!text) return;
-    setQueued((current) => [...current, text]);
-    setInput("");
+  function guidanceFromSnapshot(snapshot: ComposerSnapshot): string {
+    const parsed = parseSlashCommand(snapshot.input, t, "execution");
+    const typed =
+      parsed.kind === "infer" || parsed.kind === "goal" ? parsed.argument.trim() : snapshot.input.trim();
+    return enrichGuidanceWithAttachments(typed, snapshot.attachments, projectSlug, {});
+  }
+
+  function combinedGuidance(): string {
+    const parts = [
+      ...queuedGuidance.map((entry) => guidanceFromQueued(entry)),
+      guidanceFromSnapshot(composerSnapshotRef.current),
+    ].filter((entry) => entry.length > 0);
+    return parts.join("\n\n");
   }
 
   function removeQueued(index: number) {
     setQueued((current) => current.filter((_, i) => i !== index));
   }
 
-  async function runDispatch(action: "resume" | "restart" | "hard_reset" | "stop") {
+  async function runDispatch(
+    action: "resume" | "restart" | "hard_reset" | "stop",
+    overrides?: { goal?: string | null; instructions?: string | null },
+  ) {
     setDispatchPending(action);
     setDispatchError(null);
     setDispatchStatus(dispatchProgressLabel[action]);
 
-    // Pausing keeps the typed/queued guidance around for the next resume.
-    const guidance = action === "stop" ? "" : combinedGuidance();
+    const guidance =
+      action === "stop" ? "" : (overrides?.instructions?.trim() || combinedGuidance());
+    // Normal resume/restart must not re-send a cached objective; only explicit
+    // goal actions set the Codex goal (via controlIssueGoal). Resetting the same
+    // objective would reset native goal accounting.
+    const dispatchGoal = overrides?.goal ?? null;
 
     try {
       const result = await dispatchIssueAgent(projectSlug, issue.identifier, {
         action,
         agent,
-        goal: goalMode ? goalObjective : null,
+        goal: dispatchGoal,
         instructions: guidance || null,
       });
       onIssueUpdated?.(result.issue);
       setDispatchStatus(result.message);
       if (action !== "stop") {
-        setInput("");
         setQueued([]);
+        setComposerResetToken((token) => token + 1);
       }
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Dispatch failed";
+      const message = cause instanceof Error ? cause.message : t("issue.agent.dispatchFailed");
       setDispatchError(message);
       setDispatchStatus(null);
       toast.error(message);
@@ -240,121 +190,220 @@ export function ExecutionControlComposer({
     }
   }
 
-  function submitSteer() {
-    const parsed = parseSlashCommand(input);
-    const text = parsed.kind === "infer" ? parsed.argument.trim() : input.trim();
-    if (!text) return;
-    onSteer(text);
-    setInput("");
-  }
+  const submitExecutionGoal = useCallback(
+    async (objectiveArg: string) => {
+      const trimmed = objectiveArg.trim();
+      const objective = trimmed.length > 0 ? trimmed : t("issue.agent.goalDefaultObjective");
+      const framedInstructions =
+        trimmed.length > 0
+          ? t("issue.agent.goalCommandWithObjective", { objective: trimmed })
+          : t("issue.agent.goalCommandDefault");
 
-  // Single entry point for Enter / the send button: steer a live turn, queue
-  // guidance for a busy-but-not-steerable run, or resume/start when stopped.
-  function submitComposer() {
-    if (canSteer) {
-      submitSteer();
-      return;
-    }
-    if (control.isActive) {
-      enqueueGuidance();
-      return;
-    }
-    if (canResume && !dispatchPending) void runDispatch("resume");
-  }
+      try {
+        await controlIssueGoal(projectSlug, issue.identifier, {
+          action: "set_objective",
+          objective,
+        });
+        setGoalDismissed(false);
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+        return;
+      }
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    submitComposer();
-  }
+      toast.success(t("issue.agent.goalSetDone"));
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== "Enter" || event.shiftKey) return;
-    event.preventDefault();
-    submitComposer();
-  }
+      if (canSteer) {
+        onSteer({ message: framedInstructions, attachments: [] });
+        return;
+      }
 
-  const controlsDisabled = dispatchPending !== null;
+      if (control.isActive) {
+        setQueued((current) => [
+          ...current,
+          {
+            text: framedInstructions,
+            attachments: [],
+            fileTexts: {},
+          },
+        ]);
+        return;
+      }
+
+      if (!dispatchPending) {
+        // Goal already set natively above; resume only starts the worker.
+        await runDispatch("resume", { instructions: framedInstructions });
+      }
+    },
+    [
+      canSteer,
+      control.isActive,
+      dispatchPending,
+      issue,
+      onIssueUpdated,
+      onSteer,
+      projectSlug,
+      t,
+    ],
+  );
+
+  const handleComposerSubmit = useCallback(
+    (submit: AssistantComposerSubmit) => {
+      if (submit.kind === "goal") {
+        void submitExecutionGoal(submit.message);
+        return;
+      }
+      if (submit.kind === "btw") return;
+
+      const text = submit.message.trim();
+      const hasAttachments = submit.attachments.length > 0;
+
+      if (canSteer) {
+        if (!text && !hasAttachments) return;
+        onSteer({ message: text, attachments: submit.attachments });
+        return;
+      }
+
+      if (control.isActive) {
+        if (!text && !hasAttachments) return;
+        setQueued((current) => [
+          ...current,
+          {
+            text,
+            attachments: submit.attachments,
+            fileTexts: {},
+          },
+        ]);
+        return;
+      }
+
+      if (!dispatchPending) {
+        const instructions = enrichGuidanceWithAttachments(text, submit.attachments, projectSlug, {});
+        void runDispatch("resume", { instructions });
+      }
+    },
+    [canSteer, control.isActive, dispatchPending, onSteer, projectSlug, submitExecutionGoal],
+  );
+
+  const handleEmptySubmit = useCallback(() => {
+    if (canSteer || control.isActive || dispatchPending) return;
+    if (canResume) void runDispatch("resume");
+  }, [canResume, canSteer, control.isActive, dispatchPending]);
+
   const sendDisabled =
-    controlsDisabled ||
-    !input.trim() ||
-    (canSteer && (!sessionConnected || steerPending));
+    controlsDisabled || (canSteer && (!sessionConnected || steerPending));
   const primaryDisabled = controlsDisabled || (!agentRunActive && !canResume);
+
+  const goalPhase = executionGoalPhase(agentRunActive, showGoalPill, execution);
+  const goalTimeUsedSeconds =
+    execution?.goal?.timeUsedSeconds ?? (agentRunActive ? execution?.runtimeSeconds : null) ?? null;
+  const nativeGoal = execution?.goal?.source === "native" && execution?.goal?.kind === "goal";
+
+  async function handleGoalPause() {
+    if (nativeGoal && execution?.goal?.capabilities.includes("pause")) {
+      try {
+        await controlIssueGoal(projectSlug, issue.identifier, { action: "pause" });
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+      }
+      return;
+    }
+    if (agentRunActive) void runDispatch("stop");
+  }
+
+  async function handleGoalResume() {
+    if (nativeGoal && execution?.goal?.capabilities.includes("resume") && !agentRunActive) {
+      try {
+        await controlIssueGoal(projectSlug, issue.identifier, { action: "resume" });
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+      }
+      return;
+    }
+    if (!agentRunActive && !dispatchPending) void runDispatch("resume");
+  }
+
+  async function handleGoalRemove() {
+    try {
+      await controlIssueGoal(projectSlug, issue.identifier, { action: "clear" });
+      setGoalDismissed(true);
+      toast.success(t("issue.agent.goalControls.clearDone"));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+    }
+  }
+
+  async function handleGoalEdit(objective: string) {
+    try {
+      await controlIssueGoal(projectSlug, issue.identifier, { action: "set_objective", objective });
+      setGoalDismissed(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+    }
+  }
+
+  const composerPlaceholder = canSteer
+    ? t("issue.agent.placeholderSteer")
+    : agentRunActive
+      ? t("issue.agent.placeholderQueue")
+      : control.hasRun
+        ? t("issue.agent.placeholderResume")
+        : t("issue.agent.placeholderStart");
+
+  const goalPill = showGoalPill ? (
+    <GoalPill
+      phase={goalPhase}
+      objective={goalObjective}
+      running={agentRunActive}
+      timeUsedSeconds={goalTimeUsedSeconds}
+      onPause={() => void handleGoalPause()}
+      onResume={() => void handleGoalResume()}
+      onRemove={() => void handleGoalRemove()}
+      onEditObjective={(objective) => void handleGoalEdit(objective)}
+    />
+  ) : null;
 
   return (
     <section className="rounded-xl border border-border/70 bg-card/40 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agent control</div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {canSteer
-              ? "Steer the live run with /infer, or pause to stop safely."
-              : agentRunActive
-                ? "Agent is busy — queue guidance for the next resume, or pause to stop safely."
-                : control.hasRun
-                  ? "Resume where the run stopped, restart fresh, or add guidance before resuming."
-                  : "Start the agent on this issue. Add optional guidance before you do."}
-          </p>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {t("issue.agent.controlTitle")}
         </div>
-        <div className="flex flex-wrap items-center gap-1">
-          <AgentMenu bundle={bundle} agent={agent} disabled={controlsDisabled || agentRunActive} onChange={setAgent} />
-          <ModelMenu
-            catalog={catalog}
-            model={settings.model}
-            disabled={controlsDisabled}
-            onChange={setModel}
-            triggerVariant="outline"
-            showChevron={false}
-          />
-          <EffortMenu
-            catalog={catalog}
-            model={settings.model}
-            effort={settings.effort}
-            options={effortOptions}
-            disabled={controlsDisabled}
-            onChange={setEffort}
-          />
-        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {canSteer
+            ? t("issue.agent.hintSteer")
+            : agentRunActive
+              ? t("issue.agent.hintBusy")
+              : control.hasRun
+                ? t("issue.agent.hintResume")
+                : t("issue.agent.hintStart")}
+        </p>
       </div>
-
-      {goalObjective ? (
-        <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-          <label className="flex cursor-pointer items-start justify-between gap-3">
-            <span className="min-w-0">
-              <span className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {execution?.goal?.kind === "workflow" ? "Workflow objective" : "Goal objective"}
-              </span>
-              <span className="mt-1 block whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">
-                {goalObjective}
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={goalMode}
-              disabled={controlsDisabled}
-              aria-label="Send goal on resume or restart"
-              onChange={(event) => setGoalMode(event.target.checked)}
-              className="mt-1 h-4 w-4 shrink-0 accent-primary"
-            />
-          </label>
-        </div>
-      ) : null}
 
       {queuedGuidance.length > 0 ? (
         <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Queued guidance · sent on next resume
+            {t("issue.agent.queuedGuidance")}
           </div>
           <ul className="mt-2 flex flex-col gap-1.5">
             {queuedGuidance.map((entry, index) => (
               <li
-                key={`${index}-${entry}`}
+                key={`${index}-${entry.text}`}
                 className="flex items-start justify-between gap-2 rounded-md bg-background/70 px-2 py-1.5 text-xs"
               >
-                <span className="min-w-0 whitespace-pre-wrap break-words text-foreground/90">{entry}</span>
+                <div className="min-w-0 space-y-1">
+                  {entry.text ? (
+                    <span className="block whitespace-pre-wrap break-words text-foreground/90">{entry.text}</span>
+                  ) : null}
+                  {entry.attachments.length > 0 ? (
+                    <span className="block text-muted-foreground">
+                      {t("issue.agent.queuedAttachments", { count: entry.attachments.length })}
+                    </span>
+                  ) : null}
+                </div>
                 <button
                   type="button"
-                  aria-label="Remove queued guidance"
-                  title="Remove"
+                  aria-label={t("issue.agent.removeQueuedAria")}
+                  title={t("issue.agent.remove")}
                   disabled={controlsDisabled}
                   onClick={() => removeQueued(index)}
                   className="mt-0.5 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
@@ -367,112 +416,120 @@ export function ExecutionControlComposer({
         </div>
       ) : null}
 
-      <form className="mt-3 space-y-3" onSubmit={handleSubmit}>
-        <Textarea
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            canSteer
-              ? "/infer focus on the failing test first"
-              : agentRunActive
-                ? "Add guidance to queue for the next resume…"
-                : control.hasRun
-                  ? "Optional guidance, then Resume…"
-                  : "Optional guidance, then Start…"
-          }
-          disabled={controlsDisabled || (canSteer && (!sessionConnected || steerPending))}
-          rows={3}
-          className="min-h-0 resize-none text-sm"
-        />
-
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!canRestart || controlsDisabled}
-              title={
-                canRestart
-                  ? "Start a fresh agent pass on this issue"
-                  : "Pause the active run before restarting"
-              }
-              onClick={() => void runDispatch("restart")}
-            >
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-              {dispatchPending === "restart" ? "Restarting…" : "Restart"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="text-destructive hover:text-destructive"
-              disabled={controlsDisabled}
-              title="Stop the run, clear the session (turns and tokens), and start fresh. Keeps the workspace."
-              onClick={() => setHardResetOpen(true)}
-            >
-              <Eraser className="mr-1.5 h-3.5 w-3.5" />
-              {dispatchPending === "hard_reset" ? "Resetting…" : "Hard reset"}
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="hidden text-xs text-muted-foreground sm:inline">
-              {steerPending ? "Sending steer…" : agentEnterHintLabel(enterIntent)}
-            </span>
-            {agentRunActive ? (
-              <Button type="submit" size="sm" variant="default" disabled={sendDisabled}>
-                <Send className="mr-1.5 h-3.5 w-3.5" />
-                {canSteer ? "Steer" : "Queue"}
-              </Button>
-            ) : null}
-            {agentRunActive ? (
+      <div className="mt-3">
+        <AssistantComposer
+          projectSlug={projectSlug}
+          bundle={bundle}
+          floating
+          slashContext="execution"
+          placeholder={composerPlaceholder}
+          hint={null}
+          seedMessage={seedMessage}
+          resetToken={composerResetToken}
+          composerDisabled={controlsDisabled || (canSteer && (!sessionConnected || steerPending))}
+          agentMenuDisabled={controlsDisabled || agentRunActive}
+          allowEmptySubmit={!canSteer && !agentRunActive && canResume}
+          canSubmit={sendDisabled ? false : undefined}
+          header={goalPill}
+          onComposerSnapshot={(snapshot) => {
+            composerSnapshotRef.current = snapshot;
+          }}
+          onEmptySubmit={handleEmptySubmit}
+          onSubmit={handleComposerSubmit}
+          onAgentChange={setAgent}
+          toolbarAfterAttach={
+            <>
               <Button
                 type="button"
+                variant="ghost"
                 size="sm"
-                variant="outline"
-                disabled={controlsDisabled}
-                title="Pause the run (keeps the session to resume later)"
-                onClick={() => void runDispatch("stop")}
+                className="h-8 gap-1 px-2 text-xs"
+                disabled={!canRestart || controlsDisabled}
+                title={canRestart ? t("issue.agent.restartTitle") : t("issue.agent.restartPauseFirst")}
+                onClick={() => void runDispatch("restart")}
               >
-                <Pause className="mr-1.5 h-3.5 w-3.5" />
-                {dispatchPending === "stop" ? "Pausing…" : "Pause"}
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">
+                  {dispatchPending === "restart" ? t("issue.agent.restarting") : t("issue.agent.restart")}
+                </span>
               </Button>
-            ) : (
-              <Button type="submit" size="sm" variant="secondary" disabled={primaryDisabled}>
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-                {dispatchPending === "resume"
-                  ? primaryLabel === "Start"
-                    ? "Starting…"
-                    : "Resuming…"
-                  : primaryLabel}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 px-2 text-xs text-destructive hover:text-destructive"
+                disabled={controlsDisabled}
+                title={t("issue.agent.hardResetTitle")}
+                onClick={() => setHardResetOpen(true)}
+              >
+                <Eraser className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">
+                  {dispatchPending === "hard_reset" ? t("issue.agent.resetting") : t("issue.agent.hardReset")}
+                </span>
               </Button>
-            )}
-          </div>
-        </div>
-
-        {dispatchError ? <p className="text-xs text-destructive">{dispatchError}</p> : null}
-        {dispatchStatus ? <p className="text-xs text-muted-foreground">{dispatchStatus}</p> : null}
-        {steerError ? <p className="text-xs text-destructive">{formatSteerError(steerError)}</p> : null}
-        <p className="text-[11px] text-muted-foreground">
-          Models from {catalog.command}. Agent and model apply on resume/restart; /infer steers the live {AGENT_LABELS[agent]} session.
-        </p>
-      </form>
+            </>
+          }
+          submitActions={
+            <>
+              <span className="hidden text-xs text-muted-foreground lg:inline">
+                {steerPending ? t("issue.agent.sendingSteer") : agentEnterHintLabel(enterIntent, t)}
+              </span>
+              {agentRunActive ? (
+                <Button type="submit" size="sm" variant="default" disabled={sendDisabled} className="h-8 gap-1">
+                  <Send className="h-3.5 w-3.5" />
+                  {canSteer ? t("issue.agent.steer") : t("issue.agent.queue")}
+                </Button>
+              ) : null}
+              {agentRunActive ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1"
+                  disabled={controlsDisabled}
+                  title={t("issue.agent.pauseTitle")}
+                  onClick={() => void runDispatch("stop")}
+                >
+                  <Pause className="h-3.5 w-3.5" />
+                  {dispatchPending === "stop" ? t("issue.agent.dispatchStop") : t("issue.agent.primaryPause")}
+                </Button>
+              ) : (
+                <Button type="submit" size="sm" variant="secondary" className="h-8 gap-1" disabled={primaryDisabled}>
+                  <Play className="h-3.5 w-3.5" />
+                  {dispatchPending === "resume"
+                    ? control.primaryAction === "start"
+                      ? t("issue.agent.starting")
+                      : t("issue.agent.resuming")
+                    : primaryLabel}
+                </Button>
+              )}
+            </>
+          }
+          footer={
+            <div className="mt-2 space-y-1">
+              {dispatchError ? <p className="text-xs text-destructive">{dispatchError}</p> : null}
+              {dispatchStatus ? <p className="text-xs text-muted-foreground">{dispatchStatus}</p> : null}
+              {steerError ? (
+                <p className="text-xs text-destructive">{formatSteerError(steerError, t)}</p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                {t("assistant.composer.hint", { command: catalogFor(bundle, agent).command })}
+              </p>
+            </div>
+          }
+        />
+      </div>
 
       <Dialog open={hardResetOpen} onOpenChange={setHardResetOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Hard reset session?</DialogTitle>
-            <DialogDescription>
-              This stops any active run, discards the current agent session, and clears the turn and token counters,
-              then starts a brand-new session. The workspace and its git state are preserved.
-            </DialogDescription>
+            <DialogTitle>{t("issue.agent.hardResetDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("issue.agent.hardResetDialogDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline" size="sm">
-                Cancel
+                {t("issue.agent.cancel")}
               </Button>
             </DialogClose>
             <Button
@@ -486,7 +543,7 @@ export function ExecutionControlComposer({
               }}
             >
               <Eraser className="mr-1.5 h-3.5 w-3.5" />
-              Hard reset
+              {t("issue.agent.hardReset")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -495,85 +552,32 @@ export function ExecutionControlComposer({
   );
 }
 
-function AgentMenu({
-  bundle,
-  agent,
-  disabled,
-  onChange,
-}: {
-  bundle: AssistantCatalogBundle;
-  agent: AgentKind;
-  disabled?: boolean;
-  onChange: (agent: AgentKind) => void;
-}) {
-  const current = catalogFor(bundle, agent);
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {current.agentLabel}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Agent</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={agent} onValueChange={(value) => onChange(value as AgentKind)}>
-          {bundle.agents.map((entry) => (
-            <DropdownMenuRadioItem key={entry.agent} value={entry.agent}>
-              {entry.agentLabel}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+function executionGoalPhase(
+  agentRunActive: boolean,
+  hasGoal: boolean,
+  execution?: AgentExecution,
+): GoalPillPhase {
+  if (agentRunActive) return "running";
+  if (execution?.goal?.status === "paused") return "paused";
+  if (
+    execution?.goal?.status === "completed" ||
+    execution?.goal?.status === "complete" ||
+    execution?.goal?.status === "done" ||
+    execution?.goal?.status === "satisfied"
+  ) {
+    return "completed";
+  }
+  if (execution && canResumeExecution(execution)) return "stalled";
+  if (hasGoal) return "pending";
+  return "pending";
 }
 
-function EffortMenu({
-  catalog,
-  model,
-  effort,
-  options,
-  disabled,
-  onChange,
-}: {
-  catalog: AssistantAgentCatalog;
-  model: string;
-  effort: AssistantEffort;
-  options: ReturnType<typeof effortsForModel>;
-  disabled?: boolean;
-  onChange: (effort: AssistantEffort) => void;
-}) {
-  if (options.length === 0) return null;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {effortLabel(catalog, model, effort)}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Effort</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={effort} onValueChange={(value) => onChange(value as AssistantEffort)}>
-          {options.map((option) => (
-            <DropdownMenuRadioItem key={option.id} value={option.id}>
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function formatSteerError(reason: string): string {
+function formatSteerError(reason: string, t: (key: string) => string): string {
   if (reason === "ActiveTurnNotSteerable") {
-    return "No steerable agent turn is running — use Resume to pick the run back up.";
+    return t("issue.agent.steerNotAvailable");
   }
   if (reason === "orchestrator_unavailable") {
-    return "The orchestrator is unavailable; try again in a moment.";
+    return t("issue.agent.orchestratorUnavailable");
   }
   return reason;
 }

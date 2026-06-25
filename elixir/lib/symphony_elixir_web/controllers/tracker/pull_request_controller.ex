@@ -50,12 +50,12 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
         data: %{url: pr.url, number: pr.number, repo: pr.repo, state: pr.state, origin: pr.origin}
       })
     else
-      {:error, :invalid_pr_url} -> error(conn, 422, "Invalid GitHub pull request URL.")
+      {:error, :invalid_pr_url} -> TrackerErrors.render(conn, :invalid_pr_url)
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
-  def link(conn, _params), do: error(conn, 422, "A pull request URL is required.")
+  def link(conn, _params), do: TrackerErrors.render(conn, :pr_url_required)
 
   @spec unlink(Conn.t(), map()) :: Conn.t()
   def unlink(conn, %{"project_slug" => project_slug, "identifier" => identifier, "url" => url}) do
@@ -68,7 +68,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
     end
   end
 
-  def unlink(conn, _params), do: error(conn, 422, "A pull request URL is required.")
+  def unlink(conn, _params), do: TrackerErrors.render(conn, :pr_url_required)
 
   defp respond(conn, project, identifier, refresh?) do
     if PullRequests.supported?(project) do
@@ -142,6 +142,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
       title: pr.title,
       url: pr.url,
       state: pr.state,
+      mergeable: nil,
       repo: pr.repo,
       origin: pr.origin,
       pipelines: [],
@@ -175,6 +176,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
         Map.merge(pr, %{
           title: live_pr[:title] || pr.title,
           state: live_pr[:state] || pr.state,
+          mergeable: live_pr[:mergeable],
           checks_state: live_pr[:checks_state],
           pipelines: live_pr[:pipelines] || [],
           statuses: live_pr[:statuses] || [],
@@ -228,9 +230,4 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
     end
   end
 
-  defp error(conn, status, message) do
-    conn
-    |> put_status(status)
-    |> json(%{error: %{message: message}})
-  end
 end

@@ -83,6 +83,45 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     assert Enum.any?(reasons, &(&1 =~ "repo"))
   end
 
+  test "parses a blocked run with blocked_reason", %{tmp_dir: ws} do
+    write_manifest!(ws, %{
+      "issue" => "GAM-9",
+      "runs" => [
+        %{
+          "kind" => "unit",
+          "repo" => "backend",
+          "command" => "./vibe test",
+          "status" => "blocked",
+          "blocked_reason" => "Docker daemon unreachable in sandbox"
+        }
+      ]
+    })
+
+    assert {:ok, %{runs: [run]}} = Manifest.read(ws)
+    assert run.status == "blocked"
+    assert run.blocked_reason == "Docker daemon unreachable in sandbox"
+  end
+
+  test "parses optional task metadata on runs", %{tmp_dir: ws} do
+    write_manifest!(ws, %{
+      "issue" => "GAM-9",
+      "runs" => [
+        %{
+          "task_id" => "task-3",
+          "task_title" => "Task 3: Add Tasks, Review, And Runs Namespace",
+          "kind" => "unit",
+          "repo" => "admin",
+          "command" => "bun run test -- tasks",
+          "status" => "passed"
+        }
+      ]
+    })
+
+    assert {:ok, %{runs: [run]}} = Manifest.read(ws)
+    assert run.task_id == "task-3"
+    assert run.task_title == "Task 3: Add Tasks, Review, And Runs Namespace"
+  end
+
   test "referenced artifact missing on disk", %{tmp_dir: ws} do
     write_manifest!(ws, valid_manifest())
     assert {:error, {:artifacts_missing, missing}} = Manifest.read(ws)
@@ -134,6 +173,77 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     assert "artifacts/unit.txt" in paths
     assert "artifacts/screens/home.png" in paths
     assert "artifacts/videos/flow.webm" in paths
+  end
+
+  test "parses navigations and proof on an e2e run", %{tmp_dir: ws} do
+    manifest =
+      valid_manifest()
+      |> update_in(["runs"], fn [unit, e2e] ->
+        [unit, Map.merge(e2e, %{"navigations" => ["http://cwu.localhost:4302/students"], "proof" => %{"title" => "Student Groups"}})]
+      end)
+
+    write_manifest!(ws, manifest)
+    touch_artifacts!(ws)
+
+    assert {:ok, %{runs: [_unit, e2e]}} = Manifest.read(ws)
+    assert e2e.navigations == ["http://cwu.localhost:4302/students"]
+    assert e2e.proof == %{"title" => "Student Groups"}
+  end
+
+  test "parses labeled screenshot and video artifact refs", %{tmp_dir: ws} do
+    manifest =
+      valid_manifest()
+      |> update_in(["runs"], fn [unit, e2e] ->
+        [
+          unit,
+          Map.merge(e2e, %{
+            "screenshots" => [
+              %{
+                "path" => "artifacts/screens/home.png",
+                "label" => "long share dialog header real app",
+                "navigations" => ["http://localhost:4300/health", "http://localhost:4300/login"]
+              }
+            ],
+            "videos" => [
+              %{
+                "path" => "artifacts/videos/flow.webm",
+                "label" => "save group shares real app"
+              }
+            ]
+          })
+        ]
+      end)
+
+    write_manifest!(ws, manifest)
+    touch_artifacts!(ws)
+
+    assert {:ok, %{runs: [_unit, e2e]}} = Manifest.read(ws)
+
+    assert [%Manifest.ArtifactRef{path: "artifacts/screens/home.png", label: "long share dialog header real app", navigations: navs}] =
+             e2e.screenshots
+
+    assert navs == ["http://localhost:4300/health", "http://localhost:4300/login"]
+    assert [%Manifest.ArtifactRef{path: "artifacts/videos/flow.webm", label: "save group shares real app"}] = e2e.videos
+  end
+
+  test "navigations defaults to [] and proof to %{} when absent", %{tmp_dir: ws} do
+    write_manifest!(ws, valid_manifest())
+    touch_artifacts!(ws)
+
+    assert {:ok, %{runs: [_unit, e2e]}} = Manifest.read(ws)
+    assert e2e.navigations == []
+    assert e2e.proof == %{}
+  end
+
+  test "navigations must be a list of strings", %{tmp_dir: ws} do
+    manifest =
+      valid_manifest()
+      |> update_in(["runs"], fn [unit, e2e] -> [unit, Map.put(e2e, "navigations", "nope")] end)
+
+    write_manifest!(ws, manifest)
+
+    assert {:error, {:manifest_invalid, reasons}} = Manifest.read(ws)
+    assert Enum.any?(reasons, &(&1 =~ "navigations"))
   end
 
   defp build_valid_in_tmp do

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { i18n } from "@/i18n";
 import { InlineAssigneeEditor } from "../InlineAssigneeEditor";
 import type { IssueAssigneeOption } from "@/types/issue";
 
@@ -37,7 +38,9 @@ describe("InlineAssigneeEditor", () => {
 
     await user.click(screen.getByRole("button", { name: /unassigned/i }));
     const assigneeButtons = await screen.findAllByRole("button", { pressed: false });
-    expect(assigneeButtons[0]?.textContent).toContain("Eu — Raphael Cangucu");
+    expect(assigneeButtons[0]?.textContent).toContain(
+      i18n.t("issue.inline.assignee.mePrefix", { label: "Raphael Cangucu" }),
+    );
 
     await user.type(screen.getByRole("textbox", { name: /search assignees/i }), "bob");
     expect(screen.getByRole("button", { name: /bob/i })).toBeInTheDocument();

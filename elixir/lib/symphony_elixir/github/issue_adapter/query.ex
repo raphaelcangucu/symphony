@@ -17,6 +17,9 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
                 assignees(first: 1) { nodes { login } }
                 labels(first: 20) { nodes { name } }
                 createdAt updatedAt
+                repository { nameWithOwner }
+                parent { number repository { nameWithOwner } }
+                subIssuesSummary { total completed percentCompleted }
               }
             }
             fieldValues(first: 30) {
@@ -301,9 +304,11 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
 
   @spec normalize_item(map(), String.t(), String.t()) :: IssueDTO.t() | nil
   def normalize_item(%{"content" => %{"__typename" => "Issue"} = content} = item, status_field, project_slug) do
+    repository_full_name = get_in(content, ["repository", "nameWithOwner"])
+
     IssueDTO.build(%{
       id: content["id"],
-      identifier: to_string(content["number"]),
+      identifier: repo_scoped_identifier(repository_full_name, content["number"]),
       title: content["title"],
       description: content["body"],
       url: content["url"],
@@ -313,11 +318,48 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
       status: status_from_field_values(item["fieldValues"], status_field),
       project_slug: project_slug,
       created_at: content["createdAt"],
-      updated_at: content["updatedAt"]
+      updated_at: content["updatedAt"],
+      repository_full_name: repository_full_name,
+      parent_identifier: parent_identifier(content["parent"]),
+      sub_issue_summary: sub_issue_summary(content["subIssuesSummary"])
     })
   end
 
   def normalize_item(_item, _status_field, _project_slug), do: nil
+
+  defp parent_identifier(%{"number" => number, "repository" => %{"nameWithOwner" => repository_full_name}})
+       when is_integer(number) do
+    repo_scoped_identifier(repository_full_name, number)
+  end
+
+  defp parent_identifier(%{"number" => number}) when is_integer(number), do: to_string(number)
+  defp parent_identifier(_), do: nil
+
+  defp repo_scoped_identifier(repository_full_name, number) when is_binary(repository_full_name) and is_integer(number) do
+    case short_repo_name(repository_full_name) do
+      nil -> to_string(number)
+      repo -> "#{repo}##{number}"
+    end
+  end
+
+  defp repo_scoped_identifier(_repository_full_name, number), do: to_string(number)
+
+  defp short_repo_name(repository_full_name) do
+    repository_full_name
+    |> String.split("/")
+    |> List.last()
+    |> case do
+      repo when is_binary(repo) and repo != "" -> repo
+      _ -> nil
+    end
+  end
+
+  defp sub_issue_summary(%{"total" => total, "completed" => completed, "percentCompleted" => percent})
+       when is_integer(total) and total > 0 do
+    %{total: total, completed: completed, percent_completed: percent}
+  end
+
+  defp sub_issue_summary(_), do: nil
 
   @spec status_options(map()) :: [IssueDTO.status()]
   def status_options(%{"data" => %{"node" => %{"fields" => %{"nodes" => nodes}}}}) do

@@ -181,13 +181,13 @@ defmodule SymphonyElixir.Terminal.RegistryTest do
   end
 
   test "returns explicit errors when tmux or workspace setup fails" do
-    assert {:error, "tmux is not available"} =
+    assert {:error, :tmux_unavailable} =
              Registry.open_issue_session(%{identifier: "MAC-1"},
                tmux: MissingTmux,
                workspace: FakeWorkspace
              )
 
-    assert {:error, "workspace setup failed: :workspace_failed"} =
+    assert {:error, {:workspace_setup_failed, :workspace_failed}} =
              Registry.open_issue_session(%{identifier: "BAD-1"},
                tmux: FakeTmux,
                workspace: FakeWorkspace

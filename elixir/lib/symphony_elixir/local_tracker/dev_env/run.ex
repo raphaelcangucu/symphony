@@ -9,9 +9,11 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Run do
 
   @type t :: %__MODULE__{}
   @statuses ~w(pending running succeeded failed)
+  @kinds ~w(run warm_up)
 
   schema "local_tracker_dev_env_runs" do
     field(:status, :string, default: "pending")
+    field(:kind, :string, default: "run")
     field(:started_at, :utc_datetime_usec)
     field(:completed_at, :utc_datetime_usec)
 
@@ -23,8 +25,9 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Run do
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(run, attrs) do
     run
-    |> cast(attrs, [:project_id, :status, :started_at, :completed_at])
-    |> validate_required([:project_id, :status])
+    |> cast(attrs, [:project_id, :status, :kind, :started_at, :completed_at])
+    |> validate_required([:project_id, :status, :kind])
     |> validate_inclusion(:status, @statuses)
+    |> validate_inclusion(:kind, @kinds)
   end
 end

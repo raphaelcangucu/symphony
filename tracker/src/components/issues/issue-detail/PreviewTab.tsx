@@ -1,10 +1,13 @@
 import { AlertTriangle, Bot, Cloud, ExternalLink, Loader2, Play, RotateCcw, Server, Square } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DevServerOutputPanel } from "@/components/issues/issue-detail/DevServerOutputPanel";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
 import {
   buildPreviewFailurePrompt,
@@ -44,6 +47,7 @@ const RETRYABLE_UNAVAILABLE_REASONS = new Set<IssueDevServerReason>([
 const ACTIVE_PROVISIONING_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
 
 export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: PreviewTabProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, error, loading, restart, restartServer, start, startServer, stop, stopServer, startTunnel } =
     useIssueDevServers(projectSlug, issueIdentifier);
@@ -87,8 +91,8 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
 
   if (!hasRequiredIdentifiers) {
     return (
-      <StateCallout tone="error" title="Preview cannot load">
-        Project and issue identifiers are required to load preview status.
+      <StateCallout tone="error" title={t("issue.preview.cannotLoadTitle")}>
+        {t("issue.preview.cannotLoadBody")}
       </StateCallout>
     );
   }
@@ -99,16 +103,16 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
         ariaLive="polite"
         icon={<Loader2 className="h-5 w-5 animate-spin" />}
         role="status"
-        title="Loading preview status..."
+        title={t("issue.preview.loadingTitle")}
       >
-        Checking dev-server availability for this issue.
+        {t("issue.preview.loadingBody")}
       </StateCallout>
     );
   }
 
   if (error && !data) {
     return (
-      <StateCallout tone="error" title="Could not load preview status">
+      <StateCallout tone="error" title={t("issue.preview.loadErrorTitle")}>
         {error}
       </StateCallout>
     );
@@ -116,18 +120,18 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
 
   if (!data) {
     return (
-      <StateCallout title="Preview status unavailable">
-        No preview status has been loaded for this issue yet.
+      <StateCallout title={t("issue.preview.unavailableTitle")}>
+        {t("issue.preview.unavailableBody")}
       </StateCallout>
     );
   }
 
-  const unavailableMessage = data.available ? null : availabilityMessage(data.reason);
+  const unavailableMessage = data.available ? null : availabilityMessage(data.reason, t);
   const provisioningMessage =
     data.available &&
     primaryServer != null &&
     ACTIVE_PROVISIONING_STATUSES.has(primaryServer.status)
-      ? provisioningStatusMessage(primaryServer)
+      ? provisioningStatusMessage(primaryServer, t)
       : null;
   const controlsDisabled = loading || !canRunManualActions(data.available, data.reason);
   const failureReason = data.reason && isPreviewFailureReason(data.reason);
@@ -138,7 +142,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
   return (
     <div className="space-y-4 text-sm">
       {error ? (
-        <StateCallout tone="error" title="Could not refresh preview status">
+        <StateCallout tone="error" title={t("issue.preview.refreshErrorTitle")}>
           {error}
         </StateCallout>
       ) : null}
@@ -156,11 +160,13 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Server className="h-4 w-4" />
-                Issue Preview
+                {t("issue.preview.cardTitle")}
               </CardTitle>
               <CardDescription>
-                Availability: {data.available ? "available" : "unavailable"}
-                {loading ? " · refreshing status" : ""}
+                {t("issue.preview.availability", {
+                  status: data.available ? t("issue.preview.available") : t("issue.preview.unavailable"),
+                })}
+                {loading ? t("issue.preview.refreshing") : ""}
               </CardDescription>
             </div>
             <PreviewControls disabled={controlsDisabled} onRestart={restart} onStart={start} onStop={stop} />
@@ -183,14 +189,16 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                    Preview is ready{primaryServer ? ` from ${primaryServer.slug}` : ""}.
+                    {primaryServer
+                      ? t("issue.preview.readyFrom", { slug: primaryServer.slug })
+                      : t("issue.preview.ready")}
                   </p>
                   <p className="mt-1 break-all font-mono text-xs text-emerald-700 dark:text-emerald-300">
                     {openPrimaryUrl}
                   </p>
                   {tunnelRunning && primaryPublicUrl ? (
                     <p className="mt-1 break-all font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">
-                      Public (Cloudflare tunnel):{" "}
+                      {t("issue.preview.publicTunnel")}{" "}
                       <a href={primaryPublicUrl} target="_blank" rel="noreferrer noopener" className="underline">
                         {primaryPublicUrl}
                       </a>
@@ -198,7 +206,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                   ) : null}
                   {tunnelRunning && primaryLocalUrl ? (
                     <p className="mt-1 break-all font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">
-                      Local:{" "}
+                      {t("issue.preview.local")}{" "}
                       <a href={primaryLocalUrl} target="_blank" rel="noreferrer noopener" className="underline">
                         {primaryLocalUrl}
                       </a>
@@ -208,7 +216,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                 <Button asChild size="sm">
                   <a href={openPrimaryUrl} target="_blank" rel="noreferrer noopener">
                     <ExternalLink className="h-3.5 w-3.5" />
-                    Open Preview
+                    {t("issue.preview.openPreview")}
                   </a>
                 </Button>
               </div>
@@ -220,7 +228,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
               ariaLive="polite"
               icon={<Loader2 className="h-5 w-5 animate-spin" />}
               role="status"
-              title="Preview is being provisioned..."
+              title={t("issue.preview.provisioningTitle")}
             >
               <div className="space-y-3">
                 <p>{provisioningMessage}</p>
@@ -232,14 +240,14 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
           ) : null}
 
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dev Servers</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("issue.preview.devServers")}</h3>
             {data.servers.length === 0 ? (
               <p
                 aria-live="polite"
                 role="status"
                 className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
               >
-                No dev servers are running yet. Use Start Preview when you want to provision one.
+                {t("issue.preview.noServers")}
               </p>
             ) : (
               <div className="space-y-2">
@@ -247,6 +255,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                   <ServerRow
                     key={server.id}
                     controlsDisabled={controlsDisabled}
+                    issueIdentifier={issueIdentifier}
                     onAskAssistant={
                       isPreviewFailureServerStatus(server.status)
                         ? () => askAssistantToFix(data, server)
@@ -255,6 +264,7 @@ export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: Pr
                     onRestart={(serverId) => void restartServer(serverId)}
                     onStart={(serverId) => void startServer(serverId)}
                     onStop={(serverId) => void stopServer(serverId)}
+                    projectSlug={projectSlug}
                     server={server}
                     tunnelRunning={tunnelRunning}
                   />
@@ -279,19 +289,21 @@ function PreviewControls({
   onStart: () => Promise<void>;
   onStop: () => Promise<void>;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-wrap gap-2">
       <Button type="button" size="sm" onClick={() => void onStart()} disabled={disabled}>
         <Play className="h-3.5 w-3.5" />
-        Start Preview
+        {t("issue.preview.startPreview")}
       </Button>
       <Button type="button" size="sm" variant="outline" onClick={() => void onStop()} disabled={disabled}>
         <Square className="h-3.5 w-3.5" />
-        Stop Preview
+        {t("issue.preview.stopPreview")}
       </Button>
       <Button type="button" size="sm" variant="outline" onClick={() => void onRestart()} disabled={disabled}>
         <RotateCcw className="h-3.5 w-3.5" />
-        Restart Preview
+        {t("issue.preview.restartPreview")}
       </Button>
     </div>
   );
@@ -310,15 +322,30 @@ function ServerControls({
   onStop: () => void;
   slug: string;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" onClick={onStart} disabled={disabled} aria-label={`Start ${slug} preview`}>
+      <Button
+        type="button"
+        size="sm"
+        onClick={onStart}
+        disabled={disabled}
+        aria-label={t("issue.preview.startServerAria", { slug })}
+      >
         <Play className="h-3.5 w-3.5" />
-        Start
+        {t("issue.preview.start")}
       </Button>
-      <Button type="button" size="sm" variant="outline" onClick={onStop} disabled={disabled} aria-label={`Stop ${slug} preview`}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={onStop}
+        disabled={disabled}
+        aria-label={t("issue.preview.stopServerAria", { slug })}
+      >
         <Square className="h-3.5 w-3.5" />
-        Stop
+        {t("issue.preview.stop")}
       </Button>
       <Button
         type="button"
@@ -326,10 +353,10 @@ function ServerControls({
         variant="outline"
         onClick={onRestart}
         disabled={disabled}
-        aria-label={`Restart ${slug} preview`}
+        aria-label={t("issue.preview.restartServerAria", { slug })}
       >
         <RotateCcw className="h-3.5 w-3.5" />
-        Restart
+        {t("issue.preview.restart")}
       </Button>
     </div>
   );
@@ -346,29 +373,27 @@ function TunnelNotice({
   starting: boolean;
   onStart: () => void;
 }) {
+  const { t } = useTranslation();
+
   if (!enabled) {
     return null;
   }
 
   if (running) {
     return (
-      <StateCallout tone="default" icon={<Cloud className="h-5 w-5" />} title="Public preview URLs">
-        The Cloudflare tunnel is running, so the public <span className="font-mono">*.tracker.cods.dev</span> links
-        below reach this machine and can be shared with teammates.
+      <StateCallout tone="default" icon={<Cloud className="h-5 w-5" />} title={t("issue.preview.tunnelRunningTitle")}>
+        {t("issue.preview.tunnelRunningBody")}
       </StateCallout>
     );
   }
 
   return (
-    <StateCallout tone="warning" title="Cloudflare tunnel is not running">
+    <StateCallout tone="warning" title={t("issue.preview.tunnelStoppedTitle")}>
       <div className="space-y-3">
-        <p>
-          Public preview links won&apos;t work until the tunnel is running. Only the localhost URLs are shown below.
-          Start the tunnel to expose the public <span className="font-mono">*.tracker.cods.dev</span> hosts.
-        </p>
+        <p>{t("issue.preview.tunnelStoppedBody")}</p>
         <Button type="button" size="sm" onClick={onStart} disabled={starting}>
           {starting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Cloud className="h-3.5 w-3.5" />}
-          {starting ? "Starting tunnel..." : "Start tunnel"}
+          {starting ? t("issue.preview.startingTunnel") : t("issue.preview.startTunnel")}
         </Button>
       </div>
     </StateCallout>
@@ -376,16 +401,20 @@ function TunnelNotice({
 }
 
 function AskAssistantButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
+
   return (
     <Button type="button" size="sm" variant="outline" onClick={onClick}>
       <Bot className="h-3.5 w-3.5" />
-      Ask assistant to fix
+      {t("issue.preview.askAssistant")}
     </Button>
   );
 }
 
 function ServerRow({
   server,
+  projectSlug,
+  issueIdentifier,
   controlsDisabled,
   onAskAssistant,
   onRestart,
@@ -394,6 +423,8 @@ function ServerRow({
   tunnelRunning,
 }: {
   server: IssueDevServer;
+  projectSlug: string;
+  issueIdentifier: string;
   controlsDisabled: boolean;
   onAskAssistant?: () => void;
   onRestart: (serverId: number) => void;
@@ -401,6 +432,7 @@ function ServerRow({
   onStop: (serverId: number) => void;
   tunnelRunning: boolean;
 }) {
+  const { t } = useTranslation();
   const previewUrl = readyPreviewUrl(server);
   const publicUrl = publicTunnelPreviewUrl(server);
   const localUrl = localPreviewUrl(server);
@@ -412,16 +444,18 @@ function ServerRow({
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{server.slug}</span>
-            {server.primary ? <Badge variant="outline">primary</Badge> : null}
+            {server.primary ? <Badge variant="outline">{t("issue.preview.primaryBadge")}</Badge> : null}
             <Badge className={cn("capitalize", STATUS_BADGE_CLASS[server.status])}>{server.status}</Badge>
           </div>
           <p className="text-xs text-muted-foreground">
-            {server.working_dir ? `Working directory: ${server.working_dir}` : "No working directory reported"}
-            {server.port ? ` · Port ${server.port}` : ""}
+            {server.working_dir
+              ? t("issue.preview.workingDir", { dir: server.working_dir })
+              : t("issue.preview.noWorkingDir")}
+            {server.port ? t("issue.preview.port", { port: server.port }) : ""}
           </p>
           {tunnelRunning && publicUrl ? (
             <p className="break-all font-mono text-xs text-muted-foreground">
-              Public (Cloudflare tunnel):{" "}
+              {t("issue.preview.publicTunnel")}{" "}
               <a href={publicUrl} target="_blank" rel="noreferrer noopener" className="underline">
                 {publicUrl}
               </a>
@@ -429,7 +463,7 @@ function ServerRow({
           ) : null}
           {tunnelRunning && localUrl ? (
             <p className="break-all font-mono text-xs text-muted-foreground">
-              Local:{" "}
+              {t("issue.preview.local")}{" "}
               <a href={localUrl} target="_blank" rel="noreferrer noopener" className="underline">
                 {localUrl}
               </a>
@@ -450,14 +484,23 @@ function ServerRow({
             <Button asChild size="sm" variant="outline">
               <a href={openUrl} target="_blank" rel="noreferrer noopener">
                 <ExternalLink className="h-3.5 w-3.5" />
-                Open {server.slug} preview
+                {t("issue.preview.openServerPreview", { slug: server.slug })}
               </a>
             </Button>
           ) : (
-            <span className="text-xs text-muted-foreground">No URL yet</span>
+            <span className="text-xs text-muted-foreground">{t("issue.preview.noUrlYet")}</span>
           )}
         </div>
       </div>
+      <DevServerOutputPanel
+        defaultOpen={ACTIVE_PROVISIONING_STATUSES.has(server.status) || server.status === "crashed"}
+        issueIdentifier={issueIdentifier}
+        projectSlug={projectSlug}
+        serverId={server.id}
+        sessionName={server.session_name}
+        slug={server.slug}
+        status={server.status}
+      />
     </div>
   );
 }
@@ -527,7 +570,12 @@ function localPreviewUrl(server: IssueDevServer | null): string | null {
     return null;
   }
 
-  return `http://127.0.0.1:${server.port}${pathFromUrl(server.url)}`;
+  // Use `localhost` (not `127.0.0.1`): the browser may run on a different host
+  // than the dev server (e.g. Windows browser + WSL2 dev servers). `localhost`
+  // resolves to both ::1 and 127.0.0.1, so it reaches IPv6-bound listeners
+  // (Go's default `[::]` bind, e.g. goapi) as well as IPv4 `0.0.0.0` listeners,
+  // whereas a hardcoded `127.0.0.1` fails for IPv6-only forwarded listeners.
+  return `http://localhost:${server.port}${pathFromUrl(server.url)}`;
 }
 
 function pathFromUrl(url: string | null): string {
@@ -564,56 +612,24 @@ function canRunManualActions(available: boolean, reason: IssueDevServerReason): 
   return RETRYABLE_UNAVAILABLE_REASONS.has(reason);
 }
 
-function availabilityMessage(reason: IssueDevServerReason): { title: string; body: string } {
-  switch (reason) {
-    case "disabled":
-      return {
-        title: "Dev-server previews are disabled",
-        body: "Availability is disabled for this project. Enable dev-server previews in the project workflow before using Start Preview.",
-      };
-    case "workspace_missing":
-      return {
-        title: "Preview workspace is missing",
-        body: "Availability is blocked because the issue workspace could not be found. Create or restore the workspace before starting a preview.",
-      };
-    case "no_serve_step":
-      return {
-        title: "No serve step configured",
-        body: "Availability is blocked because this project does not have a dev-server serve step configured.",
-      };
-    case "no_free_port":
-      return {
-        title: "No free preview port",
-        body: "Availability is blocked because the system could not reserve a free port for the dev server.",
-      };
-    case "lock_unavailable":
-      return {
-        title: "Preview is already being changed",
-        body: "Another preview action is holding the lock. Manual controls remain available so you can retry after the current action finishes.",
-      };
-    case "start_failed":
-      return {
-        title: "Preview start failed",
-        body: "The last start request failed. Manual controls remain available so you can retry or restart after checking the server output.",
-      };
-    case "restart_failed":
-      return {
-        title: "Preview restart failed",
-        body: "The last restart request failed. Manual controls remain available so you can retry once the underlying issue is resolved.",
-      };
-    case "crashed":
-      return {
-        title: "Preview crashed",
-        body: "Availability is blocked because the preview process crashed. Manual controls remain available so you can restart after checking the server logs.",
-      };
-    default:
-      return {
-        title: "Preview unavailable",
-        body: "Availability is blocked right now. Resolve the issue above, then use Start Preview when you are ready.",
-      };
-  }
+function availabilityMessage(reason: IssueDevServerReason, t: TFunction): { title: string; body: string } {
+  const knownReasons: IssueDevServerReason[] = [
+    "disabled",
+    "workspace_missing",
+    "no_serve_step",
+    "no_free_port",
+    "lock_unavailable",
+    "start_failed",
+    "restart_failed",
+    "crashed",
+  ];
+  const key = knownReasons.includes(reason) ? reason : "default";
+  return {
+    title: t(`issue.preview.availabilityReason.${key}.title`),
+    body: t(`issue.preview.availabilityReason.${key}.body`),
+  };
 }
 
-function provisioningStatusMessage(primaryServer: IssueDevServer): string {
-  return `The ${primaryServer.slug} dev server is ${primaryServer.status} and has not published a URL yet.`;
+function provisioningStatusMessage(primaryServer: IssueDevServer, t: TFunction): string {
+  return t("issue.preview.provisioningStatus", { slug: primaryServer.slug, status: primaryServer.status });
 }

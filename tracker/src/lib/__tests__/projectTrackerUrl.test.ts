@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { i18n } from "@/i18n";
 import { githubProjectBoardUrl, projectTrackerLinkLabel, resolveProjectTrackerUrl } from "@/lib/projectTrackerUrl";
 import type { Project } from "@/types/project";
 
@@ -101,8 +102,8 @@ describe("projectTrackerUrl", () => {
   });
 
   it("labels tracker links by kind", () => {
-    expect(projectTrackerLinkLabel("github")).toBe("Open GitHub project");
-    expect(projectTrackerLinkLabel("linear")).toBe("Open Linear project");
-    expect(projectTrackerLinkLabel("jira")).toBe("Open Jira project");
+    expect(projectTrackerLinkLabel("github")).toBe(i18n.t("project.list.trackerLink.github"));
+    expect(projectTrackerLinkLabel("linear")).toBe(i18n.t("project.list.trackerLink.linear"));
+    expect(projectTrackerLinkLabel("jira")).toBe(i18n.t("project.list.trackerLink.jira"));
   });
 });

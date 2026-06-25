@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ConnectedIdentitiesCard } from "@/components/settings/ConnectedIdentitiesCard";
+import { LanguageCard } from "@/components/settings/LanguageCard";
 import { OrchestrationRulesCard } from "@/components/settings/OrchestrationRulesCard";
 import { ProviderCredentialsCard } from "@/components/settings/ProviderCredentialsCard";
 import { PushNotificationsCard } from "@/components/settings/PushNotificationsCard";
-import { AGENT_ICONS, AGENT_LABELS, AgentChip } from "@/components/shared/AgentChip";
+import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   type AgentAvailability,
+  type LocalePreference,
   type OrchestratorSettings,
   fetchAgentAvailability,
   fetchSettings,
@@ -18,8 +21,10 @@ import type { AgentKind } from "@/types/issue";
 
 
 export function SettingsPage() {
+  const { t } = useTranslation();
   const [defaultAgent, setDefaultAgent] = useState<AgentKind | null>(null);
   const [orchestrator, setOrchestrator] = useState<OrchestratorSettings | null>(null);
+  const [uiLocale, setUiLocale] = useState<LocalePreference | null>(null);
   const [availability, setAvailability] = useState<AgentAvailability | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -32,6 +37,7 @@ export function SettingsPage() {
         if (!cancelled) {
           setDefaultAgent(settings.agents.default_agent_kind);
           setOrchestrator(settings.orchestrator);
+          setUiLocale(settings.ui.locale);
         }
       })
       .catch(() => {
@@ -56,10 +62,10 @@ export function SettingsPage() {
     setDefaultAgent(kind);
     try {
       await updateAgentSettings({ default_agent_kind: kind });
-      toast.success(`Default coding agent set to ${AGENT_LABELS[kind]}`);
+      toast.success(t("settings.codingAgent.saved", { agent: agentKindLabel(kind, t) }));
     } catch {
       setDefaultAgent(previous);
-      toast.error("Failed to save the default coding agent");
+      toast.error(t("settings.codingAgent.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -69,31 +75,31 @@ export function SettingsPage() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-2xl space-y-6 p-6">
         <div>
-          <h1 className="text-xl font-semibold">Settings</h1>
-          <p className="text-sm text-muted-foreground">Operator-level defaults for this Symphony instance.</p>
+          <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("settings.subtitle")}</p>
         </div>
+
+        <LanguageCard initial={uiLocale} loadError={loadError} onLocaleChange={setUiLocale} />
 
         <Card>
         <CardHeader>
-          <CardTitle>Coding agent</CardTitle>
-          <CardDescription>
-            Default agent for new work. Projects and tasks can override it (task &gt; project &gt; this default).
-          </CardDescription>
+          <CardTitle>{t("settings.codingAgent.title")}</CardTitle>
+          <CardDescription>{t("settings.codingAgent.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {loadError ? (
-            <p className="text-xs text-muted-foreground">Failed to load settings — refresh to retry.</p>
+            <p className="text-xs text-muted-foreground">{t("settings.loadFailed")}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {defaultAgent === null && (
-                <p className="text-xs text-muted-foreground">Loading…</p>
+                <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
               )}
-              {(Object.keys(AGENT_LABELS) as AgentKind[]).map((kind) => {
+              {AGENT_KINDS.map((kind) => {
                 const Icon = AGENT_ICONS[kind];
                 return (
                   <AgentChip
                     key={kind}
-                    label={AGENT_LABELS[kind]}
+                    label={agentKindLabel(kind, t)}
                     icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
                     active={defaultAgent === kind}
                     disabled={saving || defaultAgent === null}
@@ -105,16 +111,16 @@ export function SettingsPage() {
           )}
 
           {availabilityError ? (
-            <p className="text-xs text-muted-foreground">Could not check agent availability.</p>
+            <p className="text-xs text-muted-foreground">{t("settings.codingAgent.availabilityFailed")}</p>
           ) : availability ? (
             <ul className="space-y-1 text-xs text-muted-foreground">
-              {(Object.keys(AGENT_LABELS) as AgentKind[]).map((kind) => {
+              {AGENT_KINDS.map((kind) => {
                 const entry = availability[kind];
                 return (
                   <li key={kind}>
                     {entry.available
                       ? `✓ ${entry.version ?? entry.command}`
-                      : `✗ ${entry.command} not found — install it or pick another agent`}
+                      : `✗ ${t("settings.codingAgent.notFound", { command: entry.command })}`}
                   </li>
                 );
               })}

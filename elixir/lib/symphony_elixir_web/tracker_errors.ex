@@ -1,9 +1,12 @@
 defmodule SymphonyElixirWeb.TrackerErrors do
   @moduledoc "Shared JSON error rendering for local tracker endpoints."
 
+  use Gettext, backend: SymphonyElixirWeb.Gettext
+
   import Phoenix.Controller
   import Plug.Conn
 
+  alias Gettext, as: GettextCore
   alias Plug.Conn
 
   @spec render(Conn.t(), Ecto.Changeset.t() | atom() | String.t()) :: Conn.t()
@@ -13,31 +16,65 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     |> json(%{
       error: %{
         code: "validation_failed",
-        message: "Validation failed",
+        message: dgettext("errors", "Validation failed"),
         details: Ecto.Changeset.traverse_errors(changeset, fn {message, _opts} -> message end)
       }
     })
   end
 
-  def render(conn, :project_not_found), do: not_found(conn, "project_not_found", "Project not found")
-  def render(conn, :issue_not_found), do: not_found(conn, "issue_not_found", "Issue not found")
-  def render(conn, :status_not_found), do: not_found(conn, "status_not_found", "Status not found")
-  def render(conn, :blocker_not_found), do: not_found(conn, "blocker_not_found", "Blocker not found")
-  def render(conn, :comment_not_found), do: not_found(conn, "comment_not_found", "Comment not found")
-  def render(conn, :dev_server_not_found), do: not_found(conn, "dev_server_not_found", "Dev server not found")
-  def render(conn, :template_not_found), do: not_found(conn, "template_not_found", "Template not found")
+  def render(conn, :project_not_found),
+    do: not_found(conn, "project_not_found", dgettext("errors", "Project not found"))
+
+  def render(conn, :issue_not_found),
+    do: not_found(conn, "issue_not_found", dgettext("errors", "Issue not found"))
+
+  def render(conn, :status_not_found),
+    do: not_found(conn, "status_not_found", dgettext("errors", "Status not found"))
+
+  def render(conn, :blocker_not_found),
+    do: not_found(conn, "blocker_not_found", dgettext("errors", "Blocker not found"))
+
+  def render(conn, :comment_not_found),
+    do: not_found(conn, "comment_not_found", dgettext("errors", "Comment not found"))
+
+  def render(conn, :evidence_run_not_found),
+    do: not_found(conn, "evidence_run_not_found", dgettext("errors", "Evidence run not found."))
+
+  def render(conn, :artifact_not_found),
+    do: not_found(conn, "artifact_not_found", dgettext("errors", "Evidence artifact not found."))
+
+  def render(conn, :invalid_artifact_path),
+    do: error(conn, 422, "invalid_artifact_path", dgettext("errors", "Invalid artifact path."))
+
+  def render(conn, :commit_not_found),
+    do: not_found(conn, "commit_not_found", dgettext("errors", "Commit not found in workspace repo."))
+
+  def render(conn, :repo_not_found),
+    do: not_found(conn, "repo_not_found", dgettext("errors", "Repository not found in workspace."))
+
+  def render(conn, :dev_server_not_found),
+    do: not_found(conn, "dev_server_not_found", dgettext("errors", "Dev server not found"))
+
+  def render(conn, :template_not_found),
+    do: not_found(conn, "template_not_found", dgettext("errors", "Template not found"))
 
   def render(conn, {:template_not_found, _slug}),
-    do: not_found(conn, "template_not_found", "Template not found")
+    do: not_found(conn, "template_not_found", dgettext("errors", "Template not found"))
 
-  def render(conn, :thread_not_found), do: not_found(conn, "thread_not_found", "Assistant thread not found")
+  def render(conn, :thread_not_found),
+    do: not_found(conn, "thread_not_found", dgettext("errors", "Assistant thread not found"))
 
   def render(conn, :missing_github_token) do
-    error(conn, 503, "github_token_missing", "GITHUB_TOKEN is not configured on the Symphony server.")
+    error(
+      conn,
+      503,
+      "github_token_missing",
+      dgettext("errors", "GITHUB_TOKEN is not configured on the Symphony server.")
+    )
   end
 
   def render(conn, :unauthorized) do
-    error(conn, 401, "github_unauthorized", "GitHub rejected the configured GITHUB_TOKEN.")
+    error(conn, 401, "github_unauthorized", dgettext("errors", "GitHub rejected the configured GITHUB_TOKEN."))
   end
 
   def render(conn, {:rate_limited, info}) when is_map(info) do
@@ -51,48 +88,91 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   end
 
   def render(conn, {:network_error, _reason}) do
-    error(conn, 503, "github_network_error", "Failed to reach GitHub. Try again in a moment.")
+    error(conn, 503, "github_network_error", dgettext("errors", "Failed to reach GitHub. Try again in a moment."))
   end
 
   def render(conn, {:malformed_response, _body}) do
-    error(conn, 502, "github_malformed_response", "GitHub returned an unexpected response.")
+    error(conn, 502, "github_malformed_response", dgettext("errors", "GitHub returned an unexpected response."))
   end
 
   def render(conn, :missing_credentials),
-    do: error(conn, 503, "tracker_credentials_missing", "GITHUB_TOKEN / LINEAR_API_KEY missing on server")
+    do:
+      error(
+        conn,
+        503,
+        "tracker_credentials_missing",
+        dgettext("errors", "GITHUB_TOKEN / LINEAR_API_KEY missing on server")
+      )
 
   def render(conn, :remote_unauthorized),
-    do: error(conn, 502, "tracker_unauthorized", "Remote tracker rejected the token (401)")
+    do: error(conn, 502, "tracker_unauthorized", dgettext("errors", "Remote tracker rejected the token (401)"))
 
   def render(conn, :remote_forbidden),
-    do: error(conn, 502, "tracker_forbidden", "Remote tracker forbade the request (403)")
+    do: error(conn, 502, "tracker_forbidden", dgettext("errors", "Remote tracker forbade the request (403)"))
 
   def render(conn, :remote_rate_limited),
-    do: error(conn, 429, "tracker_rate_limited", "Remote tracker rate limit hit; retry later")
+    do: error(conn, 429, "tracker_rate_limited", dgettext("errors", "Remote tracker rate limit hit; retry later"))
 
   def render(conn, :remote_unavailable),
-    do: error(conn, 502, "tracker_unavailable", "Remote tracker unreachable; try again")
+    do: error(conn, 502, "tracker_unavailable", dgettext("errors", "Remote tracker unreachable; try again"))
 
   def render(conn, :not_supported_on_remote),
-    do: error(conn, 501, "tracker_not_supported", "This action is not supported on the remote tracker")
+    do:
+      error(
+        conn,
+        501,
+        "tracker_not_supported",
+        dgettext("errors", "This action is not supported on the remote tracker")
+      )
 
   def render(conn, :sync_disabled),
-    do: error(conn, 409, "tracker_sync_disabled", "Local-first sync is disabled on this server.")
+    do: error(conn, 409, "tracker_sync_disabled", dgettext("errors", "Local-first sync is disabled on this server."))
 
   def render(conn, :public_tunnel_disabled),
-    do: error(conn, 409, "public_tunnel_disabled", "The public preview tunnel is disabled for this workspace.")
+    do:
+      error(
+        conn,
+        409,
+        "public_tunnel_disabled",
+        dgettext("errors", "The public preview tunnel is disabled for this workspace.")
+      )
 
   def render(conn, :public_tunnel_start_failed),
-    do: error(conn, 502, "public_tunnel_start_failed", "Failed to start the Cloudflare tunnel. Check the server logs.")
+    do:
+      error(
+        conn,
+        502,
+        "public_tunnel_start_failed",
+        dgettext("errors", "Failed to start the Cloudflare tunnel. Check the server logs.")
+      )
 
   def render(conn, :no_remote_adapter),
-    do: error(conn, 422, "tracker_no_remote_adapter", "This project has no remote tracker to sync from.")
+    do:
+      error(
+        conn,
+        422,
+        "tracker_no_remote_adapter",
+        dgettext("errors", "This project has no remote tracker to sync from.")
+      )
 
   def render(conn, {:remote_validation, details}),
-    do: error(conn, 422, "tracker_validation_failed", "Remote tracker rejected the request", details)
+    do:
+      error(
+        conn,
+        422,
+        "tracker_validation_failed",
+        dgettext("errors", "Remote tracker rejected the request"),
+        details
+      )
 
   def render(conn, :no_failing_checks),
-    do: error(conn, 422, "no_failing_checks", "No failing checks found on the linked pull request(s).")
+    do:
+      error(
+        conn,
+        422,
+        "no_failing_checks",
+        dgettext("errors", "No failing checks found on the linked pull request(s).")
+      )
 
   def render(conn, :update_branch_conflict),
     do:
@@ -100,23 +180,50 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         conn,
         422,
         "update_branch_conflict",
-        "Could not update the branch automatically — resolve conflicts on GitHub, then retry."
+        dgettext(
+          "errors",
+          "Could not update the branch automatically — resolve conflicts on GitHub, then retry."
+        )
       )
 
   def render(conn, :invalid_pr_number),
-    do: error(conn, 422, "invalid_pr_number", "Invalid pull request number.")
+    do: error(conn, 422, "invalid_pr_number", dgettext("errors", "Invalid pull request number."))
+
+  def render(conn, :invalid_pr_url),
+    do: error(conn, 422, "invalid_pr_url", dgettext("errors", "Invalid GitHub pull request URL."))
+
+  def render(conn, :pr_url_required),
+    do: error(conn, 422, "pr_url_required", dgettext("errors", "A pull request URL is required."))
 
   def render(conn, :no_failed_runs),
-    do: error(conn, 422, "no_failed_runs", "No failed workflow runs found for this pull request.")
+    do:
+      error(
+        conn,
+        422,
+        "no_failed_runs",
+        dgettext("errors", "No failed workflow runs found for this pull request.")
+      )
 
   def render(conn, :orchestrator_unavailable),
-    do: error(conn, 503, "orchestrator_unavailable", "Orchestrator is unavailable. Try again in a moment.")
+    do:
+      error(
+        conn,
+        503,
+        "orchestrator_unavailable",
+        dgettext("errors", "Orchestrator is unavailable. Try again in a moment.")
+      )
 
   def render(conn, :already_running),
-    do: error(conn, 409, "already_running", "An agent is already running on this issue.")
+    do:
+      error(
+        conn,
+        409,
+        "already_running",
+        dgettext("errors", "An agent is already running on this issue.")
+      )
 
   def render(conn, :no_slots),
-    do: error(conn, 503, "no_slots", "No orchestrator slots are available right now.")
+    do: error(conn, 503, "no_slots", dgettext("errors", "No orchestrator slots are available right now."))
 
   def render(conn, :not_dispatchable),
     do:
@@ -124,11 +231,11 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         conn,
         422,
         "not_dispatchable",
-        "This issue is not in an active, routable state for agent dispatch."
+        dgettext("errors", "This issue is not in an active, routable state for agent dispatch.")
       )
 
   def render(conn, :invalid_merge_method),
-    do: error(conn, 422, "invalid_merge_method", "Merge method must be merge, squash, or rebase.")
+    do: error(conn, 422, "invalid_merge_method", dgettext("errors", "Merge method must be merge, squash, or rebase."))
 
   def render(conn, :pull_request_not_mergeable),
     do:
@@ -136,11 +243,17 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         conn,
         422,
         "pull_request_not_mergeable",
-        "GitHub does not consider this pull request mergeable yet."
+        dgettext("errors", "GitHub does not consider this pull request mergeable yet.")
       )
 
   def render(conn, :pull_request_merge_conflict),
-    do: error(conn, 409, "pull_request_merge_conflict", "The pull request cannot be merged because it has conflicts.")
+    do:
+      error(
+        conn,
+        409,
+        "pull_request_merge_conflict",
+        dgettext("errors", "The pull request cannot be merged because it has conflicts.")
+      )
 
   def render(conn, :pull_request_merge_blocked),
     do:
@@ -148,7 +261,10 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         conn,
         422,
         "pull_request_merge_blocked",
-        "GitHub blocked the merge. Required checks, reviews, or branch rules may still be pending."
+        dgettext(
+          "errors",
+          "GitHub blocked the merge. Required checks, reviews, or branch rules may still be pending."
+        )
       )
 
   def render(conn, :pull_request_merge_forbidden),
@@ -157,23 +273,23 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         conn,
         403,
         "pull_request_merge_forbidden",
-        "The configured GitHub token is not allowed to merge this pull request."
+        dgettext("errors", "The configured GitHub token is not allowed to merge this pull request.")
       )
 
   def render(conn, {:adapter_error, _reason}),
-    do: error(conn, 500, "tracker_internal", "Tracker adapter error")
+    do: error(conn, 500, "tracker_internal", dgettext("errors", "Tracker adapter error"))
 
   def render(conn, {:assistant_config_unavailable, _reason}) do
     error(
       conn,
       503,
       "assistant_config_unavailable",
-      "Could not load Codex CLI models. Check that Codex is installed and configured."
+      dgettext("errors", "Could not load Codex CLI models. Check that Codex is installed and configured.")
     )
   end
 
   def render(conn, :invalid_thread_id),
-    do: validation(conn, "thread_id must be a positive integer")
+    do: validation(conn, dgettext("errors", "thread_id must be a positive integer"))
 
   def render(conn, :invalid_path),
     do:
@@ -181,7 +297,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         conn,
         422,
         "invalid_issue_document_path",
-        "Issue document path must be a markdown file under docs/superpowers."
+        dgettext("errors", "Issue document path must be a markdown file under docs/superpowers.")
       )
 
   def render(conn, :not_markdown),
@@ -190,14 +306,62 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         conn,
         422,
         "invalid_issue_document_path",
-        "Issue document path must be a markdown file under docs/superpowers."
+        dgettext("errors", "Issue document path must be a markdown file under docs/superpowers.")
       )
 
   def render(conn, :not_found),
-    do: not_found(conn, "issue_document_not_found", "Issue document not found")
+    do: not_found(conn, "issue_document_not_found", dgettext("errors", "Issue document not found"))
 
   def render(conn, :too_large),
-    do: error(conn, 413, "issue_document_too_large", "Issue document is too large.")
+    do: error(conn, 413, "issue_document_too_large", dgettext("errors", "Issue document is too large."))
+
+  def render(conn, :attachment_not_found),
+    do: not_found(conn, "attachment_not_found", dgettext("errors", "Attachment not found"))
+
+  def render(conn, :push_not_configured),
+    do: error(conn, 503, "push_not_configured", dgettext("errors", "Web Push is not configured"))
+
+  def render(conn, :push_not_configured_vapid),
+    do:
+      error(
+        conn,
+        503,
+        "push_not_configured",
+        dgettext("errors", "Web Push is not configured (missing VAPID keys)")
+      )
+
+  def render(conn, :unknown_credential),
+    do: not_found(conn, "unknown_credential", dgettext("errors", "unknown provider/credential"))
+
+  def render(conn, :unknown_settings_group),
+    do: not_found(conn, "not_found", dgettext("errors", "unknown settings group"))
+
+  def render(conn, :missing_runtime_id),
+    do: error(conn, 422, "invalid_report", dgettext("errors", "runtime_id is required"))
+
+  def render(conn, :tmux_unavailable),
+    do: error(conn, 503, "tmux_unavailable", dgettext("errors", "tmux is not available"))
+
+  def render(conn, {:workspace_setup_failed, reason}),
+    do:
+      error(
+        conn,
+        500,
+        "workspace_setup_failed",
+        dgettext("errors", "workspace setup failed: %{reason}", reason: format_terminal_reason(reason))
+      )
+
+  def render(conn, :cannot_group_with_self),
+    do: error(conn, 422, "cannot_group_with_self", dgettext("errors", "An issue cannot be grouped with itself."))
+
+  def render(conn, :lead_is_member),
+    do: error(conn, 422, "lead_is_member", dgettext("errors", "The chosen lead already belongs to another group."))
+
+  def render(conn, :member_is_lead),
+    do: error(conn, 422, "member_is_lead", dgettext("errors", "This issue already leads a group; ungroup it first."))
+
+  def render(conn, :not_in_group),
+    do: error(conn, 422, "not_in_group", dgettext("errors", "This issue is not part of a group."))
 
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
@@ -207,6 +371,11 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{error: %{code: "validation_failed", message: message, details: %{}}})
+  end
+
+  @spec validation_msg(Conn.t(), String.t(), map()) :: Conn.t()
+  def validation_msg(conn, msgid, bindings \\ %{}) when is_binary(msgid) and is_map(bindings) do
+    validation(conn, GettextCore.dgettext(SymphonyElixirWeb.Gettext, "errors", msgid, bindings))
   end
 
   defp error(conn, status, code, message, details \\ nil) do
@@ -219,11 +388,11 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   end
 
   defp rate_limited_message(%DateTime{} = reset_at) do
-    "GitHub API rate limit exceeded. Access resets at #{Calendar.strftime(reset_at, "%H:%M UTC")}."
+    dgettext("errors", "GitHub API rate limit exceeded. Access resets at %{time}.", time: Calendar.strftime(reset_at, "%H:%M UTC"))
   end
 
   defp rate_limited_message(_reset_at) do
-    "GitHub API rate limit exceeded. Try again shortly."
+    dgettext("errors", "GitHub API rate limit exceeded. Try again shortly.")
   end
 
   defp not_found(conn, code, message) do
@@ -235,7 +404,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   defp server_error(conn) do
     conn
     |> put_status(:internal_server_error)
-    |> json(%{error: %{code: "request_failed", message: "Request failed"}})
+    |> json(%{error: %{code: "request_failed", message: dgettext("errors", "Request failed")}})
   end
 
   defp server_error(conn, message) do
@@ -243,4 +412,7 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     |> put_status(:internal_server_error)
     |> json(%{error: %{code: "request_failed", message: message}})
   end
+
+  defp format_terminal_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_terminal_reason(reason), do: inspect(reason)
 end

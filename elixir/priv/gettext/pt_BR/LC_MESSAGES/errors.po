@@ -1,0 +1,289 @@
+msgid ""
+msgstr ""
+"Language: pt_BR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Project not found"
+msgstr "Projeto não encontrado"
+
+msgid "Validation failed"
+msgstr "Falha na validação"
+
+msgid "Issue not found"
+msgstr "Issue não encontrada"
+
+msgid "Status not found"
+msgstr "Status não encontrado"
+
+msgid "Blocker not found"
+msgstr "Bloqueio não encontrado"
+
+msgid "Comment not found"
+msgstr "Comentário não encontrado"
+
+msgid "Dev server not found"
+msgstr "Servidor de desenvolvimento não encontrado"
+
+msgid "Template not found"
+msgstr "Template não encontrado"
+
+msgid "Assistant thread not found"
+msgstr "Thread do assistente não encontrada"
+
+msgid "GITHUB_TOKEN is not configured on the Symphony server."
+msgstr "GITHUB_TOKEN não está configurado no servidor Symphony."
+
+msgid "GitHub rejected the configured GITHUB_TOKEN."
+msgstr "O GitHub rejeitou o GITHUB_TOKEN configurado."
+
+msgid "Failed to reach GitHub. Try again in a moment."
+msgstr "Falha ao conectar ao GitHub. Tente novamente em instantes."
+
+msgid "GitHub returned an unexpected response."
+msgstr "O GitHub retornou uma resposta inesperada."
+
+msgid "GITHUB_TOKEN / LINEAR_API_KEY missing on server"
+msgstr "GITHUB_TOKEN / LINEAR_API_KEY ausente no servidor"
+
+msgid "Remote tracker rejected the token (401)"
+msgstr "O tracker remoto rejeitou o token (401)"
+
+msgid "Remote tracker forbade the request (403)"
+msgstr "O tracker remoto proibiu a requisição (403)"
+
+msgid "Remote tracker rate limit hit; retry later"
+msgstr "Limite de taxa do tracker remoto atingido; tente mais tarde"
+
+msgid "Remote tracker unreachable; try again"
+msgstr "Tracker remoto inacessível; tente novamente"
+
+msgid "This action is not supported on the remote tracker"
+msgstr "Esta ação não é suportada no tracker remoto"
+
+msgid "Local-first sync is disabled on this server."
+msgstr "Sincronização local-first está desabilitada neste servidor."
+
+msgid "The public preview tunnel is disabled for this workspace."
+msgstr "O túnel público de preview está desabilitado para este workspace."
+
+msgid "Failed to start the Cloudflare tunnel. Check the server logs."
+msgstr "Falha ao iniciar o túnel Cloudflare. Verifique os logs do servidor."
+
+msgid "This project has no remote tracker to sync from."
+msgstr "Este projeto não tem tracker remoto para sincronizar."
+
+msgid "Remote tracker rejected the request"
+msgstr "O tracker remoto rejeitou a requisição"
+
+msgid "No failing checks found on the linked pull request(s)."
+msgstr "Nenhum check falho encontrado no(s) pull request(s) vinculado(s)."
+
+msgid "Could not update the branch automatically — resolve conflicts on GitHub, then retry."
+msgstr "Não foi possível atualizar o branch automaticamente — resolva conflitos no GitHub e tente novamente."
+
+msgid "Invalid pull request number."
+msgstr "Número de pull request inválido."
+
+msgid "No failed workflow runs found for this pull request."
+msgstr "Nenhuma execução de workflow falha encontrada para este pull request."
+
+msgid "Orchestrator is unavailable. Try again in a moment."
+msgstr "O orquestrador está indisponível. Tente novamente em instantes."
+
+msgid "An agent is already running on this issue."
+msgstr "Já há um agente em execução nesta issue."
+
+msgid "No orchestrator slots are available right now."
+msgstr "Não há slots do orquestrador disponíveis no momento."
+
+msgid "This issue is not in an active, routable state for agent dispatch."
+msgstr "Esta issue não está em um estado ativo e roteável para dispatch do agente."
+
+msgid "Merge method must be merge, squash, or rebase."
+msgstr "O método de merge deve ser merge, squash ou rebase."
+
+msgid "GitHub does not consider this pull request mergeable yet."
+msgstr "O GitHub ainda não considera este pull request mergeável."
+
+msgid "The pull request cannot be merged because it has conflicts."
+msgstr "O pull request não pode ser mergeado porque tem conflitos."
+
+msgid "GitHub blocked the merge. Required checks, reviews, or branch rules may still be pending."
+msgstr "O GitHub bloqueou o merge. Checks obrigatórios, reviews ou regras de branch podem estar pendentes."
+
+msgid "The configured GitHub token is not allowed to merge this pull request."
+msgstr "O token GitHub configurado não tem permissão para mergear este pull request."
+
+msgid "Tracker adapter error"
+msgstr "Erro no adaptador do tracker"
+
+msgid "Could not load Codex CLI models. Check that Codex is installed and configured."
+msgstr "Não foi possível carregar os modelos do Codex CLI. Verifique se o Codex está instalado e configurado."
+
+msgid "thread_id must be a positive integer"
+msgstr "thread_id deve ser um inteiro positivo"
+
+msgid "Issue document path must be a markdown file under docs/superpowers."
+msgstr "O caminho do documento da issue deve ser um arquivo markdown em docs/superpowers."
+
+msgid "Issue document not found"
+msgstr "Documento da issue não encontrado"
+
+msgid "Issue document is too large."
+msgstr "O documento da issue é muito grande."
+
+msgid "Request failed"
+msgstr "Falha na requisição"
+
+msgid "GitHub API rate limit exceeded. Access resets at %{time}."
+msgstr "Limite de taxa da API do GitHub excedido. Acesso restaurado às %{time}."
+
+msgid "GitHub API rate limit exceeded. Try again shortly."
+msgstr "Limite de taxa da API do GitHub excedido. Tente novamente em breve."
+
+msgid "Invalid GitHub pull request URL."
+msgstr "URL de pull request do GitHub inválida."
+
+msgid "A pull request URL is required."
+msgstr "Uma URL de pull request é obrigatória."
+
+msgid "Evidence run not found."
+msgstr "Run de evidência não encontrado."
+
+msgid "Evidence artifact not found."
+msgstr "Artefato de evidência não encontrado."
+
+msgid "Invalid artifact path."
+msgstr "Caminho de artefato inválido."
+
+msgid "Commit not found in workspace repo."
+msgstr "Commit não encontrado no repositório do workspace."
+
+msgid "Repository not found in workspace."
+msgstr "Repositório não encontrado no workspace."
+
+msgid "Snapshot timed out"
+msgstr "Snapshot expirou"
+
+msgid "Snapshot unavailable"
+msgstr "Snapshot indisponível"
+
+msgid "Attachment not found"
+msgstr "Anexo não encontrado"
+
+msgid "Web Push is not configured"
+msgstr "Web Push não está configurado"
+
+msgid "Web Push is not configured (missing VAPID keys)"
+msgstr "Web Push não está configurado (chaves VAPID ausentes)"
+
+msgid "endpoint is required"
+msgstr "endpoint é obrigatório"
+
+msgid "This file type is not supported."
+msgstr "Este tipo de arquivo não é suportado."
+
+msgid "Only PNG, JPEG, GIF, and WebP images are supported."
+msgstr "Apenas imagens PNG, JPEG, GIF e WebP são suportadas."
+
+msgid "Files must be 5 MB or smaller."
+msgstr "Arquivos devem ter no máximo 5 MB."
+
+msgid "Images must be 4 MB or smaller."
+msgstr "Imagens devem ter no máximo 4 MB."
+
+msgid "Invalid upload."
+msgstr "Upload inválido."
+
+msgid "file is required"
+msgstr "file é obrigatório"
+
+msgid "Invalid attachment path."
+msgstr "Caminho de anexo inválido."
+
+msgid "attachment path is required"
+msgstr "caminho do anexo é obrigatório"
+
+msgid "message is required"
+msgstr "message é obrigatório"
+
+msgid "%{field} is required"
+msgstr "%{field} é obrigatório"
+
+msgid "unsupported assistant tool: %{tool}"
+msgstr "ferramenta de assistente não suportada: %{tool}"
+
+msgid "only scope=freeform is supported"
+msgstr "apenas scope=freeform é suportado"
+
+msgid "thread id is required"
+msgstr "id da thread é obrigatório"
+
+msgid "agent must be codex, claude, cursor, or null"
+msgstr "agent deve ser codex, claude, cursor ou null"
+
+msgid "action must be resume, restart, hard_reset, stop, or continue_work"
+msgstr "action deve ser resume, restart, hard_reset, stop ou continue_work"
+
+msgid "server_id must be a positive integer"
+msgstr "server_id deve ser um inteiro positivo"
+
+msgid "body is required"
+msgstr "body é obrigatório"
+
+msgid "target_identifier is required"
+msgstr "target_identifier é obrigatório"
+
+msgid "provider and key are required"
+msgstr "provider e key são obrigatórios"
+
+msgid "setup is required"
+msgstr "setup é obrigatório"
+
+msgid "repositories must be a list"
+msgstr "repositories deve ser uma lista"
+
+msgid "workflow_markdown must be a string"
+msgstr "workflow_markdown deve ser uma string"
+
+msgid "invalid workflow_markdown: %{reason}"
+msgstr "workflow_markdown inválido: %{reason}"
+
+msgid "Project must be archived before permanent deletion"
+msgstr "O projeto deve estar arquivado antes da exclusão permanente"
+
+msgid "Invalid YAML"
+msgstr "YAML inválido"
+
+msgid "yaml is required"
+msgstr "yaml é obrigatório"
+
+msgid "repositories is required"
+msgstr "repositories é obrigatório"
+
+msgid "invalid setting %{name}: %{reason}"
+msgstr "configuração inválida %{name}: %{reason}"
+
+msgid "invalid tracker token"
+msgstr "token do tracker inválido"
+
+msgid "unknown provider/credential"
+msgstr "provider/credential desconhecido"
+
+msgid "unknown settings group"
+msgstr "grupo de configurações desconhecido"
+
+msgid "runtime_id is required"
+msgstr "runtime_id é obrigatório"
+
+msgid "terminal input data is required"
+msgstr "dados de entrada do terminal são obrigatórios"
+
+msgid "terminal resize cols and rows are required"
+msgstr "cols e rows do redimensionamento do terminal são obrigatórios"
+
+msgid "tmux is not available"
+msgstr "tmux não está disponível"
+
+msgid "workspace setup failed: %{reason}"
+msgstr "falha na configuração do workspace: %{reason}"

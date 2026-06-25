@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+
 import { Button } from "@/components/ui/button";
 import type { WorkspaceTemplate } from "@/types/template";
 
@@ -8,8 +10,10 @@ interface TemplateListProps {
 }
 
 export function TemplateList({ templates, onDelete }: TemplateListProps) {
+  const { t } = useTranslation();
+
   if (templates.length === 0) {
-    return <p className="text-sm text-muted-foreground">No templates yet.</p>;
+    return <p className="text-sm text-muted-foreground">{t("project.templates.list.empty")}</p>;
   }
 
   return (
@@ -19,11 +23,13 @@ export function TemplateList({ templates, onDelete }: TemplateListProps) {
           <Link to={`/templates/${encodeURIComponent(template.slug)}`} className="min-w-0">
             <span className="block text-sm font-medium">{template.name}</span>
             <span className="block text-xs text-muted-foreground">
-              {template.repositories.length} repo{template.repositories.length === 1 ? "" : "s"}
+              {t("project.templates.list.repoCount", { count: template.repositories.length })}
               {template.description ? ` · ${template.description}` : ""}
             </span>
           </Link>
-          <Button size="sm" variant="ghost" onClick={() => onDelete(template.slug)}>Delete</Button>
+          <Button size="sm" variant="ghost" onClick={() => onDelete(template.slug)}>
+            {t("project.templates.list.delete")}
+          </Button>
         </div>
       ))}
     </div>

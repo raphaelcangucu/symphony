@@ -2,6 +2,7 @@ import { type ClipboardEvent, type Dispatch, type SetStateAction, useCallback, u
 import { toast } from "sonner";
 
 import { validateImageFile } from "@/components/assistant/assistantAttachments";
+import { i18n } from "@/i18n";
 import { extractImageFilesFromClipboard } from "@/lib/clipboardImages";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { projectAttachmentUrl } from "@/services/attachments";
@@ -41,7 +42,7 @@ export function useMarkdownImagePaste({
     async (files: File[]) => {
       const slug = projectSlug.trim();
       if (!slug) {
-        toast.error("Image uploads are not available here.");
+        toast.error(i18n.t("issue.attachments.imageUnavailable"));
         return;
       }
 
@@ -55,7 +56,7 @@ export function useMarkdownImagePaste({
             const markdown = `![${sanitizeAlt(uploaded.name || file.name)}](${url})`;
             setValue((current) => appendImageMarkdown(current, markdown));
           } catch (cause) {
-            toast.error(cause instanceof Error ? cause.message : "Failed to upload image.");
+            toast.error(cause instanceof Error ? cause.message : i18n.t("issue.attachments.imageUploadFailed"));
           }
         }
       } finally {

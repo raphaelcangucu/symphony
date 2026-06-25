@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
+
 interface SpeechRecognitionAlternativeLike {
   readonly transcript: string;
 }
@@ -48,19 +50,19 @@ function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null 
 function speechErrorMessage(code: string): string {
   switch (code) {
     case "not-allowed":
-      return "Speech recognition needs microphone permission.";
+      return i18n.t("assistant.speech.errors.notAllowed");
     case "service-not-allowed":
-      return "Speech recognition is blocked in this browser.";
+      return i18n.t("assistant.speech.errors.serviceNotAllowed");
     case "network":
-      return "Speech recognition needs an internet connection.";
+      return i18n.t("assistant.speech.errors.network");
     case "no-speech":
-      return "No speech was detected.";
+      return i18n.t("assistant.speech.errors.noSpeech");
     case "audio-capture":
-      return "Could not capture audio for speech recognition.";
+      return i18n.t("assistant.speech.errors.audioCapture");
     case "aborted":
-      return "Speech recognition was interrupted.";
+      return i18n.t("assistant.speech.errors.aborted");
     default:
-      return "Speech recognition is unavailable in this browser.";
+      return i18n.t("assistant.speech.errors.unavailable");
   }
 }
 
@@ -98,7 +100,7 @@ export function useSpeechRecognition(lang = "pt-BR") {
     (onTranscript: (text: string, isFinal: boolean) => void) => {
       const Recognition = getSpeechRecognitionConstructor();
       if (!Recognition) {
-        setError("Live captions are not supported in this browser.");
+        setError(i18n.t("assistant.speech.errors.captionsUnsupported"));
         return;
       }
 
@@ -156,7 +158,7 @@ export function useSpeechRecognition(lang = "pt-BR") {
         recognition.start();
         setListening(true);
       } catch {
-        setError("Could not start speech recognition.");
+        setError(i18n.t("assistant.speech.errors.startFailed"));
         stop();
       }
     },

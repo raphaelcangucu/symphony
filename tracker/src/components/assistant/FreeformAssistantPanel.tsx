@@ -1,5 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
@@ -16,6 +17,7 @@ interface FreeformAssistantPanelProps {
 }
 
 export function FreeformAssistantPanel({ threadId, archiving = false, onArchive }: FreeformAssistantPanelProps) {
+  const { t } = useTranslation();
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const threadDocuments = useThreadDocuments({ threadId, refreshKey });
@@ -37,7 +39,7 @@ export function FreeformAssistantPanel({ threadId, archiving = false, onArchive 
     >
       <section
         className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-background shadow-sm"
-        aria-label="Assistant chat"
+        aria-label={t("assistant.freeform.chatAria")}
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
           <Link
@@ -45,7 +47,7 @@ export function FreeformAssistantPanel({ threadId, archiving = false, onArchive 
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Conversations
+            {t("assistant.freeform.backToConversations")}
           </Link>
           {onArchive ? (
             <ArchiveChatButton
@@ -64,12 +66,10 @@ export function FreeformAssistantPanel({ threadId, archiving = false, onArchive 
         />
       </section>
 
-      <aside className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden" aria-label="Assistant chat files">
+      <aside className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden" aria-label={t("assistant.freeform.filesAria")}>
         <div className="shrink-0 rounded-xl border bg-card px-4 py-3 shadow-sm">
-          <h1 className="text-sm font-semibold">Conversation files</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Open markdown drafts on the right. Click a filename in the chat to jump to it here.
-          </p>
+          <h1 className="text-sm font-semibold">{t("assistant.freeform.filesTitle")}</h1>
+          <p className="mt-1 text-xs text-muted-foreground">{t("assistant.freeform.filesHint")}</p>
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden">

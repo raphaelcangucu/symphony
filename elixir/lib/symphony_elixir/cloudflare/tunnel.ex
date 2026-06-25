@@ -3,7 +3,10 @@ defmodule SymphonyElixir.Cloudflare.Tunnel do
   Tracks and (re)starts the Cloudflare named tunnel that fronts the public
   preview hosts.
 
-  Started only when `Config.public_tunnel_enabled?/0`. The tunnel itself is an
+  Always supervised under `SharedSupervisor` when process-level
+  `Config.public_tunnel_enabled?/0` is true. Project-level `public_tunnel.enabled`
+  in workflow markdown controls whether preview UI exposes tunnel controls; process-level
+  config still gates fallback host routing in `PublicHostPlug`. The tunnel itself is an
   external `cloudflared` process launched detached by `scripts/public-tunnel.sh`
   (the same process `make tunnel-bg` starts), so this server never owns the OS
   process: liveness is derived on demand by matching the running command line,
@@ -57,14 +60,37 @@ defmodule SymphonyElixir.Cloudflare.Tunnel do
   end
 
   @doc """
-  Starts the tunnel if it is not already running. Idempotent. Returns
-  `{:error, :disabled}` when the public tunnel feature is off.
+  Tunnel snapshot for a project issue preview. `enabled` reflects the project's
+  `public_tunnel.enabled` workflow flag; `running` reflects the live `cloudflared`
+  process regardless of process-level WORKFLOW settings.
+  """
+  @spec summary_for_project(String.t()) :: %{enabled: boolean(), running: boolean()}
+  def summary_for_project(project_slug) when is_binary(project_slug) do
+    %{
+      enabled: SymphonyElixir.DevServer.Manager.project_public_tunnel_enabled?(project_slug),
+      running: cloudflared_running?()
+    }
+  end
+
+  @spec running?() :: boolean()
+  def running?, do: cloudflared_running?()
+
+  @doc """
+  Starts the tunnel if it is not already running. Idempotent. Works even when the
+  Tunnel GenServer is not supervised (for example, when only a project enables
+  public previews).
   """
   @spec start_tunnel() :: {:ok, status()} | {:error, term()}
   def start_tunnel do
-    case GenServer.whereis(__MODULE__) do
-      nil -> {:error, :disabled}
-      pid -> GenServer.call(pid, :start_tunnel)
+    cond do
+      cloudflared_running?() ->
+        {:ok, :running}
+
+      true ->
+        case GenServer.whereis(__MODULE__) do
+          nil -> do_start_tunnel()
+          pid -> GenServer.call(pid, :start_tunnel)
+        end
     end
   end
 
@@ -80,20 +106,7 @@ defmodule SymphonyElixir.Cloudflare.Tunnel do
   end
 
   def handle_call(:start_tunnel, _from, state) do
-    if running?() do
-      {:reply, {:ok, :running}, state}
-    else
-      case spawner().(spawn_spec()) do
-        :ok ->
-          Logger.info("Public tunnel start requested via #{@script_relpath}")
-          # Optimistic: cloudflared is launching. A later status probe confirms.
-          {:reply, {:ok, :running}, state}
-
-        {:error, reason} = error ->
-          Logger.warning("Public tunnel start failed reason=#{inspect(reason)}")
-          {:reply, error, state}
-      end
-    end
+    {:reply, do_start_tunnel(), state}
   end
 
   @impl true
@@ -101,10 +114,26 @@ defmodule SymphonyElixir.Cloudflare.Tunnel do
   def handle_info(_message, state), do: {:noreply, state}
 
   defp current_status do
-    if running?(), do: :running, else: :stopped
+    if cloudflared_running?(), do: :running, else: :stopped
   end
 
-  defp running?, do: checker().()
+  defp cloudflared_running?, do: checker().()
+
+  defp do_start_tunnel do
+    if cloudflared_running?() do
+      {:ok, :running}
+    else
+      case spawner().(spawn_spec()) do
+        :ok ->
+          Logger.info("Public tunnel start requested via #{@script_relpath}")
+          {:ok, :running}
+
+        {:error, reason} = error ->
+          Logger.warning("Public tunnel start failed reason=#{inspect(reason)}")
+          error
+      end
+    end
+  end
 
   defp spawn_spec do
     %{script: script_path(), log: @log_path}

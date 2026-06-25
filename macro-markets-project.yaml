@@ -1,17 +1,8 @@
 description: "Macro Markets workspace — Next.js frontend (clouapp/front) + Laravel backend (clouapp/back)."
 dev_env_steps:
-  - command: "npm ci"
-    description: "Install front dependencies"
-    optional: false
-    primary: false
-    ready_path: "/"
-    ready_probe: "tcp"
-    role: "setup"
-    source: "manual"
-    url_path: "/"
-    working_dir: "front"
-  - command: "docker run --rm --entrypoint bash -v \"$PWD\":/var/www/html -w /var/www/html sail-8.5/app -lc \"composer install --no-interaction --no-progress\""
-    description: "Install back dependencies (composer, in container)"
+  # --- Backend (Laravel Sail) — must start before the frontend ---
+  - command: "bash .symphony/setup.sh"
+    description: "Backend setup (.env + build sail-8.5 image + composer install)"
     optional: false
     primary: false
     ready_path: "/"
@@ -20,31 +11,42 @@ dev_env_steps:
     source: "manual"
     url_path: "/"
     working_dir: "back"
-  - command: "npm run dev"
-    description: "Front dev server (Next.js)"
+  - command: "bash .symphony/serve.sh"
+    description: "Backend Laravel API (docker compose up on $PORT + restore dumps + migrate + /health)"
+    optional: false
+    port_env: "PORT"
+    primary: false
+    ready_path: "/health"
+    ready_probe: "http"
+    role: "serve"
+    source: "manual"
+    url_path: "/graphiql"
+    working_dir: "back"
+  # --- Frontend (Next.js) — wired to the backend after it is healthy ---
+  - command: "bash .symphony/setup.sh"
+    description: "Frontend setup (.env.local + npm ci)"
+    optional: false
+    primary: false
+    ready_path: "/"
+    ready_probe: "tcp"
+    role: "setup"
+    source: "manual"
+    url_path: "/"
+    working_dir: "front"
+  - command: "bash .symphony/serve.sh"
+    description: "Frontend Next.js dev (wire backend, then serve on $PORT)"
     optional: false
     port_env: "PORT"
     primary: true
-    ready_path: "/"
-    ready_probe: "tcp"
+    ready_path: "/api/health"
+    ready_probe: "http"
     role: "serve"
     source: "manual"
     url_path: "/"
     working_dir: "front"
-  - command: "docker compose up laravel.test"
-    description: "Back dev server (Laravel/Docker)"
-    optional: false
-    port_env: "APP_PORT"
-    primary: false
-    ready_path: "/"
-    ready_probe: "tcp"
-    role: "serve"
-    source: "manual"
-    url_path: "/admin"
-    working_dir: "back"
 kind: "symphony_project"
 metadata:
-  exported_at: "2026-06-15T16:54:58Z"
+  exported_at: "2026-06-15T17:09:09Z"
   source_project_slug: "macro-markets"
 name: "Macro Markets"
 repositories:
@@ -70,19 +72,19 @@ setup:
     APP_ENV=dev
     NEXT_PUBLIC_DEFAULT_LANGUAGE=en
     NEXT_PUBLIC_ENABLE_PERSISTED_QUERIES=true
-    
+
     # GRAPHQL
     NEXT_PUBLIC_API_URL=https://acp.macro.markets
     NEXT_PUBLIC_USE_API_PROXY=true
-    
+
     # TURNSTILE
     NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
     NEXT_PRIVATE_TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
-    
+
     # MEILISEARCH
     NEXT_PUBLIC_MEILISEARCH_BASE_URL=http://localhost:9115
     NEXT_PUBLIC_MEILISEARCH_KEY=masterKey
-    
+
     # LARAVEL REVERB
     NEXT_PUBLIC_PUSHER_APP_KEY=app-key
     NEXT_PUBLIC_PUSHER_CLUSTER=mt1
@@ -92,15 +94,15 @@ setup:
     NEXT_PUBLIC_PUSHER_FORCE_TLS=false
     NEXT_PUBLIC_REVERB_APP_ID=app-id
     NEXT_PUBLIC_REVERB_APP_SECRET=app-secret
-    
+
     # TENOR
     NEXT_PUBLIC_TENOR_MEDIA_HOST=media.tenor.com
-    
+
     NEXT_PUBLIC_GIT_BRANCH=homolog
     NEXT_PUBLIC_GIT_COMMIT=local
     NEXT_PUBLIC_GIT_TAG=none
     NEXT_PUBLIC_BUILD_TIME=local
-    
+
     CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-85869ee1df284e998701dafe6e734c5d}
     CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
     ENV
@@ -112,16 +114,95 @@ setup:
     - "cd back && ./vibe test"
   workflow_markdown: |
     ---
-    repositories:
-      - github_full_name: clouapp/front
-        role: frontend
-        selected_branch: homolog
-        workspace_path: front
-      - github_full_name: clouapp/back
-        role: backend
-        selected_branch: dev
-        workspace_path: back
+    agent:
+      completion_transitions:
+        In Progress: Human Review
+        Merging: Done
+        Rework: Human Review
+        Todo: Human Review
+      max_concurrent_agents: 5
+      max_turns: 40
+    assistant:
+      draft_status: Planning
+    claude:
+      command: claude
+    codex:
+      goals_enabled: true
+      approval_policy: never
+      command: codex --config shell_environment_policy.inherit=all app-server
+      thread_sandbox: danger-full-access
+      turn_sandbox_policy:
+        type: dangerFullAccess
+    dev_server:
+      enabled: true
+      idle_timeout_ms: 1800000
+      port_range:
+        - 4100
+        - 4199
+    hooks:
+      after_create: |
+        gh repo clone clouapp/front front -- --depth 1 -b homolog
+        gh repo clone clouapp/back back -- --depth 1 -b dev
+        cat > front/.env.local <<ENV
+        # Local ------------------------------------------------------------------------------------------- #
+        # APP
+        APP_ENV=dev
+        NEXT_PUBLIC_DEFAULT_LANGUAGE=en
+        NEXT_PUBLIC_ENABLE_PERSISTED_QUERIES=true
+
+        # GRAPHQL
+        NEXT_PUBLIC_API_URL=https://acp.macro.markets
+        NEXT_PUBLIC_USE_API_PROXY=true
+
+        # TURNSTILE
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+        NEXT_PRIVATE_TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+
+        # MEILISEARCH
+        NEXT_PUBLIC_MEILISEARCH_BASE_URL=http://localhost:9115
+        NEXT_PUBLIC_MEILISEARCH_KEY=masterKey
+
+        # LARAVEL REVERB
+        NEXT_PUBLIC_PUSHER_APP_KEY=app-key
+        NEXT_PUBLIC_PUSHER_CLUSTER=mt1
+        NEXT_PUBLIC_PUSHER_WS_HOST=localhost
+        NEXT_PUBLIC_PUSHER_WS_PORT=8080
+        NEXT_PUBLIC_PUSHER_WSS_PORT=443
+        NEXT_PUBLIC_PUSHER_FORCE_TLS=false
+        NEXT_PUBLIC_REVERB_APP_ID=app-id
+        NEXT_PUBLIC_REVERB_APP_SECRET=app-secret
+
+        # TENOR
+        NEXT_PUBLIC_TENOR_MEDIA_HOST=media.tenor.com
+
+        NEXT_PUBLIC_GIT_BRANCH=homolog
+        NEXT_PUBLIC_GIT_COMMIT=local
+        NEXT_PUBLIC_GIT_TAG=none
+        NEXT_PUBLIC_BUILD_TIME=local
+
+        CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-85869ee1df284e998701dafe6e734c5d}
+        CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+        ENV
+    pr_monitor:
+      done_on_merge: true
+      enabled: true
+      max_auto_rework: 2
+    source_control:
+      branch_pattern: "symphony/{issue}"
+      issue_marker_key: "Symphony-Issue"
+      pr_title_pattern: "{issue}: {title}"
+    public_tunnel:
+      base_domain: tracker.cods.dev
+      enabled: true
     tracker:
+      active_states:
+        - Todo
+        - In Progress
+        - Rework
+        - Merging
+      dispatch_states:
+        - Todo
+        - Rework
       field_states:
         - Backlog
         - Planning
@@ -133,129 +214,51 @@ setup:
         - Done
         - Cancelled
         - Duplicate
-      active_states:
-        - Todo
-        - In Progress
-        - Rework
-        - Merging
-      dispatch_states:
-        - Todo
-      wait_states:
-        - Human Review
       terminal_states:
         - Done
         - Cancelled
         - Duplicate
-    assistant:
-      # Draft issues created by the New issue assistant start here. Default is
-      # Triage; this board uses Planning for assistant spec/plan/handoff work.
-      draft_status: Planning
-    # Report this process's orchestrator snapshot to a central observability hub.
-    # observability:
-    #   hub_url: http://localhost:4000      # where this process reports to; OMIT on the hub process itself (it self-registers in-process)
-    #   heartbeat_interval_ms: 5000         # liveness ping interval
-    #   min_report_interval_ms: 250         # coalesce window for burst updates
-    #   label: macro-markets                # human-friendly name shown on the observability page
-    #   # runtime_id: macro-markets-1       # optional stable id; defaults to the workflow file path
-    # Browser VS Code (code-server) for task workspaces. Disabled by default.
-    # Requires code-server installed on the host. auth: none is only safe on localhost.
-    # Issue preview dev servers. Requires at least one `.symphony/devenv.yaml`
-    # step with `role: serve` in a workspace repository.
-    dev_server:
-      enabled: true
-      port_range: [4100, 4199]
-      idle_timeout_ms: 1800000
-      # Omit auto_start_on for manual-only previews (Start Preview in the tracker).
-      # auto_start_on: pull_request,human_review
-      # base_url: https://previews.example.com  # optional proxy-facing base URL
-    # Public preview tunnel (Cloudflare). Exposes the tracker and ready dev-server
-    # previews publicly via a named tunnel. Previews become UNAUTHENTICATED to anyone
-    # with the URL once enabled.
-    public_tunnel:
-      enabled: true
-      base_domain: tracker.cods.dev
-      # namespace: raphaelcangucu   # defaults to the GitHub login when unset
+      wait_states:
+        - Human Review
     workspace:
       root: ~/code/macro-markets-workspaces
-    hooks:
-      after_create: |
-        gh repo clone clouapp/front front -- --depth 1 -b homolog
-        gh repo clone clouapp/back back -- --depth 1 -b dev
-        cat > front/.env.local <<ENV
-        # Local ------------------------------------------------------------------------------------------- #
-        # APP
-        APP_ENV=dev
-        NEXT_PUBLIC_DEFAULT_LANGUAGE=en
-        NEXT_PUBLIC_ENABLE_PERSISTED_QUERIES=true
-    
-        # GRAPHQL
-        NEXT_PUBLIC_API_URL=https://acp.macro.markets
-        NEXT_PUBLIC_USE_API_PROXY=true
-    
-        # TURNSTILE
-        NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
-        NEXT_PRIVATE_TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
-    
-        # MEILISEARCH
-        NEXT_PUBLIC_MEILISEARCH_BASE_URL=http://localhost:9115
-        NEXT_PUBLIC_MEILISEARCH_KEY=masterKey
-    
-        # LARAVEL REVERB
-        NEXT_PUBLIC_PUSHER_APP_KEY=app-key
-        NEXT_PUBLIC_PUSHER_CLUSTER=mt1
-        NEXT_PUBLIC_PUSHER_WS_HOST=localhost
-        NEXT_PUBLIC_PUSHER_WS_PORT=8080
-        NEXT_PUBLIC_PUSHER_WSS_PORT=443
-        NEXT_PUBLIC_PUSHER_FORCE_TLS=false
-        NEXT_PUBLIC_REVERB_APP_ID=app-id
-        NEXT_PUBLIC_REVERB_APP_SECRET=app-secret
-    
-        # TENOR
-        NEXT_PUBLIC_TENOR_MEDIA_HOST=media.tenor.com
-    
-        NEXT_PUBLIC_GIT_BRANCH=homolog
-        NEXT_PUBLIC_GIT_COMMIT=local
-        NEXT_PUBLIC_GIT_TAG=none
-        NEXT_PUBLIC_BUILD_TIME=local
-    
-        CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-85869ee1df284e998701dafe6e734c5d}
-        CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
-        ENV
-    agent:
-      max_concurrent_agents: 5
-      max_turns: 20
-      completion_transitions:
-        Todo: Human Review
-        In Progress: Human Review
-        Rework: Human Review
-        Merging: Done
-    codex:
-      command: codex --config shell_environment_policy.inherit=all app-server
-      # Enables the Codex-only Goal mode checkbox at dispatch time.
-      # goals_enabled: true
-      approval_policy: never
-      thread_sandbox: workspace-write
-      turn_sandbox_policy:
-        type: workspaceWrite
-    claude:
-      command: claude
     ---
-    
-    You are working on GitHub issue `{{ issue.identifier }}` in the **Macro Markets** board (`clouapp/front`).
-    
+
+    You are working on issue `{{ issue.identifier }}` in the **Macro Markets** board.
+
+    **Canonical issue (source of truth):** {{ issue.url }}
+
+    The owning GitHub repository is determined by that URL (e.g. `clouapp/back` or `clouapp/front`).
+    Do **not** assume every issue lives in `clouapp/front` — the board aggregates issues from multiple repos.
+
     Read and follow **`AGENTS.md`** in the workspace root (integration branch, PR base, lint, and unit tests).
-    
+
     Symphony injects **recent issue and PR comments** into your prompt when available. On **Rework**, those comments (and the workpad) define what you must do next.
-    
+
+    ## Tracker / issue metadata (local-first)
+
+    - Use Symphony's issue-bound tools first: `set_issue_status`, `list_comments`, `add_comment`, `update_comment`.
+    - Title, description, and synced comments come from the local tracker mirror — do not re-fetch the issue from GitHub MCP unless local data is missing or stale.
+    - If you need the GitHub repo for an API call, derive it from `{{ issue.url }}`, not from `tracker.config.repo` or this workflow file.
+
+    ## Creating tasks (multi-repo)
+
+    Before `create_issue` / `create_draft_issue`, call `list_project_repositories` and pass **`repository: "owner/name"`** when the task is not owned by `clouapp/front`:
+
+    | Work type | Repository |
+    |-----------|------------|
+    | Next.js frontend | `clouapp/front` |
+    | Laravel backend | `clouapp/back` |
+
     ## Repositories
-    
-    This is a **multi-repository** workspace. Issues and the Project board live on `clouapp/front`, but a single issue may require changes in either or both repos.
-    
+
+    This is a **multi-repository** workspace on a single GitHub Project. Each issue has its own canonical URL (`{{ issue.url }}`) pointing to the repo where it was filed (front, back, or another linked repo). Implementation may still touch `front/`, `back/`, or both.
+
     | Repo | Path | Integration branch | PR base |
     |------|------|--------------------|---------|
     | `clouapp/front` (frontend) | `front/` | `homolog` | `homolog` |
     | `clouapp/back` (backend) | `back/` | `dev` | `dev` |
-    
+
     - Workspaces are cloned by `hooks.after_create` into `front/` and `back/`.
     - Before handoff, sync each repo you touched with its integration branch:
       - frontend: `cd front && git fetch origin && git merge origin/homolog`
@@ -263,63 +266,111 @@ setup:
     - Open PRs **per repo against that repo's base**:
       - frontend: `cd front && gh pr create --base homolog --title "…"`
       - backend: `cd back && gh pr create --base dev --title "…"`
+    - **Every PR body MUST include the association marker on its own line** so Symphony links the PR to this issue deterministically (this is what populates the issue's **PR** tab): `Symphony-Issue: {{ issue.identifier }}`
+    - Keep the machine-readable PR registry updated in the `## Codex Workpad` comment — one entry per PR you open (front and back), so the PR tab still resolves even before GitHub indexes the marker:
+      ```
+      <!-- symphony:prs
+      - repo: clouapp/front
+        number: <front-pr-number>
+        branch: symphony/{{ issue.identifier }}
+        url: https://github.com/clouapp/front/pull/<front-pr-number>
+      - repo: clouapp/back
+        number: <back-pr-number>
+        branch: symphony/{{ issue.identifier }}
+        url: https://github.com/clouapp/back/pull/<back-pr-number>
+      -->
+      ```
     - On **Rework**, sync with the right integration branch per repo and address feedback. Do not target `master`/`main`.
     - Backend conventions: prefer `sail`/`vibe` over bare `php`; follow `back/`'s own `AGENTS`/`.cursorrules` and PR template; commit messages in English.
-    
+
     ## Issue preview servers
-    
-    Symphony can expose a **Preview** tab for an issue workspace when `dev_server.enabled`
-    is true and a cloned repo declares a serve step in `.symphony/devenv.yaml`:
-    
-    ```yaml
-    steps:
-      - description: Front dev server
-        command: npm run dev
-        working_dir: front
-        role: serve
-        port_env: PORT
-        url_path: /
-        ready: http
-        ready_path: /health
-        primary: true
+
+    Symphony exposes a **Preview** tab when `dev_server.enabled` is true and DevEnv
+    serve steps are saved for this project (imported via `macro-markets-project.yaml`
+    → `dev_env_steps`). There is **no goapi** in this project — only backend + frontend.
+
+    ### Preview flow
+
+    Symphony starts the **backend** first, then the **frontend** (serve steps boot in
+    declared order; each waits for the previous to be ready). The backend `serve.sh`
+    restores the committed DB dumps (Postgres + DynamoDB), runs migrations, and waits on
+    the lightweight readiness route `/health`. The frontend `serve.sh` then
+    waits for backend `/health`, writes the local API + Pusher targets into
+    `front/.env.local` (local-only — it fails if the backend is unhealthy), then starts
+    Next.js.
+
+    | Step order | Service | API target |
+    |------------|---------|------------|
+    | 1–2 | Backend setup + serve | Local Laravel (readiness `/health`, deep `/api/health` (Spatie), GraphQL `/@`, GraphiQL `/graphiql`) |
+    | 3–4 | Frontend setup + serve | Wired to the backend on `127.0.0.1` (browser proxied via `/api`) |
+
+    ### How to run each service (manual or Preview tab)
+
+    **Backend — Laravel Sail (`back/`)** — run first
+
+    ```bash
+    cd back
+    bash .symphony/setup.sh
+    PORT=9100 bash .symphony/serve.sh
+    # Readiness: http://127.0.0.1:9100/health  (deep Spatie at /api/health)
+    # GraphQL:   http://127.0.0.1:9100/@
+    # GraphiQL:  http://127.0.0.1:9100/graphiql (auth)
     ```
-    
-    - `role: setup` steps prepare the workspace; `role: serve` steps are long-running
-      preview processes. Multiple serve steps are allowed.
-    - `primary: true` chooses the URL shown first in the issue summary chip. If none is
-      marked, Symphony treats the first serve step as primary.
-    - `port_env` receives the allocated port before `command` runs. `url_path` is appended
-      to the preview URL.
-    - `ready: tcp` waits for the port to accept connections. `ready: http` probes
-      `ready_path` on localhost and treats any HTTP response below 500 as responsive.
-    
-    When `base_url` is omitted, preview URLs use
-    `http://127.0.0.1:<allocated-port><url_path>`. Set `base_url` only for proxy-backed
-    setups; Symphony uses it as the origin/base before `url_path`, not as the direct port
-    injection point unless your proxy is configured that way.
-    
+
+    **Frontend — Next.js (`front/`)** — after the backend is healthy
+
+    ```bash
+    cd front
+    bash .symphony/setup.sh
+    PORT=3000 bash .symphony/serve.sh   # wire-services → Next.js on $PORT
+    # Health: http://127.0.0.1:3000/api/health
+    ```
+
+    - Scripts ship under `back/.symphony/` and `front/.symphony/`.
+    - The backend uses `docker compose` directly (not `./vibe`) so a restart never
+      stops another project's shared containers; `PORT` is mapped to `APP_PORT:80`.
+    - The backend seeds from committed dumps via `back/.symphony/db-dev.sh bootstrap`
+      (Postgres `database/dump/postgresql.sql.gz` + DynamoDB `database/dump/dynamo.gz`);
+      restore is idempotent (skipped when data already exists), then migrations run.
+      Readiness is the lightweight `GET /health` route (returns
+      `{ "status": "ok" }`, defined in `routes/web.php`); Spatie's deep health
+      checks live at `GET /api/health`.
+    - The frontend routes browser API calls through the Next proxy
+      (`NEXT_PUBLIC_USE_API_PROXY=true` → `/api/[...path]` → `NEXT_PUBLIC_API_URL`),
+      so the preview also works behind a tunnel.
+    - Validation: `npm run lint` / `npm run test:unit` (frontend), `./vibe test` (backend).
+
+    ### Saved DevEnv steps (imported)
+
+    | Step | Role | Dir | Command |
+    |------|------|-----|---------|
+    | Backend setup | setup | `back/` | `bash .symphony/setup.sh` |
+    | Laravel API | serve | `back/` | `bash .symphony/serve.sh` |
+    | Frontend setup | setup | `front/` | `bash .symphony/setup.sh` |
+    | Next.js dev server | serve (primary) | `front/` | `bash .symphony/serve.sh` |
+
+    Setup steps for the same `working_dir` run automatically before their serve step.
+    `role: serve` steps are long-running preview processes; `primary: true` chooses the
+    URL shown first in the issue summary chip. `port_env` receives the allocated port
+    before `command` runs and `url_path` is appended to the preview URL. `ready: http`
+    probes `ready_path` and treats any response below 500 as responsive.
+
     The tracker shows provisioning state in the Summary tab, opens ready previews from the
     Preview tab, and provides manual **Start Preview**, **Stop Preview**, and **Restart
-    Preview** controls. Auto-start checks wait-state issues: `pull_request` applies to
-    wait-state issues with linked PRs, and `human_review` applies to human-review wait-state
-    issues.
-    
-    `.symphony/devenv.yaml` feeds DevEnv proposal/discovery. Preview startup uses the saved
-    DevEnv steps for this project, so propose/save or import those steps before expecting
-    previews to auto-start.
-    
+    Preview** controls.
+
     ## Agent routing (GitHub labels)
-    
+
     | Label | Agent |
     |-------|--------|
     | `symphony:codex` | Codex |
     | `symphony:claude` | Claude |
     | `symphony` | Default (**Codex** when this WORKFLOW includes `codex:`) |
-    
+
     Symphony only dispatches issues whose label resolves to an agent configured above.
-    
+
     Symphony reads and updates the GitHub Project **Status** field when moving cards. States align with the clouapp Linear board:
-    
+
     | State | Role |
     |-------|------|
     | Backlog | Intake; not ready for planning |
@@ -327,34 +378,34 @@ setup:
     | Todo | Orchestrator queue; move to In Progress before work |
     | In Progress | Active implementation |
     | Human Review | PR ready; poll for human decision — **no further coding turns** |
-    | Rework | Address review feedback (see **Rework flow** below) |
+    | Rework | Orchestrator queue for review feedback; address before returning to Human Review (see **Rework flow** below) |
     | Merging | Follow `.codex/skills/land/SKILL.md` (PR base per repo: front → **`homolog`**, back → **`dev`**) |
     | Done / Cancelled / Duplicate | Terminal |
-    
-    Use a single `## Codex Workpad` comment for progress. Blockers: `Blocked by #N` or `Depends on clouapp/front#N`.
-    
+
+    Use a single `## Codex Workpad` comment for progress. Blockers: `Blocked by #N` or `Depends on <owner>/<repo>#N` (use the target issue's canonical URL/repo, not a hardcoded front reference).
+
     Raw GitHub GraphQL: `github_graphql` (same shape as `linear_graphql`).
-    
+
     ## Assistant authoring handoff
-    
+
     The tracker **New issue** button opens the issue authoring assistant by default. It
     creates a draft in `assistant.draft_status` (**Planning**), then continues at
     `/projects/:slug/assistant/issue/:id`. Simple mode enriches the issue body; Complex
     mode writes read-only review artifacts under `docs/superpowers/specs/`,
     `docs/superpowers/plans/`, and `docs/superpowers/handoff.md` in this workspace.
-    
+
     Use **Planning** to discuss the task and produce spec, plan, and handoff artifacts
     when needed. Move to **Todo** only when the issue is ready for agent execution.
-    
+
     Before execution, read those documents when present. The Agent tab separates
     **Authoring** (assistant chat and docs) from **Execution** (orchestrator run). For
     Codex work that needs long-running continuation, enable `codex.goals_enabled` and
     dispatch with **Goal mode** checked after reviewing the generated goal.
-    
+
     ## Rework flow (required)
-    
+
     When the Project **Status** is **Rework** (human moved the card after review):
-    
+
     1. **Read all feedback** before editing code:
        - Injected **Recent discussion** section in this prompt (issue comments + linked PR reviews/threads).
        - `gh issue view <number> --comments` for the full issue thread.
@@ -365,33 +416,34 @@ setup:
     4. Implement fixes; add/update **unit tests** per `AGENTS.md` and `.cursor/rules/testing-standards.mdc`.
     5. Push and update the PR per repo (front base **`homolog`**, back base **`dev`**); run that repo's tests (front: `npm run test:unit` + lint; back: `./vibe test`); record results in the workpad **Validation** section.
     6. Move to **Human Review** only when feedback is addressed and tests are green.
-    
+
     Do **not** ignore human comments that only appear on the PR — they are part of the rework scope.
     http://localhost:4000/tracker/assistant/7006
     ## Tests and validation (mandatory)
-    
+
     Symphony does **not** run your test suite automatically. **You** must validate before **Human Review**, per `AGENTS.md` and [`.cursor/rules/testing-standards.mdc`](.cursor/rules/testing-standards.mdc):
     http://localhost:4000/tracker/assistant/7006
     - Treat ticket `Validation`, `Test Plan`, or `Testing` sections as required; mirror them in the workpad.
     - **Frontend (`front/`)** — when you changed frontend code:
-      - Run lint: `cd front && npm run lint`
-      - Run unit tests: `cd front && npm run test:unit` (or targeted: `npm run test:unit -- tests/...`)
-      - Add/update Vitest tests under `front/tests/` (mirror `front/src/`).
-    - **Backend (`back/`)** — when you changed backend code:
-      - Run tests: `cd back && ./vibe test` (equivalently `vendor/bin/pest`).
-      - Use `sail`/`vibe` for artisan/commands (not bare `php`).
-      - Add/update Pest tests under `back/tests/`.
+      - Lint **changed paths only**: `cd front && npx eslint --max-warnings 0 <paths-from-git-diff>`
+      - Unit **scoped to the change**: `cd front && npm run test:unit -- tests/...` (mirror changed `src/` under `tests/`)
+      - Do **not** run `npm run lint` or `npm run test:unit` without paths during agent validation — CI owns full regression.
+    - **Backend (`back/`)** — only when `back/` has a git diff:
+      - Run scoped Pest: `cd back && ./vibe test tests/Feature/MyTest.php` or `./vibe test --filter=MyTest`
+      - Do **not** run `./vibe test` (full suite) unless the ticket explicitly requires it.
     - Record in workpad **Validation**: `targeted tests: <command>` and outcome for each repo touched.
     - Do **not** move to **Human Review** until, for every repo you changed:
       - Acceptance criteria are met
       - That repo's tests pass for the latest commit
       - A PR is open against that repo's base branch (front → `homolog`, back → `dev`), linked on the issue, checks green where applicable
     - In **Human Review**, do not implement; wait and poll for human feedback.
-    
 slug: "macro-markets"
 tracker:
   config:
+    owner_kind: "organization"
     project_id: "PVT_kwDOCpPais4BY509"
+    project_number: 2
+    project_url: "https://github.com/orgs/clouapp/projects/2"
     repo: "clouapp/front"
     status_field: "Status"
   kind: "github"

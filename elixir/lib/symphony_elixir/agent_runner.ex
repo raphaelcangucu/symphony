@@ -24,6 +24,8 @@ defmodule SymphonyElixir.AgentRunner do
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Workpad.ExecutionContract
+  alias SymphonyElixir.Workspace.Worktree
 
   # The open-PR check runs every turn for "In Progress" issues; cache it per
   # repo+issue so a long-running issue does not re-query GitHub each turn.
@@ -62,7 +64,7 @@ defmodule SymphonyElixir.AgentRunner do
 
   @spec do_run(map(), pid() | nil, keyword()) :: run_outcome()
   defp do_run(issue, codex_update_recipient, opts) do
-    case Workspace.create_for_issue(issue) do
+    case resolve_workspace(issue, opts) do
       {:ok, workspace} ->
         try do
           case Workspace.run_before_run_hook(workspace, issue) do
@@ -86,6 +88,38 @@ defmodule SymphonyElixir.AgentRunner do
   defp handle_turns_result(:completed, _issue), do: :completed
   defp handle_turns_result({:incomplete, _reason} = outcome, _issue), do: outcome
   defp handle_turns_result({:error, reason}, issue), do: failed_run(issue, reason)
+
+  @doc """
+  Resolves the working tree for a run. A `child_run` of an execution bundle runs
+  in an isolated git worktree (`worktree: true` + `worktree_repo`) so multiple
+  children of the same repository never share a checkout; every other run uses
+  the standard per-issue workspace.
+  """
+  @spec resolve_workspace(map(), keyword()) :: {:ok, Path.t()} | {:error, term()}
+  def resolve_workspace(issue, opts) do
+    if Keyword.get(opts, :worktree) == true do
+      with {:ok, repo} <- fetch_worktree_repo(opts) do
+        slug = worktree_slug(issue, opts)
+        branch = Keyword.get(opts, :worktree_branch) || "feat/#{slug}"
+        Worktree.ensure(repo, slug, branch)
+      end
+    else
+      Workspace.create_for_issue(issue)
+    end
+  end
+
+  defp fetch_worktree_repo(opts) do
+    case Keyword.get(opts, :worktree_repo) do
+      repo when is_binary(repo) and repo != "" -> {:ok, repo}
+      _ -> {:error, :missing_worktree_repo}
+    end
+  end
+
+  defp worktree_slug(issue, opts) do
+    (Keyword.get(opts, :unit_id) || Map.get(issue, :identifier) || "child")
+    |> to_string()
+    |> String.replace(~r/[^A-Za-z0-9_.-]+/, "-")
+  end
 
   @spec failed_run(map(), term()) :: {:error, term()}
   defp failed_run(issue, reason) do
@@ -141,22 +175,29 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp resolve_project_config(_issue), do: nil
 
+  # Goal mode is driven by the durable native Codex goal thread, not by a cached
+  # objective. A Codex issue that owns a goal thread (`agent_session_id`) runs in
+  # goal mode so the run resumes that thread and pursues its native goal; an
+  # explicit `opts[:goal]` still forces goal mode for direct/ad-hoc runs.
   defp issue_goal_opts(opts, issue, agent_kind) do
-    if Keyword.has_key?(opts, :goal) do
-      opts
-    else
-      maybe_put_issue_goal(opts, agent_kind, Map.get(issue, :agent_goal))
+    cond do
+      Keyword.has_key?(opts, :goal) ->
+        Keyword.put_new(opts, :goal_mode, true)
+
+      agent_kind == "codex" and codex_goal_thread?(issue) ->
+        Keyword.put(opts, :goal_mode, true)
+
+      true ->
+        opts
     end
   end
 
-  defp maybe_put_issue_goal(opts, "codex", goal) when is_binary(goal) do
-    case String.trim(goal) do
-      "" -> opts
-      trimmed -> Keyword.put(opts, :goal, trimmed)
+  defp codex_goal_thread?(issue) do
+    case Map.get(issue, :agent_session_id) do
+      id when is_binary(id) and id != "" -> true
+      _ -> false
     end
   end
-
-  defp maybe_put_issue_goal(opts, _agent_kind, _goal), do: opts
 
   defp send_codex_update(recipient, %Issue{id: issue_id}, message)
        when is_binary(issue_id) and is_pid(recipient) do
@@ -171,18 +212,30 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp run_codex_turns(workspace, issue, codex_update_recipient, opts) do
+    opts = Keyword.put_new(opts, :issue, issue)
     max_turns = Keyword.get(opts, :max_turns, project_max_turns(Keyword.get(opts, :project_config)))
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
     agent_kind = Keyword.fetch!(opts, :agent_kind)
-    workspace_root = Workspace.workspace_root_for(issue)
+
+    # A worktree-backed child run lives under `<repo>/.worktrees/<slug>`, outside
+    # the configured workspace root, so the cwd guard is anchored to the worktree
+    # itself instead of the shared workspace root.
+    workspace_root =
+      if Keyword.get(opts, :worktree) == true,
+        do: workspace,
+        else: Workspace.workspace_root_for(issue)
 
     session_opts =
       [workspace_root: workspace_root]
       |> maybe_put_codex_config(Keyword.get(opts, :project_config))
       |> maybe_put_claude_tools(agent_kind, issue)
+      |> maybe_put_resume_thread_id(opts, agent_kind, issue)
+      |> maybe_put_goal_mode(opts, agent_kind)
 
     with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, session_opts) do
+      maybe_persist_goal_thread(session, issue, agent_kind, opts)
+
       try do
         result =
           do_run_codex_turns(
@@ -204,7 +257,8 @@ defmodule SymphonyElixir.AgentRunner do
 
         validate_evaluator =
           Keyword.get(opts, :validate_gate_evaluator, fn ws ->
-            Evidence.Gate.evaluate(ws, evidence_config(Keyword.get(opts, :project_config)))
+            cfg = evidence_config(Keyword.get(opts, :project_config))
+            Evidence.Gate.evaluate(ws, cfg, Evidence.Gate.default_deps(issue: Keyword.get(opts, :issue), config: cfg))
           end)
 
         turn_opts = agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)
@@ -217,8 +271,8 @@ defmodule SymphonyElixir.AgentRunner do
         end
 
         result
-        |> apply_validate_gate(workspace, validate_evaluator, run_corrective_turn, @max_corrective_turns)
-        |> apply_publish_gate(workspace, evaluator, run_corrective_turn, @max_corrective_turns)
+        |> apply_validate_gate(workspace, validate_evaluator, run_corrective_turn, @max_corrective_turns, opts)
+        |> apply_publish_gate(workspace, evaluator, run_corrective_turn, @max_corrective_turns, opts)
       after
         CodingAgent.stop_session(session, agent_kind)
       end
@@ -233,13 +287,34 @@ defmodule SymphonyElixir.AgentRunner do
           (String.t() -> :ok | {:error, term()}),
           non_neg_integer()
         ) :: term()
-  def apply_publish_gate({:error, _reason} = error, _workspace, _evaluator, _run_turn, _budget), do: error
+  def apply_publish_gate(result, workspace, evaluator, run_turn, budget) do
+    apply_publish_gate(result, workspace, evaluator, run_turn, budget, [])
+  end
+
+  @doc false
+  @spec apply_publish_gate(
+          term(),
+          Path.t(),
+          (Path.t() -> :satisfied | {:violations, list()}),
+          (String.t() -> :ok | {:error, term()}),
+          non_neg_integer(),
+          keyword()
+        ) :: term()
+  def apply_publish_gate({:error, _reason} = error, _workspace, _evaluator, _run_turn, _budget, _opts), do: error
 
   # A failed validate gate already stops the run; do not mask it with publish findings.
-  def apply_publish_gate({:incomplete, {:validate_gate, _violations}} = result, _workspace, _evaluator, _run_turn, _budget),
+  def apply_publish_gate({:incomplete, {:validate_gate, _violations}} = result, _workspace, _evaluator, _run_turn, _budget, _opts),
     do: result
 
-  def apply_publish_gate(result, workspace, evaluator, run_turn, budget) do
+  def apply_publish_gate(result, workspace, evaluator, run_turn, budget, opts) do
+    if final_publish_allowed?(opts) do
+      do_apply_publish_gate(result, workspace, evaluator, run_turn, budget)
+    else
+      result
+    end
+  end
+
+  defp do_apply_publish_gate(result, workspace, evaluator, run_turn, budget) do
     case evaluator.(workspace) do
       :satisfied ->
         result
@@ -248,7 +323,7 @@ defmodule SymphonyElixir.AgentRunner do
         Logger.info("Publish gate violated; running corrective turn (remaining budget=#{budget}) violations=#{inspect(violations)}")
 
         case run_turn.(corrective_publish_prompt(violations, workspace)) do
-          :ok -> apply_publish_gate(result, workspace, evaluator, run_turn, budget - 1)
+          :ok -> do_apply_publish_gate(result, workspace, evaluator, run_turn, budget - 1)
           {:error, _reason} -> {:incomplete, {:publish_gate, violations}}
         end
 
@@ -265,23 +340,52 @@ defmodule SymphonyElixir.AgentRunner do
           (String.t() -> :ok | {:error, term()}),
           non_neg_integer()
         ) :: term()
-  def apply_validate_gate({:error, _reason} = error, _workspace, _evaluator, _run_turn, _budget), do: error
-
   def apply_validate_gate(result, workspace, evaluator, run_turn, budget) do
+    apply_validate_gate(result, workspace, evaluator, run_turn, budget, [])
+  end
+
+  @doc false
+  @spec apply_validate_gate(
+          term(),
+          Path.t(),
+          (Path.t() -> :satisfied | {:violations, list()}),
+          (String.t() -> :ok | {:error, term()}),
+          non_neg_integer(),
+          keyword()
+        ) :: term()
+  def apply_validate_gate({:error, _reason} = error, _workspace, _evaluator, _run_turn, _budget, _opts), do: error
+
+  def apply_validate_gate(result, workspace, evaluator, run_turn, budget, opts) do
+    if final_validate_allowed?(opts) do
+      do_apply_validate_gate(result, workspace, evaluator, run_turn, budget)
+    else
+      result
+    end
+  end
+
+  defp do_apply_validate_gate(result, workspace, evaluator, run_turn, budget) do
     case evaluator.(workspace) do
       :satisfied ->
         result
 
-      {:violations, violations} when budget > 0 ->
-        Logger.info("Validate gate violated; running corrective turn (remaining budget=#{budget}) violations=#{inspect(violations)}")
-
-        case run_turn.(corrective_validate_prompt(violations)) do
-          :ok -> apply_validate_gate(result, workspace, evaluator, run_turn, budget - 1)
-          {:error, _reason} -> {:incomplete, {:validate_gate, violations}}
-        end
-
       {:violations, violations} ->
-        {:incomplete, {:validate_gate, violations}}
+        cond do
+          Evidence.Gate.environment_blocked_only?(violations) ->
+            Logger.info("Validate gate blocked by environment; skipping corrective turns violations=#{inspect(violations)}")
+
+            {:incomplete, {:validate_gate, violations}}
+
+          budget > 0 ->
+            Logger.info("Validate gate violated; running corrective turn (remaining budget=#{budget}) violations=#{inspect(violations)}")
+
+            case run_turn.(corrective_validate_prompt(violations)) do
+              :ok -> do_apply_validate_gate(result, workspace, evaluator, run_turn, budget - 1)
+              {:error, _reason} -> {:incomplete, {:validate_gate, violations}}
+            end
+
+          true ->
+            {:incomplete, {:validate_gate, violations}}
+        end
     end
   end
 
@@ -296,14 +400,32 @@ defmodule SymphonyElixir.AgentRunner do
 
     #{Enum.map_join(violations, "\n", &validate_violation_line/1)}
 
-    Read and follow the `evidence` skill now. For every repo you changed: run its
-    unit tests. For each UI repo whose e2e is required (listed above), run e2e
-    with screenshot/video capture. For a changed back-end/service repo that the
-    config says may impact a UI repo but where you judge there is NO impact on
-    that UI surface, declare it in the manifest `impact` list with
-    `impacts_ui: false` and a concrete rationale instead of running its e2e. Then
-    write `.symphony/evidence/manifest.json` referencing the real artifacts. Do
-    nothing else in this turn.
+    This is a **final VALIDATE** corrective turn. Only proceed if the workpad
+    `### Plan` checklist is complete and `final_validate_allowed: true`;
+    otherwise update the workpad and resume the next incomplete plan task
+    instead.
+
+    Read and follow the `evidence` skill now. Run **focused** checks only on files
+    you changed (or backend tests that could be impacted by those changes) — do
+    **not** run the full lint or unit suite; CI/CD owns full regression. For every
+    repo you changed: one passing scoped `unit` run is enough — do not also record
+    a failed full-suite run in the manifest. For each UI repo whose e2e is required
+    (listed above), run e2e on the affected spec with screenshot/video capture.
+    Before UI e2e: call **`manage_preview`** with `action: status` (or `start` / `restart` if not ready).
+    Run e2e via the **project's configured e2e command** (from the `evidence` config /
+    project workflow) — not bare `npx playwright test` on ad-hoc ports. The configured
+    command reuses the issue's preview ports and its isolated e2e database.
+    For a changed back-end/service repo that the config says may impact a UI repo
+    but where you judge there is NO impact on that UI surface, declare it in the
+    manifest `impact` list with `impacts_ui: false` and a concrete rationale
+    instead of running its e2e. Re-run every command fresh in this session and
+    write a new `.symphony/evidence/manifest.json` — do not reuse a prior manifest.
+    If any prior run is marked `blocked` but the blocker is actually fixable repo
+    tooling/config (a `vibe`/`.symphony` script, a wrong compose project, file
+    permissions, a missing setup step), fix it and re-run instead of leaving it
+    `blocked` — `blocked` is only for environment limits you cannot change from
+    inside the workspace.
+    Do nothing else in this turn.
     """
   end
 
@@ -336,7 +458,7 @@ defmodule SymphonyElixir.AgentRunner do
   # before implementation continues. Softer than the publish gate — a still-missing
   # workpad logs a warning but never strands the run.
   defp run_plan_gate(session, issue, opts, agent_kind, codex_update_recipient) do
-    workpad_checker = Keyword.get(opts, :workpad_checker, default_workpad_checker(issue))
+    workpad_checker = Keyword.get(opts, :workpad_checker, default_workpad_checker(issue, opts))
 
     turn_opts = agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)
 
@@ -353,26 +475,47 @@ defmodule SymphonyElixir.AgentRunner do
   # Legacy live trackers have no project_slug; the gate no-ops there. Only a
   # genuinely missing workpad (`:not_found`) is a violation — an unresolvable
   # local project/issue means the gate has nothing to assert against.
-  defp default_workpad_checker(%{project_slug: project_slug, identifier: identifier})
+  defp default_workpad_checker(%{project_slug: project_slug, identifier: identifier}, opts)
        when is_binary(project_slug) and is_binary(identifier) do
     fn ->
+      require_execution_contract? = goal_mode?(opts)
+
       case Context.latest_workpad(project_slug, identifier) do
         {:error, :not_found} -> {:error, :not_found}
+        {:ok, %{body: body}} -> ExecutionContract.validate_workpad(body, require_execution_contract: require_execution_contract?)
         _present_or_unresolvable -> :ok
       end
     end
   end
 
-  defp default_workpad_checker(_issue), do: fn -> :ok end
+  defp default_workpad_checker(_issue, _opts), do: fn -> :ok end
 
   defp plan_gate_prompt do
     """
     ## Plan gate failed (Symphony)
 
-    No `## Codex Workpad` comment exists for this issue yet. Before any further
-    implementation, read and follow the `workpad` skill: create the workpad
-    comment with the plan, acceptance criteria, and a Validation section. Do
-    nothing else in this turn.
+    The issue is missing a valid `## Codex Workpad` execution contract. Before
+    any further implementation, read and follow the `workpad` skill: create or
+    update the single workpad comment with:
+
+    - `### Plan`
+    - `### Acceptance criteria`
+    - `### Validation`
+    - `### Outcome`
+
+    For plan-driven runs, `### Plan` must start with execution contract metadata:
+    `source_plan`, `mode`, `scope_status`, `final_validate_allowed`, and
+    `final_publish_allowed`. The same `### Plan` section must track every plan
+    task with `[ ]`, `[~]`, or `[x]` before implementation continues.
+
+    Build the Plan from the scope Symphony already gave you: derive from a spec or
+    plan under `docs/superpowers/` when present, otherwise from the issue title and
+    description in this thread. Do not fetch the issue from GitHub to discover scope,
+    and do not look up a same-numbered issue in another repository. If you think the
+    scope is missing, you are looking in the wrong place — re-read the injected issue
+    context and build the Plan instead of stalling.
+
+    Do nothing else in this turn.
     """
   end
 
@@ -424,7 +567,7 @@ defmodule SymphonyElixir.AgentRunner do
         run_plan_gate(advanced_session, issue, opts, agent_kind, codex_update_recipient)
       end
 
-      case continue_with_issue?(issue, issue_state_fetcher, Keyword.get(opts, :project_config)) do
+      case continue_with_issue?(issue, issue_state_fetcher, Keyword.get(opts, :project_config), opts) do
         {:continue, refreshed_issue} ->
           continue_or_stop_outer_turn_loop(
             advanced_session,
@@ -458,11 +601,20 @@ defmodule SymphonyElixir.AgentRunner do
          turn_number,
          max_turns
        ) do
+    handoff_outcome = handoff_ready_outcome(workspace, opts)
+
     cond do
-      goal_mode?(opts) ->
+      goal_mode?(opts) and not scope_incomplete?(opts) ->
         Logger.info("Stopping outer agent turn loop for #{issue_context(refreshed_issue)} because Codex goal mode handles continuation internally")
 
         :completed
+
+      match?({:stop, _outcome}, handoff_outcome) ->
+        {:stop, outcome} = handoff_outcome
+
+        Logger.info("Stopping outer agent turn loop for #{issue_context(refreshed_issue)} after turn #{turn_number}/#{max_turns}; deliverables ready outcome=#{inspect(outcome)}")
+
+        outcome
 
       turn_number < max_turns ->
         Logger.info("Continuing agent run for #{issue_context(refreshed_issue)} after normal turn completion turn=#{turn_number}/#{max_turns}")
@@ -488,6 +640,121 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
+  # When publish deliverables are already satisfied (clean trees, nothing to push),
+  # further continuation turns cannot advance implementation — only VALIDATE/evidence
+  # work remains. Stop the outer loop once the validate gate is satisfied or only
+  # reports environment blockers, so the agent does not burn max_turns re-checking
+  # an unchanged manifest.
+  @doc false
+  @spec handoff_ready_outcome(Path.t(), keyword()) :: :continue | {:stop, run_outcome()}
+  def handoff_ready_outcome(workspace, opts) do
+    # `:handoff_ready_evaluator` is a test seam (mirroring `:validate_gate_evaluator`
+    # and `:publish_gate_evaluator`): production never sets it, so the default logic
+    # below is what actually runs. It lets continuation tests drive the outer loop
+    # without standing up a dirty git tree just to keep the loop alive.
+    case Keyword.get(opts, :handoff_ready_evaluator) do
+      fun when is_function(fun, 2) -> fun.(workspace, opts)
+      fun when is_function(fun, 1) -> fun.(workspace)
+      nil -> default_handoff_ready_outcome(workspace, opts)
+    end
+  end
+
+  defp default_handoff_ready_outcome(workspace, opts) do
+    repo_states = RunContract.repo_states(workspace)
+
+    cond do
+      RunContract.work_present?(repo_states) ->
+        :continue
+
+      scope_incomplete?(opts) ->
+        :continue
+
+      true ->
+        validate_gate_outcome(workspace, opts)
+    end
+  end
+
+  defp validate_gate_outcome(workspace, opts) do
+    evaluator =
+      Keyword.get(opts, :validate_gate_evaluator, fn ws ->
+        cfg = evidence_config(Keyword.get(opts, :project_config))
+        Evidence.Gate.evaluate(ws, cfg, Evidence.Gate.default_deps(issue: Keyword.get(opts, :issue), config: cfg))
+      end)
+
+    case evaluator.(workspace) do
+      :satisfied ->
+        {:stop, :completed}
+
+      {:violations, violations} ->
+        if Evidence.Gate.environment_blocked_only?(violations) do
+          {:stop, {:incomplete, {:validate_gate, violations}}}
+        else
+          :continue
+        end
+    end
+  end
+
+  defp final_validate_allowed?(opts) do
+    case execution_contract_from_opts(opts) do
+      %ExecutionContract{final_validate_allowed?: allowed?} -> allowed?
+      {:error, _reason} -> false
+      :absent -> true
+      nil -> true
+    end
+  end
+
+  defp final_publish_allowed?(opts) do
+    case execution_contract_from_opts(opts) do
+      %ExecutionContract{final_publish_allowed?: allowed?} -> allowed?
+      {:error, _reason} -> false
+      :absent -> true
+      nil -> true
+    end
+  end
+
+  defp scope_incomplete?(opts) do
+    case execution_contract_from_opts(opts) do
+      %ExecutionContract{scope_complete?: complete?} -> not complete?
+      {:error, _reason} -> true
+      _absent_or_unplanned -> false
+    end
+  end
+
+  defp execution_contract_from_opts(opts) do
+    case Keyword.fetch(opts, :execution_contract) do
+      {:ok, contract} ->
+        contract
+
+      :error ->
+        execution_contract_from_fetcher(opts)
+    end
+  end
+
+  defp execution_contract_from_fetcher(opts) do
+    case Keyword.get(opts, :execution_contract_fetcher) do
+      fun when is_function(fun, 0) -> normalize_execution_contract(fun.())
+      fun when is_function(fun, 1) -> normalize_execution_contract(fun.(Keyword.get(opts, :issue)))
+      _other -> latest_workpad_execution_contract(Keyword.get(opts, :issue))
+    end
+  end
+
+  defp latest_workpad_execution_contract(%{project_slug: project_slug, identifier: identifier})
+       when is_binary(project_slug) and is_binary(identifier) do
+    case Context.latest_workpad(project_slug, identifier) do
+      {:ok, %{body: body}} -> normalize_execution_contract(ExecutionContract.parse(body))
+      {:error, :not_found} -> :absent
+      _unresolvable -> :absent
+    end
+  end
+
+  defp latest_workpad_execution_contract(_issue), do: :absent
+
+  defp normalize_execution_contract({:ok, %ExecutionContract{} = contract}), do: contract
+  defp normalize_execution_contract(%ExecutionContract{} = contract), do: contract
+  defp normalize_execution_contract(:absent), do: :absent
+  defp normalize_execution_contract({:error, reason}), do: {:error, reason}
+  defp normalize_execution_contract(_other), do: :absent
+
   defp build_turn_prompt(issue, opts, workspace, 1, _max_turns) do
     base = PromptBuilder.build_prompt(issue, Keyword.put(opts, :workspace, workspace))
     repo_states = RunContract.repo_states(workspace)
@@ -499,8 +766,8 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
-  defp build_turn_prompt(_issue, _opts, workspace, turn_number, max_turns) do
-    continuation_prompt(turn_number, max_turns, RunContract.repo_states(workspace))
+  defp build_turn_prompt(_issue, opts, workspace, turn_number, max_turns) do
+    continuation_prompt(turn_number, max_turns, RunContract.repo_states(workspace), opts)
   end
 
   @doc false
@@ -527,6 +794,14 @@ defmodule SymphonyElixir.AgentRunner do
   @doc false
   @spec continuation_prompt(pos_integer(), pos_integer(), [RunContract.RepoState.t()]) :: String.t()
   def continuation_prompt(turn_number, max_turns, repo_states) do
+    continuation_prompt(turn_number, max_turns, repo_states, [])
+  end
+
+  @doc false
+  @spec continuation_prompt(pos_integer(), pos_integer(), [RunContract.RepoState.t()], keyword()) :: String.t()
+  def continuation_prompt(turn_number, max_turns, repo_states, opts) do
+    execution_contract = execution_contract_from_opts(opts)
+
     """
     Continuation guidance:
 
@@ -536,16 +811,75 @@ defmodule SymphonyElixir.AgentRunner do
     - The original task instructions and prior turn context are already present in this thread, so do not restate them before acting.
     - Focus on the remaining ticket work and do not end the turn while the issue stays active unless you are truly blocked.
     - Do not front-load the full VALIDATE/evidence matrix while implementation or PR work is still missing.
+    #{validate_mode_guidance(execution_contract)}
+    - On continuation turns, do **not** loop on `git status` + manifest parse + "Continuação #N" workpad notes. Either execute missing evidence commands or end the turn if this session already recorded the outcome (including `blocked` after a real retry).
+    - If rework asked for fresh evidence, delete the old manifest and artifacts before re-running checks.
+    - If a prior manifest marks runs as `blocked`, retry each required command **once** in this turn before recording `blocked` again. After one retry still blocked, stop — document in Validation and end the turn.
+    - A plan task is not complete until its `### Plan` item has terminal validation/evidence/commit metadata: validation `passed` or `n/a`, evidence `done` or `n/a`, and commit `done` or `n/a`. Tests passing alone do not make `evidence: done`.
+
+    #{execution_focus_section(execution_contract)}
 
     Deliverable state (computed by the orchestrator from the workspace):
 
     #{RunContract.summary_text(repo_states)}
 
+    #{next_incomplete_task_section(execution_contract)}
+
     Any repo with commits ahead must end with a pushed branch and an open pull request (follow the `push` skill). Run the `evidence` skill only when handoff is ready.
     """
   end
 
-  defp continue_with_issue?(%Issue{id: issue_id} = issue, issue_state_fetcher, project_config)
+  defp validate_mode_guidance(%ExecutionContract{scope_complete?: false}) do
+    "- Final VALIDATE/evidence is not the next action while the workpad scope is incomplete."
+  end
+
+  defp validate_mode_guidance(_contract) do
+    "- When deliverables below show no commits ahead and no uncommitted changes, you are in **VALIDATE-only** mode: read and follow the `evidence` skill now. Run focused tests from the git diff and write a fresh `.symphony/evidence/manifest.json` for this session. Updating the workpad alone is not progress."
+  end
+
+  defp execution_focus_section(%ExecutionContract{scope_complete?: false, next_incomplete: %{title: title} = task})
+       when is_binary(title) do
+    """
+    Execution focus: WORKPAD_TASK
+
+    Act on the next incomplete workpad task now. Finish any pending implementation for this item first, then close its task-scoped gates before moving on:
+    - validation: #{task_gate(task, :validation)}
+    - evidence: #{task_gate(task, :evidence)}
+    - commit: #{task_gate(task, :commit)}
+    """
+  end
+
+  defp execution_focus_section(%ExecutionContract{scope_complete?: true, final_validate_allowed?: true}) do
+    """
+    Execution focus: FINAL_VALIDATE
+
+    The workpad scope is complete and final validation is allowed. Run final VALIDATE/evidence only after publish deliverables are ready.
+    """
+  end
+
+  defp execution_focus_section(_contract), do: "Execution focus: DELIVERABLES\n"
+
+  defp task_gate(task, key) do
+    Map.get(task, key) || "pending"
+  end
+
+  defp next_incomplete_task_section(execution_contract) do
+    case execution_contract do
+      %ExecutionContract{next_incomplete: %{title: title, remaining: remaining}} when is_binary(title) ->
+        remaining_text =
+          case remaining do
+            [] -> ""
+            items -> "\n    Remaining:\n" <> Enum.map_join(items, "\n", &"    - #{&1}")
+          end
+
+        "Next incomplete plan task: #{title}#{remaining_text}\n"
+
+      _contract ->
+        ""
+    end
+  end
+
+  defp continue_with_issue?(%Issue{id: issue_id} = issue, issue_state_fetcher, project_config, opts)
        when is_binary(issue_id) do
     case issue_state_fetcher.([issue_id]) do
       {:ok, [%Issue{} = refreshed_issue | _]} ->
@@ -553,7 +887,7 @@ defmodule SymphonyElixir.AgentRunner do
           wait_state?(refreshed_issue.state, project_config) ->
             {:done, refreshed_issue}
 
-          open_pr_should_stop_turns?(refreshed_issue, project_config) ->
+          open_pr_should_stop_turns?(refreshed_issue, project_config, opts) ->
             Logger.info("Stopping agent turns for #{issue_context(refreshed_issue)}: open pull request while still in In Progress")
 
             {:done, refreshed_issue}
@@ -573,7 +907,7 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
-  defp continue_with_issue?(issue, _issue_state_fetcher, _project_config), do: {:done, issue}
+  defp continue_with_issue?(issue, _issue_state_fetcher, _project_config, _opts), do: {:done, issue}
 
   defp pause_between_turns(opts) do
     case Keyword.get(opts, :continuation_delay_ms, @continuation_delay_ms) do
@@ -583,10 +917,11 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp goal_mode?(opts) do
-    case Keyword.get(opts, :goal) do
-      goal when is_binary(goal) -> String.trim(goal) != ""
-      _goal -> false
-    end
+    Keyword.get(opts, :goal_mode, false) == true or
+      case Keyword.get(opts, :goal) do
+        goal when is_binary(goal) -> String.trim(goal) != ""
+        _goal -> false
+      end
   end
 
   defp wait_state?(state_name, project_config) when is_binary(state_name) do
@@ -599,14 +934,17 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp wait_state?(_state_name, _project_config), do: false
 
-  defp open_pr_should_stop_turns?(%Issue{state: state, identifier: identifier}, project_config)
-       when is_binary(state) and is_binary(identifier) do
-    project_tracker_kind(project_config) == "github" and
+  @doc false
+  @spec open_pr_should_stop_turns?(Issue.t(), ProjectConfig.t() | nil, keyword()) :: boolean()
+  def open_pr_should_stop_turns?(%Issue{state: state, identifier: identifier}, project_config, opts)
+      when is_binary(state) and is_binary(identifier) do
+    not scope_incomplete?(opts) and
+      project_tracker_kind(project_config) == "github" and
       normalize_issue_state(state) == "in progress" and
       github_issue_has_open_pull_request?(identifier)
   end
 
-  defp open_pr_should_stop_turns?(_issue, _project_config), do: false
+  def open_pr_should_stop_turns?(_issue, _project_config, _opts), do: false
 
   # Thread the project's `codex:` section (from DB workflow_markdown) over instance
   # defaults so dispatch honors per-project command/approval/sandbox settings.
@@ -638,6 +976,70 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp maybe_put_claude_tools(session_opts, _agent_kind, _issue), do: session_opts
+
+  # Goal-mode Codex runs resume the issue's durable thread so the native goal
+  # state persists across orchestrator dispatches. The workspace sidecar is the
+  # primary source; the issue's stored `agent_session_id` is a belt-and-suspenders
+  # pointer that survives even when the workspace is recreated.
+  defp maybe_put_resume_thread_id(session_opts, opts, "codex", issue) do
+    if goal_mode?(opts) do
+      case issue_session_thread_id(issue) do
+        thread_id when is_binary(thread_id) and thread_id != "" ->
+          Keyword.put(session_opts, :resume_thread_id, thread_id)
+
+        _ ->
+          session_opts
+      end
+    else
+      session_opts
+    end
+  end
+
+  defp maybe_put_resume_thread_id(session_opts, _opts, _agent_kind, _issue), do: session_opts
+
+  # Propagate goal mode into the session so `CodingAgent` resumes the durable
+  # Codex thread (via `resume_thread_id`/sidecar) instead of starting a fresh
+  # one. Without this flag the session would ignore the resume pointer and lose
+  # the native goal state across dispatches.
+  defp maybe_put_goal_mode(session_opts, opts, "codex") do
+    if goal_mode?(opts) do
+      Keyword.put(session_opts, :goal_mode, true)
+    else
+      session_opts
+    end
+  end
+
+  defp maybe_put_goal_mode(session_opts, _opts, _agent_kind), do: session_opts
+
+  defp issue_session_thread_id(%Issue{agent_session_id: id}) when is_binary(id) and id != "", do: id
+  defp issue_session_thread_id(_issue), do: nil
+
+  # Persist the durable Codex thread id at the issue level for goal-mode runs so
+  # the tracker can show that a goal thread exists (even when no worker is live)
+  # and so future dispatches can resume it. Best-effort: trackers without a local
+  # row (e.g. GitHub/Jira) simply skip persistence.
+  defp maybe_persist_goal_thread(session, %Issue{} = issue, "codex", opts) do
+    with true <- goal_mode?(opts),
+         thread_id when is_binary(thread_id) and thread_id != "" <- Map.get(session, :thread_id),
+         slug when is_binary(slug) and slug != "" <- issue.project_slug,
+         identifier when is_binary(identifier) and identifier != "" <- issue.identifier,
+         true <- thread_id != issue.agent_session_id do
+      persist_agent_session_id(slug, identifier, thread_id)
+    else
+      _ -> :ok
+    end
+  end
+
+  defp maybe_persist_goal_thread(_session, _issue, _agent_kind, _opts), do: :ok
+
+  defp persist_agent_session_id(slug, identifier, thread_id) do
+    Context.set_agent_session_id(slug, identifier, thread_id)
+    :ok
+  rescue
+    error ->
+      Logger.debug("Skipping agent_session_id persistence identifier=#{identifier} reason=#{inspect(error)}")
+      :ok
+  end
 
   defp project_max_turns(%ProjectConfig{max_turns: n}) when is_integer(n) and n > 0, do: n
   defp project_max_turns(_project_config), do: Config.agent_max_turns()

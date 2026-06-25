@@ -710,7 +710,12 @@ match `ui_paths` (computed by the orchestrator via git diff, not by the agent),
 a passing `e2e` run with ≥1 screenshot and ≥1 video; and every declared command
 present in the Codex session log (anti-fraud, fails closed). Violations trigger
 up to 2 corrective turns, then the run ends incomplete (`validate_gate`) and the
-issue is annotated. On completion, evidence is copied to a durable store
+issue is annotated. A required `unit`/`e2e` run the agent marks
+`status: "blocked"` (with a `blocked_reason`) — a command that cannot run in the
+workspace at all, e.g. no Docker/network/browser sandbox — never satisfies the
+gate but is reported as `environment_blocked`: when every violation is
+environment-blocked the corrective turns are skipped and the annotation says the
+blocker is the environment, not the code. On completion, evidence is copied to a durable store
 (`issue_evidence` table + `.symphony/evidence/<project>/<issue>/<run_id>/`), a
 `## Codex Evidence` comment is posted (edited in place on each update) to the
 issue, and artifacts are served through the tracker API into the issue drawer's

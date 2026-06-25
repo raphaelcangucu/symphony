@@ -5,16 +5,30 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { AudioLines, Bot, Clock, FileText, ImageIcon, SendHorizontal, X } from "lucide-react";
+import {
+  AudioLines,
+  Bot,
+  Clock,
+  FileText,
+  ImageIcon,
+  SendHorizontal,
+  X,
+} from "lucide-react";
+import type { TFunction } from "i18next";
+import { i18n } from "@/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
+import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
+import { FileActivityCard } from "@/components/assistant/FileActivityCard";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
+import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
@@ -40,9 +54,21 @@ import {
   assistantThreadTopic,
   assistantTopic,
   bindAssistantEvents,
+  clearAuthoringGoal,
   dispatchCodingAgent,
+  normalizeGoalStatus,
+  pauseAuthoringGoal,
+  readLastTurn,
+  requestGoalStatus,
+  requestHistorySync,
+  resumeAuthoringGoal,
+  resumeTurn,
+  isTerminalTurnStatus,
+  setAuthoringGoalObjective,
   submitUserInput,
   type AssistantDocumentChangedPayload,
+  type AssistantTurnStatus,
+  type AuthoringGoalStatus,
   type AssistantIssueCreatedPayload,
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
@@ -53,6 +79,32 @@ import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 
 export type IssueAssistantMode = "triage" | "simple" | "complex";
+
+interface AuthoringGoalState {
+  enabled: boolean;
+  objective: string | null;
+  native: boolean;
+  status: string | null;
+  timeUsedSeconds: number | null;
+}
+
+const emptyAuthoringGoal: AuthoringGoalState = {
+  enabled: false,
+  objective: null,
+  native: false,
+  status: null,
+  timeUsedSeconds: null,
+};
+
+function mergeGoalStatus(prev: AuthoringGoalState, status: AuthoringGoalStatus): AuthoringGoalState {
+  return {
+    enabled: status.enabled,
+    objective: status.objective ?? prev.objective,
+    native: status.native,
+    status: status.goal?.status ?? (status.native ? prev.status : null),
+    timeUsedSeconds: status.goal?.timeUsedSeconds ?? prev.timeUsedSeconds,
+  };
+}
 
 export interface DraftIssueCreated {
   identifier: string;
@@ -126,6 +178,7 @@ export function ProjectAssistantPanel({
   onOpenDocumentPath,
   composerSeedMessage = null,
 }: ProjectAssistantPanelProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
@@ -134,6 +187,13 @@ export function ProjectAssistantPanel({
     null,
   );
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
+  // Tab-scoped Authoring goal: a native Codex goal running directly in this chat (no orchestrator).
+  // It is independent from the issue's Execution goal owned by the Execution tab. `native` reflects
+  // whether a native Codex goal exists yet (established by a turn); `status`/`timeUsedSeconds` come
+  // from the native goal so the pill shows truthful state instead of just the enabled flag.
+  const [authoringGoal, setAuthoringGoal] = useState<AuthoringGoalState>(emptyAuthoringGoal);
+  // The thread's last turn lifecycle state; an interrupted turn surfaces a Resume affordance.
+  const [lastTurn, setLastTurn] = useState<AssistantTurnStatus | null>(null);
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
@@ -143,6 +203,7 @@ export function ProjectAssistantPanel({
   const bundleRef = useRef<AssistantCatalogBundle | null>(null);
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollBehaviorRef = useRef<"initial" | "smooth">("initial");
   const panelRef = useRef<HTMLElement | null>(null);
   const lastConfirmedIssueModeRef = useRef<IssueAssistantMode | null>(null);
   const pendingIssueModeRef = useRef<{ mode: IssueAssistantMode; requestId: number } | null>(null);
@@ -163,6 +224,10 @@ export function ProjectAssistantPanel({
   const isExploreMode = resolvedAssistantMode === "explore";
 
   bundleRef.current = bundle;
+
+  useEffect(() => {
+    scrollBehaviorRef.current = "initial";
+  }, [issueIdentifier, threadId]);
 
   useEffect(() => {
     setRunningStartedAt((current) => {
@@ -193,7 +258,7 @@ export function ProjectAssistantPanel({
       })
       .catch((cause) => {
         if (!cancelled) {
-          setCatalogError(cause instanceof Error ? cause.message : "Failed to load assistant models.");
+          setCatalogError(cause instanceof Error ? cause.message : t("assistant.panel.catalogLoadFailed"));
         }
       });
 
@@ -205,7 +270,7 @@ export function ProjectAssistantPanel({
   useEffect(() => {
     if (!active) return;
     if (threadId == null && !projectSlug) {
-      setConnectionError("Assistant has no thread or project to connect to.");
+      setConnectionError(t("assistant.panel.noConnectionTarget"));
       return;
     }
 
@@ -214,6 +279,8 @@ export function ProjectAssistantPanel({
     pendingIssueModeRef.current = null;
     lastConfirmedGoalModeRef.current = null;
     pendingGoalModeRef.current = null;
+    setAuthoringGoal(emptyAuthoringGoal);
+    setLastTurn(null);
 
     const socket = createTrackerSocket();
     socket.connect();
@@ -231,6 +298,11 @@ export function ProjectAssistantPanel({
 
     bindAssistantEvents(channel, {
       onHistoryLoaded: (history) => setMessages(history),
+      onHistorySynced: (history) => {
+        setMessages(history);
+        setIsRunning(false);
+        setPendingQuestions(null);
+      },
       onMessageCreated: (message) => setMessages((current) => appendMessage(current, message)),
       onAssistantDelta: (delta) => {
         setIsRunning(true);
@@ -282,12 +354,43 @@ export function ProjectAssistantPanel({
         setBtw((current) => (current && current.id === btwId ? { ...current, answer: message, status: "complete" } : current)),
       onBtwError: ({ btwId, message }) =>
         setBtw((current) => (current && current.id === btwId ? { ...current, answer: message, status: "error" } : current)),
+      onGoalStatus: (status) => {
+        setAuthoringGoal((current) => mergeGoalStatus(current, status));
+        // In a goal-enabled thread every turn is a goal turn, so the status push is
+        // authoritative for whether the assistant is busy: running:true reattaches a
+        // tab to a run already in flight (e.g. after a refresh); running:false means
+        // idle (covers paused-cancel where no assistant_completed/error is emitted).
+        setIsRunning(status.running);
+      },
+      onGoalRunning: (running) => {
+        if (running) setIsRunning(true);
+      },
+      // Observer/reattached tabs receive turn_status fan-out (the originating tab
+      // reconciles via assistant_completed/error). Mirror the running indicator and
+      // remember the latest turn so an interrupted turn can offer Resume. Request a
+      // durable history sync on terminal status so tabs recover when streaming events
+      // targeted a dead channel process.
+      onTurnStatus: (status) => {
+        setLastTurn(status);
+        setIsRunning(status.status === "running");
+        if (isTerminalTurnStatus(status.status)) {
+          setPendingQuestions(null);
+          requestHistorySync(channel);
+        }
+      },
     });
 
     const joinPush = channel.join();
     joinPush.receive("ok", (response) => {
       setConnectionError(null);
       setChannelReady(true);
+
+      // Reconcile the last turn on a freshly joined (e.g. reloaded) tab: surface the
+      // Resume affordance for an interrupted turn and reattach the running indicator
+      // when a turn is still in flight.
+      const joinedLastTurn = readLastTurn(response);
+      setLastTurn(joinedLastTurn);
+      if (joinedLastTurn?.status === "running") setIsRunning(true);
 
       const hydratedMode = modeFromResponse(response);
       if (issueIdentifier && hydratedMode && hydratedMode !== "triage") {
@@ -299,6 +402,21 @@ export function ProjectAssistantPanel({
         const hydratedGoalMode = goalModeFromResponse(response) ?? false;
         lastConfirmedGoalModeRef.current = hydratedGoalMode;
         if (hydratedGoalMode) onIssueGoalModeChanged?.(true);
+        // Reattach to a goal turn already in flight (e.g. started before this
+        // refresh): seed the pill timer from the server's run-elapsed and mark the
+        // assistant running so the pill renders "executing" immediately.
+        const goalRunning = hydratedGoalMode && goalRunningFromResponse(response);
+        setAuthoringGoal({
+          ...emptyAuthoringGoal,
+          enabled: hydratedGoalMode,
+          objective: hydratedGoalMode ? goalObjectiveFromResponse(response) : null,
+          status: goalRunning ? "active" : null,
+          timeUsedSeconds: goalRunning ? goalRunElapsedFromResponse(response) : null,
+        });
+        if (goalRunning) setIsRunning(true);
+        // Pull the native goal (status + timer) asynchronously; the channel pushes
+        // "goal_status" back. Cheap no-op server-side when the goal isn't enabled.
+        if (hydratedGoalMode) requestGoalStatus(channel);
       }
 
       const agent = effectiveAgentFromResponse(response);
@@ -342,7 +460,7 @@ export function ProjectAssistantPanel({
     });
     pushResult.receive("timeout", () => {
       pendingIssueModeRef.current = null;
-      onIssueModeError?.("Assistant mode update timed out");
+      onIssueModeError?.(t("assistant.panel.modeUpdateTimeout"));
     });
   }, [active, channelReady, issueIdentifier, issueMode, issueModeRequestId, onIssueModeChanged, onIssueModeError]);
 
@@ -371,7 +489,7 @@ export function ProjectAssistantPanel({
     });
     pushResult.receive("timeout", () => {
       pendingGoalModeRef.current = null;
-      onIssueGoalModeError?.("Assistant goal mode update timed out");
+      onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout"));
     });
   }, [active, channelReady, issueIdentifier, issueGoalMode, issueGoalModeRequestId, onIssueGoalModeChanged, onIssueGoalModeError]);
 
@@ -389,13 +507,13 @@ export function ProjectAssistantPanel({
     const agentName = agentDisplayName(agent);
     const pushResult = dispatchCodingAgent(channel, { goalMode: issueGoalMode === true, agent });
     pushResult.receive("ok", (response) => {
-      onDispatchSucceeded?.(messageFromResponse(response) ?? `Dispatched to ${agentName}.`);
+      onDispatchSucceeded?.(messageFromResponse(response) ?? t("assistant.panel.dispatchedTo", { agent: agentName }));
     });
     pushResult.receive("error", (reason) => {
       onDispatchError?.(errorMessage(reason));
     });
     pushResult.receive("timeout", () => {
-      onDispatchError?.(`${agentName} dispatch timed out`);
+      onDispatchError?.(t("assistant.panel.dispatchTimeout", { agent: agentName }));
     });
   }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError]);
 
@@ -407,12 +525,12 @@ export function ProjectAssistantPanel({
 
       const channel = channelRef.current;
       if (!channel) {
-        setConnectionError("Assistant channel is not connected yet.");
+        setConnectionError(t("assistant.panel.channelNotConnected"));
         return;
       }
 
       const payload = {
-        message: trimmed || fallbackAttachmentMessage(submit.attachments),
+        message: trimmed || fallbackAttachmentMessage(submit.attachments, t),
         context: {
           view,
           agent: submit.agent,
@@ -429,7 +547,7 @@ export function ProjectAssistantPanel({
         setIsRunning(false);
       });
     },
-    [view],
+    [view, t],
   );
 
   const steerTurn = useCallback((submit: AssistantComposerSubmit) => {
@@ -439,8 +557,109 @@ export function ProjectAssistantPanel({
     channel.push("steer_turn", { message: text });
   }, []);
 
+  const enableGoalCommand = useCallback(
+    (submit: AssistantComposerSubmit) => {
+      const channel = channelRef.current;
+      if (!channel) {
+        setConnectionError(t("assistant.panel.channelNotConnected"));
+        return;
+      }
+
+      if (!issueIdentifier) {
+        setMessages((current) =>
+          appendMessage(current, assistantMessage(`goal-help-${crypto.randomUUID()}`, t("assistant.panel.goalRequiresIssue"))),
+        );
+        return;
+      }
+
+      const objective = submit.message.trim();
+
+      // Authoring goal: persist the chat goal + objective so this turn (and the next ones) run
+      // Codex native goal mode directly in the conversation. This never dispatches the orchestrator
+      // and never changes the issue's status or Execution goal.
+      const goalPush = channel.push("set_goal_mode", {
+        goal_mode: true,
+        ...(objective.length > 0 ? { objective } : {}),
+      });
+      goalPush.receive("ok", (response) => {
+        const enabled = goalModeFromResponse(response) ?? true;
+        lastConfirmedGoalModeRef.current = enabled;
+        onIssueGoalModeChanged?.(enabled);
+        setAuthoringGoal((current) => ({
+          ...current,
+          enabled,
+          objective: goalObjectiveFromResponse(response) ?? (objective.length > 0 ? objective : current.objective),
+        }));
+      });
+      goalPush.receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
+      goalPush.receive("timeout", () => onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout")));
+
+      const framed =
+        objective.length > 0
+          ? t("assistant.panel.goalCommandWithObjective", { objective })
+          : t("assistant.panel.goalCommandDefault");
+      const framedSubmit: AssistantComposerSubmit = { ...submit, kind: "message", message: framed };
+
+      if (isRunning) {
+        setQueued((current) => [...current, { id: crypto.randomUUID(), payload: framedSubmit }]);
+      } else {
+        dispatchSend(framedSubmit);
+      }
+    },
+    [dispatchSend, isRunning, issueIdentifier, onIssueGoalModeChanged, onIssueGoalModeError, t],
+  );
+
+  const pauseGoal = useCallback(() => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    // Optimistic: mark paused immediately; the reply carries the authoritative state.
+    setAuthoringGoal((current) => ({ ...current, status: "paused" }));
+    pauseAuthoringGoal(channel).receive("ok", (response) => {
+      setAuthoringGoal((current) => mergeGoalStatus(current, normalizeGoalStatus(response)));
+    });
+  }, []);
+
+  const resumeGoal = useCallback(() => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    setAuthoringGoal((current) => ({ ...current, status: "active" }));
+    setIsRunning(true);
+    resumeAuthoringGoal(channel).receive("error", (reason) => {
+      setIsRunning(false);
+      onIssueGoalModeError?.(errorMessage(reason, t));
+    });
+  }, [onIssueGoalModeError, t]);
+
+  const removeGoal = useCallback(() => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    clearAuthoringGoal(channel).receive("ok", (response) => {
+      setAuthoringGoal((current) => mergeGoalStatus(current, normalizeGoalStatus(response)));
+      lastConfirmedGoalModeRef.current = false;
+      onIssueGoalModeChanged?.(false);
+    });
+  }, [onIssueGoalModeChanged]);
+
+  const editGoalObjective = useCallback(
+    (objective: string) => {
+      const channel = channelRef.current;
+      const trimmed = objective.trim();
+      if (!channel || trimmed.length === 0) return;
+      setAuthoringGoal((current) => ({ ...current, objective: trimmed }));
+      setAuthoringGoalObjective(channel, trimmed).receive("ok", (response) => {
+        setAuthoringGoal((current) => mergeGoalStatus(current, normalizeGoalStatus(response)));
+      });
+    },
+    [],
+  );
+
   const sendMessage = useCallback(
     (submit: AssistantComposerSubmit) => {
+      if (submit.kind === "goal") {
+        enableGoalCommand(submit);
+        return;
+      }
+
       const trimmed = submit.message.trim();
       const hasAttachments = submit.attachments.length > 0;
       if (!trimmed && !hasAttachments) return;
@@ -468,7 +687,7 @@ export function ProjectAssistantPanel({
           })
           .receive("error", () => {
             setBtw((current) =>
-              current ? { ...current, status: "error", answer: "Failed to start side question." } : current,
+              current ? { ...current, status: "error", answer: t("assistant.panel.btwFailed") } : current,
             );
           });
         return;
@@ -481,7 +700,7 @@ export function ProjectAssistantPanel({
 
       dispatchSend(submit);
     },
-    [dispatchSend, isRunning, steerTurn],
+    [dispatchSend, enableGoalCommand, isRunning, steerTurn, t],
   );
 
   const wasRunningRef = useRef(false);
@@ -527,7 +746,7 @@ export function ProjectAssistantPanel({
   const onNew = useCallback(
     async (message: AppendMessage) => {
       const firstPart = message.content[0];
-      if (firstPart?.type !== "text") throw new Error("Only text assistant messages are supported");
+      if (firstPart?.type !== "text") throw new Error(i18n.t("assistant.errors.textOnlyMessages"));
       const activeBundle = bundleRef.current;
       if (!activeBundle) return;
 
@@ -543,7 +762,7 @@ export function ProjectAssistantPanel({
     [sendMessage],
   );
 
-  const visibleMessages = displayMessages(messages);
+  const visibleMessages = useMemo(() => displayMessages(messages, t), [messages, t]);
 
   useEffect(() => {
     if (!isFullPageProjectAssistant) return;
@@ -562,7 +781,13 @@ export function ProjectAssistantPanel({
     if (!isPanelMode) return;
     const scroller = scrollRef.current;
     if (!scroller) return;
-    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+
+    const behavior = scrollBehaviorRef.current === "initial" ? "auto" : "smooth";
+    scrollBehaviorRef.current = "smooth";
+
+    requestAnimationFrame(() => {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior });
+    });
   }, [isPanelMode, visibleMessages, isRunning]);
 
   const runtime = useExternalStoreRuntime<AssistantChatMessage>(
@@ -611,8 +836,8 @@ export function ProjectAssistantPanel({
             <span className="min-w-0 flex-1 truncate">{item.payload.message.trim()}</span>
             <button
               type="button"
-              aria-label="Send queued message now"
-              title="Send now"
+              aria-label={t("assistant.panel.sendQueuedNow")}
+              title={t("assistant.panel.sendNow")}
               onClick={() => forceSendQueued(item.id)}
               className="rounded p-0.5 hover:text-foreground"
             >
@@ -620,8 +845,8 @@ export function ProjectAssistantPanel({
             </button>
             <button
               type="button"
-              aria-label="Remove queued message"
-              title="Remove"
+              aria-label={t("assistant.panel.removeQueued")}
+              title={t("assistant.panel.remove")}
               onClick={() => setQueued((current) => current.filter((entry) => entry.id !== item.id))}
               className="rounded p-0.5 hover:text-foreground"
             >
@@ -648,15 +873,56 @@ export function ProjectAssistantPanel({
     </div>
   ) : null;
 
+  // An interrupted turn can be re-dispatched; offer Resume while no turn is running.
+  const resumeBanner =
+    lastTurn?.canResume && !isRunning ? (
+      <div className="px-4 pb-2">
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/30 dark:bg-amber-950/40 dark:text-amber-300">
+          <span className="min-w-0 flex-1">{t("assistant.panel.turnInterrupted")}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0 px-2 text-xs"
+            onClick={() => {
+              const channel = channelRef.current;
+              if (!channel) return;
+              void resumeTurn(channel);
+              setLastTurn(null);
+            }}
+          >
+            {t("assistant.panel.resume")}
+          </Button>
+        </div>
+      </div>
+    ) : null;
+
+  // Docks flush inside the composer card (passed as its `header`) so the goal
+  // reads as the top of the message box — one piece, no separating line.
+  const authoringGoalPill =
+    issueIdentifier && authoringGoal.enabled ? (
+      <GoalPill
+        phase={authoringGoalPhase(authoringGoal, isRunning)}
+        objective={authoringGoal.objective}
+        running={isRunning}
+        timeUsedSeconds={authoringGoal.timeUsedSeconds}
+        onPause={pauseGoal}
+        onResume={resumeGoal}
+        onRemove={removeGoal}
+        onEditObjective={editGoalObjective}
+      />
+    ) : null;
+
   const composerNode =
     bundle || catalogError ? (
       <AssistantComposer
         projectSlug={projectSlug ?? ""}
         bundle={bundle ?? fallbackCatalogBundle()}
         disabled={isRunning}
-        floating={isFullPageProjectAssistant}
+        floating={isPageMode}
         hasQueued={queued.length > 0}
         seedMessage={composerSeedMessage}
+        header={authoringGoalPill}
         onForceQueued={forceSendOldestQueued}
         onSubmit={sendMessage}
         onAgentChange={handleComposerAgentChange}
@@ -674,25 +940,31 @@ export function ProjectAssistantPanel({
             isPageMode && (isFullPageProjectAssistant ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
             isEmbeddedMode && "h-full min-h-0",
           )}
-          aria-label="Project assistant"
+          aria-label={t("assistant.panel.ariaLabel")}
         >
-          <div
-            className={cn("border-b", isPageMode ? "px-6 py-3.5" : isEmbeddedMode ? "px-4 py-2" : "px-4 py-3")}
-          >
-            <h2 className={cn("font-semibold leading-tight", isEmbeddedMode ? "text-sm" : "text-base")}>
-              {isExploreMode ? "Explore project" : projectSlug ? "Project assistant" : "Freeform assistant"}
-            </h2>
-            {isEmbeddedMode ? null : (
+          {isEmbeddedMode ? null : (
+            <div
+              className={cn("border-b", isPageMode ? "px-6 py-3.5" : "px-4 py-3")}
+            >
+              <h2 className="text-base font-semibold leading-tight">
+                {isExploreMode
+                  ? t("assistant.panel.exploreTitle")
+                  : projectSlug
+                    ? t("assistant.panel.projectTitle")
+                    : t("assistant.panel.freeformTitle")}
+              </h2>
               <p className="text-xs text-muted-foreground">
                 {isExploreMode
-                  ? `Ask questions about the codebase in \`${projectSlug}\` (default branches).`
+                  ? t("assistant.panel.exploreDescription", { slug: projectSlug })
                   : projectSlug
-                    ? `AI coding assistant for \`${projectSlug}\`.`
-                    : "AI coding assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
-                {bundle ? ` Models from \`${catalogFor(bundle, bundle.defaultAgent).command}\`.` : null}
+                    ? t("assistant.panel.projectDescription", { slug: projectSlug })
+                    : t("assistant.panel.freeformDescription")}
+                {bundle
+                  ? t("assistant.panel.modelsFrom", { command: catalogFor(bundle, bundle.defaultAgent).command })
+                  : null}
               </p>
-            )}
-          </div>
+            </div>
+          )}
 
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
             <div
@@ -711,11 +983,12 @@ export function ProjectAssistantPanel({
               <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
               <div className="pointer-events-auto bg-background">
                 <div className="mx-auto w-full max-w-4xl px-4 pb-2 pt-1">
+                  {resumeBanner}
                   {queuedChips}
                   {questionsNode}
                   {composerNode ?? (
                     <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
-                      Loading assistant models...
+                      {t("assistant.panel.loadingModels")}
                     </div>
                   )}
                   {catalogError ? (
@@ -725,13 +998,14 @@ export function ProjectAssistantPanel({
               </div>
             </div>
           ) : isPageMode ? (
-            <div ref={composerDockRef} className="shrink-0 border-t bg-background">
+            <div ref={composerDockRef} className="shrink-0 bg-background">
               <div className="mx-auto w-full max-w-4xl px-4 py-2">
+                {resumeBanner}
                 {queuedChips}
                 {questionsNode}
                 {composerNode ?? (
                   <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
-                    Loading assistant models...
+                    {t("assistant.panel.loadingModels")}
                   </div>
                 )}
                 {catalogError ? (
@@ -744,7 +1018,7 @@ export function ProjectAssistantPanel({
               {queuedChips}
               {questionsNode}
               {composerNode ?? (
-                <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading assistant models...</div>
+                <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
               )}
               {catalogError ? (
                 <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
@@ -763,26 +1037,29 @@ export function ProjectAssistantPanel({
     <AssistantRuntimeProvider runtime={runtime}>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
-          <Button type="button" variant="outline" size="sm" aria-label="Open project assistant">
+          <Button type="button" variant="outline" size="sm" aria-label={t("assistant.panel.openAria")}>
             <Bot className="h-4 w-4" />
-            Assistant
+            {t("assistant.panel.openButton")}
           </Button>
         </SheetTrigger>
         <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
           <SheetHeader className="border-b px-6 py-4">
-            <SheetTitle>{projectSlug ? "Project assistant" : "Freeform assistant"}</SheetTitle>
+            <SheetTitle>
+              {projectSlug ? t("assistant.panel.projectTitle") : t("assistant.panel.freeformTitle")}
+            </SheetTitle>
             <SheetDescription>
               {projectSlug
-                ? `AI coding assistant for \`${projectSlug}\`.`
-                : "AI coding assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug."}
+                ? t("assistant.panel.projectDescription", { slug: projectSlug })
+                : t("assistant.panel.freeformDescription")}
             </SheetDescription>
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">{messageItems}</div>
+            {resumeBanner}
             {queuedChips}
             {questionsNode}
             {composerNode ?? (
-              <div className="border-t px-4 py-6 text-sm text-muted-foreground">Loading assistant models...</div>
+              <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
             )}
             {catalogError ? (
               <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
@@ -795,6 +1072,27 @@ export function ProjectAssistantPanel({
       ) : null}
     </AssistantRuntimeProvider>
   );
+}
+
+function authoringGoalPhase(goal: AuthoringGoalState, running: boolean): GoalPillPhase {
+  if (running) return "running";
+  switch (goal.status) {
+    case "paused":
+      return "paused";
+    case "completed":
+    case "complete":
+    case "done":
+    case "satisfied":
+      return "completed";
+    case "blocked":
+    case "failed":
+    case "cancelled":
+    case "canceled":
+      return "stalled";
+    default:
+      // native + active-but-not-running reads as stalled (resumable); no native goal yet = pending.
+      return goal.native ? "stalled" : "pending";
+  }
 }
 
 function AssistantBubble({
@@ -842,9 +1140,14 @@ function AssistantBubble({
         )}
         {message.toolCalls.length ? (
           <div className={cn("mt-3 space-y-2 border-t pt-2", isUser && "border-white/20")}>
-            {message.toolCalls.map((toolCall, index) => (
-              <ToolCallBlock view={assistantToolCallToView(toolCall)} key={`${toolCall.name}-${index}`} />
-            ))}
+            {message.toolCalls.map((toolCall, index) => {
+              const activity = fileActivityFromToolCall(toolCall);
+              return activity ? (
+                <FileActivityCard view={activity} key={`fa-${toolCall.name}-${index}`} />
+              ) : (
+                <ToolCallBlock view={assistantToolCallToView(toolCall)} key={`${toolCall.name}-${index}`} />
+              );
+            })}
           </div>
         ) : null}
       </article>
@@ -857,6 +1160,7 @@ function isUserQuestionsMessage(message: AssistantChatMessage): boolean {
 }
 
 function UserQuestionsReceipt({ message }: { message: AssistantChatMessage }) {
+  const { t } = useTranslation();
   const rawQuestions = Array.isArray(message.metadata.questions)
     ? (message.metadata.questions as UserQuestion[])
     : [];
@@ -871,7 +1175,7 @@ function UserQuestionsReceipt({ message }: { message: AssistantChatMessage }) {
     <div className="flex w-full justify-start">
       <article className="w-full max-w-none rounded-2xl border bg-muted/30 p-3 text-sm">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Clarifying questions
+          {t("assistant.panel.clarifyingQuestions")}
         </p>
         <dl className="space-y-2">
           {rawQuestions.map((question) => (
@@ -895,11 +1199,12 @@ function AttachmentPreview({
   isUser: boolean;
   projectSlug?: string;
 }) {
+  const { t } = useTranslation();
   if (!attachment || typeof attachment !== "object") return null;
 
   const record = attachment as Record<string, unknown>;
   const type = record.type;
-  const name = typeof record.name === "string" ? record.name : "attachment";
+  const name = typeof record.name === "string" ? record.name : t("assistant.panel.attachmentLabel.default");
   const mediaType = typeof record.media_type === "string" ? record.media_type : "";
   const data = typeof record.data === "string" ? record.data : "";
   const path = typeof record.path === "string" ? record.path : "";
@@ -928,7 +1233,7 @@ function AttachmentPreview({
         )}
       >
         <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Image: {name}</span>
+        <span className="truncate">{t("assistant.panel.attachmentLabel.image", { name })}</span>
       </span>
     );
   }
@@ -970,7 +1275,7 @@ function AttachmentPreview({
         )}
       >
         <AudioLines className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Audio: {name}</span>
+        <span className="truncate">{t("assistant.panel.attachmentLabel.audio", { name })}</span>
       </span>
     );
   }
@@ -1010,21 +1315,23 @@ function AssistantMarkdown({
   );
 }
 
-function displayMessages(messages: AssistantChatMessage[]): AssistantChatMessage[] {
+function displayMessages(messages: AssistantChatMessage[], t: TFunction): AssistantChatMessage[] {
   if (messages.length > 0) return messages;
 
-  return [
-    assistantMessage(
-      "assistant-welcome",
-      "Ask naturally about this project, or request tracker actions. I can chat, create tasks, comment on issues, move statuses, list issues, and request Codex work when you ask for it.",
-    ),
-  ];
+  return [assistantMessage("assistant-welcome", t("assistant.panel.welcome"))];
 }
 
-function fallbackAttachmentMessage(attachments: AssistantComposerSubmit["attachments"]): string {
-  if (attachments.some((attachment) => attachment.type === "audio")) return "See the attached audio.";
-  if (attachments.some((attachment) => attachment.type === "image")) return "See the attached image.";
-  return "See the attached files.";
+function fallbackAttachmentMessage(
+  attachments: AssistantComposerSubmit["attachments"],
+  t: TFunction,
+): string {
+  if (attachments.some((attachment) => attachment.type === "audio")) {
+    return t("assistant.panel.attachmentFallback.audio");
+  }
+  if (attachments.some((attachment) => attachment.type === "image")) {
+    return t("assistant.panel.attachmentFallback.image");
+  }
+  return t("assistant.panel.attachmentFallback.files");
 }
 
 function assistantMessage(id: string, content: string): AssistantChatMessage {
@@ -1112,6 +1419,25 @@ function goalModeFromResponse(response: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
+function goalObjectiveFromResponse(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+  const value = (response as Record<string, unknown>).goal_objective;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function goalRunningFromResponse(response: unknown): boolean {
+  if (!response || typeof response !== "object") return false;
+  return (response as Record<string, unknown>).goal_running === true;
+}
+
+function goalRunElapsedFromResponse(response: unknown): number | null {
+  if (!response || typeof response !== "object") return null;
+  const value = (response as Record<string, unknown>).goal_run_elapsed_seconds;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function effectiveAgentFromResponse(response: unknown): AgentKind | null {
   if (!response || typeof response !== "object") return null;
   const value = (response as Record<string, unknown>).effective_agent;
@@ -1135,8 +1461,8 @@ function stringFromRecord(record: Record<string, unknown>, key: string): string 
   return typeof value === "string" ? value : null;
 }
 
-function errorMessage(reason: unknown): string {
+function errorMessage(reason: unknown, t: TFunction = i18n.t.bind(i18n) as TFunction): string {
   if (reason && typeof reason === "object" && "reason" in reason && typeof reason.reason === "string") return reason.reason;
   if (reason instanceof Error) return reason.message;
-  return "Assistant request failed";
+  return t("assistant.panel.requestFailed");
 }

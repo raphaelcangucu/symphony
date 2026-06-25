@@ -1,6 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { assistantIssueTopic, assistantThreadTopic, assistantTopic, bindAssistantEvents } from "../assistantChannel";
+import {
+  assistantIssueTopic,
+  assistantThreadTopic,
+  assistantTopic,
+  bindAssistantEvents,
+  clearAuthoringGoal,
+  isTerminalTurnStatus,
+  normalizeGoalStatus,
+  normalizeTurnStatus,
+  pauseAuthoringGoal,
+  readLastTurn,
+  requestGoalStatus,
+  requestHistorySync,
+  resumeAuthoringGoal,
+  resumeTurn,
+  setAuthoringGoalObjective,
+} from "../assistantChannel";
 
 describe("assistantThreadTopic", () => {
   it("builds a thread topic from a numeric id", () => {
@@ -33,6 +49,32 @@ describe("assistantIssueTopic", () => {
 });
 
 describe("assistant channel binding", () => {
+  it("forwards last_turn from history_loaded to onTurnStatus", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onTurnStatus = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onTurnStatus,
+    });
+
+    handlers["history_loaded"]({
+      messages: [],
+      last_turn: { status: "interrupted", can_resume: true },
+    });
+
+    expect(onTurnStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "interrupted", canResume: true }),
+    );
+  });
+
   it("normalizes history, streaming deltas, tool calls, completion, and errors", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
     const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
@@ -154,5 +196,175 @@ describe("assistant channel binding", () => {
 
   it("fails fast for blank project slugs", () => {
     expect(() => assistantTopic(" ")).toThrow("projectSlug is required");
+  });
+});
+
+describe("authoring goal channel", () => {
+  it("normalizes goal_status payloads and the native goal", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onGoalStatus = vi.fn();
+    const onGoalRunning = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onGoalStatus,
+      onGoalRunning,
+    });
+
+    handlers["goal_status"]({
+      enabled: true,
+      objective: "Audit the admin UI",
+      native: true,
+      goal: { kind: "goal", source: "native", status: "paused", timeUsedSeconds: 73, token_budget: 200000 },
+      running: false,
+    });
+    handlers["goal_running"]({ running: true });
+
+    expect(onGoalStatus).toHaveBeenCalledWith({
+      enabled: true,
+      objective: "Audit the admin UI",
+      native: true,
+      goal: expect.objectContaining({ status: "paused", timeUsedSeconds: 73, tokenBudget: 200000 }),
+      running: false,
+    });
+    expect(onGoalRunning).toHaveBeenCalledWith(true);
+  });
+
+  it("treats a blank objective and missing goal as empty", () => {
+    const status = normalizeGoalStatus({ enabled: true, objective: "  ", native: false, goal: null });
+    expect(status).toEqual({ enabled: true, objective: null, native: false, goal: null, running: false });
+  });
+
+  it("pushes goal control intents with empty payloads", () => {
+    const push = vi.fn();
+    const channel = { push } as never;
+
+    requestGoalStatus(channel);
+    pauseAuthoringGoal(channel);
+    resumeAuthoringGoal(channel);
+    clearAuthoringGoal(channel);
+    setAuthoringGoalObjective(channel, "Finish the spec");
+
+    expect(push).toHaveBeenCalledWith("goal_status", {});
+    expect(push).toHaveBeenCalledWith("goal_pause", {});
+    expect(push).toHaveBeenCalledWith("goal_resume", {});
+    expect(push).toHaveBeenCalledWith("goal_clear", {});
+    expect(push).toHaveBeenCalledWith("goal_set_objective", { objective: "Finish the spec" });
+  });
+});
+
+describe("turn status channel", () => {
+  it("invokes onTurnStatus when the channel pushes turn_status", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onTurnStatus = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onTurnStatus,
+    });
+
+    handlers["turn_status"]({ status: "interrupted", session_id: "ct-tn", can_resume: true });
+
+    expect(onTurnStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "interrupted", sessionId: "ct-tn", canResume: true }),
+    );
+  });
+
+  it("normalizes a turn_status payload and falls back for missing fields", () => {
+    expect(
+      normalizeTurnStatus({
+        status: "running",
+        session_id: "ct-1",
+        started_at: "2026-06-22T12:00:00Z",
+        finished_at: null,
+        can_resume: false,
+      }),
+    ).toEqual({
+      status: "running",
+      sessionId: "ct-1",
+      startedAt: "2026-06-22T12:00:00Z",
+      finishedAt: null,
+      canResume: false,
+    });
+
+    expect(normalizeTurnStatus(null)).toEqual({
+      status: "unknown",
+      sessionId: null,
+      startedAt: null,
+      finishedAt: null,
+      canResume: false,
+    });
+  });
+
+  it("reads last_turn from a join payload, or null when absent", () => {
+    expect(readLastTurn({ last_turn: { status: "interrupted", can_resume: true } })).toEqual(
+      expect.objectContaining({ status: "interrupted", canResume: true }),
+    );
+    expect(readLastTurn({})).toBeNull();
+    expect(readLastTurn(null)).toBeNull();
+  });
+
+  it("pushes resume_turn with an empty payload", () => {
+    const push = vi.fn();
+    const channel = { push } as never;
+
+    resumeTurn(channel);
+
+    expect(push).toHaveBeenCalledWith("resume_turn", {});
+  });
+
+  it("forwards history_synced to onHistorySynced", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onHistorySynced = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onHistorySynced,
+    });
+
+    handlers["history_synced"]({
+      messages: [{ id: 1, role: "assistant", content: "synced", tool_calls: [] }],
+    });
+
+    expect(onHistorySynced).toHaveBeenCalledWith([
+      expect.objectContaining({ role: "assistant", content: "synced" }),
+    ]);
+  });
+
+  it("pushes sync_history with an empty payload", () => {
+    const push = vi.fn();
+    const channel = { push } as never;
+
+    requestHistorySync(channel);
+
+    expect(push).toHaveBeenCalledWith("sync_history", {});
+  });
+
+  it("recognizes terminal turn statuses", () => {
+    expect(isTerminalTurnStatus("completed")).toBe(true);
+    expect(isTerminalTurnStatus("failed")).toBe(true);
+    expect(isTerminalTurnStatus("interrupted")).toBe(true);
+    expect(isTerminalTurnStatus("running")).toBe(false);
   });
 });

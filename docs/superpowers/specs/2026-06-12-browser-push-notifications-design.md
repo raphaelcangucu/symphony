@@ -82,3 +82,4 @@ Service worker scope: `/tracker/` (matches Vite `base`).
 - Per-event notification preferences in Settings UI.
 - Quiet hours / suppress when tracker tab is focused.
 - PR merged → Done (informational, lower priority).
+- Comment @mention push (`comment_mention`) — see `docs/superpowers/specs/2026-06-24-comment-mentions-push-design.md`.

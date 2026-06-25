@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { GitPullRequest, RefreshCw, RotateCcw, Wrench } from "lucide-react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { hasFailingChecks } from "@/components/issues/pull-request/pr-meta";
@@ -31,6 +33,7 @@ export function PullRequestTab({
   error,
   onRefresh,
 }: PullRequestTabProps) {
+  const { t } = useTranslation();
   const [fixing, setFixing] = useState(false);
   const [rerunning, setRerunning] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -47,10 +50,10 @@ export function PullRequestTab({
     setFixing(true);
     try {
       const result = await requestPullRequestFix(projectSlug, issue.identifier);
-      toast.success(`Sent to ${result.movedTo} — the agent will pick it up on the next poll.`);
+      toast.success(t("issue.pullRequest.toasts.fixSent", { status: result.movedTo }));
       onRefresh();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Could not request a fix.");
+      toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.toasts.fixFailed"));
     } finally {
       setFixing(false);
     }
@@ -66,12 +69,12 @@ export function PullRequestTab({
         results.push(...(await rerunFailedJobs(projectSlug, issue.identifier, pr.number)));
       }
       if (results.some((result) => result.ok === false)) {
-        toast.error("Some jobs could not be re-run. Refresh in a minute to see results.");
+        toast.error(t("issue.pullRequest.toasts.rerunPartialFailed"));
       } else {
-        toast.success("Failed jobs were re-run. Refresh in a minute to see results.");
+        toast.success(t("issue.pullRequest.toasts.rerunSuccess"));
       }
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Could not re-run the failed jobs.");
+      toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.toasts.rerunFailed"));
     } finally {
       setRerunning(false);
       onRefresh();
@@ -84,10 +87,10 @@ export function PullRequestTab({
     try {
       await linkPullRequest(projectSlug, issue.identifier, linkUrl);
       setLinkUrl("");
-      toast.success("Pull request linked.");
+      toast.success(t("issue.pullRequest.toasts.linked"));
       onRefresh();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Could not link the pull request.");
+      toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.toasts.linkFailed"));
     } finally {
       setLinking(false);
     }
@@ -97,10 +100,10 @@ export function PullRequestTab({
     if (!url) return;
     try {
       await unlinkPullRequest(projectSlug, issue.identifier, url);
-      toast.success("Pull request unlinked.");
+      toast.success(t("issue.pullRequest.toasts.unlinked"));
       onRefresh();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Could not unlink the pull request.");
+      toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.toasts.unlinkFailed"));
     }
   }
 
@@ -114,7 +117,7 @@ export function PullRequestTab({
       className="text-muted-foreground"
     >
       <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-      Refresh
+      {t("issue.pullRequest.refresh")}
     </Button>
   );
 
@@ -124,7 +127,7 @@ export function PullRequestTab({
         type="url"
         value={linkUrl}
         onChange={(event) => setLinkUrl(event.target.value)}
-        placeholder="https://github.com/owner/repo/pull/123"
+        placeholder={t("issue.pullRequest.linkPlaceholder")}
         className="h-8 flex-1 rounded-md border px-3 text-xs"
       />
       <Button
@@ -135,13 +138,13 @@ export function PullRequestTab({
         disabled={linking || !linkUrl.trim()}
         className="shrink-0 text-muted-foreground"
       >
-        {linking ? "Linking…" : "Link PR"}
+        {linking ? t("issue.pullRequest.linking") : t("issue.pullRequest.linkPr")}
       </Button>
     </div>
   );
 
   if (loading && pullRequests.length === 0) {
-    return <EmptyState>Loading pull request details…</EmptyState>;
+    return <EmptyState>{t("issue.pullRequest.loading")}</EmptyState>;
   }
 
   if (error && pullRequests.length === 0) {
@@ -149,7 +152,7 @@ export function PullRequestTab({
       <EmptyState>
         {error}{" "}
         <button type="button" onClick={onRefresh} className="underline">
-          Retry
+          {t("issue.pullRequest.retry")}
         </button>
       </EmptyState>
     );
@@ -158,10 +161,7 @@ export function PullRequestTab({
   if (pullRequests.length === 0) {
     if (!supported) {
       return (
-        <EmptyState>
-          Pull requests require a configured GitHub repository. Add one in project settings to link PRs to{" "}
-          <span className="font-mono">{issue.identifier}</span>.
-        </EmptyState>
+        <EmptyState>{t("issue.pullRequest.unsupported", { identifier: issue.identifier })}</EmptyState>
       );
     }
 
@@ -169,10 +169,7 @@ export function PullRequestTab({
       return (
         <div className="space-y-4">
           <div className="flex items-center justify-end">{refreshButton}</div>
-          <EmptyState>
-            A GitHub token is required to discover pull requests and load CI details. Set{" "}
-            <span className="font-mono">GITHUB_TOKEN</span> and refresh, or link a PR manually below.
-          </EmptyState>
+          <EmptyState>{t("issue.pullRequest.tokenRequired")}</EmptyState>
           {linkRow}
         </div>
       );
@@ -181,11 +178,7 @@ export function PullRequestTab({
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-end">{refreshButton}</div>
-        <EmptyState>
-          No pull request linked to this issue yet. Once an agent opens a PR that references{" "}
-          <span className="font-mono">{issue.identifier}</span> (or uses its linked branch), it will appear here.
-          You can also link one manually below (e.g. a PR in another repository).
-        </EmptyState>
+        <EmptyState>{t("issue.pullRequest.empty", { identifier: issue.identifier })}</EmptyState>
         {linkRow}
       </div>
     );
@@ -195,13 +188,13 @@ export function PullRequestTab({
     <div className="space-y-4">
       {!available ? (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Limited GitHub access.</span> Linked pull requests are shown,
-          but CI details and merge actions need <span className="font-mono">GITHUB_TOKEN</span> configured.
+          <span className="font-medium text-foreground">{t("issue.pullRequest.limitedAccessTitle")}</span>{" "}
+          {t("issue.pullRequest.limitedAccessBody")}
         </div>
       ) : null}
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
-          {pullRequests.length} related pull request{pullRequests.length === 1 ? "" : "s"}
+          {t("issue.pullRequest.relatedCount", { count: pullRequests.length })}
         </span>
         <div className="flex items-center gap-2">
           {canUseLiveActions && canFix ? (
@@ -215,7 +208,7 @@ export function PullRequestTab({
                 className="text-muted-foreground"
               >
                 <RotateCcw aria-hidden="true" className={cn("h-4 w-4", rerunning && "animate-spin")} />
-                {rerunning ? "Re-running…" : "Re-run failed jobs"}
+                {rerunning ? t("issue.pullRequest.rerunning") : t("issue.pullRequest.rerunFailedJobs")}
               </Button>
               <Button
                 type="button"
@@ -226,7 +219,7 @@ export function PullRequestTab({
                 className="border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
               >
                 <Wrench className={cn("h-4 w-4", fixing && "animate-pulse")} />
-                {fixing ? "Sending…" : "Fix with agent"}
+                {fixing ? t("issue.pullRequest.sending") : t("issue.pullRequest.fixWithAgent")}
               </Button>
             </>
           ) : null}
@@ -239,7 +232,7 @@ export function PullRequestTab({
           key={`monitor-${pr.number}`}
           className="rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2 text-xs text-muted-foreground"
         >
-          <span className="font-medium text-foreground">{monitorLabel(monitor)}</span>
+          <span className="font-medium text-foreground">{monitorLabel(monitor, t)}</span>
           {monitor.summary ? <> — {monitor.summary}</> : null}
         </div>
       ))}
@@ -261,18 +254,18 @@ export function PullRequestTab({
   );
 }
 
-function monitorLabel(monitor: PullRequestMonitorInfo): string {
+function monitorLabel(monitor: PullRequestMonitorInfo, t: TFunction): string {
   switch (monitor.lastAction) {
     case "moved_to_rework":
-      return `CI/review failure attributed to this PR — sent to Rework (attempt ${Math.max(1, monitor.autoReworkCount)})`;
+      return t("issue.pullRequest.monitor.movedToRework", { count: Math.max(1, monitor.autoReworkCount) });
     case "moved_to_done":
-      return "PR merged — issue moved to Done";
+      return t("issue.pullRequest.monitor.movedToDone");
     case "kept_human_review":
-      return "Kept in review — failure looks unrelated or needs a human";
+      return t("issue.pullRequest.monitor.keptHumanReview");
     case "limit_reached":
-      return "Automatic fix limit reached — human review required";
+      return t("issue.pullRequest.monitor.limitReached");
     default:
-      return `Monitor: ${monitor.lastAction ?? "status"}`;
+      return t("issue.pullRequest.monitor.fallback", { action: monitor.lastAction ?? "status" });
   }
 }
 

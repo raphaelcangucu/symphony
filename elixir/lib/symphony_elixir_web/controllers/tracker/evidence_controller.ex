@@ -19,6 +19,31 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceController do
     end
   end
 
+  @spec clear(Conn.t(), map()) :: Conn.t()
+  def clear(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    case Store.delete_all(project_slug, identifier) do
+      {:ok, count} -> json(conn, %{data: %{deleted: count}})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec clear_failed(Conn.t(), map()) :: Conn.t()
+  def clear_failed(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    case Store.delete_failed(project_slug, identifier) do
+      {:ok, count} -> json(conn, %{data: %{deleted: count}})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec delete(Conn.t(), map()) :: Conn.t()
+  def delete(conn, %{"project_slug" => project_slug, "identifier" => identifier, "run_id" => run_id}) do
+    case Store.delete_run(project_slug, identifier, run_id) do
+      {:ok, _record} -> send_resp(conn, 204, "")
+      {:error, :run_not_found} -> TrackerErrors.render(conn, :evidence_run_not_found)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec artifact(Conn.t(), map()) :: Conn.t()
   def artifact(conn, %{
         "project_slug" => project_slug,
@@ -36,9 +61,9 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceController do
       |> Conn.put_resp_header("cache-control", "private, max-age=31536000, immutable")
       |> Conn.send_file(200, absolute)
     else
-      {:error, :invalid_path} -> artifact_error(conn, 422, "invalid_artifact_path", "Invalid artifact path.")
-      {:error, :not_found} -> artifact_error(conn, 404, "artifact_not_found", "Evidence artifact not found.")
-      {:error, :run_not_found} -> artifact_error(conn, 404, "evidence_run_not_found", "Evidence run not found.")
+      {:error, :invalid_path} -> TrackerErrors.render(conn, :invalid_artifact_path)
+      {:error, :not_found} -> TrackerErrors.render(conn, :artifact_not_found)
+      {:error, :run_not_found} -> TrackerErrors.render(conn, :evidence_run_not_found)
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
@@ -60,11 +85,5 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceController do
       manifest: record.manifest,
       inserted_at: record.inserted_at
     }
-  end
-
-  defp artifact_error(conn, status, code, message) do
-    conn
-    |> Conn.put_status(status)
-    |> json(%{error: %{code: code, message: message}})
   end
 end

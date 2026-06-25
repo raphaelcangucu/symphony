@@ -1,5 +1,6 @@
 import axios from "axios";
 
+import { i18n } from "@/i18n";
 import { http, trackerPath, unwrapData } from "./http";
 import type { Viewer } from "@/types/viewer";
 
@@ -24,7 +25,7 @@ export class ViewerNotConfiguredError extends Error {
 export function normalizeViewer(dto: BackendViewerDto): Viewer {
   const login = dto.githubLogin ?? dto.github_login ?? "";
   if (!login.trim()) {
-    throw new Error("viewer payload missing github_login");
+    throw new Error(i18n.t("auth.viewerErrors.missingLogin"));
   }
 
   return {

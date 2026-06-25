@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
@@ -10,6 +11,7 @@ interface SessionLogEntryCardProps {
 }
 
 export function SessionLogEntryCard({ entry }: SessionLogEntryCardProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(!entry.collapsed);
 
   if (entry.kind === "assistant") {
@@ -37,10 +39,10 @@ export function SessionLogEntryCard({ entry }: SessionLogEntryCardProps) {
         open={open}
         onToggle={() => setOpen((current) => !current)}
         title={entry.title}
-        subtitle="Internal reasoning"
+        subtitle={t("issue.sessionLog.subtitles.reasoning")}
         tone="muted"
       >
-        <p className="text-sm leading-6 text-muted-foreground">{entry.body ?? "Thinking…"}</p>
+        <p className="text-sm leading-6 text-muted-foreground">{entry.body ?? t("issue.sessionLog.subtitles.thinking")}</p>
       </CollapsibleCard>
     );
   }
@@ -51,7 +53,11 @@ export function SessionLogEntryCard({ entry }: SessionLogEntryCardProps) {
         open={open}
         onToggle={() => setOpen((current) => !current)}
         title={entry.title}
-        subtitle={entry.kind === "system" ? "System" : "Session"}
+        subtitle={
+          entry.kind === "system"
+            ? t("issue.sessionLog.subtitles.system")
+            : t("issue.sessionLog.subtitles.session")
+        }
         tone="muted"
       >
         {entry.body ? <CodeBody language={entry.language} value={entry.body} /> : null}
@@ -64,7 +70,7 @@ export function SessionLogEntryCard({ entry }: SessionLogEntryCardProps) {
       open={open}
       onToggle={() => setOpen((current) => !current)}
       title={entry.title}
-      subtitle="Event"
+      subtitle={t("issue.sessionLog.subtitles.event")}
       tone="event"
     >
       {entry.body ? <CodeBody language={entry.language} value={entry.body} /> : null}

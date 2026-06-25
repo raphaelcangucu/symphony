@@ -85,6 +85,8 @@ defmodule SymphonyElixir.LocalTracker.Projects do
   defp apply_setup(_project_slug, setup) when setup in [%{}, nil], do: {:ok, nil}
 
   defp apply_setup(project_slug, setup) when is_map(setup) do
+    setup = sanitize_setup_workflow(setup)
+
     case Context.upsert_project_setup(project_slug, setup) do
       {:ok, _setup} -> {:ok, nil}
       {:error, reason} -> {:error, reason}
@@ -135,7 +137,7 @@ defmodule SymphonyElixir.LocalTracker.Projects do
   defp validate_setup(setup) when setup in [%{}, nil], do: :ok
 
   defp validate_setup(%{"workflow_markdown" => markdown}) when is_binary(markdown) do
-    case Config.parse_workflow_markdown(markdown) do
+    case Config.parse_workflow_markdown(Config.portable_workflow_markdown(markdown)) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, {:invalid_workflow_markdown, reason}}
     end
@@ -143,4 +145,10 @@ defmodule SymphonyElixir.LocalTracker.Projects do
 
   defp validate_setup(%{"workflow_markdown" => _other}), do: {:error, :invalid_yaml}
   defp validate_setup(_setup), do: :ok
+
+  defp sanitize_setup_workflow(%{"workflow_markdown" => markdown} = setup) when is_binary(markdown) do
+    Map.put(setup, "workflow_markdown", Config.portable_workflow_markdown(markdown))
+  end
+
+  defp sanitize_setup_workflow(setup), do: setup
 end

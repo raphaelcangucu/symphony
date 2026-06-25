@@ -11,6 +11,7 @@ defmodule SymphonyElixirWeb.Tracker.TunnelControllerTest do
 
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
+    Application.put_env(:symphony_elixir, :cloudflare_tunnel_checker, fn -> false end)
 
     previous_token = System.get_env(@token_env)
     System.put_env(@token_env, "secret")
@@ -24,14 +25,14 @@ defmodule SymphonyElixirWeb.Tracker.TunnelControllerTest do
     :ok
   end
 
-  test "start returns 409 when the public tunnel is disabled" do
+  test "start spawns the tunnel without the Tunnel GenServer when disabled at process level" do
+    Application.put_env(:symphony_elixir, :cloudflare_tunnel_checker, fn -> false end)
+    Application.put_env(:symphony_elixir, :cloudflare_tunnel_spawner, fn _spec -> :ok end)
+
     conn = post(authorized_conn(), "/api/tracker/v1/tunnel/start")
 
-    assert json_response(conn, 409) == %{
-             "error" => %{
-               "code" => "public_tunnel_disabled",
-               "message" => "The public preview tunnel is disabled for this workspace."
-             }
+    assert json_response(conn, 200) == %{
+             "data" => %{"enabled" => true, "running" => true}
            }
   end
 

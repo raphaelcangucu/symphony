@@ -22,9 +22,35 @@ defmodule SymphonyElixirWeb.Tracker.EditorController do
     end
   end
 
+  def show(conn, %{"project_slug" => project_slug}) do
+    with {:ok, _project} <- Context.get_project(project_slug) do
+      render_project_target(conn, project_slug)
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   defp render_target(conn, project_slug, identifier) do
     browser = editor_payload(Editor.editor_target(project_slug, identifier))
     cursor = editor_payload(Editor.cursor_desktop_target(project_slug, identifier))
+
+    json(conn, %{
+      data: %{
+        available: browser.available,
+        url: browser.url,
+        reason: browser.reason,
+        cursor_desktop: %{
+          available: cursor.available,
+          url: cursor.url,
+          reason: cursor.reason
+        }
+      }
+    })
+  end
+
+  defp render_project_target(conn, project_slug) do
+    browser = editor_payload(Editor.project_editor_target(project_slug))
+    cursor = editor_payload(Editor.project_cursor_desktop_target(project_slug))
 
     json(conn, %{
       data: %{

@@ -1,10 +1,57 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { I18nextProvider } from "react-i18next";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EvidenceTab } from "../EvidenceTab";
+import { i18n } from "@/i18n";
+import { initTestI18n } from "@/i18n/testUtils";
 import type { EvidenceRecord } from "@/types/evidence";
 import type { Issue } from "@/types/issue";
+
+vi.mock("@/components/shared/AttachmentVideo", () => ({
+  AttachmentVideo: ({
+    src,
+    label,
+    description,
+  }: {
+    src: string;
+    label: string;
+    description?: string;
+  }) => (
+    <div data-testid="attachment-video" data-src={src} data-description={description ?? ""}>
+      {label}
+    </div>
+  ),
+}));
+
+vi.mock("@/components/issues/issue-detail/EvidenceTextViewer", () => ({
+  EvidenceTextViewerTrigger: ({ label, url }: { label: string; url: string }) => (
+    <button data-testid="evidence-text-trigger" data-url={url} type="button">
+      {label}
+    </button>
+  ),
+}));
+
+vi.mock("@/components/shared/AttachmentImage", () => ({
+  AttachmentImage: ({ src, alt }: { src: string; alt: string }) => (
+    <img data-testid="attachment-image" src={src} alt={alt} />
+  ),
+}));
+
+const clearFailedIssueEvidenceMock = vi.hoisted(() => vi.fn());
+const clearIssueEvidenceMock = vi.hoisted(() => vi.fn());
+const deleteEvidenceRunMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/evidence", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/evidence")>();
+  return {
+    ...actual,
+    clearFailedIssueEvidence: (...args: unknown[]) => clearFailedIssueEvidenceMock(...args),
+    clearIssueEvidence: (...args: unknown[]) => clearIssueEvidenceMock(...args),
+    deleteEvidenceRun: (...args: unknown[]) => deleteEvidenceRunMock(...args),
+  };
+});
 
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
 const getCommitEvidenceMock = vi.hoisted(() => vi.fn());
@@ -71,13 +118,27 @@ function record(overrides: Partial<EvidenceRecord> = {}): EvidenceRecord {
 }
 
 describe("EvidenceTab", () => {
+  beforeEach(async () => {
+    await initTestI18n("pt-BR");
+    clearFailedIssueEvidenceMock.mockReset();
+    clearIssueEvidenceMock.mockReset();
+    deleteEvidenceRunMock.mockReset();
+    clearFailedIssueEvidenceMock.mockResolvedValue(1);
+    clearIssueEvidenceMock.mockResolvedValue(2);
+    deleteEvidenceRunMock.mockResolvedValue(undefined);
+  });
+
+  function renderTab(ui: React.ReactElement) {
+    return render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>);
+  }
+
   it("shows the empty state when there are no records", () => {
-    render(<EvidenceTab {...baseProps} records={[]} />);
-    expect(screen.getByText("No evidence captured for this issue yet.")).toBeInTheDocument();
+    renderTab(<EvidenceTab {...baseProps} records={[]} />);
+    expect(screen.getByText(i18n.t("issue.evidence.tab.empty"))).toBeInTheDocument();
   });
 
   it("shows continue work when evidence is missing in review", () => {
-    render(
+    renderTab(
       <EvidenceTab
         {...baseProps}
         issue={issue}
@@ -99,7 +160,7 @@ describe("EvidenceTab", () => {
     });
 
     const user = userEvent.setup();
-    render(
+    renderTab(
       <EvidenceTab
         {...baseProps}
         issue={issue}
@@ -125,19 +186,38 @@ describe("EvidenceTab", () => {
 
     expect(screen.getByText(/Retomar validação/)).toBeInTheDocument();
     expect(screen.getAllByText(/Docker is not running/).length).toBeGreaterThan(0);
-    expect(screen.getByText("blocked")).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.evidence.status.blocked"))).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /voltar para em andamento e retomar/i }));
     expect(dispatchIssueAgentMock).toHaveBeenCalled();
   });
 
   it("shows the error message", () => {
-    render(<EvidenceTab {...baseProps} error="Could not load evidence." records={[]} />);
+    renderTab(<EvidenceTab {...baseProps} error="Could not load evidence." records={[]} />);
     expect(screen.getByText("Could not load evidence.")).toBeInTheDocument();
   });
 
-  it("renders run rows, screenshots and videos for a record", () => {
-    const { container } = render(
+  it("clears failed evidence runs after confirmation", async () => {
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+
+    renderTab(
+      <EvidenceTab
+        {...baseProps}
+        onRefresh={onRefresh}
+        records={[record({ status: "failed" })]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /limpar falhas/i }));
+    expect(clearFailedIssueEvidenceMock).toHaveBeenCalledWith("advising", "CDE-1131");
+    expect(onRefresh).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("renders run sections, screenshots, videos, and text report triggers", () => {
+    renderTab(
       <EvidenceTab
         {...baseProps}
         records={[
@@ -161,9 +241,22 @@ describe("EvidenceTab", () => {
                 status: "passed",
                 summary: { total: 1, passed: 1, failed: 0 },
                 report: null,
-                screenshots: ["artifacts/screens/home.png"],
-                videos: ["artifacts/videos/flow.webm"],
+                screenshots: [
+                  {
+                    path: "artifacts/screens/home.png",
+                    label: "Home page flow",
+                    navigations: ["http://localhost:4302/home"],
+                  },
+                ],
+                videos: [
+                  {
+                    path: "artifacts/videos/flow.webm",
+                    label: "Home page flow",
+                  },
+                ],
                 trace: "artifacts/trace.zip",
+                proof: { title: "Home page flow" },
+                navigations: ["http://localhost:4302/home"],
               },
             ],
           }),
@@ -171,23 +264,77 @@ describe("EvidenceTab", () => {
       />,
     );
 
-    expect(screen.getByText("unit")).toBeInTheDocument();
-    expect(screen.getByText("e2e")).toBeInTheDocument();
-    expect(screen.getByText("npm test")).toBeInTheDocument();
-    expect(screen.getByText("3/3 passed, 0 failed")).toBeInTheDocument();
-    expect(screen.getByText("UI change")).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.evidence.tab.runSection.unitTitle", { repo: "frontend" }))).toBeInTheDocument();
+    expect(screen.getByText(/Teste end-to-end — frontend/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Home page flow/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("npm test").length).toBeGreaterThan(0);
+    expect(screen.getByText(i18n.t("issue.evidence.tab.runSummary", { passed: 3, total: 3, failed: 0 }))).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.evidence.tab.uiChange"))).toBeInTheDocument();
 
-    const image = screen.getByRole("img", { name: "home.png" });
+    const image = screen.getByTestId("attachment-image");
     expect(image.getAttribute("src")).toContain(
       "/projects/advising/issues/CDE-1131/evidence/20260610-1/artifacts/artifacts/screens/home.png",
     );
+    expect(image).toHaveAttribute("alt", "/home — Home page flow");
 
-    const video = container.querySelector("video");
-    expect(video).not.toBeNull();
-    expect(video?.getAttribute("src")).toContain("artifacts/videos/flow.webm");
+    const video = screen.getByTestId("attachment-video");
+    expect(video.getAttribute("data-src")).toContain("artifacts/videos/flow.webm");
+    expect(video.getAttribute("data-description")).toBe("");
+    expect(screen.getByText("flow.webm")).toBeInTheDocument();
 
-    const traceLink = screen.getByRole("link", { name: "e2e trace (frontend)" });
+    const reportTrigger = screen.getByTestId("evidence-text-trigger");
+    expect(reportTrigger).toHaveTextContent(
+      i18n.t("issue.evidence.tab.reportLink", { kind: "unit", repo: "frontend" }),
+    );
+    expect(reportTrigger.getAttribute("data-url")).toContain("artifacts/unit.txt");
+
+    const traceLink = screen.getByRole("link", { name: /trace e2e \(frontend\)/i });
     expect(traceLink.getAttribute("href")).toContain("artifacts/trace.zip");
+  });
+
+  it("groups evidence runs by plan task title", () => {
+    renderTab(
+      <EvidenceTab
+        {...baseProps}
+        records={[
+          record({
+            runs: [
+              {
+                task_id: "task-3",
+                task_title: "Task 3: Add Tasks, Review, And Runs Namespace",
+                kind: "unit",
+                repo: "admin",
+                command: "bun run test -- tasks",
+                status: "passed",
+                summary: { total: 2, passed: 2, failed: 0 },
+              },
+              {
+                task_id: "task-3",
+                task_title: "Task 3: Add Tasks, Review, And Runs Namespace",
+                kind: "e2e",
+                repo: "admin",
+                command: "npx playwright test tasks.spec.js",
+                status: "passed",
+                summary: { total: 1, passed: 1, failed: 0 },
+              },
+              {
+                kind: "unit",
+                repo: "backend",
+                command: ".venv/bin/python -m pytest tests/test_modules.py",
+                status: "passed",
+                summary: { total: 6, passed: 6, failed: 0 },
+              },
+            ],
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Task 3: Add Tasks, Review, And Runs Namespace")).toBeInTheDocument();
+    expect(screen.getByText("Evidência sem tarefa vinculada")).toBeInTheDocument();
+    expect(screen.getByText("bun run test -- tasks")).toBeInTheDocument();
+    expect(screen.getByText("npx playwright test tasks.spec.js")).toBeInTheDocument();
+    expect(screen.getByText(".venv/bin/python -m pytest tests/test_modules.py")).toBeInTheDocument();
   });
 
   it("renders agent commits and opens the diff sheet on click", async () => {
@@ -205,7 +352,7 @@ describe("EvidenceTab", () => {
     });
 
     const user = userEvent.setup();
-    render(
+    renderTab(
       <EvidenceTab
         {...baseProps}
         commits={[
@@ -227,7 +374,7 @@ describe("EvidenceTab", () => {
       />,
     );
 
-    expect(screen.getByText("Agent commits")).toBeInTheDocument();
+    expect(screen.getByText(i18n.t("issue.commits.title"))).toBeInTheDocument();
     await user.click(screen.getByTestId("commit-evidence-abc123d"));
     expect(getCommitEvidenceMock).toHaveBeenCalledWith("advising", "CDE-1131", "advising", "abc123def456");
     expect(await screen.findByText("work.txt")).toBeInTheDocument();

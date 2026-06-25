@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,24 +19,26 @@ interface RuleDescriptor {
   description: string;
 }
 
-const RULES: RuleDescriptor[] = [
-  {
-    key: "require_symphony_label",
-    title: "Require a Symphony label",
-    description:
-      "Only auto-start issues tagged symphony, symphony:codex, or symphony:claude. Manual dispatch from the board is never affected.",
-  },
-  {
-    key: "require_assignee_match",
-    title: "Require assignment to me",
-    description:
-      "Only auto-start issues assigned to the connected provider identity (GitHub login, Jira account, or Linear user).",
-  },
-];
-
 export function OrchestrationRulesCard({ initial, loadError }: OrchestrationRulesCardProps) {
+  const { t } = useTranslation();
   const [rules, setRules] = useState<OrchestratorSettings | null>(initial);
   const [savingKey, setSavingKey] = useState<RuleKey | null>(null);
+
+  const ruleDescriptors = useMemo<RuleDescriptor[]>(
+    () => [
+      {
+        key: "require_symphony_label",
+        title: t("settings.orchestration.rules.requireSymphonyLabel.title"),
+        description: t("settings.orchestration.rules.requireSymphonyLabel.description"),
+      },
+      {
+        key: "require_assignee_match",
+        title: t("settings.orchestration.rules.requireAssigneeMatch.title"),
+        description: t("settings.orchestration.rules.requireAssigneeMatch.description"),
+      },
+    ],
+    [t],
+  );
 
   useEffect(() => {
     setRules(initial);
@@ -51,7 +54,7 @@ export function OrchestrationRulesCard({ initial, loadError }: OrchestrationRule
       setRules(updated);
     } catch {
       setRules((current) => (current ? { ...current, [key]: !next } : current));
-      toast.error("Failed to save orchestration rule");
+      toast.error(t("settings.orchestration.saveFailed"));
     } finally {
       setSavingKey(null);
     }
@@ -60,19 +63,16 @@ export function OrchestrationRulesCard({ initial, loadError }: OrchestrationRule
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Orchestration rules</CardTitle>
-        <CardDescription>
-          What the orchestrator is allowed to start on its own. Defaults are conservative so it never
-          grabs unlabeled or unassigned work.
-        </CardDescription>
+        <CardTitle>{t("settings.orchestration.title")}</CardTitle>
+        <CardDescription>{t("settings.orchestration.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {loadError ? (
-          <p className="text-xs text-muted-foreground">Failed to load rules — refresh to retry.</p>
+          <p className="text-xs text-muted-foreground">{t("settings.orchestration.loadFailed")}</p>
         ) : !rules ? (
-          <p className="text-xs text-muted-foreground">Loading…</p>
+          <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
         ) : (
-          RULES.map((rule) => (
+          ruleDescriptors.map((rule) => (
             <div key={rule.key} className="flex items-start justify-between gap-4">
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">{rule.title}</p>

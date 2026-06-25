@@ -34,4 +34,7 @@ export interface Project {
   createdAt?: string;
   updatedAt?: string;
   archivedAt?: string | null;
+  warmUpStatus?: "never" | "running" | "succeeded" | "failed";
+  warmedAt?: string | null;
+  lastWarmUpRunId?: number | null;
 }

@@ -1,0 +1,163 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Project not found"
+msgstr "Project not found"
+
+msgid "Validation failed"
+msgstr "Validation failed"
+
+msgid "Request failed"
+msgstr "Request failed"
+
+msgid "An agent is already running on this issue."
+msgstr "An agent is already running on this issue."
+
+msgid "Invalid GitHub pull request URL."
+msgstr "Invalid GitHub pull request URL."
+
+msgid "A pull request URL is required."
+msgstr "A pull request URL is required."
+
+msgid "Evidence run not found."
+msgstr "Evidence run not found."
+
+msgid "Evidence artifact not found."
+msgstr "Evidence artifact not found."
+
+msgid "Invalid artifact path."
+msgstr "Invalid artifact path."
+
+msgid "Commit not found in workspace repo."
+msgstr "Commit not found in workspace repo."
+
+msgid "Repository not found in workspace."
+msgstr "Repository not found in workspace."
+
+msgid "Snapshot timed out"
+msgstr "Snapshot timed out"
+
+msgid "Snapshot unavailable"
+msgstr "Snapshot unavailable"
+
+msgid "Attachment not found"
+msgstr "Attachment not found"
+
+msgid "Web Push is not configured"
+msgstr "Web Push is not configured"
+
+msgid "Web Push is not configured (missing VAPID keys)"
+msgstr "Web Push is not configured (missing VAPID keys)"
+
+msgid "endpoint is required"
+msgstr "endpoint is required"
+
+msgid "This file type is not supported."
+msgstr "This file type is not supported."
+
+msgid "Only PNG, JPEG, GIF, and WebP images are supported."
+msgstr "Only PNG, JPEG, GIF, and WebP images are supported."
+
+msgid "Files must be 5 MB or smaller."
+msgstr "Files must be 5 MB or smaller."
+
+msgid "Images must be 4 MB or smaller."
+msgstr "Images must be 4 MB or smaller."
+
+msgid "Invalid upload."
+msgstr "Invalid upload."
+
+msgid "file is required"
+msgstr "file is required"
+
+msgid "Invalid attachment path."
+msgstr "Invalid attachment path."
+
+msgid "attachment path is required"
+msgstr "attachment path is required"
+
+msgid "message is required"
+msgstr "message is required"
+
+msgid "%{field} is required"
+msgstr "%{field} is required"
+
+msgid "unsupported assistant tool: %{tool}"
+msgstr "unsupported assistant tool: %{tool}"
+
+msgid "only scope=freeform is supported"
+msgstr "only scope=freeform is supported"
+
+msgid "thread id is required"
+msgstr "thread id is required"
+
+msgid "agent must be codex, claude, cursor, or null"
+msgstr "agent must be codex, claude, cursor, or null"
+
+msgid "action must be resume, restart, hard_reset, stop, or continue_work"
+msgstr "action must be resume, restart, hard_reset, stop, or continue_work"
+
+msgid "server_id must be a positive integer"
+msgstr "server_id must be a positive integer"
+
+msgid "body is required"
+msgstr "body is required"
+
+msgid "target_identifier is required"
+msgstr "target_identifier is required"
+
+msgid "provider and key are required"
+msgstr "provider and key are required"
+
+msgid "setup is required"
+msgstr "setup is required"
+
+msgid "repositories must be a list"
+msgstr "repositories must be a list"
+
+msgid "workflow_markdown must be a string"
+msgstr "workflow_markdown must be a string"
+
+msgid "invalid workflow_markdown: %{reason}"
+msgstr "invalid workflow_markdown: %{reason}"
+
+msgid "Project must be archived before permanent deletion"
+msgstr "Project must be archived before permanent deletion"
+
+msgid "Invalid YAML"
+msgstr "Invalid YAML"
+
+msgid "yaml is required"
+msgstr "yaml is required"
+
+msgid "repositories is required"
+msgstr "repositories is required"
+
+msgid "invalid setting %{name}: %{reason}"
+msgstr "invalid setting %{name}: %{reason}"
+
+msgid "invalid tracker token"
+msgstr "invalid tracker token"
+
+msgid "unknown provider/credential"
+msgstr "unknown provider/credential"
+
+msgid "unknown settings group"
+msgstr "unknown settings group"
+
+msgid "runtime_id is required"
+msgstr "runtime_id is required"
+
+msgid "terminal input data is required"
+msgstr "terminal input data is required"
+
+msgid "terminal resize cols and rows are required"
+msgstr "terminal resize cols and rows are required"
+
+msgid "tmux is not available"
+msgstr "tmux is not available"
+
+msgid "workspace setup failed: %{reason}"
+msgstr "workspace setup failed: %{reason}"

@@ -11,10 +11,106 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestBranchControllerTest do
   @github_token_env "GITHUB_TOKEN"
 
   defmodule AcceptedClient do
-    def rest_put(_path, _body, _opts), do: {:ok, %{status: 202, body: %{}}}
+    def graphql(query, _variables, _opts) when is_binary(query) do
+      cond do
+        query =~ "issueNodeId" or query =~ "IssueNodeId" ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_node"}}}}}
+
+        true ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "timelineItems" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       pr_node(509, "acme/app")
+                     ]
+                   }
+                 }
+               }
+             }
+           }}
+      end
+    end
+
+    def rest_put(path, _body, _opts) do
+      send(self(), {:put, path})
+      {:ok, %{status: 202, body: %{}}}
+    end
+
+    defp pr_node(number, repo) do
+      %{
+        "number" => number,
+        "title" => "docs: add llms.txt",
+        "url" => "https://github.com/#{repo}/pull/#{number}",
+        "state" => "OPEN",
+        "isDraft" => false,
+        "merged" => false,
+        "headRefName" => "feat-#{number}",
+        "baseRefName" => "main",
+        "repository" => %{"nameWithOwner" => repo},
+        "author" => %{"login" => "codex-bot"},
+        "updatedAt" => "2026-05-29T00:00:00Z",
+        "commits" => %{"nodes" => []},
+        "comments" => %{"nodes" => []},
+        "reviews" => %{"nodes" => []}
+      }
+    end
+  end
+
+  defmodule MultiRepoGraphqlClient do
+    def graphql(query, _variables, _opts) when is_binary(query) do
+      cond do
+        query =~ "issueNodeId" or query =~ "IssueNodeId" ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_node"}}}}}
+
+        true ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "timelineItems" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       %{
+                         "number" => 509,
+                         "title" => "fix(auth): rotate tokens",
+                         "url" => "https://github.com/acme/backend/pull/509",
+                         "state" => "OPEN",
+                         "isDraft" => false,
+                         "merged" => false,
+                         "headRefName" => "fix-auth",
+                         "baseRefName" => "dev",
+                         "repository" => %{"nameWithOwner" => "acme/backend"},
+                         "author" => %{"login" => "codex-bot"},
+                         "updatedAt" => "2026-05-29T00:00:00Z",
+                         "commits" => %{"nodes" => []},
+                         "comments" => %{"nodes" => []},
+                         "reviews" => %{"nodes" => []}
+                       }
+                     ]
+                   }
+                 }
+               }
+             }
+           }}
+      end
+    end
+
+    def rest_put(path, _body, _opts) do
+      send(self(), {:put, path})
+      {:ok, %{status: 202, body: %{}}}
+    end
   end
 
   defmodule ConflictClient do
+    def graphql(query, variables, opts), do: AcceptedClient.graphql(query, variables, opts)
+
     def rest_put(_path, _body, _opts), do: {:error, {:github_api_status, 422}}
   end
 
@@ -28,13 +124,15 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestBranchControllerTest do
     previous_github = System.get_env(@github_token_env)
     System.put_env(@github_token_env, "gh-token")
 
+    Application.put_env(:symphony_elixir, :github_client_module, AcceptedClient)
+
     on_exit(fn ->
       Application.delete_env(:symphony_elixir, :github_client_module)
       restore_env(@token_env, previous_token)
       restore_env(@github_token_env, previous_github)
     end)
 
-    {:ok, project} =
+    {:ok, _project} =
       Context.create_workspace_project(%{
         "name" => "Remote",
         "slug" => "remote",
@@ -43,15 +141,23 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestBranchControllerTest do
         "setup" => %{}
       })
 
-    %{project: project}
+    :ok
   end
 
   test "returns updated:true on success" do
-    Application.put_env(:symphony_elixir, :github_client_module, AcceptedClient)
+    conn = post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/508/pull_requests/509/update_branch")
+
+    assert %{"data" => %{"updated" => true}} = json_response(conn, 200)
+    assert_received {:put, "/repos/acme/app/pulls/509/update-branch"}
+  end
+
+  test "uses the PR repo for multi-repo projects" do
+    Application.put_env(:symphony_elixir, :github_client_module, MultiRepoGraphqlClient)
 
     conn = post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/508/pull_requests/509/update_branch")
 
     assert %{"data" => %{"updated" => true}} = json_response(conn, 200)
+    assert_received {:put, "/repos/acme/backend/pulls/509/update-branch"}
   end
 
   test "maps a conflict to 422" do
@@ -63,8 +169,6 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestBranchControllerTest do
   end
 
   test "rejects a non-numeric pr number with 422" do
-    Application.put_env(:symphony_elixir, :github_client_module, AcceptedClient)
-
     conn = post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/508/pull_requests/abc/update_branch")
 
     assert %{"error" => %{"code" => "invalid_pr_number"}} = json_response(conn, 422)

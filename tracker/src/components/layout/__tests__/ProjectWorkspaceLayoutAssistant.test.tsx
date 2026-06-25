@@ -1,9 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
+
+const fetchProjectEditorTargetsMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    browser: { available: false, url: null, reason: "disabled" as const },
+    cursorDesktop: { available: true, url: "cursor://file//tmp/macro-markets", reason: null },
+  })),
+);
 
 vi.mock("@/components/layout/WorkspaceContext", () => ({
   WorkspaceProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -21,7 +28,19 @@ vi.mock("@/components/board/BoardPaletteShortcuts", () => ({
   BoardPaletteShortcuts: () => null,
 }));
 
+vi.mock("@/services/editor", async () => {
+  const actual = await vi.importActual<typeof import("@/services/editor")>("@/services/editor");
+  return {
+    ...actual,
+    fetchProjectEditorTargets: fetchProjectEditorTargetsMock,
+  };
+});
+
 describe("ProjectWorkspaceLayout assistant entry", () => {
+  beforeEach(() => {
+    fetchProjectEditorTargetsMock.mockClear();
+  });
+
   it("hides board filters outside the board view", () => {
     for (const path of [
       "/projects/macro-markets/settings",
@@ -68,5 +87,32 @@ describe("ProjectWorkspaceLayout assistant entry", () => {
     expect(screen.getByRole("menuitem", { name: "Explore project" }).getAttribute("href")).toBe(
       "/projects/macro-markets/assistant/explore",
     );
+  });
+
+  it("shows an editor menu on the project explore route and opens Cursor Desktop", async () => {
+    const user = userEvent.setup();
+    const appendChild = vi.spyOn(document.body, "appendChild");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
+    render(
+      <MemoryRouter initialEntries={["/projects/macro-markets/assistant/explore"]}>
+        <Routes>
+          <Route path="/projects/:projectSlug" element={<ProjectWorkspaceLayout />}>
+            <Route path="assistant/explore" element={<div>Explore route</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(fetchProjectEditorTargetsMock).toHaveBeenCalledWith("macro-markets"));
+
+    await user.click(await screen.findByRole("button", { name: "Open project workspace in Code" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Cursor" }));
+
+    const openedAnchor = appendChild.mock.calls
+      .map(([node]) => node)
+      .find((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
+
+    expect(openedAnchor?.href).toBe("cursor://file//tmp/macro-markets");
   });
 });

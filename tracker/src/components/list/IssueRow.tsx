@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,8 @@ interface IssueRowProps {
 }
 
 export function IssueRow({ issue, onSelect }: IssueRowProps) {
+  const { t } = useTranslation();
+
   return (
     <button
       type="button"
@@ -34,7 +37,7 @@ export function IssueRow({ issue, onSelect }: IssueRowProps) {
       </Badge>
       <span className="text-xs text-muted-foreground">{formatDateTime(issue.updatedAt)}</span>
       <Button tabIndex={-1} variant="ghost" size="sm" className="sr-only">
-        Open
+        {t("board.list.open")}
       </Button>
     </button>
   );

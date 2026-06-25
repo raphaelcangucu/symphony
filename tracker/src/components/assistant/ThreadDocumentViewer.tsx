@@ -1,5 +1,6 @@
 import { FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
@@ -24,6 +25,7 @@ export function ThreadDocumentViewer({
   selectedPath: selectedPathProp,
   onSelectPath,
 }: ThreadDocumentViewerProps) {
+  const { t } = useTranslation();
   const visibleDocuments = useMemo(() => documents.filter((document) => document.path.trim()), [documents]);
   const [internalSelectedPath, setInternalSelectedPath] = useState<string | null>(null);
   const selectedPath = selectedPathProp ?? internalSelectedPath;
@@ -94,27 +96,22 @@ export function ThreadDocumentViewer({
     return (
       <DocumentViewerEmptyState>
         {reason === "workspace_missing"
-          ? "The chat workspace is not ready yet. Generated files appear here after the assistant writes them."
-          : "No files available yet."}
+          ? t("assistant.threadDocuments.workspaceMissing")
+          : t("assistant.threadDocuments.unavailable")}
       </DocumentViewerEmptyState>
     );
   }
 
   if (visibleDocuments.length === 0) {
-    return (
-      <DocumentViewerEmptyState>
-        Markdown drafts from this chat will appear here. Ask the assistant to create or update a file, then open it from
-        the list or from a link in the conversation.
-      </DocumentViewerEmptyState>
-    );
+    return <DocumentViewerEmptyState>{t("assistant.threadDocuments.empty")}</DocumentViewerEmptyState>;
   }
 
   return (
-    <section className="flex h-full min-h-0 overflow-hidden rounded-xl border bg-card" aria-label="Chat files">
-      <aside className="flex w-64 shrink-0 min-h-0 flex-col border-r bg-muted/20" aria-label="Chat file list">
+    <section className="flex h-full min-h-0 overflow-hidden rounded-xl border bg-card" aria-label={t("assistant.threadDocuments.ariaLabel")}>
+      <aside className="flex w-64 shrink-0 min-h-0 flex-col border-r bg-muted/20" aria-label={t("assistant.threadDocuments.listAria")}>
         <div className="shrink-0 border-b px-4 py-3">
-          <h2 className="text-sm font-semibold">Files</h2>
-          <p className="text-xs text-muted-foreground">Markdown drafts written in this conversation.</p>
+          <h2 className="text-sm font-semibold">{t("assistant.threadDocuments.filesTitle")}</h2>
+          <p className="text-xs text-muted-foreground">{t("assistant.threadDocuments.filesSubtitle")}</p>
         </div>
 
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
@@ -142,13 +139,13 @@ export function ThreadDocumentViewer({
       </aside>
 
       <article className="min-w-0 flex-1 overflow-auto p-6" aria-live="polite">
-        {loading ? <DocumentContentState>Loading file...</DocumentContentState> : null}
+        {loading ? <DocumentContentState>{t("assistant.threadDocuments.loading")}</DocumentContentState> : null}
 
         {!loading && loadError ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-            <p className="text-sm font-medium text-destructive">Could not load this file.</p>
+            <p className="text-sm font-medium text-destructive">{t("assistant.threadDocuments.loadError")}</p>
             <Button type="button" variant="outline" size="sm" className="mt-3" onClick={retrySelectedDocument}>
-              Retry
+              {t("assistant.threadDocuments.retry")}
             </Button>
           </div>
         ) : null}
@@ -157,7 +154,9 @@ export function ThreadDocumentViewer({
           <Markdown className="max-w-none text-sm leading-7">{content}</Markdown>
         ) : null}
 
-        {!loading && !loadError && !content ? <DocumentContentState>No content to display.</DocumentContentState> : null}
+        {!loading && !loadError && !content ? (
+          <DocumentContentState>{t("assistant.threadDocuments.noContent")}</DocumentContentState>
+        ) : null}
       </article>
     </section>
   );

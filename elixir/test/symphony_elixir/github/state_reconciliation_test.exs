@@ -245,4 +245,87 @@ defmodule SymphonyElixir.GitHub.StateReconciliationTest do
 
     assert :ok = StateReconciliation.reconcile(dir, @metadata, client_module: AddBacklogMock)
   end
+
+  defmodule ReconcileProjectMock do
+    def graphql(query, variables, _opts) do
+      cond do
+        String.contains?(query, "SymphonyGitHubReadStatusField") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "url" => "https://github.com/orgs/clouapp/projects/2",
+                 "field" => %{
+                   "id" => "FIELD_1",
+                   "name" => "Status",
+                   "options" => [
+                     %{"id" => "opt_backlog", "name" => "Backlog"},
+                     %{"id" => "opt_todo", "name" => "Todo"}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyGitHubItemsUsage") ->
+          {:ok, empty_items_page()}
+
+        String.contains?(query, "SymphonyGitHubUpdateField") ->
+          names = get_in(variables, ["input", "singleSelectOptions"]) |> Enum.map(& &1["name"])
+          assert "Planning" in names
+          assert Enum.at(names, 1) == "Planning"
+
+          {:ok,
+           %{
+             "data" => %{
+               "updateProjectV2Field" => %{
+                 "projectV2Field" => %{
+                   "options" => [
+                     %{"id" => "opt_backlog", "name" => "Backlog"},
+                     %{"id" => "opt_planning", "name" => "Planning"},
+                     %{"id" => "opt_todo", "name" => "Todo"}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        true ->
+          raise "unexpected query: #{query}"
+      end
+    end
+
+    defp empty_items_page do
+      %{
+        "data" => %{
+          "node" => %{
+            "items" => %{"nodes" => [], "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}}
+          }
+        }
+      }
+    end
+  end
+
+  test "reconcile_project adds missing local workflow statuses to GitHub", %{dir: _dir} do
+    project = %SymphonyElixir.LocalTracker.Project{
+      tracker_kind: "github",
+      slug: "macro-markets",
+      tracker_config: %{
+        "project_id" => "PVT_test",
+        "repo" => "clouapp/front",
+        "status_field" => "Status"
+      }
+    }
+
+    log =
+      capture_log(fn ->
+        assert :ok =
+                 StateReconciliation.reconcile_project(project,
+                   client_module: ReconcileProjectMock,
+                   desired_states: ["Backlog", "Planning", "Todo"]
+                 )
+      end)
+
+    assert log =~ "Planning"
+  end
 end

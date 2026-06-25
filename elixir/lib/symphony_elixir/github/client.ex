@@ -45,6 +45,9 @@ defmodule SymphonyElixir.GitHub.Client do
                 repository {
                   nameWithOwner
                 }
+                parent {
+                  number
+                }
                 assignees(first: 1) {
                   nodes { login }
                 }
@@ -109,6 +112,7 @@ defmodule SymphonyElixir.GitHub.Client do
         url
         state
         repository { nameWithOwner }
+        parent { number }
         assignees(first: 1) { nodes { login } }
         labels(first: 20) { nodes { name } }
         linkedBranches(first: 1) {
@@ -657,7 +661,9 @@ defmodule SymphonyElixir.GitHub.Client do
       agent_kind: agent_kind,
       assigned_to_worker: AgentRouting.routable?(raw_labels) and assigned_to_worker?(assignee_login, assignee_filter),
       created_at: parse_datetime(content["createdAt"]),
-      updated_at: parse_datetime(content["updatedAt"])
+      updated_at: parse_datetime(content["updatedAt"]),
+      repository_full_name: get_in(content, ["repository", "nameWithOwner"]) || default_repo,
+      parent_identifier: extract_parent_identifier(content)
     }
   end
 
@@ -801,13 +807,22 @@ defmodule SymphonyElixir.GitHub.Client do
         agent_kind: agent_kind,
         assigned_to_worker: AgentRouting.routable?(raw_labels) and assigned_to_worker?(assignee_login, assignee_filter),
         created_at: parse_datetime(node["createdAt"]),
-        updated_at: parse_datetime(node["updatedAt"])
+        updated_at: parse_datetime(node["updatedAt"]),
+        repository_full_name: get_in(node, ["repository", "nameWithOwner"]) || repo,
+        parent_identifier: extract_parent_identifier(node)
       }
     end
   end
 
   defp build_issue_from_node(_node, _project_id, _status_field_name, _repo, _assignee_filter),
     do: nil
+
+  defp extract_parent_identifier(content) do
+    case get_in(content, ["parent", "number"]) do
+      number when is_integer(number) or is_binary(number) -> format_identifier(number)
+      _ -> nil
+    end
+  end
 
   defp extract_linked_branch_name(content) do
     case get_in(content, ["linkedBranches", "nodes"]) do

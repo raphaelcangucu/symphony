@@ -46,8 +46,16 @@ defmodule SymphonyElixir.GitHub.IssueCommentsTest do
                  "issue" => %{
                    "comments" => %{
                      "nodes" => [
-                       %{"body" => "## Codex Workpad", "author" => %{"login" => "codex-bot"}},
-                       %{"body" => "Reviewed", "author" => %{"login" => "alice"}}
+                       %{
+                         "body" => "## Codex Workpad",
+                         "createdAt" => "2026-05-26T10:00:00Z",
+                         "author" => %{"login" => "codex-bot"}
+                       },
+                       %{
+                         "body" => "Reviewed",
+                         "createdAt" => "2026-05-27T10:00:00Z",
+                         "author" => %{"login" => "alice"}
+                       }
                      ]
                    }
                  }
@@ -57,7 +65,7 @@ defmodule SymphonyElixir.GitHub.IssueCommentsTest do
          }}
       end
 
-      assert {:ok, [%{kind: "workpad"}, %{kind: "comment"}]} =
+      assert {:ok, [%{kind: "comment", author: "alice"}, %{kind: "workpad", author: "codex-bot"}]} =
                IssueComments.for_issue("o/r", "#42", request_fun: request_fun)
     end
 

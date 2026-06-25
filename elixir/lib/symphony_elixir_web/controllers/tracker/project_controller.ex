@@ -99,11 +99,15 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   def update_setup(conn, %{"id" => slug, "setup" => setup}) when is_map(setup) do
     case validate_workflow_markdown(setup) do
       :ok -> upsert_setup(conn, slug, setup)
-      {:error, message} -> TrackerErrors.validation(conn, message)
+      {:error, :workflow_markdown_must_be_string} ->
+        TrackerErrors.validation_msg(conn, "workflow_markdown must be a string")
+
+      {:error, {:invalid_workflow_markdown, reason}} ->
+        TrackerErrors.validation_msg(conn, "invalid workflow_markdown: %{reason}", %{reason: reason})
     end
   end
 
-  def update_setup(conn, _params), do: TrackerErrors.validation(conn, "setup is required")
+  def update_setup(conn, _params), do: TrackerErrors.validation_msg(conn, "setup is required")
 
   @spec update_repositories(Conn.t(), map()) :: Conn.t()
   def update_repositories(conn, %{"id" => slug, "repositories" => repositories}) when is_list(repositories) do
@@ -123,7 +127,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
     end
   end
 
-  def update_repositories(conn, _params), do: TrackerErrors.validation(conn, "repositories must be a list")
+  def update_repositories(conn, _params), do: TrackerErrors.validation_msg(conn, "repositories must be a list")
 
   defp upsert_setup(conn, slug, setup) do
     case Context.upsert_project_setup(slug, setup) do
@@ -154,11 +158,11 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
       markdown when is_binary(markdown) ->
         case Config.parse_workflow_markdown(markdown) do
           {:ok, %{front_matter: _, body: _}} -> :ok
-          {:error, reason} -> {:error, "invalid workflow_markdown: " <> reason}
+          {:error, reason} -> {:error, {:invalid_workflow_markdown, reason}}
         end
 
       _other ->
-        {:error, "workflow_markdown must be a string"}
+        {:error, :workflow_markdown_must_be_string}
     end
   end
 
@@ -182,7 +186,8 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   def delete(conn, %{"id" => project_slug}) do
     case Context.delete_project(project_slug) do
       {:ok, _project} -> send_resp(conn, :no_content, "")
-      {:error, :project_not_archived} -> TrackerErrors.validation(conn, "Project must be archived before permanent deletion")
+      {:error, :project_not_archived} ->
+        TrackerErrors.validation_msg(conn, "Project must be archived before permanent deletion")
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
@@ -208,17 +213,17 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
         |> json(%{data: TrackerPresenter.project(project, statuses, repositories, setup)})
 
       {:error, :invalid_yaml} ->
-        TrackerErrors.validation(conn, "Invalid YAML")
+        TrackerErrors.validation_msg(conn, "Invalid YAML")
 
       {:error, {:invalid_workflow_markdown, reason}} ->
-        TrackerErrors.validation(conn, "invalid workflow_markdown: " <> reason)
+        TrackerErrors.validation_msg(conn, "invalid workflow_markdown: %{reason}", %{reason: reason})
 
       {:error, reason} ->
         TrackerErrors.render(conn, reason)
     end
   end
 
-  def import_bundle(conn, _params), do: TrackerErrors.validation(conn, "yaml is required")
+  def import_bundle(conn, _params), do: TrackerErrors.validation_msg(conn, "yaml is required")
 
   @spec import_config(Conn.t(), map()) :: Conn.t()
   def import_config(conn, %{"id" => project_slug, "yaml" => yaml}) when is_binary(yaml) do
@@ -230,15 +235,15 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
         json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup)})
 
       {:error, :invalid_yaml} ->
-        TrackerErrors.validation(conn, "Invalid YAML")
+        TrackerErrors.validation_msg(conn, "Invalid YAML")
 
       {:error, {:invalid_workflow_markdown, reason}} ->
-        TrackerErrors.validation(conn, "invalid workflow_markdown: " <> reason)
+        TrackerErrors.validation_msg(conn, "invalid workflow_markdown: %{reason}", %{reason: reason})
 
       {:error, reason} ->
         TrackerErrors.render(conn, reason)
     end
   end
 
-  def import_config(conn, _params), do: TrackerErrors.validation(conn, "yaml is required")
+  def import_config(conn, _params), do: TrackerErrors.validation_msg(conn, "yaml is required")
 end

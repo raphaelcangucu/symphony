@@ -1,9 +1,52 @@
+import type { TFunction } from "i18next";
+
+import { i18n } from "@/i18n";
 import type { AgentExecution, AgentExecutionStatus } from "@/types/agent-execution";
 
 function hasInterruptedSignals(execution: AgentExecution): boolean {
   if (execution.error?.trim()) return true;
   const event = execution.lastEvent?.toLowerCase() ?? "";
   return event.includes("aborted") || event === "turn_aborted";
+}
+
+/**
+ * Native Codex goal statuses (plus the Symphony-side `not_loaded` dormant
+ * marker) mapped to localized labels. Falls back to the raw status string for
+ * any value the backend introduces that the UI does not yet know about.
+ */
+export function goalStatusLabel(
+  status: string | null | undefined,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): string | null {
+  if (!status) return null;
+  const key = `issue.agent.goalStatus.${status}`;
+  const label = t(key);
+  return label === key ? status : label;
+}
+
+/** True when the goal is parked on the issue without a live run attached. */
+export function isGoalNotLoaded(execution?: AgentExecution): boolean {
+  if (!execution) return false;
+  return execution.status === "saved" || execution.goal?.status === "not_loaded";
+}
+
+/** Localized badge text for the long-running goal/workflow chip. */
+export function longRunningBadgeText(
+  execution: AgentExecution,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): string | null {
+  if (!execution.longRunning) return null;
+
+  const status = execution.goal?.status;
+  const baseLabel = execution.longRunningLabel ?? execution.goal?.kind ?? null;
+  if (!baseLabel) return null;
+
+  if (status && status !== "active") {
+    const humanized = goalStatusLabel(status, t);
+    if (humanized) return `${baseLabel} · ${humanized}`;
+  }
+
+  return baseLabel;
 }
 
 /** Single display status for board cards and execution detail. */
@@ -56,7 +99,8 @@ export type AgentControlState =
   | "waiting"
   | "retrying"
   | "error"
-  | "aborted";
+  | "aborted"
+  | "saved";
 
 /** Lifecycle action the primary control button performs in a given state. */
 export type AgentPrimaryAction = "start" | "resume" | "pause";
@@ -86,7 +130,10 @@ export interface AgentControlModel {
 }
 
 /** Derives the full Agent Control model from an execution snapshot. */
-export function deriveAgentControl(execution?: AgentExecution): AgentControlModel {
+export function deriveAgentControl(
+  execution?: AgentExecution,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): AgentControlModel {
   if (!execution) {
     return {
       state: "no-run",
@@ -96,7 +143,7 @@ export function deriveAgentControl(execution?: AgentExecution): AgentControlMode
       canResume: true,
       canPause: false,
       primaryAction: "start",
-      primaryLabel: "Start",
+      primaryLabel: t("issue.agent.primaryStart"),
       enterIntent: "start",
     };
   }
@@ -114,21 +161,24 @@ export function deriveAgentControl(execution?: AgentExecution): AgentControlMode
     canResume: !isActive,
     canPause: isActive,
     primaryAction: isActive ? "pause" : "resume",
-    primaryLabel: isActive ? "Pause" : "Resume",
+    primaryLabel: isActive ? t("issue.agent.primaryPause") : t("issue.agent.primaryResume"),
     enterIntent: canSteer ? "steer" : isActive ? "queue" : "resume",
   };
 }
 
 /** Short hint shown next to the composer describing the Enter action. */
-export function agentEnterHintLabel(intent: AgentEnterIntent): string {
+export function agentEnterHintLabel(
+  intent: AgentEnterIntent,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): string {
   switch (intent) {
     case "steer":
-      return "Enter to steer";
+      return t("issue.agent.enterSteer");
     case "queue":
-      return "Enter to queue";
+      return t("issue.agent.enterQueue");
     case "resume":
-      return "Enter to resume";
+      return t("issue.agent.enterResume");
     case "start":
-      return "Enter to start";
+      return t("issue.agent.enterStart");
   }
 }

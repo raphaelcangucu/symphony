@@ -1,9 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { http } from "@/services/http";
-import { fetchViewer } from "@/services/viewer";
+import { fetchViewer, normalizeViewer } from "@/services/viewer";
+import { i18n } from "@/i18n";
+import { initTestI18n } from "@/i18n/testUtils";
 
 describe("viewer service", () => {
+  beforeEach(async () => {
+    await initTestI18n("en");
+  });
+
   afterEach(() => vi.restoreAllMocks());
 
   it("returns the normalized viewer payload", async () => {
@@ -16,6 +22,10 @@ describe("viewer service", () => {
       name: "Octo",
       avatarUrl: "https://x",
     });
+  });
+
+  it("throws when the viewer payload is missing github_login", () => {
+    expect(() => normalizeViewer({ name: "Octo" })).toThrow(i18n.t("auth.viewerErrors.missingLogin"));
   });
 
   it("throws ViewerNotConfiguredError on 503 github_token_missing", async () => {

@@ -3,6 +3,8 @@ defmodule SymphonyElixir.Assistant.SessionManager do
   Stateless assistant session boundary for project-scoped tracker chat turns.
   """
 
+  use Gettext, backend: SymphonyElixirWeb.Gettext
+
   alias SymphonyElixir.Assistant.ToolExecutor
 
   @type message_result :: %{
@@ -33,7 +35,7 @@ defmodule SymphonyElixir.Assistant.SessionManager do
   end
 
   defp infer_intent("create issue:" <> title, _context) do
-    {:ok, %{tool: "create_issue", arguments: %{"title" => title |> String.trim(), "status" => "Todo"}}}
+    {:ok, %{tool: "create_issue", arguments: %{"title" => title |> String.trim()}}}
   end
 
   defp infer_intent("agent executions", _context) do
@@ -145,13 +147,22 @@ defmodule SymphonyElixir.Assistant.SessionManager do
 
     cond do
       greeting?(normalized) ->
-        "Oi! Estou aqui no contexto deste projeto. Pode conversar comigo normalmente ou pedir ações como criar tarefa, comentar em uma issue, mover status ou pedir trabalho do Codex."
+        dgettext(
+          "assistant",
+          "Hi! I'm here in this project's context. Chat normally or ask me to create a task, comment on an issue, move status, or dispatch Codex work."
+        )
 
-      String.contains?(normalized, ["conversacional", "conversar", "conversa", "chat"]) ->
-        "Eu estava tratando texto livre como busca de issues, por isso a resposta parecia robótica. Agora mensagens conversacionais ficam no chat, e eu só consulto ferramentas quando você pede uma ação ou busca explicitamente."
+      String.contains?(normalized, ["conversational", "conversar", "conversa", "chat"]) ->
+        dgettext(
+          "assistant",
+          "I used to treat free text as issue search, which felt robotic. Conversational messages stay in chat now; I only call tools when you ask for an action or explicit search."
+        )
 
       true ->
-        "Entendi. Posso conversar sobre o projeto e acionar ferramentas do tracker quando você pedir algo concreto, como criar uma tarefa, comentar em uma issue, mover status, consultar tarefas ou pedir trabalho do Codex."
+        dgettext(
+          "assistant",
+          "Got it. I can chat about the project and call tracker tools when you ask for something concrete — create a task, comment, move status, list issues, or dispatch Codex."
+        )
     end
   end
 

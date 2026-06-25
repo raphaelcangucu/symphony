@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssueAssistantRoute } from "@/components/workspace/IssueAssistantRoute";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
+import type { Issue } from "@/types/issue";
 import type { IssueDocument } from "@/types/issueDocument";
 
 const projectAssistantPanel = vi.fn(
@@ -130,8 +131,31 @@ const execution: AgentExecution = {
   turnCount: 1,
 };
 
+const issue: Issue = {
+  id: "issue-1",
+  identifier: "DIS-6",
+  projectSlug: "distributionmachine",
+  status: "Todo",
+  title: "Translate the admin UI",
+  description: null,
+  priority: null,
+  position: 0,
+  labels: [],
+  blockedBy: [],
+  assignee: null,
+  creator: null,
+  url: null,
+  branchName: null,
+  createdAt: "2026-06-20T00:00:00Z",
+  updatedAt: "2026-06-20T00:00:00Z",
+  attachments: [],
+  groupLeadIdentifier: null,
+  groupMemberIdentifiers: [],
+};
+
 let workspaceValue: {
   agentExecutions: ReadonlyMap<string, AgentExecution>;
+  issues: Issue[];
   projectSlug: string;
   view: WorkspaceView;
 };
@@ -171,7 +195,7 @@ function renderAt(path: string) {
 
 describe("IssueAssistantRoute", () => {
   beforeEach(() => {
-    workspaceValue = { agentExecutions: new Map(), projectSlug: "macro", view: "board" };
+    workspaceValue = { agentExecutions: new Map(), issues: [], projectSlug: "macro", view: "board" };
     projectAssistantPanel.mockClear();
     documentViewer.mockClear();
     useIssueDocuments.mockClear();
@@ -195,7 +219,7 @@ describe("IssueAssistantRoute", () => {
     });
   });
 
-  it("shows active long-running goal status on the issue assistant route", () => {
+  it("does not surface orchestrator execution status on the authoring route", () => {
     workspaceValue = {
       ...workspaceValue,
       agentExecutions: new Map([["MAC-1", execution]]),
@@ -203,8 +227,22 @@ describe("IssueAssistantRoute", () => {
 
     renderAt("/projects/macro/assistant/issue/MAC-1");
 
-    expect(screen.getByText("Live")).toBeTruthy();
-    expect(screen.getByText("Pursuing goal")).toBeTruthy();
+    // Execution status (including the Execution goal) belongs to the Execution tab, not the
+    // authoring assistant route.
+    expect(screen.queryByText("Live")).toBeNull();
+    expect(screen.queryByText("Pursuing goal")).toBeNull();
+  });
+
+  it("shows the task title with a link to its issue detail", () => {
+    workspaceValue = { ...workspaceValue, issues: [issue], projectSlug: "distributionmachine" };
+
+    renderAt("/projects/distributionmachine/assistant/issue/DIS-6");
+
+    expect(screen.getByText("Translate the admin UI")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open issue details/i })).toHaveAttribute(
+      "href",
+      "/projects/distributionmachine/board/issues/DIS-6",
+    );
   });
 
   it("renders the new issue authoring placeholder without loading documents", () => {

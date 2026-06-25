@@ -11,14 +11,21 @@ defmodule SymphonyElixir.AgentExecution do
 
   alias SymphonyElixir.{Orchestrator, StatusDashboard}
   alias SymphonyElixir.AgentRouting
+  alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper}
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
   alias SymphonyElixir.SessionLog
   alias SymphonyElixir.Workspace
 
-  @typedoc "Coarse, UI-facing execution status derived from orchestrator runtime."
-  @type status :: :live | :idle | :waiting | :retrying | :error | :aborted
+  @typedoc """
+  Coarse, UI-facing execution status derived from orchestrator runtime.
+
+  `:saved` means there is no live or interrupted run, but the issue still owns a
+  durable Codex goal thread (persisted `agent_session_id` + objective). The UI
+  surfaces it as a dormant "goal not loaded" state that can be resumed.
+  """
+  @type status :: :live | :idle | :waiting | :retrying | :error | :aborted | :saved
 
   @type t :: %{
           issue_id: String.t() | nil,
@@ -38,6 +45,11 @@ defmodule SymphonyElixir.AgentExecution do
           long_running: boolean(),
           long_running_kind: String.t() | nil,
           long_running_label: String.t() | nil,
+          parent_identifier: String.t() | nil,
+          bundle_role: :parent | :child | :standalone,
+          unit_id: String.t() | nil,
+          repo: String.t() | nil,
+          child_identifiers: [String.t()],
           tokens: %{input: non_neg_integer(), output: non_neg_integer(), total: non_neg_integer()} | nil
         }
 
@@ -74,7 +86,11 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp executions_from_snapshot(snapshot) do
-    from_snapshot(snapshot) ++ interrupted_executions(snapshot)
+    live = from_snapshot(snapshot)
+    interrupted = interrupted_executions(snapshot)
+    covered = MapSet.new(live ++ interrupted, & &1.issue_identifier)
+
+    live ++ interrupted ++ saved_goal_executions(snapshot, covered)
   end
 
   defp dedupe_executions(executions) when is_list(executions) do
@@ -89,7 +105,8 @@ defmodule SymphonyElixir.AgentExecution do
   defp status_priority(:waiting), do: 3
   defp status_priority(:live), do: 4
   defp status_priority(:idle), do: 5
-  defp status_priority(_status), do: 6
+  defp status_priority(:saved), do: 6
+  defp status_priority(_status), do: 7
 
   @doc "Projects a raw orchestrator snapshot into agent execution views."
   @spec from_snapshot(map()) :: [t()]
@@ -132,6 +149,11 @@ defmodule SymphonyElixir.AgentExecution do
       long_running: not is_nil(goal) and not interrupted?,
       long_running_kind: if(interrupted?, do: nil, else: long_running_kind(goal)),
       long_running_label: if(interrupted?, do: nil, else: long_running_label(goal)),
+      parent_identifier: bundle_parent_identifier(entry),
+      bundle_role: bundle_role(entry),
+      unit_id: bundle_unit_id(entry),
+      repo: bundle_repo(entry),
+      child_identifiers: bundle_child_identifiers(entry),
       tokens: %{
         input: Map.get(entry, :agent_input_tokens, 0),
         output: Map.get(entry, :agent_output_tokens, 0),
@@ -191,6 +213,11 @@ defmodule SymphonyElixir.AgentExecution do
       long_running: false,
       long_running_kind: nil,
       long_running_label: nil,
+      parent_identifier: bundle_parent_identifier(entry),
+      bundle_role: bundle_role(entry),
+      unit_id: bundle_unit_id(entry),
+      repo: bundle_repo(entry),
+      child_identifiers: bundle_child_identifiers(entry),
       tokens: nil
     }
   end
@@ -223,6 +250,75 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp interrupted_executions(_snapshot), do: []
+
+  # Issues that own a durable Codex goal thread (persisted `agent_session_id`)
+  # whose goal can be projected from native Codex data (the workspace goal mirror
+  # for Codex, or `agent_goal` workflow guidance for Claude/Cursor) but have no
+  # live or interrupted run. These are projected as a dormant `:saved` ("goal not
+  # loaded") state so the UI can show a goal is parked on the issue even when no
+  # worker is attached.
+  defp saved_goal_executions(%{running: running, retrying: retrying}, covered) do
+    active_identifiers =
+      (running ++ retrying)
+      |> Enum.map(&Map.get(&1, :identifier))
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
+
+    Context.list_routable_non_terminal_issues()
+    |> Enum.reject(fn record ->
+      MapSet.member?(active_identifiers, record.identifier) or
+        MapSet.member?(covered, record.identifier)
+    end)
+    |> Enum.flat_map(&saved_goal_candidate/1)
+  end
+
+  defp saved_goal_executions(_snapshot, _covered), do: []
+
+  defp saved_goal_candidate(%{} = record) do
+    issue = IssueMapper.to_issue(record)
+    agent_kind = issue.agent_kind || "codex"
+
+    with true <- present?(record.agent_session_id),
+         true <- AgentRouting.routable?(issue.labels),
+         true <- issue_in_active_state?(record, issue),
+         %{} = goal <-
+           build_goal(agent_kind, "not_loaded", record.agent_goal, Workspace.path_for_issue(issue)) do
+      [saved_goal_execution(record, agent_kind, goal)]
+    else
+      _ -> []
+    end
+  end
+
+  defp saved_goal_execution(record, agent_kind, goal) do
+    %{
+      issue_id: to_string(record.id),
+      issue_identifier: record.identifier,
+      status: :saved,
+      session_id: record.agent_session_id,
+      last_event: nil,
+      last_message: nil,
+      last_event_at: record.updated_at,
+      turn_count: 0,
+      runtime_seconds: nil,
+      started_at: nil,
+      retry_attempt: 0,
+      error: nil,
+      agent_kind: agent_kind,
+      goal: goal,
+      long_running: true,
+      long_running_kind: long_running_kind(goal),
+      long_running_label: long_running_label(goal),
+      parent_identifier: nil,
+      bundle_role: :standalone,
+      unit_id: nil,
+      repo: nil,
+      child_identifiers: [],
+      tokens: nil
+    }
+  end
+
+  defp present?(value) when is_binary(value), do: String.trim(value) != ""
+  defp present?(_value), do: false
 
   defp interrupted_issue?(%{} = record) do
     issue = IssueMapper.to_issue(record)
@@ -297,6 +393,7 @@ defmodule SymphonyElixir.AgentExecution do
     issue = IssueMapper.to_issue(record)
     workspace = Workspace.path_for_issue(issue)
     {:ok, agent_kind, _path} = SessionLog.resolve_log_source(issue.agent_kind || "codex", workspace)
+    goal = build_goal(agent_kind, "interrupted", record.agent_goal, workspace)
 
     %{
       issue_id: to_string(record.id),
@@ -312,43 +409,18 @@ defmodule SymphonyElixir.AgentExecution do
       retry_attempt: 0,
       error: "Agent run interrupted — use Resume in the execution panel",
       agent_kind: agent_kind,
-      goal: interrupted_goal(record, agent_kind),
-      long_running: is_binary(record.agent_goal) and String.trim(record.agent_goal) != "",
-      long_running_kind: interrupted_goal_kind(agent_kind),
-      long_running_label: interrupted_goal_label(agent_kind, record.agent_goal),
+      goal: goal,
+      long_running: not is_nil(goal),
+      long_running_kind: long_running_kind(goal),
+      long_running_label: if(is_nil(goal), do: nil, else: "Interrupted"),
+      parent_identifier: nil,
+      bundle_role: :standalone,
+      unit_id: nil,
+      repo: nil,
+      child_identifiers: [],
       tokens: nil
     }
   end
-
-  defp interrupted_goal(%{agent_goal: goal}, agent_kind) when is_binary(goal) do
-    objective = String.trim(goal)
-
-    if objective == "" do
-      nil
-    else
-      kind = interrupted_goal_kind(agent_kind)
-
-      %{
-        kind: kind,
-        source: if(kind == "goal", do: "native", else: "prompt"),
-        status: "interrupted",
-        objective: objective,
-        capabilities: if(kind == "goal", do: ["get", "edit", "pause", "resume", "clear"], else: ["view"])
-      }
-    end
-  end
-
-  defp interrupted_goal(_record, _agent_kind), do: nil
-
-  defp interrupted_goal_kind("claude"), do: "workflow"
-  defp interrupted_goal_kind("cursor"), do: "workflow"
-  defp interrupted_goal_kind(_), do: "goal"
-
-  defp interrupted_goal_label(_agent_kind, goal) when is_binary(goal) do
-    if String.trim(goal) == "", do: nil, else: "Interrupted"
-  end
-
-  defp interrupted_goal_label(_agent_kind, _goal), do: nil
 
   defp normalize_status_name(value) when is_binary(value),
     do: value |> String.trim() |> String.downcase()
@@ -358,33 +430,88 @@ defmodule SymphonyElixir.AgentExecution do
   defp identifier(entry), do: Map.get(entry, :identifier)
   defp issue_id(entry), do: entry |> Map.get(:issue_id) |> maybe_to_string()
 
+  # Bundle context is threaded onto the orchestrator run entry by the coordinator
+  # (parent run carries `child_identifiers`; child runs carry `parent_identifier`
+  # + `unit_id` + `repo`). Non-bundle runs default to `:standalone`.
+  defp bundle_role(entry) do
+    case Map.get(entry, :bundle_role) do
+      role when role in [:parent, :child, :standalone] -> role
+      _ -> :standalone
+    end
+  end
+
+  defp bundle_parent_identifier(entry), do: entry |> Map.get(:parent_identifier) |> maybe_to_string()
+  defp bundle_unit_id(entry), do: entry |> Map.get(:unit_id) |> maybe_to_string()
+  defp bundle_repo(entry), do: entry |> Map.get(:repo) |> maybe_to_string()
+
+  defp bundle_child_identifiers(entry) do
+    case Map.get(entry, :child_identifiers) do
+      ids when is_list(ids) -> Enum.map(ids, &to_string/1)
+      _ -> []
+    end
+  end
+
   defp execution_goal(entry) do
     Map.get(entry, :goal) || fallback_goal(entry)
   end
 
+  # When the orchestrator has no live native goal for a running entry, project
+  # from native Codex data: the workspace goal mirror for Codex, or `agent_goal`
+  # workflow guidance for Claude/Cursor.
   defp fallback_goal(entry) do
-    case Map.get(entry, :agent_goal) do
-      goal when is_binary(goal) ->
-        objective = String.trim(goal)
+    agent_kind = Map.get(entry, :agent_kind) || "codex"
+    subject = Map.get(entry, :issue) || identifier(entry)
+    build_goal(agent_kind, "active", Map.get(entry, :agent_goal), workspace_for(subject))
+  end
 
-        if objective == "" do
-          nil
-        else
-          kind = goal_kind(entry)
+  # Build a UI-facing goal projection. Codex goals are sourced only from the
+  # native goal mirror (`.symphony/codex-session.json`), keeping the Codex thread
+  # authoritative; Claude/Cursor "workflow" goals come from the provided
+  # `agent_goal` prompt guidance.
+  defp build_goal(agent_kind, status, workflow_objective, workspace) do
+    kind = goal_kind(%{agent_kind: agent_kind})
 
-          %{
-            kind: kind,
-            source: goal_source(kind),
-            status: "active",
-            objective: objective,
-            capabilities: goal_capabilities(kind)
-          }
-        end
+    objective =
+      case kind do
+        "goal" -> native_mirror_objective(workspace)
+        _ -> normalize_objective(workflow_objective)
+      end
 
-      _goal ->
+    case objective do
+      nil ->
         nil
+
+      value ->
+        %{
+          kind: kind,
+          source: goal_source(kind),
+          status: status,
+          objective: value,
+          capabilities: goal_capabilities(kind)
+        }
     end
   end
+
+  defp native_mirror_objective(workspace) when is_binary(workspace) do
+    case CodexSession.read_goal(workspace) do
+      {:ok, %{"objective" => objective}} -> normalize_objective(objective)
+      _ -> nil
+    end
+  end
+
+  defp native_mirror_objective(_workspace), do: nil
+
+  defp normalize_objective(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_objective(_value), do: nil
+
+  defp workspace_for(nil), do: nil
+  defp workspace_for(subject), do: Workspace.path_for_issue(subject)
 
   defp goal_kind(%{agent_kind: kind}) when kind in ["claude", "cursor"], do: "workflow"
   defp goal_kind(_entry), do: "goal"
@@ -392,7 +519,12 @@ defmodule SymphonyElixir.AgentExecution do
   defp goal_source("goal"), do: "native"
   defp goal_source("workflow"), do: "prompt"
 
-  defp goal_capabilities("goal"), do: ["get", "edit", "pause", "resume", "clear"]
+  # Capabilities for goals projected without a live Codex app-server connection
+  # (saved/not-loaded, interrupted, and fallback states). Native pause/resume
+  # require a resolvable thread, which a dormant goal does not have, so we only
+  # advertise the controls `GoalControl` can satisfy from the cached objective.
+  # The UI falls back to dispatch (start/stop the worker) for resume/pause.
+  defp goal_capabilities("goal"), do: ["get", "edit", "clear"]
   defp goal_capabilities("workflow"), do: ["view"]
   defp goal_capabilities(_kind), do: []
 

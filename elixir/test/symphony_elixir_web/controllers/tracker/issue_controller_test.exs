@@ -518,7 +518,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     end
   end
 
-  test "create passes trimmed Codex goal to the local tracker" do
+  test "create does not cache a Codex goal on agent_goal (Codex thread is the source of truth)" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
     conn =
@@ -531,7 +531,10 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
 
     assert %{"data" => %{"identifier" => "MAC-1"}} = json_response(conn, 201)
     assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
-    assert issue.agent_goal == "Ship the local goal"
+    # Codex goal mode is disabled in tests, so no native goal is established and
+    # the legacy agent_goal column must remain unset — Codex goals live on the
+    # native thread, never mirrored here.
+    assert issue.agent_goal in [nil, ""]
   end
 
   test "create persists the trimmed workflow objective for Claude agents" do

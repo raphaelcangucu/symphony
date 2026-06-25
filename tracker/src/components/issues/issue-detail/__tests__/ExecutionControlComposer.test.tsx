@@ -8,13 +8,21 @@ import type { Issue } from "@/types/issue";
 
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
 const fetchAssistantCatalogBundleMock = vi.hoisted(() => vi.fn());
+const controlIssueGoalMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issueDispatch", () => ({
   dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
 }));
 
+vi.mock("@/services/goalControl", () => ({
+  controlIssueGoal: (...args: unknown[]) => controlIssueGoalMock(...args),
+}));
+
+const uploadAssistantAttachmentMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/services/assistant", () => ({
   fetchAssistantCatalogBundle: (...args: unknown[]) => fetchAssistantCatalogBundleMock(...args),
+  uploadAssistantAttachment: (...args: unknown[]) => uploadAssistantAttachmentMock(...args),
 }));
 
 const issue = {
@@ -65,14 +73,23 @@ const interruptedExecution = makeExecution({
 describe("ExecutionControlComposer", () => {
   beforeEach(() => {
     dispatchIssueAgentMock.mockReset();
+    controlIssueGoalMock.mockReset();
+    uploadAssistantAttachmentMock.mockReset();
     fetchAssistantCatalogBundleMock.mockResolvedValue({
       agents: [
         {
           agent: "codex",
           agentLabel: "Codex",
           command: "codex",
-          models: [{ id: "gpt-5", model: "gpt-5", label: "GPT-5" }],
-          efforts: [{ id: "high", label: "High" }],
+          models: [
+            {
+              id: "gpt-5",
+              model: "gpt-5",
+              label: "GPT-5",
+              defaultEffort: "high",
+              efforts: [{ id: "high", label: "High" }],
+            },
+          ],
         },
       ],
     });
@@ -96,7 +113,10 @@ describe("ExecutionControlComposer", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^steer$/i }));
 
-    expect(onSteer).toHaveBeenCalledWith("prefer the simpler fix");
+    expect(onSteer).toHaveBeenCalledWith({
+      message: "prefer the simpler fix",
+      attachments: [],
+    });
   });
 
   it("resumes a stalled run", async () => {
@@ -303,6 +323,49 @@ describe("ExecutionControlComposer", () => {
     expect(onIssueUpdated).toHaveBeenCalledWith(issue);
   });
 
+  it("steers with pasted image attachments", async () => {
+    uploadAssistantAttachmentMock.mockResolvedValue({
+      type: "image",
+      name: "shot.png",
+      mediaType: "image/png",
+      path: "uploads/shot.png",
+    });
+
+    const onSteer = vi.fn();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "live" })}
+        sessionConnected
+        canSteer
+        onSteer={onSteer}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText(/focus on the failing test/i);
+    const file = new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" });
+
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+        files: [file],
+      },
+    });
+
+    await waitFor(() => expect(screen.getByRole("img", { name: "shot.png" })).toBeInTheDocument());
+
+    fireEvent.change(textarea, { target: { value: "/infer check this screenshot" } });
+    fireEvent.click(screen.getByRole("button", { name: /^steer$/i }));
+
+    expect(onSteer).toHaveBeenCalledWith({
+      message: "check this screenshot",
+      attachments: [
+        expect.objectContaining({ type: "image", name: "shot.png", path: "uploads/shot.png" }),
+      ],
+    });
+  });
+
   it("shows a friendly steer error when no turn is steerable", () => {
     render(
       <ExecutionControlComposer
@@ -317,5 +380,91 @@ describe("ExecutionControlComposer", () => {
     );
 
     expect(screen.getByText(/use resume to pick the run back up/i)).toBeInTheDocument();
+  });
+
+  it("sets an execution goal and dispatches when /goal is submitted", async () => {
+    controlIssueGoalMock.mockResolvedValue({
+      action: "set_objective",
+      cleared: false,
+      goal: { kind: "goal", source: "native", objective: "ship i18n", status: "pending", capabilities: [] },
+    });
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resume requested",
+      issue,
+    });
+
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText(/optional guidance/i);
+    fireEvent.change(textarea, { target: { value: "/goal ship i18n" } });
+    fireEvent.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() => {
+      expect(controlIssueGoalMock).toHaveBeenCalledWith("advising", "CDE-1132", {
+        action: "set_objective",
+        objective: "ship i18n",
+      });
+    });
+
+    // The goal is set natively via controlIssueGoal; the resume dispatch must NOT
+    // re-send the objective (doing so would reset native goal accounting). The
+    // objective only survives as framing in the resume instructions.
+    await waitFor(() => {
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({
+          action: "resume",
+          goal: null,
+          instructions: expect.stringContaining("ship i18n"),
+        }),
+      );
+    });
+  });
+
+  it("renders the goal pill from execution.goal only, not issue.agentGoal", () => {
+    const issueWithCachedGoal = {
+      ...issue,
+      agentGoal: "stale cached objective",
+    } as unknown as Issue;
+
+    const { rerender } = render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issueWithCachedGoal}
+        execution={makeExecution({ goal: null })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("stale cached objective")).not.toBeInTheDocument();
+
+    rerender(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issueWithCachedGoal}
+        execution={makeExecution({
+          goal: {
+            kind: "goal",
+            source: "native",
+            objective: "native objective",
+            status: "active",
+            capabilities: [],
+          } as unknown as AgentExecution["goal"],
+        })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("native objective")).toBeInTheDocument();
+    expect(screen.queryByText("stale cached objective")).not.toBeInTheDocument();
   });
 });

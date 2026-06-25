@@ -1,8 +1,11 @@
 import { ExternalLink, GitBranch } from "lucide-react";
+import type { TFunction } from "i18next";
 import { type ReactNode, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { getStatusMeta } from "@/components/board/status-meta";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { InlineAgentEditor } from "@/components/issues/inline/InlineAgentEditor";
 import { InlineAssigneeEditor } from "@/components/issues/inline/InlineAssigneeEditor";
 import { InlineEditableMarkdown } from "@/components/issues/inline/InlineEditableMarkdown";
@@ -33,13 +36,16 @@ import type { WorkflowStatusName } from "@/types/workflow-status";
 import { BlockedBanner } from "./BlockedBanner";
 import { CommentCard, SyncBadge, WorkpadBadge } from "./CommentCard";
 import { IssueAttachments } from "./IssueAttachments";
+import { SubIssuesSection } from "./SubIssuesSection";
 
 interface SummaryTabProps {
   issue: Issue;
   projectSlug: string;
   pullRequests?: PullRequest[];
   workpad?: Comment | null;
+  subtasks?: Issue[];
   saving?: boolean;
+  onOpenIssue?: (identifier: string) => void;
   onOpenPullRequest?: () => void;
   onOpenComments?: () => void;
   onSaveDescription?: (description: string) => Promise<boolean>;
@@ -48,12 +54,13 @@ interface SummaryTabProps {
   onSavePriority?: (priority: IssuePriority | null) => Promise<boolean>;
   onSaveAssignee?: (assigneeIds: string[]) => Promise<boolean>;
   onSaveAgent?: (agent: AgentKind | null) => Promise<boolean>;
+  onRemoveAttachment?: (attachmentId: string) => Promise<boolean>;
 }
 
-function issueLinkLabel(url: string): string {
-  if (url.includes("github.com")) return "Open in GitHub";
-  if (url.includes("linear.app")) return "Open in Linear";
-  return "Open issue";
+function issueLinkLabel(url: string, t: TFunction): string {
+  if (url.includes("github.com")) return t("issue.summary.openInGitHub");
+  if (url.includes("linear.app")) return t("issue.summary.openInLinear");
+  return t("issue.summary.openIssue");
 }
 
 export function SummaryTab({
@@ -61,7 +68,9 @@ export function SummaryTab({
   projectSlug,
   pullRequests = [],
   workpad = null,
+  subtasks = [],
   saving = false,
+  onOpenIssue,
   onOpenPullRequest,
   onOpenComments,
   onSaveDescription,
@@ -70,7 +79,9 @@ export function SummaryTab({
   onSavePriority,
   onSaveAssignee,
   onSaveAgent,
+  onRemoveAttachment,
 }: SummaryTabProps) {
+  const { t } = useTranslation();
   const [labelOptions, setLabelOptions] = useState<IssueLabelOption[]>([]);
   const [assigneeOptions, setAssigneeOptions] = useState<IssueAssigneeOption[]>([]);
   const [statusOptions, setStatusOptions] = useState<WorkflowStatusName[]>([]);
@@ -82,7 +93,7 @@ export function SummaryTab({
   const { data: previewData } = useIssueDevServers(issue.projectSlug, issue.identifier);
   const primaryPreviewServer = selectPrimaryPreviewServer(previewData?.servers ?? []);
   const previewUrl = readyPreviewUrl(primaryPreviewServer);
-  const previewStatus = previewUrl ? null : previewStatusLabel(previewData, primaryPreviewServer);
+  const previewStatus = previewUrl ? null : previewStatusLabel(previewData, primaryPreviewServer, t);
   const hasPreviewSummary = Boolean(previewUrl || previewStatus);
   const hasLinks = Boolean(issue.url) || issue.branchName !== null || pullRequests.length > 0 || hasPreviewSummary;
   const editable = Boolean(
@@ -135,7 +146,7 @@ export function SummaryTab({
                 className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                {issueLinkLabel(issue.url)}
+                {issueLinkLabel(issue.url, t)}
               </a>
             ) : null}
             {issue.branchName ? (
@@ -155,7 +166,7 @@ export function SummaryTab({
                 className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15 dark:text-emerald-300"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                Preview
+                {t("issue.summary.preview")}
               </a>
             ) : null}
             {previewStatus ? (
@@ -171,7 +182,7 @@ export function SummaryTab({
         ) : null}
         <section>
           <h3 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Description
+            {t("issue.summary.description")}
           </h3>
           {onSaveDescription ? (
             <InlineEditableMarkdown
@@ -183,13 +194,20 @@ export function SummaryTab({
           ) : issue.description?.trim() ? (
             <p className="whitespace-pre-wrap text-sm">{issue.description}</p>
           ) : (
-            <p className="text-sm text-muted-foreground">No description yet.</p>
+            <p className="text-sm text-muted-foreground">{t("issue.summary.noDescription")}</p>
           )}
         </section>
-        <IssueAttachments attachments={issue.attachments} projectSlug={projectSlug || issue.projectSlug} />
+        <SubIssuesSection subtasks={subtasks} summary={issue.subIssueSummary} onOpenIssue={onOpenIssue} />
+        <IssueAttachments
+          attachments={issue.attachments}
+          projectSlug={projectSlug || issue.projectSlug}
+          onRemoveAttachment={onRemoveAttachment}
+        />
         {workpad ? (
           <section className="space-y-2">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agent Workpad</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("issue.summary.agentWorkpad")}
+            </h3>
             <CommentCard
               author={workpad.author}
               body={workpad.body}
@@ -205,7 +223,7 @@ export function SummaryTab({
               actions={
                 onOpenComments ? (
                   <button type="button" onClick={onOpenComments} className="text-xs text-primary hover:underline">
-                    View all comments
+                    {t("issue.summary.viewAllComments")}
                   </button>
                 ) : null
               }
@@ -216,7 +234,7 @@ export function SummaryTab({
 
       <aside className="space-y-5 lg:border-l lg:border-border/70 lg:pl-6">
         <div className="space-y-4">
-          <Field label="Status">
+          <Field label={t("issue.summary.status")}>
             {onSaveStatus ? (
               <InlineStatusEditor
                 status={issue.status}
@@ -231,7 +249,7 @@ export function SummaryTab({
               </span>
             )}
           </Field>
-          <Field label="Priority">
+          <Field label={t("issue.summary.priority")}>
             {onSavePriority ? (
               <InlinePriorityEditor priority={issue.priority} saving={saving} onSave={onSavePriority} />
             ) : (
@@ -241,7 +259,7 @@ export function SummaryTab({
               </span>
             )}
           </Field>
-          <Field label="Assignee">
+          <Field label={t("issue.summary.assignee")}>
             {onSaveAssignee ? (
               <InlineAssigneeEditor
                 assignee={issue.assignee}
@@ -253,11 +271,11 @@ export function SummaryTab({
             ) : (
               <span className="inline-flex items-center gap-1.5">
                 <AssigneeAvatar login={issue.assignee} />
-                {issue.assignee || "Unassigned"}
+                {issue.assignee || t("issue.drawer.unassigned")}
               </span>
             )}
           </Field>
-          <Field label="Agent">
+          <Field label={t("issue.summary.agent")}>
             {onSaveAgent ? (
               <InlineAgentEditor
                 agent={issue.agentKind ?? null}
@@ -269,16 +287,18 @@ export function SummaryTab({
               />
             ) : (
               <span className="inline-flex items-center gap-1.5">
-                {issue.agentKind ? agentLabel(issue.agentKind) : `Inherit (${agentLabel(effectiveAgent)})`}
+                {issue.agentKind
+                  ? agentKindLabel(issue.agentKind, t)
+                  : t("issue.create.inherit", { agent: agentKindLabel(effectiveAgent, t) })}
               </span>
             )}
           </Field>
-          <Field label="Updated">
+          <Field label={t("issue.summary.updated")}>
             <span className="text-muted-foreground">{formatDateTime(issue.updatedAt)}</span>
           </Field>
         </div>
         <Separator />
-        <Field label="Labels">
+        <Field label={t("issue.summary.labels")}>
           {onSaveLabels ? (
             <InlineLabelEditor
               labels={issue.labels}
@@ -288,7 +308,7 @@ export function SummaryTab({
               onSave={onSaveLabels}
             />
           ) : userVisibleLabels(issue.labels).length === 0 ? (
-            <span className="text-xs text-muted-foreground">No labels</span>
+            <span className="text-xs text-muted-foreground">{t("issue.summary.noLabels")}</span>
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {userVisibleLabels(issue.labels).map((label) => (
@@ -316,12 +336,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function agentLabel(agent: AgentKind): string {
-  if (agent === "claude") return "Claude";
-  if (agent === "cursor") return "Cursor";
-  return "Codex";
-}
-
 function selectPrimaryPreviewServer(servers: IssueDevServer[]): IssueDevServer | null {
   return servers.find((server) => server.primary) ?? servers.find((server) => server.status === "ready") ?? servers[0] ?? null;
 }
@@ -337,6 +351,7 @@ function readyPreviewUrl(server: IssueDevServer | null): string | null {
 function previewStatusLabel(
   data: IssueDevServersResponse | null,
   primaryServer: IssueDevServer | null,
+  t: TFunction,
 ): string | null {
   if (!data || !primaryServer || shouldHideUnavailablePreview(data)) {
     return null;
@@ -345,11 +360,11 @@ function previewStatusLabel(
   switch (primaryServer.status) {
     case "pending":
     case "provisioning":
-      return "Preview provisioning...";
+      return t("issue.summary.previewProvisioning");
     case "starting":
-      return "Preview starting...";
+      return t("issue.summary.previewStarting");
     case "crashed":
-      return "Preview crashed";
+      return t("issue.summary.previewCrashed");
     default:
       return null;
   }

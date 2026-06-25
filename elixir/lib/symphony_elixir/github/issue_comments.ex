@@ -15,7 +15,7 @@ defmodule SymphonyElixir.GitHub.IssueComments do
 
   @doc """
   Returns the issue comments for `repo` ("owner/name") and tracker `identifier`
-  (e.g. `"#42"` or `"42"`), ordered oldest-first.
+  (e.g. `"#42"` or `"42"`), ordered newest-first.
 
   A pull-request number (or otherwise non-issue) yields a GraphQL
   "Could not resolve to an Issue" error; comments are non-critical, so this
@@ -26,8 +26,14 @@ defmodule SymphonyElixir.GitHub.IssueComments do
   def for_issue(repo, identifier, opts \\ []) do
     if is_binary(repo) and is_binary(identifier) do
       case Api.list_comments(repo, identifier, opts) do
-        {:error, {:github_graphql_errors, _}} -> {:ok, []}
-        other -> other
+        {:error, {:github_graphql_errors, _}} ->
+          {:ok, []}
+
+        {:ok, comments} when is_list(comments) ->
+          {:ok, Enum.reverse(comments)}
+
+        other ->
+          other
       end
     else
       {:error, :invalid_arguments}

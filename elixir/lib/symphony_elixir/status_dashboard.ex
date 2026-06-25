@@ -6,7 +6,10 @@ defmodule SymphonyElixir.StatusDashboard do
   use GenServer
   require Logger
 
-  alias SymphonyElixir.{Config, HttpServer, Tracker}
+  alias Gettext, as: GettextCore
+
+  alias SymphonyElixir.{Config, HttpServer, Settings, Tracker}
+  alias SymphonyElixir.EventHumanizer.Text, as: EventText
   alias SymphonyElixir.GitHub.ProjectMetadata
   alias SymphonyElixir.Orchestrator
   alias SymphonyElixirWeb.ObservabilityPubSub
@@ -1082,9 +1085,13 @@ defmodule SymphonyElixir.StatusDashboard do
 
   @doc false
   @spec humanize_codex_message(term()) :: String.t()
-  def humanize_codex_message(nil), do: "no message from #{SymphonyElixir.Config.agent_kind()} yet"
+  def humanize_codex_message(nil) do
+    put_event_locale()
+    EventText.t("no message from %{agent} yet", agent: Config.agent_kind())
+  end
 
   def humanize_codex_message(%{event: event, message: message}) do
+    put_event_locale()
     payload = unwrap_codex_message_payload(message)
 
     (humanize_codex_event(event, message, payload) || humanize_codex_payload(payload))
@@ -1092,6 +1099,7 @@ defmodule SymphonyElixir.StatusDashboard do
   end
 
   def humanize_codex_message(%{message: message}) do
+    put_event_locale()
     message
     |> unwrap_codex_message_payload()
     |> humanize_codex_payload()
@@ -1099,6 +1107,7 @@ defmodule SymphonyElixir.StatusDashboard do
   end
 
   def humanize_codex_message(message) do
+    put_event_locale()
     message
     |> unwrap_codex_message_payload()
     |> humanize_codex_payload()
@@ -1111,13 +1120,14 @@ defmodule SymphonyElixir.StatusDashboard do
     session_id = map_value(payload, ["session_id", :session_id])
 
     if is_binary(session_id) do
-      "session started (#{session_id})"
+      EventText.t("session started (%{id})", id: session_id)
     else
-      "session started"
+      EventText.t("session started")
     end
   end
 
-  defp humanize_codex_event(:turn_input_required, _message, _payload), do: "turn blocked: waiting for user input"
+  defp humanize_codex_event(:turn_input_required, _message, _payload),
+    do: EventText.t("turn blocked: waiting for user input")
 
   defp humanize_codex_event(:approval_auto_approved, message, payload) do
     method =
@@ -1129,9 +1139,9 @@ defmodule SymphonyElixir.StatusDashboard do
 
     base =
       if is_binary(method) do
-        "#{SymphonyElixir.EventHumanizer.humanize_method(method, payload)} (auto-approved)"
+        EventText.t("%{message} (auto-approved)", message: SymphonyElixir.EventHumanizer.humanize_method(method, payload))
       else
-        "approval request auto-approved"
+        EventText.t("approval request auto-approved")
       end
 
     if is_binary(decision), do: "#{base}: #{decision}", else: base
@@ -1140,25 +1150,31 @@ defmodule SymphonyElixir.StatusDashboard do
   defp humanize_codex_event(:tool_input_auto_answered, message, payload) do
     answer = map_value(message, ["answer", :answer])
 
-    base = "#{SymphonyElixir.EventHumanizer.humanize_method("item/tool/requestUserInput", payload)} (auto-answered)"
+    base =
+      EventText.t("%{message} (auto-answered)",
+        message: SymphonyElixir.EventHumanizer.humanize_method("item/tool/requestUserInput", payload)
+      )
 
     if is_binary(answer), do: "#{base}: #{inline_text(answer)}", else: base
   end
 
   defp humanize_codex_event(:tool_call_completed, _message, payload),
-    do: humanize_dynamic_tool_event("dynamic tool call completed", payload)
+    do: humanize_dynamic_tool_event(EventText.t("dynamic tool call completed"), payload)
 
   defp humanize_codex_event(:tool_call_failed, _message, payload),
-    do: humanize_dynamic_tool_event("dynamic tool call failed", payload)
+    do: humanize_dynamic_tool_event(EventText.t("dynamic tool call failed"), payload)
 
   defp humanize_codex_event(:unsupported_tool_call, _message, payload),
-    do: humanize_dynamic_tool_event("unsupported dynamic tool call rejected", payload)
+    do: humanize_dynamic_tool_event(EventText.t("unsupported dynamic tool call rejected"), payload)
 
-  defp humanize_codex_event(:turn_ended_with_error, message, _payload), do: "turn ended with error: #{format_reason(message)}"
-  defp humanize_codex_event(:startup_failed, message, _payload), do: "startup failed: #{format_reason(message)}"
+  defp humanize_codex_event(:turn_ended_with_error, message, _payload),
+    do: EventText.t("turn ended with error: %{reason}", reason: format_reason(message))
+
+  defp humanize_codex_event(:startup_failed, message, _payload),
+    do: EventText.t("startup failed: %{reason}", reason: format_reason(message))
   defp humanize_codex_event(:turn_failed, _message, payload), do: SymphonyElixir.EventHumanizer.humanize_method("turn/failed", payload)
-  defp humanize_codex_event(:turn_cancelled, _message, _payload), do: "turn cancelled"
-  defp humanize_codex_event(:malformed, _message, _payload), do: "malformed JSON event from codex"
+  defp humanize_codex_event(:turn_cancelled, _message, _payload), do: EventText.t("turn cancelled")
+  defp humanize_codex_event(:malformed, _message, _payload), do: EventText.t("malformed JSON event from codex")
   defp humanize_codex_event(_event, _message, _payload), do: nil
 
   defp unwrap_codex_message_payload(%{} = message) do
@@ -1180,10 +1196,10 @@ defmodule SymphonyElixir.StatusDashboard do
       _ ->
         cond do
           is_binary(map_value(payload, ["session_id", :session_id])) ->
-            "session started (#{map_value(payload, ["session_id", :session_id])})"
+            EventText.t("session started (%{id})", id: map_value(payload, ["session_id", :session_id]))
 
           match?(%{"error" => _}, payload) ->
-            "error: #{format_error_value(Map.get(payload, "error"))}"
+            EventText.t("error: %{error}", error: format_error_value(Map.get(payload, "error")))
 
           true ->
             payload
@@ -1225,12 +1241,16 @@ defmodule SymphonyElixir.StatusDashboard do
         if trimmed == "" do
           base
         else
-          "#{base} (#{trimmed})"
+          EventText.t("%{base} (%{tool})", base: base, tool: trimmed)
         end
 
       _ ->
         base
     end
+  end
+
+  defp put_event_locale do
+    GettextCore.put_locale(SymphonyElixirWeb.Gettext, Settings.Ui.effective_gettext_locale())
   end
 
   defp dynamic_tool_name(payload) do

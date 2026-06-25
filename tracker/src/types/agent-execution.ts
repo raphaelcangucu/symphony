@@ -1,4 +1,11 @@
-export type AgentExecutionStatus = "live" | "idle" | "waiting" | "retrying" | "error" | "aborted";
+export type AgentExecutionStatus =
+  | "live"
+  | "idle"
+  | "waiting"
+  | "retrying"
+  | "error"
+  | "aborted"
+  | "saved";
 
 export interface AgentExecutionTokens {
   input: number;
@@ -39,4 +46,9 @@ export interface AgentExecution {
   longRunningKind: AgentExecutionGoalKind | null;
   longRunningLabel: string | null;
   tokens: AgentExecutionTokens | null;
+  parentIdentifier?: string | null;
+  bundleRole?: "parent" | "child" | "standalone";
+  unitId?: string | null;
+  repo?: string | null;
+  childIdentifiers?: string[];
 }

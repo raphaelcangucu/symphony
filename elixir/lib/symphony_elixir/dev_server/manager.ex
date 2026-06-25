@@ -8,8 +8,11 @@ defmodule SymphonyElixir.DevServer.Manager do
   require Logger
 
   alias SymphonyElixir.Config
+  alias SymphonyElixir.DevServer.Broadcaster
   alias SymphonyElixir.DevServer.Instance
-  alias SymphonyElixir.DevServer.PortAllocator
+  alias SymphonyElixir.DevServer.LeaseStore
+  alias SymphonyElixir.DevServer.PortPlan
+  alias SymphonyElixir.DevServer.PortReclaimer
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord, ProjectSetup}
   alias SymphonyElixir.Terminal.Registry, as: TerminalRegistry
   alias SymphonyElixir.Workspace
@@ -17,9 +20,13 @@ defmodule SymphonyElixir.DevServer.Manager do
   @registry Module.concat(__MODULE__, Registry)
   @instance_supervisor Module.concat(__MODULE__, InstanceSupervisor)
   @reservation_table Module.concat(__MODULE__, PortReservations)
-  @initial_boot_timeout_ms 250
+  @prior_instance_ready_timeout_ms 600_000
+  @prior_instance_ready_poll_ms 2_000
   @serve_with_setup_probe_interval_ms 2_000
   @serve_with_setup_max_probe_attempts 300
+  @probe_connect_timeout_ms 1_000
+  @probe_loopback_host "127.0.0.1"
+  @tracked_live_statuses ~w(pending provisioning starting ready)
 
   @type start_error ::
           :disabled
@@ -58,12 +65,15 @@ defmodule SymphonyElixir.DevServer.Manager do
     Supervisor.init(children, strategy: :one_for_all)
   end
 
-  @spec start_for_issue(String.t(), String.t()) :: {:ok, [pid()]} | {:error, start_error()}
-  def start_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
+  @spec start_for_issue(String.t(), String.t(), keyword()) :: {:ok, [pid()]} | {:error, start_error()}
+  def start_for_issue(project_slug, identifier, opts \\ [])
+
+  def start_for_issue(project_slug, identifier, opts)
+      when is_binary(project_slug) and is_binary(identifier) and is_list(opts) do
     identifier = canonical_identifier(identifier)
 
     with {:ok, project} <- Context.get_project(project_slug) do
-      runtime_options = project_runtime_options(project)
+      runtime_options = project |> project_runtime_options() |> apply_runtime_overrides(opts)
 
       if runtime_options.dev_server_enabled? do
         normalize_lock_result(
@@ -77,7 +87,7 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  def start_for_issue(_project_slug, _identifier), do: {:error, :invalid_arguments}
+  def start_for_issue(_project_slug, _identifier, _opts), do: {:error, :invalid_arguments}
 
   @spec stop_for_issue(String.t(), String.t()) :: :ok
   def stop_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
@@ -91,19 +101,24 @@ defmodule SymphonyElixir.DevServer.Manager do
     |> reservation_keys_for_issue(identifier)
     |> release_reservations()
 
+    release_issue_slot(project_slug, identifier)
+
     :ok
   end
 
   def stop_for_issue(_project_slug, _identifier), do: :ok
 
-  @spec restart_for_issue(String.t(), String.t()) :: {:ok, [pid()]} | {:error, term()}
-  def restart_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
+  @spec restart_for_issue(String.t(), String.t(), keyword()) :: {:ok, [pid()]} | {:error, term()}
+  def restart_for_issue(project_slug, identifier, opts \\ [])
+
+  def restart_for_issue(project_slug, identifier, opts)
+      when is_binary(project_slug) and is_binary(identifier) and is_list(opts) do
     identifier = canonical_identifier(identifier)
     :ok = stop_for_issue(project_slug, identifier)
-    start_for_issue(project_slug, identifier)
+    start_for_issue(project_slug, identifier, opts)
   end
 
-  def restart_for_issue(_project_slug, _identifier), do: {:error, :invalid_arguments}
+  def restart_for_issue(_project_slug, _identifier, _opts), do: {:error, :invalid_arguments}
 
   @spec stop_instance_for_server(String.t(), String.t(), pos_integer()) :: :ok | {:error, :not_found}
   def stop_instance_for_server(project_slug, identifier, server_id)
@@ -175,8 +190,11 @@ defmodule SymphonyElixir.DevServer.Manager do
 
     case Context.get_project(project_slug) do
       {:ok, project} ->
+        ensure_serve_records(project, project_slug, identifier)
+
         project.id
         |> DevServerRecord.list_for_issue(identifier)
+        |> Enum.map(&reconcile_record_status(&1, project, project_slug, identifier))
         |> Enum.map(&record_to_map/1)
 
       {:error, _reason} ->
@@ -185,6 +203,30 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   def list_for_issue(_project_slug, _identifier), do: []
+
+  @spec capture_server_output(String.t(), String.t(), pos_integer()) ::
+          {:ok, %{output: String.t(), session_name: String.t()}} | {:error, :not_found | String.t()}
+  def capture_server_output(project_slug, identifier, server_id)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 do
+    identifier = canonical_identifier(identifier)
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         %DevServerRecord{slug: slug, session_name: session_name} <-
+           DevServerRecord.get_for_issue(project.id, identifier, server_id),
+         true <- is_binary(slug) do
+      session_name = session_name || TerminalRegistry.dev_session_name(project_slug, identifier, slug)
+
+      project_slug
+      |> TerminalRegistry.capture_dev_session(identifier, slug)
+      |> normalize_dev_session_capture(session_name)
+    else
+      nil -> {:error, :not_found}
+      {:error, _reason} -> {:error, :not_found}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  def capture_server_output(_project_slug, _identifier, _server_id), do: {:error, :not_found}
 
   @spec live_ports() :: [pos_integer()]
   def live_ports do
@@ -196,6 +238,14 @@ defmodule SymphonyElixir.DevServer.Manager do
     Enum.uniq(reserved_ports() ++ registry_ports)
   end
 
+  @spec running_issue_keys() :: MapSet.t({String.t(), String.t()})
+  def running_issue_keys do
+    @registry
+    |> all_registry_entries()
+    |> Enum.map(fn {{project_slug, identifier, _step_slug}, _pid} -> {project_slug, identifier} end)
+    |> MapSet.new()
+  end
+
   @doc false
   @spec normalize_lock_result(:aborted | term()) :: {:error, :lock_unavailable} | term()
   def normalize_lock_result(:aborted), do: {:error, :lock_unavailable}
@@ -204,31 +254,37 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp do_start_for_issue(project, identifier, runtime_options) do
     with {:ok, workspace_path} <- issue_workspace_path(identifier),
          {:ok, serve_steps} <- serve_steps(project.slug, identifier),
-         {:ok, reserved_steps} <- reserve_ports(project.slug, identifier, serve_steps, runtime_options.dev_server_port_range) do
+         {:ok, reserved_steps} <-
+           reserve_ports(
+             project,
+             identifier,
+             serve_steps,
+             runtime_options.dev_server_port_range,
+             runtime_options.dev_server_reclaim_ports?
+           ) do
       setup_issue_session(project.slug, identifier, workspace_path)
       start_instances(project, identifier, workspace_path, reserved_steps, runtime_options)
     end
   end
 
   defp do_start_instance_for_server(project, identifier, server_id, runtime_options) do
-    with {:ok, slug} <- server_slug_for_id(project, identifier, server_id) do
-      case running_instance_pid(project.slug, identifier, slug) do
-        {:ok, pid} ->
-          {:ok, [pid]}
+    with {:ok, slug} <- server_slug_for_id(project, identifier, server_id),
+         {:ok, workspace_path} <- issue_workspace_path(identifier),
+         {:ok, step} <- serve_step_for_slug(project.slug, identifier, slug),
+         {:ok, reserved_steps} <-
+           reserve_ports(
+             project,
+             identifier,
+             [step],
+             runtime_options.dev_server_port_range,
+             runtime_options.dev_server_reclaim_ports?
+           ),
+         [{step, port, key}] <- reserved_steps do
+      setup_issue_session(project.slug, identifier, workspace_path)
 
-        {:error, :not_running} ->
-          with {:ok, workspace_path} <- issue_workspace_path(identifier),
-               {:ok, step} <- serve_step_for_slug(project.slug, identifier, slug),
-               {:ok, reserved_steps} <-
-                 reserve_ports(project.slug, identifier, [step], runtime_options.dev_server_port_range),
-               [{step, port, key}] <- reserved_steps do
-            setup_issue_session(project.slug, identifier, workspace_path)
-
-            case start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
-              {:ok, {pid, _key}} -> {:ok, [pid]}
-              {:error, reason} -> {:error, reason}
-            end
-          end
+      case start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
+        {:ok, {pid, _key}} -> {:ok, [pid]}
+        {:error, reason} -> {:error, reason}
       end
     end
   end
@@ -243,6 +299,11 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
 
     release_reservations([key])
+
+    if registered_instance_pids(project_slug, identifier) == [] do
+      release_issue_slot(project_slug, identifier)
+    end
+
     :ok
   end
 
@@ -256,7 +317,7 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp serve_step_for_slug(project_slug, identifier, slug) do
     project_slug
     |> DevEnv.list_serve_steps()
-    |> unique_serve_steps(project_slug, identifier)
+    |> then(&unique_serve_steps(project_slug, identifier, &1))
     |> Enum.find(fn step -> Map.fetch!(step_to_map(step), :slug) == slug end)
     |> case do
       nil -> {:error, :no_serve_step}
@@ -295,14 +356,39 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  defp reserve_ports(project_slug, identifier, serve_steps, port_range) do
-    serve_steps
-    |> Enum.reduce_while({:ok, []}, fn step, {:ok, reserved_steps} ->
-      claimed_ports = live_ports() ++ Enum.map(reserved_steps, fn {_step, port, _key} -> port end)
+  defp reserve_ports(project, identifier, serve_steps, port_range, reclaim?) do
+    ctx = allocation_context(project, identifier, port_range)
+    owned = owned_ports(project.id, identifier)
+    reserve_with_context(project.slug, identifier, serve_steps, ctx, owned, reclaim?)
+  end
 
-      case PortAllocator.allocate(port_range, claimed_ports) do
+  # Ports each service of this issue was last assigned (from its DevServerRecord),
+  # keyed by slug. Used so a restart reclaims a service's own canonical port even
+  # when a long-lived resource it owns still holds it (see PortPlan.choose_port/4).
+  defp owned_ports(project_id, identifier) do
+    for record <- DevServerRecord.list_for_issue(project_id, identifier),
+        is_binary(record.slug),
+        is_integer(record.port),
+        into: %{} do
+      {record.slug, record.port}
+    end
+  end
+
+  defp reserve_with_context(project_slug, identifier, serve_steps, ctx, owned_ports, reclaim?) do
+    serve_steps
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {step, offset}, {:ok, reserved_steps} ->
+      slug = Map.fetch!(step, :slug)
+
+      if reclaim? do
+        reclaim_canonical_port(project_slug, identifier, slug, ctx, offset)
+      end
+
+      claimed = live_ports() ++ Enum.map(reserved_steps, fn {_step, port, _key} -> port end)
+
+      case PortPlan.choose_port(ctx, offset, claimed, Map.get(owned_ports, slug)) do
         {:ok, port} ->
-          key = {project_slug, identifier, Map.fetch!(step, :slug)}
+          key = {project_slug, identifier, slug}
           reserve_port_for_key(key, port)
           {:cont, {:ok, [{step, port, key} | reserved_steps]}}
 
@@ -315,6 +401,139 @@ defmodule SymphonyElixir.DevServer.Manager do
       {:ok, reserved_steps} -> {:ok, Enum.reverse(reserved_steps)}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # Free a service's *canonical* port (deterministic from its band/slot/offset)
+  # before reserving, so a restart reclaims the same port instead of drifting
+  # onto the next free one. The canonical port belongs exclusively to this
+  # project+issue+service slot by construction, so killing whatever lingers on
+  # it is safe. We never touch a port currently served by a healthy, tracked
+  # Symphony instance for the same key (that is a legitimate reuse, not a leak).
+  defp reclaim_canonical_port(project_slug, identifier, slug, ctx, offset) do
+    case canonical_port(ctx, offset) do
+      nil ->
+        :ok
+
+      port ->
+        if port_held_by_tracked_instance?(project_slug, identifier, slug, port) do
+          :ok
+        else
+          case PortReclaimer.reclaim(port) do
+            :ok ->
+              :ok
+
+            {:error, :still_bound} ->
+              Logger.warning(
+                "[port-reclaim] could not free canonical port #{port} for " <>
+                  "#{project_slug}/#{identifier}/#{slug}; falling back to drift"
+              )
+
+              :ok
+          end
+        end
+    end
+  end
+
+  defp canonical_port(%{slot_index: nil}, _offset), do: nil
+
+  defp canonical_port(%{slot_index: slot_index, ports_per_slot: ports_per_slot, band: {band_start, _}}, offset) do
+    case PortPlan.port(band_start, slot_index, offset, ports_per_slot) do
+      {:ok, port} -> port
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp canonical_port(_ctx, _offset), do: nil
+
+  defp port_held_by_tracked_instance?(project_slug, identifier, slug, port) do
+    case running_instance_pid(project_slug, identifier, slug) do
+      {:ok, pid} -> port in instance_port(pid)
+      _ -> false
+    end
+  end
+
+  defp allocation_context(project, identifier, port_range) do
+    pool = preview_pool_config()
+
+    case pinned_band(port_range, pool.ports_per_slot) do
+      {:ok, band_start, band_end, slots} ->
+        slot_index = lease_slot(project.id, identifier, slots)
+
+        %{
+          band: {band_start, band_end},
+          slot_index: slot_index,
+          ports_per_slot: pool.ports_per_slot,
+          pool_range: pool.pool_range,
+          auto?: false
+        }
+
+      :auto ->
+        auto_context(project, identifier, pool)
+    end
+  end
+
+  defp auto_context(project, identifier, pool) do
+    band_size = PortPlan.band_size(pool.slots_per_project, pool.ports_per_slot)
+    max_bands = PortPlan.max_bands(pool.pool_range, band_size)
+
+    case LeaseStore.ensure_band(project.id, max_bands) do
+      {:ok, band_index} ->
+        band_start = PortPlan.band_start(pool.pool_range, band_index, band_size)
+        slot_index = lease_slot(project.id, identifier, pool.slots_per_project)
+
+        %{
+          band: {band_start, band_start + band_size - 1},
+          slot_index: slot_index,
+          ports_per_slot: pool.ports_per_slot,
+          pool_range: pool.pool_range,
+          auto?: true
+        }
+
+      {:error, :no_free_band} ->
+        Logger.warning("Dev server preview bands exhausted; scanning pool project=#{project.slug}")
+        [pool_min, pool_max] = pool.pool_range
+
+        %{
+          band: {pool_min, pool_max},
+          slot_index: nil,
+          ports_per_slot: pool.ports_per_slot,
+          pool_range: pool.pool_range,
+          auto?: true
+        }
+    end
+  end
+
+  defp pinned_band(port_range, ports_per_slot) do
+    case port_range do
+      [a, b] when is_integer(a) and is_integer(b) and a > 0 and b > 0 ->
+        band_min = min(a, b)
+        band_max = max(a, b)
+        slots = div(band_max - band_min + 1, ports_per_slot)
+        {:ok, band_min, band_max, slots}
+
+      _auto ->
+        :auto
+    end
+  end
+
+  defp lease_slot(project_id, identifier, slots) do
+    case LeaseStore.ensure_slot(project_id, identifier, slots) do
+      {:ok, slot_index} ->
+        slot_index
+
+      {:error, :no_free_slot} ->
+        Logger.warning("Dev server preview slots exhausted; scanning band project_id=#{project_id} issue=#{identifier}")
+
+        nil
+    end
+  end
+
+  defp preview_pool_config do
+    %{
+      pool_range: Config.preview_pool_range(),
+      slots_per_project: Config.preview_slots_per_project(),
+      ports_per_slot: Config.preview_ports_per_slot()
+    }
   end
 
   defp setup_issue_session(project_slug, identifier, workspace_path) do
@@ -410,21 +629,112 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
+    slug = Map.fetch!(step, :slug)
+    project_slug = project.slug
+    step_map = step_to_map(step)
+
+    ready_timeout_ms = ready_timeout_ms(runtime_options)
+
+    case running_instance_pid(project_slug, identifier, slug) do
+      {:ok, pid} ->
+        reuse_or_replace_instance(
+          pid,
+          project_slug,
+          identifier,
+          port,
+          step_map,
+          key,
+          ready_timeout_ms,
+          fn ->
+            start_fresh_instance(project, identifier, workspace_path, step, port, key, runtime_options)
+          end
+        )
+
+      {:error, :not_running} ->
+        start_fresh_instance(project, identifier, workspace_path, step, port, key, runtime_options)
+    end
+  end
+
+  defp reuse_or_replace_instance(pid, project_slug, identifier, port, step, key, ready_timeout_ms, start_fresh) do
+    slug = Map.fetch!(step, :slug)
+
+    case safe_instance_status(pid) do
+      :ready ->
+        if port_ready?(port, step) do
+          {:ok, {pid, key}}
+        else
+          with :ok <- do_stop_instance_for_server(project_slug, identifier, slug) do
+            start_fresh.()
+          end
+        end
+
+      status when status in [:starting, :provisioning] ->
+        await_reserved_instance_boot(pid, key, ready_timeout_ms)
+
+      _ ->
+        with :ok <- do_stop_instance_for_server(project_slug, identifier, slug) do
+          start_fresh.()
+        end
+    end
+  end
+
+  defp start_fresh_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
     case start_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
-      {:ok, pid} -> await_reserved_instance_boot(pid, key)
+      {:ok, pid} -> await_reserved_instance_boot(pid, key, ready_timeout_ms(runtime_options))
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp await_reserved_instance_boot(pid, key) do
-    case await_initial_boot(pid) do
+  defp await_reserved_instance_boot(pid, key, ready_timeout_ms) do
+    case await_instance_ready(pid, ready_timeout_ms) do
       :ok ->
         {:ok, {pid, key}}
 
-      {:error, reason} ->
+      {:error, :crashed} ->
         stop_instance(pid)
-        {:error, reason}
+        {:error, :crashed}
+
+      :timeout ->
+        Logger.warning("Dev server instance not ready within #{ready_timeout_ms}ms; proceeding slug=#{inspect(key)}")
+        {:ok, {pid, key}}
     end
+  end
+
+  defp await_instance_ready(pid, ready_timeout_ms) when is_pid(pid) and is_integer(ready_timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + ready_timeout_ms
+    await_instance_ready_loop(pid, deadline)
+  end
+
+  defp await_instance_ready_loop(pid, deadline) when is_pid(pid) do
+    case safe_instance_status(pid) do
+      :ready ->
+        :ok
+
+      :crashed ->
+        {:error, :crashed}
+
+      :stopped ->
+        {:error, :crashed}
+
+      _status ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          :timeout
+        else
+          Process.sleep(@prior_instance_ready_poll_ms)
+          await_instance_ready_loop(pid, deadline)
+        end
+    end
+  end
+
+  defp ready_timeout_ms(%{ready_timeout_ms: ms}) when is_integer(ms) and ms >= 0, do: ms
+  defp ready_timeout_ms(_runtime_options), do: @prior_instance_ready_timeout_ms
+
+  defp safe_instance_status(pid) do
+    Instance.status(pid)
+  catch
+    # A live process whose status call timed out (e.g. busy probing during a
+    # sequential boot) must NOT be treated as stopped — only a dead process is.
+    :exit, _reason -> if Process.alive?(pid), do: :starting, else: :stopped
   end
 
   defp start_instance(project, identifier, workspace_path, step, port, key, runtime_options) do
@@ -627,6 +937,13 @@ defmodule SymphonyElixir.DevServer.Manager do
     |> Enum.map(fn {key, _port, _pid} -> key end)
   end
 
+  defp release_issue_slot(project_slug, identifier) do
+    case Context.get_project(project_slug) do
+      {:ok, project} -> LeaseStore.release_slot(project.id, identifier)
+      {:error, _reason} -> :ok
+    end
+  end
+
   defp all_registered_pids(registry) do
     registry
     |> all_registry_entries()
@@ -658,17 +975,6 @@ defmodule SymphonyElixir.DevServer.Manager do
     |> release_reservations()
   end
 
-  defp await_initial_boot(pid) when is_pid(pid) do
-    task = Task.async(fn -> Instance.status(pid) end)
-
-    case Task.yield(task, @initial_boot_timeout_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, :crashed} -> {:error, :crashed}
-      {:ok, _status} -> :ok
-      {:exit, reason} -> {:error, reason}
-      nil -> :ok
-    end
-  end
-
   defp instance_port(pid) when is_pid(pid) do
     case :sys.get_state(pid, 100) do
       %{port: port} when is_integer(port) and port > 0 -> [port]
@@ -691,6 +997,172 @@ defmodule SymphonyElixir.DevServer.Manager do
     }
   end
 
+  defp reconcile_record_status(%DevServerRecord{} = record, project, project_slug, identifier) do
+    record
+    |> reconcile_live_instance_state(project, project_slug, identifier)
+    |> reconcile_port_truth(project, project_slug, identifier)
+  end
+
+  defp reconcile_live_instance_state(record, project, project_slug, identifier) do
+    case running_instance_pid(project_slug, identifier, record.slug) do
+      {:ok, pid} ->
+        reconcile_with_live_instance(record, project, project_slug, identifier, pid)
+
+      {:error, :not_running} ->
+        reconcile_without_live_instance(record, project, project_slug, identifier)
+    end
+  end
+
+  defp reconcile_port_truth(record, project, project_slug, identifier) do
+    step = serve_step_map(project_slug, identifier, record.slug)
+
+    if record.status == "ready" and not port_ready?(record.port, step) do
+      persist_reconciled_status(record, project, project_slug, identifier, "crashed")
+    else
+      record
+    end
+  end
+
+  # A live, registered instance whose port is actually serving is "ready" — even
+  # if a transient status call timed out. Treat the listening port as the source
+  # of truth so the periodic reconciler never stamps a serving instance "stopped",
+  # and so a record left stale (e.g. by an earlier transient blip) self-heals
+  # back to "ready".
+  defp reconcile_with_live_instance(record, project, project_slug, identifier, pid) do
+    step = serve_step_map(project_slug, identifier, record.slug)
+
+    if port_ready?(record.port, step) do
+      persist_reconciled_status(record, project, project_slug, identifier, "ready")
+    else
+      case safe_instance_status(pid) do
+        status when status in [:crashed, :stopped] ->
+          persist_reconciled_status(record, project, project_slug, identifier, Atom.to_string(status))
+
+        _ ->
+          record
+      end
+    end
+  end
+
+  defp reconcile_without_live_instance(record, project, project_slug, identifier) do
+    step = serve_step_map(project_slug, identifier, record.slug)
+
+    if record.status in @tracked_live_statuses do
+      reconcile_stale_active_record(record, project, project_slug, identifier, step)
+    else
+      record
+    end
+  end
+
+  defp reconcile_stale_active_record(record, project, project_slug, identifier, _step) do
+    persist_reconciled_status(record, project, project_slug, identifier, "crashed")
+  end
+
+  defp serve_step_map(project_slug, identifier, slug) do
+    case serve_step_for_slug(project_slug, identifier, slug) do
+      {:ok, step} -> step_to_map(step)
+      {:error, _reason} -> %{ready_probe: "tcp", ready_path: "/"}
+    end
+  end
+
+  defp port_ready?(port, step) when is_integer(port) and port > 0 do
+    ready_probe = Map.get(step, :ready_probe) || Map.get(step, "ready_probe") || "tcp"
+    ready_path = Map.get(step, :ready_path) || Map.get(step, "ready_path") || "/"
+    probe_port(@probe_loopback_host, port, ready_probe, ready_path) == :ok
+  end
+
+  defp port_ready?(_port, _step), do: false
+
+  defp probe_port(host, port, "http", ready_path) do
+    url = "http://#{host}:#{port}#{normalize_probe_path(ready_path)}"
+
+    case Req.get(url, retry: false, receive_timeout: @probe_connect_timeout_ms) do
+      {:ok, %{status: status}} when status in 200..499 -> :ok
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp probe_port(host, port, _ready_probe, _ready_path) do
+    case :gen_tcp.connect(String.to_charlist(host), port, [:binary, active: false], @probe_connect_timeout_ms) do
+      {:ok, socket} ->
+        :gen_tcp.close(socket)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp normalize_probe_path(path) when is_binary(path) do
+    case String.trim(path) do
+      "" -> "/"
+      "/" <> _rest = normalized -> normalized
+      normalized -> "/" <> normalized
+    end
+  end
+
+  defp persist_reconciled_status(record, project, project_slug, identifier, status)
+       when is_binary(status) do
+    if record.status == status do
+      record
+    else
+      case DevServerRecord.upsert(project.id, identifier, record.slug, %{status: status}) do
+        {:ok, updated} ->
+          Broadcaster.notify(project_slug, identifier)
+          updated
+
+        {:error, reason} ->
+          Logger.warning("dev server status reconciliation failed slug=#{record.slug} issue=#{identifier} reason=#{inspect(reason)}")
+
+          record
+      end
+    end
+  end
+
+  defp ensure_serve_records(project, project_slug, identifier) do
+    configured = DevEnv.list_serve_steps(project_slug)
+    serve_steps = unique_serve_steps(project_slug, identifier, configured)
+
+    existing_slugs =
+      project.id
+      |> DevServerRecord.list_for_issue(identifier)
+      |> MapSet.new(& &1.slug)
+
+    Enum.each(serve_steps, fn step ->
+      slug = Map.fetch!(step, :slug)
+
+      unless MapSet.member?(existing_slugs, slug) do
+        case DevServerRecord.upsert(project.id, identifier, slug, %{
+               working_dir: Map.get(step, :working_dir),
+               status: "stopped",
+               primary: Map.get(step, :primary, false)
+             }) do
+          {:ok, _record} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning("dev server placeholder upsert failed slug=#{slug} issue=#{identifier} reason=#{inspect(reason)}")
+        end
+      end
+    end)
+  end
+
+  @doc false
+  @spec project_public_tunnel_enabled?(String.t()) :: boolean()
+  def project_public_tunnel_enabled?(project_slug) when is_binary(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        project
+        |> project_runtime_options()
+        |> Map.get(:public_tunnel, [])
+        |> Keyword.get(:enabled) == true
+
+      {:error, _} ->
+        false
+    end
+  end
+
   defp project_runtime_options(project) do
     opts =
       project
@@ -699,15 +1171,28 @@ defmodule SymphonyElixir.DevServer.Manager do
 
     %{
       dev_server_enabled?: get_in(opts, [:dev_server, :enabled]) == true,
+      dev_server_reclaim_ports?: get_in(opts, [:dev_server, :reclaim_ports]) == true,
       dev_server_port_range: get_in(opts, [:dev_server, :port_range]),
       dev_server_base_url: normalize_base_url(get_in(opts, [:dev_server, :base_url])),
       dev_server_idle_timeout_ms: get_in(opts, [:dev_server, :idle_timeout_ms]),
+      ready_timeout_ms: @prior_instance_ready_timeout_ms,
       public_tunnel: [
         enabled: get_in(opts, [:public_tunnel, :enabled]),
         base_domain: get_in(opts, [:public_tunnel, :base_domain]),
         namespace: get_in(opts, [:public_tunnel, :namespace])
       ]
     }
+  end
+
+  # Callers (such as the `manage_preview` agent tool) can shorten the synchronous
+  # wait for instance readiness so a slow/crashing dev server cannot block the
+  # turn for minutes. The instance keeps booting asynchronously regardless; the
+  # caller just stops *waiting* and reports the in-flight status instead.
+  defp apply_runtime_overrides(runtime_options, opts) do
+    case Keyword.get(opts, :ready_timeout_ms) do
+      ms when is_integer(ms) and ms >= 0 -> Map.put(runtime_options, :ready_timeout_ms, ms)
+      _ -> runtime_options
+    end
   end
 
   defp project_workflow_config(project) do
@@ -875,6 +1360,35 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp canonical_identifier(identifier) when is_binary(identifier) do
     String.trim_leading(identifier, "#")
   end
+
+  defp normalize_dev_session_capture({:ok, output}, session_name) do
+    {:ok, %{output: output, session_name: session_name}}
+  end
+
+  # A missing tmux pane just means the server is not running (e.g. it crashed,
+  # idled out, or the daemon restarted). Surface an empty buffer instead of
+  # leaking the raw tmux error to the preview UI.
+  defp normalize_dev_session_capture({:error, message}, session_name) when is_binary(message) do
+    if missing_dev_session?(message) do
+      {:ok, %{output: "", session_name: session_name}}
+    else
+      {:error, message}
+    end
+  end
+
+  @missing_session_markers [
+    "can't find pane",
+    "can't find session",
+    "no server running",
+    "session not found"
+  ]
+
+  defp missing_dev_session?(message) when is_binary(message) do
+    normalized = String.downcase(message)
+    Enum.any?(@missing_session_markers, &String.contains?(normalized, &1))
+  end
+
+  defp missing_dev_session?(_message), do: false
 
   defp mark_all_stopped_safely do
     DevServerRecord.mark_all_stopped()

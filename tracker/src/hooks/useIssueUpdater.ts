@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
+import { i18n } from "@/i18n";
 import { moveIssue, updateIssue } from "@/services/issues";
 import type { Issue, UpdateIssueInput } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
@@ -23,7 +24,7 @@ export function useIssueUpdater({ projectSlug, issue, onUpdated }: UseIssueUpdat
         onUpdated?.(updated);
         return updated;
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Failed to save changes");
+        toast.error(cause instanceof Error ? cause.message : i18n.t("issue.updater.saveFailed"));
         return null;
       } finally {
         setSaving(false);
@@ -38,14 +39,15 @@ export function useIssueUpdater({ projectSlug, issue, onUpdated }: UseIssueUpdat
       if (status === issue.status) return issue;
       setSaving(true);
       try {
-        const updated = await moveIssue(projectSlug, issue.identifier, {
+        const leadIdentifier = issue.groupLeadIdentifier ?? issue.identifier;
+        const updated = await moveIssue(projectSlug, leadIdentifier, {
           status,
           position: issue.position,
         });
         onUpdated?.(updated);
         return updated;
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Failed to update status");
+        toast.error(cause instanceof Error ? cause.message : i18n.t("issue.updater.statusFailed"));
         return null;
       } finally {
         setSaving(false);

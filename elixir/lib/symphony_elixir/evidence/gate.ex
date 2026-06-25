@@ -14,6 +14,7 @@ defmodule SymphonyElixir.Evidence.Gate do
   """
 
   alias SymphonyElixir.Evidence.GitDiff
+  alias SymphonyElixir.Evidence.Judge
   alias SymphonyElixir.Evidence.Manifest
   alias SymphonyElixir.Evidence.SessionAudit
 
@@ -30,13 +31,32 @@ defmodule SymphonyElixir.Evidence.Gate do
     end
   end
 
-  @spec default_deps() :: map()
-  def default_deps do
-    %{
+  @doc """
+  True when a non-empty violation list contains only `:environment_blocked`
+  entries. The corrective loop and the orchestrator use this to avoid retrying
+  commands that cannot run in the workspace (no Docker/network/browser sandbox)
+  and to annotate the run as an environment blocker rather than a code failure.
+  """
+  @spec environment_blocked_only?([violation()]) :: boolean()
+  def environment_blocked_only?(violations) when is_list(violations) do
+    violations != [] and Enum.all?(violations, &(&1.kind == :environment_blocked))
+  end
+
+  def environment_blocked_only?(_violations), do: false
+
+  @spec default_deps(keyword()) :: map()
+  def default_deps(opts \\ []) do
+    base = %{
       read_manifest: &Manifest.read/1,
       changed_files: &GitDiff.changed_files/1,
-      audit: fn commands, opts -> SessionAudit.verify_commands(commands, opts) end
+      audit: fn commands, audit_opts -> SessionAudit.verify_commands(commands, audit_opts) end,
+      judge_verdict: fn _ws -> :none end
     }
+
+    case Keyword.get(opts, :issue) do
+      nil -> base
+      issue -> Map.put(base, :judge_verdict, fn ws -> Judge.verdict(ws, issue: issue, config: Keyword.get(opts, :config)) end)
+    end
   end
 
   defp evaluate_manifest(workspace, config, changed, deps) do
@@ -66,7 +86,8 @@ defmodule SymphonyElixir.Evidence.Gate do
     violations =
       unit_violations(manifest, changed) ++
         impact_violations ++
-        e2e_violations(manifest, required_ui) ++
+        e2e_violations(manifest, required_ui, repos) ++
+        judge_violations(workspace, deps) ++
         audit_violations(manifest, workspace, deps)
 
     case violations do
@@ -91,7 +112,12 @@ defmodule SymphonyElixir.Evidence.Gate do
         &(&1.kind == "unit" and &1.repo == repo and &1.status == "passed")
       )
     end)
-    |> Enum.map(&%{kind: :unit_not_green, repo: &1, detail: "no passing unit run for changed repo #{&1}"})
+    |> Enum.map(fn repo ->
+      case blocked_run(manifest, "unit", repo) do
+        nil -> %{kind: :unit_not_green, repo: repo, detail: "no passing unit run for changed repo #{repo}"}
+        run -> environment_blocked_violation(repo, "unit", run)
+      end
+    end)
   end
 
   # Decides which UI repos must have an e2e run, in three layers:
@@ -147,29 +173,122 @@ defmodule SymphonyElixir.Evidence.Gate do
     {required, impact_violations}
   end
 
-  defp e2e_violations(manifest, required_ui) do
-    Enum.flat_map(required_ui, &e2e_violation_for(manifest, &1))
+  defp e2e_violations(manifest, required_ui, repos) do
+    Enum.flat_map(required_ui, &e2e_violation_for(manifest, &1, repos))
   end
 
-  defp e2e_violation_for(manifest, repo) do
+  defp e2e_violation_for(manifest, repo, repos) do
     case Enum.find(manifest.runs, &(&1.kind == "e2e" and &1.repo == repo and &1.status == "passed")) do
       nil ->
-        [%{kind: :e2e_missing, repo: repo, detail: "e2e required for #{repo} but no passing e2e run"}]
+        case blocked_run(manifest, "e2e", repo) do
+          nil -> [%{kind: :e2e_missing, repo: repo, detail: "e2e required for #{repo} but no passing e2e run"}]
+          run -> [environment_blocked_violation(repo, "e2e", run)]
+        end
 
       run ->
-        if run.screenshots != [] and run.videos != [] do
-          []
-        else
-          [
-            %{
-              kind: :visual_capture_missing,
-              repo: repo,
-              detail: "e2e run for #{repo} must include at least 1 screenshot and 1 video"
-            }
-          ]
-        end
+        visual_violation(run, repo) ++ synthetic_violation(run, repo) ++ url_pattern_violation(run, repo, repos)
     end
   end
+
+  defp visual_violation(run, repo) do
+    if run.screenshots != [] and run.videos != [] do
+      []
+    else
+      [
+        %{
+          kind: :visual_capture_missing,
+          repo: repo,
+          detail: "e2e run for #{repo} must include at least 1 screenshot and 1 video"
+        }
+      ]
+    end
+  end
+
+  # Layer A: a passing e2e that never loaded a real page (empty navigations, or
+  # only about:/data: URLs from page.setContent) is synthetic, not real proof.
+  defp synthetic_violation(run, repo) do
+    if Enum.any?(run.navigations, &real_navigation?/1) do
+      []
+    else
+      [
+        %{
+          kind: :synthetic_e2e,
+          repo: repo,
+          detail:
+            "e2e run for #{repo} recorded no real page navigation " <>
+              "(page.setContent/about:blank/data: do not count); drive the real flow with page.goto"
+        }
+      ]
+    end
+  end
+
+  # Optional per-project strictness: a real navigation must match the configured
+  # URL pattern (e.g. advising's `<tenant>.localhost`). Ignored when unset.
+  defp url_pattern_violation(run, repo, repos) do
+    case get_in(repos, [repo, :e2e, :require_url_pattern]) do
+      pattern when is_binary(pattern) and pattern != "" ->
+        regex = Regex.compile!(pattern)
+
+        if Enum.any?(run.navigations, &(real_navigation?(&1) and Regex.match?(regex, &1))) do
+          []
+        else
+          [%{kind: :e2e_url_mismatch, repo: repo, detail: "e2e for #{repo} must navigate a URL matching #{pattern}"}]
+        end
+
+      _ ->
+        []
+    end
+  end
+
+  defp real_navigation?(url) when is_binary(url) do
+    trimmed = String.trim(url)
+    trimmed != "" and not String.starts_with?(trimmed, "about:") and not String.starts_with?(trimmed, "data:")
+  end
+
+  defp real_navigation?(_url), do: false
+
+  # Layer B: the independent judge's verdict, read purely via the injected dep.
+  # `{:fail, reasons}` vetoes; `:pass`/`:none` (none = disabled or unavailable)
+  # never block — the LLM call lives in the dep, not in this pure function.
+  defp judge_violations(workspace, deps) do
+    case deps.judge_verdict.(workspace) do
+      {:fail, reasons} ->
+        [%{kind: :judge_rejected, repo: nil, detail: "validation judge rejected the evidence: " <> format_reasons(reasons)}]
+
+      _pass_or_none ->
+        []
+    end
+  end
+
+  defp format_reasons(reasons) when is_list(reasons), do: Enum.join(reasons, "; ")
+  defp format_reasons(reason) when is_binary(reason), do: reason
+  defp format_reasons(other), do: inspect(other)
+
+  # A required `unit`/`e2e` run the agent explicitly marked as unrunnable in this
+  # workspace environment. Distinct from a `failed` (code) run: it never
+  # satisfies the gate, but it is reported as `:environment_blocked` so the
+  # corrective loop stops retrying the impossible and a human gets a clear,
+  # actionable blocker.
+  defp blocked_run(manifest, kind, repo) do
+    Enum.find(manifest.runs, &(&1.kind == kind and &1.repo == repo and &1.status == "blocked"))
+  end
+
+  defp environment_blocked_violation(repo, kind, run) do
+    %{
+      kind: :environment_blocked,
+      repo: repo,
+      detail: "#{kind} for #{repo} could not run in this environment: #{blocked_detail(run)}"
+    }
+  end
+
+  defp blocked_detail(%{blocked_reason: reason}) when is_binary(reason) do
+    case String.trim(reason) do
+      "" -> "no reason provided"
+      trimmed -> trimmed
+    end
+  end
+
+  defp blocked_detail(_run), do: "no reason provided"
 
   defp ui_repos(repos) do
     for {name, cfg} <- repos, e2e_command(cfg) != nil, do: name

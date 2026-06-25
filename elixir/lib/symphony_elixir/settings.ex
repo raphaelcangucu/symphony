@@ -13,7 +13,8 @@ defmodule SymphonyElixir.Settings do
 
   @groups %{
     "agents" => SymphonyElixir.Settings.Agents,
-    "orchestrator" => SymphonyElixir.Settings.Orchestration
+    "orchestrator" => SymphonyElixir.Settings.Orchestration,
+    "ui" => SymphonyElixir.Settings.Ui
   }
 
   @spec groups() :: %{String.t() => module()}

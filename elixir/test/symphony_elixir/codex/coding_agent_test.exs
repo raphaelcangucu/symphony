@@ -156,6 +156,161 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     end
   end
 
+  describe "durable goal threads" do
+    test "resumes the stored thread and reads the native goal instead of overwriting it" do
+      with_fake_resume_server(:present, fn workspace, issue, trace_file ->
+        enable_goals!()
+        write_session_sidecar!(workspace, "thread-resume")
+
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
+
+        messages = outbound_messages(trace_file)
+
+        assert message_order(messages) == [
+                 "initialize",
+                 "initialized",
+                 "thread/resume",
+                 "thread/goal/get",
+                 "turn/start"
+               ]
+
+        refute message_with_method(messages, "thread/start")
+        refute message_with_method(messages, "thread/goal/set")
+      end)
+    end
+
+    test "seeds the goal when a resumed thread has no native goal yet" do
+      with_fake_resume_server(:null, fn workspace, issue, trace_file ->
+        enable_goals!()
+        write_session_sidecar!(workspace, "thread-resume")
+
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
+
+        messages = outbound_messages(trace_file)
+
+        assert message_with_method(messages, "thread/resume")
+        assert message_with_method(messages, "thread/goal/get")
+
+        goal_set = message_with_method(messages, "thread/goal/set")
+        assert goal_set["params"]["objective"] == "Ship the feature"
+      end)
+    end
+
+    test "starts a fresh thread when goals are disabled even if a sidecar exists" do
+      with_fake_resume_server(:present, fn workspace, issue, trace_file ->
+        write_session_sidecar!(workspace, "thread-resume")
+
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
+
+        messages = outbound_messages(trace_file)
+
+        assert message_with_method(messages, "thread/start")
+        refute message_with_method(messages, "thread/resume")
+      end)
+    end
+  end
+
+  describe "native goal control (manage_goal/3)" do
+    test "reads the current goal after resuming the stored thread" do
+      with_fake_resume_server(:present, fn workspace, _issue, trace_file ->
+        enable_goals!()
+
+        assert {:ok, goal} =
+                 AppServer.manage_goal(workspace, :get,
+                   thread_id: "thread-resume",
+                   workspace_root: Path.dirname(workspace)
+                 )
+
+        assert goal["objective"] == "Resume the migration"
+        assert goal["status"] == "active"
+
+        messages = outbound_messages(trace_file)
+        assert message_order(messages) == ["initialize", "initialized", "thread/resume", "thread/goal/get"]
+      end)
+    end
+
+    test "pauses the goal with a status-only thread/goal/set" do
+      with_fake_resume_server(:present, fn workspace, _issue, trace_file ->
+        enable_goals!()
+
+        assert {:ok, _goal} =
+                 AppServer.manage_goal(workspace, {:set, %{status: "paused"}},
+                   thread_id: "thread-resume",
+                   workspace_root: Path.dirname(workspace)
+                 )
+
+        goal_set = message_with_method(outbound_messages(trace_file), "thread/goal/set")
+        assert goal_set["params"] == %{"threadId" => "thread-resume", "status" => "paused"}
+      end)
+    end
+
+    test "removes the token budget when set to nil" do
+      with_fake_resume_server(:present, fn workspace, _issue, trace_file ->
+        enable_goals!()
+
+        assert {:ok, _goal} =
+                 AppServer.manage_goal(workspace, {:set, %{token_budget: nil}},
+                   thread_id: "thread-resume",
+                   workspace_root: Path.dirname(workspace)
+                 )
+
+        goal_set = message_with_method(outbound_messages(trace_file), "thread/goal/set")
+        assert Map.has_key?(goal_set["params"], "tokenBudget")
+        assert goal_set["params"]["tokenBudget"] == nil
+      end)
+    end
+
+    test "clears the goal and reports cleared" do
+      with_fake_resume_server(:present, fn workspace, _issue, trace_file ->
+        enable_goals!()
+
+        assert {:ok, :cleared} =
+                 AppServer.manage_goal(workspace, :clear,
+                   thread_id: "thread-resume",
+                   workspace_root: Path.dirname(workspace)
+                 )
+
+        assert message_with_method(outbound_messages(trace_file), "thread/goal/clear")
+      end)
+    end
+
+    test "refuses goal mutations when goal mode is disabled" do
+      with_fake_resume_server(:present, fn workspace, _issue, _trace_file ->
+        assert {:error, :goals_disabled} =
+                 AppServer.manage_goal(workspace, {:set, %{status: "paused"}},
+                   thread_id: "thread-resume",
+                   workspace_root: Path.dirname(workspace)
+                 )
+      end)
+    end
+  end
+
+  describe "tool call resilience" do
+    test "a crashing client tool does not abort the run; the failure is reported back" do
+      with_fake_tool_server(fn workspace, issue ->
+        test_pid = self()
+        on_message = fn message -> send(test_pid, {:codex_event, message}) end
+
+        log =
+          capture_log(fn ->
+            assert {:ok, result} =
+                     AppServer.run(workspace, "Build the feature", issue,
+                       tool_executor: fn _tool, _arguments -> raise "boom tool" end,
+                       on_message: on_message
+                     )
+
+            assert result[:result] == :turn_completed
+          end)
+
+        assert_received {:codex_event, %{event: :tool_call_failed, result: %{"success" => false}}}
+        assert log =~ "boom tool"
+      end)
+    end
+  end
+
   describe "transient error handling" do
     test "fails the turn when an error event precedes completion with no agent message" do
       with_fake_error_server([emit_agent_message: false], fn workspace, issue ->
@@ -175,6 +330,22 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       with_fake_error_server([emit_agent_message: true], fn workspace, issue ->
         assert {:ok, result} = AppServer.run(workspace, "Build the feature", issue)
         assert result[:result] == :turn_completed
+      end)
+    end
+  end
+
+  describe "process group reaping" do
+    test "stop_session kills the whole Codex process group, not just the immediate child" do
+      with_fake_reaper_server(fn workspace, pid_file ->
+        assert {:ok, session} = AppServer.start_session(workspace)
+
+        grandchild_pid = wait_for_pid_file!(pid_file)
+        assert os_process_alive?(grandchild_pid), "fake grandchild should be running before teardown"
+
+        AppServer.stop_session(session)
+
+        assert eventually_dead?(grandchild_pid),
+               "stop_session must reap the backgrounded grandchild (pid #{grandchild_pid})"
       end)
     end
   end
@@ -214,6 +385,169 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     after
       File.rm_rf(test_root)
     end
+  end
+
+  defp with_fake_resume_server(goal_get_mode, fun) when is_function(fun, 3) do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-coding-agent-resume-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-RESUME")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-resume.trace")
+
+      File.mkdir_p!(workspace)
+      write_resume_fake_codex!(codex_binary, trace_file, goal_get_mode)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-resume",
+        identifier: "MT-RESUME",
+        title: "Resume goal",
+        description: "Exercise Codex durable goal threads",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-RESUME",
+        labels: ["backend"]
+      }
+
+      fun.(workspace, issue, trace_file)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  defp write_session_sidecar!(workspace, thread_id) do
+    path = Path.join([Path.expand(workspace), ".symphony", "codex-session.json"])
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, Jason.encode!(%{"thread_id" => thread_id, "updated_at" => "2026-01-01T00:00:00Z"}))
+    :ok
+  end
+
+  defp write_resume_fake_codex!(codex_binary, trace_file, goal_get_mode) do
+    goal_get_response =
+      case goal_get_mode do
+        :present ->
+          ~s({"id":6,"result":{"goal":{"threadId":"thread-resume","objective":"Resume the migration","status":"active","tokenBudget":200000,"tokensUsed":10,"timeUsedSeconds":5}}})
+
+        :null ->
+          ~s({"id":6,"result":{"goal":null}})
+      end
+
+    File.write!(codex_binary, """
+    #!/bin/sh
+    trace_file="#{trace_file}"
+
+    while IFS= read -r line; do
+      printf 'JSON:%s\\n' "$line" >> "$trace_file"
+
+      case "$line" in
+        *'"method":"initialize"'*)
+          printf '%s\\n' '{"id":1,"result":{}}'
+          ;;
+        *'"method":"initialized"'*)
+          ;;
+        *'"method":"thread/start"'*)
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-resume"}}}'
+          ;;
+        *'"method":"thread/resume"'*)
+          printf '%s\\n' '{"id":5,"result":{"thread":{"id":"thread-resume"}}}'
+          ;;
+        *'"method":"thread/goal/get"'*)
+          printf '%s\\n' '#{goal_get_response}'
+          ;;
+        *'"method":"thread/goal/set"'*)
+          printf '%s\\n' '{"id":4,"result":{"goal":{"threadId":"thread-resume","objective":"Resume the migration","status":"active","tokenBudget":null,"tokensUsed":0,"timeUsedSeconds":0}}}'
+          ;;
+        *'"method":"thread/goal/clear"'*)
+          printf '%s\\n' '{"id":7,"result":{"cleared":true}}'
+          ;;
+        *'"method":"turn/start"'*)
+          printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-resume"}}}'
+          printf '%s\\n' '{"method":"turn/completed","params":{"goal":{"status":"completed"}}}'
+          exit 0
+          ;;
+        *)
+          ;;
+      esac
+    done
+    """)
+
+    File.chmod!(codex_binary, 0o755)
+  end
+
+  defp with_fake_tool_server(fun) when is_function(fun, 2) do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-coding-agent-tool-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-TOOL")
+      codex_binary = Path.join(test_root, "fake-codex")
+
+      File.mkdir_p!(workspace)
+      write_tool_fake_codex!(codex_binary)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-tool",
+        identifier: "MT-TOOL",
+        title: "Tool resilience",
+        description: "Exercise Codex client tool crash handling",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-TOOL",
+        labels: ["backend"]
+      }
+
+      fun.(workspace, issue)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  # Emits a single client tool call during the turn, then completes the turn once
+  # Symphony sends the tool result back. This exercises the inline tool-call path
+  # so a crashing executor must not take down the run.
+  defp write_tool_fake_codex!(codex_binary) do
+    File.write!(codex_binary, """
+    #!/bin/sh
+    while IFS= read -r line; do
+      case "$line" in
+        *'"method":"initialize"'*)
+          printf '%s\\n' '{"id":1,"result":{}}'
+          ;;
+        *'"method":"thread/start"'*)
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-tool"}}}'
+          ;;
+        *'"method":"turn/start"'*)
+          printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-tool"}}}'
+          printf '%s\\n' '{"id":"call-1","method":"item/tool/call","params":{"tool":"boom","arguments":{}}}'
+          ;;
+        *'"id":"call-1"'*)
+          printf '%s\\n' '{"method":"turn/completed"}'
+          exit 0
+          ;;
+        *)
+          ;;
+      esac
+    done
+    """)
+
+    File.chmod!(codex_binary, 0o755)
   end
 
   defp with_fake_error_server(opts, fun) when is_function(fun, 2) do
@@ -378,6 +712,95 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
 
     File.write!(workflow_file, updated_workflow)
     :ok
+  end
+
+  # Spawns a fake Codex app-server that backgrounds a long-lived `sleep`
+  # grandchild at startup (recording its pid), then completes only the
+  # start_session handshake (initialize + thread/start). The grandchild lets us
+  # prove teardown kills the whole process group, not just the immediate child.
+  defp with_fake_reaper_server(fun) when is_function(fun, 2) do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-coding-agent-reaper-#{System.unique_integer([:positive])}"
+      )
+
+    pid_file = Path.join(test_root, "grandchild.pid")
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-REAP")
+      codex_binary = Path.join(test_root, "fake-codex")
+
+      File.mkdir_p!(workspace)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      sleep 300 &
+      echo "$!" > "#{pid_file}"
+
+      while IFS= read -r line; do
+        case "$line" in
+          *'"method":"initialize"'*)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          *'"method":"initialized"'*)
+            ;;
+          *'"method":"thread/start"'*)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-reaper"}}}'
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server"
+      )
+
+      fun.(workspace, pid_file)
+    after
+      case File.read(pid_file) do
+        {:ok, raw} -> System.cmd("kill", ["-9", String.trim(raw)], stderr_to_stdout: true)
+        _ -> :ok
+      end
+
+      File.rm_rf(test_root)
+    end
+  end
+
+  defp wait_for_pid_file!(pid_file), do: wait_for_pid_file!(pid_file, 50)
+
+  defp wait_for_pid_file!(pid_file, 0), do: flunk("fake codex never wrote its pid to #{pid_file}")
+
+  defp wait_for_pid_file!(pid_file, attempts) do
+    case File.read(pid_file) do
+      {:ok, raw} when raw != "" ->
+        String.trim(raw)
+
+      _ ->
+        Process.sleep(20)
+        wait_for_pid_file!(pid_file, attempts - 1)
+    end
+  end
+
+  defp os_process_alive?(pid) when is_binary(pid) do
+    match?({_, 0}, System.cmd("kill", ["-0", pid], stderr_to_stdout: true))
+  end
+
+  defp eventually_dead?(pid), do: eventually_dead?(pid, 50)
+
+  defp eventually_dead?(_pid, 0), do: false
+
+  defp eventually_dead?(pid, attempts) do
+    if os_process_alive?(pid) do
+      Process.sleep(20)
+      eventually_dead?(pid, attempts - 1)
+    else
+      true
+    end
   end
 
   defp outbound_messages(trace_file) do

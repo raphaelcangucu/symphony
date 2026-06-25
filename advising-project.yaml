@@ -52,8 +52,8 @@ repositories:
   # lacks origin/HEAD (common in ephemeral workspaces). Must match the PR base branch.
   - github_full_name: civitaslearning/advising
     clone_url: git@github.com:civitaslearning/advising.git
-    default_branch: pre-release
-    selected_branch: pre-release
+    default_branch: feature/lti-group-sharing-CDE-1106
+    selected_branch: feature/lti-group-sharing-CDE-1106
     role: primary
     workspace_path: advising
 workflow_statuses:
@@ -72,8 +72,12 @@ workflow_statuses:
   - { name: "Concluído", category: "completed", position: 10, is_terminal: true }
   - { name: "Won't Do", category: "completed", position: 11, is_terminal: true }
 dev_env_steps:
-  - command: "test -f docker/.env || cp docker/.env.example docker/.env"
-    description: "Ensure docker/.env exists"
+  # Script-based preview, committed in the repo under advising/.symphony/. The
+  # scripts pin a per-workspace Compose project (so previews coexist), keep the
+  # shared singletons (postgres/memcached/localstack) in the global "docker"
+  # project, and gate readiness on the app's existing GET /health endpoint.
+  - command: "bash .symphony/setup.sh"
+    description: "Preview setup: docker/.env, ECR login (best-effort), Playwright browser"
     optional: true
     primary: false
     ready_path: "/"
@@ -82,22 +86,12 @@ dev_env_steps:
     source: "manual"
     url_path: "/"
     working_dir: "advising"
-  - command: "./vibe shared up"
-    description: "Start shared Docker services (postgres, memcached, localstack)"
-    optional: false
-    primary: false
-    ready_path: "/"
-    ready_probe: "tcp"
-    role: "setup"
-    source: "manual"
-    url_path: "/"
-    working_dir: "advising"
-  - command: "COMPOSE_PROJECT_NAME=$(basename \"$(dirname \"$PWD\")\") ./vibe up"
-    description: "Inspire web app (PHP 7.4 Docker)"
+  - command: "bash .symphony/serve.sh"
+    description: "Inspire web app (PHP 7.4 Docker) — boots stack, waits on /health"
     optional: false
     port_env: "INSPIRE_PORT"
     primary: true
-    ready_path: "/"
+    ready_path: "/health"
     ready_probe: "http"
     role: "serve"
     source: "manual"
@@ -119,9 +113,12 @@ setup:
             - "kiosk/**"
           e2e:
             command: "cd automation/playwright && npx playwright test"
+            # Tenants are served on <tenant>.localhost; a real e2e must navigate there.
+            require_url_pattern: "^https?://[^/]+\\.localhost"
     agent:
-      max_turns: 20
+      max_turns: 40
     codex:
+      goals_enabled: true
       approval_policy: never
       thread_sandbox: danger-full-access
       turn_sandbox_policy:
@@ -139,7 +136,7 @@ setup:
     hooks:
       after_create: |
         # Prefer gh (SSH per `gh config`) or git+SSH — not the Codex GitHub app connector.
-        gh repo clone civitaslearning/advising advising -- --depth 1 -b pre-release
+        gh repo clone civitaslearning/advising advising -- --depth 1 -b feature/lti-group-sharing-CDE-1106
 
         if [ -f advising/docker/.env.example ] && [ ! -f advising/docker/.env ]; then
           cp advising/docker/.env.example advising/docker/.env
@@ -181,7 +178,8 @@ setup:
     (Jira project `CDE`, scoped to Product `Inspire`).
 
     Repository: `civitaslearning/advising` (workspace path `advising/`), integration
-    branch and PR base `pre-release`.
+    branch and PR base `feature/lti-group-sharing-CDE-1106` (the active dev branch;
+    it will be merged into `pre-release` soon).
 
     Read `docs/SAIL.md`, `docs/VIBE.md`, `docs/TESTS.md`, and `docs/INSTALL.md` in
     the repo before running commands. This is **PHP 7.4 Symfony 1.x** (legacy Inspire)
@@ -268,14 +266,24 @@ setup:
 
     ## Issue preview (Symphony Preview tab)
 
-    Preview steps live in the project's DevEnv config (`.symphony/devenv.yaml` in the
-    repo + saved steps in Symphony). The tracker **Preview** tab starts them on demand
-    or auto-starts on `pull_request` / `human_review`.
+    Preview is **script-based**, committed in the repo under `advising/.symphony/`
+    (`devenv.yaml` mirrors the steps; see `.symphony/README.md`). The tracker
+    **Preview** tab starts them on demand or auto-starts on `pull_request` /
+    `human_review`. Two steps:
 
-    - Symphony allocates `INSPIRE_PORT` and runs `./vibe up` inside Docker.
-    - Each issue workspace gets an isolated `COMPOSE_PROJECT_NAME` (the workspace folder
-      name) so containers do not collide across issues.
-    - Shared infra (`./vibe shared up`) is global — same postgres/memcached as local dev.
+    1. `bash .symphony/setup.sh` — ensures `docker/.env`, best-effort ECR login,
+       installs the Playwright preview browser. Idempotent, never fatal.
+    2. `bash .symphony/serve.sh` (primary) — boots the app, discovers the published
+       port, and waits for `GET /health` before staying in the foreground.
+
+    - Symphony allocates `INSPIRE_PORT` and `serve.sh` runs `./vibe up` inside Docker.
+    - Each workspace runs under its own `COMPOSE_PROJECT_NAME` (resolved to the
+      workspace/worktree name) so app containers never collide across issues.
+      `scripts/vibe` + `scripts/sail` honor that project for the app stack and for
+      `./vibe <cmd>` exec (e.g. `phpunit`); the shared singletons
+      (postgres/memcached/localstack) stay pinned to the global `docker` project.
+    - Readiness uses the app's own `GET /health` (the same endpoint the K8s probes
+      hit), so the **Preview** tab goes ready only once the app actually serves.
     - **Prerequisite**: AWS ECR login (`./sail aws:login`) and valid `docker/.env` on
       the host running Symphony — see `docs/INSTALL.md`.
 
@@ -283,11 +291,45 @@ setup:
 
     ```bash
     cd advising
-    COMPOSE_PROJECT_NAME=$(basename "$(dirname "$PWD")") INSPIRE_PORT=4300 ./vibe up
-    ./vibe status
+    bash .symphony/setup.sh                 # once
+    bash .symphony/serve.sh                 # boots app, waits on /health, blocks
+    # in another shell:
+    bash .symphony/verify-health.sh         # project/port/health diagnostics
     ```
 
-    Tenant URLs (when app is ready): `http://cwu.localhost:<port>/`, etc.
+    `serve.sh` writes the resolved port to `.symphony/preview-port` and exports
+    `PLAYWRIGHT_BASE_URL`. Preview smoke (full screenshot/video/trace capture):
+
+    ```bash
+    cd advising/automation/playwright
+    SYMPHONY_PREVIEW_TENANT=<tenant> npm run playwright:preview   # playwright.preview.config.js
+    ```
+
+    ## Tenant-aware e2e (read `docs/SYMPHONY_E2E.md`)
+
+    The e2e you record as evidence MUST cover the **screens your change touched** — derive
+    it from `git diff`, exactly like the `evidence` skill ("Focused testing"). Do not record
+    a generic "app loads" check or the full matrix. Two specifics for this repo:
+
+    - **Tenant host, never the bare host.** Each CDE issue belongs to a client/tenant served
+      at `http://<tenant>.localhost:<port>/` (the app maps the subdomain to its DB via
+      `DynamicDoctrineDatabase`). The bare `http://localhost:<port>/` is the **kiosk login**
+      — a different product, so a kiosk screenshot is invalid evidence.
+    - **Resolve the tenant**: Jira issue fields/description first, else infer from the
+      ticket, else fall back to the default dev tenant **`illume`** (`illume.localhost`).
+
+    Per issue:
+
+    1. **Ensure the tenant DB exists**: `bash .symphony/ensure-tenant-db.sh <tenant>`
+       (downloads + imports a scrubbed dump if missing, and seeds a `Welcome123` login;
+       see `docs/DBDUMP.md`).
+    2. **Precondition smoke** (not the deliverable):
+       `SYMPHONY_PREVIEW_TENANT=<tenant> npm run playwright:preview` — proves the tenant app
+       boots and is not the kiosk.
+    3. **Change-scoped e2e** (the actual evidence): write/run a spec under
+       `automation/playwright/playwright/e2e/tests/jira/<ticket-id>/` that drives the changed
+       flow on the tenant host, logs in with a `manage-user`-seeded account, and screenshots
+       its key states. Record only that scoped run in `.symphony/evidence/manifest.json`.
 
     ## Workflow
 
@@ -299,9 +341,9 @@ setup:
     - **READY FOR QA** / **IN QA** / **Ready for Deploy**: post-review pipeline (humans or QA move these).
     - **Concluído**: done.
 
-    - Sync before handoff: `cd advising && git fetch origin && git merge origin/pre-release`.
-    - Open the PR against `pre-release`:
-      `cd advising && gh pr create --base pre-release --title "{{ issue.identifier }}: ..."`.
+    - Sync before handoff: `cd advising && git fetch origin && git merge origin/feature/lti-group-sharing-CDE-1106`.
+    - Open the PR against `feature/lti-group-sharing-CDE-1106`:
+      `cd advising && gh pr create --base feature/lti-group-sharing-CDE-1106 --title "{{ issue.identifier }}: ..."`.
     - **Every PR body MUST include the association marker on its own line** so Symphony
       links the PR to this issue deterministically: `Symphony-Issue: {{ issue.identifier }}`.
     - Use a single `## Codex Workpad` comment for progress and the machine-readable

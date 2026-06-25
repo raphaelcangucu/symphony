@@ -34,7 +34,7 @@ defmodule SymphonyElixirWeb.Tracker.CommentController do
     end
   end
 
-  def create(conn, _params), do: TrackerErrors.validation(conn, "body is required")
+  def create(conn, _params), do: TrackerErrors.validation_msg(conn, "body is required")
 
   @spec update(Conn.t(), map()) :: Conn.t()
   def update(conn, %{"project_slug" => project_slug, "identifier" => identifier, "comment_id" => comment_id, "body" => body})
@@ -47,7 +47,7 @@ defmodule SymphonyElixirWeb.Tracker.CommentController do
     end
   end
 
-  def update(conn, _params), do: TrackerErrors.validation(conn, "body is required")
+  def update(conn, _params), do: TrackerErrors.validation_msg(conn, "body is required")
 
   @spec delete(Conn.t(), map()) :: Conn.t()
   def delete(conn, %{"project_slug" => project_slug, "identifier" => identifier, "comment_id" => comment_id}) do

@@ -1,7 +1,28 @@
+defmodule SymphonyElixir.DevServer.ManagerTest.FakeTmux do
+  @moduledoc false
+  def open_dev_session(_project_slug, _identifier, _slug, _cwd, _opts \\ []),
+    do: {:ok, %{session_name: "sym-dev-test"}}
+
+  def kill_dev_session(_project_slug, _identifier, _slug, _opts \\ []), do: :ok
+
+  def send_keys(_session_name, _data), do: :ok
+end
+
+defmodule SymphonyElixir.DevServer.ManagerTest.MissingPaneTmux do
+  @moduledoc false
+  def capture_pane(session_name), do: {:error, "can't find pane: #{session_name}"}
+end
+
+defmodule SymphonyElixir.DevServer.ManagerTest.BrokenTmux do
+  @moduledoc false
+  def capture_pane(_session_name), do: {:error, "tmux server exited unexpectedly"}
+end
+
 defmodule SymphonyElixir.DevServer.ManagerTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.DevServer.Manager
+  alias SymphonyElixir.DevServer.{Instance, Manager}
+  alias SymphonyElixir.DevServer.ManagerTest.{BrokenTmux, FakeTmux, MissingPaneTmux}
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.TestSupport
@@ -71,13 +92,34 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.start_for_issue(project.slug, "#missing-workspace") == {:error, :workspace_missing}
   end
 
+  test "list_for_issue ensures stopped placeholders for configured serve steps", %{project: project} do
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Back", command: "docker compose up", role: "serve", working_dir: "backend"},
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "frontend", primary: true}
+      ])
+
+    assert DevServerRecord.list_for_issue(project.id, "1") == []
+
+    servers = Manager.list_for_issue(project.slug, "#1")
+
+    assert length(servers) == 2
+    assert length(DevServerRecord.list_for_issue(project.id, "1")) == 2
+
+    assert %{slug: "frontend", status: "stopped", primary: true} =
+             Enum.find(servers, &(&1.slug == "frontend"))
+
+    assert %{slug: "backend", status: "stopped", primary: false} =
+             Enum.find(servers, &(&1.slug == "backend"))
+  end
+
   test "list_for_issue returns persisted record maps ordered primary first", %{project: project} do
     {:ok, primary} =
       DevServerRecord.upsert(project.id, "1", "front", %{
         working_dir: "front",
         port: 4101,
         url: "http://127.0.0.1:4101/",
-        status: "ready",
+        status: "stopped",
         primary: true,
         session_name: "sym-dev-front"
       })
@@ -87,7 +129,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
         working_dir: "api",
         port: 4102,
         url: "http://127.0.0.1:4102/",
-        status: "starting",
+        status: "stopped",
         primary: false,
         session_name: "sym-dev-api"
       })
@@ -99,7 +141,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
                working_dir: "front",
                port: 4101,
                url: "http://127.0.0.1:4101/",
-               status: "ready",
+               status: "stopped",
                primary: true,
                session_name: "sym-dev-front"
              },
@@ -109,7 +151,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
                working_dir: "api",
                port: 4102,
                url: "http://127.0.0.1:4102/",
-               status: "starting",
+               status: "stopped",
                primary: false,
                session_name: "sym-dev-api"
              }
@@ -119,13 +161,103 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert secondary_id == secondary.id
   end
 
+  test "list_for_issue keeps stopped servers stopped when the port responds without a live instance", %{
+    project: project
+  } do
+    port = start_probe_server!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "GoAPI",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "goapi",
+          ready_probe: "http",
+          ready_path: "/graphiql"
+        }
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1878", "goapi", %{
+        working_dir: "goapi",
+        port: port,
+        url: "http://127.0.0.1:#{port}/graphiql",
+        status: "stopped",
+        primary: false,
+        session_name: "sym-dev-gamba-1878-goapi"
+      })
+
+    assert [%{id: id, status: "stopped"}] = Manager.list_for_issue(project.slug, "1878")
+    assert id == record.id
+    assert %DevServerRecord{status: "stopped"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
+  end
+
+  test "list_for_issue marks ready servers as crashed when no live instance owns the port", %{project: project} do
+    port = start_probe_server!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "GoAPI",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "goapi",
+          ready_probe: "http",
+          ready_path: "/graphiql"
+        }
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1878", "goapi", %{
+        working_dir: "goapi",
+        port: port,
+        url: "http://127.0.0.1:#{port}/graphiql",
+        status: "ready",
+        primary: false,
+        session_name: "sym-dev-gamba-1878-goapi"
+      })
+
+    assert [%{id: id, status: "crashed"}] = Manager.list_for_issue(project.slug, "1878")
+    assert id == record.id
+    assert %DevServerRecord{status: "crashed"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
+  end
+
+  test "list_for_issue marks stale ready servers as crashed when the port is down", %{project: project} do
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Front",
+          command: "npm run dev",
+          role: "serve",
+          working_dir: "front",
+          ready_probe: "http",
+          ready_path: "/"
+        }
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1878", "front", %{
+        working_dir: "front",
+        port: 41_099,
+        url: "http://127.0.0.1:41099/",
+        status: "ready",
+        primary: true,
+        session_name: "sym-dev-front"
+      })
+
+    assert [%{id: id, status: "crashed"}] = Manager.list_for_issue(project.slug, "1878")
+    assert id == record.id
+    assert %DevServerRecord{status: "crashed"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
+  end
+
   test "list_for_issue canonicalizes identifiers", %{project: project} do
     {:ok, row} =
       DevServerRecord.upsert(project.id, "1", "front", %{
         working_dir: "front",
         port: 4101,
         url: "http://127.0.0.1:4101/",
-        status: "ready",
+        status: "stopped",
         primary: true,
         session_name: "sym-dev-front"
       })
@@ -133,6 +265,52 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert [%{id: row_id, slug: "front"}] = Manager.list_for_issue(project.slug, "#1")
     assert Manager.list_for_issue(project.slug, "#1") == Manager.list_for_issue(project.slug, "1")
     assert row_id == row.id
+  end
+
+  describe "capture_server_output/3" do
+    setup do
+      previous = Application.get_env(:symphony_elixir, :terminal_tmux)
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:symphony_elixir, :terminal_tmux, previous),
+          else: Application.delete_env(:symphony_elixir, :terminal_tmux)
+      end)
+
+      :ok
+    end
+
+    test "returns empty output when the tmux pane no longer exists", %{project: project} do
+      {:ok, record} =
+        DevServerRecord.upsert(project.id, "1878", "goapi", %{
+          working_dir: "goapi",
+          port: 6363,
+          status: "ready",
+          primary: false,
+          session_name: "sym-dev-gamba-1878-goapi"
+        })
+
+      Application.put_env(:symphony_elixir, :terminal_tmux, MissingPaneTmux)
+
+      assert {:ok, %{output: "", session_name: "sym-dev-gamba-1878-goapi"}} =
+               Manager.capture_server_output(project.slug, "1878", record.id)
+    end
+
+    test "propagates unexpected tmux errors", %{project: project} do
+      {:ok, record} =
+        DevServerRecord.upsert(project.id, "1878", "goapi", %{
+          working_dir: "goapi",
+          port: 6363,
+          status: "ready",
+          primary: false,
+          session_name: "sym-dev-gamba-1878-goapi"
+        })
+
+      Application.put_env(:symphony_elixir, :terminal_tmux, BrokenTmux)
+
+      assert {:error, "tmux server exited unexpectedly"} =
+               Manager.capture_server_output(project.slug, "1878", record.id)
+    end
   end
 
   test "instance child specs are temporary so manual stops do not restart" do
@@ -284,8 +462,226 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.live_ports() == []
   end
 
+  test "auto-mode start leases a band and a per-issue slot", %{project: project} do
+    alias SymphonyElixir.DevServer.LeaseStore
+
+    enable_project_dev_server_auto!(project)
+    prepare_workspace!("1")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Broken", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert {:ok, 0} = LeaseStore.ensure_band(project.id, 78)
+    assert {:ok, 0} = LeaseStore.slot_for_issue(project.id, "1")
+    assert Manager.live_ports() == []
+  end
+
+  test "auto-mode gives distinct slots to distinct issues", %{project: project} do
+    alias SymphonyElixir.DevServer.LeaseStore
+
+    enable_project_dev_server_auto!(project)
+    prepare_workspace!("1")
+    prepare_workspace!("2")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Broken", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert Manager.start_for_issue(project.slug, "#2") == {:error, :crashed}
+
+    assert {:ok, 0} = LeaseStore.slot_for_issue(project.id, "1")
+    assert {:ok, 1} = LeaseStore.slot_for_issue(project.id, "2")
+  end
+
+  test "pinned port_range still leases a slot inside the pinned band", %{project: project} do
+    alias SymphonyElixir.DevServer.LeaseStore
+
+    enable_project_dev_server!(project, port_range: [4100, 4199], max_concurrent: 2)
+    prepare_workspace!("1")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Broken", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert [] = SymphonyElixir.Repo.all(SymphonyElixir.LocalTracker.PreviewBand)
+    assert {:ok, 0} = LeaseStore.slot_for_issue(project.id, "1")
+  end
+
+  test "stop_for_issue releases the issue slot lease", %{project: project} do
+    alias SymphonyElixir.DevServer.LeaseStore
+
+    enable_project_dev_server_auto!(project)
+    prepare_workspace!("1")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Broken", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+    assert {:ok, 0} = LeaseStore.slot_for_issue(project.id, "1")
+
+    assert :ok = Manager.stop_for_issue(project.slug, "#1")
+    assert :error = LeaseStore.slot_for_issue(project.id, "1")
+  end
+
+  test "running_issue_keys is empty with no live instances" do
+    ensure_manager_started!()
+    assert Manager.running_issue_keys() == MapSet.new()
+  end
+
   test "stop_instance_for_server returns not_found for an unknown server id", %{project: project} do
     assert Manager.stop_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
+  end
+
+  test "start_instance_for_server restarts a crashed instance instead of no-op", %{project: project} do
+    enable_project_dev_server!(project, port_range: [4100, 4199], max_concurrent: 2)
+    identifier = "535-start-restart"
+    workspace = prepare_workspace!(identifier)
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Front",
+          command: "npm run dev",
+          role: "serve",
+          working_dir: "front",
+          primary: true
+        }
+      ])
+
+    slug = "front"
+    key = {project.slug, identifier, slug}
+
+    {:ok, old_pid} =
+      Instance.start_link(
+        registry_name: {:via, Registry, {instance_registry(), key}},
+        project_id: project.id,
+        project_slug: project.slug,
+        identifier: identifier,
+        workspace_path: workspace,
+        step: %{
+          slug: slug,
+          command: "npm run dev",
+          working_dir: "front",
+          port_env: "PORT",
+          url_path: "/",
+          ready_probe: "tcp",
+          ready_path: "/",
+          primary: true
+        },
+        idle_timeout_ms: 60_000,
+        tmux: FakeTmux,
+        command_sender: &FakeTmux.send_keys/2,
+        port_allocator: fn _range, _claimed -> {:ok, 4101} end,
+        probe: fn "127.0.0.1", 4101, "tcp", "/" -> {:error, :timeout} end,
+        probe_interval_ms: 5,
+        max_probe_attempts: 1
+      )
+
+    assert_eventually(fn -> Instance.status(old_pid) == :crashed end)
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, identifier, slug, %{
+        working_dir: "front",
+        port: 4101,
+        url: "http://127.0.0.1:4101/",
+        status: "crashed",
+        primary: true,
+        session_name: "sym-dev-test"
+      })
+
+    result = Manager.start_instance_for_server(project.slug, identifier, record.id)
+    refute match?({:ok, [^old_pid]}, result)
+
+    new_pid =
+      case Registry.lookup(instance_registry(), key) do
+        [{pid, _}] -> pid
+        [] -> nil
+      end
+
+    assert is_pid(new_pid)
+    refute new_pid == old_pid
+    refute Process.alive?(old_pid)
+  end
+
+  test "start_for_issue/3 honors a short ready_timeout_ms instead of blocking on a starting instance", %{
+    project: project
+  } do
+    enable_project_dev_server!(project, port_range: [4100, 4199], max_concurrent: 2)
+    identifier = "771-bounded-start"
+    workspace = prepare_workspace!(identifier)
+    File.mkdir_p!(Path.join(workspace, "front"))
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front", primary: true}
+      ])
+
+    slug = "front"
+    key = {project.slug, identifier, slug}
+
+    {:ok, pid} =
+      Instance.start_link(
+        registry_name: {:via, Registry, {instance_registry(), key}},
+        project_id: project.id,
+        project_slug: project.slug,
+        identifier: identifier,
+        workspace_path: workspace,
+        step: %{
+          slug: slug,
+          command: "npm run dev",
+          working_dir: "front",
+          port_env: "PORT",
+          url_path: "/",
+          ready_probe: "tcp",
+          ready_path: "/",
+          primary: true
+        },
+        idle_timeout_ms: 60_000,
+        tmux: FakeTmux,
+        command_sender: &FakeTmux.send_keys/2,
+        port_allocator: fn _range, _claimed -> {:ok, 4101} end,
+        # Never readies; the next probe is far enough out that the instance stays
+        # `starting` for the whole test instead of crashing.
+        probe: fn _host, _port, _probe, _path -> {:error, :timeout} end,
+        probe_interval_ms: 60_000,
+        max_probe_attempts: 1_000
+      )
+
+    # Detach from the test process so teardown order can't race the instance,
+    # then stop it explicitly (the instance traps exits, so it would otherwise
+    # outlive the test and leak its port into later tests).
+    Process.unlink(pid)
+
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        try do
+          Instance.stop(pid)
+        catch
+          :exit, _reason -> :ok
+        end
+      end
+    end)
+
+    # A 0ms ready budget must return immediately and reuse the already-running
+    # (still starting) instance instead of waiting for readiness — proving the
+    # bound is threaded all the way through start_for_issue.
+    assert {:ok, [^pid]} = Manager.start_for_issue(project.slug, "##{identifier}", ready_timeout_ms: 0)
+    assert Instance.status(pid) in [:provisioning, :starting]
   end
 
   test "start_instance_for_server returns not_found for an unknown server id", %{project: project} do
@@ -294,6 +690,38 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
 
   test "restart_instance_for_server returns not_found for an unknown server id", %{project: project} do
     assert Manager.restart_instance_for_server(project.slug, "#1", 999) == {:error, :not_found}
+  end
+
+  test "start_instance_for_server resolves the serve step for a configured server (regression: unique_serve_steps arg order)",
+       %{project: project} do
+    enable_project_dev_server!(project, port_range: [4100, 4199], max_concurrent: 2)
+    prepare_workspace!("1")
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Missing", command: "npm run dev", role: "serve", working_dir: "missing"}
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1", "missing", %{
+        working_dir: "missing",
+        port: 4100,
+        url: "http://127.0.0.1:4100/",
+        status: "stopped",
+        primary: true,
+        session_name: "sym-dev-missing"
+      })
+
+    result = Manager.start_instance_for_server(project.slug, "#1", record.id)
+
+    # Before the fix, serve_step_for_slug piped the step list into
+    # unique_serve_steps/3 with swapped args, so the is_binary guards failed
+    # and it always returned []. Every per-server Start/Restart control then
+    # failed with {:error, :no_serve_step}. The serve step must resolve now;
+    # the start only fails because the configured working dir does not exist.
+    refute result == {:error, :no_serve_step}
+    assert result == {:error, :crashed}
   end
 
   test "stop_instance_for_server stops a persisted server by id", %{project: project} do
@@ -334,6 +762,10 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
 
   defp reservation_table do
     Module.concat(Manager, PortReservations)
+  end
+
+  defp instance_registry do
+    Module.concat(Manager, Registry)
   end
 
   defp ensure_manager_started! do
@@ -392,4 +824,64 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
 
     :ok
   end
+
+  defp enable_project_dev_server_auto!(project) do
+    workflow_markdown =
+      SymphonyElixir.Workflow.to_markdown(
+        %{"dev_server" => %{"enabled" => true, "idle_timeout_ms" => 60_000}},
+        ""
+      )
+
+    {:ok, _setup} =
+      Context.upsert_project_setup(project.slug, %{"workflow_markdown" => workflow_markdown})
+
+    :ok
+  end
+
+  defp prepare_workspace!(identifier) do
+    workspace = SymphonyElixir.Workspace.path_for_issue(identifier)
+    File.rm_rf!(workspace)
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf(workspace) end)
+    workspace
+  end
+
+  defp start_probe_server! do
+    {:ok, listen_socket} =
+      :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, ip: {127, 0, 0, 1}])
+
+    {:ok, port} = :inet.port(listen_socket)
+
+    Task.start_link(fn ->
+      probe_server_loop(listen_socket)
+    end)
+
+    on_exit(fn -> :gen_tcp.close(listen_socket) end)
+    port
+  end
+
+  defp probe_server_loop(listen_socket) do
+    case :gen_tcp.accept(listen_socket) do
+      {:ok, client} ->
+        _ = :gen_tcp.send(client, "HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok")
+        :gen_tcp.close(client)
+        probe_server_loop(listen_socket)
+
+      {:error, _} ->
+        :ok
+    end
+  end
+
+  defp assert_eventually(fun, attempts \\ 40)
+
+  defp assert_eventually(fun, attempts) when attempts > 0 do
+    if fun.() do
+      assert true
+    else
+      Process.sleep(25)
+      assert_eventually(fun, attempts - 1)
+    end
+  end
+
+  defp assert_eventually(_fun, 0), do: flunk("condition not met in time")
 end

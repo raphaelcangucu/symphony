@@ -1,0 +1,2020 @@
+{
+  "common": {
+    "loading": "Carregando…",
+    "close": "Fechar",
+    "save": "Salvar",
+    "refresh": "Atualizar"
+  },
+  "ui": {
+    "dialog": {
+      "close": "Fechar"
+    }
+  },
+  "settings": {
+    "title": "Configurações",
+    "subtitle": "Padrões da instância Symphony para o operador.",
+    "loadFailed": "Falha ao carregar configurações — atualize para tentar novamente.",
+    "codingAgent": {
+      "title": "Agente de código",
+      "description": "Agente padrão para novo trabalho. Projetos e tarefas podem sobrescrever (tarefa > projeto > este padrão).",
+      "saved": "Agente de código padrão definido como {{agent}}",
+      "saveFailed": "Falha ao salvar o agente de código padrão",
+      "availabilityFailed": "Não foi possível verificar a disponibilidade dos agentes.",
+      "notFound": "{{command}} não encontrado — instale ou escolha outro agente"
+    },
+    "language": {
+      "title": "Idioma",
+      "description": "Idioma da interface do tracker. Notificações push usam inglês enquanto estiver em Automático.",
+      "auto": "Automático (navegador)",
+      "en": "English",
+      "pt-BR": "Português (Brasil)",
+      "saved": "Preferência de idioma salva",
+      "saveFailed": "Falha ao salvar preferência de idioma",
+      "loadFailed": "Falha ao carregar configurações de idioma — atualize para tentar novamente."
+    },
+    "orchestration": {
+      "title": "Regras de orquestração",
+      "description": "O que o orquestrador pode iniciar sozinho. Os padrões são conservadores para não pegar trabalho sem label ou sem assignee.",
+      "loadFailed": "Falha ao carregar regras — atualize para tentar novamente.",
+      "saveFailed": "Falha ao salvar regra de orquestração",
+      "rules": {
+        "requireSymphonyLabel": {
+          "title": "Exigir label Symphony",
+          "description": "Só auto-iniciar issues com label symphony, symphony:codex ou symphony:claude. Dispatch manual do board nunca é afetado."
+        },
+        "requireAssigneeMatch": {
+          "title": "Exigir assignee para mim",
+          "description": "Só auto-iniciar issues atribuídas à identidade conectada (login GitHub, conta Jira ou usuário Linear)."
+        }
+      }
+    },
+    "push": {
+      "title": "Notificações do navegador",
+      "description": "Receba avisos quando uma issue precisar de revisão humana, evidência estiver pronta, uma execução do agente falhar ou travar, o monitor de PR sinalizar algo, ou uma tarefa for atribuída a você — mesmo com a aba em segundo plano.",
+      "unsupported": "Web Push não é suportado neste navegador.",
+      "notConfigured": "Push não está configurado no servidor. Defina SYMPHONY_VAPID_PUBLIC_KEY e SYMPHONY_VAPID_PRIVATE_KEY e reinicie o Symphony.",
+      "enabled": "Notificações ativadas neste navegador.",
+      "prompt": "Ative notificações para Human Review, evidência, falhas do agente e alertas do monitor de PR.",
+      "disable": "Desativar notificações",
+      "sendTest": "Enviar notificação de teste",
+      "enable": "Ativar notificações",
+      "errors": {
+        "loadFailed": "Falha ao carregar configurações de notificação push",
+        "permissionDenied": "Permissão de notificação negada",
+        "enableFailed": "Falha ao ativar notificações do navegador",
+        "disableFailed": "Falha ao desativar notificações do navegador",
+        "noSubscriptions": "Nenhuma inscrição push no servidor — desative e reative as notificações",
+        "testFailed": "Falha ao enviar notificação de teste"
+      }
+    },
+    "identities": {
+      "title": "Identidades conectadas",
+      "description": "Com quem o Symphony se autentica em cada provider. A regra \"atribuídas a mim\" do orquestrador usa essas identidades.",
+      "loadFailed": "Falha ao carregar identidades — atualize para tentar novamente.",
+      "loading": "Carregando…",
+      "providers": { "github": "GitHub", "jira": "Jira", "linear": "Linear" },
+      "status": {
+        "notConfigured": "Não configurado",
+        "connected": "Conectado",
+        "error": "Erro"
+      },
+      "describe": {
+        "addToken": "Adicione um token abaixo para conectar este provider.",
+        "connected": "Conectado",
+        "verifyFailed": "Não foi possível verificar: {{error}}",
+        "verifyTokenFailed": "Não foi possível verificar o token."
+      }
+    },
+    "credentials": {
+      "title": "Tokens de providers",
+      "description": "Tokens salvos aqui são criptografados em repouso e substituem a variável de ambiente correspondente. Deixe um segredo em branco para manter o valor atual ou limpe para voltar ao ambiente.",
+      "loadFailed": "Falha ao carregar credenciais — atualize para tentar novamente.",
+      "loading": "Carregando…",
+      "save": "Salvar",
+      "clear": "Limpar",
+      "placeholderNotSet": "Não definido",
+      "placeholderReplace": "{{hint}} — digite um novo valor para substituir",
+      "source": {
+        "savedHere": "Salvo aqui",
+        "fromEnv": "Do ambiente",
+        "notSet": "Não definido"
+      },
+      "toasts": {
+        "saved": "{{label}} salvo",
+        "saveFailed": "Falha ao salvar {{label}}",
+        "cleared": "{{label}} removido",
+        "clearFailed": "Falha ao remover {{label}}"
+      }
+    }
+  },
+  "issue": {
+    "bundle": {
+      "title": "Pacote de execução",
+      "contracts": "Contratos compartilhados",
+      "dependsOn": "depende de {{units}}",
+      "consumes": "consome {{contracts}}"
+    },
+    "agent": {
+      "advancedControls": "Controles avançados",
+      "controlTitle": "Controle do agente",
+      "hintSteer": "Direcione a execução ao vivo com /infer, ou pause para parar com segurança.",
+      "hintBusy": "Agente ocupado — enfileire orientação para o próximo resume, ou pause para parar com segurança.",
+      "hintResume": "Retome de onde parou, reinicie do zero ou adicione orientação antes de retomar.",
+      "hintStart": "Inicie o agente nesta issue. Adicione orientação opcional antes.",
+      "workflowObjective": "Objetivo do workflow",
+      "goalObjective": "Objetivo da meta",
+      "goalDefaultObjective": "Implementar conforme spec e plano",
+      "goalCommandWithObjective": "Persiga este goal de execução via o orquestrador. Objetivo: {{objective}}. Continue trabalhando nele ao longo dos turnos até a issue estar pronta ou você ficar bloqueado.",
+      "goalCommandDefault": "Persiga um goal de execução via o orquestrador. Derive o objetivo a partir do spec/plano/handoff existentes e continue trabalhando nele ao longo dos turnos até a issue estar pronta ou você ficar bloqueado.",
+      "goalSetDone": "Goal de execução salvo",
+      "sendGoalAria": "Enviar meta no resume ou restart",
+      "queuedGuidance": "Orientação enfileirada · enviada no próximo resume",
+      "queuedAttachments": "{{count}} anexo(s)",
+      "removeQueuedAria": "Remover orientação enfileirada",
+      "remove": "Remover",
+      "placeholderSteer": "/infer foque no teste que falhou primeiro",
+      "placeholderQueue": "Adicione orientação para enfileirar no próximo resume…",
+      "placeholderResume": "Orientação opcional, depois Resume…",
+      "placeholderStart": "Orientação opcional, depois Start…",
+      "restartTitle": "Iniciar uma nova passagem do agente nesta issue",
+      "restartPauseFirst": "Pause a execução ativa antes de reiniciar",
+      "restart": "Reiniciar",
+      "restarting": "Reiniciando…",
+      "hardResetTitle": "Parar a execução, limpar a sessão (turnos e tokens) e começar do zero. Mantém o workspace.",
+      "hardReset": "Reset completo",
+      "resetting": "Resetando…",
+      "sendingSteer": "Enviando steer…",
+      "pauseTitle": "Pausar a execução (mantém a sessão para retomar depois)",
+      "starting": "Iniciando…",
+      "resuming": "Retomando…",
+      "dispatchResume": "Retomando agente…",
+      "dispatchRestart": "Reiniciando agente…",
+      "dispatchHardReset": "Resetando sessão…",
+      "dispatchStop": "Pausando agente…",
+      "dispatchFailed": "Falha no dispatch",
+      "hardResetDialogTitle": "Reset completo da sessão?",
+      "hardResetDialogDescription": "Isso para qualquer execução ativa, descarta a sessão atual do agente e limpa contadores de turnos e tokens, depois inicia uma sessão nova. O workspace e o estado git são preservados.",
+      "cancel": "Cancelar",
+      "modelsHint": "Modelos de {{command}}. Agente e modelo aplicam no resume/restart; /infer direciona a sessão {{agent}} ao vivo.",
+      "steerNotAvailable": "Nenhum turno direcionável em execução — use Resume para retomar.",
+      "orchestratorUnavailable": "O orquestrador está indisponível; tente novamente em instantes.",
+      "primaryStart": "Iniciar",
+      "primaryPause": "Pausar",
+      "primaryResume": "Retomar",
+      "enterSteer": "Enter para direcionar",
+      "enterQueue": "Enter para enfileirar",
+      "enterResume": "Enter para retomar",
+      "enterStart": "Enter para iniciar",
+      "agentMenu": "Agente",
+      "steer": "Direcionar",
+      "queue": "Enfileirar",
+      "pausing": "Pausando…",
+      "effort": "Esforço",
+      "executionStatus": {
+        "live": "Ao vivo",
+        "idle": "Ocioso",
+        "waiting": "Aguardando",
+        "retrying": "Repetindo",
+        "error": "Erro",
+        "aborted": "Abortado",
+        "saved": "Goal salvo"
+      },
+      "goalStatus": {
+        "active": "Ativo",
+        "paused": "Pausado",
+        "blocked": "Bloqueado",
+        "complete": "Concluído",
+        "completed": "Concluído",
+        "budgetLimited": "Limite de orçamento",
+        "usageLimited": "Limite de uso",
+        "interrupted": "Interrompido",
+        "not_loaded": "Não carregado"
+      },
+      "goalControls": {
+        "pause": "Pausar goal",
+        "resume": "Retomar goal",
+        "clear": "Limpar goal",
+        "pauseDone": "Goal pausado",
+        "resumeDone": "Goal retomado",
+        "clearDone": "Goal limpo",
+        "failed": "Falha no controle do goal"
+      },
+      "tab": {
+        "runStatus": "Status da execução",
+        "noActiveAgent": "Nenhum agente ativo",
+        "session": "Sessão",
+        "turn": "Turno",
+        "runtime": "Tempo de execução",
+        "started": "Iniciado",
+        "lastActivity": "Última atividade",
+        "retryAttempt": "Tentativa de retry",
+        "goalSource": "Origem: {{source}}",
+        "goalSourceNative": "estado nativo do agente",
+        "goalSourcePrompt": "orientação do prompt",
+        "goalCapabilities": "Capacidades: {{list}}",
+        "goalStatus": "Status",
+        "goalBudget": "Orçamento de tokens",
+        "goalTokensUsed": "Tokens usados",
+        "goalTimeUsed": "Tempo usado",
+        "goalBudgetUnlimited": "Ilimitado",
+        "goalSeconds": "{{seconds}}s",
+        "noExecution": "Nenhum agente está executando esta issue no momento.",
+        "executionGoalSaved": "Goal de execução salvo, não em execução",
+        "executionGoalSavedHint": "Inicie o agente nesta aba para rodar este goal pelo orquestrador.",
+        "latestUpdate": "Última atualização",
+        "lastError": "Último erro",
+        "tokens": "Tokens",
+        "input": "Entrada",
+        "output": "Saída",
+        "total": "Total",
+        "assignment": "Atribuição",
+        "noAgentAssigned": "Nenhum agente atribuído",
+        "agentSection": "Agente",
+        "inherit": "Herdar",
+        "stopToChange": "Pare a execução ativa para trocar o agente.",
+        "retryPaused": "Retries ficam pausados ao escolher outro agente. Mova a issue para fora do estado ativo para parar o re-dispatch por completo.",
+        "updateFailed": "Falha ao atualizar agente"
+      }
+    },
+    "drawer": {
+      "tabs": {
+        "summary": "Resumo",
+        "pr": "Pull request",
+        "comments": "Comentários",
+        "evidence": "Evidência",
+        "blockers": "Bloqueios",
+        "agent": "Agente",
+        "preview": "Preview",
+        "activity": "Atividade",
+        "terminal": "Terminal"
+      },
+      "openInCode": "Abrir no Code",
+      "openInCodeBrowser": "Abrir no VS Code (navegador)",
+      "openInCursor": "Abrir no Cursor (app local)",
+      "issueActions": "Ações da issue",
+      "openWorkspaceCode": "Abrir o workspace desta tarefa no Code (.)",
+      "blocked": "Bloqueada",
+      "syncFromRemote": "Sincronizar do remoto",
+      "archive": "Arquivar",
+      "delete": "Excluir",
+      "deleteConfirm": "Excluir {{identifier}} permanentemente? Isso remove do board e não pode ser desfeito.",
+      "issueTitleAria": "Título da issue",
+      "untitledIssue": "Issue sem título",
+      "unassigned": "Sem assignee",
+      "group": {
+        "title": "Grupo",
+        "lead": "Principal",
+        "current": "Esta issue",
+        "unavailable": "Fora da visão atual"
+      },
+      "code": "Code",
+      "editor": {
+        "checking": "Verificando editor…",
+        "starting": "Editor iniciando…",
+        "workspaceMissing": "Workspace ainda não criado — execute o agente ou abra o terminal primeiro",
+        "workspacePreparing": "Workspace ainda preparando — tente novamente em instantes",
+        "unavailableUpgrade": "Editor indisponível — reinicie o Symphony após atualizar (make build && make update)",
+        "unavailable": "Editor indisponível",
+        "vsCode": "VS Code",
+        "cursor": "Cursor"
+      }
+    },
+    "agentTabs": {
+      "authoringHint": "Rascunhe o brief e o plano, depois despache o agente.",
+      "executionHint": "Acompanhe a execução ao vivo, direcione com /infer e pause ou retome.",
+      "sectionsAria": "Seções do agente",
+      "authoring": "Authoring",
+      "execution": "Execução"
+    },
+    "toolCall": {
+      "status": {
+        "running": "em execução",
+        "completed": "concluído",
+        "failed": "falhou"
+      },
+      "tools": {
+        "add_comment": "Adicionar comentário",
+        "apply_patch": "Editar arquivos",
+        "check_handoff_gate": "Verificar gate de handoff",
+        "create_draft_issue": "Criar rascunho de issue",
+        "create_github_tracker_project": "Criar projeto tracker no GitHub",
+        "create_issue": "Criar issue",
+        "create_tracker_project": "Criar projeto tracker",
+        "dispatch_coding_agent": "Disparar agente de código",
+        "dispatch_codex": "Disparar Codex",
+        "get_agent_executions": "Listar execuções do agente",
+        "get_evidence_status": "Obter status da evidência",
+        "get_issue": "Obter issue",
+        "get_issue_form_options": "Obter opções do formulário",
+        "get_project": "Obter projeto",
+        "get_template": "Obter template",
+        "get_workflow": "Obter workflow",
+        "list_comments": "Listar comentários",
+        "list_github_projects": "Listar projetos GitHub",
+        "list_issues": "Listar issues",
+        "list_jira_projects": "Listar projetos Jira",
+        "list_linear_projects": "Listar projetos Linear",
+        "list_project_repositories": "Listar repositórios do projeto",
+        "list_pull_requests": "Listar pull requests",
+        "list_templates": "Listar templates",
+        "list_tracker_projects": "Listar projetos do tracker",
+        "manage_dev_env": "Gerenciar ambiente de dev",
+        "manage_preview": "Gerenciar preview",
+        "move_issue": "Mover issue",
+        "provision_github_project": "Provisionar projeto GitHub",
+        "read_workspace_file": "Ler arquivo do workspace",
+        "scan_project_setup": "Escanear setup do projeto",
+        "shell": "Rodar comando",
+        "suggest_project_setup": "Sugerir setup do projeto",
+        "update_comment": "Atualizar comentário",
+        "update_issue": "Atualizar issue",
+        "update_project_repositories": "Atualizar repositórios do projeto",
+        "update_project_workflow": "Atualizar workflow do projeto"
+      },
+      "input": "ENT",
+      "output": "SAÍ",
+      "showMore": "… mostrar mais",
+      "fileActivity": {
+        "read": "Leu",
+        "edited": "Editou",
+        "command": "Rodou",
+        "files_one": "{{count}} arquivo",
+        "files_other": "{{count}} arquivos",
+        "running": "Trabalhando…",
+        "expand": "Alternar detalhes"
+      }
+    },
+    "inlineMarkdown": {
+      "placeholder": "Adicione uma descrição…",
+      "descriptionAria": "Descrição da issue",
+      "editAria": "Editar descrição",
+      "nothingToPreview": "Nada para pré-visualizar ainda.",
+      "hint": "⌘↵ para salvar · Markdown suportado · cole imagens"
+    },
+    "inlineText": {
+      "placeholder": "Clique para editar",
+      "editAria": "Editar",
+      "saveHint": "⌘↵ para salvar"
+    },
+    "comments": {
+      "write": "Escrever",
+      "preview": "Pré-visualizar",
+      "toolbar": {
+        "heading": "Título",
+        "bold": "Negrito",
+        "italic": "Itálico",
+        "code": "Código",
+        "link": "Link",
+        "bulletedList": "Lista com marcadores",
+        "numberedList": "Lista numerada",
+        "taskList": "Lista de tarefas"
+      },
+      "placeholder": "Use Markdown para formatar · cole imagens para anexar",
+      "nothingToPreview": "Nada para pré-visualizar.",
+      "uploadingImage": "Enviando imagem…",
+      "markdownHint": "Markdown suportado · cole imagens · ⌘/Ctrl+Enter para enviar",
+      "posting": "Publicando…",
+      "comment": "Comentar",
+      "loading": "Carregando comentários…",
+      "empty": "Nenhum comentário ainda.",
+      "addFailed": "Falha ao adicionar comentário",
+      "updateFailed": "Falha ao atualizar comentário",
+      "deleteConfirm": "Excluir este comentário? Isso não pode ser desfeito.",
+      "deleteFailed": "Falha ao excluir comentário",
+      "cancel": "Cancelar",
+      "saving": "Salvando…",
+      "save": "Salvar",
+      "errors": {
+        "loadFailed": "Não foi possível carregar os comentários."
+      },
+      "editAria": "Editar comentário",
+      "deleteAria": "Excluir comentário",
+      "linkPlaceholder": "texto",
+      "mentions": {
+        "listLabel": "Mencionar um usuário"
+      },
+      "card": {
+        "unknownAuthor": "Desconhecido",
+        "commented": "comentou",
+        "empty": "Comentário vazio.",
+        "openOnGitHub": "Abrir no GitHub",
+        "sync": {
+          "pending": "Sincronizando…",
+          "conflict": "Conflito de sync",
+          "error": "Falha no sync"
+        },
+        "workpad": "Workpad",
+        "evidence": "Evidência",
+        "evidenceArtifactsHint": "Artefatos completos (vídeos, relatórios, traces): abra a aba Evidência.",
+        "workpadSectionEmpty": "Sem notas ainda.",
+        "workpadPullRequests": "Pull requests vinculados",
+        "workpadRegistryHint": "Registro sincronizado",
+        "workpadPrStatus": {
+          "active": "Ativo",
+          "closed_superseded_unlinked": "Substituído"
+        }
+      }
+    },
+    "priority": {
+      "none": "Sem prioridade",
+      "urgent": "Urgente",
+      "high": "Alta",
+      "medium": "Média",
+      "low": "Baixa"
+    },
+    "inline": {
+      "agent": {
+        "title": "Agente",
+        "loading": "Carregando agentes...",
+        "save": "Salvar",
+        "close": "Fechar"
+      },
+      "assignee": {
+        "title": "Responsável",
+        "unassigned": "Não atribuído",
+        "searchPlaceholder": "Buscar responsáveis…",
+        "searchAria": "Buscar responsáveis",
+        "loading": "Carregando usuários…",
+        "empty": "Nenhum responsável encontrado.",
+        "mePrefix": "Eu — {{label}}",
+        "unknown": "Desconhecido"
+      },
+      "priority": {
+        "title": "Prioridade"
+      },
+      "status": {
+        "title": "Status"
+      }
+    },
+    "commits": {
+      "title": "Commits do agente",
+      "refresh": "Atualizar",
+      "workspaceUnavailable": "Workspace indisponível nesta máquina — histórico de commits não pode ser lido localmente.",
+      "loading": "Carregando commits…",
+      "empty": "Nenhum commit do agente à frente do branch de integração ainda.",
+      "files_one": "{{count}} arquivo",
+      "files_other": "{{count}} arquivos",
+      "sheet": {
+        "title": "Commit",
+        "descriptionFallback": "Alterações do commit do agente",
+        "loadFailed": "Não foi possível carregar o diff do commit.",
+        "loadingDiff": "Carregando diff…",
+        "noFiles": "Nenhuma alteração de arquivo neste commit.",
+        "selectFile": "Selecione um arquivo para ver o diff."
+      },
+      "errors": {
+        "loadFailed": "Não foi possível carregar a evidência de commits."
+      }
+    },
+    "preview": {
+      "cannotLoadTitle": "Preview não pode carregar",
+      "cannotLoadBody": "Identificadores de projeto e issue são necessários para carregar o status do preview.",
+      "loadingTitle": "Carregando status do preview...",
+      "loadingBody": "Verificando disponibilidade do dev-server para esta issue.",
+      "loadErrorTitle": "Não foi possível carregar o status do preview",
+      "unavailableTitle": "Status do preview indisponível",
+      "unavailableBody": "Nenhum status de preview foi carregado para esta issue ainda.",
+      "refreshErrorTitle": "Não foi possível atualizar o status do preview",
+      "cardTitle": "Preview da issue",
+      "availability": "Disponibilidade: {{status}}",
+      "available": "disponível",
+      "unavailable": "indisponível",
+      "refreshing": " · atualizando status",
+      "readyFrom": "Preview pronto a partir de {{slug}}.",
+      "ready": "Preview pronto.",
+      "publicTunnel": "Público (túnel Cloudflare):",
+      "local": "Local:",
+      "openPreview": "Abrir preview",
+      "provisioningTitle": "Preview sendo provisionado...",
+      "devServers": "Dev Servers",
+      "noServers": "Nenhum dev server em execução. Use Iniciar preview quando quiser provisionar um.",
+      "startPreview": "Iniciar preview",
+      "stopPreview": "Parar preview",
+      "restartPreview": "Reiniciar preview",
+      "start": "Iniciar",
+      "stop": "Parar",
+      "restart": "Reiniciar",
+      "startServerAria": "Iniciar preview {{slug}}",
+      "stopServerAria": "Parar preview {{slug}}",
+      "restartServerAria": "Reiniciar preview {{slug}}",
+      "tunnelRunningTitle": "URLs públicas de preview",
+      "tunnelRunningBody": "O túnel Cloudflare está ativo; os links públicos *.tracker.cods.dev abaixo alcançam esta máquina e podem ser compartilhados com o time.",
+      "tunnelStoppedTitle": "Túnel Cloudflare não está ativo",
+      "tunnelStoppedBody": "Links públicos de preview não funcionam até o túnel estar ativo. Apenas URLs localhost são mostradas abaixo. Inicie o túnel para expor os hosts públicos *.tracker.cods.dev.",
+      "startingTunnel": "Iniciando túnel...",
+      "startTunnel": "Iniciar túnel",
+      "askAssistant": "Pedir ao assistente para corrigir",
+      "primaryBadge": "principal",
+      "workingDir": "Diretório de trabalho: {{dir}}",
+      "noWorkingDir": "Nenhum diretório de trabalho informado",
+      "port": " · Porta {{port}}",
+      "openServerPreview": "Abrir preview {{slug}}",
+      "noUrlYet": "Sem URL ainda",
+      "provisioningStatus": "O dev server {{slug}} está {{status}} e ainda não publicou uma URL.",
+      "availabilityReason": {
+        "disabled": {
+          "title": "Previews de dev-server desativados",
+          "body": "Disponibilidade desativada para este projeto. Ative previews de dev-server no workflow do projeto antes de usar Iniciar preview."
+        },
+        "workspace_missing": {
+          "title": "Workspace do preview ausente",
+          "body": "Disponibilidade bloqueada porque o workspace da issue não foi encontrado. Crie ou restaure o workspace antes de iniciar um preview."
+        },
+        "no_serve_step": {
+          "title": "Nenhum passo serve configurado",
+          "body": "Disponibilidade bloqueada porque este projeto não tem um passo serve de dev-server configurado."
+        },
+        "no_free_port": {
+          "title": "Sem porta livre para preview",
+          "body": "Disponibilidade bloqueada porque o sistema não conseguiu reservar uma porta livre para o dev server."
+        },
+        "lock_unavailable": {
+          "title": "Preview já está sendo alterado",
+          "body": "Outra ação de preview está segurando o lock. Controles manuais permanecem disponíveis para tentar novamente após a ação atual terminar."
+        },
+        "start_failed": {
+          "title": "Falha ao iniciar preview",
+          "body": "A última solicitação de start falhou. Controles manuais permanecem disponíveis para tentar novamente ou reiniciar após verificar a saída do servidor."
+        },
+        "restart_failed": {
+          "title": "Falha ao reiniciar preview",
+          "body": "A última solicitação de restart falhou. Controles manuais permanecem disponíveis para tentar novamente quando o problema subjacente for resolvido."
+        },
+        "crashed": {
+          "title": "Preview travou",
+          "body": "Disponibilidade bloqueada porque o processo de preview travou. Controles manuais permanecem disponíveis para reiniciar após verificar os logs do servidor."
+        },
+        "default": {
+          "title": "Preview indisponível",
+          "body": "Disponibilidade bloqueada no momento. Resolva o problema acima e use Iniciar preview quando estiver pronto."
+        }
+      },
+      "failurePrompt": {
+        "intro": "O servidor de preview da issue falhou. Diagnostique o workspace, corrija a causa raiz e me avise quando Iniciar preview voltar a funcionar.",
+        "availability": "Disponibilidade: {{status}}",
+        "availabilityReason": "Motivo da indisponibilidade: {{reason}}",
+        "failedServer": "Servidor com falha: {{slug}}",
+        "status": "Status: {{status}}",
+        "workingDirectory": "Diretório de trabalho: {{dir}}",
+        "port": "Porta: {{port}}",
+        "tmuxSession": "Sessão tmux: {{session}}",
+        "inspectLogs": "Inspecionar logs: tmux capture-pane -t {{session}} -p -S -80",
+        "footer": "Verifique os passos setup/serve do DevEnv, execute instalações faltantes (por exemplo npm ci em front/) e confirme que npm run dev ou o comando serve configurado funciona no workspace da issue."
+      }
+    },
+    "evidence": {
+      "status": {
+        "passed": "Aprovado",
+        "failed": "Falhou",
+        "blocked": "Bloqueado"
+      },
+      "missing": "Nenhuma evidência registrada no tracker.",
+      "incomplete": "Validação incompleta — {{details}}{{suffix}}",
+      "failedStatus": "Última evidência com status \"{{status}}\".",
+      "failedRunsHeader": "Runs que falharam ou ficaram bloqueados na última tentativa:",
+      "absent": "Evidence: ausente",
+      "tab": {
+        "title": "Runs de evidência",
+        "refresh": "Atualizar",
+        "clearFailed": "Limpar falhas",
+        "clearAll": "Limpar tudo",
+        "clearFailedConfirm": "Remover todas as evidências com falha ou bloqueadas desta issue?",
+        "clearAllConfirm": "Remover todas as evidências desta issue? Isso não pode ser desfeito.",
+        "deleteRun": "Remover run {{runId}}",
+        "deleteRunConfirm": "Remover a evidência {{runId}}?",
+        "actionFailed": "Não foi possível atualizar as evidências.",
+        "loading": "Carregando evidências…",
+        "empty": "Nenhuma evidência capturada para esta issue ainda.",
+        "uiChange": "Mudança de UI",
+        "columns": {
+          "kind": "Tipo",
+          "repo": "Repo",
+          "command": "Comando",
+          "status": "Status",
+          "summary": "Resumo"
+        },
+        "screenshots": "Screenshots",
+        "videos": "Vídeos",
+        "reportLink": "relatório {{kind}} ({{repo}})",
+        "traceLink": "trace {{kind}} ({{repo}})",
+        "runSummary": "{{passed}}/{{total}} passou, {{failed}} falhou",
+        "openExternal": "Abrir em nova aba",
+        "taskGroup": {
+          "ungrouped": "Evidência sem tarefa vinculada",
+          "runCount": "{{count}} run(s)"
+        },
+        "runSection": {
+          "e2eTitle": "Teste end-to-end — {{repo}}",
+          "unitTitle": "Testes unitários — {{repo}}",
+          "genericTitle": "{{kind}} — {{repo}}",
+          "objective": "O que foi testado",
+          "command": "Comando",
+          "blockedReason": "Bloqueado porque",
+          "navigations": "Páginas visitadas",
+          "noSummary": "Sem resumo de resultado",
+          "multipleSpecs": "{{count}} specs"
+        },
+        "artifactVideoAria": "Vídeo de evidência: {{name}}",
+        "textViewer": {
+          "loading": "Carregando arquivo…",
+          "loadError": "Não foi possível carregar este arquivo.",
+          "retry": "Tentar novamente",
+          "openAria": "Ver {{name}}"
+        }
+      },
+      "errors": {
+        "loadFailed": "Não foi possível carregar a evidência."
+      }
+    },
+    "summary": {
+      "openInGitHub": "Abrir no GitHub",
+      "openInLinear": "Abrir no Linear",
+      "openIssue": "Abrir issue",
+      "preview": "Preview",
+      "previewProvisioning": "Provisionando preview...",
+      "previewStarting": "Iniciando preview...",
+      "previewCrashed": "Preview falhou",
+      "description": "Descrição",
+      "noDescription": "Sem descrição ainda.",
+      "agentWorkpad": "Workpad do agente",
+      "viewAllComments": "Ver todos os comentários",
+      "subIssues": {
+        "title": "Sub-issues",
+        "progress": "{{completed}} de {{total}}",
+        "expand": "Mostrar sub-issues",
+        "collapse": "Ocultar sub-issues",
+        "empty": "As sub-issues ainda não foram carregadas."
+      },
+      "status": "Status",
+      "priority": "Prioridade",
+      "assignee": "Responsável",
+      "agent": "Agente",
+      "updated": "Atualizado",
+      "labels": "Labels",
+      "noLabels": "Sem labels"
+    },
+    "labels": {
+      "add": "Adicionar labels",
+      "searchPlaceholder": "Buscar labels…",
+      "searchAria": "Buscar labels",
+      "loading": "Carregando labels…",
+      "noSearchMatch": "Nenhum label corresponde à busca.",
+      "typeToAdd": "Digite um nome de label abaixo para adicionar.",
+      "newLabelPlaceholder": "Novo label",
+      "newLabelAria": "Novo label",
+      "addButton": "Adicionar"
+    },
+    "devServer": {
+      "commandOutput": "Saída do comando",
+      "refresh": "Atualizar",
+      "loadFailed": "Não foi possível carregar a saída do servidor.",
+      "outputAria": "saída do comando {{slug}}",
+      "empty": "Nenhuma saída capturada ainda. A saída aparece aqui enquanto os comandos de setup e serve rodam.",
+      "errors": {
+        "loadFailed": "Não foi possível carregar os dev servers da issue.",
+        "identifiersRequired": "Identificadores de projeto e issue são obrigatórios.",
+        "startAllFailed": "Não foi possível iniciar os dev servers da issue.",
+        "stopAllFailed": "Não foi possível parar os dev servers da issue.",
+        "restartAllFailed": "Não foi possível reiniciar os dev servers da issue.",
+        "startFailed": "Não foi possível iniciar o dev server.",
+        "stopFailed": "Não foi possível parar o dev server.",
+        "restartFailed": "Não foi possível reiniciar o dev server.",
+        "tunnelFailed": "Não foi possível iniciar o túnel Cloudflare."
+      }
+    },
+    "sessionLog": {
+      "title": "Log da sessão",
+      "streaming": "Transmitindo",
+      "connecting": "Conectando…",
+      "agentHistory": "Exibindo histórico do {{shown}} — {{preferred}} ainda não produziu log para esta issue.",
+      "source": "Origem: {{agent}}",
+      "ariaLabel": "Log da sessão para {{identifier}}",
+      "waiting": "Aguardando saída da sessão…",
+      "subtitles": {
+        "reasoning": "Raciocínio interno",
+        "thinking": "Pensando…",
+        "system": "Sistema",
+        "session": "Sessão",
+        "event": "Evento"
+      },
+      "agentLabels": {
+        "codex": "Codex",
+        "claude": "Claude Code",
+        "cursor": "Cursor Agent"
+      },
+      "errors": {
+        "joinTimeout": "Tempo esgotado ao entrar no canal de log da sessão",
+        "streamFailed": "Falha ao abrir o stream de log da sessão",
+        "noLogForAgent": "Nenhum log de sessão do {{agent}} encontrado para esta issue ainda.",
+        "noLog": "Nenhum log de sessão encontrado para esta issue ainda."
+      }
+    },
+    "blockedBanner": {
+      "title": "Execução bloqueada — gate de publicação não satisfeito",
+      "body": "A execução do agente terminou com trabalho que não pôde ser publicado (push ou pull request falhou mesmo após o finalizer do Symphony). Veja a nota mais recente no workpad para a violação exata, corrija o problema subjacente e mova a issue de volta para um estado ativo para re-dispatch."
+    },
+    "activity": {
+      "empty": "Nenhuma atividade registrada ainda para {{identifier}}. Eventos do tracker aparecem aqui conforme a issue se move, recebe comentários ou é trabalhada.",
+      "agentAttached": "Agente vinculado a esta issue.",
+      "events": {
+        "issueCreated": "Issue criada",
+        "movedTo": "Movida para {{status}}",
+        "statusChanged": "Status alterado",
+        "updated": "Atualizada · {{status}}",
+        "issueUpdated": "Issue atualizada",
+        "commentAdded": "Comentário adicionado",
+        "blockerUpdated": "Bloqueio atualizado",
+        "agentDispatchRequested": "Dispatch do agente solicitado",
+        "agentRestartRequested": "Restart do agente solicitado",
+        "agentHardResetRequested": "Hard reset do agente solicitado"
+      }
+    },
+    "terminal": {
+      "title": "Terminal da issue",
+      "description": "Executa no workspace da issue via tmux.",
+      "error": "Erro no terminal",
+      "joinTimeout": "Timeout ao entrar no canal do terminal",
+      "openFailed": "Falha ao abrir sessão do terminal",
+      "joinFailed": "Falha ao entrar no canal do terminal: {{reason}}",
+      "ariaLabel": "Terminal para {{identifier}}"
+    },
+    "blockers": {
+      "addTitle": "Adicionar bloqueio",
+      "blockingAria": "Identificador da issue bloqueadora",
+      "add": "Adicionar",
+      "addFailed": "Falha ao adicionar bloqueio",
+      "blockedBy": "Bloqueada por",
+      "empty": "Nenhum registro de bloqueio.",
+      "externalBlocker": "Bloqueio externo",
+      "identifierPlaceholder": "MAC-123"
+    },
+    "attachmentsSection": {
+      "title": "Anexos",
+      "removeAttachment": "Remover {{name}}"
+    },
+    "returnToAgent": {
+      "resumeValidation": "Retomar validação",
+      "returnToAgent": "Devolver ao agente",
+      "failedGateDescription": "A última tentativa de evidência não passou no VALIDATE gate. Retome em {{target}} para corrigir o ambiente, rerodar testes e atualizar o manifest.",
+      "humanReviewDescription": "Esta issue está em revisão humana. Escolha o motivo, ajuste a instrução se quiser, e retome em {{target}}.",
+      "statusLine": "Status: {{status}}",
+      "evidenceLine": "Evidence: {{summary}}",
+      "instructionsPlaceholder": "Instruções específicas para o agente (opcional)",
+      "resuming": "Retomando…",
+      "resumeButton": "Voltar para {{target}} e retomar",
+      "resumeToast": "Retomando em {{target}}",
+      "resumeFailed": "Falha ao retomar o agente",
+      "templates": {
+        "evidence": {
+          "label": "Completar evidências",
+          "body": "Implementação e PR já estão prontos. Não altere código salvo instrução explícita.\n\nExecute apenas a etapa VALIDATE:\n1. Siga o skill `evidence`\n2. Suba Docker se necessário (`./vibe shared up`, `./vibe up`)\n3. Rode os testes aplicáveis ao diff\n4. Se tocou UI, rode Playwright com screenshot + vídeo\n5. Escreva `.symphony/evidence/manifest.json` na raiz do workspace Symphony (não dentro do clone git) com `\"repo\": \"advising\"` (ou o repo do projeto)\n6. Atualize o workpad na seção Validation\n7. Não mova o card para revisão — evidência apenas"
+        },
+        "fix": {
+          "label": "Corrigir implementação",
+          "body": "A implementação precisa de ajustes antes do handoff.\n\nPrioridade:\n1. Leia o feedback humano/comentários do PR\n2. Corrija o código, commits, push e PR\n3. Rode testes direcionados para o que mudou\n4. Só então execute VALIDATE/evidence se o handoff estiver pronto"
+        },
+        "review_feedback": {
+          "label": "Responder review do PR",
+          "body": "Há feedback de review/CI no PR que precisa ser endereçado.\n\nPrioridade:\n1. Leia comentários de review e checks falhos\n2. Corrija apenas o necessário para o PR ficar verde\n3. Atualize o workpad com o que foi feito\n4. Execute VALIDATE/evidence quando o PR estiver pronto de novo"
+        },
+        "custom": {
+          "label": "Outro",
+          "body": ""
+        }
+      }
+    },
+    "board": {
+      "loadFailed": "Falha ao carregar issues",
+      "moveFailed": "Falha ao mover issue"
+    },
+    "updater": {
+      "saveFailed": "Falha ao salvar alterações",
+      "statusFailed": "Falha ao atualizar status"
+    },
+    "route": {
+      "notFound": "Issue {{identifier}} não encontrada",
+      "archived": "{{identifier}} arquivada",
+      "archiveFailed": "Falha ao arquivar issue",
+      "deleted": "{{identifier}} excluída",
+      "deleteFailed": "Falha ao excluir issue",
+      "synced": "{{identifier}} sincronizada do remoto",
+      "syncFailed": "Falha ao sincronizar issue do remoto",
+      "attachmentRemoved": "Anexo removido",
+      "attachmentRemoveFailed": "Falha ao remover anexo"
+    },
+    "attachments": {
+      "imageUnavailable": "Upload de imagens não está disponível aqui.",
+      "imageUploadFailed": "Falha ao enviar imagem.",
+      "popupBlocked": "Permita pop-ups para abrir este arquivo.",
+      "openFailed": "Falha ao abrir arquivo.",
+      "openTitle": "Abrir {{name}}",
+      "openAria": "Abrir {{name}}",
+      "loading": "Carregando {{name}}",
+      "loadFailed": "Falha ao carregar {{name}}",
+      "defaultVideo": "Vídeo"
+    },
+    "create": {
+      "trigger": "Nova issue",
+      "title": "Criar issue",
+      "description": "Adicione uma issue ao tracker deste projeto.",
+      "titlePlaceholder": "Título da issue",
+      "descriptionPlaceholder": "Descrição",
+      "status": "Status",
+      "priority": "Prioridade",
+      "priorityPlaceholder": "0-4",
+      "agent": "Agente",
+      "inherit": "Herdar ({{agent}})",
+      "longRunningMode": "Modo {{termCapitalized}} (long-running)",
+      "goalAria": "{{agent}} {{term}}",
+      "goal": {
+        "defaultObjective": "Concluir esta issue",
+        "objective": "Objetivo: {{objective}}",
+        "context": "Contexto: {{details}}",
+        "constraints": "Restrições: siga artefatos, specs e planos existentes da issue quando houver; verifique as mudanças antes de reportar conclusão; pare quando concluir ou ficar bloqueado."
+      },
+      "terms": { "goal": "goal", "workflow": "workflow" },
+      "labels": "Labels",
+      "assignees": "Assignees",
+      "loadingLabels": "Carregando labels...",
+      "noLabels": "Nenhuma label disponível.",
+      "loadingAssignees": "Carregando assignees...",
+      "noAssignees": "Nenhum assignee disponível.",
+      "cancel": "Cancelar",
+      "creating": "Criando...",
+      "create": "Criar",
+      "validation": {
+        "titleRequired": "Título é obrigatório",
+        "statusRequired": "Status é obrigatório",
+        "invalid": "Issue inválida"
+      },
+      "goalModeRequired": "Modo {{termCapitalized}} exige um {{term}}.",
+      "created": "Issue criada",
+      "createFailed": "Falha ao criar issue",
+      "unknownAssignee": "desconhecido",
+      "add": "Adicionar issue",
+      "addToStatus": "Adicionar issue em {{status}}",
+      "optionsAria": "Opções de nova issue",
+      "withAssistant": "Nova issue com assistente",
+      "quickCreate": "Criação rápida"
+    },
+    "pullRequest": {
+      "refresh": "Atualizar",
+      "linkPlaceholder": "https://github.com/owner/repo/pull/123",
+      "linking": "Vinculando…",
+      "linkPr": "Vincular PR",
+      "loading": "Carregando detalhes do pull request…",
+      "retry": "Tentar novamente",
+      "unsupported": "Pull requests exigem um repositório GitHub configurado. Adicione um nas configurações do projeto para vincular PRs a {{identifier}}.",
+      "tokenRequired": "Um token GitHub é necessário para descobrir pull requests e carregar detalhes de CI. Defina GITHUB_TOKEN e atualize, ou vincule um PR manualmente abaixo.",
+      "empty": "Nenhum pull request vinculado a esta issue ainda. Quando um agente abrir um PR que referencia {{identifier}} (ou usar o branch vinculado), ele aparecerá aqui. Você também pode vincular manualmente abaixo (ex.: PR em outro repositório).",
+      "limitedAccessTitle": "Acesso GitHub limitado.",
+      "limitedAccessBody": "Pull requests vinculados são exibidos, mas detalhes de CI e ações de merge precisam de GITHUB_TOKEN configurado.",
+      "relatedCount_one": "{{count}} pull request relacionado",
+      "relatedCount_other": "{{count}} pull requests relacionados",
+      "rerunning": "Reexecutando…",
+      "rerunFailedJobs": "Reexecutar jobs com falha",
+      "sending": "Enviando…",
+      "fixWithAgent": "Corrigir com agente",
+      "monitor": {
+        "movedToRework": "Falha de CI/review atribuída a este PR — enviado para Rework (tentativa {{count}})",
+        "movedToDone": "PR mergeado — issue movida para Done",
+        "keptHumanReview": "Mantido em review — falha parece não relacionada ou precisa de humano",
+        "limitReached": "Limite de correção automática atingido — revisão humana necessária",
+        "fallback": "Monitor: {{action}}"
+      },
+      "toasts": {
+        "fixSent": "Enviado para {{status}} — o agente pegará no próximo poll.",
+        "fixFailed": "Não foi possível solicitar correção.",
+        "rerunPartialFailed": "Alguns jobs não puderam ser reexecutados. Atualize em um minuto para ver os resultados.",
+        "rerunSuccess": "Jobs com falha foram reexecutados. Atualize em um minuto para ver os resultados.",
+        "rerunFailed": "Não foi possível reexecutar os jobs com falha.",
+        "linked": "Pull request vinculado.",
+        "linkFailed": "Não foi possível vincular o pull request.",
+        "unlinked": "Pull request desvinculado.",
+        "unlinkFailed": "Não foi possível desvincular o pull request."
+      },
+      "errors": {
+        "loadFailed": "Não foi possível carregar os detalhes do pull request."
+      },
+      "panel": {
+        "branchUpdateStarted": "Atualização do branch iniciada — acompanhando CI…",
+        "branchUpdateFailed": "Não foi possível atualizar o branch.",
+        "forceMergeCompleted": "Force merge concluído — issue movida para Done.",
+        "mergeCompleted": "Pull request mergeado — issue movida para Done.",
+        "mergeFailed": "Não foi possível fazer merge do pull request.",
+        "originLinked": "vinculado",
+        "originAgent": "agente",
+        "conflictTitle": "Este branch tem conflitos que devem ser resolvidos antes do merge.",
+        "titleFallback": "Pull request #{{number}}",
+        "updated": "Atualizado {{time}}",
+        "mergeMethodLabel": "Método de merge",
+        "mergeMethodMerge": "Merge commit",
+        "mergeMethodSquash": "Squash",
+        "mergeMethodRebase": "Rebase",
+        "merging": "Fazendo merge…",
+        "merge": "Merge",
+        "forceMerging": "Force merge…",
+        "forceMerge": "Force merge",
+        "forceMergeTitle": "Tenta um merge imediato com o token GitHub configurado. O GitHub ainda aplica permissões do token e regras de branch.",
+        "updating": "Atualizando…",
+        "updateBranch": "Atualizar branch ({{count}} atrás)",
+        "open": "Abrir",
+        "unlinkTitle": "Desvincular este pull request",
+        "unlinkAria": "Desvincular este pull request",
+        "statusChecks": "Status checks",
+        "statusFallback": "status",
+        "noChecks": "Nenhum check de CI reportado para este pull request.",
+        "conversation": "Conversa",
+        "jobFallback": "job"
+      },
+      "meta": {
+        "state": {
+          "open": "Aberto",
+          "draft": "Rascunho",
+          "merged": "Mergeado",
+          "closed": "Fechado",
+          "unknown": "Pull request"
+        },
+        "job": {
+          "passed": "Passou",
+          "failed": "Falhou",
+          "running": "Executando",
+          "pending": "Pendente",
+          "neutral": "Neutro",
+          "skipped": "Ignorado",
+          "actionRequired": "Ação necessária"
+        },
+        "rollup": {
+          "allPassed": "Todos os checks passaram",
+          "someFailed": "Alguns checks falharam",
+          "checksRunning": "Checks em execução",
+          "noChecks": "Sem checks"
+        },
+        "conflicts": "Conflitos"
+      },
+      "link": {
+        "titleFallback": "Pull request #{{number}}",
+        "counts": {
+          "passed_one": "{{count}} passou",
+          "passed_other": "{{count}} passaram",
+          "failed_one": "{{count}} falhou",
+          "failed_other": "{{count}} falharam",
+          "running_one": "{{count}} executando",
+          "running_other": "{{count}} executando",
+          "other_one": "{{count}} outro",
+          "other_other": "{{count}} outros"
+        }
+      }
+    }
+  },
+  "project": {
+    "wizard": {
+      "trigger": "Novo projeto workspace",
+      "title": "Criar projeto workspace",
+      "description": "Descubra repositórios GitHub, escaneie caminhos locais e crie um workspace tracker multi-repo.",
+      "tabTemplate": "Começar de um template",
+      "tabScratch": "Construir do zero",
+      "templateLabel": "Template",
+      "templateHint": "Escolha um template salvo para clonar repositórios e setup.",
+      "loadingTemplates": "Carregando templates...",
+      "noTemplates": "Nenhum template salvo ainda.",
+      "projectNamePlaceholder": "Nome do projeto",
+      "projectSlugPlaceholder": "slug-do-projeto",
+      "cancel": "Cancelar",
+      "creating": "Criando...",
+      "createFromTemplate": "Criar a partir do template",
+      "trackerSource": "Fonte do tracker",
+      "connected": "Projeto conectado",
+      "connectFailed": "Falha ao conectar projeto",
+      "created": "Projeto workspace criado",
+      "createFailed": "Falha ao criar projeto workspace",
+      "selectTemplate": "Selecione um template primeiro",
+      "nameSlugRequired": "Nome e slug do projeto são obrigatórios",
+      "createdFromTemplate": "Projeto criado a partir do template",
+      "createFromTemplateFailed": "Falha ao criar projeto a partir do template",
+      "loadTemplatesFailed": "Falha ao carregar templates",
+      "loadOrgsFailed": "Falha ao carregar organizações GitHub",
+      "loadReposFailed": "Falha ao carregar repositórios",
+      "suggestFailed": "Falha ao sugerir setup do workspace",
+      "selectRemoteFirst": "Selecione um projeto remoto primeiro",
+      "scanning": "Escaneando...",
+      "scanAndSuggest": "Escanear e sugerir",
+      "loading": "Carregando...",
+      "refresh": "Atualizar",
+      "loadingOrganizations": "Carregando organizações...",
+      "noOrganizations": "Nenhuma organização GitHub retornada para este token ainda.",
+      "reloadRepositories": "Recarregar repositórios",
+      "createWorkspaceProject": "Criar projeto workspace",
+      "connecting": "Conectando...",
+      "connectProject": "Conectar projeto",
+      "templateRepoCount_one": "{{count}} repositório",
+      "templateRepoCount_other": "{{count}} repositórios",
+      "organization": {
+        "title": "Organização GitHub",
+        "description": "Escolha um owner que este token pode acessar.",
+        "kindOrganization": "organização",
+        "kindUser": "usuário",
+        "selected": "Selecionado"
+      },
+      "repositories": {
+        "title": "Repositórios",
+        "description": "Caminhos do workspace são derivados do slug do projeto. Caminhos de scan local ficam ocultos até serem editados.",
+        "private": "Privado",
+        "workspacePath": "Caminho do workspace",
+        "scanPathLabel": "Caminho de scan local para {{repo}}",
+        "scanPathPlaceholder": "Caminho de scan local opcional para {{path}}",
+        "scanPathHint": "Checkout local opcional. O scan só lê arquivos deste caminho.",
+        "editScanPath": "Editar caminho de scan",
+        "editScanPathAria": "Editar caminho de scan para {{repo}}"
+      },
+      "scanCount_one": "{{count}} scan de repositório",
+      "scanCount_other": "{{count}} scans de repositório",
+      "suggestedSetup": "Setup sugerido",
+      "agent": {
+        "label": "Agente de código",
+        "inherit": "Herdar ({{agent}})",
+        "hint": "Herdar segue o padrão do usuário em Configurações; escolhas explícitas gravam agent.kind no front matter do workflow."
+      }
+    },
+    "tracker": {
+      "fields": {
+        "slugHint": "O slug {{slug}} é fixo. Trocar a fonte muda de onde as issues são lidas.",
+        "localBoard": "Issues ficarão no board local do Symphony. Configuração remota é limpa."
+      },
+      "source": {
+        "aria": "Fonte do tracker",
+        "local": {
+          "title": "Tracker local Symphony",
+          "description": "Issues ficam no board local do Symphony (padrão)."
+        },
+        "github": {
+          "title": "GitHub Project v2",
+          "description": "Lê e move issues em um board GitHub conectado."
+        },
+        "linear": {
+          "title": "Projeto Linear",
+          "description": "Lê e move issues de um board Linear conectado."
+        },
+        "jira": {
+          "title": "Projeto Jira",
+          "description": "Lê e move issues de um board Jira conectado."
+        }
+      },
+      "github": {
+        "title": "Board GitHub Project v2",
+        "descriptionWizard": "Escolha um board que este token pode acessar. Issues ficam no GitHub.",
+        "descriptionEditor": "Escolha um board que este token pode acessar (usuário ou organização).",
+        "loading": "Carregando projetos GitHub…",
+        "empty": "Nenhum board GitHub Projects v2 encontrado.",
+        "loadFailed": "Falha ao carregar projetos GitHub",
+        "availableBoards": "Boards disponíveis",
+        "issuesRepository": "Repositório de issues",
+        "issuesRepositoryPlaceholder": "owner/name (ex. clouapp/front)",
+        "statusField": "Campo de status",
+        "noBoardSelected": "Nenhum board selecionado ainda.",
+        "connectedBoard": "Board conectado",
+        "resolvingBoard": "Resolvendo board…",
+        "connectedBoardFallback": "Board GitHub conectado",
+        "orgSuffix": " · org",
+        "orgLabel": " (org)",
+        "repoLine": "repo {{repo}}",
+        "openOnGitHub": "Abrir no GitHub"
+      },
+      "linear": {
+        "title": "Projeto Linear",
+        "description": "Escolha um projeto que este token pode acessar. Issues ficam no Linear.",
+        "loading": "Carregando projetos Linear…",
+        "empty": "Nenhum projeto Linear encontrado.",
+        "loadFailed": "Falha ao carregar projetos Linear",
+        "connectedProject": "Projeto conectado",
+        "noProjectSelected": "Nenhum projeto selecionado ainda."
+      },
+      "jira": {
+        "title": "Projeto Jira",
+        "description": "Issues ficam no Jira. O board lê tudo que corresponde a project = KEY mais os filtros de campo abaixo.",
+        "projectKey": "Chave do projeto",
+        "projectKeyPlaceholder": "ex. CDE",
+        "projectKeyRequired": "Obrigatório — o projeto Jira que o board lê.",
+        "boardFilters": "Filtros do board",
+        "addFilter": "Adicionar filtro",
+        "filtersHint": "Cláusulas campo = valor, unidas por AND na query do board — ex. Product = Inspire.",
+        "noFilters": "Sem filtros de campo — o board mostra o projeto inteiro.",
+        "filterFieldAria": "Campo do filtro",
+        "filterFieldPlaceholder": "Campo (ex. Product)",
+        "filterValueAria": "Valor do filtro",
+        "filterValuePlaceholder": "Valor (ex. Inspire)",
+        "removeFilterAria": "Remover filtro",
+        "advancedSummary": "Avançado (JQL bruto, ordenação, limite)",
+        "extraJql": "JQL extra",
+        "extraJqlPlaceholder": "cf[10042] = \"Inspire\" OR labels = inspire",
+        "extraJqlHint": "Fragmento bruto unido por AND após os filtros acima. Use para ids de custom field (cf[id]) ou grupos OR.",
+        "orderBy": "Ordenar por",
+        "orderByPlaceholder": "created DESC",
+        "maxResults": "Máximo de resultados",
+        "maxResultsPlaceholder": "500"
+      }
+    },
+    "createDialog": {
+      "trigger": "Novo projeto",
+      "title": "Criar projeto",
+      "description": "Adicione um board local de projeto com o tracker API.",
+      "namePlaceholder": "Nome do projeto",
+      "slugPlaceholder": "project-slug",
+      "descriptionPlaceholder": "Descrição",
+      "cancel": "Cancelar",
+      "creating": "Criando...",
+      "submit": "Criar projeto",
+      "validation": {
+        "nameRequired": "Nome do projeto é obrigatório",
+        "slugRequired": "Slug do projeto é obrigatório",
+        "slugFormat": "Use um slug em minúsculas, como macro-markets",
+        "invalid": "Projeto inválido"
+      },
+      "created": "Projeto criado",
+      "createFailed": "Falha ao criar projeto"
+    },
+    "list": {
+      "title": "Projetos",
+      "subtitle": "Escolha um projeto do tracker local.",
+      "import": "Importar",
+      "filters": "Filtros",
+      "newWorkspace": "Novo projeto workspace",
+      "emptyApi": "Nenhum projeto retornado pela API do tracker.",
+      "emptyFiltered": "Nenhum projeto corresponde aos filtros.",
+      "archived": "Arquivado",
+      "issueCount_one": "{{count}} issue",
+      "issueCount_other": "{{count}} issues",
+      "editProject": "Editar projeto",
+      "editProjectAria": "Editar {{name}}",
+      "restoreProject": "Restaurar projeto",
+      "restoreProjectAria": "Restaurar {{name}}",
+      "deletePermanently": "Excluir projeto permanentemente",
+      "deletePermanentlyAria": "Excluir {{name}} permanentemente",
+      "archiveProject": "Arquivar projeto",
+      "archiveProjectAria": "Arquivar {{name}}",
+      "deleteConfirm": "Excluir projeto \"{{name}}\" permanentemente? Isso não pode ser desfeito.",
+      "toasts": {
+        "loadFailed": "Não foi possível carregar projetos",
+        "imported": "Projeto \"{{name}}\" importado (projetos existentes são sobrescritos)",
+        "importFailed": "Não foi possível importar projeto",
+        "archiveFailed": "Não foi possível arquivar projeto",
+        "restoreFailed": "Não foi possível restaurar projeto",
+        "deleteFailed": "Não foi possível excluir projeto"
+      },
+      "trackerLink": {
+        "local": "Abrir tracker",
+        "github": "Abrir projeto no GitHub",
+        "linear": "Abrir projeto no Linear",
+        "jira": "Abrir projeto no Jira"
+      }
+    },
+    "filters": {
+      "dismissAria": "Fechar filtros",
+      "title": "Filtros",
+      "heading": "Foco do projeto",
+      "closeAria": "Fechar filtros",
+      "keyword": "Palavra-chave",
+      "searchPlaceholder": "Buscar projetos...",
+      "status": "Status",
+      "total": "{{count}} no total",
+      "ongoing": "Em andamento",
+      "ongoingDescription": "Workspaces ativos",
+      "archived": "Arquivados",
+      "archivedDescription": "Guardados com segurança",
+      "all": "Todos",
+      "allDescription": "Tudo local",
+      "summaryOngoing": "{{count}} em andamento",
+      "summaryArchived": "{{count}} arquivados",
+      "hint": "Filtros são locais e instantâneos; workspaces arquivados ficam disponíveis até exclusão permanente.",
+      "clear": "Limpar filtros"
+    },
+    "config": {
+      "sections": {
+        "general": {
+          "label": "Geral",
+          "title": "Geral",
+          "description": "Identidade do projeto, repositórios vinculados e comandos de validação."
+        },
+        "tracker": {
+          "label": "Tracker",
+          "title": "Fonte do tracker",
+          "description": "De onde as issues são lidas — board local, GitHub Projects, Linear ou Jira."
+        },
+        "workflow": {
+          "label": "Workflow",
+          "title": "Workflow",
+          "description": "Comportamento por projeto: estados do board, limites de agente, hooks, Codex/Claude, dev server e prompt do agente."
+        },
+        "dev": {
+          "label": "Dev environment",
+          "title": "Dev environment",
+          "description": "Passos de setup e serve agrupados por repositório. Passos serve alimentam a aba Preview de cada issue."
+        }
+      },
+      "name": "Nome",
+      "description": "Descrição",
+      "validationCommands": "Comandos de validação (um por linha)",
+      "validationCommandsAria": "Comandos de validação",
+      "repositories": "Repositórios",
+      "repositoriesHint": "Repositórios vinculados a este projeto. Remover só desvincula no Symphony — arquivos no disco permanecem.",
+      "templateSeedHint": "Templates só preenchem comandos de validação; edite o workflow YAML aqui.",
+      "footerHint": "Alterações aplicam somente a este projeto.",
+      "cancel": "Cancelar",
+      "saving": "Salvando...",
+      "save": "Salvar configuração",
+      "repoEditor": {
+        "empty": "Nenhum repositório vinculado ainda. Adicione um abaixo.",
+        "private": "Privado",
+        "removeAria": "Remover {{repo}}",
+        "workspacePath": "Caminho do workspace",
+        "workspacePathAria": "Caminho do workspace para {{repo}}",
+        "role": "Papel",
+        "roleAria": "Papel para {{repo}}",
+        "branch": "Branch",
+        "branchAria": "Branch para {{repo}}",
+        "addRepository": "Adicionar repositório",
+        "githubOwner": "Owner GitHub",
+        "githubOwnerAria": "Owner GitHub",
+        "loadingOwners": "Carregando owners…",
+        "selectOwner": "Selecione um owner",
+        "loadingRepositories": "Carregando repositórios…",
+        "noRepositories": "Nenhum repositório encontrado para este owner.",
+        "addRepoAria": "Adicionar {{repo}}",
+        "linked": "Vinculado",
+        "toasts": {
+          "loadOwnersFailed": "Falha ao carregar owners GitHub",
+          "loadReposFailed": "Falha ao carregar repositórios"
+        }
+      },
+      "loadDefault": {
+        "trigger": "Carregar padrão",
+        "empty": "Nenhum template.",
+        "loadFailed": "Falha ao carregar templates"
+      },
+      "workflowEditor": {
+        "hint": "YAML front matter (estados do tracker, agente, hooks, codex/claude, dev_server) mais o corpo do prompt do agente abaixo do --- final. Configurações de conexão ficam na aba Tracker.",
+        "edit": "Editar",
+        "preview": "Pré-visualizar",
+        "aria": "Markdown de workflow do projeto",
+        "frontMatter": "Front matter",
+        "noFrontMatter": "Sem YAML front matter.",
+        "promptBody": "Corpo do prompt",
+        "noPromptBody": "Sem corpo de prompt."
+      },
+      "mapEditor": {
+        "remove": "Remover",
+        "removeAria": "remover {{key}}",
+        "addKey": "Adicionar chave",
+        "addKeyAria": "adicionar chave",
+        "selectState": "Selecionar estado…",
+        "newValue": "Novo valor",
+        "newValueAria": "novo valor",
+        "addEntry": "Adicionar entrada"
+      },
+      "stateSelect": {
+        "empty": "Nenhum status definido para este projeto ainda."
+      },
+      "scalar": {
+        "maxTurns": "Máximo de turnos",
+        "maxConcurrentAgents": "Máximo de agentes concorrentes",
+        "maxRetryBackoffMs": "Backoff máximo de retry (ms)",
+        "turnTimeoutMs": "Timeout de turno (ms)",
+        "readTimeoutMs": "Timeout de leitura (ms)",
+        "stallTimeoutMs": "Timeout de stall (ms)",
+        "enabled": "Habilitado",
+        "binary": "Binário",
+        "host": "Host",
+        "port": "Porta",
+        "auth": "Auth",
+        "password": "Senha",
+        "baseUrl": "URL base",
+        "maxConcurrent": "Máximo concorrente",
+        "idleTimeoutMs": "Timeout de idle (ms)",
+        "baseDomain": "Domínio base",
+        "namespace": "Namespace",
+        "readIntervalMs": "Intervalo de leitura (ms)",
+        "mutationIntervalMs": "Intervalo de mutação (ms)",
+        "maxRetries": "Máximo de retries",
+        "maxBackoffMs": "Backoff máximo (ms)"
+      },
+      "devenv": {
+        "hint": "Passos são agrupados por repositório. Passos Serve alimentam a aba Preview da issue. Alterações são persistidas com Salvar configuração.",
+        "serve": "Serve",
+        "saveConfiguration": "Salvar configuração",
+        "proposeSteps": "Propor passos",
+        "noStepsYet": "Nenhum passo ainda",
+        "serveCount_one": "{{count}} serve",
+        "serveCount_other": "{{count}} serve",
+        "addStep": "Adicionar passo",
+        "addStepTo": "Adicionar passo em {{label}}",
+        "generalGroup": "Geral",
+        "noStepsProposed": "Nenhum passo proposto; adicione manualmente ou um .symphony/devenv.yaml",
+        "proposeFailed": "Falha ao propor passos",
+        "running": "Executando: {{command}}",
+        "runFailed": "Falha ao executar passo",
+        "stepLabel": "passo {{index}}",
+        "descriptionAria": "Descrição do passo",
+        "descriptionPlaceholder": "Descrição",
+        "commandAria": "Comando do passo",
+        "commandPlaceholder": "comando",
+        "run": "Executar",
+        "remove": "Remover",
+        "role": "Papel",
+        "roleAria": "Papel para {{label}}",
+        "roleSetup": "Setup",
+        "roleServe": "Serve",
+        "optional": "Opcional",
+        "optionalAria": "Opcional para {{label}}",
+        "primaryPreview": "Preview principal",
+        "primaryPreviewAria": "Preview principal para {{label}}",
+        "portEnv": "Env de porta",
+        "portEnvAria": "Env de porta para {{label}}",
+        "portEnvPlaceholder": "PORT",
+        "ready": "Ready",
+        "readyAria": "Probe ready para {{label}}",
+        "readyTcp": "TCP",
+        "readyHttp": "HTTP",
+        "path": "Caminho",
+        "readyPathAria": "Caminho ready para {{label}}",
+        "readyPathPlaceholder": "/"
+      },
+      "toasts": {
+        "devEnvLoadFailed": "Falha ao carregar passos de dev-env",
+        "nameRequired": "Nome do projeto é obrigatório",
+        "saved": "Configuração do projeto salva",
+        "saveFailed": "Falha ao salvar configuração do projeto"
+      },
+      "importExport": {
+        "export": "Exportar",
+        "import": "Importar",
+        "exportSuccess": "Configuração do projeto exportada",
+        "exportFailed": "Falha ao exportar configuração do projeto",
+        "importConfirm": "Importar configuração de \"{{fileName}}\" para \"{{projectName}}\"? Isso substitui as configurações atuais.",
+        "importSuccess": "Configuração do projeto importada",
+        "importFailed": "Falha ao importar configuração do projeto"
+      }
+    },
+    "settings": {
+      "eyebrow": "Configurações do projeto",
+      "subtitle": "Configuração por projeto. Configurações de processo ficam no ambiente do servidor.",
+      "loadFailed": "Não foi possível carregar projeto",
+      "saved": "Salvo"
+    },
+    "services": {
+      "validation": {
+        "nameRequired": "Nome do projeto é obrigatório",
+        "slugRequired": "Slug do projeto é obrigatório",
+        "projectSlugRequired": "projectSlug é obrigatório",
+        "fieldRequired": "{{field}} é obrigatório",
+        "positiveIntegerRequired": "{{field}} deve ser um inteiro positivo",
+        "workflowStatusRequired": "Pelo menos um status de workflow é obrigatório",
+        "repositoryRequired": "Pelo menos um repositório é obrigatório",
+        "githubOwnerRequired": "Owner GitHub é obrigatório",
+        "documentPathInvalid": "O caminho do documento não pode incluir segmentos . ou ..",
+        "uploadPathMissing": "A resposta do upload não incluiu um caminho de arquivo.",
+        "projectAndIdentifierRequired": "projectSlug e identifier são obrigatórios",
+        "evidenceDeleteRequired": "projectSlug, identifier e runId são obrigatórios",
+        "dispatchResponseMissingIssue": "A resposta do dispatch não incluiu a issue."
+      }
+    },
+    "templates": {
+      "back": "Templates",
+      "editTitle": "Editar template",
+      "notFound": "Template não encontrado.",
+      "loadFailed": "Não foi possível carregar template",
+      "saveAsTemplate": "Salvar como template",
+      "saveAsTitle": "Salvar projeto como template",
+      "slugPlaceholder": "template-slug",
+      "list": {
+        "title": "Templates",
+        "subtitle": "Modelos reutilizáveis de workspace.",
+        "import": "Importar",
+        "empty": "Nenhum template ainda.",
+        "delete": "Excluir",
+        "repoCount_one": "{{count}} repositório",
+        "repoCount_other": "{{count}} repositórios",
+        "deleteConfirm": "Excluir template \"{{slug}}\" permanentemente? Isso não pode ser desfeito.",
+        "toasts": {
+          "loadFailed": "Não foi possível carregar templates",
+          "deleted": "Template excluído",
+          "deleteFailed": "Não foi possível excluir template",
+          "imported": "Template importado",
+          "importFailed": "Não foi possível importar template"
+        }
+      },
+      "clone": {
+        "failed": "Alguns repositórios falharam ao clonar",
+        "inProgress": "Clonando repositórios ({{count}} em progresso)",
+        "retry": "Tentar novamente"
+      },
+      "form": {
+        "name": "Nome",
+        "namePlaceholder": "Nome do template",
+        "description": "Descrição",
+        "descriptionPlaceholder": "Descrição opcional",
+        "repositories": "Repositórios",
+        "addRepository": "Adicionar repositório",
+        "noRepositories": "Nenhum repositório.",
+        "githubFullName": "Nome completo no GitHub",
+        "githubFullNamePlaceholder": "owner/repo",
+        "cloneUrl": "URL de clone",
+        "cloneUrlPlaceholder": "URL de clone",
+        "workspacePath": "Caminho do workspace",
+        "defaultBranch": "Branch padrão",
+        "role": "Papel",
+        "rolePlaceholder": "Papel (opcional)",
+        "remove": "Remover",
+        "validationCommands": "Comandos de validação",
+        "validationCommandsHint": "Um comando por linha.",
+        "validationCommandsPlaceholder": "npm test",
+        "afterCreateHook": "Hook pós-criação",
+        "promptTemplate": "Template de prompt",
+        "devEnvMarkdown": "Dev environment (markdown)",
+        "export": "Exportar",
+        "saving": "Salvando…",
+        "save": "Salvar template"
+      },
+      "toasts": {
+        "saved": "Template salvo",
+        "saveFailed": "Falha ao salvar template",
+        "exportFailed": "Falha ao exportar template"
+      }
+    }
+  },
+  "observability": {
+    "title": "Observabilidade",
+    "subtitle": "Estado ao vivo dos processos Symphony que reportam.",
+    "project": "Projeto",
+    "allProjects": "Todos os projetos",
+    "loadingRuntimes": "Carregando runtimes…",
+    "noRuntimes": "Nenhum runtime reportando ainda.",
+    "noRuntimesFilter": "Nenhum runtime corresponde a este filtro de projeto.",
+    "running": "Em execução",
+    "retrying": "Retentando",
+    "totalTokens": "Total de tokens",
+    "runningSessions": "Sessões em execução",
+    "runningSessionsHint": "Todas as sessões ativas nos runtimes.",
+    "noActiveSessions": "Nenhuma sessão ativa.",
+    "childRuns": {
+      "count": "{{count}} execuções filhas",
+      "show": "Mostrar execuções filhas",
+      "hide": "Ocultar execuções filhas"
+    },
+    "openBoard": "Abrir board",
+    "pursuingGoal": "Perseguindo a goal: {{objective}}",
+    "table": {
+      "project": "Projeto",
+      "issue": "Issue",
+      "goal": "Goal",
+      "state": "Estado",
+      "runtimeTurns": "Runtime / turnos",
+      "agentUpdate": "Atualização do agente",
+      "tokens": "Tokens",
+      "actions": "Ações"
+    },
+    "session": {
+      "pause": "Pausar",
+      "pausing": "Pausando…",
+      "restart": "Reiniciar",
+      "restarting": "Reiniciando…",
+      "hardReset": "Reset completo",
+      "resetting": "Resetando…",
+      "noProjectMapping": "Sem mapeamento de projeto para este runtime",
+      "pauseTitle": "Pausar a execução (mantém a sessão para retomar depois)",
+      "restartTitle": "Reiniciar com uma nova passagem do agente",
+      "hardResetTitle": "Reset completo: limpar a sessão e começar do zero",
+      "restartDialogTitle": "Reiniciar execução do agente?",
+      "restartDialogDescription": "Para a execução atual e inicia uma nova passagem do agente nesta issue. O workspace e o estado git são preservados.",
+      "hardResetDialogTitle": "Reset completo da sessão?",
+      "hardResetDialogDescription": "Para a execução, descarta a sessão do agente e limpa contadores de turnos e tokens, depois inicia uma sessão nova. O workspace e o estado git são preservados.",
+      "cancel": "Cancelar",
+      "dispatchFailed": "Falha ao {{action}} {{identifier}}"
+    },
+    "prMonitor": {
+      "title": "Monitor de PR",
+      "subtitle": "Acompanhamento em background de PRs para issues em wait states (merge → Done, CI/review → Rework).",
+      "running": "ativo",
+      "degraded": "degradado",
+      "offline": "offline",
+      "lastTick": "Último tick",
+      "inFlight": "Em andamento",
+      "evaluatedLastTick": "Avaliados no último tick",
+      "ticks": "Ticks",
+      "interval": "Intervalo",
+      "lastTickStatus": "Status do último tick",
+      "heartbeatUnavailable": "Heartbeat indisponível.",
+      "lastError": "Último erro: {{error}}",
+      "noEvaluations": "Nenhuma avaliação de PR registrada ainda.",
+      "prLink": "link",
+      "event": "Evento",
+      "action": "Ação",
+      "checked": "Verificado",
+      "events": {
+        "none": "sem mudança",
+        "merged": "PR merged",
+        "ci_failure": "falha de CI",
+        "review_findings": "achados de review"
+      },
+      "actions": {
+        "moved_to_done": "→ Done",
+        "moved_to_rework": "→ Rework",
+        "limit_reached": "limite atingido",
+        "kept_human_review": "mantido em Human Review"
+      }
+    },
+    "time": {
+      "never": "nunca",
+      "secondsAgo": "há {{count}}s",
+      "minutesAgo": "há {{count}}m",
+      "hoursMinutesAgo": "há {{hours}}h {{minutes}}m"
+    }
+  },
+  "backup": {
+    "title": "Backups",
+    "subtitle": "Snapshots locais do banco SQLite do tracker (`.symphony/backups/database/`).",
+    "source": "Origem: {{path}} ({{status}})",
+    "missing": "ausente",
+    "sqliteDatabase": "Banco SQLite",
+    "lastBackup": "Último backup: {{when}}",
+    "createBackup": "Criar backup",
+    "backupDatabase": "Fazer backup do banco",
+    "removeExpired": "Remover expirados",
+    "loading": "Carregando…",
+    "noBackups": "Nenhum backup ainda.",
+    "table": {
+      "id": "ID",
+      "file": "Arquivo",
+      "trigger": "Gatilho",
+      "size": "Tamanho",
+      "status": "Status",
+      "created": "Criado",
+      "actions": "Ações"
+    },
+    "download": "Baixar",
+    "restore": "Restaurar",
+    "delete": "Excluir",
+    "deleteConfirm": "Excluir backup #{{id}}?",
+    "restoreDialog": {
+      "title": "Restaurar backup do banco",
+      "description": "Substitui o arquivo SQLite atual do tracker por este snapshot. Uma cópia de segurança pré-restore é criada no servidor quando possível. Reinicie ou recarregue o daemon Symphony após restaurar.",
+      "warning": "Pare trabalho ativo antes de restaurar — conexões abertas ao DB podem manter dados obsoletos até o restart.",
+      "backupLine": "Backup #{{id}} — {{filename}}",
+      "cancel": "Cancelar",
+      "restore": "Restaurar",
+      "restoring": "Restaurando…"
+    },
+    "freshness": {
+      "never": "Nunca",
+      "minutes": "{{count}} min",
+      "hours": "{{count}} h",
+      "days": "{{count}} d"
+    },
+    "toasts": {
+      "loadFailed": "Falha ao carregar backups",
+      "created": "Backup criado",
+      "failed": "Backup falhou",
+      "createFailed": "Falha ao criar backup",
+      "cleanupDone": "Limpeza concluída",
+      "cleanupFailed": "Falha na limpeza",
+      "restored": "Banco restaurado",
+      "restoreFailed": "Falha ao restaurar",
+      "removed": "Backup removido",
+      "deleteFailed": "Falha ao excluir",
+      "downloadFailed": "Falha ao baixar"
+    }
+  },
+  "assistant": {
+    "errors": {
+      "textOnlyMessages": "Apenas mensagens de texto do assistente são suportadas"
+    },
+    "panel": {
+      "ariaLabel": "Assistente do projeto",
+      "exploreTitle": "Explorar projeto",
+      "projectTitle": "Assistente do projeto",
+      "freeformTitle": "Assistente livre",
+      "exploreDescription": "Faça perguntas sobre o codebase em `{{slug}}` (branches padrão).",
+      "projectDescription": "Assistente de código IA para `{{slug}}`.",
+      "freeformDescription": "Assistente de código IA para chat livre. Lista projetos e pode gerenciar issues do board quando você passa um slug de projeto.",
+      "modelsFrom": " Modelos de `{{command}}`.",
+      "openButton": "Assistente",
+      "openAria": "Abrir assistente do projeto",
+      "loadingModels": "Carregando modelos do assistente...",
+      "catalogLoadFailed": "Falha ao carregar modelos do assistente.",
+      "noConnectionTarget": "Assistente não tem thread ou projeto para conectar.",
+      "channelNotConnected": "Canal do assistente ainda não está conectado.",
+      "requestFailed": "Falha na requisição do assistente",
+      "modeUpdateTimeout": "Atualização de modo do assistente expirou",
+      "goalModeUpdateTimeout": "Atualização de modo goal do assistente expirou",
+      "goalRequiresIssue": "O goal de authoring só está disponível ao trabalhar em uma issue específica.",
+      "goalCommandWithObjective": "Persiga este goal de authoring direto na nossa conversa (modo goal long-running do Codex). Objetivo: {{objective}}. Continue trabalhando nele ao longo dos turnos até o artefato estar pronto para revisão ou você ficar bloqueado. Isto é apenas authoring — não despache o orquestrador nem altere o status da issue.",
+      "goalCommandDefault": "Persiga um goal de authoring direto na nossa conversa (modo goal long-running do Codex). Derive o objetivo a partir do spec/plano/handoff existentes e continue trabalhando nele ao longo dos turnos até o artefato estar pronto para revisão ou você ficar bloqueado. Isto é apenas authoring — não despache o orquestrador nem altere o status da issue.",
+      "dispatchedTo": "Dispatch para {{agent}}.",
+      "dispatchTimeout": "Dispatch de {{agent}} expirou",
+      "btwFailed": "Falha ao iniciar pergunta paralela.",
+      "welcome": "Pergunte naturalmente sobre este projeto ou peça ações no tracker. Posso conversar, criar tarefas, comentar em issues, mover status, listar issues e solicitar trabalho do Codex quando você pedir.",
+      "clarifyingQuestions": "Perguntas de esclarecimento",
+      "sendQueuedNow": "Enviar mensagem enfileirada agora",
+      "sendNow": "Enviar agora",
+      "removeQueued": "Remover mensagem enfileirada",
+      "remove": "Remover",
+      "turnInterrupted": "O turno anterior foi interrompido.",
+      "resume": "Retomar",
+      "attachmentFallback": {
+        "audio": "Veja o áudio anexado.",
+        "image": "Veja a imagem anexada.",
+        "files": "Veja os arquivos anexados."
+      },
+      "attachmentLabel": {
+        "image": "Imagem: {{name}}",
+        "audio": "Áudio: {{name}}",
+        "default": "anexo"
+      }
+    },
+    "speech": {
+      "errors": {
+        "notAllowed": "O reconhecimento de voz precisa de permissão do microfone.",
+        "serviceNotAllowed": "O reconhecimento de voz está bloqueado neste navegador.",
+        "network": "O reconhecimento de voz precisa de conexão com a internet.",
+        "noSpeech": "Nenhuma fala foi detectada.",
+        "audioCapture": "Não foi possível capturar áudio para reconhecimento de voz.",
+        "aborted": "O reconhecimento de voz foi interrompido.",
+        "unavailable": "O reconhecimento de voz não está disponível neste navegador.",
+        "captionsUnsupported": "Legendas ao vivo não são suportadas neste navegador.",
+        "startFailed": "Não foi possível iniciar o reconhecimento de voz."
+      }
+    },
+    "audio": {
+      "errors": {
+        "notAllowed": "Permissão do microfone negada. Permita o acesso ao microfone nas configurações do navegador e tente novamente.",
+        "notFound": "Nenhum microfone foi encontrado neste dispositivo.",
+        "notReadable": "O microfone está em uso por outro aplicativo.",
+        "security": "O acesso ao microfone requer HTTPS ou localhost.",
+        "accessFailed": "Não foi possível acessar o microfone.",
+        "unsupported": "Gravação por microfone não está disponível. Use HTTPS em um navegador compatível.",
+        "recordingFailed": "Falha na gravação de áudio.",
+        "tooShort": "Gravação muito curta. Segure o botão do microfone um pouco mais."
+      }
+    },
+    "modelMenu": {
+      "modelSuffix": "Modelo",
+      "searchPlaceholder": "Buscar modelos…",
+      "noMatch": "Nenhum modelo corresponde."
+    },
+    "slash": {
+      "goal": "Rode um goal de authoring direto neste chat (sem despachar o orquestrador)",
+      "goalExecution": "Defina um goal de execução e despache via o orquestrador",
+      "infer": "Direcione o agente em execução sem esperar",
+      "btw": "Faça uma pergunta rápida (somente leitura, não salva)"
+    },
+    "effort": {
+      "low": "Baixo",
+      "medium": "Médio",
+      "high": "Alto",
+      "xhigh": "Extra alto",
+      "max": "Máximo"
+    },
+    "catalog": {
+      "agents": {
+        "codex": "Codex CLI",
+        "claude": "Claude Code",
+        "cursor": "Cursor Agent"
+      },
+      "models": {
+        "gpt-5_5": "GPT-5.5",
+        "gpt-5_4": "GPT-5.4",
+        "gpt-5_3-codex": "GPT-5.3 Codex",
+        "claude-opus-4-8": "Claude Opus 4.8",
+        "claude-opus-4-7": "Claude Opus 4.7",
+        "claude-opus-4-6": "Claude Opus 4.6",
+        "claude-sonnet-4-6": "Claude Sonnet 4.6",
+        "claude-haiku-4-5": "Claude Haiku 4.5",
+        "auto": "Auto",
+        "composer-1": "Composer 1",
+        "gpt-5": "GPT-5",
+        "sonnet-4": "Claude Sonnet 4",
+        "sonnet-4-thinking": "Claude Sonnet 4 Thinking"
+      },
+      "errors": {
+        "noCodexModels": "O Codex CLI não retornou modelos",
+        "loadFailed": "Falha ao carregar modelos do assistente.",
+        "apiMissing": "A API do assistente não está disponível no servidor. Reinicie o Symphony para carregar as rotas mais recentes do tracker."
+      }
+    },
+    "composer": {
+      "placeholder": "Escreva uma mensagem...",
+      "dropFiles": "Solte arquivos para anexar",
+      "tabToComplete": "Tab para completar",
+      "attachFile": "Anexar arquivo",
+      "removeAttachment": "Remover {{name}}",
+      "agentMenu": "Agente",
+      "reasoningEffort": "Esforço de raciocínio",
+      "stopRecording": "Parar gravação",
+      "recordAudio": "Gravar áudio",
+      "recording": "Gravando",
+      "sendMessage": "Enviar mensagem",
+      "hint": "Enter para enviar · Shift+Enter para nova linha · cole ou solte arquivos · Modelos de {{command}}",
+      "voiceUnavailable": " · Ditado por voz indisponível ({{error}})",
+      "attachmentsUnavailable": "Anexos não estão disponíveis nesta conversa.",
+      "uploadFailed": "Falha ao enviar arquivo.",
+      "voiceNotSupported": "Ditado por voz não é suportado neste navegador.",
+      "attachmentValidation": {
+        "imagesOnly": "Apenas arquivos de imagem são suportados.",
+        "imageTooLarge": "Imagens devem ter no máximo 4 MB.",
+        "emptyFile": "Arquivos vazios não podem ser anexados.",
+        "fileTooLarge": "Arquivos devem ter no máximo 5 MB.",
+        "audioTooLarge": "Gravações de áudio devem ter no máximo 8 MB.",
+        "readAudioFailed": "Falha ao ler o áudio."
+      }
+    },
+    "authoring": {
+      "chatAria": "Chat de authoring da issue",
+      "documentsAria": "Documentos de authoring da issue",
+      "documentsDrawerTitle": "Documentos de authoring",
+      "documentsDrawerDescription": "Specs, planos e handoffs vinculados a esta issue.",
+      "openDocuments": "Documentos",
+      "documentsEmpty": "Documentos de rascunho aparecem aqui depois que o assistente cria ou vincula uma issue. Peça ao assistente do projeto para rascunhar a issue e abra a rota de authoring quando houver um identificador.",
+      "taskLabel": "Tarefa",
+      "titleLoading": "Carregando título da issue…",
+      "openIssueDetails": "Abrir detalhe da issue",
+      "goalBannerAria": "Goal de authoring",
+      "goalRunning": "Perseguindo goal",
+      "goalActive": "Goal de authoring ativo",
+      "goalPaused": "Goal pausada",
+      "goalStalled": "Goal parada",
+      "goalCompleted": "Goal concluída",
+      "goalPending": "Goal pronta",
+      "goalNoObjective": "Perseguindo o objetivo de authoring da issue.",
+      "goalPause": "Pausar goal",
+      "goalResume": "Retomar goal",
+      "goalEdit": "Editar objetivo",
+      "goalRemove": "Remover goal",
+      "goalEditSave": "Salvar objetivo",
+      "goalEditCancel": "Cancelar",
+      "goalObjectivePlaceholder": "Descreva o objetivo de authoring…",
+      "titleNew": "Novo authoring de issue",
+      "hintNoId": "Comece pedindo ao assistente para rascunhar uma issue; documentos aparecem quando houver identificador. Diga se quer um brief simples ou fazer um brainstorm de spec, e use /goal para rodar um goal de authoring long-running direto no chat."
+    },
+    "btw": {
+      "ariaLabel": "Pergunta paralela",
+      "title": "Aliás",
+      "closeAria": "Fechar pergunta paralela",
+      "thinking": "Pensando…",
+      "footer": "Esc para fechar · não salvo na conversa"
+    },
+    "working": {
+      "runningTool": "Executando {{tool}}",
+      "verbs": {
+        "pondering": "Refletindo",
+        "cooking": "Preparando",
+        "wrangling": "Organizando tokens",
+        "consulting": "Consultando o codex",
+        "untangling": "Desembaraçando threads",
+        "spelunking": "Explorando o repo",
+        "composing": "Compondo",
+        "crunching": "Processando",
+        "plotting": "Planejando"
+      }
+    },
+    "questions": {
+      "placeholder": "Digite sua resposta",
+      "other": "Outro",
+      "submit": "Enviar respostas",
+      "questionFallback": "P{{index}}"
+    },
+    "page": {
+      "conversationsAria": "Conversas",
+      "title": "Conversas",
+      "newChat": "Novo chat",
+      "searchPlaceholder": "Buscar conversas...",
+      "searchAria": "Buscar conversas",
+      "empty": "Nenhuma conversa ainda. Comece uma nova.",
+      "noMatch": "Nenhuma conversa corresponde à busca."
+    },
+    "documents": {
+      "ariaLabel": "Documentos da issue",
+      "listAria": "Lista de documentos",
+      "title": "Documentos",
+      "subtitle": "Specs, planos e handoffs gerados.",
+      "workspaceMissing": "A árvore de trabalho ainda não está pronta. Documentos aparecem quando o assistente começar a trabalhar.",
+      "unavailable": "Nenhum documento disponível.",
+      "empty": "Nenhum spec ou plan ainda.",
+      "loading": "Carregando documento...",
+      "loadError": "Não foi possível carregar este documento.",
+      "loadErrorHint": "Use Retry para tentar novamente ou peça ao assistente para regenerar o documento.",
+      "retry": "Tentar novamente",
+      "noContent": "Nenhum conteúdo para exibir.",
+      "kinds": {
+        "spec": { "label": "Spec", "group": "Specs" },
+        "plan": { "label": "Plan", "group": "Plans" },
+        "handoff": { "label": "Handoff", "group": "Handoff" }
+      },
+      "itemAria": "{{label}} {{title}}"
+    },
+    "freeform": {
+      "chatAria": "Chat do assistente",
+      "backToConversations": "Conversas",
+      "filesAria": "Arquivos do chat",
+      "filesTitle": "Arquivos da conversa",
+      "filesHint": "Abra rascunhos markdown à direita. Clique em um nome no chat para abrir aqui.",
+      "createFailed": "Não foi possível iniciar um novo chat"
+    },
+    "archive": {
+      "label": "Arquivar",
+      "ariaLabel": "Arquivar conversa",
+      "title": "Arquivar conversa",
+      "failed": "Não foi possível arquivar o chat"
+    },
+    "threadDocuments": {
+      "ariaLabel": "Arquivos do chat",
+      "listAria": "Lista de arquivos",
+      "filesTitle": "Arquivos",
+      "filesSubtitle": "Rascunhos markdown escritos nesta conversa.",
+      "workspaceMissing": "O workspace do chat ainda não está pronto. Arquivos gerados aparecem aqui depois que o assistente escrever.",
+      "unavailable": "Nenhum arquivo disponível ainda.",
+      "empty": "Rascunhos markdown deste chat aparecem aqui. Peça ao assistente para criar ou atualizar um arquivo e abra pela lista ou por um link na conversa.",
+      "loading": "Carregando arquivo...",
+      "loadError": "Não foi possível carregar este arquivo.",
+      "retry": "Tentar novamente",
+      "noContent": "Nenhum conteúdo para exibir."
+    }
+  },
+  "layout": {
+    "projectHeader": {
+      "pollingActive": "Polling ativo",
+      "pollingPaused": "Polling pausado (janela sem foco)",
+      "syncError": "Erro de sync",
+      "syncErrorTitle": "Sync em background com o tracker remoto está falhando.",
+      "lastError": "Último erro: {{error}}",
+      "lastSync": "Último sync bem-sucedido: {{when}}",
+      "lessThanMinute": "há menos de um minuto",
+      "minutesAgo": "há {{count}} min",
+      "hoursAgo": "há {{count}} h",
+      "refreshing": "Atualizando",
+      "refreshBoard": "Atualizar board",
+      "openProjectWorkspaceCode": "Abrir workspace do projeto no Code",
+      "board": "Board",
+      "list": "Lista",
+      "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
+    },
+    "recents": {
+      "title": "Recentes",
+      "seeAll": "Ver tudo",
+      "loading": "Carregando…",
+      "empty": "Nenhuma sessão recente ainda.",
+      "newChatAria": "Novo chat",
+      "newChatTitle": "Novo chat",
+      "status": {
+        "running": "Em execução",
+        "waiting": "Aguardando",
+        "retrying": "Repetindo",
+        "idle": "Ocioso",
+        "active": "Ativo",
+        "in_progress": "Em andamento",
+        "todo": "A fazer",
+        "done": "Concluído",
+        "closed": "Fechado",
+        "error": "Erro"
+      }
+    },
+    "assistantMenu": {
+      "optionsAria": "Opções do assistente",
+      "createIssue": "Criar issue"
+    },
+    "editProject": "Editar projeto",
+    "sessionSubtitle": {
+      "freeform": "Chat livre",
+      "explore": "Explorar projeto",
+      "projectChat": "Chat do projeto"
+    }
+  },
+  "board": {
+    "quickFilters": "Filtros rápidos",
+    "searchPlaceholder": "Buscar issues...",
+    "searchAria": "Buscar issues",
+    "clearSearch": "Limpar busca",
+    "assigneeTitle": "{{login}} · {{count}} issue",
+    "assigneeTitle_plural": "{{login}} · {{count}} issues",
+    "assignee": "Assignee",
+    "assignedToMe": "Atribuídas a mim",
+    "unassigned": "Sem assignee",
+    "recentlyUpdated": "Atualizadas recentemente",
+    "clear": "Limpar",
+    "filtersTitle": "Filtros",
+    "filtersDescription": "Refine o board por busca, pessoas e recência.",
+    "searchLabel": "Busca",
+    "creator": "Criador",
+    "recency": "Recência",
+    "updatedLast7Days": "Atualizadas nos últimos 7 dias",
+    "apply": "Aplicar",
+    "reset": "Resetar filtros",
+    "clearAllFilters": "Limpar todos os filtros",
+    "done": "Concluir",
+    "recentlyUpdated7d": "Atualizadas recentemente (7d)",
+    "list": {
+      "empty": "Nenhuma issue ainda.",
+      "open": "Abrir",
+      "columns": {
+        "id": "ID",
+        "title": "Título",
+        "status": "Status",
+        "updated": "Atualizada"
+      }
+    },
+    "filtersTrigger": {
+      "filters": "Filtros",
+      "filtersCount": "Filtros · {{count}}"
+    },
+    "palette": {
+      "placeholder": "Digite um comando...",
+      "empty": "Nenhum comando correspondente.",
+      "filtersHeading": "Filtros",
+      "openFilters": "Abrir filtros",
+      "searchIssues": "Buscar issues...",
+      "assignedToMe": "Filtro: Atribuídas a mim",
+      "createdByMe": "Filtro: Criadas por mim",
+      "clearFilters": "Limpar filtros"
+    },
+    "people": {
+      "assignedToMe": "Atribuídas a mim",
+      "searchPlaceholder": "Buscar {{label}}…",
+      "noPeopleFound": "Nenhuma pessoa encontrada."
+    },
+    "group": {
+      "mergeHint": "Agrupar com {{identifier}}",
+      "dropToGroup": "Soltar para agrupar",
+      "count": "{{count}} agrupadas",
+      "expand": "Mostrar tarefas do grupo",
+      "collapse": "Ocultar tarefas do grupo",
+      "removeMember": "Remover {{identifier}} do grupo",
+      "disband": "Desfazer grupo",
+      "runningLocked": "Não dá para alterar o grupo enquanto ele está rodando"
+    },
+    "subtasks": {
+      "count": "{{count}} subtarefas",
+      "expand": "Mostrar subtarefas",
+      "collapse": "Ocultar subtarefas",
+      "empty": "Abra a tarefa pai para ver as subtarefas"
+    },
+    "issueCard": {
+      "openOnTracker": "Abrir no tracker",
+      "agentStatus": "Agente: {{status}}",
+      "blocked": "Bloqueada"
+    },
+    "column": {
+      "expandAria": "Expandir coluna {{status}}",
+      "expandTitle": "Expandir {{status}}",
+      "optionsAria": "Opções da coluna {{status}}",
+      "optionsTitle": "Opções da coluna",
+      "collapse": "Recolher coluna",
+      "editWipLimit": "Editar limite de WIP",
+      "setWipLimit": "Definir limite de WIP",
+      "clearLimit": "Remover limite",
+      "wipDialogTitle": "Limite de work-in-progress",
+      "wipDialogDescription": "Destaca a coluna “{{status}}” quando tiver mais issues que este número. Deixe vazio para remover o limite.",
+      "wipPlaceholder": "ex.: 5"
+    }
+  },
+  "nav": {
+    "brandTitle": "Symphony Tracker",
+    "brandSubtitle": "Board de projetos local",
+    "expandSidebar": "Expandir barra lateral",
+    "collapseSidebar": "Recolher barra lateral",
+    "projects": "Projetos",
+    "templates": "Templates",
+    "observability": "Observabilidade",
+    "backups": "Backups",
+    "settings": "Configurações",
+    "boards": "Boards",
+    "noProjects": "Nenhum projeto local ainda.",
+    "resetToken": "Resetar token",
+    "brandIconAlt": "Ícone do Symphony Tracker",
+    "theme": {
+      "toggleAria": "Alternar tema",
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema"
+    }
+  },
+  "auth": {
+    "title": "Conectar Tracker Local",
+    "checkingSaved": "Verificando token salvo…",
+    "description": "Informe o token do tracker configurado no backend Phoenix.",
+    "invalidSaved": "O token salvo não corresponde mais a esta instância Symphony. Cole o valor atual de elixir/.env (SYMPHONY_TRACKER_TOKEN).",
+    "placeholder": "Token do tracker",
+    "storedAs": "Armazenado localmente como {{key}}.",
+    "validating": "Validando...",
+    "continue": "Continuar",
+    "tokenRequired": "O token do tracker é obrigatório.",
+    "invalidToken": "Token do tracker inválido.",
+    "serverUnreachable": "Não foi possível alcançar o servidor Symphony. Confirme que está rodando e tente novamente.",
+    "viewerLoadFailed": "Symphony aceitou o token mas não carregou os detalhes do operador. Verifique os logs do servidor e tente novamente.",
+    "viewerErrors": {
+      "github_token_missing": "GITHUB_TOKEN não está configurado no servidor Symphony. Defina e reinicie o Symphony.",
+      "github_unauthorized": "GitHub rejeitou o GITHUB_TOKEN configurado. Gere um novo token com os escopos necessários.",
+      "github_rate_limited": "O rate limit da API do GitHub está esgotado. O Symphony se recuperará automaticamente quando o limite resetar.",
+      "github_network_error": "Symphony não conseguiu alcançar o GitHub. Verifique a conectividade do servidor e tente novamente.",
+      "missingLogin": "A resposta do viewer não inclui o login do GitHub.",
+      "default": "Symphony não conseguiu identificar o operador. Verifique a configuração do servidor."
+    }
+  }
+}

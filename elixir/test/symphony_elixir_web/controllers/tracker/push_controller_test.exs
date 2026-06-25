@@ -66,8 +66,9 @@ defmodule SymphonyElixirWeb.Tracker.PushControllerTest do
 
   test "POST /api/tracker/v1/push/subscriptions upserts a browser subscription" do
     conn = post(authed_conn(), "/api/tracker/v1/push/subscriptions", @valid_subscription)
-    assert %{"data" => %{"endpoint" => endpoint}} = json_response(conn, 201)
+    assert %{"data" => %{"endpoint" => endpoint, "identity_keys" => keys}} = json_response(conn, 201)
     assert endpoint == @valid_subscription["endpoint"]
+    assert is_list(keys)
     assert Subscriptions.count() == 1
 
     conn = post(authed_conn(), "/api/tracker/v1/push/subscriptions", @valid_subscription)

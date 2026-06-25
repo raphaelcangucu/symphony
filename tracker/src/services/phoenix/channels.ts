@@ -1,5 +1,7 @@
 import type { Channel } from "phoenix";
 
+import { requireProjectSlug } from "@/lib/serviceValidation";
+
 import { normalizeProjectRealtimePayload } from "@/services/mappers";
 import type { ProjectRealtimeEventName, ProjectRealtimePayloadByEvent } from "@/types/realtime-events";
 
@@ -12,8 +14,8 @@ export const PROJECT_REALTIME_EVENTS = [
 ] as const satisfies readonly ProjectRealtimeEventName[];
 
 export function projectTopic(projectSlug: string): string {
-  if (!projectSlug.trim()) throw new Error("projectSlug is required");
-  return `project:${projectSlug}`;
+  const slug = requireProjectSlug(projectSlug);
+  return `project:${slug}`;
 }
 
 export function isProjectRealtimeEventName(value: string): value is ProjectRealtimeEventName {

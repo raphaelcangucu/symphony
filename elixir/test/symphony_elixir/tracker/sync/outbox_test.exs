@@ -37,6 +37,33 @@ defmodule SymphonyElixir.Tracker.Sync.OutboxTest do
     assert Repo.aggregate(OutboxEntry, :count) == 1
   end
 
+  test "concurrent enqueue of the same dedup_key never raises and coalesces to one pending entry", %{
+    project: project
+  } do
+    attrs = %{
+      project_id: project.id,
+      entity_type: "state",
+      operation: "move",
+      payload: %{"state" => "Done"},
+      dedup_key: "state:move:#{project.id}:MM-1"
+    }
+
+    # Hammer the check-then-insert path harder than the connection pool so the
+    # lookup-then-insert window overlaps a concurrent insert. Before the fix this
+    # raised `Ecto.ConstraintError` in a worker (surfacing the move endpoint 500).
+    results =
+      1..24
+      |> Task.async_stream(fn _ -> Outbox.enqueue(attrs) end,
+        max_concurrency: 24,
+        timeout: 15_000,
+        on_timeout: :kill_task
+      )
+      |> Enum.to_list()
+
+    assert Enum.all?(results, &match?({:ok, {:ok, %OutboxEntry{}}}, &1))
+    assert Outbox.pending_count(project.id) == 1
+  end
+
   test "pending_count counts only pending entries", %{project: project} do
     {:ok, _} = Outbox.enqueue(%{project_id: project.id, entity_type: "comment", operation: "create", payload: %{}, dedup_key: "c1"})
     assert Outbox.pending_count(project.id) == 1

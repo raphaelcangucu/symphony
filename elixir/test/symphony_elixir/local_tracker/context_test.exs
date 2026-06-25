@@ -726,6 +726,161 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     refute "old-label" in label_names
   end
 
+  test "set_issue_group makes the target the lead and snaps the member to its status" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Backlog"})
+
+    assert {:ok, member} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    assert member.group_lead_id
+    assert member.status.name == "Todo"
+    assert {:ok, [m]} = Context.list_group_members("macro-markets", "MAC-1")
+    assert m.identifier == "MAC-2"
+  end
+
+  test "set_issue_group rejects self / nested / existing-lead" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _a} = Context.create_issue("macro-markets", %{title: "A", status: "Todo"})
+    {:ok, _b} = Context.create_issue("macro-markets", %{title: "B", status: "Todo"})
+    {:ok, _c} = Context.create_issue("macro-markets", %{title: "C", status: "Todo"})
+
+    assert {:error, :cannot_group_with_self} = Context.set_issue_group("macro-markets", "MAC-1", "MAC-1")
+    assert {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    assert {:error, :lead_is_member} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-2")
+    assert {:error, :member_is_lead} = Context.set_issue_group("macro-markets", "MAC-1", "MAC-3")
+  end
+
+  test "remove_from_group detaches a member and disbands on the lead" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
+    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, m2} = Context.remove_from_group("macro-markets", "MAC-2")
+    assert m2.group_lead_id == nil
+    assert {:ok, [one]} = Context.list_group_members("macro-markets", "MAC-1")
+    assert one.identifier == "MAC-3"
+
+    assert {:ok, _lead} = Context.remove_from_group("macro-markets", "MAC-1")
+    assert {:ok, []} = Context.list_group_members("macro-markets", "MAC-1")
+  end
+
+  test "remove_from_group errors when not grouped" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _solo} = Context.create_issue("macro-markets", %{title: "Solo", status: "Todo"})
+    assert {:error, :not_in_group} = Context.remove_from_group("macro-markets", "MAC-1")
+  end
+
+  test "move_issue carries group members to the lead's new status" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+
+    assert {:ok, lead} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+    assert lead.status.name == "In Progress"
+    assert {:ok, [member]} = Context.list_group_members("macro-markets", "MAC-1")
+    assert member.status.name == "In Progress"
+  end
+
+  test "move_issue on a member carries the lead and siblings to the new status" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
+    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, lead} = Context.move_issue("macro-markets", "MAC-2", %{status: "In Progress"})
+    assert lead.identifier == "MAC-1"
+    assert lead.status.name == "In Progress"
+
+    assert {:ok, members} = Context.list_group_members("macro-markets", "MAC-1")
+    assert Enum.all?(members, &(&1.status.name == "In Progress"))
+  end
+
+  test "move_issue records an issue_moved activity event for the lead and every member" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
+    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, _lead} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+
+    for identifier <- ["MAC-1", "MAC-2", "MAC-3"] do
+      assert {:ok, events} = Context.list_activity_events("macro-markets", identifier)
+
+      assert Enum.any?(events, &(&1.event_type == "issue_moved")),
+             "expected an issue_moved event for #{identifier}"
+    end
+  end
+
+  test "move_issue sends a human review push only for the group lead" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    {:ok, _setup} =
+      Context.upsert_project_setup("macro-markets", %{
+        workflow_markdown: """
+        ---
+        tracker:
+          wait_states:
+            - Human Review
+        ---
+
+        Prompt.
+        """,
+        validation_commands: [],
+        scan_summary: %{}
+      })
+
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
+    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+
+    trace_push_dispatch_calls()
+
+    task = Task.async(fn -> Context.move_issue("macro-markets", "MAC-2", %{status: "Human Review"}) end)
+
+    assert {:ok, lead} = Task.await(task)
+    assert lead.identifier == "MAC-1"
+
+    assert_receive {:trace, _pid, :call, {SymphonyElixir.PushNotifications.Dispatcher, :notify, ["human_review", %{tag: "human_review:macro-markets:MAC-1"}]}}
+
+    refute_receive {:trace, _pid, :call, {SymphonyElixir.PushNotifications.Dispatcher, :notify, ["human_review", _payload]}}
+  end
+
+  test "update_issue_state on a member carries the lead and siblings" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+
+    assert {:ok, lead} = Context.update_issue_state("macro-markets", "MAC-2", "In Progress")
+    assert lead.identifier == "MAC-1"
+    assert lead.status.name == "In Progress"
+    assert {:ok, [member]} = Context.list_group_members("macro-markets", "MAC-1")
+    assert member.status.name == "In Progress"
+  end
+
+  test "archiving a lead promotes the oldest member to lead" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
+    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
+    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, _archived} = Context.archive_issue("macro-markets", "MAC-1")
+    assert {:ok, [member]} = Context.list_group_members("macro-markets", "MAC-2")
+    assert member.identifier == "MAC-3"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
@@ -735,5 +890,16 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
 
   defp clean_repo do
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
+  end
+
+  defp trace_push_dispatch_calls do
+    test_pid = self()
+    :erlang.trace(:all, true, [:call, {:tracer, test_pid}])
+    :erlang.trace_pattern({SymphonyElixir.PushNotifications.Dispatcher, :notify, 2}, true, [:local])
+
+    on_exit(fn ->
+      :erlang.trace(:all, false, [:call])
+      :erlang.trace_pattern({SymphonyElixir.PushNotifications.Dispatcher, :notify, 2}, false, [:local])
+    end)
   end
 end

@@ -447,9 +447,10 @@ Notes:
     already exist and should be outside `tracker.active_states` so drafts are not auto-dispatched.
   - Complex issue authoring injects vendored skill files from `skills/superpowers/...`; update that
     folder manually when changing the assistant methodology.
-  - The assistant chat does **not** post its replies as GitHub issue comments (they stream in the
-    chat UI); it records changes via `update_issue`. Only `dispatch_codex` posts a single milestone
-    comment. This keeps the chat from spamming GitHub and triggering rate limits.
+  - Issue authoring chat does **not** mirror normal replies as tracker comments (they stream in the
+    chat UI). Stable fields go through `update_issue`; `add_comment` is available when the user
+    explicitly asks to record a comment on the issue. `dispatch_codex` still posts a single
+    milestone comment on handoff. This keeps the chat from spamming the remote tracker.
 - **GitHub request gateway** (`github.*`, optional): GitHub REST/GraphQL calls flow through
   `SymphonyElixir.GitHub.RequestGateway`, which follows GitHub's API best practices — spacing
   mutations at least one second apart and, on a `429`/`403`/GraphQL rate-limit response, opening a
@@ -534,6 +535,29 @@ acceptance criteria, validation, outcome — see the `workpad` skill). A missing
 workpad triggers one corrective turn; if it is still missing the run continues
 with a logged warning (the plan gate never strands implementation work).
 
+Plan-driven runs also use the workpad as a machine-readable execution contract:
+
+```markdown
+### Plan
+source_plan: docs/superpowers/plans/2026-06-23-dis-6-admin-i18n-complete-plan.md
+mode: full-plan
+scope_status: in_progress
+final_validate_allowed: false
+final_publish_allowed: false
+
+- [x] Task 1: Stabilize existing first slice
+- [~] Task 2: Add Tasks namespace
+- [ ] Task 3: Add Distribution namespace
+```
+
+`Workpad.ExecutionContract` parses this single Plan block. While any plan item
+is `[ ]` or `[~]`, Symphony treats the issue as scope-incomplete: final VALIDATE
+and publish corrective turns are skipped, goal-mode continuation is not stopped
+just because a turn ended, and an open PR is treated as a checkpoint rather than
+completion. Once every task is `[x]`, the agent sets `scope_status: complete`
+and flips `final_validate_allowed` / `final_publish_allowed` to `true`, allowing
+the final evidence and publish gates to run.
+
 Workpads are first-class in sync:
 
 - Locally authored comments are classified by body (`Tracker.Workpad`) and start
@@ -565,8 +589,10 @@ evidence:
   required: true
 ```
 
-When `required: true` and the run changed any repo, the VALIDATE gate runs
-before the publish gate. The agent (guided by the `evidence` skill) must write
+When `required: true` and the run changed any repo, the final VALIDATE gate runs
+before the publish gate only after the execution contract says the plan scope is
+complete. Earlier test runs are slice evidence: useful for the current task
+slice, but not a handoff signal. The agent (guided by the `evidence` skill) must write
 `.symphony/evidence/manifest.json` with its test runs and artifacts. The
 orchestrator verifies — never trusting the agent's judgment — that:
 
@@ -646,6 +672,26 @@ Symphony's dynamic tools (`set_issue_status`, `github_graphql`, ...) are exposed
 MCP gateway: the session merges a `symphony` server entry into `<workspace>/.cursor/mcp.json`
 (restored on session stop) and the run passes `--approve-mcps`.
 
+### Assistant turn tracking & Resume
+
+Each assistant chat turn is tracked durably so the UI can recover after a refresh or a full serve
+restart. Design spec: `docs/superpowers/specs/2026-06-21-assistant-turn-session-tracking-design.md`.
+
+- **Durable state, no new table.** The thread's latest turn lives in `assistant_threads.metadata`
+  under `current_turn` (status, prompt, Codex thread/turn ids, timing) — written through
+  `SymphonyElixir.Assistant.History`. Full per-turn history stays in `log/symphony.log`.
+- **`Assistant.TurnManager`** is an always-on GenServer (started by `SharedSupervisor` after
+  `Repo`, independent of the web server). It owns the turn lifecycle: it spawns + monitors the
+  worker, holds the live worker pid in a `:unique` registry keyed by `thread_id`, and streams
+  lifecycle over the per-thread PubSub topic. On boot it reconciles any turn still marked `running`
+  to `interrupted (serve_restart)`.
+- **Re-attach after refresh.** The channel join exposes `last_turn` + `turn_running`, so a reloaded
+  tab immediately shows the running indicator (or an **Interrupted** banner with a **Resume** button
+  that re-dispatches the saved prompt, continuing the same Codex thread).
+- **Steer-then-queue.** A new message sent while a turn runs steers the live turn (cross-channel via
+  the registry) instead of starting a second Codex session; if it cannot steer, it is queued and run
+  next. Project-scoped chats (no durable thread) keep the legacy single-turn busy guard.
+
 ### Local Tracker Development
 
 The local tracker runs from the same Phoenix server as the API and stores data in the SQLite path
@@ -698,6 +744,38 @@ make migrate                          # create db if needed + apply pending migr
 make new-migration name=add_widgets   # generate a new migration file
 make rollback                         # roll back the last migration
 ```
+
+#### Tracker CLI (`mix symphony.tracker`)
+
+A thin shell over the same assistant tools the chat assistant and coding agents
+use. It connects to the **running** daemon over distributed Erlang (`make serve`
+first) so the SQLite DB keeps a single owner — it never starts its own app.
+
+```bash
+mix symphony.tracker projects                              # list local tracker projects
+mix symphony.tracker issues <slug> [--search TEXT]         # list issues
+mix symphony.tracker issue <slug> <id>                     # get one issue
+mix symphony.tracker move <slug> <id> <status>             # move to a workflow status
+mix symphony.tracker comment <slug> <id> <body>            # add a comment
+mix symphony.tracker comments <slug> <id>                  # list comments
+mix symphony.tracker dispatch <slug> <id> --instructions "…" [--agent codex]
+mix symphony.tracker running [slug]                        # live agents running/retrying (omit slug = all projects)
+mix symphony.tracker steer <slug> <id> <message>          # inject a message into a running agent's turn
+mix symphony.tracker sync <slug> <id>                      # pull remote tracker state
+mix symphony.tracker evidence <slug> <id>                  # evidence gate status
+mix symphony.tracker handoff <slug> <id>                   # validate + publish gates
+mix symphony.tracker orchestrator <slug> <id>              # live running/retry/idle state
+mix symphony.tracker dispatch-explain <slug> <id>          # why an issue is / isn't dispatchable
+mix symphony.tracker pr-link <slug> <id> <url>             # attach a PR URL
+mix symphony.tracker preview <slug> <id> [status|start|stop|restart]
+mix symphony.tracker dev-env <slug> <action> [--step-id ID] [--category CAT]
+mix symphony.tracker blockers <slug> <id>                  # list blockers
+mix symphony.tracker blockers-add <slug> <id> <target>     # add blocked_by relation
+mix symphony.tracker blockers-rm <slug> <id> <target>      # remove blocked_by relation
+```
+
+Add `--json` to print the full structured `{tool, message, data}` as one JSON line
+(ideal for scripts / `jq`); the default prints a human summary plus pretty data.
 
 #### SQLite backups
 
@@ -802,6 +880,11 @@ conversational only in v1 (no tracker tools). The thread model carries a `scope`
 (`project`|`freeform`|`issue`) with `issue_identifier`/`title`, and `project_slug` is nullable.
 Assistant tool calls record IN/OUT arguments and output for debugging in the chat transcript.
 
+- Assistant file activity renders as compact, expandable cards in the chat:
+  file reads come from the existing MCP read-tool calls, while Codex's native
+  edits and shell commands are surfaced by relaying its item events through the
+  tool-call pipeline.
+
 Issue authoring uses the same assistant surface as the primary **New issue** path. The assistant
 creates a draft issue in `assistant.draft_status`, redirects to
 `/projects/:slug/assistant/issue/:id`, and continues in an issue-scoped chat that runs inside that
@@ -847,13 +930,26 @@ tracker. Enable the feature in a project's `workflow_markdown` front matter:
 ```yaml
 dev_server:
   enabled: true
-  port_range: [4100, 4199]
+  # port_range: [4100, 4199]   # optional — omit to auto-lease from the pool
+  # reclaim_ports: true        # optional — kill stale listeners to keep ports stable
   idle_timeout_ms: 1800000
   auto_start_on: pull_request,human_review
 ```
 
-Defaults are `enabled: false`, `port_range: [4100, 4199]`,
-`idle_timeout_ms: 1800000`, and `auto_start_on: [pull_request, human_review]`.
+Defaults are `enabled: false`, `reclaim_ports: false`, `port_range: nil`
+(auto-lease, see below), `idle_timeout_ms: 1800000`, and
+`auto_start_on: [pull_request, human_review]`.
+
+`reclaim_ports` hardens the port bridge. When `true`, before (re)starting a
+serve step Symphony frees that step's **canonical** port (the deterministic
+`band/slot/offset` port) by terminating any stale process still listening on it
+(`SIGTERM`, then `SIGKILL`, waiting until the socket is bindable), then reuses
+the same port instead of drifting onto the next free one. This keeps the
+Symphony → preview → public-tunnel mapping stable across restarts and crashes.
+A port already served by a healthy, Symphony-tracked instance is never touched.
+Leave it `false` (default) for projects that deliberately keep a long-lived
+resource (e.g. a shared docker container) bound to a service's port across
+restarts, since that resource must not be killed.
 When `base_url` is omitted, each preview URL is built as
 `http://127.0.0.1:<allocated-port><url_path>`.
 
@@ -866,6 +962,33 @@ dev_server:
 
 When set, `base_url` is used as the origin/base before `url_path`; it is not where
 Symphony injects the allocated port unless your proxy is configured to route previews that way.
+
+### Preview port scheme
+
+Local preview ports are assigned from a node-level pool so multiple projects and
+issues never collide and the same project+issue+service keeps a stable port while
+it runs. The pool is configured instance-wide (not per project):
+
+| Env var | Default | Meaning |
+| --- | --- | --- |
+| `SYMPHONY_PREVIEW_POOL` | `10000-30000` | Inclusive global port range. |
+| `SYMPHONY_PREVIEW_SLOTS_PER_PROJECT` | `32` | Issue slots per project band. |
+| `SYMPHONY_PREVIEW_PORTS_PER_SLOT` | `8` | Ports (serve steps) per issue slot. |
+
+The pool is carved into fixed bands of `SLOTS_PER_PROJECT * PORTS_PER_SLOT` ports.
+Each project leases one band (auto, persisted in the tracker DB); each running
+issue leases a slot inside that band; each serve step occupies a fixed offset, so
+`port = band_start + slot_index * PORTS_PER_SLOT + service_offset`. Slots are
+released when an issue's previews stop and garbage-collected if they leak.
+
+Omitting `dev_server.port_range` auto-leases a band from the pool. Setting it
+**pins** the project to exactly that range (still carved into slots/offsets),
+which is useful for proxy setups that expect fixed ports.
+
+**Migration note:** projects that previously relied on the old `[4100, 4199]`
+default now auto-lease from `10000-30000`, so local `127.0.0.1:<port>` URLs move
+into that range. Public preview tunnel hostnames are unchanged. To keep the old
+neighborhood, set `dev_server.port_range: [4100, 4199]` explicitly.
 
 Each workspace repo can declare setup and serve steps in `.symphony/devenv.yaml` for
 DevEnv proposal/discovery:

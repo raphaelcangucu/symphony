@@ -61,6 +61,50 @@ defmodule SymphonyElixir.Evidence.StoreTest do
     assert record.status == "failed"
   end
 
+  test "supplementary failed full-suite run does not fail the record when targeted unit passed", ctx do
+    manifest = %{
+      "issue" => "GAM-9",
+      "runs" => [
+        %{"kind" => "unit", "repo" => "frontend", "status" => "failed"},
+        %{"kind" => "unit", "repo" => "frontend", "status" => "passed"}
+      ]
+    }
+
+    assert {:ok, record} =
+             Store.persist(ctx.project.slug, "GAM-9", ctx.workspace, manifest, evidence_root: ctx.evidence_root)
+
+    assert record.status == "passed"
+  end
+
+  test "delete_run removes the record and artifact directory", ctx do
+    {:ok, record} =
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => []}, evidence_root: ctx.evidence_root)
+
+    assert File.exists?(Path.join(record.artifact_dir, "artifacts/s.png"))
+
+    assert {:ok, deleted} = Store.delete_run("gam", "GAM-9", record.run_id)
+    assert deleted.id == record.id
+    refute File.exists?(record.artifact_dir)
+    assert {:ok, []} = Store.list("gam", "GAM-9")
+  end
+
+  test "delete_failed removes only non-passing records", ctx do
+    {:ok, passed} =
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => [%{"kind" => "unit", "status" => "passed"}]},
+        evidence_root: ctx.evidence_root
+      )
+
+    {:ok, failed} =
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => [%{"kind" => "unit", "status" => "failed"}]},
+        evidence_root: ctx.evidence_root
+      )
+
+    assert {:ok, 1} = Store.delete_failed("gam", "GAM-9")
+    assert {:ok, [remaining]} = Store.list("gam", "GAM-9")
+    assert remaining.run_id == passed.run_id
+    refute File.exists?(failed.artifact_dir)
+  end
+
   test "unknown project is an error", ctx do
     assert {:error, _reason} =
              Store.persist("nope", "GAM-9", ctx.workspace, %{"runs" => []}, evidence_root: ctx.evidence_root)

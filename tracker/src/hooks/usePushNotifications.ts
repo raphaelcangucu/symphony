@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { i18n } from "@/i18n";
 import {
   fetchPushConfig,
   getLocalPushSubscription,
@@ -47,7 +48,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
       setConfig(nextConfig);
       setSubscribed(Boolean(localSubscription));
     } catch {
-      setError("Failed to load push notification settings");
+      setError(i18n.t("settings.push.errors.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -66,14 +67,14 @@ export function usePushNotifications(): UsePushNotificationsResult {
     try {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
-        setError("Notification permission was denied");
+        setError(i18n.t("settings.push.errors.permissionDenied"));
         return;
       }
 
       await subscribeToPush(config.public_key);
       setSubscribed(true);
     } catch {
-      setError("Failed to enable browser notifications");
+      setError(i18n.t("settings.push.errors.enableFailed"));
     } finally {
       setBusy(false);
     }
@@ -87,7 +88,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
       await unsubscribeFromPush();
       setSubscribed(false);
     } catch {
-      setError("Failed to disable browser notifications");
+      setError(i18n.t("settings.push.errors.disableFailed"));
     } finally {
       setBusy(false);
     }
@@ -100,10 +101,10 @@ export function usePushNotifications(): UsePushNotificationsResult {
     try {
       const result = await sendTestPushNotification();
       if (result.subscription_count === 0) {
-        setError("No push subscriptions on the server — disable and re-enable notifications");
+        setError(i18n.t("settings.push.errors.noSubscriptions"));
       }
     } catch {
-      setError("Failed to send test notification");
+      setError(i18n.t("settings.push.errors.testFailed"));
     } finally {
       setBusy(false);
     }

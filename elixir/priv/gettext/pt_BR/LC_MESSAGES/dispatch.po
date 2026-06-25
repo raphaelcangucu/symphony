@@ -1,0 +1,19 @@
+msgid ""
+msgstr ""
+"Language: pt_BR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Resuming agent work on %{identifier}"
+msgstr "Retomando trabalho do agente em %{identifier}"
+
+msgid "Restarting agent work on %{identifier}"
+msgstr "Reiniciando trabalho do agente em %{identifier}"
+
+msgid "Hard reset — starting a fresh agent session for %{identifier}"
+msgstr "Reset completo — iniciando nova sessão do agente para %{identifier}"
+
+msgid "Continuing agent work on %{identifier}"
+msgstr "Continuando trabalho do agente em %{identifier}"
+
+msgid "Paused agent run for %{identifier} — resume when ready"
+msgstr "Execução do agente pausada para %{identifier} — retome quando estiver pronto"

@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { i18n } from "@/i18n";
 import { createFreeformThread } from "@/services/assistantThreads";
 
 export interface UseCreateFreeformChatResult {
@@ -27,7 +28,7 @@ export function useCreateFreeformChat(onCreated?: () => void): UseCreateFreeform
       onCreated?.();
       navigate(`/assistant/${thread.id}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to start a new chat");
+      toast.error(error instanceof Error ? error.message : i18n.t("assistant.freeform.createFailed"));
     } finally {
       setCreating(false);
     }

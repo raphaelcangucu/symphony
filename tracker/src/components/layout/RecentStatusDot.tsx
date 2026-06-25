@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { cn } from "@/lib/utils";
 import type { RecentStatusKind } from "@/types/recents";
 
@@ -16,26 +18,14 @@ const STATUS_COLORS: Record<RecentStatusKind, string> = {
 
 const PULSING: ReadonlySet<RecentStatusKind> = new Set(["running", "retrying"]);
 
-const STATUS_LABELS: Record<RecentStatusKind, string> = {
-  running: "Running",
-  waiting: "Waiting",
-  retrying: "Retrying",
-  idle: "Idle",
-  active: "Active",
-  in_progress: "In progress",
-  todo: "To do",
-  done: "Done",
-  closed: "Closed",
-  error: "Error",
-};
-
 interface RecentStatusDotProps {
   statusKind: RecentStatusKind;
   className?: string;
 }
 
 export function RecentStatusDot({ statusKind, className }: RecentStatusDotProps) {
-  const label = STATUS_LABELS[statusKind];
+  const { t } = useTranslation();
+  const label = t(`layout.recents.status.${statusKind}`);
   return (
     <span
       role="img"

@@ -26,6 +26,7 @@ function makePr(overrides: Partial<PullRequest> = {}): PullRequest {
     createdAt: null,
     updatedAt: null,
     mergedAt: null,
+    mergeable: null,
     checksState: null,
     pipelines: [],
     statuses: [],

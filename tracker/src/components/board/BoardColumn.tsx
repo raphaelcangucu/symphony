@@ -1,7 +1,8 @@
 import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, type SortingStrategy } from "@dnd-kit/sortable";
 import { Gauge, MoreHorizontal, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { AgentStatusDot } from "@/components/issues/AgentStatusBadge";
 import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
@@ -20,9 +21,19 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflow-status";
 
+import { GroupCard } from "./GroupCard";
 import { IssueCard } from "./IssueCard";
-import { issueDragId } from "./board-utils";
+import { SubtaskParentCard } from "./SubtaskParentCard";
+import { groupIssuesIntoUnits, type DropIndicator } from "./board-utils";
 import { getStatusMeta } from "./status-meta";
+
+/**
+ * Keeps cards fixed in place during a drag (no shuffle to "make room"). A
+ * stationary column means the card under the pointer is always the one the user
+ * is aiming at, which is what makes drag-to-group reliable and keeps it visually
+ * distinct from reordering (shown via an explicit drop line instead).
+ */
+const noShiftStrategy: SortingStrategy = () => null;
 
 interface BoardColumnProps {
   status: WorkflowStatusName;
@@ -37,6 +48,12 @@ interface BoardColumnProps {
   agentExecutions?: ReadonlyMap<string, AgentExecution>;
   limit?: number;
   onChangeLimit?: (status: WorkflowStatusName, limit: number | null) => void;
+  /** True while a card is being dragged anywhere on the board. */
+  dragActive?: boolean;
+  onRemoveMember: (identifier: string) => void;
+  onDisband: (leadIdentifier: string) => void;
+  mergeTargetId?: string | null;
+  dropIndicator?: DropIndicator | null;
 }
 
 export function BoardColumn({
@@ -52,10 +69,17 @@ export function BoardColumn({
   agentExecutions,
   limit,
   onChangeLimit,
+  dragActive = false,
+  onRemoveMember,
+  onDisband,
+  mergeTargetId = null,
+  dropIndicator = null,
 }: BoardColumnProps) {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const meta = getStatusMeta(status, category);
   const Icon = meta.Icon;
+  const units = groupIssuesIntoUnits(issues);
 
   const [limitOpen, setLimitOpen] = useState(false);
   const [limitDraft, setLimitDraft] = useState("");
@@ -106,8 +130,8 @@ export function BoardColumn({
         <button
           type="button"
           onClick={onToggleCollapse}
-          aria-label={`Expand ${status} column`}
-          title={`Expand ${status}`}
+          aria-label={t("board.column.expandAria", { status })}
+          title={t("board.column.expandTitle", { status })}
           className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <PanelLeftOpen className="h-4 w-4" />
@@ -147,8 +171,8 @@ export function BoardColumn({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                aria-label={`${status} column options`}
-                title="Column options"
+                aria-label={t("board.column.optionsAria", { status })}
+                title={t("board.column.optionsTitle")}
                 className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <MoreHorizontal className="h-4 w-4" />
@@ -157,19 +181,19 @@ export function BoardColumn({
             <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuItem onSelect={onToggleCollapse}>
                 <PanelLeftClose className="mr-2 h-4 w-4" />
-                Collapse column
+                {t("board.column.collapse")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={openLimitDialog}>
                 <Gauge className="mr-2 h-4 w-4" />
-                {typeof limit === "number" ? "Edit work-in-progress limit" : "Set work-in-progress limit"}
+                {typeof limit === "number" ? t("board.column.editWipLimit") : t("board.column.setWipLimit")}
               </DropdownMenuItem>
               {typeof limit === "number" ? (
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onSelect={() => onChangeLimit?.(status, null)}
                 >
-                  Clear limit
+                  {t("board.column.clearLimit")}
                 </DropdownMenuItem>
               ) : null}
             </DropdownMenuContent>
@@ -188,19 +212,46 @@ export function BoardColumn({
         )}
       >
         <span className={cn("absolute inset-x-3 top-0 h-0.5 rounded-full", overLimit ? "bg-rose-500/70" : meta.accentClass)} />
-        <SortableContext items={issues.map((issue) => issueDragId(issue.identifier))} strategy={verticalListSortingStrategy}>
+        <SortableContext items={units.map((unit) => unit.id)} strategy={noShiftStrategy}>
           <div className="space-y-2.5 pt-1">
-            {issues.map((issue) => (
-              <IssueCard
-                key={issue.identifier}
-                issue={issue}
-                onSelect={onSelectIssue}
-                agent={agentExecutions?.get(issue.identifier)}
-              />
-            ))}
+            {units.map((unit) =>
+              unit.kind === "group" ? (
+                <GroupCard
+                  key={unit.id}
+                  id={unit.id}
+                  lead={unit.lead}
+                  members={unit.members}
+                  onSelectIssue={onSelectIssue}
+                  onRemoveMember={onRemoveMember}
+                  onDisband={onDisband}
+                  agentExecutions={agentExecutions}
+                  mergeActive={mergeTargetId === unit.id}
+                  dropEdge={dropIndicator?.unitId === unit.id ? dropIndicator.edge : null}
+                />
+              ) : unit.kind === "parent" ? (
+                <SubtaskParentCard
+                  key={unit.id}
+                  issue={unit.issue}
+                  subtasks={unit.subtasks}
+                  onSelectIssue={onSelectIssue}
+                  agent={agentExecutions?.get(unit.issue.identifier)}
+                  mergeActive={mergeTargetId === unit.id}
+                  dropEdge={dropIndicator?.unitId === unit.id ? dropIndicator.edge : null}
+                />
+              ) : (
+                <IssueCard
+                  key={unit.id}
+                  issue={unit.issue}
+                  onSelect={onSelectIssue}
+                  agent={agentExecutions?.get(unit.issue.identifier)}
+                  mergeActive={mergeTargetId === unit.id}
+                  dropEdge={dropIndicator?.unitId === unit.id ? dropIndicator.edge : null}
+                />
+              ),
+            )}
           </div>
         </SortableContext>
-        {issues.length === 0 ? (
+        {issues.length === 0 && !dragActive ? (
           <NewIssueMenu
             projectSlug={projectSlug}
             status={status}
@@ -215,15 +266,15 @@ export function BoardColumn({
       <Dialog open={limitOpen} onOpenChange={setLimitOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Work-in-progress limit</DialogTitle>
+            <DialogTitle>{t("board.column.wipDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Highlight the “{status}” column when it holds more than this many issues. Leave empty to remove the limit.
+              {t("board.column.wipDialogDescription", { status })}
             </DialogDescription>
           </DialogHeader>
           <Input
             value={limitDraft}
             onChange={(event) => setLimitDraft(event.target.value)}
-            placeholder="e.g. 5"
+            placeholder={t("board.column.wipPlaceholder")}
             inputMode="numeric"
             autoFocus
             onKeyDown={(event) => {
@@ -232,10 +283,10 @@ export function BoardColumn({
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setLimitOpen(false)}>
-              Cancel
+              {t("issue.comments.cancel")}
             </Button>
             <Button type="button" onClick={saveLimit}>
-              Save
+              {t("issue.comments.save")}
             </Button>
           </div>
         </DialogContent>

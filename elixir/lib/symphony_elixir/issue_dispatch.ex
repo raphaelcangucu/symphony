@@ -7,11 +7,14 @@ defmodule SymphonyElixir.IssueDispatch do
   pick the issue up again.
   """
 
-  alias SymphonyElixir.{Orchestrator, ProjectConfig, Repo, Workspace}
+  alias SymphonyElixir.{AgentPreference, Orchestrator, ProjectConfig, Repo, Workspace}
+  alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
   alias SymphonyElixirWeb.TrackerPresenter
+
+  use Gettext, backend: SymphonyElixirWeb.Gettext
 
   require Logger
 
@@ -78,12 +81,15 @@ defmodule SymphonyElixir.IssueDispatch do
   defp dispatch(%Project{} = project, identifier, action, opts)
        when action in [:resume, :restart, :hard_reset, :continue_work] do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
+         agent_kind = effective_agent_kind(project, issue, opts),
          {:ok, _comment} <- maybe_add_comment(project, identifier, action, opts),
-         {:ok, _} <- maybe_update_agent(project, identifier, opts),
+         {:ok, _} <- maybe_update_agent(project, identifier, opts, agent_kind),
+         :ok <- maybe_route_codex_goal(project, identifier, opts, agent_kind),
          :ok <- maybe_hard_reset(project, identifier, issue, action),
          {:ok, _} <- maybe_move_for_action(project, issue, action, opts),
          :ok <- cancel_retry(identifier),
-         :ok <- nudge_manual_dispatch(identifier) do
+         :ok <- nudge_manual_dispatch(identifier),
+         :ok <- maybe_record_dispatch_activity(project, identifier, action, opts) do
       {:ok, reloaded} = IssueAdapter.dispatch(project, :get_issue, [identifier])
 
       {:ok,
@@ -96,14 +102,39 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   defp maybe_add_comment(project, identifier, action, opts) do
-    body = comment_body(action, Map.get(opts, :instructions))
+    if comment_required?(action, Map.get(opts, :instructions)) do
+      body = comment_body(action, Map.get(opts, :instructions))
 
-    if body == "" do
-      {:ok, nil}
-    else
       IssueAdapter.dispatch(project, :add_comment, [identifier, body, %{"author" => "tracker"}])
+    else
+      {:ok, nil}
     end
   end
+
+  defp comment_required?(action, instructions) when action in [:restart, :hard_reset] do
+    not is_nil(normalize_optional_string(instructions))
+  end
+
+  defp comment_required?(_action, _instructions), do: true
+
+  defp maybe_record_dispatch_activity(project, identifier, action, opts) when action in [:restart, :hard_reset] do
+    if comment_required?(action, Map.get(opts, :instructions)) do
+      :ok
+    else
+      metadata = %{"action" => Atom.to_string(action)}
+
+      case Context.record_activity_event(project.slug, identifier, "agent_dispatch_requested", metadata) do
+        {:ok, _event} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.debug("Skipping dispatch activity identifier=#{identifier} reason=#{inspect(reason)}")
+          :ok
+      end
+    end
+  end
+
+  defp maybe_record_dispatch_activity(_project, _identifier, _action, _opts), do: :ok
 
   defp comment_body(action, instructions) do
     base =
@@ -115,11 +146,11 @@ defmodule SymphonyElixir.IssueDispatch do
           A previous agent run was interrupted or stalled. Resume from the current workspace and session log — do not restart from scratch unless the workspace is empty.
 
           **Priority on resume:**
-          1. Finish remaining **implementation** first (code, commits, push, PR).
+          1. Read the workpad `### Plan` checklist and continue the next incomplete `[ ]` or `[~]` item first.
           2. Do **not** front-load full test/evidence runs unless implementation is already complete and only validation was blocked.
           3. Run VALIDATE/evidence (`evidence` skill) when handoff is ready — after deliverables exist and before moving to review.
 
-          Stale `targeted tests:` lines in the workpad describe a previous attempt; retry them only after the ticket work itself is done.
+          Stale `targeted tests:` lines in the workpad describe a previous attempt; retry them only after the current plan item is implemented. Evidence before all plan items are `[x]` is slice evidence, not final handoff evidence.
           """
 
         :restart ->
@@ -144,8 +175,8 @@ defmodule SymphonyElixir.IssueDispatch do
 
           **Priority:**
           1. Follow the human/tracker instructions first.
-          2. Finish any remaining implementation before full VALIDATE runs unless the instructions say otherwise.
-          3. Run VALIDATE/evidence (`evidence` skill) when handoff is ready.
+          2. Read the workpad `### Plan` checklist and continue the next incomplete `[ ]` or `[~]` item.
+          3. Run final VALIDATE/evidence (`evidence` skill) only when every plan item is `[x]`.
           """
       end
 
@@ -157,19 +188,63 @@ defmodule SymphonyElixir.IssueDispatch do
     end
   end
 
-  defp maybe_update_agent(project, identifier, opts) do
+  # Codex goals are the Codex thread's responsibility (routed via
+  # `maybe_route_codex_goal/4`), so only persist `agent_goal` as workflow
+  # guidance for non-Codex agents.
+  defp maybe_update_agent(project, identifier, opts, agent_kind) do
     agent = normalize_agent(Map.get(opts, :agent))
     goal = normalize_optional_string(Map.get(opts, :goal))
+    goal_attr = if agent_kind == "codex", do: nil, else: goal
 
     attrs =
       %{}
       |> maybe_put("agent", agent)
-      |> maybe_put("agent_goal", goal)
+      |> maybe_put("agent_goal", goal_attr)
 
     if attrs == %{} do
       {:ok, nil}
     else
       IssueAdapter.dispatch(project, :update_issue, [identifier, attrs])
+    end
+  end
+
+  # When a Codex dispatch supplies a goal, establish it on the native Codex
+  # thread rather than caching it on the issue. Best-effort so a transient Codex
+  # failure never blocks resume/restart.
+  defp maybe_route_codex_goal(project, identifier, opts, "codex") do
+    case normalize_optional_string(Map.get(opts, :goal)) do
+      nil ->
+        :ok
+
+      objective ->
+        case GoalControl.set_objective(project, identifier, objective) do
+          {:ok, _goal} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.debug("Skipping Codex goal routing on dispatch identifier=#{identifier} reason=#{inspect(reason)}")
+            :ok
+        end
+    end
+  end
+
+  defp maybe_route_codex_goal(_project, _identifier, _opts, _agent_kind), do: :ok
+
+  # Effective agent kind for this dispatch: an explicit `opts[:agent]` override
+  # wins, otherwise resolve task labels over the project default.
+  defp effective_agent_kind(project, %IssueDTO{labels: labels}, opts) do
+    case normalize_agent(Map.get(opts, :agent)) do
+      agent when is_binary(agent) ->
+        agent
+
+      _ ->
+        project_kind =
+          project
+          |> Repo.preload(:setup)
+          |> ProjectConfig.resolve()
+          |> Map.get(:agent_kind)
+
+        AgentPreference.resolve(labels || [], project_kind)
     end
   end
 
@@ -335,19 +410,19 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   defp dispatch_message(:resume, %IssueDTO{identifier: identifier}),
-    do: "Resuming agent work on #{identifier}"
+    do: dgettext("dispatch", "Resuming agent work on %{identifier}", identifier: identifier)
 
   defp dispatch_message(:restart, %IssueDTO{identifier: identifier}),
-    do: "Restarting agent work on #{identifier}"
+    do: dgettext("dispatch", "Restarting agent work on %{identifier}", identifier: identifier)
 
   defp dispatch_message(:hard_reset, %IssueDTO{identifier: identifier}),
-    do: "Hard reset — starting a fresh agent session for #{identifier}"
+    do: dgettext("dispatch", "Hard reset — starting a fresh agent session for %{identifier}", identifier: identifier)
 
   defp dispatch_message(:continue_work, %IssueDTO{identifier: identifier}),
-    do: "Continuing agent work on #{identifier}"
+    do: dgettext("dispatch", "Continuing agent work on %{identifier}", identifier: identifier)
 
   defp dispatch_message(:stop, %IssueDTO{identifier: identifier}),
-    do: "Paused agent run for #{identifier} — resume when ready"
+    do: dgettext("dispatch", "Paused agent run for %{identifier} — resume when ready", identifier: identifier)
 
   defp normalize_agent(agent) when agent in ["codex", "claude", "cursor"], do: agent
   defp normalize_agent(_agent), do: nil

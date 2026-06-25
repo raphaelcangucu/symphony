@@ -1,27 +1,32 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
+import { resolveIssueGroup } from "@/components/issues/issue-detail/issueGroup";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import {
-  DEFAULT_ISSUE_TAB,
-  isIssueTab,
+  isHiddenIssueTab,
   issueAgentTabPath,
   issuePath,
+  resolveIssueTab,
   workspaceBasePath,
   type IssueTab,
 } from "@/lib/workspaceRoutes";
 import { archiveIssue, deleteIssue, forceSyncIssue, getIssue } from "@/services/issues";
+import { deleteJiraAttachment } from "@/services/attachments";
 import type { Issue } from "@/types/issue";
 
 export function IssueDetailRoute() {
+  const { t } = useTranslation();
   const { identifier = "", tab: tabParam } = useParams();
   const { projectSlug, view, issues, setIssues, agentExecutions, loading, trackerKind, project } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const tab: IssueTab = isIssueTab(tabParam) ? tabParam : DEFAULT_ISSUE_TAB;
+  const tab: IssueTab = resolveIssueTab(tabParam);
   const issueFromList = issues.find((candidate) => candidate.identifier === identifier) ?? null;
   const [fetchedIssue, setFetchedIssue] = useState<Issue | null>(null);
   // Tracks the (project, issue) we've already requested so unrelated board churn
@@ -34,6 +39,9 @@ export function IssueDetailRoute() {
   // attachments) that the board list endpoint omits. Fall back to the cached
   // list entry for an instant first paint while the full fetch is in flight.
   const issue = matchedFetched ?? issueFromList;
+
+  const group = issue ? resolveIssueGroup(issue, issues) : null;
+  const subtasks = issue ? collectSubtasks(issue.identifier, issues) : [];
 
   const basePath = workspaceBasePath(projectSlug, view);
 
@@ -49,10 +57,10 @@ export function IssueDetailRoute() {
     try {
       await archiveIssue(projectSlug, target.identifier);
       removeFromBoard(target);
-      toast.success(`${target.identifier} archived`);
+      toast.success(t("issue.route.archived", { identifier: target.identifier }));
       goToBase();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to archive issue");
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.archiveFailed"));
     }
   }
 
@@ -60,10 +68,10 @@ export function IssueDetailRoute() {
     try {
       await deleteIssue(projectSlug, target.identifier);
       removeFromBoard(target);
-      toast.success(`${target.identifier} deleted`);
+      toast.success(t("issue.route.deleted", { identifier: target.identifier }));
       goToBase();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to delete issue");
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.deleteFailed"));
     }
   }
 
@@ -81,9 +89,23 @@ export function IssueDetailRoute() {
         current.map((candidate) => (candidate.identifier === refreshed.identifier ? refreshed : candidate)),
       );
       if (fetchedIssue?.identifier === refreshed.identifier) setFetchedIssue(refreshed);
-      toast.success(`${target.identifier} synced from remote`);
+      toast.success(t("issue.route.synced", { identifier: target.identifier }));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to sync issue from remote");
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.syncFailed"));
+    }
+  }
+
+  async function handleRemoveAttachment(attachmentId: string): Promise<boolean> {
+    if (!issue) return false;
+    try {
+      await deleteJiraAttachment(projectSlug, attachmentId);
+      const refreshed = await getIssue(projectSlug, issue.identifier);
+      handleIssueUpdated(refreshed);
+      toast.success(t("issue.route.attachmentRemoved"));
+      return true;
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.attachmentRemoveFailed"));
+      return false;
     }
   }
 
@@ -93,6 +115,11 @@ export function IssueDetailRoute() {
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!identifier || !isHiddenIssueTab(tabParam)) return;
+    navigate({ pathname: issuePath(projectSlug, view, identifier, tab), search: location.search }, { replace: true });
+  }, [identifier, tab, tabParam, projectSlug, view, location.search, navigate]);
 
   useEffect(() => {
     if (!identifier || loading) return;
@@ -117,7 +144,7 @@ export function IssueDetailRoute() {
         // Keep showing the cached list entry if we have one; only bounce back to
         // the board when there is nothing at all to display.
         if (!issueFromList) {
-          toast.error(`Issue ${identifier} was not found`);
+          toast.error(t("issue.route.notFound", { identifier }));
           navigate({ pathname: basePath, search: location.search }, { replace: true });
         }
       });
@@ -129,6 +156,7 @@ export function IssueDetailRoute() {
       view={view}
       issue={issue}
       execution={issue ? agentExecutions.get(issue.identifier) : undefined}
+      subtasks={subtasks}
       workflowMarkdown={project?.setup?.workflowMarkdown ?? null}
       open
       onOpenChange={(open) => {
@@ -150,7 +178,26 @@ export function IssueDetailRoute() {
       onArchive={handleArchive}
       onDelete={handleDelete}
       onForceSync={trackerKind === "local" ? undefined : handleForceSync}
+      onRemoveAttachment={trackerKind === "jira" ? handleRemoveAttachment : undefined}
       onIssueUpdated={handleIssueUpdated}
+      group={group}
+      onOpenIssue={(targetIdentifier) => {
+        navigate({ pathname: issuePath(projectSlug, view, targetIdentifier), search: location.search });
+      }}
     />
   );
+}
+
+/** Children whose parentIdentifier points at this issue, ordered like the board. */
+function collectSubtasks(parentIdentifier: string, issues: readonly Issue[]): Issue[] {
+  const parentKey = normalizeIssueIdentifier(parentIdentifier);
+  if (!parentKey) return [];
+
+  return issues
+    .filter(
+      (candidate) =>
+        candidate.parentIdentifier != null &&
+        normalizeIssueIdentifier(candidate.parentIdentifier) === parentKey,
+    )
+    .sort((left, right) => left.position - right.position);
 }

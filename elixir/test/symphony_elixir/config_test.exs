@@ -47,6 +47,34 @@ defmodule SymphonyElixir.ConfigTest do
     test "workflow_front_matter/0 returns the normalized global front matter map" do
       assert is_map(SymphonyElixir.Config.workflow_front_matter())
     end
+
+    test "per-project dev_server port_range defaults to nil (auto pool)" do
+      opts = SymphonyElixir.Config.validate_front_matter(%{"dev_server" => %{"enabled" => true}})
+      assert get_in(opts, [:dev_server, :port_range]) == nil
+    end
+
+    test "per-project dev_server port_range keeps an explicit pin" do
+      opts =
+        SymphonyElixir.Config.validate_front_matter(%{
+          "dev_server" => %{"enabled" => true, "port_range" => [4100, 4199]}
+        })
+
+      assert get_in(opts, [:dev_server, :port_range]) == [4100, 4199]
+    end
+
+    test "per-project dev_server reclaim_ports defaults to false" do
+      opts = SymphonyElixir.Config.validate_front_matter(%{"dev_server" => %{"enabled" => true}})
+      assert get_in(opts, [:dev_server, :reclaim_ports]) == false
+    end
+
+    test "per-project dev_server reclaim_ports honors an explicit true" do
+      opts =
+        SymphonyElixir.Config.validate_front_matter(%{
+          "dev_server" => %{"enabled" => true, "reclaim_ports" => true}
+        })
+
+      assert get_in(opts, [:dev_server, :reclaim_ports]) == true
+    end
   end
 
   describe "evidence workflow section" do
@@ -111,6 +139,26 @@ defmodule SymphonyElixir.ConfigTest do
       validated = SymphonyElixir.Config.validate_front_matter(%{})
       assert get_in(validated, [:evidence, :required]) == false
       assert get_in(validated, [:evidence, :repos]) == %{}
+    end
+
+    test "validate_front_matter passes through e2e require_url_pattern" do
+      validated =
+        SymphonyElixir.Config.validate_front_matter(%{
+          "evidence" => %{
+            "required" => true,
+            "repos" => %{
+              "frontend" => %{
+                "ui_paths" => ["src/**"],
+                "e2e" => %{"command" => "npx playwright test", "require_url_pattern" => "^https?://[^/]+\\.localhost"}
+              }
+            }
+          }
+        })
+
+      assert get_in(validated, [:evidence, :repos, "frontend", :e2e]) == %{
+               command: "npx playwright test",
+               require_url_pattern: "^https?://[^/]+\\.localhost"
+             }
     end
   end
 

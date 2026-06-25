@@ -1,10 +1,14 @@
 import type { ReactElement, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
-import { isInternalAttachmentUrl, isVideoAttachmentSource } from "@/services/attachments";
+import {
+  isTrackerAuthenticatedMediaUrl,
+  isVideoAttachmentSource,
+} from "@/services/attachments";
 import { isAssistantWorkspaceMarkdownHref } from "@/services/threadDocuments";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +24,8 @@ interface MarkdownProps {
 }
 
 export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
+  const { t } = useTranslation();
+
   return (
     <div className={cn("markdown-body text-sm leading-6 text-foreground/90", className)}>
       <ReactMarkdown
@@ -33,8 +39,8 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
               return <span className="font-medium text-primary underline underline-offset-2">{linkChildren}</span>;
             }
 
-            if (href && isInternalAttachmentUrl(href) && isVideoAttachmentSource(href)) {
-              const label = linkText(linkChildren) || "video";
+            if (href && isTrackerAuthenticatedMediaUrl(href) && isVideoAttachmentSource(href)) {
+              const label = linkText(linkChildren) || t("issue.attachments.defaultVideo");
               return (
                 <AttachmentVideo
                   src={href}
@@ -52,14 +58,15 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
           },
           img: ({ src, alt }) => {
             const source = typeof src === "string" ? src : "";
-            const label = typeof alt === "string" && alt.length > 0 ? alt : "attachment";
+            const label = typeof alt === "string" && alt.length > 0 ? alt : t("assistant.panel.attachmentLabel.default");
 
-            if (isInternalAttachmentUrl(source)) {
+            if (isTrackerAuthenticatedMediaUrl(source)) {
               return (
                 <AttachmentImage
                   src={source}
                   alt={label}
-                  className="my-2 max-h-80 w-auto max-w-full object-contain"
+                  className="max-h-80 w-auto max-w-full object-contain"
+                  layout="inline"
                 />
               );
             }

@@ -2,6 +2,8 @@ defmodule SymphonyElixir.AgentExecutionTest do
   use ExUnit.Case, async: true
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Workspace
 
   defp running_entry(overrides) do
     Map.merge(
@@ -40,13 +42,63 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.long_running_label == nil
     end
 
-    test "marks Codex goal executions as pursuing a goal" do
-      snapshot = %{running: [running_entry(%{agent_kind: "codex", agent_goal: "Ship the issue"})], retrying: []}
+    test "defaults bundle role to standalone for ordinary runs" do
+      snapshot = %{running: [running_entry(%{})], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.bundle_role == :standalone
+      assert execution.parent_identifier == nil
+      assert execution.unit_id == nil
+      assert execution.repo == nil
+      assert execution.child_identifiers == []
+    end
+
+    test "projects parent coordinator bundle context" do
+      entry = running_entry(%{bundle_role: :parent, child_identifiers: ["SYM-2", "SYM-3"]})
+      snapshot = %{running: [entry], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.bundle_role == :parent
+      assert execution.child_identifiers == ["SYM-2", "SYM-3"]
+      assert execution.parent_identifier == nil
+    end
+
+    test "projects child run bundle context" do
+      entry =
+        running_entry(%{
+          identifier: "SYM-2",
+          bundle_role: :child,
+          parent_identifier: "SYM-1",
+          unit_id: "be",
+          repo: "macro/be"
+        })
+
+      snapshot = %{running: [entry], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.bundle_role == :child
+      assert execution.parent_identifier == "SYM-1"
+      assert execution.unit_id == "be"
+      assert execution.repo == "macro/be"
+      assert execution.child_identifiers == []
+    end
+
+    test "marks Codex goal executions as pursuing a goal from native goal data" do
+      goal = %{
+        kind: "goal",
+        source: "native",
+        status: "active",
+        objective: "Ship the issue",
+        capabilities: ["get", "edit", "clear"]
+      }
+
+      snapshot = %{running: [running_entry(%{agent_kind: "codex", goal: goal})], retrying: []}
 
       assert [execution] = AgentExecution.from_snapshot(snapshot)
       assert execution.long_running
       assert execution.long_running_kind == "goal"
       assert execution.long_running_label == "Pursuing goal"
+      assert execution.goal.objective == "Ship the issue"
     end
 
     test "marks Claude goal executions as pursuing a workflow" do
@@ -56,6 +108,38 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.long_running
       assert execution.long_running_kind == "workflow"
       assert execution.long_running_label == "Pursuing workflow"
+    end
+
+    test "Codex running entries ignore the cached agent_goal (Codex thread is the source of truth)" do
+      snapshot = %{running: [running_entry(%{agent_kind: "codex", agent_goal: "Ship the issue"})], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      # No native goal data (no orchestrator goal, no workspace mirror), so the
+      # cached agent_goal must NOT be surfaced as a Codex goal.
+      assert execution.goal == nil
+      refute execution.long_running
+    end
+
+    test "Codex running entries surface the native goal mirror from the workspace sidecar" do
+      identifier = "SYM-MIRROR-1"
+      issue_ref = %{identifier: identifier, project_slug: nil}
+      workspace = Workspace.path_for_issue(issue_ref)
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      :ok = CodexSession.put_goal(workspace, %{"objective" => "Pursue the native goal", "status" => "active"})
+
+      entry = running_entry(%{identifier: identifier, agent_kind: "codex", issue: issue_ref})
+      snapshot = %{running: [entry], retrying: []}
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.goal.kind == "goal"
+      assert execution.goal.source == "native"
+      assert execution.goal.objective == "Pursue the native goal"
+      # Projected (non-live-thread) capabilities only — native pause/resume require
+      # a live resolvable thread the UI dispatches into instead.
+      assert execution.goal.capabilities == ["get", "edit", "clear"]
+      assert execution.long_running
+      assert execution.long_running_label == "Pursuing goal"
     end
 
     test "marks running issues with stale activity as idle" do

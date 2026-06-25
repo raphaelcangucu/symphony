@@ -1,9 +1,12 @@
 import { PenLine, Play } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
+import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import { consumeReturnToAgentHandoff, type ReturnToAgentTemplate } from "@/lib/returnToAgent";
 import { assessEvidenceAttention } from "@/lib/evidenceStatus";
@@ -18,11 +21,13 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { AgentTab } from "./AgentTab";
+import { BundlePanel } from "./BundlePanel";
 
 interface AgentTabsProps {
   issue: Issue;
   projectSlug: string;
   execution?: AgentExecution;
+  executions?: AgentExecution[];
   view: WorkspaceView;
   workflowMarkdown?: string | null;
   evidenceRecords?: import("@/types/evidence").EvidenceRecord[];
@@ -33,16 +38,19 @@ export function AgentTabs({
   issue,
   projectSlug,
   execution,
+  executions,
   view,
   workflowMarkdown = null,
   evidenceRecords = [],
   onIssueUpdated,
 }: AgentTabsProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const section = agentSectionFromSearchParams(new URLSearchParams(location.search));
   const [steerSeedMessage, setSteerSeedMessage] = useState<string | null>(null);
   const [returnToAgentTemplate, setReturnToAgentTemplate] = useState<ReturnToAgentTemplate | null>(null);
+  const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0);
 
   const setSection = useCallback(
     (nextSection: AgentSection) => {
@@ -72,42 +80,54 @@ export function AgentTabs({
       onValueChange={(value) => {
         if (isAgentSection(value)) setSection(value);
       }}
-      className="flex flex-col gap-4"
+      className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex shrink-0 items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          {section === "authoring"
-            ? "Draft the brief and plan, then dispatch the agent."
-            : "Watch the live run, steer with /infer, and pause or resume."}
+          {section === "authoring" ? t("issue.agentTabs.authoringHint") : t("issue.agentTabs.executionHint")}
         </p>
-        <TabsList
-          aria-label="Agent sections"
-          className="h-8 shrink-0 gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
-        >
-          <TabsTrigger
-            value="authoring"
-            className="gap-1.5 rounded-md px-2.5 text-xs data-[state=active]:shadow-sm"
+        <div className="flex shrink-0 items-center gap-2">
+          <IssueDocumentsDrawer
+            projectSlug={projectSlug}
+            identifier={issue.identifier}
+            refreshKey={documentsRefreshKey}
+          />
+          <TabsList
+            aria-label={t("issue.agentTabs.sectionsAria")}
+            className="h-8 shrink-0 gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
           >
-            <PenLine className="h-3.5 w-3.5" />
-            Authoring
-          </TabsTrigger>
-          <TabsTrigger
-            value="execution"
-            className="gap-1.5 rounded-md px-2.5 text-xs data-[state=active]:shadow-sm"
-          >
-            <Play className="h-3.5 w-3.5" />
-            Execution
-          </TabsTrigger>
-        </TabsList>
+            <TabsTrigger
+              value="authoring"
+              className="gap-1.5 rounded-md px-2.5 text-xs data-[state=active]:shadow-sm"
+            >
+              <PenLine className="h-3.5 w-3.5" />
+              {t("issue.agentTabs.authoring")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="execution"
+              className="gap-1.5 rounded-md px-2.5 text-xs data-[state=active]:shadow-sm"
+            >
+              <Play className="h-3.5 w-3.5" />
+              {t("issue.agentTabs.execution")}
+            </TabsTrigger>
+          </TabsList>
+        </div>
       </div>
 
-      <TabsContent
-        value="authoring"
-        className="mt-0 flex min-h-[min(640px,calc(100dvh-13rem))] flex-col overflow-hidden"
-      >
-        <IssueAuthoringPanel projectSlug={projectSlug} identifier={issue.identifier} view={view} execution={execution} compact />
+      <TabsContent value="authoring" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+        <IssueAuthoringPanel
+          projectSlug={projectSlug}
+          identifier={issue.identifier}
+          view={view}
+          compact
+          onDocumentsChanged={() => setDocumentsRefreshKey((current) => current + 1)}
+        />
       </TabsContent>
-      <TabsContent value="execution" className="mt-0">
+      <TabsContent
+        value="execution"
+        className={cn("mt-0 min-h-0 flex-1 space-y-3 overflow-y-auto pb-1", SCROLLBAR_THIN)}
+      >
+        <BundlePanel issue={issue} executions={executions ?? (execution ? [execution] : [])} />
         <AgentTab
           issue={issue}
           execution={execution}

@@ -16,7 +16,7 @@ defmodule SymphonyElixir.InstanceConfig do
   @default_tracker_sync_min_pull_ms 60_000
   @default_tracker_pr_sync_ttl_ms 300_000
   @default_max_concurrent_agents 10
-  @default_max_turns 20
+  @default_max_turns 30
   @default_max_retry_backoff_ms 300_000
   @default_turn_timeout_ms 3_600_000
   @default_read_timeout_ms 5_000
@@ -40,6 +40,9 @@ defmodule SymphonyElixir.InstanceConfig do
   @default_claude_command "claude"
   @default_cursor_command "cursor-agent"
   @default_agent_kind "codex"
+  @default_preview_pool_range [10_000, 30_000]
+  @default_preview_slots_per_project 32
+  @default_preview_ports_per_slot 8
 
   @spec poll_interval_ms() :: pos_integer()
   def poll_interval_ms, do: get(:poll_interval_ms, @default_poll_interval_ms)
@@ -213,6 +216,48 @@ defmodule SymphonyElixir.InstanceConfig do
 
   @spec default_agent_kind() :: String.t()
   def default_agent_kind, do: get(:default_agent_kind, @default_agent_kind)
+
+  @doc """
+  Inclusive `[low, high]` global TCP port pool that preview dev servers draw from.
+  Projects lease non-overlapping bands inside this range. Falls back to
+  #{inspect(@default_preview_pool_range)} when unset or malformed.
+  """
+  @spec preview_pool_range() :: [pos_integer()]
+  def preview_pool_range do
+    case Application.get_env(:symphony_elixir, :preview_pool_range) do
+      [low, high]
+      when is_integer(low) and is_integer(high) and low > 0 and high > low ->
+        [low, high]
+
+      _ ->
+        @default_preview_pool_range
+    end
+  end
+
+  @doc """
+  Number of issue slots reserved per project band. Falls back to
+  #{@default_preview_slots_per_project} when unset or non-positive.
+  """
+  @spec preview_slots_per_project() :: pos_integer()
+  def preview_slots_per_project do
+    case Application.get_env(:symphony_elixir, :preview_slots_per_project) do
+      n when is_integer(n) and n > 0 -> n
+      _ -> @default_preview_slots_per_project
+    end
+  end
+
+  @doc """
+  Number of contiguous ports reserved per issue slot (i.e. the max number of
+  serve steps a single issue can host). Falls back to
+  #{@default_preview_ports_per_slot} when unset or non-positive.
+  """
+  @spec preview_ports_per_slot() :: pos_integer()
+  def preview_ports_per_slot do
+    case Application.get_env(:symphony_elixir, :preview_ports_per_slot) do
+      n when is_integer(n) and n > 0 -> n
+      _ -> @default_preview_ports_per_slot
+    end
+  end
 
   defp get(key, default) do
     case Application.get_env(:symphony_elixir, key, default) do

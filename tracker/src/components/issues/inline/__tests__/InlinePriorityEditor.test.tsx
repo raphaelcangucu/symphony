@@ -15,14 +15,21 @@ describe("InlinePriorityEditor", () => {
     expect(screen.getByRole("button", { name: /no priority/i })).toBeInTheDocument();
   });
 
-  it("opens the popover and saves the chosen priority", async () => {
+  it("autosaves the chosen priority when clicking outside", async () => {
     const onSave = vi.fn(async () => true);
     const user = userEvent.setup();
-    render(<InlinePriorityEditor priority={null} onSave={onSave} />);
+    render(
+      <>
+        <InlinePriorityEditor priority={null} onSave={onSave} />
+        <button type="button">Outside</button>
+      </>,
+    );
 
     await user.click(screen.getByRole("button", { name: /no priority/i }));
     await user.click(await screen.findByRole("button", { name: /^high$/i }));
-    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(screen.queryByRole("button", { name: /^save$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^close$/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^outside$/i }));
 
     expect(onSave).toHaveBeenCalledWith(2);
   });

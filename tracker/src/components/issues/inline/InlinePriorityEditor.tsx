@@ -1,17 +1,9 @@
-import { Check, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { PriorityIndicator, priorityLabel } from "@/components/issues/PriorityIndicator";
+import { PriorityIndicator, priorityLabel, priorityOptions } from "@/components/issues/PriorityIndicator";
 import { cn } from "@/lib/utils";
 import type { IssuePriority } from "@/types/issue";
-
-const PRIORITY_OPTIONS: Array<{ value: IssuePriority | null; label: string }> = [
-  { value: null, label: "No priority" },
-  { value: 1, label: "Urgent" },
-  { value: 2, label: "High" },
-  { value: 3, label: "Medium" },
-  { value: 4, label: "Low" },
-];
 
 interface InlinePriorityEditorProps {
   priority: IssuePriority | null;
@@ -26,42 +18,50 @@ export function InlinePriorityEditor({
   saving = false,
   onSave,
 }: InlinePriorityEditorProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<IssuePriority | null>(priority);
   const containerRef = useRef<HTMLDivElement>(null);
+  const options = priorityOptions(t);
 
   useEffect(() => {
     if (!open) setDraft(priority);
   }, [open, priority]);
+
+  const commit = useCallback(async () => {
+    if (draft === priority) {
+      setOpen(false);
+      return;
+    }
+    const saved = await onSave(draft);
+    if (saved) setOpen(false);
+  }, [draft, onSave, priority]);
 
   useEffect(() => {
     if (!open) return undefined;
 
     function handlePointerDown(event: MouseEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        void commit();
       }
     }
 
     window.addEventListener("mousedown", handlePointerDown);
     return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [open]);
-
-  async function commit(next: IssuePriority | null) {
-    if (next === priority) {
-      setOpen(false);
-      return;
-    }
-    const saved = await onSave(next);
-    if (saved) setOpen(false);
-  }
+  }, [commit, open]);
 
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
         disabled={disabled || saving}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (open) {
+            void commit();
+          } else {
+            setOpen(true);
+          }
+        }}
         className={cn(
           "group inline-flex w-full items-center gap-1.5 rounded-lg border border-transparent px-1 py-1 text-left transition-colors",
           "hover:border-border/60 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
@@ -70,16 +70,16 @@ export function InlinePriorityEditor({
         )}
       >
         <PriorityIndicator priority={priority} />
-        <span className="text-sm">{priorityLabel(priority)}</span>
+        <span className="text-sm">{priorityLabel(priority, t)}</span>
       </button>
 
       {open ? (
         <div className="absolute left-0 z-20 mt-2 w-52 overflow-hidden rounded-xl border border-border/70 bg-popover p-2 shadow-lg">
           <div className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Priority
+            {t("issue.inline.priority.title")}
           </div>
           <div className="space-y-0.5">
-            {PRIORITY_OPTIONS.map((option) => {
+            {options.map((option) => {
               const active = draft === option.value;
               return (
                 <button
@@ -97,26 +97,6 @@ export function InlinePriorityEditor({
                 </button>
               );
             })}
-          </div>
-          <div className="mt-2 flex items-center gap-1.5 border-t border-border/60 pt-2">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void commit(draft)}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              <Check className="h-3.5 w-3.5" />
-              Save
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => setOpen(false)}
-              className="inline-flex items-center gap-1 rounded-md border border-border/70 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-            >
-              <X className="h-3.5 w-3.5" />
-              Close
-            </button>
           </div>
         </div>
       ) : null}

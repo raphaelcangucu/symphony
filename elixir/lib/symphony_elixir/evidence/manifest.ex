@@ -8,6 +8,14 @@ defmodule SymphonyElixir.Evidence.Manifest do
   @enforce_keys [:issue, :runs]
   defstruct [:issue, :generated_at, ui_change: false, runs: [], impact: []]
 
+  defmodule ArtifactRef do
+    @moduledoc false
+    @enforce_keys [:path]
+    defstruct [:path, :label, navigations: []]
+
+    @type t :: %__MODULE__{}
+  end
+
   defmodule Run do
     @moduledoc false
     @enforce_keys [:kind, :repo, :command, :status]
@@ -16,15 +24,43 @@ defmodule SymphonyElixir.Evidence.Manifest do
       :repo,
       :command,
       :status,
+      :task_id,
+      :task_title,
       :summary,
       :report,
       :duration_ms,
+      # Set when `status == "blocked"`: why the command could not run in this
+      # workspace environment (no Docker/network/browser sandbox, etc.).
+      :blocked_reason,
       screenshots: [],
       videos: [],
-      trace: nil
+      trace: nil,
+      navigations: [],
+      proof: %{}
     ]
 
     @type t :: %__MODULE__{}
+  end
+
+  @spec artifact_path(term()) :: String.t() | nil
+  def artifact_path(%ArtifactRef{path: path}) when is_binary(path), do: path
+
+  def artifact_path(%{"path" => path}) when is_binary(path), do: path
+
+  def artifact_path(path) when is_binary(path), do: path
+
+  def artifact_path(_other), do: nil
+
+  @spec artifact_label(term()) :: String.t() | nil
+  def artifact_label(%ArtifactRef{label: label}) when is_binary(label) and label != "", do: label
+
+  def artifact_label(%{"label" => label}) when is_binary(label) and label != "", do: label
+
+  def artifact_label(entry) do
+    case artifact_path(entry) do
+      nil -> nil
+      path -> path |> Path.basename() |> Path.rootname()
+    end
   end
 
   @type t :: %__MODULE__{}
@@ -52,8 +88,11 @@ defmodule SymphonyElixir.Evidence.Manifest do
   @spec artifact_paths(t()) :: [String.t()]
   def artifact_paths(%__MODULE__{runs: runs}) do
     Enum.flat_map(runs, fn run ->
-      Enum.filter([run.report, run.trace], &is_binary/1) ++ run.screenshots ++ run.videos
+      Enum.filter([run.report, run.trace], &is_binary/1) ++
+        Enum.map(run.screenshots, &artifact_path/1) ++
+        Enum.map(run.videos, &artifact_path/1)
     end)
+    |> Enum.reject(&is_nil/1)
   end
 
   defp read_file(path) do
@@ -136,12 +175,23 @@ defmodule SymphonyElixir.Evidence.Manifest do
   end
 
   defp run_issues(run) when is_map(run) do
-    @required_run_fields
-    |> Enum.reject(&is_binary(run[&1]))
-    |> Enum.map(&"run missing required field: #{&1}")
+    field_issues =
+      @required_run_fields
+      |> Enum.reject(&is_binary(run[&1]))
+      |> Enum.map(&"run missing required field: #{&1}")
+
+    field_issues ++ navigations_issues(run["navigations"])
   end
 
   defp run_issues(_run), do: ["run entries must be objects"]
+
+  defp navigations_issues(nil), do: []
+
+  defp navigations_issues(list) when is_list(list) do
+    if Enum.all?(list, &is_binary/1), do: [], else: ["run navigations must be a list of strings"]
+  end
+
+  defp navigations_issues(_other), do: ["run navigations must be a list of strings"]
 
   defp to_run(run) do
     %Run{
@@ -149,14 +199,43 @@ defmodule SymphonyElixir.Evidence.Manifest do
       repo: run["repo"],
       command: run["command"],
       status: run["status"],
+      task_id: run["task_id"],
+      task_title: run["task_title"],
       summary: run["summary"],
       report: run["report"],
       duration_ms: run["duration_ms"],
-      screenshots: List.wrap(run["screenshots"]),
-      videos: List.wrap(run["videos"]),
-      trace: run["trace"]
+      blocked_reason: run["blocked_reason"],
+      screenshots: normalize_artifact_list(run["screenshots"]),
+      videos: normalize_artifact_list(run["videos"]),
+      trace: run["trace"],
+      navigations: List.wrap(run["navigations"]),
+      proof: if(is_map(run["proof"]), do: run["proof"], else: %{})
     }
   end
+
+  defp normalize_artifact_list(nil), do: []
+
+  defp normalize_artifact_list(list) when is_list(list) do
+    Enum.flat_map(list, &normalize_artifact_ref/1)
+  end
+
+  defp normalize_artifact_list(_other), do: []
+
+  defp normalize_artifact_ref(path) when is_binary(path), do: [%ArtifactRef{path: path}]
+
+  defp normalize_artifact_ref(%{"path" => path} = entry) when is_binary(path) do
+    label = if(is_binary(entry["label"]), do: entry["label"], else: nil)
+
+    navigations =
+      case entry["navigations"] do
+        list when is_list(list) -> Enum.filter(list, &is_binary/1)
+        _ -> []
+      end
+
+    [%ArtifactRef{path: path, label: label, navigations: navigations}]
+  end
+
+  defp normalize_artifact_ref(_other), do: []
 
   defp verify_artifacts(workspace, manifest) do
     base = dir(workspace)

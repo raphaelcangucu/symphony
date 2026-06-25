@@ -7,6 +7,13 @@ description: Use when starting any conversation - establishes how to find and us
 If you were dispatched as a subagent to execute a specific task, skip this skill.
 </SUBAGENT-STOP>
 
+<ORCHESTRATOR-STOP>
+If this is a Symphony orchestrator execution dispatch (the prompt includes
+`## Symphony execution mode (orchestrator dispatch)`), skip this skill and follow
+the injected execution methodology instead. Do not load `brainstorming` or
+`writing-plans`.
+</ORCHESTRATOR-STOP>
+
 <EXTREMELY-IMPORTANT>
 If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
 

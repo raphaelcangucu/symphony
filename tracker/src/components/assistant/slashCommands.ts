@@ -1,4 +1,9 @@
+import type { TFunction } from "i18next";
+
 import type { AssistantComposerSubmitKind } from "@/components/assistant/AssistantComposer";
+import { i18n } from "@/i18n";
+
+export type SlashCommandContext = "authoring" | "execution";
 
 export interface SlashCommandDef {
   name: `/${string}`;
@@ -6,17 +11,41 @@ export interface SlashCommandDef {
   description: string;
 }
 
-export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
-  { name: "/infer", kind: "infer", description: "Steer the running agent without waiting" },
-  { name: "/btw", kind: "btw", description: "Ask a quick side question (read-only, not saved)" },
-] as const;
+const SLASH_COMMAND_SPECS = [
+  { name: "/goal", kind: "goal", descriptionKeys: { authoring: "assistant.slash.goal", execution: "assistant.slash.goalExecution" } },
+  { name: "/infer", kind: "infer", descriptionKeys: { authoring: "assistant.slash.infer", execution: "assistant.slash.infer" } },
+  { name: "/btw", kind: "btw", descriptionKeys: { authoring: "assistant.slash.btw", execution: "assistant.slash.btw" } },
+] as const satisfies ReadonlyArray<{
+  name: `/${string}`;
+  kind: Exclude<AssistantComposerSubmitKind, "message">;
+  descriptionKeys: Record<SlashCommandContext, string>;
+}>;
+
+export const SLASH_COMMAND_NAMES = SLASH_COMMAND_SPECS.map((spec) => spec.name);
+
+type Translate = TFunction;
+
+function resolveSlashCommands(
+  t: Translate = i18n.t.bind(i18n) as Translate,
+  context: SlashCommandContext = "authoring",
+): SlashCommandDef[] {
+  return SLASH_COMMAND_SPECS.map((spec) => ({
+    name: spec.name,
+    kind: spec.kind,
+    description: t(spec.descriptionKeys[context]),
+  }));
+}
 
 export interface ParsedComposerInput {
   kind: AssistantComposerSubmitKind;
   argument: string;
 }
 
-export function parseSlashCommand(input: string): ParsedComposerInput {
+export function parseSlashCommand(
+  input: string,
+  t: Translate = i18n.t.bind(i18n) as Translate,
+  context: SlashCommandContext = "authoring",
+): ParsedComposerInput {
   const trimmedStart = input.trimStart();
   if (!trimmedStart.startsWith("/")) {
     return { kind: "message", argument: input.trim() };
@@ -26,7 +55,7 @@ export function parseSlashCommand(input: string): ParsedComposerInput {
   const token = spaceIndex === -1 ? trimmedStart : trimmedStart.slice(0, spaceIndex);
   const rest = spaceIndex === -1 ? "" : trimmedStart.slice(spaceIndex + 1);
 
-  const command = SLASH_COMMANDS.find((entry) => entry.name === token.toLowerCase());
+  const command = resolveSlashCommands(t, context).find((entry) => entry.name === token.toLowerCase());
   if (!command) {
     return { kind: "message", argument: input.trim() };
   }
@@ -34,10 +63,14 @@ export function parseSlashCommand(input: string): ParsedComposerInput {
   return { kind: command.kind, argument: rest.trim() };
 }
 
-export function matchingSlashCommands(input: string): SlashCommandDef[] {
+export function matchingSlashCommands(
+  input: string,
+  t: Translate = i18n.t.bind(i18n) as Translate,
+  context: SlashCommandContext = "authoring",
+): SlashCommandDef[] {
   const trimmed = input.trimStart();
   if (!trimmed.startsWith("/")) return [];
 
   const token = (trimmed.split(" ", 1)[0] ?? "").toLowerCase();
-  return SLASH_COMMANDS.filter((entry) => entry.name.startsWith(token));
+  return resolveSlashCommands(t, context).filter((entry) => entry.name.startsWith(token));
 }

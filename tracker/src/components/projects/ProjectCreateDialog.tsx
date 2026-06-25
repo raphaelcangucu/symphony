@@ -1,5 +1,7 @@
 import { Plus } from "lucide-react";
+import type { TFunction } from "i18next";
 import { FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -10,21 +12,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { createProject } from "@/services/projects";
 import type { Project } from "@/types/project";
 
-const projectFormSchema = z.object({
-  name: z.string().trim().min(1, "Project name is required"),
-  slug: z
-    .string()
-    .trim()
-    .min(1, "Project slug is required")
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use a lowercase URL slug such as macro-markets"),
-  description: z.string().optional(),
-});
+function projectFormSchema(t: TFunction) {
+  return z.object({
+    name: z.string().trim().min(1, t("project.createDialog.validation.nameRequired")),
+    slug: z
+      .string()
+      .trim()
+      .min(1, t("project.createDialog.validation.slugRequired"))
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, t("project.createDialog.validation.slugFormat")),
+    description: z.string().optional(),
+  });
+}
 
 interface ProjectCreateDialogProps {
   onCreated?: (project: Project) => void;
 }
 
 export function ProjectCreateDialog({ onCreated }: ProjectCreateDialogProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -33,10 +38,10 @@ export function ProjectCreateDialog({ onCreated }: ProjectCreateDialogProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsed = projectFormSchema.safeParse({ name, slug, description });
+    const parsed = projectFormSchema(t).safeParse({ name, slug, description });
 
     if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Invalid project");
+      toast.error(parsed.error.issues[0]?.message ?? t("project.createDialog.validation.invalid"));
       return;
     }
 
@@ -53,9 +58,9 @@ export function ProjectCreateDialog({ onCreated }: ProjectCreateDialogProps) {
       setSlug("");
       setDescription("");
       setOpen(false);
-      toast.success("Project created");
+      toast.success(t("project.createDialog.created"));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to create project");
+      toast.error(cause instanceof Error ? cause.message : t("project.createDialog.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -66,24 +71,37 @@ export function ProjectCreateDialog({ onCreated }: ProjectCreateDialogProps) {
       <DialogTrigger asChild>
         <Button size="sm">
           <Plus className="h-4 w-4" />
-          New project
+          {t("project.createDialog.trigger")}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create project</DialogTitle>
-          <DialogDescription>Add a local project board backed by the tracker API.</DialogDescription>
+          <DialogTitle>{t("project.createDialog.title")}</DialogTitle>
+          <DialogDescription>{t("project.createDialog.description")}</DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" autoFocus />
-          <Input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="project-slug" />
-          <Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description" />
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={t("project.createDialog.namePlaceholder")}
+            autoFocus
+          />
+          <Input
+            value={slug}
+            onChange={(event) => setSlug(event.target.value)}
+            placeholder={t("project.createDialog.slugPlaceholder")}
+          />
+          <Textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder={t("project.createDialog.descriptionPlaceholder")}
+          />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+              {t("project.createDialog.cancel")}
             </Button>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Creating..." : "Create project"}
+              {submitting ? t("project.createDialog.creating") : t("project.createDialog.submit")}
             </Button>
           </div>
         </form>

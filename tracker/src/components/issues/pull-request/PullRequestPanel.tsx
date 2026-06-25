@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowDownToLine, ArrowRight, ExternalLink, GitBranch, GitMerge, ShieldCheck, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
@@ -10,7 +11,7 @@ import { cn, formatDateTime } from "@/lib/utils";
 import { mergePullRequest, updatePullRequestBranch } from "@/services/pullRequests";
 import type { PullRequest, PullRequestMergeMethod, PullRequestPipeline } from "@/types/pull-request";
 
-import { jobMeta, prStateMeta, rollupMeta, statusStateMeta } from "./pr-meta";
+import { hasMergeConflicts, jobMeta, mergeConflictMeta, prStateMeta, rollupMeta, statusStateMeta } from "./pr-meta";
 
 interface PullRequestPanelProps {
   pullRequest: PullRequest;
@@ -27,6 +28,7 @@ export function PullRequestPanel({
   onRefresh,
   onRemove,
 }: PullRequestPanelProps) {
+  const { t } = useTranslation();
   const [updating, setUpdating] = useState(false);
   const [merging, setMerging] = useState<"normal" | "force" | null>(null);
   const [mergeMethod, setMergeMethod] = useState<PullRequestMergeMethod>("merge");
@@ -39,10 +41,10 @@ export function PullRequestPanel({
     setUpdating(true);
     try {
       await updatePullRequestBranch(projectSlug, issueIdentifier, pr.number);
-      toast.success("Branch update started — following CI…");
+      toast.success(t("issue.pullRequest.panel.branchUpdateStarted"));
       onRefresh();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Could not update the branch.");
+      toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.panel.branchUpdateFailed"));
     } finally {
       setUpdating(false);
     }
@@ -54,20 +56,27 @@ export function PullRequestPanel({
     setMerging(mode);
     try {
       await mergePullRequest(projectSlug, issueIdentifier, pr.number, { method: mergeMethod, bypass });
-      toast.success(bypass ? "Force merge completed — issue moved to Done." : "Pull request merged — issue moved to Done.");
+      toast.success(
+        bypass
+          ? t("issue.pullRequest.panel.forceMergeCompleted")
+          : t("issue.pullRequest.panel.mergeCompleted"),
+      );
       onRefresh();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Could not merge the pull request.");
+      toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.panel.mergeFailed"));
     } finally {
       setMerging(null);
     }
   }
 
-  const state = prStateMeta(pr.state);
+  const state = prStateMeta(pr.state, t);
   const StateIcon = state.Icon;
-  const rollup = rollupMeta(pr.checksState);
+  const rollup = rollupMeta(pr.checksState, t);
   const RollupIcon = rollup.Icon;
   const hasChecks = pr.pipelines.length > 0 || pr.statuses.length > 0;
+  const conflicting = hasMergeConflicts(pr);
+  const conflictMeta = mergeConflictMeta(t);
+  const ConflictIcon = conflictMeta.Icon;
 
   return (
     <article className="rounded-xl border bg-card">
@@ -91,16 +100,30 @@ export function PullRequestPanel({
             ) : null}
             {pr.origin === "manual" ? (
               <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                linked
+                {t("issue.pullRequest.panel.originLinked")}
               </span>
             ) : null}
             {pr.origin === "auto" ? (
               <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                agent
+                {t("issue.pullRequest.panel.originAgent")}
+              </span>
+            ) : null}
+            {conflicting ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold",
+                  conflictMeta.className,
+                )}
+                title={t("issue.pullRequest.panel.conflictTitle")}
+              >
+                <ConflictIcon className="h-3 w-3" />
+                {conflictMeta.label}
               </span>
             ) : null}
           </div>
-          <h3 className="text-sm font-semibold leading-snug">{pr.title ?? `Pull request #${pr.number}`}</h3>
+          <h3 className="text-sm font-semibold leading-snug">
+            {pr.title ?? t("issue.pullRequest.panel.titleFallback", { number: pr.number })}
+          </h3>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {pr.author ? (
               <span className="inline-flex items-center gap-1.5">
@@ -120,14 +143,16 @@ export function PullRequestPanel({
                 {pr.headRef}
               </span>
             ) : null}
-            {pr.updatedAt ? <span>Updated {formatDateTime(pr.updatedAt)}</span> : null}
+            {pr.updatedAt ? (
+              <span>{t("issue.pullRequest.panel.updated", { time: formatDateTime(pr.updatedAt) })}</span>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {canMerge ? (
             <>
               <label className="sr-only" htmlFor={`merge-method-${pr.number}`}>
-                Merge method
+                {t("issue.pullRequest.panel.mergeMethodLabel")}
               </label>
               <select
                 id={`merge-method-${pr.number}`}
@@ -136,9 +161,9 @@ export function PullRequestPanel({
                 disabled={merging !== null}
                 className="h-8 rounded-md border border-input bg-background px-3 text-xs font-medium disabled:opacity-50"
               >
-                <option value="merge">Merge commit</option>
-                <option value="squash">Squash</option>
-                <option value="rebase">Rebase</option>
+                <option value="merge">{t("issue.pullRequest.panel.mergeMethodMerge")}</option>
+                <option value="squash">{t("issue.pullRequest.panel.mergeMethodSquash")}</option>
+                <option value="rebase">{t("issue.pullRequest.panel.mergeMethodRebase")}</option>
               </select>
               <Button
                 type="button"
@@ -149,7 +174,7 @@ export function PullRequestPanel({
                 className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300"
               >
                 <GitMerge className={cn("h-4 w-4", merging === "normal" && "animate-pulse")} />
-                {merging === "normal" ? "Merging…" : "Merge"}
+                {merging === "normal" ? t("issue.pullRequest.panel.merging") : t("issue.pullRequest.panel.merge")}
               </Button>
               <Button
                 type="button"
@@ -158,10 +183,12 @@ export function PullRequestPanel({
                 onClick={() => void handleMerge(true)}
                 disabled={merging !== null}
                 className="border-red-500/40 bg-red-500/10 text-red-700 hover:bg-red-500/20 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
-                title="Attempts an immediate merge with the configured GitHub token. GitHub still enforces token permissions and branch rules."
+                title={t("issue.pullRequest.panel.forceMergeTitle")}
               >
                 <ShieldCheck className={cn("h-4 w-4", merging === "force" && "animate-pulse")} />
-                {merging === "force" ? "Force merging…" : "Force merge"}
+                {merging === "force"
+                  ? t("issue.pullRequest.panel.forceMerging")
+                  : t("issue.pullRequest.panel.forceMerge")}
               </Button>
             </>
           ) : null}
@@ -175,14 +202,16 @@ export function PullRequestPanel({
               className="border-blue-500/40 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-300"
             >
               <ArrowDownToLine className={cn("h-4 w-4", updating && "animate-pulse")} />
-              {updating ? "Updating…" : `Update branch (${behind} behind)`}
+              {updating
+                ? t("issue.pullRequest.panel.updating")
+                : t("issue.pullRequest.panel.updateBranch", { count: behind })}
             </Button>
           ) : null}
           {pr.url ? (
             <Button asChild variant="outline" size="sm">
               <a href={pr.url} target="_blank" rel="noreferrer noopener">
                 <ExternalLink className="h-4 w-4" />
-                Open
+                {t("issue.pullRequest.panel.open")}
               </a>
             </Button>
           ) : null}
@@ -192,8 +221,8 @@ export function PullRequestPanel({
               variant="outline"
               size="sm"
               onClick={onRemove}
-              title="Unlink this pull request"
-              aria-label="Unlink this pull request"
+              title={t("issue.pullRequest.panel.unlinkTitle")}
+              aria-label={t("issue.pullRequest.panel.unlinkAria")}
               className="w-8 px-0 text-muted-foreground"
             >
               <X className="h-4 w-4" />
@@ -215,10 +244,12 @@ export function PullRequestPanel({
             ))}
             {pr.statuses.length > 0 ? (
               <div className="rounded-lg border">
-                <div className="border-b px-3 py-2 text-xs font-semibold text-muted-foreground">Status checks</div>
+                <div className="border-b px-3 py-2 text-xs font-semibold text-muted-foreground">
+                  {t("issue.pullRequest.panel.statusChecks")}
+                </div>
                 <ul className="divide-y">
                   {pr.statuses.map((status, index) => {
-                    const meta = statusStateMeta(status.state);
+                    const meta = statusStateMeta(status.state, t);
                     const Icon = meta.Icon;
                     return (
                       <li
@@ -226,7 +257,7 @@ export function PullRequestPanel({
                         className="flex items-center gap-2 px-3 py-2 text-xs"
                       >
                         <Icon className={cn("h-3.5 w-3.5 shrink-0", meta.className, meta.spin && "animate-spin")} />
-                        <span className="font-medium">{status.context ?? "status"}</span>
+                        <span className="font-medium">{status.context ?? t("issue.pullRequest.panel.statusFallback")}</span>
                         {status.description ? (
                           <span className="truncate text-muted-foreground">{status.description}</span>
                         ) : null}
@@ -248,7 +279,7 @@ export function PullRequestPanel({
             ) : null}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">No CI checks reported for this pull request.</p>
+          <p className="text-xs text-muted-foreground">{t("issue.pullRequest.panel.noChecks")}</p>
         )}
 
         {pr.conversation.length > 0 ? (
@@ -256,7 +287,7 @@ export function PullRequestPanel({
             <Separator />
             <section className="space-y-3">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Conversation
+                {t("issue.pullRequest.panel.conversation")}
               </h4>
               {pr.conversation.map((entry, index) => (
                 <CommentCard
@@ -280,6 +311,8 @@ export function PullRequestPanel({
 }
 
 function PipelineGroup({ pipeline }: { pipeline: PullRequestPipeline }) {
+  const { t } = useTranslation();
+
   return (
     <div className="rounded-lg border">
       <div className="flex items-center justify-between border-b px-3 py-2">
@@ -297,12 +330,12 @@ function PipelineGroup({ pipeline }: { pipeline: PullRequestPipeline }) {
       </div>
       <ul className="divide-y">
         {pipeline.jobs.map((job, index) => {
-          const meta = jobMeta(job);
+          const meta = jobMeta(job, t);
           const Icon = meta.Icon;
           return (
             <li key={`${job.name ?? "job"}-${index}`} className="flex items-center gap-2 px-3 py-2 text-xs">
               <Icon className={cn("h-3.5 w-3.5 shrink-0", meta.className, meta.spin && "animate-spin")} />
-              <span className="truncate font-medium">{job.name ?? "job"}</span>
+              <span className="truncate font-medium">{job.name ?? t("issue.pullRequest.panel.jobFallback")}</span>
               <span className="ml-auto shrink-0 text-muted-foreground">{meta.label}</span>
               {job.url ? (
                 <a

@@ -37,6 +37,29 @@ describe("tracker DTO mappers", () => {
     });
   });
 
+  it("maps the saved execution goal (agent_goal) for the unambiguous Execution tab state", () => {
+    const withGoal = normalizeIssue({
+      id: 9,
+      identifier: "MAC-9",
+      project_slug: "macro-markets",
+      title: "Saved goal",
+      agent_goal: "  Implement the auth module  ",
+    });
+    expect(withGoal.agentGoal).toBe("Implement the auth module");
+
+    const blankGoal = normalizeIssue({
+      id: 10,
+      identifier: "MAC-10",
+      project_slug: "macro-markets",
+      title: "Blank goal",
+      agent_goal: "   ",
+    });
+    expect(blankGoal.agentGoal).toBeNull();
+
+    const noGoal = normalizeIssue({ id: 11, identifier: "MAC-11", project_slug: "macro-markets", title: "No goal" });
+    expect(noGoal.agentGoal).toBeNull();
+  });
+
   it("normalizes issue attachments and drops entries without an id", () => {
     const issue = normalizeIssue({
       id: 123,
@@ -99,6 +122,8 @@ describe("tracker DTO mappers", () => {
       ],
       inserted_at: "2026-05-27T01:00:00Z",
       updated_at: "2026-05-27T02:00:00Z",
+      warm_up_status: "failed",
+      last_warm_up_run_id: 3,
     });
 
     expect(project).toMatchObject({
@@ -109,11 +134,27 @@ describe("tracker DTO mappers", () => {
       issueCount: 5,
       createdAt: "2026-05-27T01:00:00Z",
       updatedAt: "2026-05-27T02:00:00Z",
+      warmUpStatus: "failed",
+      lastWarmUpRunId: 3,
       workflowStatuses: [
         { id: "1", name: "Todo", category: "unstarted", position: 1, isTerminal: false },
         { id: "2", name: "Done", category: "completed", position: 6, isTerminal: true },
       ],
     });
+  });
+
+  it("defaults warm-up readiness when the project DTO omits it", () => {
+    const project = normalizeProject({
+      id: 7,
+      slug: "p",
+      name: "P",
+      description: null,
+      inserted_at: "2026-05-27T01:00:00Z",
+      updated_at: "2026-05-27T02:00:00Z",
+    });
+
+    expect(project.warmUpStatus).toBe("never");
+    expect(project.lastWarmUpRunId).toBeNull();
   });
 
   it("normalizes comments and blockers from snake_case backend DTOs", () => {
@@ -172,5 +213,49 @@ describe("tracker DTO mappers", () => {
 
     expect(payload.issue.status).toBe("Done");
     expect(payload.issue.projectSlug).toBe("macro-markets");
+  });
+});
+
+describe("normalizeIssue group fields", () => {
+  it("reads snake_case group identifiers", () => {
+    const issue = normalizeIssue({
+      id: 1,
+      identifier: "MAC-2",
+      title: "Member",
+      group_lead_identifier: "MAC-1",
+      group_member_identifiers: [],
+    });
+    expect(issue.groupLeadIdentifier).toBe("MAC-1");
+    expect(issue.groupMemberIdentifiers).toEqual([]);
+  });
+
+  it("reads a lead's members and defaults to null/[]", () => {
+    const lead = normalizeIssue({ id: 2, identifier: "MAC-1", title: "Lead", group_member_identifiers: ["MAC-2"] });
+    expect(lead.groupLeadIdentifier).toBeNull();
+    expect(lead.groupMemberIdentifiers).toEqual(["MAC-2"]);
+  });
+});
+
+describe("normalizeIssue subtask metadata", () => {
+  it("maps repository, parent, and sub-issue summary", () => {
+    const issue = normalizeIssue({
+      id: 2,
+      identifier: "2",
+      title: "Aplicativo IOS",
+      repository_full_name: "xipcash/ios",
+      parent_identifier: "1",
+      sub_issue_summary: { total: 4, completed: 4, percent_completed: 100 },
+    });
+
+    expect(issue.repositoryFullName).toBe("xipcash/ios");
+    expect(issue.parentIdentifier).toBe("1");
+    expect(issue.subIssueSummary).toEqual({ total: 4, completed: 4, percentCompleted: 100 });
+  });
+
+  it("defaults missing metadata to null", () => {
+    const issue = normalizeIssue({ id: 9, identifier: "9", title: "No metadata" });
+    expect(issue.repositoryFullName).toBeNull();
+    expect(issue.parentIdentifier).toBeNull();
+    expect(issue.subIssueSummary).toBeNull();
   });
 });

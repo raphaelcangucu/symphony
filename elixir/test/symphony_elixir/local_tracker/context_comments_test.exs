@@ -47,6 +47,14 @@ defmodule SymphonyElixir.LocalTracker.ContextCommentsTest do
     assert {:error, :comment_not_found} = Context.delete_issue_comment(project.slug, issue.identifier, 999_999)
   end
 
+  test "list_comments returns newest first", %{project: project, issue: issue} do
+    {:ok, first} = Context.add_comment(project.slug, issue.identifier, "first", %{})
+    {:ok, second} = Context.add_comment(project.slug, issue.identifier, "second", %{})
+    assert {:ok, [newest, oldest]} = Context.list_comments(project.slug, issue.identifier)
+    assert newest.id == second.id
+    assert oldest.id == first.id
+  end
+
   test "latest_workpad returns the newest workpad comment", %{project: project, issue: issue} do
     {:ok, _} = Context.add_comment(project.slug, issue.identifier, "plain", %{})
     {:ok, wp} = Context.add_comment(project.slug, issue.identifier, "## Codex Workpad\nv1", %{})

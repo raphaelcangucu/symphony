@@ -17,10 +17,30 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     read_workspace_file
     list_pull_requests
     manage_preview
+    check_handoff_gate
+    get_evidence_status
+    manage_dev_env
+    scan_project_setup
+    suggest_project_setup
     update_project_workflow
     update_project_repositories
     dispatch_codex
     get_agent_executions
+    link_pull_request
+    get_issue_orchestrator_state
+    explain_dispatch_eligibility
+    manage_blockers
+    sync_issue
+    list_running_agents
+    steer_agent
+    manage_codex_goal
+    classify_execution_unit
+    create_subtask
+    set_issue_parent
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
   )
 
   @tools @scoped_tools ++ ~w(create_tracker_project)

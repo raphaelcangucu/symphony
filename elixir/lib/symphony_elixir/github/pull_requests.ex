@@ -34,6 +34,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   url
   body
   state
+  mergeable
   repository { nameWithOwner }
   isDraft
   merged
@@ -412,6 +413,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       body: nil,
       url: url,
       state: "unknown",
+      mergeable: nil,
       repo: repo,
       head_ref: branch,
       base_ref: nil,
@@ -494,6 +496,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
       url: string_or_nil(Map.get(node, "url")),
       state: derive_state(node),
       raw_state: string_or_nil(Map.get(node, "state")),
+      mergeable: string_or_nil(Map.get(node, "mergeable")),
       is_draft: Map.get(node, "isDraft") == true,
       merged: Map.get(node, "merged") == true,
       head_sha: extract_head_sha(node),
@@ -825,4 +828,29 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   """
   @spec available?() :: boolean()
   def available?, do: is_binary(Config.token())
+
+  @doc """
+  Returns true when every PR in the list is merged.
+
+  An empty list returns false — there must be at least one merged PR before an
+  issue can be considered complete from a PR perspective.
+  """
+  @spec all_merged?([map()]) :: boolean()
+  def all_merged?(prs) when is_list(prs), do: prs != [] and Enum.all?(prs, &merged?/1)
+
+  @doc false
+  @spec merged?(map()) :: boolean()
+  def merged?(pr) when is_map(pr) do
+    Map.get(pr, :merged) == true or Map.get(pr, "merged") == true or
+      pr_state(pr) == "merged"
+  end
+
+  defp pr_state(pr) do
+    pr
+    |> Map.get(:state, Map.get(pr, "state"))
+    |> case do
+      state when is_binary(state) -> String.downcase(state)
+      _ -> ""
+    end
+  end
 end

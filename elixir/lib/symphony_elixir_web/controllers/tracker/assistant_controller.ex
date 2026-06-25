@@ -33,16 +33,18 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
       |> json(%{data: attachment})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
-      {:error, :unsupported_file_type} -> TrackerErrors.validation(conn, "This file type is not supported.")
-      {:error, :unsupported_image_type} -> TrackerErrors.validation(conn, "Only PNG, JPEG, GIF, and WebP images are supported.")
-      {:error, :file_too_large} -> TrackerErrors.validation(conn, "Files must be 5 MB or smaller.")
-      {:error, :image_too_large} -> TrackerErrors.validation(conn, "Images must be 4 MB or smaller.")
-      {:error, :invalid_upload} -> TrackerErrors.validation(conn, "Invalid upload.")
+      {:error, :unsupported_file_type} -> TrackerErrors.validation_msg(conn, "This file type is not supported.")
+      {:error, :unsupported_image_type} ->
+        TrackerErrors.validation_msg(conn, "Only PNG, JPEG, GIF, and WebP images are supported.")
+
+      {:error, :file_too_large} -> TrackerErrors.validation_msg(conn, "Files must be 5 MB or smaller.")
+      {:error, :image_too_large} -> TrackerErrors.validation_msg(conn, "Images must be 4 MB or smaller.")
+      {:error, :invalid_upload} -> TrackerErrors.validation_msg(conn, "Invalid upload.")
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
-  def upload_attachment(conn, _params), do: TrackerErrors.validation(conn, "file is required")
+  def upload_attachment(conn, _params), do: TrackerErrors.validation_msg(conn, "file is required")
 
   @spec show_attachment(Conn.t(), map()) :: Conn.t()
   def show_attachment(conn, %{"project_slug" => project_slug, "path" => path_segments}) do
@@ -56,19 +58,13 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
       |> Conn.send_file(200, absolute_path)
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
-      {:error, :invalid_path} -> TrackerErrors.validation(conn, "Invalid attachment path.")
-      {:error, :attachment_not_found} -> attachment_not_found(conn)
+      {:error, :invalid_path} -> TrackerErrors.validation_msg(conn, "Invalid attachment path.")
+      {:error, :attachment_not_found} -> TrackerErrors.render(conn, :attachment_not_found)
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
-  def show_attachment(conn, _params), do: TrackerErrors.validation(conn, "attachment path is required")
-
-  defp attachment_not_found(conn) do
-    conn
-    |> put_status(:not_found)
-    |> json(%{error: %{code: "attachment_not_found", message: "Attachment not found"}})
-  end
+  def show_attachment(conn, _params), do: TrackerErrors.validation_msg(conn, "attachment path is required")
 
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"project_slug" => project_slug, "message" => message} = params) when is_binary(message) do
@@ -79,14 +75,18 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
       |> put_status(:created)
       |> json(%{data: result})
     else
-      {:error, :message_required} -> TrackerErrors.validation(conn, "message is required")
-      {:error, {:missing_required_field, field}} -> TrackerErrors.validation(conn, "#{field} is required")
-      {:error, {:unsupported_tool, tool}} -> TrackerErrors.validation(conn, "unsupported assistant tool: #{tool}")
+      {:error, :message_required} -> TrackerErrors.validation_msg(conn, "message is required")
+      {:error, {:missing_required_field, field}} ->
+        TrackerErrors.validation_msg(conn, "%{field} is required", %{field: field})
+
+      {:error, {:unsupported_tool, tool}} ->
+        TrackerErrors.validation_msg(conn, "unsupported assistant tool: %{tool}", %{tool: tool})
+
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
-  def create(conn, _params), do: TrackerErrors.validation(conn, "message is required")
+  def create(conn, _params), do: TrackerErrors.validation_msg(conn, "message is required")
 
   defp normalize_context(context) when is_map(context), do: context
   defp normalize_context(_context), do: %{}

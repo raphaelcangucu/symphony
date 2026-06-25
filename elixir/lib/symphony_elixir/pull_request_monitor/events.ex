@@ -2,7 +2,7 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
   @moduledoc """
   Pure detection of actionable PR events against the persisted monitor state.
 
-  Order matters: merged > ci_failure > review_findings > none. Each event is
+  Order matters: merged > merge_conflict > ci_failure > review_findings > none. Each event is
   identified by a stable fingerprint/marker so it is consumed exactly once.
   """
 
@@ -10,6 +10,7 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
 
   @type event ::
           :merged
+          | {:merge_conflict, String.t()}
           | {:ci_failure, String.t()}
           | {:review_findings, String.t()}
           | :none
@@ -26,9 +27,27 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
     "## PR feedback"
   ]
 
+  @spec merge_conflicting?(map()) :: boolean()
+  def merge_conflicting?(pr) when is_map(pr) do
+    pr
+    |> Map.get(:mergeable)
+    |> to_string()
+    |> String.upcase() == "CONFLICTING"
+  end
+
   @spec detect(map(), MonitorState.t() | nil) :: event()
   def detect(pr, row) when is_map(pr) do
-    if merged_event?(pr, row), do: :merged, else: detect_ci_or_review(pr, row)
+    cond do
+      merged_event?(pr, row) -> :merged
+      true -> detect_after_merge(pr, row)
+    end
+  end
+
+  defp detect_after_merge(pr, row) do
+    case merge_conflict_event(pr, row) do
+      {:merge_conflict, _} = event -> event
+      :none -> detect_ci_or_review(pr, row)
+    end
   end
 
   @spec checks_fingerprint(map()) :: String.t() | nil
@@ -54,6 +73,17 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
     |> Enum.filter(&failing_job?/1)
   end
 
+  defp merge_conflict_event(pr, row) do
+    with true <- Map.get(pr, :state) in ["open", "draft"],
+         true <- merge_conflicting?(pr),
+         head_sha when is_binary(head_sha) and head_sha != "" <- Map.get(pr, :head_sha),
+         true <- head_sha != last_merge_conflict_head_sha(row) do
+      {:merge_conflict, head_sha}
+    else
+      _ -> :none
+    end
+  end
+
   defp detect_ci_or_review(pr, row) do
     case ci_failure_event(pr, row) do
       {:ci_failure, _fp} = event -> event
@@ -61,8 +91,10 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
     end
   end
 
+  @merged_terminal_actions ~w(moved_to_done merged_awaiting_others)
+
   defp merged_event?(pr, row) do
-    Map.get(pr, :merged) == true and last_action(row) != "moved_to_done"
+    Map.get(pr, :merged) == true and last_action(row) not in @merged_terminal_actions
   end
 
   defp ci_failure_event(pr, row) do
@@ -138,4 +170,9 @@ defmodule SymphonyElixir.PullRequestMonitor.Events do
 
   defp last_marker(nil), do: nil
   defp last_marker(%MonitorState{last_review_marker: marker}), do: marker
+
+  defp last_merge_conflict_head_sha(nil), do: nil
+
+  defp last_merge_conflict_head_sha(%MonitorState{last_merge_conflict_head_sha: head_sha}),
+    do: head_sha
 end

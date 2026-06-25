@@ -33,6 +33,25 @@ defmodule SymphonyElixir.Tracker.Sync.OutboxEntryTest do
     assert "is invalid" in errors_on(changeset).entity_type
   end
 
+  test "rejects a second pending entry for the same dedup_key as a changeset error (not a raise)", %{
+    project: project
+  } do
+    attrs = %{
+      project_id: project.id,
+      entity_type: "state",
+      operation: "move",
+      payload: %{},
+      dedup_key: "state:move:#{project.id}:MM-1"
+    }
+
+    assert {:ok, _first} = %OutboxEntry{} |> OutboxEntry.changeset(attrs) |> Repo.insert()
+
+    # Without `unique_constraint(:dedup_key)` this raised `Ecto.ConstraintError`
+    # (HTTP 500). It must surface as a recoverable changeset error instead.
+    assert {:error, changeset} = %OutboxEntry{} |> OutboxEntry.changeset(attrs) |> Repo.insert()
+    assert "has already been taken" in errors_on(changeset).dedup_key
+  end
+
   defp errors_on(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Regex.replace(~r"%{(\w+)}", msg, fn _, key -> opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string() end)

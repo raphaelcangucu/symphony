@@ -9,6 +9,11 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
   alias SymphonyElixir.TestSupport
   alias SymphonyElixir.Workflow
 
+  defmodule OutputStreamTmux do
+    @moduledoc false
+    def capture_pane(_session_name), do: {:ok, "setup complete\n"}
+  end
+
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
   @workflow_statuses [
@@ -17,6 +22,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
 
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
+    Application.put_env(:symphony_elixir, :cloudflare_tunnel_checker, fn -> false end)
 
     workflow_root = Path.join(System.tmp_dir!(), "symphony-dev-server-controller-workflow-#{System.unique_integer([:positive])}")
     workspace_root = Path.join(System.tmp_dir!(), "symphony-dev-server-controller-workspaces-#{System.unique_integer([:positive])}")
@@ -47,6 +53,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
 
     on_exit(fn ->
       restore_env(@token_env, previous_token)
+      Application.delete_env(:symphony_elixir, :cloudflare_tunnel_checker)
       Application.delete_env(:symphony_elixir, :workflow_file_path)
       File.rm_rf(workflow_root)
       File.rm_rf(workspace_root)
@@ -137,6 +144,110 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
            }
   end
 
+  test "output returns 404 for an unknown server", %{identifier: identifier} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers/999/output"
+      )
+
+    assert json_response(conn, 404) == %{
+             "error" => %{"code" => "dev_server_not_found", "message" => "Dev server not found"}
+           }
+  end
+
+  test "output events returns 404 for an unknown server", %{identifier: identifier} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers/999/output/events"
+      )
+
+    assert get_resp_header(conn, "content-type") == ["text/event-stream; charset=utf-8"]
+    assert conn.resp_body =~ "dev_server_not_found"
+  end
+
+  test "output events streams a snapshot and closes for terminal servers", %{identifier: identifier} do
+    previous_poll_ms = Application.get_env(:symphony_elixir, :dev_server_output_poll_ms)
+    previous_tmux = Application.get_env(:symphony_elixir, :terminal_tmux)
+    Application.put_env(:symphony_elixir, :dev_server_output_poll_ms, 0)
+    Application.put_env(:symphony_elixir, :terminal_tmux, OutputStreamTmux)
+
+    on_exit(fn ->
+      restore_env_value(:symphony_elixir, :dev_server_output_poll_ms, previous_poll_ms)
+      restore_env_value(:symphony_elixir, :terminal_tmux, previous_tmux)
+    end)
+
+    {:ok, project} = Context.get_project("p")
+
+    {:ok, record} =
+      SymphonyElixir.LocalTracker.DevServerRecord.upsert(project.id, identifier, "goapi", %{
+        working_dir: "goapi",
+        port: 4102,
+        url: "http://127.0.0.1:4102/graphiql",
+        status: "ready",
+        primary: false,
+        session_name: "sym-dev-goapi"
+      })
+
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers/#{record.id}/output/events"
+      )
+
+    assert get_resp_header(conn, "content-type") == ["text/event-stream; charset=utf-8"]
+    assert conn.resp_body =~ "event: snapshot"
+    assert conn.resp_body =~ "setup complete"
+    assert conn.resp_body =~ "event: done"
+    assert conn.resp_body =~ ~s("status":"ready")
+  end
+
+  test "output events accepts token query param for EventSource auth", %{identifier: identifier} do
+    conn =
+      get(
+        build_conn(),
+        "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers/999/output/events?token=secret"
+      )
+
+    assert get_resp_header(conn, "content-type") == ["text/event-stream; charset=utf-8"]
+    assert conn.resp_body =~ "dev_server_not_found"
+  end
+
+  test "index accepts token query param for EventSource auth", %{identifier: identifier} do
+    conn = get(build_conn(), "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers?token=secret")
+
+    assert json_response(conn, 200) == %{
+             "data" => %{
+               "available" => false,
+               "reason" => "disabled",
+               "servers" => [],
+               "tunnel" => %{"enabled" => false, "running" => false}
+             }
+           }
+  end
+
+  test "index reports project-level public tunnel as enabled even when process WORKFLOW disables it", %{
+    identifier: identifier
+  } do
+    {:ok, _setup} =
+      Context.upsert_project_setup("p", %{
+        "workflow_markdown" => """
+        ---
+        dev_server:
+          enabled: true
+        public_tunnel:
+          enabled: true
+          base_domain: tracker.cods.dev
+        ---
+        """
+      })
+
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers")
+
+    assert json_response(conn, 200)["data"]["tunnel"] == %{"enabled" => true, "running" => false}
+  end
+
   defp authorized_conn do
     build_conn()
     |> put_req_header("authorization", "Bearer secret")
@@ -155,4 +266,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
 
   defp restore_env(key, nil), do: System.delete_env(key)
   defp restore_env(key, value), do: System.put_env(key, value)
+
+  defp restore_env_value(app, key, nil), do: Application.delete_env(app, key)
+  defp restore_env_value(app, key, value), do: Application.put_env(app, key, value)
 end

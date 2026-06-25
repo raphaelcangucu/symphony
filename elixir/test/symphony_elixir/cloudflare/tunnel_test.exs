@@ -4,6 +4,8 @@ defmodule SymphonyElixir.Cloudflare.TunnelTest do
   alias SymphonyElixir.Cloudflare.Tunnel
 
   setup do
+    Application.put_env(:symphony_elixir, :cloudflare_tunnel_checker, fn -> false end)
+
     on_exit(fn ->
       Application.delete_env(:symphony_elixir, :cloudflare_tunnel_checker)
       Application.delete_env(:symphony_elixir, :cloudflare_tunnel_spawner)
@@ -17,8 +19,13 @@ defmodule SymphonyElixir.Cloudflare.TunnelTest do
     assert Tunnel.summary() == %{enabled: false, running: false}
   end
 
-  test "start_tunnel/0 returns {:error, :disabled} when the server is not running" do
-    assert Tunnel.start_tunnel() == {:error, :disabled}
+  test "start_tunnel/0 spawns the tunnel script when the server is not running" do
+    put_spawner(spawner_recording_to(self(), :ok))
+
+    assert Tunnel.start_tunnel() == {:ok, :running}
+    assert_received {:tunnel_spawn, %{script: script, log: log}}
+    assert String.ends_with?(script, "scripts/public-tunnel.sh")
+    assert log == "/tmp/symphony-cloudflared.log"
   end
 
   test "status reflects the liveness checker when the server is running" do
@@ -59,6 +66,15 @@ defmodule SymphonyElixir.Cloudflare.TunnelTest do
     start_supervised!(Tunnel)
 
     assert Tunnel.start_tunnel() == {:error, :boom}
+  end
+
+  test "summary_for_project reflects project workflow and live tunnel status" do
+    refute Tunnel.summary_for_project("missing-project").enabled
+
+    put_checker(fn -> true end)
+    start_supervised!(Tunnel)
+
+    assert Tunnel.summary_for_project("missing-project") == %{enabled: false, running: true}
   end
 
   defp put_checker(fun), do: Application.put_env(:symphony_elixir, :cloudflare_tunnel_checker, fun)

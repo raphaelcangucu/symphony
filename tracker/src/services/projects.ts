@@ -3,6 +3,9 @@ import type { ProjectSetup } from "@/types/project-setup";
 import type { WorkspaceRepository } from "@/types/repository";
 import type { WorkflowStatus } from "@/types/workflow-status";
 
+import { i18n } from "@/i18n";
+import { requireProjectSlug } from "@/lib/serviceValidation";
+
 import { http, trackerPath, unwrapData } from "./http";
 import { type BackendProjectDto, normalizeProject } from "./mappers";
 import { repositoryPayload } from "./projectSetup";
@@ -44,8 +47,8 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   const slug = input.slug.trim();
   const description = input.description?.trim() || null;
 
-  if (!name) throw new Error("Project name is required");
-  if (!slug) throw new Error("Project slug is required");
+  if (!name) throw new Error(i18n.t("project.services.validation.nameRequired"));
+  if (!slug) throw new Error(i18n.t("project.services.validation.slugRequired"));
 
   const response = await http.post(trackerPath("/projects"), { name, slug, description });
   return normalizeProject(unwrapData<BackendProjectDto>(response));
@@ -57,11 +60,15 @@ export async function createWorkspaceProject(input: CreateWorkspaceProjectInput)
   const description = input.description?.trim() || null;
   const tracker = input.tracker ?? { kind: "local" as TrackerKind, config: {} };
 
-  if (!name) throw new Error("Project name is required");
-  if (!slug) throw new Error("Project slug is required");
+  if (!name) throw new Error(i18n.t("project.services.validation.nameRequired"));
+  if (!slug) throw new Error(i18n.t("project.services.validation.slugRequired"));
   if (tracker.kind === "local") {
-    if (input.workflowStatuses.length === 0) throw new Error("At least one workflow status is required");
-    if (input.repositories.length === 0) throw new Error("At least one repository is required");
+    if (input.workflowStatuses.length === 0) {
+      throw new Error(i18n.t("project.services.validation.workflowStatusRequired"));
+    }
+    if (input.repositories.length === 0) {
+      throw new Error(i18n.t("project.services.validation.repositoryRequired"));
+    }
   }
 
   const response = await http.post(trackerPath("/projects/workspace"), {
@@ -100,7 +107,7 @@ export async function updateProject(projectSlug: string, input: UpdateProjectInp
 
   if (input.name !== undefined) {
     const name = input.name.trim();
-    if (!name) throw new Error("Project name is required");
+    if (!name) throw new Error(i18n.t("project.services.validation.nameRequired"));
     payload.name = name;
   }
 
@@ -157,12 +164,6 @@ export async function restoreProject(projectSlug: string): Promise<Project> {
 export async function deleteProject(projectSlug: string): Promise<void> {
   const slug = requireProjectSlug(projectSlug);
   await http.delete(trackerPath(`/projects/${encodeURIComponent(slug)}`));
-}
-
-function requireProjectSlug(projectSlug: string): string {
-  const slug = projectSlug.trim();
-  if (!slug) throw new Error("projectSlug is required");
-  return slug;
 }
 
 function compactPayload(payload: Record<string, unknown>): Record<string, unknown> {

@@ -1,13 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { I18nextProvider } from "react-i18next";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { i18n } from "@/i18n";
 import { SettingsPage } from "@/pages/SettingsPage";
 import * as settingsService from "@/services/settings";
 
 vi.mock("@/services/settings", () => ({
   fetchSettings: vi.fn(),
   updateAgentSettings: vi.fn(),
+  updateUiSettings: vi.fn(),
   fetchAgentAvailability: vi.fn(),
   updateOrchestratorSettings: vi.fn(),
   fetchIdentities: vi.fn(),
@@ -22,6 +25,7 @@ describe("SettingsPage", () => {
     vi.mocked(settingsService.fetchSettings).mockResolvedValue({
       agents: { default_agent_kind: "codex" },
       orchestrator: { require_symphony_label: true, require_assignee_match: true },
+      ui: { locale: "auto" },
     });
     vi.mocked(settingsService.fetchAgentAvailability).mockResolvedValue({
       codex: { available: true, version: "codex 3.1.0", command: "codex" },
@@ -32,12 +36,18 @@ describe("SettingsPage", () => {
     vi.mocked(settingsService.fetchCredentials).mockResolvedValue([]);
   });
 
-  it("renders the current default and availability", async () => {
-    render(
-      <MemoryRouter>
-        <SettingsPage />
-      </MemoryRouter>,
+  function renderPage() {
+    return render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter>
+          <SettingsPage />
+        </MemoryRouter>
+      </I18nextProvider>,
     );
+  }
+
+  it("renders the current default and availability", async () => {
+    renderPage();
 
     await waitFor(() => expect(screen.getByRole("button", { name: /Codex/ })).toBeTruthy());
     expect(screen.getByText(/codex 3\.1\.0/)).toBeTruthy();
@@ -47,11 +57,7 @@ describe("SettingsPage", () => {
   it("saves a new default agent via PUT", async () => {
     vi.mocked(settingsService.updateAgentSettings).mockResolvedValue({ default_agent_kind: "claude" });
 
-    render(
-      <MemoryRouter>
-        <SettingsPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     await waitFor(() => expect(screen.getByRole("button", { name: /Claude/ })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /Claude/ }));
@@ -64,11 +70,7 @@ describe("SettingsPage", () => {
   it("reverts optimistic selection when save fails", async () => {
     vi.mocked(settingsService.updateAgentSettings).mockRejectedValue(new Error("network error"));
 
-    render(
-      <MemoryRouter>
-        <SettingsPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     await waitFor(() => expect(screen.getByRole("button", { name: /Codex/ })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /Claude/ }));

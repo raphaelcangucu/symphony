@@ -1,4 +1,5 @@
 import { Settings } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { upsertIssue } from "@/components/board/board-utils";
@@ -6,11 +7,12 @@ import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
 import { BoardQuickFilters } from "@/components/board/BoardQuickFilters";
 import { ProjectAssistantMenu } from "@/components/layout/ProjectAssistantMenu";
+import { ProjectEditorMenu } from "@/components/layout/ProjectEditorMenu";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import { WorkspaceProvider, useWorkspace } from "@/components/layout/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
-import { isBoardPath, projectSettingsPath } from "@/lib/workspaceRoutes";
+import { isBoardPath, projectExploreAssistantPath, projectSettingsPath } from "@/lib/workspaceRoutes";
 
 export function ProjectWorkspaceLayout() {
   const { projectSlug = "" } = useParams();
@@ -25,11 +27,13 @@ export function ProjectWorkspaceLayout() {
 }
 
 function WorkspaceChrome() {
+  const { t } = useTranslation();
   const { projectSlug, project, trackerKind, reloadProject, refreshing, setIssues } = useWorkspace();
   const pollingActive = useWindowFocus();
   const navigate = useNavigate();
   const location = useLocation();
   const showBoardFilters = isBoardPath(location.pathname);
+  const showProjectEditor = location.pathname === projectExploreAssistantPath(projectSlug);
 
   return (
     <div className="min-h-screen">
@@ -44,11 +48,12 @@ function WorkspaceChrome() {
               size="sm"
               onClick={() => navigate(projectSettingsPath(projectSlug))}
               disabled={!project}
-              aria-label="Edit project"
-              title="Edit project"
+              aria-label={t("layout.editProject")}
+              title={t("layout.editProject")}
             >
               <Settings className="h-4 w-4" />
             </Button>
+            {showProjectEditor ? <ProjectEditorMenu projectSlug={projectSlug} /> : null}
             <ProjectAssistantMenu projectSlug={projectSlug} />
             {showBoardFilters ? <BoardFiltersTrigger /> : null}
           </>

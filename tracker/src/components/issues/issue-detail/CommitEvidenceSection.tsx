@@ -1,5 +1,6 @@
 import { GitCommit, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { CommitDiffSheet } from "@/components/issues/issue-detail/CommitDiffSheet";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ export function CommitEvidenceSection({
   error,
   onRefresh,
 }: CommitEvidenceSectionProps) {
+  const { t } = useTranslation();
   const [selectedCommit, setSelectedCommit] = useState<CommitEvidenceSummary | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -38,25 +40,23 @@ export function CommitEvidenceSection({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium">
           <GitCommit className="h-4 w-4 opacity-80" />
-          Agent commits
+          {t("issue.commits.title")}
         </div>
         <Button onClick={onRefresh} size="sm" type="button" variant="ghost">
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-          Refresh
+          {t("issue.commits.refresh")}
         </Button>
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       {!error && workspace && !workspace.available ? (
-        <p className="text-sm text-muted-foreground">
-          Workspace not available on this machine — commit history cannot be read locally.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("issue.commits.workspaceUnavailable")}</p>
       ) : null}
 
       {!error && commits.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {loading ? "Loading commits…" : "No agent commits ahead of the integration branch yet."}
+          {loading ? t("issue.commits.loading") : t("issue.commits.empty")}
         </p>
       ) : null}
 
@@ -76,9 +76,7 @@ export function CommitEvidenceSection({
           </div>
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
             <span>{commit.author}</span>
-            <span>
-              {commit.filesChanged} file{commit.filesChanged === 1 ? "" : "s"}
-            </span>
+            <span>{t("issue.commits.files", { count: commit.filesChanged })}</span>
             <span className="text-emerald-600 dark:text-emerald-400">+{commit.insertions}</span>
             <span className="text-red-600 dark:text-red-400">-{commit.deletions}</span>
           </div>

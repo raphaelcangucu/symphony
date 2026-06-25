@@ -14,7 +14,7 @@ defmodule SymphonyElixir.WorkspaceTest do
 
     File.mkdir_p!(workspace_root)
     skills_root = Path.join(workspace_root, "_skills")
-    write_skill!(Path.join(skills_root, "superpowers"), "brainstorming")
+    write_skill!(Path.join(skills_root, "superpowers"), "subagent-driven-development")
     Application.put_env(:symphony_elixir, :skills_root, skills_root)
 
     workflow_file = Path.join(workspace_root, "WORKFLOW.md")
@@ -128,8 +128,15 @@ defmodule SymphonyElixir.WorkspaceTest do
 
     assert {:ok, ^workspace} = Workspace.create_for_issue(issue)
     assert File.dir?(front)
-    assert File.regular?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
-    assert File.regular?(Path.join([front, ".claude", "skills", "brainstorming", "SKILL.md"]))
+    assert File.regular?(
+             Path.join([workspace, ".codex", "skills", "subagent-driven-development", "SKILL.md"])
+           )
+
+    assert File.regular?(
+             Path.join([front, ".claude", "skills", "subagent-driven-development", "SKILL.md"])
+           )
+
+    refute File.exists?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
 
     exclude = File.read!(Path.join([front, ".git", "info", "exclude"]))
     assert exclude =~ "/.codex/"

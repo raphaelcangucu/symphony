@@ -40,6 +40,40 @@ defmodule SymphonyElixir.Tracker.Sync.NormalizeTest do
     assert %DateTime{} = norm.remote_updated_at
   end
 
+  test "keeps the GitHub issue number from a repo-scoped identifier" do
+    dto =
+      IssueDTO.build(%{
+        id: "I_5",
+        identifier: "ios#5",
+        title: "PoC BLE",
+        status: %{name: "Todo"}
+      })
+
+    norm = Normalize.issue(dto, [])
+
+    assert norm.identifier == "ios#5"
+    assert norm.remote_number == 5
+  end
+
+  test "preserves GitHub parent and sub-issue metadata for local grouping" do
+    dto =
+      IssueDTO.build(%{
+        id: "I_child",
+        identifier: "ios#3",
+        title: "Child",
+        status: %{name: "Done"},
+        repository_full_name: "xipcash/ios",
+        parent_identifier: "ios#2",
+        sub_issue_summary: %{total: 4, completed: 4, percent_completed: 100}
+      })
+
+    norm = Normalize.issue(dto, [])
+
+    assert norm.repository_full_name == "xipcash/ios"
+    assert norm.parent_identifier == "ios#2"
+    assert norm.sub_issue_summary == %{total: 4, completed: 4, percent_completed: 100}
+  end
+
   test "maps GitHub-shaped comments (id/updated_at/kind) into the local-store shape" do
     dto = IssueDTO.build(%{id: "I_3", identifier: "510", title: "t", status: %{name: "Human Review"}})
 

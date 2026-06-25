@@ -49,7 +49,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   end
 
   def create(conn, _params) do
-    TrackerErrors.validation(conn, "only scope=freeform is supported")
+    TrackerErrors.validation_msg(conn, "only scope=freeform is supported")
   end
 
   @spec archive(Conn.t(), map()) :: Conn.t()
@@ -70,7 +70,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   end
 
   def archive(conn, _params) do
-    TrackerErrors.validation(conn, "thread id is required")
+    TrackerErrors.validation_msg(conn, "thread id is required")
   end
 
   defp parse_thread_id(id) when is_integer(id) and id > 0, do: {:ok, id}

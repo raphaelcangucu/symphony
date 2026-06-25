@@ -1,0 +1,353 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Hi! I'm here in this project's context. Chat normally or ask me to create a task, comment on an issue, move status, or dispatch Codex work."
+msgstr "Hi! I'm here in this project's context. Chat normally or ask me to create a task, comment on an issue, move status, or dispatch Codex work."
+
+msgid "I used to treat free text as issue search, which felt robotic. Conversational messages stay in chat now; I only call tools when you ask for an action or explicit search."
+msgstr "I used to treat free text as issue search, which felt robotic. Conversational messages stay in chat now; I only call tools when you ask for an action or explicit search."
+
+msgid "Got it. I can chat about the project and call tracker tools when you ask for something concrete — create a task, comment, move status, list issues, or dispatch Codex."
+msgstr "Got it. I can chat about the project and call tracker tools when you ask for something concrete — create a task, comment, move status, list issues, or dispatch Codex."
+
+msgid "1-based end line (inclusive)."
+msgstr "1-based end line (inclusive)."
+
+msgid "1-based start line (inclusive)."
+msgstr "1-based start line (inclusive)."
+
+msgid "Add a comment on a tracker issue (use when the user wants it recorded on the issue, not for normal chat replies)."
+msgstr "Add a comment on a tracker issue (use when the user wants it recorded on the issue, not for normal chat replies)."
+
+msgid "Alias for dispatch_coding_agent (resolves agent via task > project > user preference)."
+msgstr "Alias for dispatch_coding_agent (resolves agent via task > project > user preference)."
+
+msgid "Bound issue identifier. Must be %{identifier}."
+msgstr "Bound issue identifier. Must be %{identifier}."
+
+msgid "Bound issue workspace for %{identifier}."
+msgstr "Bound issue workspace for %{identifier}."
+
+msgid ""
+"Check validate and publish gates before moving to a handoff status (Human Review, Done, etc.).\n"
+"Call this before set_issue_status when targeting wait_states or completion destinations."
+msgstr ""
+"Check validate and publish gates before moving to a handoff status (Human Review, Done, etc.).\n"
+"Call this before set_issue_status when targeting wait_states or completion destinations."
+
+msgid "Comment body markdown/text."
+msgstr "Comment body markdown/text."
+
+msgid "Comment id from list_comments."
+msgstr "Comment id from list_comments."
+
+msgid "Concrete coding instructions for Codex."
+msgstr "Concrete coding instructions for Codex."
+
+msgid "Concrete coding instructions for the agent."
+msgstr "Concrete coding instructions for the agent."
+
+msgid "Create a GitHub Project v2 on the repo owner with a single-select status field and states (server-side GraphQL)."
+msgstr "Create a GitHub Project v2 on the repo owner with a single-select status field and states (server-side GraphQL)."
+
+msgid "Create a draft tracker issue (non-actionable status) to anchor the authoring chat."
+msgstr "Create a draft tracker issue (non-actionable status) to anchor the authoring chat."
+
+msgid "Create a local-only Symphony tracker project (no GitHub/Linear/Jira link). Use after list_tracker_projects when setting up a new board."
+msgstr "Create a local-only Symphony tracker project (no GitHub/Linear/Jira link). Use after list_tracker_projects when setting up a new board."
+
+msgid "Create a tracker issue in the current project."
+msgstr "Create a tracker issue in the current project."
+
+msgid "Dev-env action."
+msgstr "Dev-env action."
+
+msgid "Display name."
+msgstr "Display name."
+
+msgid "Edit an existing issue comment in place (for workpad updates)."
+msgstr "Edit an existing issue comment in place (for workpad updates)."
+
+msgid "Execute a raw GraphQL query or mutation against GitHub using Symphony's configured GITHUB_TOKEN."
+msgstr "Execute a raw GraphQL query or mutation against GitHub using Symphony's configured GITHUB_TOKEN."
+
+msgid "Execute a raw GraphQL query or mutation against Linear using Symphony's configured auth."
+msgstr "Execute a raw GraphQL query or mutation against Linear using Symphony's configured auth."
+
+msgid "Existing GitHub Project node id; skips remote creation when set."
+msgstr "Existing GitHub Project node id; skips remote creation when set."
+
+msgid "Fetch assignees, labels, and statuses for creating or updating issues in this project. Use this instead of linear_graphql or shell commands to resolve assignee logins/ids."
+msgstr "Fetch assignees, labels, and statuses for creating or updating issues in this project. Use this instead of linear_graphql or shell commands to resolve assignee logins/ids."
+
+msgid "Fetch one tracker issue by identifier. Prefer this over list_issues when you know the id."
+msgstr "Fetch one tracker issue by identifier. Prefer this over list_issues when you know the id."
+
+msgid "Fetch one workspace template by slug. Call list_templates first when unsure of slugs (e.g. multi-repo-fullstack, not multi-repo)."
+msgstr "Fetch one workspace template by slug. Call list_templates first when unsure of slugs (e.g. multi-repo-fullstack, not multi-repo)."
+
+msgid "Fetch project metadata: board status names and categories (unstarted/started/completed), repositories, and setup summary. Status categories are UI metadata — they do NOT define orchestrator dispatch. For dispatch_states, active_states, and terminal_states use get_workflow."
+msgstr "Fetch project metadata: board status names and categories (unstarted/started/completed), repositories, and setup summary. Status categories are UI metadata — they do NOT define orchestrator dispatch. For dispatch_states, active_states, and terminal_states use get_workflow."
+
+msgid "Fetch workflow markdown from project settings (YAML front matter + body). Source of truth for orchestrator: tracker.dispatch_states (queue for NEW auto-runs), tracker.active_states (polled candidates), tracker.wait_states, tracker.terminal_states. Parsed config is in data.config. Body prose guides agents only; orchestrator reads YAML keys."
+msgstr "Fetch workflow markdown from project settings (YAML front matter + body). Source of truth for orchestrator: tracker.dispatch_states (queue for NEW auto-runs), tracker.active_states (polled candidates), tracker.wait_states, tracker.terminal_states. Parsed config is in data.config. Body prose guides agents only; orchestrator reads YAML keys."
+
+msgid "Full WORKFLOW markdown stored on the project."
+msgstr "Full WORKFLOW markdown stored on the project."
+
+msgid "Full replacement list. Each entry needs github_full_name, workspace_path, and role. Optional: clone_url, default_branch, selected_branch, local_path, scan_summary."
+msgstr "Full replacement list. Each entry needs github_full_name, workspace_path, and role. Optional: clone_url, default_branch, selected_branch, local_path, scan_summary."
+
+msgid "GitHub Project title when provisioning (defaults to name)."
+msgstr "GitHub Project title when provisioning (defaults to name)."
+
+msgid "GitHub repo owner/name, e.g. clouapp/distributionmachine."
+msgstr "GitHub repo owner/name, e.g. clouapp/distributionmachine."
+
+msgid "GitHub repo owner/name."
+msgstr "GitHub repo owner/name."
+
+msgid "GitHub repo, e.g. GambaLabs/frontend."
+msgstr "GitHub repo, e.g. GambaLabs/frontend."
+
+msgid "GraphQL query or mutation document to execute."
+msgstr "GraphQL query or mutation document to execute."
+
+msgid ""
+"Inspect or control the issue dev-server preview (status, start, stop, restart).\n"
+"When preview is unavailable, read `next_steps` and configure serve steps via manage_dev_env first."
+msgstr ""
+"Inspect or control the issue dev-server preview (status, start, stop, restart).\n"
+"When preview is unavailable, read `next_steps` and configure serve steps via manage_dev_env first."
+
+msgid "Issue identifier to dispatch, for example MAC-1."
+msgstr "Issue identifier to dispatch, for example MAC-1."
+
+msgid "Issue identifier, for example MAC-1."
+msgstr "Issue identifier, for example MAC-1."
+
+msgid "Issue title."
+msgstr "Issue title."
+
+msgid "List GitHub Project v2 boards visible to Symphony's GITHUB_TOKEN (server-side; do not use gh in the shell)."
+msgstr "List GitHub Project v2 boards visible to Symphony's GITHUB_TOKEN (server-side; do not use gh in the shell)."
+
+msgid "List Jira Cloud projects visible to Symphony's configured Jira credentials (server-side REST)."
+msgstr "List Jira Cloud projects visible to Symphony's configured Jira credentials (server-side REST)."
+
+msgid "List Linear projects visible to Symphony's configured Linear auth (server-side GraphQL)."
+msgstr "List Linear projects visible to Symphony's configured Linear auth (server-side GraphQL)."
+
+msgid "List Symphony local tracker projects (server-side). Prefer this before remote GitHub/Linear/Jira discovery when the user asks about existing projects here."
+msgstr "List Symphony local tracker projects (server-side). Prefer this before remote GitHub/Linear/Jira discovery when the user asks about existing projects here."
+
+msgid "List active or retrying coding-agent executions for this project."
+msgstr "List active or retrying coding-agent executions for this project."
+
+msgid "List comments on a tracker issue (use to find workpad comment ids before update_comment)."
+msgstr "List comments on a tracker issue (use to find workpad comment ids before update_comment)."
+
+msgid "List pull requests linked to an issue (GitHub discovery + persisted links)."
+msgstr "List pull requests linked to an issue (GitHub discovery + persisted links)."
+
+msgid "List repositories linked to this project in Symphony (persisted metadata). Compare with get_workflow when workflow front matter declares more repos than settings show."
+msgstr "List repositories linked to this project in Symphony (persisted metadata). Compare with get_workflow when workflow front matter declares more repos than settings show."
+
+msgid "List tracker issues in the current project (prefer get_issue when you know the identifier)."
+msgstr "List tracker issues in the current project (prefer get_issue when you know the identifier)."
+
+msgid "List workspace templates stored in Symphony (slug, name, description). Use before get_template."
+msgstr "List workspace templates stored in Symphony (slug, name, description). Use before get_template."
+
+msgid ""
+"List, propose, save, or run project dev-environment setup/serve steps.\n"
+"Coding agents may only list or run existing steps (optionally filter category_filter=serve)."
+msgstr ""
+"List, propose, save, or run project dev-environment setup/serve steps.\n"
+"Coding agents may only list or run existing steps (optionally filter category_filter=serve)."
+
+msgid "Local tracker project display name."
+msgstr "Local tracker project display name."
+
+msgid "Local tracker project slug."
+msgstr "Local tracker project slug."
+
+msgid "Maximum issues to return (default 20, max 100)."
+msgstr "Maximum issues to return (default 20, max 100)."
+
+msgid "Move an issue to a workflow status."
+msgstr "Move an issue to a workflow status."
+
+msgid "Optional GraphQL variables object."
+msgstr "Optional GraphQL variables object."
+
+msgid "Optional absolute path on the host for discovery scans."
+msgstr "Optional absolute path on the host for discovery scans."
+
+msgid "Optional agent override: codex, claude, or cursor. Omit to follow task > project > user preference."
+msgstr "Optional agent override: codex, claude, or cursor. Omit to follow task > project > user preference."
+
+msgid "Optional assignee filter."
+msgstr "Optional assignee filter."
+
+msgid "Optional assignee logins or remote ids. Call get_issue_form_options first."
+msgstr "Optional assignee logins or remote ids. Call get_issue_form_options first."
+
+msgid "Optional branch Symphony checks out."
+msgstr "Optional branch Symphony checks out."
+
+msgid "Optional creator filter."
+msgstr "Optional creator filter."
+
+msgid "Optional default branch from GitHub."
+msgstr "Optional default branch from GitHub."
+
+msgid "Optional description."
+msgstr "Optional description."
+
+msgid "Optional discovery metadata."
+msgstr "Optional discovery metadata."
+
+msgid "Optional filter when running steps, e.g. serve."
+msgstr "Optional filter when running steps, e.g. serve."
+
+msgid "Optional full-text search query."
+msgstr "Optional full-text search query."
+
+msgid "Optional git clone URL."
+msgstr "Optional git clone URL."
+
+msgid "Optional issue description."
+msgstr "Optional issue description."
+
+msgid "Optional issue id; reads from that issue workspace instead of project explore."
+msgstr "Optional issue id; reads from that issue workspace instead of project explore."
+
+msgid "Optional long-running Codex goal to persist for the orchestrator."
+msgstr "Optional long-running Codex goal to persist for the orchestrator."
+
+msgid "Optional long-running objective to persist for the orchestrator (Codex goal or Claude/Cursor workflow)."
+msgstr "Optional long-running objective to persist for the orchestrator (Codex goal or Claude/Cursor workflow)."
+
+msgid "Optional new description."
+msgstr "Optional new description."
+
+msgid "Optional new title."
+msgstr "Optional new title."
+
+msgid "Optional numeric priority."
+msgstr "Optional numeric priority."
+
+msgid "Optional project description."
+msgstr "Optional project description."
+
+msgid "Optional repository metadata. Omit to use the project's linked repositories."
+msgstr "Optional repository metadata. Omit to use the project's linked repositories."
+
+msgid "Optional repository scan inputs. Omit to scan the project's linked repositories."
+msgstr "Optional repository scan inputs. Omit to scan the project's linked repositories."
+
+msgid "Optional scan results. Omit to run scan_project_setup first."
+msgstr "Optional scan results. Omit to run scan_project_setup first."
+
+msgid "Optional short description."
+msgstr "Optional short description."
+
+msgid "Optional workflow status name filter."
+msgstr "Optional workflow status name filter."
+
+msgid "Optional workflow status."
+msgstr "Optional workflow status."
+
+msgid "Optional workflow status. Omit to create in Backlog (intake). Do not use orchestrator queue statuses (e.g. Todo) on create — move_issue after intake when ready."
+msgstr "Optional workflow status. Omit to create in Backlog (intake). Do not use orchestrator queue statuses (e.g. Todo) on create — move_issue after intake when ready."
+
+msgid "Preview action."
+msgstr "Preview action."
+
+msgid "Project board title."
+msgstr "Project board title."
+
+msgid "Provision (or link) a GitHub Project and create the matching local Symphony tracker project."
+msgstr "Provision (or link) a GitHub Project and create the matching local Symphony tracker project."
+
+msgid "Read a text file under the project explore workspace or an issue workspace (path relative to workspace root). For workflow markdown use get_workflow instead of WORKFLOW.md."
+msgstr "Read a text file under the project explore workspace or an issue workspace (path relative to workspace root). For workflow markdown use get_workflow instead of WORKFLOW.md."
+
+msgid ""
+"Read persisted evidence runs and the current validate gate state for an issue workspace.\n"
+"Call after writing .symphony/evidence/manifest.json and before handoff."
+msgstr ""
+"Read persisted evidence runs and the current validate gate state for an issue workspace.\n"
+"Call after writing .symphony/evidence/manifest.json and before handoff."
+
+msgid "Relative path inside the workspace, e.g. front/README.md."
+msgstr "Relative path inside the workspace, e.g. front/README.md."
+
+msgid "Relative path under the project workspace root (unique per project)."
+msgstr "Relative path under the project workspace root (unique per project)."
+
+msgid "Replace the repositories linked to this project in Symphony (same as Project Settings). Does not delete workspace files; only updates persisted metadata."
+msgstr "Replace the repositories linked to this project in Symphony (same as Project Settings). Does not delete workspace files; only updates persisted metadata."
+
+msgid "Replacement comment body markdown/text."
+msgstr "Replacement comment body markdown/text."
+
+msgid "Repo role label, e.g. frontend or backend."
+msgstr "Repo role label, e.g. frontend or backend."
+
+msgid "Request coding-agent work (Codex or Claude) through the existing issue workflow."
+msgstr "Request coding-agent work (Codex or Claude) through the existing issue workflow."
+
+msgid "Required for run_step."
+msgstr "Required for run_step."
+
+msgid "Required for save_steps."
+msgstr "Required for save_steps."
+
+msgid "Response format: json (default) or yaml."
+msgstr "Response format: json (default) or yaml."
+
+msgid "Scan linked repositories for stack hints (same as the project setup wizard)."
+msgstr "Scan linked repositories for stack hints (same as the project setup wizard)."
+
+msgid "Single-select field name (default Status, the built-in board field)."
+msgstr "Single-select field name (default Status, the built-in board field)."
+
+msgid "Status field name when provisioning (default Status, the built-in board field)."
+msgstr "Status field name when provisioning (default Status, the built-in board field)."
+
+msgid "Status names when provisioning a new GitHub Project."
+msgstr "Status names when provisioning a new GitHub Project."
+
+msgid "Suggest workflow markdown, hooks, and validation commands from repository scans."
+msgstr "Suggest workflow markdown, hooks, and validation commands from repository scans."
+
+msgid "Symphony tracker project slug (from list_tracker_projects)."
+msgstr "Symphony tracker project slug (from list_tracker_projects)."
+
+msgid "Target workflow status."
+msgstr "Target workflow status."
+
+msgid "Template slug."
+msgstr "Template slug."
+
+msgid "URL slug, e.g. meu-projeto."
+msgstr "URL slug, e.g. meu-projeto."
+
+msgid "Update mutable fields on an existing tracker issue."
+msgstr "Update mutable fields on an existing tracker issue."
+
+msgid "Update workflow markdown (YAML front matter + body). Orchestrator behavior requires tracker.* lists in front matter (dispatch_states, active_states, terminal_states, wait_states, field_states) — editing body prose alone does not change auto-dispatch. Preserve or update YAML when changing queue/work statuses."
+msgstr "Update workflow markdown (YAML front matter + body). Orchestrator behavior requires tracker.* lists in front matter (dispatch_states, active_states, terminal_states, wait_states, field_states) — editing body prose alone does not change auto-dispatch. Preserve or update YAML when changing queue/work statuses."
+
+msgid "When true, include archived local projects (default false)."
+msgstr "When true, include archived local projects (default false)."
+
+msgid "When true, include issue comments in the response."
+msgstr "When true, include issue comments in the response."
+
+msgid "Workflow status option names to create on the board."
+msgstr "Workflow status option names to create on the board."

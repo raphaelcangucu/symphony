@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
 import { listPullRequests } from "@/services/pullRequests";
 import type { PullRequest } from "@/types/pull-request";
 
@@ -58,7 +59,7 @@ export function useIssuePullRequests({
       hasLoadedRef.current = true;
       lastFetchedAtRef.current = Date.now();
     } catch {
-      setError("Could not load pull request details.");
+      setError(i18n.t("issue.pullRequest.errors.loadFailed"));
     } finally {
       inFlightRef.current = false;
       setLoading(false);

@@ -24,6 +24,28 @@ if config_env() != :test do
     end
   end
 
+  parse_range = fn name, default ->
+    case System.get_env(name) do
+      value when is_binary(value) and value != "" ->
+        case String.split(value, "-", parts: 2) do
+          [min, max] ->
+            with {min_int, ""} <- Integer.parse(String.trim(min)),
+                 {max_int, ""} <- Integer.parse(String.trim(max)),
+                 true <- min_int > 0 and max_int > min_int do
+              [min_int, max_int]
+            else
+              _ -> default
+            end
+
+          _ ->
+            default
+        end
+
+      _ ->
+        default
+    end
+  end
+
   editor_settings = SymphonyElixir.BootInstanceConfig.editor_settings()
 
   # Integer.parse (not parse_int) so invalid values yield nil and fall back to
@@ -70,6 +92,9 @@ if config_env() != :test do
     claude_command: System.get_env("SYMPHONY_CLAUDE_COMMAND") || "claude",
     cursor_command: System.get_env("SYMPHONY_CURSOR_COMMAND") || "cursor-agent",
     default_agent_kind: System.get_env("SYMPHONY_DEFAULT_AGENT_KIND") || "codex",
+    preview_pool_range: parse_range.("SYMPHONY_PREVIEW_POOL", [10_000, 30_000]),
+    preview_slots_per_project: parse_int.("SYMPHONY_PREVIEW_SLOTS_PER_PROJECT", 32),
+    preview_ports_per_slot: parse_int.("SYMPHONY_PREVIEW_PORTS_PER_SLOT", 8),
     vapid_public_key: maybe.("SYMPHONY_VAPID_PUBLIC_KEY"),
     vapid_private_key: maybe.("SYMPHONY_VAPID_PRIVATE_KEY"),
     vapid_subject: System.get_env("SYMPHONY_VAPID_SUBJECT") || "mailto:symphony@localhost"

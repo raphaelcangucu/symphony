@@ -1,4 +1,5 @@
 import type { ToolCallView } from "@/components/shared/ToolCallBlock";
+import { i18n } from "@/i18n";
 import type { AssistantToolCall, AssistantToolStatus } from "@/services/assistant";
 
 const ACTION_TOOLS = new Set<string>([
@@ -23,12 +24,12 @@ export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallVi
   const input = serializeArguments(toolCall.arguments);
 
   return {
-    toolType: humanize(toolCall.name),
+    toolType: localizeToolName(toolCall.name),
     description: null,
     status: mapStatus(toolCall.status),
     input: input ? { value: input, language: "json" } : null,
     output: toolCall.output ? { value: toolCall.output, language: "text" } : null,
-    defaultCollapsed: !action,
+    defaultCollapsed: true,
   };
 }
 
@@ -45,6 +46,10 @@ function mapStatus(status: AssistantToolStatus): ToolCallView["status"] {
   if (status === "running") return "running";
   if (status === "error") return "failed";
   return "completed";
+}
+
+function localizeToolName(name: string): string {
+  return i18n.t(`issue.toolCall.tools.${name}`, { defaultValue: humanize(name) });
 }
 
 function humanize(value: string): string {

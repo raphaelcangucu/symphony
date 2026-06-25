@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.LocalTracker.ProjectYaml do
   @moduledoc "Converts local tracker projects to/from portable YAML bundles."
 
+  alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.{Project, ProjectSetup, Repository, TemplateYaml, WorkflowStatus}
 
   @bundle_kind "symphony_project"
@@ -143,7 +144,7 @@ defmodule SymphonyElixir.LocalTracker.ProjectYaml do
 
   defp setup_to_map(%ProjectSetup{} = setup) do
     %{
-      "workflow_markdown" => setup.workflow_markdown,
+      "workflow_markdown" => portable_workflow_markdown(setup.workflow_markdown),
       "after_create_hook" => setup.after_create_hook,
       "validation_commands" => validation_commands(setup),
       "scan_summary" => empty_map_to_nil(setup.scan_summary)
@@ -177,4 +178,9 @@ defmodule SymphonyElixir.LocalTracker.ProjectYaml do
     do: commands
 
   defp validation_commands(_setup), do: []
+
+  defp portable_workflow_markdown(nil), do: nil
+
+  defp portable_workflow_markdown(markdown) when is_binary(markdown),
+    do: Config.portable_workflow_markdown(markdown)
 end

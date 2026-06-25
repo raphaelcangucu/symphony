@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ function answerValue(question: UserQuestion, draft: DraftAnswer): string | null 
 }
 
 export function UserQuestionsCard({ request, onSubmit, disabled }: UserQuestionsCardProps) {
+  const { t } = useTranslation();
   const { questions } = request;
   const [activeIndex, setActiveIndex] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, DraftAnswer>>(() =>
@@ -86,7 +88,7 @@ export function UserQuestionsCard({ request, onSubmit, disabled }: UserQuestions
                 answerValue(question, drafts[question.id] ?? emptyDraft()) != null ? "ring-1 ring-primary/40" : "",
               )}
             >
-              {question.header || `Q${index + 1}`}
+              {question.header || t("assistant.questions.questionFallback", { index: index + 1 })}
             </button>
           ))}
         </div>
@@ -102,7 +104,7 @@ export function UserQuestionsCard({ request, onSubmit, disabled }: UserQuestions
             rows={3}
             value={draft.freeformText}
             onChange={(event) => updateDraft(active.id, { freeformText: event.target.value })}
-            placeholder="Type your answer"
+            placeholder={t("assistant.questions.placeholder")}
             disabled={disabled}
           />
         ) : (
@@ -140,14 +142,14 @@ export function UserQuestionsCard({ request, onSubmit, disabled }: UserQuestions
                   disabled={disabled}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="font-medium">Other</span>
+                  <span className="font-medium">{t("assistant.questions.other")}</span>
                   {draft.selected === OTHER_VALUE ? (
                     <input
                       type="text"
                       className="mt-1 w-full rounded-md border bg-background p-1.5 text-sm"
                       value={draft.otherText}
                       onChange={(event) => updateDraft(active.id, { otherText: event.target.value })}
-                      placeholder="Type your answer"
+                      placeholder={t("assistant.questions.placeholder")}
                       disabled={disabled}
                     />
                   ) : null}
@@ -160,7 +162,7 @@ export function UserQuestionsCard({ request, onSubmit, disabled }: UserQuestions
 
       <div className="mt-3 flex justify-end">
         <Button type="button" size="sm" onClick={handleSubmit} disabled={!allAnswered || disabled}>
-          Submit answers
+          {t("assistant.questions.submit")}
         </Button>
       </div>
     </div>

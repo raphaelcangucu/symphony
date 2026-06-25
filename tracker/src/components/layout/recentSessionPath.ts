@@ -1,7 +1,13 @@
+import type { TFunction } from "i18next";
+
+import { i18n } from "@/i18n";
 import { issueAssistantPath, issuePath, projectExploreAssistantPath, withAgentSection } from "@/lib/workspaceRoutes";
 import type { RecentSession } from "@/types/recents";
 
-export function recentSessionSubtitle(session: RecentSession): string {
+export function recentSessionSubtitle(
+  session: RecentSession,
+  t: TFunction = i18n.t.bind(i18n) as TFunction,
+): string {
   if (session.kind === "codex") {
     return [session.identifier, session.projectName ?? session.projectSlug].filter(Boolean).join(" · ");
   }
@@ -10,10 +16,12 @@ export function recentSessionSubtitle(session: RecentSession): string {
     return [session.identifier, session.projectName ?? session.projectSlug].filter(Boolean).join(" · ");
   }
 
-  if (session.scope === "freeform") return "Freeform chat";
-  if (session.scope === "project_explore") return session.projectName ?? session.projectSlug ?? "Explore project";
+  if (session.scope === "freeform") return t("layout.sessionSubtitle.freeform");
+  if (session.scope === "project_explore") {
+    return session.projectName ?? session.projectSlug ?? t("layout.sessionSubtitle.explore");
+  }
 
-  return session.projectName ?? session.projectSlug ?? "Project chat";
+  return session.projectName ?? session.projectSlug ?? t("layout.sessionSubtitle.projectChat");
 }
 
 export function recentSessionPath(session: RecentSession): string {

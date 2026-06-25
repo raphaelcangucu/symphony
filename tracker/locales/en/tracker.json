@@ -1,0 +1,2020 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "close": "Close",
+    "save": "Save",
+    "refresh": "Refresh"
+  },
+  "ui": {
+    "dialog": {
+      "close": "Close"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Operator-level defaults for this Symphony instance.",
+    "loadFailed": "Failed to load settings — refresh to retry.",
+    "codingAgent": {
+      "title": "Coding agent",
+      "description": "Default agent for new work. Projects and tasks can override it (task > project > this default).",
+      "saved": "Default coding agent set to {{agent}}",
+      "saveFailed": "Failed to save the default coding agent",
+      "availabilityFailed": "Could not check agent availability.",
+      "notFound": "{{command}} not found — install it or pick another agent"
+    },
+    "language": {
+      "title": "Language",
+      "description": "UI language for the tracker. Push notifications use English while set to Auto.",
+      "auto": "Auto (browser)",
+      "en": "English",
+      "pt-BR": "Português (Brasil)",
+      "saved": "Language preference saved",
+      "saveFailed": "Failed to save language preference",
+      "loadFailed": "Failed to load language settings — refresh to retry."
+    },
+    "orchestration": {
+      "title": "Orchestration rules",
+      "description": "What the orchestrator is allowed to start on its own. Defaults are conservative so it never grabs unlabeled or unassigned work.",
+      "loadFailed": "Failed to load rules — refresh to retry.",
+      "saveFailed": "Failed to save orchestration rule",
+      "rules": {
+        "requireSymphonyLabel": {
+          "title": "Require a Symphony label",
+          "description": "Only auto-start issues tagged symphony, symphony:codex, or symphony:claude. Manual dispatch from the board is never affected."
+        },
+        "requireAssigneeMatch": {
+          "title": "Require assignment to me",
+          "description": "Only auto-start issues assigned to the connected provider identity (GitHub login, Jira account, or Linear user)."
+        }
+      }
+    },
+    "push": {
+      "title": "Browser notifications",
+      "description": "Get notified when an issue needs human review, validation evidence is ready, an agent run fails or stalls, the PR monitor flags something for you, or a task is assigned to you — even when this tab is in the background.",
+      "unsupported": "Web Push is not supported in this browser.",
+      "notConfigured": "Push is not configured on the server. Set SYMPHONY_VAPID_PUBLIC_KEY and SYMPHONY_VAPID_PRIVATE_KEY, then restart Symphony.",
+      "enabled": "Notifications are enabled for this browser.",
+      "prompt": "Enable notifications for Human Review, evidence, agent failures, and PR monitor alerts.",
+      "disable": "Disable notifications",
+      "sendTest": "Send test notification",
+      "enable": "Enable notifications",
+      "errors": {
+        "loadFailed": "Failed to load push notification settings",
+        "permissionDenied": "Notification permission was denied",
+        "enableFailed": "Failed to enable browser notifications",
+        "disableFailed": "Failed to disable browser notifications",
+        "noSubscriptions": "No push subscriptions on the server — disable and re-enable notifications",
+        "testFailed": "Failed to send test notification"
+      }
+    },
+    "identities": {
+      "title": "Connected identities",
+      "description": "Who Symphony authenticates as on each provider. The orchestrator's \"assigned to me\" rule matches against these identities.",
+      "loadFailed": "Failed to load identities — refresh to retry.",
+      "loading": "Loading…",
+      "providers": { "github": "GitHub", "jira": "Jira", "linear": "Linear" },
+      "status": {
+        "notConfigured": "Not configured",
+        "connected": "Connected",
+        "error": "Error"
+      },
+      "describe": {
+        "addToken": "Add a token below to connect this provider.",
+        "connected": "Connected",
+        "verifyFailed": "Could not verify: {{error}}",
+        "verifyTokenFailed": "Could not verify the token."
+      }
+    },
+    "credentials": {
+      "title": "Provider tokens",
+      "description": "Tokens saved here are encrypted at rest and override the matching environment variable. Leave a secret blank to keep the current value, or clear it to fall back to the environment.",
+      "loadFailed": "Failed to load credentials — refresh to retry.",
+      "loading": "Loading…",
+      "save": "Save",
+      "clear": "Clear",
+      "placeholderNotSet": "Not set",
+      "placeholderReplace": "{{hint}} — enter a new value to replace",
+      "source": {
+        "savedHere": "Saved here",
+        "fromEnv": "From environment",
+        "notSet": "Not set"
+      },
+      "toasts": {
+        "saved": "{{label}} saved",
+        "saveFailed": "Failed to save {{label}}",
+        "cleared": "{{label}} cleared",
+        "clearFailed": "Failed to clear {{label}}"
+      }
+    }
+  },
+  "issue": {
+    "bundle": {
+      "title": "Execution bundle",
+      "contracts": "Shared contracts",
+      "dependsOn": "depends on {{units}}",
+      "consumes": "consumes {{contracts}}"
+    },
+    "agent": {
+      "advancedControls": "Advanced controls",
+      "controlTitle": "Agent control",
+      "hintSteer": "Steer the live run with /infer, or pause to stop safely.",
+      "hintBusy": "Agent is busy — queue guidance for the next resume, or pause to stop safely.",
+      "hintResume": "Resume where the run stopped, restart fresh, or add guidance before resuming.",
+      "hintStart": "Start the agent on this issue. Add optional guidance before you do.",
+      "workflowObjective": "Workflow objective",
+      "goalObjective": "Goal objective",
+      "goalDefaultObjective": "Implement per spec and plan",
+      "goalCommandWithObjective": "Pursue this execution goal via the orchestrator. Objective: {{objective}}. Keep working toward it across turns until the issue is done or you are blocked.",
+      "goalCommandDefault": "Pursue an execution goal via the orchestrator. Derive the objective from the existing spec/plan/handoff, then keep working toward it across turns until the issue is done or you are blocked.",
+      "goalSetDone": "Execution goal saved",
+      "sendGoalAria": "Send goal on resume or restart",
+      "queuedGuidance": "Queued guidance · sent on next resume",
+      "queuedAttachments": "{{count}} attachment(s)",
+      "removeQueuedAria": "Remove queued guidance",
+      "remove": "Remove",
+      "placeholderSteer": "/infer focus on the failing test first",
+      "placeholderQueue": "Add guidance to queue for the next resume…",
+      "placeholderResume": "Optional guidance, then Resume…",
+      "placeholderStart": "Optional guidance, then Start…",
+      "restartTitle": "Start a fresh agent pass on this issue",
+      "restartPauseFirst": "Pause the active run before restarting",
+      "restart": "Restart",
+      "restarting": "Restarting…",
+      "hardResetTitle": "Stop the run, clear the session (turns and tokens), and start fresh. Keeps the workspace.",
+      "hardReset": "Hard reset",
+      "resetting": "Resetting…",
+      "sendingSteer": "Sending steer…",
+      "pauseTitle": "Pause the run (keeps the session to resume later)",
+      "starting": "Starting…",
+      "resuming": "Resuming…",
+      "dispatchResume": "Resuming agent…",
+      "dispatchRestart": "Restarting agent…",
+      "dispatchHardReset": "Hard resetting session…",
+      "dispatchStop": "Pausing agent…",
+      "dispatchFailed": "Dispatch failed",
+      "hardResetDialogTitle": "Hard reset session?",
+      "hardResetDialogDescription": "This stops any active run, discards the current agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and its git state are preserved.",
+      "cancel": "Cancel",
+      "modelsHint": "Models from {{command}}. Agent and model apply on resume/restart; /infer steers the live {{agent}} session.",
+      "steerNotAvailable": "No steerable agent turn is running — use Resume to pick the run back up.",
+      "orchestratorUnavailable": "The orchestrator is unavailable; try again in a moment.",
+      "primaryStart": "Start",
+      "primaryPause": "Pause",
+      "primaryResume": "Resume",
+      "enterSteer": "Enter to steer",
+      "enterQueue": "Enter to queue",
+      "enterResume": "Enter to resume",
+      "enterStart": "Enter to start",
+      "agentMenu": "Agent",
+      "steer": "Steer",
+      "queue": "Queue",
+      "pausing": "Pausing…",
+      "effort": "Effort",
+      "executionStatus": {
+        "live": "Live",
+        "idle": "Idle",
+        "waiting": "Waiting",
+        "retrying": "Retrying",
+        "error": "Error",
+        "aborted": "Aborted",
+        "saved": "Goal saved"
+      },
+      "goalStatus": {
+        "active": "Active",
+        "paused": "Paused",
+        "blocked": "Blocked",
+        "complete": "Complete",
+        "completed": "Complete",
+        "budgetLimited": "Budget limited",
+        "usageLimited": "Usage limited",
+        "interrupted": "Interrupted",
+        "not_loaded": "Not loaded"
+      },
+      "goalControls": {
+        "pause": "Pause goal",
+        "resume": "Resume goal",
+        "clear": "Clear goal",
+        "pauseDone": "Goal paused",
+        "resumeDone": "Goal resumed",
+        "clearDone": "Goal cleared",
+        "failed": "Goal control failed"
+      },
+      "tab": {
+        "runStatus": "Run status",
+        "noActiveAgent": "No active agent",
+        "session": "Session",
+        "turn": "Turn",
+        "runtime": "Runtime",
+        "started": "Started",
+        "lastActivity": "Last activity",
+        "retryAttempt": "Retry attempt",
+        "goalSource": "Source: {{source}}",
+        "goalSourceNative": "agent native state",
+        "goalSourcePrompt": "prompt guidance",
+        "goalCapabilities": "Capabilities: {{list}}",
+        "goalStatus": "Status",
+        "goalBudget": "Token budget",
+        "goalTokensUsed": "Tokens used",
+        "goalTimeUsed": "Time used",
+        "goalBudgetUnlimited": "Unlimited",
+        "goalSeconds": "{{seconds}}s",
+        "noExecution": "No agent is currently executing this issue.",
+        "executionGoalSaved": "Execution goal saved, not running",
+        "executionGoalSavedHint": "Start the agent from this tab to run this goal through the orchestrator.",
+        "latestUpdate": "Latest update",
+        "lastError": "Last error",
+        "tokens": "Tokens",
+        "input": "Input",
+        "output": "Output",
+        "total": "Total",
+        "assignment": "Assignment",
+        "noAgentAssigned": "No agent assigned",
+        "agentSection": "Agent",
+        "inherit": "Inherit",
+        "stopToChange": "Stop the active run to change the agent.",
+        "retryPaused": "Retries are paused when you pick a different agent. Move the issue out of its active state to stop re-dispatch entirely.",
+        "updateFailed": "Failed to update agent"
+      }
+    },
+    "drawer": {
+      "tabs": {
+        "summary": "Summary",
+        "pr": "Pull request",
+        "comments": "Comments",
+        "evidence": "Evidence",
+        "blockers": "Blockers",
+        "agent": "Agent",
+        "preview": "Preview",
+        "activity": "Activity",
+        "terminal": "Terminal"
+      },
+      "openInCode": "Open in Code",
+      "openInCodeBrowser": "Open in VS Code (browser)",
+      "openInCursor": "Open in Cursor (local app)",
+      "issueActions": "Issue actions",
+      "openWorkspaceCode": "Open this task's workspace in Code (.)",
+      "blocked": "Blocked",
+      "syncFromRemote": "Sync from remote",
+      "archive": "Archive",
+      "delete": "Delete",
+      "deleteConfirm": "Delete {{identifier}} permanently? This removes it from the board and cannot be undone.",
+      "issueTitleAria": "Issue title",
+      "untitledIssue": "Untitled issue",
+      "unassigned": "Unassigned",
+      "group": {
+        "title": "Group",
+        "lead": "Lead",
+        "current": "This issue",
+        "unavailable": "Not in current view"
+      },
+      "code": "Code",
+      "editor": {
+        "checking": "Checking editor…",
+        "starting": "Editor is starting…",
+        "workspaceMissing": "Workspace not created yet — run the agent or open the terminal first",
+        "workspacePreparing": "Workspace is still preparing — try again in a moment",
+        "unavailableUpgrade": "Editor unavailable — restart Symphony after upgrading (make build && make update)",
+        "unavailable": "Editor unavailable",
+        "vsCode": "VS Code",
+        "cursor": "Cursor"
+      }
+    },
+    "agentTabs": {
+      "authoringHint": "Draft the brief and plan, then dispatch the agent.",
+      "executionHint": "Watch the live run, steer with /infer, and pause or resume.",
+      "sectionsAria": "Agent sections",
+      "authoring": "Authoring",
+      "execution": "Execution"
+    },
+    "toolCall": {
+      "status": {
+        "running": "running",
+        "completed": "completed",
+        "failed": "failed"
+      },
+      "tools": {
+        "add_comment": "Add comment",
+        "apply_patch": "Edit files",
+        "check_handoff_gate": "Check handoff gate",
+        "create_draft_issue": "Create draft issue",
+        "create_github_tracker_project": "Create GitHub tracker project",
+        "create_issue": "Create issue",
+        "create_tracker_project": "Create tracker project",
+        "dispatch_coding_agent": "Dispatch coding agent",
+        "dispatch_codex": "Dispatch codex",
+        "get_agent_executions": "Get agent executions",
+        "get_evidence_status": "Get evidence status",
+        "get_issue": "Get issue",
+        "get_issue_form_options": "Get issue form options",
+        "get_project": "Get project",
+        "get_template": "Get template",
+        "get_workflow": "Get workflow",
+        "list_comments": "List comments",
+        "list_github_projects": "List GitHub projects",
+        "list_issues": "List issues",
+        "list_jira_projects": "List Jira projects",
+        "list_linear_projects": "List Linear projects",
+        "list_project_repositories": "List project repositories",
+        "list_pull_requests": "List pull requests",
+        "list_templates": "List templates",
+        "list_tracker_projects": "List tracker projects",
+        "manage_dev_env": "Manage dev env",
+        "manage_preview": "Manage preview",
+        "move_issue": "Move issue",
+        "provision_github_project": "Provision GitHub project",
+        "read_workspace_file": "Read workspace file",
+        "scan_project_setup": "Scan project setup",
+        "shell": "Run command",
+        "suggest_project_setup": "Suggest project setup",
+        "update_comment": "Update comment",
+        "update_issue": "Update issue",
+        "update_project_repositories": "Update project repositories",
+        "update_project_workflow": "Update project workflow"
+      },
+      "input": "IN",
+      "output": "OUT",
+      "showMore": "… show more",
+      "fileActivity": {
+        "read": "Read",
+        "edited": "Edited",
+        "command": "Ran",
+        "files_one": "{{count}} file",
+        "files_other": "{{count}} files",
+        "running": "Working…",
+        "expand": "Toggle details"
+      }
+    },
+    "inlineMarkdown": {
+      "placeholder": "Add a description…",
+      "descriptionAria": "Issue description",
+      "editAria": "Edit description",
+      "nothingToPreview": "Nothing to preview yet.",
+      "hint": "⌘↵ to save · Markdown supported · paste images"
+    },
+    "inlineText": {
+      "placeholder": "Click to edit",
+      "editAria": "Edit",
+      "saveHint": "⌘↵ to save"
+    },
+    "comments": {
+      "write": "Write",
+      "preview": "Preview",
+      "toolbar": {
+        "heading": "Heading",
+        "bold": "Bold",
+        "italic": "Italic",
+        "code": "Code",
+        "link": "Link",
+        "bulletedList": "Bulleted list",
+        "numberedList": "Numbered list",
+        "taskList": "Task list"
+      },
+      "placeholder": "Use Markdown to format your comment · paste images to attach",
+      "nothingToPreview": "Nothing to preview.",
+      "uploadingImage": "Uploading image…",
+      "markdownHint": "Markdown supported · paste images · ⌘/Ctrl+Enter to send",
+      "posting": "Posting…",
+      "comment": "Comment",
+      "loading": "Loading comments…",
+      "empty": "No comments yet.",
+      "addFailed": "Failed to add comment",
+      "updateFailed": "Failed to update comment",
+      "deleteConfirm": "Delete this comment? This cannot be undone.",
+      "deleteFailed": "Failed to delete comment",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "save": "Save",
+      "errors": {
+        "loadFailed": "Could not load comments."
+      },
+      "editAria": "Edit comment",
+      "deleteAria": "Delete comment",
+      "linkPlaceholder": "text",
+      "mentions": {
+        "listLabel": "Mention a user"
+      },
+      "card": {
+        "unknownAuthor": "Unknown",
+        "commented": "commented",
+        "empty": "Empty comment.",
+        "openOnGitHub": "Open on GitHub",
+        "sync": {
+          "pending": "Syncing…",
+          "conflict": "Sync conflict",
+          "error": "Sync failed"
+        },
+        "workpad": "Workpad",
+        "evidence": "Evidence",
+        "evidenceArtifactsHint": "Full artifacts (videos, reports, traces): open the Evidence tab.",
+        "workpadSectionEmpty": "No notes yet.",
+        "workpadPullRequests": "Linked pull requests",
+        "workpadRegistryHint": "Auto-synced registry",
+        "workpadPrStatus": {
+          "active": "Active",
+          "closed_superseded_unlinked": "Superseded"
+        }
+      }
+    },
+    "priority": {
+      "none": "No priority",
+      "urgent": "Urgent",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "inline": {
+      "agent": {
+        "title": "Agent",
+        "loading": "Loading agents...",
+        "save": "Save",
+        "close": "Close"
+      },
+      "assignee": {
+        "title": "Assignee",
+        "unassigned": "Unassigned",
+        "searchPlaceholder": "Search assignees…",
+        "searchAria": "Search assignees",
+        "loading": "Loading users…",
+        "empty": "No assignees found.",
+        "mePrefix": "Me — {{label}}",
+        "unknown": "Unknown"
+      },
+      "priority": {
+        "title": "Priority"
+      },
+      "status": {
+        "title": "Status"
+      }
+    },
+    "commits": {
+      "title": "Agent commits",
+      "refresh": "Refresh",
+      "workspaceUnavailable": "Workspace not available on this machine — commit history cannot be read locally.",
+      "loading": "Loading commits…",
+      "empty": "No agent commits ahead of the integration branch yet.",
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "sheet": {
+        "title": "Commit",
+        "descriptionFallback": "Agent commit changes",
+        "loadFailed": "Could not load commit diff.",
+        "loadingDiff": "Loading diff…",
+        "noFiles": "No file changes in this commit.",
+        "selectFile": "Select a file to view its diff."
+      },
+      "errors": {
+        "loadFailed": "Could not load commit evidence."
+      }
+    },
+    "preview": {
+      "cannotLoadTitle": "Preview cannot load",
+      "cannotLoadBody": "Project and issue identifiers are required to load preview status.",
+      "loadingTitle": "Loading preview status...",
+      "loadingBody": "Checking dev-server availability for this issue.",
+      "loadErrorTitle": "Could not load preview status",
+      "unavailableTitle": "Preview status unavailable",
+      "unavailableBody": "No preview status has been loaded for this issue yet.",
+      "refreshErrorTitle": "Could not refresh preview status",
+      "cardTitle": "Issue Preview",
+      "availability": "Availability: {{status}}",
+      "available": "available",
+      "unavailable": "unavailable",
+      "refreshing": " · refreshing status",
+      "readyFrom": "Preview is ready from {{slug}}.",
+      "ready": "Preview is ready.",
+      "publicTunnel": "Public (Cloudflare tunnel):",
+      "local": "Local:",
+      "openPreview": "Open Preview",
+      "provisioningTitle": "Preview is being provisioned...",
+      "devServers": "Dev Servers",
+      "noServers": "No dev servers are running yet. Use Start Preview when you want to provision one.",
+      "startPreview": "Start Preview",
+      "stopPreview": "Stop Preview",
+      "restartPreview": "Restart Preview",
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Restart",
+      "startServerAria": "Start {{slug}} preview",
+      "stopServerAria": "Stop {{slug}} preview",
+      "restartServerAria": "Restart {{slug}} preview",
+      "tunnelRunningTitle": "Public preview URLs",
+      "tunnelRunningBody": "The Cloudflare tunnel is running, so the public *.tracker.cods.dev links below reach this machine and can be shared with teammates.",
+      "tunnelStoppedTitle": "Cloudflare tunnel is not running",
+      "tunnelStoppedBody": "Public preview links won't work until the tunnel is running. Only the localhost URLs are shown below. Start the tunnel to expose the public *.tracker.cods.dev hosts.",
+      "startingTunnel": "Starting tunnel...",
+      "startTunnel": "Start tunnel",
+      "askAssistant": "Ask assistant to fix",
+      "primaryBadge": "primary",
+      "workingDir": "Working directory: {{dir}}",
+      "noWorkingDir": "No working directory reported",
+      "port": " · Port {{port}}",
+      "openServerPreview": "Open {{slug}} preview",
+      "noUrlYet": "No URL yet",
+      "provisioningStatus": "The {{slug}} dev server is {{status}} and has not published a URL yet.",
+      "availabilityReason": {
+        "disabled": {
+          "title": "Dev-server previews are disabled",
+          "body": "Availability is disabled for this project. Enable dev-server previews in the project workflow before using Start Preview."
+        },
+        "workspace_missing": {
+          "title": "Preview workspace is missing",
+          "body": "Availability is blocked because the issue workspace could not be found. Create or restore the workspace before starting a preview."
+        },
+        "no_serve_step": {
+          "title": "No serve step configured",
+          "body": "Availability is blocked because this project does not have a dev-server serve step configured."
+        },
+        "no_free_port": {
+          "title": "No free preview port",
+          "body": "Availability is blocked because the system could not reserve a free port for the dev server."
+        },
+        "lock_unavailable": {
+          "title": "Preview is already being changed",
+          "body": "Another preview action is holding the lock. Manual controls remain available so you can retry after the current action finishes."
+        },
+        "start_failed": {
+          "title": "Preview start failed",
+          "body": "The last start request failed. Manual controls remain available so you can retry or restart after checking the server output."
+        },
+        "restart_failed": {
+          "title": "Preview restart failed",
+          "body": "The last restart request failed. Manual controls remain available so you can retry once the underlying issue is resolved."
+        },
+        "crashed": {
+          "title": "Preview crashed",
+          "body": "Availability is blocked because the preview process crashed. Manual controls remain available so you can restart after checking the server logs."
+        },
+        "default": {
+          "title": "Preview unavailable",
+          "body": "Availability is blocked right now. Resolve the issue above, then use Start Preview when you are ready."
+        }
+      },
+      "failurePrompt": {
+        "intro": "The issue preview dev server failed. Diagnose the workspace, fix the root cause, and tell me when Start Preview should work again.",
+        "availability": "Availability: {{status}}",
+        "availabilityReason": "Availability reason: {{reason}}",
+        "failedServer": "Failed server: {{slug}}",
+        "status": "Status: {{status}}",
+        "workingDirectory": "Working directory: {{dir}}",
+        "port": "Port: {{port}}",
+        "tmuxSession": "Tmux session: {{session}}",
+        "inspectLogs": "Inspect logs: tmux capture-pane -t {{session}} -p -S -80",
+        "footer": "Check setup/serve DevEnv steps, run missing installs (for example npm ci in front/), then confirm npm run dev or the configured serve command works in the issue workspace."
+      }
+    },
+    "evidence": {
+      "status": {
+        "passed": "Passed",
+        "failed": "Failed",
+        "blocked": "Blocked"
+      },
+      "missing": "No evidence recorded in the tracker.",
+      "incomplete": "Validation incomplete — {{details}}{{suffix}}",
+      "failedStatus": "Latest evidence has status \"{{status}}\".",
+      "failedRunsHeader": "Runs that failed or were blocked on the last attempt:",
+      "absent": "Evidence: absent",
+      "tab": {
+        "title": "Evidence runs",
+        "refresh": "Refresh",
+        "clearFailed": "Clear failed",
+        "clearAll": "Clear all",
+        "clearFailedConfirm": "Remove all failed or blocked evidence runs for this issue?",
+        "clearAllConfirm": "Remove all evidence runs for this issue? This cannot be undone.",
+        "deleteRun": "Remove run {{runId}}",
+        "deleteRunConfirm": "Remove evidence run {{runId}}?",
+        "actionFailed": "Could not update evidence.",
+        "loading": "Loading evidence…",
+        "empty": "No evidence captured for this issue yet.",
+        "uiChange": "UI change",
+        "columns": {
+          "kind": "Kind",
+          "repo": "Repo",
+          "command": "Command",
+          "status": "Status",
+          "summary": "Summary"
+        },
+        "screenshots": "Screenshots",
+        "videos": "Videos",
+        "reportLink": "{{kind}} report ({{repo}})",
+        "traceLink": "{{kind}} trace ({{repo}})",
+        "runSummary": "{{passed}}/{{total}} passed, {{failed}} failed",
+        "openExternal": "Open in new tab",
+        "taskGroup": {
+          "ungrouped": "Evidence without linked task",
+          "runCount": "{{count}} run(s)"
+        },
+        "runSection": {
+          "e2eTitle": "End-to-end test — {{repo}}",
+          "unitTitle": "Unit tests — {{repo}}",
+          "genericTitle": "{{kind}} — {{repo}}",
+          "objective": "What was tested",
+          "command": "Command",
+          "blockedReason": "Blocked because",
+          "navigations": "Pages visited",
+          "noSummary": "No result summary",
+          "multipleSpecs": "{{count}} specs"
+        },
+        "artifactVideoAria": "Video evidence: {{name}}",
+        "textViewer": {
+          "loading": "Loading file…",
+          "loadError": "Could not load this file.",
+          "retry": "Retry",
+          "openAria": "View {{name}}"
+        }
+      },
+      "errors": {
+        "loadFailed": "Could not load evidence."
+      }
+    },
+    "summary": {
+      "openInGitHub": "Open in GitHub",
+      "openInLinear": "Open in Linear",
+      "openIssue": "Open issue",
+      "preview": "Preview",
+      "previewProvisioning": "Preview provisioning...",
+      "previewStarting": "Preview starting...",
+      "previewCrashed": "Preview crashed",
+      "description": "Description",
+      "noDescription": "No description yet.",
+      "agentWorkpad": "Agent Workpad",
+      "viewAllComments": "View all comments",
+      "subIssues": {
+        "title": "Sub-issues",
+        "progress": "{{completed}} of {{total}}",
+        "expand": "Show sub-issues",
+        "collapse": "Hide sub-issues",
+        "empty": "Sub-issues are not loaded yet."
+      },
+      "status": "Status",
+      "priority": "Priority",
+      "assignee": "Assignee",
+      "agent": "Agent",
+      "updated": "Updated",
+      "labels": "Labels",
+      "noLabels": "No labels"
+    },
+    "labels": {
+      "add": "Add labels",
+      "searchPlaceholder": "Search labels…",
+      "searchAria": "Search labels",
+      "loading": "Loading labels…",
+      "noSearchMatch": "No labels match your search.",
+      "typeToAdd": "Type a label name below to add one.",
+      "newLabelPlaceholder": "New label",
+      "newLabelAria": "New label",
+      "addButton": "Add"
+    },
+    "devServer": {
+      "commandOutput": "Command output",
+      "refresh": "Refresh",
+      "loadFailed": "Could not load server output.",
+      "outputAria": "{{slug}} command output",
+      "empty": "No output captured yet. Output appears here while setup and serve commands run.",
+      "errors": {
+        "loadFailed": "Could not load issue dev servers.",
+        "identifiersRequired": "Project and issue identifiers are required.",
+        "startAllFailed": "Could not start issue dev servers.",
+        "stopAllFailed": "Could not stop issue dev servers.",
+        "restartAllFailed": "Could not restart issue dev servers.",
+        "startFailed": "Could not start the dev server.",
+        "stopFailed": "Could not stop the dev server.",
+        "restartFailed": "Could not restart the dev server.",
+        "tunnelFailed": "Could not start the Cloudflare tunnel."
+      }
+    },
+    "sessionLog": {
+      "title": "Session log",
+      "streaming": "Streaming",
+      "connecting": "Connecting…",
+      "agentHistory": "Showing {{shown}} history — {{preferred}} has not produced a log for this issue yet.",
+      "source": "Source: {{agent}}",
+      "ariaLabel": "Session log for {{identifier}}",
+      "waiting": "Waiting for session output…",
+      "subtitles": {
+        "reasoning": "Internal reasoning",
+        "thinking": "Thinking…",
+        "system": "System",
+        "session": "Session",
+        "event": "Event"
+      },
+      "agentLabels": {
+        "codex": "Codex",
+        "claude": "Claude Code",
+        "cursor": "Cursor Agent"
+      },
+      "errors": {
+        "joinTimeout": "Timed out joining session log channel",
+        "streamFailed": "Failed to open session log stream",
+        "noLogForAgent": "No {{agent}} session log found for this issue yet.",
+        "noLog": "No session log found for this issue yet."
+      }
+    },
+    "blockedBanner": {
+      "title": "Run blocked — publish gate unsatisfied",
+      "body": "The agent run finished with work that could not be published (push or pull request failed even after Symphony's finalizer). See the latest workpad note for the exact violation, fix the underlying problem, and move the issue back to an active state to re-dispatch."
+    },
+    "activity": {
+      "empty": "No activity recorded yet for {{identifier}}. Tracker events appear here as the issue moves, gets comments, or is worked on.",
+      "agentAttached": "Agent is attached to this issue.",
+      "events": {
+        "issueCreated": "Issue created",
+        "movedTo": "Moved to {{status}}",
+        "statusChanged": "Status changed",
+        "updated": "Updated · {{status}}",
+        "issueUpdated": "Issue updated",
+        "commentAdded": "Comment added",
+        "blockerUpdated": "Blocker updated",
+        "agentDispatchRequested": "Agent dispatch requested",
+        "agentRestartRequested": "Agent restart requested",
+        "agentHardResetRequested": "Agent hard reset requested"
+      }
+    },
+    "terminal": {
+      "title": "Issue Terminal",
+      "description": "Runs in the issue workspace through tmux.",
+      "error": "Terminal error",
+      "joinTimeout": "Timed out joining terminal channel",
+      "openFailed": "Failed to open terminal session",
+      "joinFailed": "Failed to join terminal channel: {{reason}}",
+      "ariaLabel": "Terminal for {{identifier}}"
+    },
+    "blockers": {
+      "addTitle": "Add blocker",
+      "blockingAria": "Blocking issue identifier",
+      "add": "Add",
+      "addFailed": "Failed to add blocker",
+      "blockedBy": "Blocked by",
+      "empty": "No blocker records.",
+      "externalBlocker": "External blocker",
+      "identifierPlaceholder": "MAC-123"
+    },
+    "attachmentsSection": {
+      "title": "Attachments",
+      "removeAttachment": "Remove {{name}}"
+    },
+    "returnToAgent": {
+      "resumeValidation": "Resume validation",
+      "returnToAgent": "Return to agent",
+      "failedGateDescription": "The last evidence attempt did not pass the VALIDATE gate. Resume in {{target}} to fix the environment, rerun tests, and update the manifest.",
+      "humanReviewDescription": "This issue is in human review. Choose a reason, adjust the instructions if needed, and resume in {{target}}.",
+      "statusLine": "Status: {{status}}",
+      "evidenceLine": "Evidence: {{summary}}",
+      "instructionsPlaceholder": "Specific instructions for the agent (optional)",
+      "resuming": "Resuming…",
+      "resumeButton": "Return to {{target}} and resume",
+      "resumeToast": "Resuming in {{target}}",
+      "resumeFailed": "Failed to resume the agent",
+      "templates": {
+        "evidence": {
+          "label": "Complete evidence",
+          "body": "Implementation and PR are already ready. Do not change code unless explicitly instructed.\n\nRun only the VALIDATE step:\n1. Follow the `evidence` skill\n2. Start Docker if needed (`./vibe shared up`, `./vibe up`)\n3. Run tests applicable to the diff\n4. If UI was touched, run Playwright with screenshot + video\n5. Write `.symphony/evidence/manifest.json` at the Symphony workspace root (not inside the git clone) with `\"repo\": \"advising\"` (or the project repo)\n6. Update the workpad in the Validation section\n7. Do not move the card to review — evidence only"
+        },
+        "fix": {
+          "label": "Fix implementation",
+          "body": "The implementation needs adjustments before handoff.\n\nPriority:\n1. Read human feedback / PR comments\n2. Fix the code, commits, push, and PR\n3. Run targeted tests for what changed\n4. Only then run VALIDATE/evidence if the handoff is ready"
+        },
+        "review_feedback": {
+          "label": "Respond to PR review",
+          "body": "There is review/CI feedback on the PR that needs to be addressed.\n\nPriority:\n1. Read review comments and failing checks\n2. Fix only what is needed for the PR to go green\n3. Update the workpad with what was done\n4. Run VALIDATE/evidence when the PR is ready again"
+        },
+        "custom": {
+          "label": "Other",
+          "body": ""
+        }
+      }
+    },
+    "board": {
+      "loadFailed": "Failed to load issues",
+      "moveFailed": "Failed to move issue"
+    },
+    "updater": {
+      "saveFailed": "Failed to save changes",
+      "statusFailed": "Failed to update status"
+    },
+    "route": {
+      "notFound": "Issue {{identifier}} was not found",
+      "archived": "{{identifier}} archived",
+      "archiveFailed": "Failed to archive issue",
+      "deleted": "{{identifier}} deleted",
+      "deleteFailed": "Failed to delete issue",
+      "synced": "{{identifier}} synced from remote",
+      "syncFailed": "Failed to sync issue from remote",
+      "attachmentRemoved": "Attachment removed",
+      "attachmentRemoveFailed": "Failed to remove attachment"
+    },
+    "attachments": {
+      "imageUnavailable": "Image uploads are not available here.",
+      "imageUploadFailed": "Failed to upload image.",
+      "popupBlocked": "Allow pop-ups to open this file.",
+      "openFailed": "Failed to open file.",
+      "openTitle": "Open {{name}}",
+      "openAria": "Open {{name}}",
+      "loading": "Loading {{name}}",
+      "loadFailed": "Failed to load {{name}}",
+      "defaultVideo": "Video"
+    },
+    "create": {
+      "trigger": "New issue",
+      "title": "Create issue",
+      "description": "Add an issue to this project's tracker.",
+      "titlePlaceholder": "Issue title",
+      "descriptionPlaceholder": "Description",
+      "status": "Status",
+      "priority": "Priority",
+      "priorityPlaceholder": "0-4",
+      "agent": "Agent",
+      "inherit": "Inherit ({{agent}})",
+      "longRunningMode": "{{termCapitalized}} mode (long-running)",
+      "goalAria": "{{agent}} {{term}}",
+      "goal": {
+        "defaultObjective": "Complete this issue",
+        "objective": "Objective: {{objective}}",
+        "context": "Context: {{details}}",
+        "constraints": "Constraints: follow existing issue artifacts, specs, and plans when present; verify changes before reporting completion; stop when complete or blocked."
+      },
+      "terms": { "goal": "goal", "workflow": "workflow" },
+      "labels": "Labels",
+      "assignees": "Assignees",
+      "loadingLabels": "Loading labels...",
+      "noLabels": "No labels available.",
+      "loadingAssignees": "Loading assignees...",
+      "noAssignees": "No assignees available.",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "create": "Create",
+      "validation": {
+        "titleRequired": "Title is required",
+        "statusRequired": "Status is required",
+        "invalid": "Invalid issue"
+      },
+      "goalModeRequired": "{{termCapitalized}} mode requires a {{term}}.",
+      "created": "Issue created",
+      "createFailed": "Failed to create issue",
+      "unknownAssignee": "unknown",
+      "add": "Add issue",
+      "addToStatus": "Add issue to {{status}}",
+      "optionsAria": "New issue options",
+      "withAssistant": "New issue with assistant",
+      "quickCreate": "Quick create"
+    },
+    "pullRequest": {
+      "refresh": "Refresh",
+      "linkPlaceholder": "https://github.com/owner/repo/pull/123",
+      "linking": "Linking…",
+      "linkPr": "Link PR",
+      "loading": "Loading pull request details…",
+      "retry": "Retry",
+      "unsupported": "Pull requests require a configured GitHub repository. Add one in project settings to link PRs to {{identifier}}.",
+      "tokenRequired": "A GitHub token is required to discover pull requests and load CI details. Set GITHUB_TOKEN and refresh, or link a PR manually below.",
+      "empty": "No pull request linked to this issue yet. Once an agent opens a PR that references {{identifier}} (or uses its linked branch), it will appear here. You can also link one manually below (e.g. a PR in another repository).",
+      "limitedAccessTitle": "Limited GitHub access.",
+      "limitedAccessBody": "Linked pull requests are shown, but CI details and merge actions need GITHUB_TOKEN configured.",
+      "relatedCount_one": "{{count}} related pull request",
+      "relatedCount_other": "{{count}} related pull requests",
+      "rerunning": "Re-running…",
+      "rerunFailedJobs": "Re-run failed jobs",
+      "sending": "Sending…",
+      "fixWithAgent": "Fix with agent",
+      "monitor": {
+        "movedToRework": "CI/review failure attributed to this PR — sent to Rework (attempt {{count}})",
+        "movedToDone": "PR merged — issue moved to Done",
+        "keptHumanReview": "Kept in review — failure looks unrelated or needs a human",
+        "limitReached": "Automatic fix limit reached — human review required",
+        "fallback": "Monitor: {{action}}"
+      },
+      "toasts": {
+        "fixSent": "Sent to {{status}} — the agent will pick it up on the next poll.",
+        "fixFailed": "Could not request a fix.",
+        "rerunPartialFailed": "Some jobs could not be re-run. Refresh in a minute to see results.",
+        "rerunSuccess": "Failed jobs were re-run. Refresh in a minute to see results.",
+        "rerunFailed": "Could not re-run the failed jobs.",
+        "linked": "Pull request linked.",
+        "linkFailed": "Could not link the pull request.",
+        "unlinked": "Pull request unlinked.",
+        "unlinkFailed": "Could not unlink the pull request."
+      },
+      "errors": {
+        "loadFailed": "Could not load pull request details."
+      },
+      "panel": {
+        "branchUpdateStarted": "Branch update started — following CI…",
+        "branchUpdateFailed": "Could not update the branch.",
+        "forceMergeCompleted": "Force merge completed — issue moved to Done.",
+        "mergeCompleted": "Pull request merged — issue moved to Done.",
+        "mergeFailed": "Could not merge the pull request.",
+        "originLinked": "linked",
+        "originAgent": "agent",
+        "conflictTitle": "This branch has conflicts that must be resolved before it can merge.",
+        "titleFallback": "Pull request #{{number}}",
+        "updated": "Updated {{time}}",
+        "mergeMethodLabel": "Merge method",
+        "mergeMethodMerge": "Merge commit",
+        "mergeMethodSquash": "Squash",
+        "mergeMethodRebase": "Rebase",
+        "merging": "Merging…",
+        "merge": "Merge",
+        "forceMerging": "Force merging…",
+        "forceMerge": "Force merge",
+        "forceMergeTitle": "Attempts an immediate merge with the configured GitHub token. GitHub still enforces token permissions and branch rules.",
+        "updating": "Updating…",
+        "updateBranch": "Update branch ({{count}} behind)",
+        "open": "Open",
+        "unlinkTitle": "Unlink this pull request",
+        "unlinkAria": "Unlink this pull request",
+        "statusChecks": "Status checks",
+        "statusFallback": "status",
+        "noChecks": "No CI checks reported for this pull request.",
+        "conversation": "Conversation",
+        "jobFallback": "job"
+      },
+      "meta": {
+        "state": {
+          "open": "Open",
+          "draft": "Draft",
+          "merged": "Merged",
+          "closed": "Closed",
+          "unknown": "Pull request"
+        },
+        "job": {
+          "passed": "Passed",
+          "failed": "Failed",
+          "running": "Running",
+          "pending": "Pending",
+          "neutral": "Neutral",
+          "skipped": "Skipped",
+          "actionRequired": "Action required"
+        },
+        "rollup": {
+          "allPassed": "All checks passed",
+          "someFailed": "Some checks failed",
+          "checksRunning": "Checks running",
+          "noChecks": "No checks"
+        },
+        "conflicts": "Conflicts"
+      },
+      "link": {
+        "titleFallback": "Pull request #{{number}}",
+        "counts": {
+          "passed_one": "{{count}} passed",
+          "passed_other": "{{count}} passed",
+          "failed_one": "{{count}} failed",
+          "failed_other": "{{count}} failed",
+          "running_one": "{{count}} running",
+          "running_other": "{{count}} running",
+          "other_one": "{{count}} other",
+          "other_other": "{{count}} other"
+        }
+      }
+    }
+  },
+  "project": {
+    "wizard": {
+      "trigger": "New workspace project",
+      "title": "Create workspace project",
+      "description": "Discover GitHub repositories, scan local paths, and create a multi-repo tracker workspace.",
+      "tabTemplate": "Start from a template",
+      "tabScratch": "Build from scratch",
+      "templateLabel": "Template",
+      "templateHint": "Pick a saved workspace template to clone its repositories and setup.",
+      "loadingTemplates": "Loading templates...",
+      "noTemplates": "No templates saved yet.",
+      "projectNamePlaceholder": "Project name",
+      "projectSlugPlaceholder": "project-slug",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "createFromTemplate": "Create from template",
+      "trackerSource": "Tracker source",
+      "connected": "Project connected",
+      "connectFailed": "Failed to connect project",
+      "created": "Workspace project created",
+      "createFailed": "Failed to create workspace project",
+      "selectTemplate": "Select a template first",
+      "nameSlugRequired": "Project name and slug are required",
+      "createdFromTemplate": "Project created from template",
+      "createFromTemplateFailed": "Failed to create project from template",
+      "loadTemplatesFailed": "Failed to load templates",
+      "loadOrgsFailed": "Failed to load GitHub organizations",
+      "loadReposFailed": "Failed to load repositories",
+      "suggestFailed": "Failed to suggest workspace setup",
+      "selectRemoteFirst": "Select a remote project first",
+      "scanning": "Scanning...",
+      "scanAndSuggest": "Scan and suggest",
+      "loading": "Loading...",
+      "refresh": "Refresh",
+      "loadingOrganizations": "Loading organizations...",
+      "noOrganizations": "No GitHub organizations returned for this token yet.",
+      "reloadRepositories": "Reload repositories",
+      "createWorkspaceProject": "Create workspace project",
+      "connecting": "Connecting...",
+      "connectProject": "Connect project",
+      "templateRepoCount_one": "{{count}} repository",
+      "templateRepoCount_other": "{{count}} repositories",
+      "organization": {
+        "title": "GitHub organization",
+        "description": "Choose one owner that this token can access.",
+        "kindOrganization": "organization",
+        "kindUser": "user",
+        "selected": "Selected"
+      },
+      "repositories": {
+        "title": "Repositories",
+        "description": "Workspace paths are derived from the project slug. Local scan paths stay hidden unless edited.",
+        "private": "Private",
+        "workspacePath": "Workspace path",
+        "scanPathLabel": "Local scan path for {{repo}}",
+        "scanPathPlaceholder": "Optional local scan path for {{path}}",
+        "scanPathHint": "Optional existing checkout. The scan only reads files from this path.",
+        "editScanPath": "Edit scan path",
+        "editScanPathAria": "Edit scan path for {{repo}}"
+      },
+      "scanCount_one": "{{count}} repository scan",
+      "scanCount_other": "{{count}} repository scans",
+      "suggestedSetup": "Suggested setup",
+      "agent": {
+        "label": "Coding agent",
+        "inherit": "Inherit ({{agent}})",
+        "hint": "Inherit follows the user default from Settings; explicit choices write agent.kind into the workflow front matter."
+      }
+    },
+    "tracker": {
+      "fields": {
+        "slugHint": "The slug {{slug}} is fixed. Switching the source changes where issues are read from.",
+        "localBoard": "Issues will be stored in Symphony's local board. Remote configuration is cleared."
+      },
+      "source": {
+        "aria": "Tracker source",
+        "local": {
+          "title": "Symphony local tracker",
+          "description": "Issues live in Symphony's local board (default)."
+        },
+        "github": {
+          "title": "GitHub Project v2",
+          "description": "Read and move issues on a connected GitHub board."
+        },
+        "linear": {
+          "title": "Linear project",
+          "description": "Read and move issues from a connected Linear board."
+        },
+        "jira": {
+          "title": "Jira project",
+          "description": "Read and move issues from a connected Jira board."
+        }
+      },
+      "github": {
+        "title": "GitHub Project v2 board",
+        "descriptionWizard": "Pick a board this token can access. Issues stay in GitHub.",
+        "descriptionEditor": "Pick a board this token can access (user or organization).",
+        "loading": "Loading GitHub projects…",
+        "empty": "No GitHub Projects v2 boards found.",
+        "loadFailed": "Failed to load GitHub projects",
+        "availableBoards": "Available boards",
+        "issuesRepository": "Issues repository",
+        "issuesRepositoryPlaceholder": "owner/name (e.g. clouapp/front)",
+        "statusField": "Status field",
+        "noBoardSelected": "No board selected yet.",
+        "connectedBoard": "Connected board",
+        "resolvingBoard": "Resolving board…",
+        "connectedBoardFallback": "Connected GitHub board",
+        "orgSuffix": " · org",
+        "orgLabel": " (org)",
+        "repoLine": "repo {{repo}}",
+        "openOnGitHub": "Open on GitHub"
+      },
+      "linear": {
+        "title": "Linear project",
+        "description": "Pick a project this token can access. Issues stay in Linear.",
+        "loading": "Loading Linear projects…",
+        "empty": "No Linear projects found.",
+        "loadFailed": "Failed to load Linear projects",
+        "connectedProject": "Connected project",
+        "noProjectSelected": "No project selected yet."
+      },
+      "jira": {
+        "title": "Jira project",
+        "description": "Issues stay in Jira. The board reads everything matching project = KEY plus the field filters below.",
+        "projectKey": "Project key",
+        "projectKeyPlaceholder": "e.g. CDE",
+        "projectKeyRequired": "Required — the Jira project the board reads.",
+        "boardFilters": "Board filters",
+        "addFilter": "Add filter",
+        "filtersHint": "Field = value clauses, AND-joined into the board query — e.g. Product = Inspire.",
+        "noFilters": "No field filters — the board shows the whole project.",
+        "filterFieldAria": "Filter field",
+        "filterFieldPlaceholder": "Field (e.g. Product)",
+        "filterValueAria": "Filter value",
+        "filterValuePlaceholder": "Value (e.g. Inspire)",
+        "removeFilterAria": "Remove filter",
+        "advancedSummary": "Advanced (raw JQL, ordering, cap)",
+        "extraJql": "Extra JQL",
+        "extraJqlPlaceholder": "cf[10042] = \"Inspire\" OR labels = inspire",
+        "extraJqlHint": "Raw fragment ANDed after the filters above. Use for custom-field ids (cf[id]) or OR-groups.",
+        "orderBy": "Order by",
+        "orderByPlaceholder": "created DESC",
+        "maxResults": "Max results",
+        "maxResultsPlaceholder": "500"
+      }
+    },
+    "createDialog": {
+      "trigger": "New project",
+      "title": "Create project",
+      "description": "Add a local project board backed by the tracker API.",
+      "namePlaceholder": "Project name",
+      "slugPlaceholder": "project-slug",
+      "descriptionPlaceholder": "Description",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "submit": "Create project",
+      "validation": {
+        "nameRequired": "Project name is required",
+        "slugRequired": "Project slug is required",
+        "slugFormat": "Use a lowercase URL slug such as macro-markets",
+        "invalid": "Invalid project"
+      },
+      "created": "Project created",
+      "createFailed": "Failed to create project"
+    },
+    "list": {
+      "title": "Projects",
+      "subtitle": "Choose a local tracker project.",
+      "import": "Import",
+      "filters": "Filters",
+      "newWorkspace": "New workspace project",
+      "emptyApi": "No projects returned by the tracker API.",
+      "emptyFiltered": "No projects match your filters.",
+      "archived": "Archived",
+      "issueCount_one": "{{count}} issue",
+      "issueCount_other": "{{count}} issues",
+      "editProject": "Edit project",
+      "editProjectAria": "Edit {{name}}",
+      "restoreProject": "Restore project",
+      "restoreProjectAria": "Restore {{name}}",
+      "deletePermanently": "Delete project permanently",
+      "deletePermanentlyAria": "Delete {{name}} permanently",
+      "archiveProject": "Archive project",
+      "archiveProjectAria": "Archive {{name}}",
+      "deleteConfirm": "Delete project \"{{name}}\" permanently? This cannot be undone.",
+      "toasts": {
+        "loadFailed": "Unable to load projects",
+        "imported": "Imported project \"{{name}}\" (existing projects are overwritten)",
+        "importFailed": "Unable to import project",
+        "archiveFailed": "Unable to archive project",
+        "restoreFailed": "Unable to restore project",
+        "deleteFailed": "Unable to delete project"
+      },
+      "trackerLink": {
+        "local": "Open tracker",
+        "github": "Open GitHub project",
+        "linear": "Open Linear project",
+        "jira": "Open Jira project"
+      }
+    },
+    "filters": {
+      "dismissAria": "Dismiss filters",
+      "title": "Filters",
+      "heading": "Project focus",
+      "closeAria": "Close filters",
+      "keyword": "Keyword",
+      "searchPlaceholder": "Search projects...",
+      "status": "Status",
+      "total": "{{count}} total",
+      "ongoing": "Ongoing",
+      "ongoingDescription": "Active workspaces",
+      "archived": "Archived",
+      "archivedDescription": "Stored safely",
+      "all": "All",
+      "allDescription": "Everything local",
+      "summaryOngoing": "{{count}} ongoing",
+      "summaryArchived": "{{count}} archived",
+      "hint": "Filters are local and instant; archived workspaces stay available until permanently deleted.",
+      "clear": "Clear filters"
+    },
+    "config": {
+      "sections": {
+        "general": {
+          "label": "General",
+          "title": "General",
+          "description": "Project identity, linked repositories, and validation commands."
+        },
+        "tracker": {
+          "label": "Tracker",
+          "title": "Tracker source",
+          "description": "Where issues are read from — the local board, GitHub Projects, Linear, or Jira."
+        },
+        "workflow": {
+          "label": "Workflow",
+          "title": "Workflow",
+          "description": "Per-project behavior: board states, agent limits, hooks, Codex/Claude, dev server, and the agent prompt."
+        },
+        "dev": {
+          "label": "Dev environment",
+          "title": "Dev environment",
+          "description": "Setup and serve steps grouped by repository. Serve steps power each issue's Preview tab."
+        }
+      },
+      "name": "Name",
+      "description": "Description",
+      "validationCommands": "Validation commands (one per line)",
+      "validationCommandsAria": "Validation commands",
+      "repositories": "Repositories",
+      "repositoriesHint": "Repositories linked to this project. Removing one only unlinks it in Symphony — files on disk are left untouched.",
+      "templateSeedHint": "Templates only seed validation commands; edit workflow YAML here.",
+      "footerHint": "Changes apply to this project only.",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "save": "Save configuration",
+      "repoEditor": {
+        "empty": "No repositories linked yet. Add one below.",
+        "private": "Private",
+        "removeAria": "Remove {{repo}}",
+        "workspacePath": "Workspace path",
+        "workspacePathAria": "Workspace path for {{repo}}",
+        "role": "Role",
+        "roleAria": "Role for {{repo}}",
+        "branch": "Branch",
+        "branchAria": "Branch for {{repo}}",
+        "addRepository": "Add repository",
+        "githubOwner": "GitHub owner",
+        "githubOwnerAria": "GitHub owner",
+        "loadingOwners": "Loading owners…",
+        "selectOwner": "Select an owner",
+        "loadingRepositories": "Loading repositories…",
+        "noRepositories": "No repositories found for this owner.",
+        "addRepoAria": "Add {{repo}}",
+        "linked": "Linked",
+        "toasts": {
+          "loadOwnersFailed": "Failed to load GitHub owners",
+          "loadReposFailed": "Failed to load repositories"
+        }
+      },
+      "loadDefault": {
+        "trigger": "Load default",
+        "empty": "No templates.",
+        "loadFailed": "Failed to load templates"
+      },
+      "workflowEditor": {
+        "hint": "YAML front matter (tracker states, agent, hooks, codex/claude, dev_server) plus the agent prompt body below the closing ---. Connection settings stay in the Tracker tab.",
+        "edit": "Edit",
+        "preview": "Preview",
+        "aria": "Project workflow markdown",
+        "frontMatter": "Front matter",
+        "noFrontMatter": "No YAML front matter.",
+        "promptBody": "Prompt body",
+        "noPromptBody": "No prompt body."
+      },
+      "mapEditor": {
+        "remove": "Remove",
+        "removeAria": "remove {{key}}",
+        "addKey": "Add key",
+        "addKeyAria": "add key",
+        "selectState": "Select state…",
+        "newValue": "New value",
+        "newValueAria": "new value",
+        "addEntry": "Add entry"
+      },
+      "stateSelect": {
+        "empty": "No statuses defined for this project yet."
+      },
+      "scalar": {
+        "maxTurns": "Max turns",
+        "maxConcurrentAgents": "Max concurrent agents",
+        "maxRetryBackoffMs": "Max retry backoff (ms)",
+        "turnTimeoutMs": "Turn timeout (ms)",
+        "readTimeoutMs": "Read timeout (ms)",
+        "stallTimeoutMs": "Stall timeout (ms)",
+        "enabled": "Enabled",
+        "binary": "Binary",
+        "host": "Host",
+        "port": "Port",
+        "auth": "Auth",
+        "password": "Password",
+        "baseUrl": "Base URL",
+        "maxConcurrent": "Max concurrent",
+        "idleTimeoutMs": "Idle timeout (ms)",
+        "baseDomain": "Base domain",
+        "namespace": "Namespace",
+        "readIntervalMs": "Read interval (ms)",
+        "mutationIntervalMs": "Mutation interval (ms)",
+        "maxRetries": "Max retries",
+        "maxBackoffMs": "Max backoff (ms)"
+      },
+      "devenv": {
+        "hint": "Steps are grouped by repository. Serve steps power the issue Preview tab. Changes are persisted with Save configuration.",
+        "serve": "Serve",
+        "saveConfiguration": "Save configuration",
+        "proposeSteps": "Propose steps",
+        "noStepsYet": "No steps yet",
+        "serveCount_one": "{{count}} serve",
+        "serveCount_other": "{{count}} serve",
+        "addStep": "Add step",
+      "addStepTo": "Add step to {{label}}",
+      "generalGroup": "General",
+      "noStepsProposed": "No steps proposed; add steps manually or a .symphony/devenv.yaml",
+        "proposeFailed": "Failed to propose steps",
+        "running": "Running: {{command}}",
+        "runFailed": "Failed to run step",
+        "stepLabel": "step {{index}}",
+        "descriptionAria": "Step description",
+        "descriptionPlaceholder": "Description",
+        "commandAria": "Step command",
+        "commandPlaceholder": "command",
+        "run": "Run",
+        "remove": "Remove",
+        "role": "Role",
+        "roleAria": "Role for {{label}}",
+        "roleSetup": "Setup",
+        "roleServe": "Serve",
+        "optional": "Optional",
+        "optionalAria": "Optional for {{label}}",
+        "primaryPreview": "Primary preview",
+        "primaryPreviewAria": "Primary preview for {{label}}",
+        "portEnv": "Port env",
+        "portEnvAria": "Port env for {{label}}",
+        "portEnvPlaceholder": "PORT",
+        "ready": "Ready",
+        "readyAria": "Ready probe for {{label}}",
+        "readyTcp": "TCP",
+        "readyHttp": "HTTP",
+        "path": "Path",
+        "readyPathAria": "Ready path for {{label}}",
+        "readyPathPlaceholder": "/"
+      },
+      "toasts": {
+        "devEnvLoadFailed": "Failed to load dev-env steps",
+        "nameRequired": "Project name is required",
+        "saved": "Project configuration saved",
+        "saveFailed": "Failed to save project configuration"
+      },
+      "importExport": {
+        "export": "Export",
+        "import": "Import",
+        "exportSuccess": "Project configuration exported",
+        "exportFailed": "Failed to export project configuration",
+        "importConfirm": "Import configuration from \"{{fileName}}\" into \"{{projectName}}\"? This replaces the current settings.",
+        "importSuccess": "Project configuration imported",
+        "importFailed": "Failed to import project configuration"
+      }
+    },
+    "settings": {
+      "eyebrow": "Project settings",
+      "subtitle": "Per-project configuration. Process-level settings live in the server environment.",
+      "loadFailed": "Unable to load project",
+      "saved": "Saved"
+    },
+    "services": {
+      "validation": {
+        "nameRequired": "Project name is required",
+        "slugRequired": "Project slug is required",
+        "projectSlugRequired": "projectSlug is required",
+        "fieldRequired": "{{field}} is required",
+        "positiveIntegerRequired": "{{field}} must be a positive integer",
+        "workflowStatusRequired": "At least one workflow status is required",
+        "repositoryRequired": "At least one repository is required",
+        "githubOwnerRequired": "GitHub owner is required",
+        "documentPathInvalid": "Document path cannot include . or .. segments",
+        "uploadPathMissing": "Upload response did not include a file path.",
+        "projectAndIdentifierRequired": "projectSlug and identifier are required",
+        "evidenceDeleteRequired": "projectSlug, identifier, and runId are required",
+        "dispatchResponseMissingIssue": "Dispatch response is missing the issue payload."
+      }
+    },
+    "templates": {
+      "back": "Templates",
+      "editTitle": "Edit template",
+      "notFound": "Template not found.",
+      "loadFailed": "Unable to load template",
+      "saveAsTemplate": "Save as template",
+      "saveAsTitle": "Save project as template",
+      "slugPlaceholder": "template-slug",
+      "list": {
+        "title": "Templates",
+        "subtitle": "Reusable workspace blueprints.",
+        "import": "Import",
+        "empty": "No templates yet.",
+        "delete": "Delete",
+        "repoCount_one": "{{count}} repo",
+        "repoCount_other": "{{count}} repos",
+        "deleteConfirm": "Delete template \"{{slug}}\" permanently? This cannot be undone.",
+        "toasts": {
+          "loadFailed": "Unable to load templates",
+          "deleted": "Template deleted",
+          "deleteFailed": "Unable to delete template",
+          "imported": "Template imported",
+          "importFailed": "Unable to import template"
+        }
+      },
+      "clone": {
+        "failed": "Some repositories failed to clone",
+        "inProgress": "Cloning repositories ({{count}} in progress)",
+        "retry": "Retry"
+      },
+      "form": {
+        "name": "Name",
+        "namePlaceholder": "Template name",
+        "description": "Description",
+        "descriptionPlaceholder": "Optional description",
+        "repositories": "Repositories",
+        "addRepository": "Add repository",
+        "noRepositories": "No repositories.",
+        "githubFullName": "GitHub full name",
+        "githubFullNamePlaceholder": "owner/repo",
+        "cloneUrl": "Clone URL",
+        "cloneUrlPlaceholder": "Clone URL",
+        "workspacePath": "Workspace path",
+        "defaultBranch": "Default branch",
+        "role": "Role",
+        "rolePlaceholder": "Role (optional)",
+        "remove": "Remove",
+        "validationCommands": "Validation commands",
+        "validationCommandsHint": "One command per line.",
+        "validationCommandsPlaceholder": "npm test",
+        "afterCreateHook": "After-create hook",
+        "promptTemplate": "Prompt template",
+        "devEnvMarkdown": "Dev environment (markdown)",
+        "export": "Export",
+        "saving": "Saving…",
+        "save": "Save template"
+      },
+      "toasts": {
+        "saved": "Template saved",
+        "saveFailed": "Failed to save template",
+        "exportFailed": "Failed to export template"
+      }
+    }
+  },
+  "observability": {
+    "title": "Observability",
+    "subtitle": "Live runtime state across all reporting Symphony processes.",
+    "project": "Project",
+    "allProjects": "All projects",
+    "loadingRuntimes": "Loading runtimes…",
+    "noRuntimes": "No runtimes are reporting yet.",
+    "noRuntimesFilter": "No runtimes match this project filter.",
+    "running": "Running",
+    "retrying": "Retrying",
+    "totalTokens": "Total tokens",
+    "runningSessions": "Running sessions",
+    "runningSessionsHint": "All active sessions across runtimes.",
+    "noActiveSessions": "No active sessions.",
+    "childRuns": {
+      "count": "{{count}} child runs",
+      "show": "Show child runs",
+      "hide": "Hide child runs"
+    },
+    "openBoard": "Open board",
+    "pursuingGoal": "Pursuing goal: {{objective}}",
+    "table": {
+      "project": "Project",
+      "issue": "Issue",
+      "goal": "Goal",
+      "state": "State",
+      "runtimeTurns": "Runtime / turns",
+      "agentUpdate": "Agent update",
+      "tokens": "Tokens",
+      "actions": "Actions"
+    },
+    "session": {
+      "pause": "Pause",
+      "pausing": "Pausing…",
+      "restart": "Restart",
+      "restarting": "Restarting…",
+      "hardReset": "Hard reset",
+      "resetting": "Resetting…",
+      "noProjectMapping": "No project mapping for this runtime",
+      "pauseTitle": "Pause the run (keeps the session to resume later)",
+      "restartTitle": "Restart with a fresh agent pass",
+      "hardResetTitle": "Hard reset: clear the session and start fresh",
+      "restartDialogTitle": "Restart agent run?",
+      "restartDialogDescription": "Stops the current run and starts a fresh agent pass on this issue. The workspace and git state are preserved.",
+      "hardResetDialogTitle": "Hard reset session?",
+      "hardResetDialogDescription": "Stops the run, discards the agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and git state are preserved.",
+      "cancel": "Cancel",
+      "dispatchFailed": "Failed to {{action}} {{identifier}}"
+    },
+    "prMonitor": {
+      "title": "PR monitor",
+      "subtitle": "Background follow-up of PRs for issues in wait states (merge → Done, CI/review → Rework).",
+      "running": "running",
+      "degraded": "degraded",
+      "offline": "offline",
+      "lastTick": "Last tick",
+      "inFlight": "In-flight",
+      "evaluatedLastTick": "Evaluated last tick",
+      "ticks": "Ticks",
+      "interval": "Interval",
+      "lastTickStatus": "Last tick status",
+      "heartbeatUnavailable": "Heartbeat unavailable.",
+      "lastError": "Last error: {{error}}",
+      "noEvaluations": "No PR evaluations recorded yet.",
+      "prLink": "link",
+      "event": "Event",
+      "action": "Action",
+      "checked": "Checked",
+      "events": {
+        "none": "no change",
+        "merged": "PR merged",
+        "ci_failure": "CI failure",
+        "review_findings": "review findings"
+      },
+      "actions": {
+        "moved_to_done": "→ Done",
+        "moved_to_rework": "→ Rework",
+        "limit_reached": "limit reached",
+        "kept_human_review": "kept in Human Review"
+      }
+    },
+    "time": {
+      "never": "never",
+      "secondsAgo": "{{count}}s ago",
+      "minutesAgo": "{{count}}m ago",
+      "hoursMinutesAgo": "{{hours}}h {{minutes}}m ago"
+    }
+  },
+  "backup": {
+    "title": "Backups",
+    "subtitle": "Local SQLite tracker database snapshots (`.symphony/backups/database/`).",
+    "source": "Source: {{path}} ({{status}})",
+    "missing": "missing",
+    "sqliteDatabase": "SQLite database",
+    "lastBackup": "Last backup: {{when}}",
+    "createBackup": "Create backup",
+    "backupDatabase": "Backup database",
+    "removeExpired": "Remove expired",
+    "loading": "Loading…",
+    "noBackups": "No backups yet.",
+    "table": {
+      "id": "ID",
+      "file": "File",
+      "trigger": "Trigger",
+      "size": "Size",
+      "status": "Status",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "download": "Download",
+    "restore": "Restore",
+    "delete": "Delete",
+    "deleteConfirm": "Delete backup #{{id}}?",
+    "restoreDialog": {
+      "title": "Restore database backup",
+      "description": "Replaces the current tracker SQLite file with this snapshot. A pre-restore safety copy is created on the server when possible. Restart or reload the Symphony daemon after restoring.",
+      "warning": "Stop active work before restoring — open DB connections may hold stale data until restart.",
+      "backupLine": "Backup #{{id}} — {{filename}}",
+      "cancel": "Cancel",
+      "restore": "Restore",
+      "restoring": "Restoring…"
+    },
+    "freshness": {
+      "never": "Never",
+      "minutes": "{{count}} min",
+      "hours": "{{count}} h",
+      "days": "{{count}} d"
+    },
+    "toasts": {
+      "loadFailed": "Failed to load backups",
+      "created": "Backup created",
+      "failed": "Backup failed",
+      "createFailed": "Failed to create backup",
+      "cleanupDone": "Cleanup done",
+      "cleanupFailed": "Cleanup failed",
+      "restored": "Database restored",
+      "restoreFailed": "Restore failed",
+      "removed": "Backup removed",
+      "deleteFailed": "Delete failed",
+      "downloadFailed": "Download failed"
+    }
+  },
+  "assistant": {
+    "errors": {
+      "textOnlyMessages": "Only text assistant messages are supported"
+    },
+    "panel": {
+      "ariaLabel": "Project assistant",
+      "exploreTitle": "Explore project",
+      "projectTitle": "Project assistant",
+      "freeformTitle": "Freeform assistant",
+      "exploreDescription": "Ask questions about the codebase in `{{slug}}` (default branches).",
+      "projectDescription": "AI coding assistant for `{{slug}}`.",
+      "freeformDescription": "AI coding assistant for freeform chat. Lists projects and can manage board issues when you pass a project slug.",
+      "modelsFrom": " Models from `{{command}}`.",
+      "openButton": "Assistant",
+      "openAria": "Open project assistant",
+      "loadingModels": "Loading assistant models...",
+      "catalogLoadFailed": "Failed to load assistant models.",
+      "noConnectionTarget": "Assistant has no thread or project to connect to.",
+      "channelNotConnected": "Assistant channel is not connected yet.",
+      "requestFailed": "Assistant request failed",
+      "modeUpdateTimeout": "Assistant mode update timed out",
+      "goalModeUpdateTimeout": "Assistant goal mode update timed out",
+      "goalRequiresIssue": "Authoring goal is only available when authoring a specific issue.",
+      "goalCommandWithObjective": "Pursue this authoring goal directly in our conversation (Codex long-running goal mode). Objective: {{objective}}. Keep working toward it across turns until the artifact is ready for review or you are blocked. This is authoring only — do not dispatch the orchestrator or change the issue status.",
+      "goalCommandDefault": "Pursue an authoring goal directly in our conversation (Codex long-running goal mode). Derive the objective from the existing spec/plan/handoff, then keep working toward it across turns until the artifact is ready for review or you are blocked. This is authoring only — do not dispatch the orchestrator or change the issue status.",
+      "dispatchedTo": "Dispatched to {{agent}}.",
+      "dispatchTimeout": "{{agent}} dispatch timed out",
+      "btwFailed": "Failed to start side question.",
+      "welcome": "Ask naturally about this project, or request tracker actions. I can chat, create tasks, comment on issues, move statuses, list issues, and request Codex work when you ask for it.",
+      "clarifyingQuestions": "Clarifying questions",
+      "sendQueuedNow": "Send queued message now",
+      "sendNow": "Send now",
+      "removeQueued": "Remove queued message",
+      "remove": "Remove",
+      "turnInterrupted": "The previous turn was interrupted.",
+      "resume": "Resume",
+      "attachmentFallback": {
+        "audio": "See the attached audio.",
+        "image": "See the attached image.",
+        "files": "See the attached files."
+      },
+      "attachmentLabel": {
+        "image": "Image: {{name}}",
+        "audio": "Audio: {{name}}",
+        "default": "attachment"
+      }
+    },
+    "modelMenu": {
+      "modelSuffix": "Model",
+      "searchPlaceholder": "Search models…",
+      "noMatch": "No models match."
+    },
+    "slash": {
+      "goal": "Run an authoring goal directly in this chat (no orchestrator dispatch)",
+      "goalExecution": "Set an execution goal and dispatch via the orchestrator",
+      "infer": "Steer the running agent without waiting",
+      "btw": "Ask a quick side question (read-only, not saved)"
+    },
+    "effort": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Max"
+    },
+    "catalog": {
+      "agents": {
+        "codex": "Codex CLI",
+        "claude": "Claude Code",
+        "cursor": "Cursor Agent"
+      },
+      "models": {
+        "gpt-5_5": "GPT-5.5",
+        "gpt-5_4": "GPT-5.4",
+        "gpt-5_3-codex": "GPT-5.3 Codex",
+        "claude-opus-4-8": "Claude Opus 4.8",
+        "claude-opus-4-7": "Claude Opus 4.7",
+        "claude-opus-4-6": "Claude Opus 4.6",
+        "claude-sonnet-4-6": "Claude Sonnet 4.6",
+        "claude-haiku-4-5": "Claude Haiku 4.5",
+        "auto": "Auto",
+        "composer-1": "Composer 1",
+        "gpt-5": "GPT-5",
+        "sonnet-4": "Claude Sonnet 4",
+        "sonnet-4-thinking": "Claude Sonnet 4 Thinking"
+      },
+      "errors": {
+        "noCodexModels": "Codex CLI returned no models",
+        "loadFailed": "Failed to load assistant models.",
+        "apiMissing": "Assistant API is missing on the server. Restart Symphony to load the latest tracker routes."
+      }
+    },
+    "speech": {
+      "errors": {
+        "notAllowed": "Speech recognition needs microphone permission.",
+        "serviceNotAllowed": "Speech recognition is blocked in this browser.",
+        "network": "Speech recognition needs an internet connection.",
+        "noSpeech": "No speech was detected.",
+        "audioCapture": "Could not capture audio for speech recognition.",
+        "aborted": "Speech recognition was interrupted.",
+        "unavailable": "Speech recognition is unavailable in this browser.",
+        "captionsUnsupported": "Live captions are not supported in this browser.",
+        "startFailed": "Could not start speech recognition."
+      }
+    },
+    "audio": {
+      "errors": {
+        "notAllowed": "Microphone permission denied. Allow microphone access in your browser settings and try again.",
+        "notFound": "No microphone was found on this device.",
+        "notReadable": "The microphone is in use by another application.",
+        "security": "Microphone access requires HTTPS or localhost.",
+        "accessFailed": "Could not access the microphone.",
+        "unsupported": "Microphone recording is not available. Use HTTPS in a supported browser.",
+        "recordingFailed": "Audio recording failed.",
+        "tooShort": "Recording was too short. Hold the microphone button a little longer."
+      }
+    },
+    "composer": {
+      "placeholder": "Write a message...",
+      "dropFiles": "Drop files to attach",
+      "tabToComplete": "Tab to complete",
+      "attachFile": "Attach file",
+      "removeAttachment": "Remove {{name}}",
+      "agentMenu": "Agent",
+      "reasoningEffort": "Reasoning effort",
+      "stopRecording": "Stop recording",
+      "recordAudio": "Record audio",
+      "recording": "Recording",
+      "sendMessage": "Send message",
+      "hint": "Enter to send · Shift+Enter for a new line · paste or drop files · Models from {{command}}",
+      "voiceUnavailable": " · Voice dictation unavailable ({{error}})",
+      "attachmentsUnavailable": "Attachments are not available in this conversation.",
+      "uploadFailed": "Failed to upload file.",
+      "voiceNotSupported": "Voice dictation is not supported in this browser.",
+      "attachmentValidation": {
+        "imagesOnly": "Only image files are supported.",
+        "imageTooLarge": "Images must be 4 MB or smaller.",
+        "emptyFile": "Empty files cannot be attached.",
+        "fileTooLarge": "Files must be 5 MB or smaller.",
+        "audioTooLarge": "Audio recordings must be 8 MB or smaller.",
+        "readAudioFailed": "Failed to read audio."
+      }
+    },
+    "authoring": {
+      "chatAria": "Issue authoring chat",
+      "documentsAria": "Issue authoring documents",
+      "documentsDrawerTitle": "Authoring documents",
+      "documentsDrawerDescription": "Specs, plans, and handoffs linked to this issue.",
+      "openDocuments": "Documents",
+      "documentsEmpty": "Draft documents appear here after the assistant creates or links an issue. Start by asking the project assistant to draft the issue, then open the issue authoring route once an identifier exists.",
+      "taskLabel": "Task",
+      "titleLoading": "Loading issue title…",
+      "openIssueDetails": "Open issue details",
+      "goalBannerAria": "Authoring goal",
+      "goalRunning": "Pursuing goal",
+      "goalActive": "Authoring goal active",
+      "goalPaused": "Goal paused",
+      "goalStalled": "Goal stopped",
+      "goalCompleted": "Goal completed",
+      "goalPending": "Goal ready",
+      "goalNoObjective": "Pursuing the issue's authoring objective.",
+      "goalPause": "Pause goal",
+      "goalResume": "Resume goal",
+      "goalEdit": "Edit objective",
+      "goalRemove": "Remove goal",
+      "goalEditSave": "Save objective",
+      "goalEditCancel": "Cancel",
+      "goalObjectivePlaceholder": "Describe the authoring objective…",
+      "titleNew": "New issue authoring",
+      "hintNoId": "Start by asking the assistant to draft an issue; documents appear once an identifier exists. Tell it whether you want a simple brief or to brainstorm a spec, and use /goal to run a long-running authoring goal directly in the chat."
+    },
+    "btw": {
+      "ariaLabel": "Side question",
+      "title": "By the way",
+      "closeAria": "Close side question",
+      "thinking": "Thinking…",
+      "footer": "Esc to dismiss · not saved to the conversation"
+    },
+    "working": {
+      "runningTool": "Running {{tool}}",
+      "verbs": {
+        "pondering": "Pondering",
+        "cooking": "Cooking",
+        "wrangling": "Wrangling tokens",
+        "consulting": "Consulting the codex",
+        "untangling": "Untangling threads",
+        "spelunking": "Spelunking the repo",
+        "composing": "Composing",
+        "crunching": "Crunching",
+        "plotting": "Plotting"
+      }
+    },
+    "questions": {
+      "placeholder": "Type your answer",
+      "other": "Other",
+      "submit": "Submit answers",
+      "questionFallback": "Q{{index}}"
+    },
+    "page": {
+      "conversationsAria": "Conversations",
+      "title": "Conversations",
+      "newChat": "New chat",
+      "searchPlaceholder": "Search conversations...",
+      "searchAria": "Search conversations",
+      "empty": "No conversations yet. Start a new one.",
+      "noMatch": "No conversations match your search."
+    },
+    "documents": {
+      "ariaLabel": "Issue documents",
+      "listAria": "Document list",
+      "title": "Documents",
+      "subtitle": "Generated specs, plans, and handoffs.",
+      "workspaceMissing": "The working tree is not ready yet. Documents appear once the assistant starts working.",
+      "unavailable": "No documents available.",
+      "empty": "No spec or plan documents yet.",
+      "loading": "Loading document...",
+      "loadError": "Could not load this document.",
+      "loadErrorHint": "Use Retry to load it again, or ask the assistant to regenerate the document.",
+      "retry": "Retry",
+      "noContent": "No content to display.",
+      "kinds": {
+        "spec": { "label": "Spec", "group": "Specs" },
+        "plan": { "label": "Plan", "group": "Plans" },
+        "handoff": { "label": "Handoff", "group": "Handoff" }
+      },
+      "itemAria": "{{label}} {{title}}"
+    },
+    "freeform": {
+      "chatAria": "Assistant chat",
+      "backToConversations": "Conversations",
+      "filesAria": "Assistant chat files",
+      "filesTitle": "Conversation files",
+      "filesHint": "Open markdown drafts on the right. Click a filename in the chat to jump to it here.",
+      "createFailed": "Unable to start a new chat"
+    },
+    "archive": {
+      "label": "Archive",
+      "ariaLabel": "Archive conversation",
+      "title": "Archive conversation",
+      "failed": "Unable to archive chat"
+    },
+    "threadDocuments": {
+      "ariaLabel": "Chat files",
+      "listAria": "Chat file list",
+      "filesTitle": "Files",
+      "filesSubtitle": "Markdown drafts written in this conversation.",
+      "workspaceMissing": "The chat workspace is not ready yet. Generated files appear here after the assistant writes them.",
+      "unavailable": "No files available yet.",
+      "empty": "Markdown drafts from this chat will appear here. Ask the assistant to create or update a file, then open it from the list or from a link in the conversation.",
+      "loading": "Loading file...",
+      "loadError": "Could not load this file.",
+      "retry": "Retry",
+      "noContent": "No content to display."
+    }
+  },
+  "layout": {
+    "projectHeader": {
+      "pollingActive": "Polling active",
+      "pollingPaused": "Polling paused (window not focused)",
+      "syncError": "Sync error",
+      "syncErrorTitle": "Background sync with the remote tracker is failing.",
+      "lastError": "Last error: {{error}}",
+      "lastSync": "Last successful sync: {{when}}",
+      "lessThanMinute": "less than a minute ago",
+      "minutesAgo": "{{count}} min ago",
+      "hoursAgo": "{{count}} h ago",
+      "refreshing": "Refreshing",
+      "refreshBoard": "Refresh board",
+      "openProjectWorkspaceCode": "Open project workspace in Code",
+      "board": "Board",
+      "list": "List",
+      "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
+    },
+    "recents": {
+      "title": "Recents",
+      "seeAll": "See all",
+      "loading": "Loading…",
+      "empty": "No recent sessions yet.",
+      "newChatAria": "New chat",
+      "newChatTitle": "New chat",
+      "status": {
+        "running": "Running",
+        "waiting": "Waiting",
+        "retrying": "Retrying",
+        "idle": "Idle",
+        "active": "Active",
+        "in_progress": "In progress",
+        "todo": "To do",
+        "done": "Done",
+        "closed": "Closed",
+        "error": "Error"
+      }
+    },
+    "assistantMenu": {
+      "optionsAria": "Assistant options",
+      "createIssue": "Create issue"
+    },
+    "editProject": "Edit project",
+    "sessionSubtitle": {
+      "freeform": "Freeform chat",
+      "explore": "Explore project",
+      "projectChat": "Project chat"
+    }
+  },
+  "board": {
+    "quickFilters": "Quick filters",
+    "searchPlaceholder": "Search issues...",
+    "searchAria": "Search issues",
+    "clearSearch": "Clear search",
+    "assigneeTitle": "{{login}} · {{count}} issue",
+    "assigneeTitle_plural": "{{login}} · {{count}} issues",
+    "assignee": "Assignee",
+    "assignedToMe": "Assigned to me",
+    "unassigned": "Unassigned",
+    "recentlyUpdated": "Recently updated",
+    "clear": "Clear",
+    "filtersTitle": "Filters",
+    "filtersDescription": "Narrow the board by search, people, and recency.",
+    "searchLabel": "Search",
+    "creator": "Creator",
+    "recency": "Recency",
+    "updatedLast7Days": "Updated in the last 7 days",
+    "apply": "Apply",
+    "reset": "Reset filters",
+    "clearAllFilters": "Clear all filters",
+    "done": "Done",
+    "recentlyUpdated7d": "Recently updated (7d)",
+    "list": {
+      "empty": "No issues yet.",
+      "open": "Open",
+      "columns": {
+        "id": "ID",
+        "title": "Title",
+        "status": "Status",
+        "updated": "Updated"
+      }
+    },
+    "filtersTrigger": {
+      "filters": "Filters",
+      "filtersCount": "Filters · {{count}}"
+    },
+    "palette": {
+      "placeholder": "Type a command...",
+      "empty": "No matching command.",
+      "filtersHeading": "Filters",
+      "openFilters": "Open filters",
+      "searchIssues": "Search issues...",
+      "assignedToMe": "Filter: Assigned to me",
+      "createdByMe": "Filter: Created by me",
+      "clearFilters": "Clear filters"
+    },
+    "people": {
+      "assignedToMe": "Assigned to me",
+      "searchPlaceholder": "Search {{label}}…",
+      "noPeopleFound": "No people found."
+    },
+    "group": {
+      "mergeHint": "Group with {{identifier}}",
+      "dropToGroup": "Drop to group",
+      "count": "{{count}} grouped",
+      "expand": "Show grouped tasks",
+      "collapse": "Hide grouped tasks",
+      "removeMember": "Remove {{identifier}} from group",
+      "disband": "Ungroup all",
+      "runningLocked": "Can't change the group while it's running"
+    },
+    "subtasks": {
+      "count": "{{count}} subtasks",
+      "expand": "Show subtasks",
+      "collapse": "Hide subtasks",
+      "empty": "Open the parent to view its subtasks"
+    },
+    "issueCard": {
+      "openOnTracker": "Open on tracker",
+      "agentStatus": "Agent: {{status}}",
+      "blocked": "Blocked"
+    },
+    "column": {
+      "expandAria": "Expand {{status}} column",
+      "expandTitle": "Expand {{status}}",
+      "optionsAria": "{{status}} column options",
+      "optionsTitle": "Column options",
+      "collapse": "Collapse column",
+      "editWipLimit": "Edit work-in-progress limit",
+      "setWipLimit": "Set work-in-progress limit",
+      "clearLimit": "Clear limit",
+      "wipDialogTitle": "Work-in-progress limit",
+      "wipDialogDescription": "Highlight the “{{status}}” column when it holds more than this many issues. Leave empty to remove the limit.",
+      "wipPlaceholder": "e.g. 5"
+    }
+  },
+  "nav": {
+    "brandTitle": "Symphony Tracker",
+    "brandSubtitle": "Local project board",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "projects": "Projects",
+    "templates": "Templates",
+    "observability": "Observability",
+    "backups": "Backups",
+    "settings": "Settings",
+    "boards": "Boards",
+    "noProjects": "No local projects yet.",
+    "resetToken": "Reset token",
+    "brandIconAlt": "Symphony Tracker icon",
+    "theme": {
+      "toggleAria": "Toggle theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    }
+  },
+  "auth": {
+    "title": "Connect Local Tracker",
+    "checkingSaved": "Checking saved tracker token…",
+    "description": "Enter the tracker token configured for your Phoenix backend.",
+    "invalidSaved": "The saved token no longer matches this Symphony instance. Paste the current value from elixir/.env (SYMPHONY_TRACKER_TOKEN).",
+    "placeholder": "Tracker token",
+    "storedAs": "Stored locally as {{key}}.",
+    "validating": "Validating...",
+    "continue": "Continue",
+    "tokenRequired": "Tracker token is required.",
+    "invalidToken": "Invalid tracker token.",
+    "serverUnreachable": "Could not reach the Symphony server. Confirm it is running and retry.",
+    "viewerLoadFailed": "Symphony accepted the token but could not load operator details. Check server logs and retry.",
+    "viewerErrors": {
+      "github_token_missing": "GITHUB_TOKEN is not configured on the Symphony server. Set it and restart Symphony.",
+      "github_unauthorized": "GitHub rejected the configured GITHUB_TOKEN. Generate a new token with the required scopes.",
+      "github_rate_limited": "GitHub's API rate limit is exhausted. Symphony will recover automatically once the limit resets.",
+      "github_network_error": "Symphony could not reach GitHub. Check the server's connectivity and retry.",
+      "missingLogin": "Viewer payload is missing the GitHub login.",
+      "default": "Symphony could not identify the operator. Check the server configuration."
+    }
+  }
+}

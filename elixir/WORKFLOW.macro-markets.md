@@ -36,6 +36,7 @@ tracker:
     - Merging
   dispatch_states:
     - Todo
+    - Rework
   wait_states:
     - Human Review
   terminal_states:
@@ -141,9 +142,9 @@ codex:
   # Enables the Codex-only Goal mode checkbox at dispatch time.
   # goals_enabled: true
   approval_policy: never
-  thread_sandbox: workspace-write
+  thread_sandbox: danger-full-access
   turn_sandbox_policy:
-    type: workspaceWrite
+    type: dangerFullAccess
 claude:
   command: claude
 ---
@@ -234,7 +235,7 @@ Symphony reads and updates the GitHub Project **Status** field when moving cards
 | Todo | Orchestrator queue; move to In Progress before work |
 | In Progress | Active implementation |
 | Human Review | PR ready; poll for human decision — **no further coding turns** |
-| Rework | Address review feedback (see **Rework flow** below) |
+| Rework | Orchestrator queue for review feedback; address before returning to Human Review (see **Rework flow** below) |
 | Merging | Follow `.codex/skills/land/SKILL.md` (PR base per repo: front → **`homolog`**, back → **`dev`**) |
 | Done / Cancelled / Duplicate | Terminal |
 
@@ -280,14 +281,13 @@ http://localhost:4000/tracker/assistant/7006
 Symphony does **not** run your test suite automatically. **You** must validate before **Human Review**, per `AGENTS.md` and [`.cursor/rules/testing-standards.mdc`](.cursor/rules/testing-standards.mdc):
 http://localhost:4000/tracker/assistant/7006
 - Treat ticket `Validation`, `Test Plan`, or `Testing` sections as required; mirror them in the workpad.
-- **Frontend (`front/`)** — when you changed frontend code:
-  - Run lint: `cd front && npm run lint`
-  - Run unit tests: `cd front && npm run test:unit` (or targeted: `npm run test:unit -- tests/...`)
-  - Add/update Vitest tests under `front/tests/` (mirror `front/src/`).
-- **Backend (`back/`)** — when you changed backend code:
-  - Run tests: `cd back && ./vibe test` (equivalently `vendor/bin/pest`).
-  - Use `sail`/`vibe` for artisan/commands (not bare `php`).
-  - Add/update Pest tests under `back/tests/`.
+    - **Frontend (`front/`)** — when you changed frontend code:
+      - Lint **changed paths only**: `cd front && npx eslint --max-warnings 0 <paths-from-git-diff>`
+      - Unit **scoped to the change**: `cd front && npm run test:unit -- tests/...` (mirror changed `src/` under `tests/`)
+      - Do **not** run `npm run lint` or `npm run test:unit` without paths during agent validation — CI owns full regression.
+    - **Backend (`back/`)** — only when `back/` has a git diff:
+      - Run scoped Pest: `cd back && ./vibe test tests/Feature/MyTest.php` or `./vibe test --filter=MyTest`
+      - Do **not** run `./vibe test` (full suite) unless the ticket explicitly requires it.
 - Record in workpad **Validation**: `targeted tests: <command>` and outcome for each repo touched.
 - Do **not** move to **Human Review** until, for every repo you changed:
   - Acceptance criteria are met

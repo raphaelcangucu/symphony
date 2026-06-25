@@ -4,12 +4,14 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ObservabilityPage } from "../ObservabilityPage";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { PrMonitorObservability, RuntimeObservability } from "@/types/observability";
 import type { Project } from "@/types/project";
 
 let runtimes: RuntimeObservability[];
 let projects: Project[];
 let prMonitor: PrMonitorObservability | null;
+let executions: Map<string, AgentExecution>;
 
 const macroRuntime: RuntimeObservability = {
   runtimeId: "r1",
@@ -63,6 +65,10 @@ vi.mock("@/hooks/usePrMonitorObservability", () => ({
   usePrMonitorObservability: () => ({ data: prMonitor, loading: false }),
 }));
 
+vi.mock("@/hooks/useAgentExecutions", () => ({
+  useAgentExecutions: () => ({ executions, refetch: vi.fn() }),
+}));
+
 vi.mock("@/services/projects", () => ({
   listProjects: vi.fn(() => Promise.resolve(projects)),
 }));
@@ -100,11 +106,44 @@ const prMonitorData: PrMonitorObservability = {
   ],
 };
 
+function goalExecution(issueIdentifier: string, objective: string): AgentExecution {
+  return {
+    issueIdentifier,
+    status: "live",
+    agentKind: "codex",
+    sessionId: "sess-1",
+    lastEvent: "turn_started",
+    lastMessage: "working",
+    lastEventAt: null,
+    turnCount: 2,
+    runtimeSeconds: 120,
+    startedAt: null,
+    retryAttempt: 0,
+    error: null,
+    goal: {
+      kind: "goal",
+      source: "native",
+      objective,
+      status: "active",
+      capabilities: [],
+      tokenBudget: null,
+      tokensUsed: null,
+      timeUsedSeconds: null,
+      updatedAt: null,
+    },
+    longRunning: true,
+    longRunningKind: "goal",
+    longRunningLabel: "Pursuing goal",
+    tokens: null,
+  };
+}
+
 describe("ObservabilityPage", () => {
   beforeEach(() => {
     runtimes = [macroRuntime];
     projects = [macroProject];
     prMonitor = prMonitorData;
+    executions = new Map();
     dispatchIssueAgentMock.mockReset();
     dispatchIssueAgentMock.mockResolvedValue({ action: "stop", message: "ok", issue: {} });
   });
@@ -206,5 +245,72 @@ describe("ObservabilityPage", () => {
     expect(await screen.findByText("PR monitor")).toBeInTheDocument();
     expect(screen.getByText("offline")).toBeInTheDocument();
     expect(screen.getByText("No PR evaluations recorded yet.")).toBeInTheDocument();
+  });
+
+  it("shows the native goal an agent is pursuing in the sessions table", async () => {
+    executions = new Map([["508", goalExecution("508", "Ship the i18n migration")]]);
+
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("link", { name: "508" });
+    expect(screen.getByText("Ship the i18n migration")).toBeInTheDocument();
+  });
+
+  it("nests child runs under their coordinating parent", async () => {
+    const parent = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "601",
+      sessionId: "p",
+      bundleRole: "parent" as const,
+      childIdentifiers: ["602", "603"],
+    };
+    const childA = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "602",
+      sessionId: "ca",
+      bundleRole: "child" as const,
+      parentIdentifier: "601",
+      repo: "macro/be",
+    };
+    const childB = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "603",
+      sessionId: "cb",
+      bundleRole: "child" as const,
+      parentIdentifier: "601",
+      repo: "macro/fe",
+    };
+    runtimes = [{ ...macroRuntime, counts: { running: 3, retrying: 0 }, running: [parent, childA, childB] }];
+
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("link", { name: "601" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "602" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "603" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /child runs/i }));
+
+    expect(screen.queryByRole("link", { name: "602" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "603" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "601" })).toBeInTheDocument();
+  });
+
+  it("links each runtime summary card to the project board", async () => {
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    const boardLink = await screen.findByRole("link", { name: /macro-markets/i });
+    expect(boardLink).toHaveAttribute("href", "/projects/macro-markets/board");
   });
 });

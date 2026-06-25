@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
 import { IssueCreateDialog } from "@/components/issues/IssueCreateDialog";
+import { i18n } from "@/i18n";
 import { createIssue, getIssueFormOptions } from "@/services/issues";
 import type { Issue, IssueFormOptions } from "@/types/issue";
 
@@ -40,6 +41,8 @@ const createdIssue: Issue = {
   createdAt: "2026-05-31T00:00:00Z",
   updatedAt: "2026-05-31T00:00:00Z",
   attachments: [],
+  groupLeadIdentifier: null,
+  groupMemberIdentifiers: [],
 };
 
 const formOptions: IssueFormOptions = {
@@ -76,9 +79,18 @@ describe("IssueCreateDialog Codex goal mode", () => {
 
     await user.click(goalMode);
 
-    const goal = await screen.findByRole("textbox", { name: /codex goal/i });
+    const goal = await screen.findByRole("textbox", {
+      name: i18n.t("issue.create.goalAria", {
+        agent: i18n.t("issue.sessionLog.agentLabels.codex"),
+        term: i18n.t("issue.create.terms.goal"),
+      }),
+    });
     expect(goal).toHaveValue(
-      "Objective: Social login\nContext: Add OAuth and session handling.\nConstraints: follow existing issue artifacts, specs, and plans when present; verify changes before reporting completion; stop when complete or blocked.",
+      [
+        i18n.t("issue.create.goal.objective", { objective: "Social login" }),
+        i18n.t("issue.create.goal.context", { details: "Add OAuth and session handling." }),
+        i18n.t("issue.create.goal.constraints"),
+      ].join("\n"),
     );
 
     await user.clear(goal);
@@ -108,9 +120,17 @@ describe("IssueCreateDialog Codex goal mode", () => {
 
     await user.click(workflowMode);
 
-    const workflow = await screen.findByRole("textbox", { name: /claude workflow/i });
+    const workflow = await screen.findByRole("textbox", {
+      name: i18n.t("issue.create.goalAria", {
+        agent: i18n.t("issue.sessionLog.agentLabels.claude"),
+        term: i18n.t("issue.create.terms.workflow"),
+      }),
+    });
     expect(workflow).toHaveValue(
-      "Objective: Claude task\nConstraints: follow existing issue artifacts, specs, and plans when present; verify changes before reporting completion; stop when complete or blocked.",
+      [
+        i18n.t("issue.create.goal.objective", { objective: "Claude task" }),
+        i18n.t("issue.create.goal.constraints"),
+      ].join("\n"),
     );
 
     await user.clear(workflow);
@@ -155,11 +175,21 @@ describe("IssueCreateDialog Codex goal mode", () => {
     await user.click(await screen.findByRole("button", { name: "Codex" }));
     await user.click(await screen.findByRole("checkbox", { name: /goal mode/i }));
 
-    const goal = await screen.findByRole("textbox", { name: /codex goal/i });
+    const goal = await screen.findByRole("textbox", {
+      name: i18n.t("issue.create.goalAria", {
+        agent: i18n.t("issue.sessionLog.agentLabels.codex"),
+        term: i18n.t("issue.create.terms.goal"),
+      }),
+    });
     await user.clear(goal);
     await user.click(screen.getByRole("button", { name: "Create" }));
 
-    expect(toast.error).toHaveBeenCalledWith("Goal mode requires a goal.");
+    expect(toast.error).toHaveBeenCalledWith(
+      i18n.t("issue.create.goalModeRequired", {
+        termCapitalized: "Goal",
+        term: i18n.t("issue.create.terms.goal"),
+      }),
+    );
     expect(mockCreateIssue).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
 import {
   fetchIssueDevServers,
@@ -10,11 +11,9 @@ import {
   startPublicTunnel,
   stopIssueDevServer,
   stopIssueDevServers,
+  subscribeIssueDevServers,
 } from "@/services/issueDevServers";
-import type { IssueDevServersResponse, IssueDevServerStatus } from "@/types/issue";
-
-const POLL_INTERVAL_MS = 2_000;
-const TRANSIENT_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
+import type { IssueDevServersResponse } from "@/types/issue";
 
 export interface UseIssueDevServersResult {
   data: IssueDevServersResponse | null;
@@ -53,6 +52,7 @@ export function useIssueDevServers(
   const actionInFlightRef = useRef(false);
   const actionGenerationRef = useRef(0);
   const hasLoadedRef = useRef(false);
+  const streamFailedRef = useRef(false);
   const focused = useWindowFocus();
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
@@ -90,7 +90,7 @@ export function useIssueDevServers(
         return;
       }
 
-      setError("Could not load issue dev servers.");
+      setError(i18n.t("issue.devServer.errors.loadFailed"));
     } finally {
       if (requestId === requestIdRef.current) {
         inFlightRef.current = false;
@@ -102,7 +102,7 @@ export function useIssueDevServers(
   const runAction = useCallback(
     async (action: IssueDevServerAction, failureMessage: string) => {
       if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
-        setError("Project and issue identifiers are required.");
+        setError(i18n.t("issue.devServer.errors.identifiersRequired"));
         return;
       }
 
@@ -149,7 +149,7 @@ export function useIssueDevServers(
   const runInstanceAction = useCallback(
     async (action: IssueDevServerInstanceAction, serverId: number, failureMessage: string) => {
       if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
-        setError("Project and issue identifiers are required.");
+        setError(i18n.t("issue.devServer.errors.identifiersRequired"));
         return;
       }
 
@@ -194,30 +194,30 @@ export function useIssueDevServers(
   );
 
   const start = useCallback(
-    () => runAction(startIssueDevServers, "Could not start issue dev servers."),
+    () => runAction(startIssueDevServers, i18n.t("issue.devServer.errors.startAllFailed")),
     [runAction],
   );
   const stop = useCallback(
-    () => runAction(stopIssueDevServers, "Could not stop issue dev servers."),
+    () => runAction(stopIssueDevServers, i18n.t("issue.devServer.errors.stopAllFailed")),
     [runAction],
   );
   const restart = useCallback(
-    () => runAction(restartIssueDevServers, "Could not restart issue dev servers."),
+    () => runAction(restartIssueDevServers, i18n.t("issue.devServer.errors.restartAllFailed")),
     [runAction],
   );
   const startServer = useCallback(
     (serverId: number) =>
-      runInstanceAction(startIssueDevServer, serverId, "Could not start the dev server."),
+      runInstanceAction(startIssueDevServer, serverId, i18n.t("issue.devServer.errors.startFailed")),
     [runInstanceAction],
   );
   const stopServer = useCallback(
     (serverId: number) =>
-      runInstanceAction(stopIssueDevServer, serverId, "Could not stop the dev server."),
+      runInstanceAction(stopIssueDevServer, serverId, i18n.t("issue.devServer.errors.stopFailed")),
     [runInstanceAction],
   );
   const restartServer = useCallback(
     (serverId: number) =>
-      runInstanceAction(restartIssueDevServer, serverId, "Could not restart the dev server."),
+      runInstanceAction(restartIssueDevServer, serverId, i18n.t("issue.devServer.errors.restartFailed")),
     [runInstanceAction],
   );
 
@@ -227,7 +227,7 @@ export function useIssueDevServers(
       setData((current) => (current ? { ...current, tunnel } : current));
       setError(null);
     } catch {
-      setError("Could not start the Cloudflare tunnel.");
+      setError(i18n.t("issue.devServer.errors.tunnelFailed"));
     } finally {
       void refresh();
     }
@@ -239,35 +239,46 @@ export function useIssueDevServers(
     inFlightRef.current = false;
     actionGenerationRef.current += 1;
     actionInFlightRef.current = false;
+    streamFailedRef.current = false;
 
-    if (!hasIdentifiers) {
+    if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
       setData(null);
       setError(null);
       setLoading(false);
       return undefined;
     }
 
-    void refresh();
+    setLoading(true);
+
+    const unsubscribe = subscribeIssueDevServers(projectSlug, issueIdentifier, {
+      onSnapshot: (response) => {
+        setData(response);
+        setError(null);
+        hasLoadedRef.current = true;
+        setLoading(false);
+      },
+      onUpdate: (response) => {
+        setData(response);
+        setError(null);
+      },
+      onError: () => {
+        if (streamFailedRef.current) {
+          return;
+        }
+
+        streamFailedRef.current = true;
+        void refresh();
+      },
+    });
 
     return () => {
       requestIdRef.current += 1;
       inFlightRef.current = false;
       actionGenerationRef.current += 1;
       actionInFlightRef.current = false;
+      unsubscribe();
     };
-  }, [hasIdentifiers, refresh]);
-
-  useEffect(() => {
-    if (!hasIdentifiers || !shouldPoll(data)) {
-      return undefined;
-    }
-
-    const timer = setInterval(() => {
-      if (focusedRef.current) void refresh();
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(timer);
-  }, [data, hasIdentifiers, refresh]);
+  }, [hasIdentifiers, issueIdentifier, projectSlug, refresh]);
 
   useEffect(() => {
     if (!hasIdentifiers || !focused) return;
@@ -279,12 +290,4 @@ export function useIssueDevServers(
 
 function hasRequiredIdentifier(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function shouldPoll(data: IssueDevServersResponse | null): boolean {
-  if (!data) {
-    return false;
-  }
-
-  return data.servers.some((server) => TRANSIENT_STATUSES.has(server.status));
 }

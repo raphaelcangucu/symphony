@@ -14,6 +14,9 @@ defmodule SymphonyElixir.WorkspaceSkills do
   @editor_root_names ["front", "repo", "back", "docs"]
   @skill_file "SKILL.md"
   @superpowers_dir "superpowers"
+  # Authoring-only superpowers skills — omitted from execution workspaces so Codex
+  # does not auto-discover and enter design-first loops at session start.
+  @authoring_only_skills ~w(brainstorming using-superpowers writing-plans writing-skills)
 
   @type error ::
           {:workspace_missing, Path.t()}
@@ -26,8 +29,10 @@ defmodule SymphonyElixir.WorkspaceSkills do
   def prepare(workspace) when is_binary(workspace) do
     with :ok <- ensure_existing_directory(workspace, {:workspace_missing, workspace}),
          {:ok, skill_sources} <- skill_sources(),
-         :ok <- prepare_mirror(workspace, skill_sources) do
-      prepare_agent_roots(workspace)
+         :ok <- prepare_mirror(workspace, skill_sources),
+         :ok <- prepare_agent_roots(workspace),
+         :ok <- prune_authoring_skills(workspace) do
+      :ok
     end
   end
 
@@ -55,6 +60,7 @@ defmodule SymphonyElixir.WorkspaceSkills do
     root
     |> Path.join(@superpowers_dir)
     |> child_skill_sources()
+    |> Enum.reject(fn {name, _path} -> name in @authoring_only_skills end)
   end
 
   defp child_skill_sources(root) do
@@ -267,6 +273,58 @@ defmodule SymphonyElixir.WorkspaceSkills do
   end
 
   defp mirror_root(workspace), do: Path.join([workspace, ".symphony", "skills"])
+
+  defp prune_authoring_skills(workspace) do
+    workspace
+    |> prune_skill_directories()
+    |> Enum.uniq()
+    |> Enum.reduce_while(:ok, fn skills_dir, :ok ->
+      prune_authoring_entries(skills_dir)
+      |> continue_or_halt()
+    end)
+  end
+
+  defp prune_skill_directories(workspace) do
+    agent_skill_dirs =
+      workspace
+      |> agent_roots()
+      |> Enum.flat_map(fn root ->
+        Enum.map(@agent_dirs, &Path.join([root, &1, "skills"]))
+      end)
+
+    [mirror_root(workspace) | agent_skill_dirs]
+  end
+
+  defp prune_authoring_entries(skills_dir) do
+    case File.lstat(skills_dir) do
+      {:ok, %File.Stat{type: :directory}} ->
+        Enum.reduce_while(@authoring_only_skills, :ok, fn name, :ok ->
+          skills_dir
+          |> Path.join(name)
+          |> remove_if_present()
+          |> continue_or_halt()
+        end)
+
+      _other ->
+        :ok
+    end
+  end
+
+  defp remove_if_present(path) do
+    case File.lstat(path) do
+      {:ok, _stat} ->
+        case File.rm_rf(path) do
+          {:ok, _files} -> :ok
+          {:error, reason, failed} -> {:error, {:file_error, failed, reason}}
+        end
+
+      {:error, :enoent} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:file_error, path, reason}}
+    end
+  end
 
   defp continue_or_halt(:ok), do: {:cont, :ok}
   defp continue_or_halt({:error, reason}), do: {:halt, {:error, reason}}

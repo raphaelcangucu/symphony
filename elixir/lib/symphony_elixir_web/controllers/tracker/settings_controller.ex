@@ -24,15 +24,16 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
         json(conn, %{data: Settings.get_group(group)})
 
       {:error, :unknown_group} ->
-        conn
-        |> Conn.put_status(:not_found)
-        |> json(%{error: %{code: "not_found", message: "unknown settings group"}})
+        TrackerErrors.render(conn, :unknown_settings_group)
 
       {:error, _name, %Ecto.Changeset{} = changeset} ->
         TrackerErrors.render(conn, changeset)
 
       {:error, name, reason} ->
-        TrackerErrors.validation(conn, "invalid setting #{name}: #{format_reason(reason)}")
+        TrackerErrors.validation_msg(conn, "invalid setting %{name}: %{reason}", %{
+          name: name,
+          reason: format_reason(reason)
+        })
     end
   end
 

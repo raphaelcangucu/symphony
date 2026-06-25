@@ -1,5 +1,7 @@
 import { ArrowLeft, Loader2 } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,16 +25,17 @@ const TEMPLATE_OPTIONS: ReturnToAgentTemplate[] = ["evidence", "fix", "review_fe
 
 function buildInitialInstructions(
   template: ReturnToAgentTemplate,
-  evidenceAttention?: EvidenceAttention,
+  evidenceAttention: EvidenceAttention | undefined,
+  t: TFunction,
 ): string {
   if (template === "custom") return "";
 
-  const base = returnToAgentTemplateText(template);
+  const base = returnToAgentTemplateText(template, t);
   if (template !== "evidence" || !evidenceAttention || evidenceAttention.kind !== "failed") {
     return base;
   }
 
-  const failedContext = evidenceAttentionInstructions(evidenceAttention);
+  const failedContext = evidenceAttentionInstructions(evidenceAttention, t);
   return failedContext ? `${base}\n\n${failedContext}` : base;
 }
 
@@ -53,9 +56,10 @@ export function ReturnToAgentPanel({
   initialTemplate = null,
   onIssueUpdated,
 }: ReturnToAgentPanelProps) {
+  const { t } = useTranslation();
   const [template, setTemplate] = useState<ReturnToAgentTemplate>(initialTemplate ?? "evidence");
   const [instructions, setInstructions] = useState(() =>
-    buildInitialInstructions(initialTemplate ?? "evidence", evidenceAttention),
+    buildInitialInstructions(initialTemplate ?? "evidence", evidenceAttention, t),
   );
   const [pending, setPending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -63,18 +67,22 @@ export function ReturnToAgentPanel({
   const reworkTarget = trackerConfig.reworkTarget ?? "Em andamento";
 
   const summaryLine = useMemo(() => {
-    const parts = [`Status: ${issue.status}`];
+    const parts = [t("issue.returnToAgent.statusLine", { status: issue.status })];
     if (evidenceAttention?.kind === "missing") {
-      parts.push("Evidence: ausente");
+      parts.push(t("issue.evidence.absent"));
     } else if (evidenceAttention?.kind === "failed") {
-      parts.push(`Evidence: ${evidenceAttentionSummary(evidenceAttention)}`);
+      parts.push(
+        t("issue.returnToAgent.evidenceLine", {
+          summary: evidenceAttentionSummary(evidenceAttention, t),
+        }),
+      );
     }
     return parts.join(" · ");
-  }, [evidenceAttention, issue.status]);
+  }, [evidenceAttention, issue.status, t]);
 
   function selectTemplate(next: ReturnToAgentTemplate) {
     setTemplate(next);
-    setInstructions(buildInitialInstructions(next, evidenceAttention));
+    setInstructions(buildInitialInstructions(next, evidenceAttention, t));
   }
 
   async function continueWork() {
@@ -89,9 +97,9 @@ export function ReturnToAgentPanel({
       });
       onIssueUpdated?.(result.issue);
       setStatusMessage(result.message);
-      toast.success(`Retomando em ${reworkTarget}`);
+      toast.success(t("issue.returnToAgent.resumeToast", { target: reworkTarget }));
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Falha ao retomar o agente";
+      const message = cause instanceof Error ? cause.message : t("issue.returnToAgent.resumeFailed");
       toast.error(message);
     } finally {
       setPending(false);
@@ -106,21 +114,14 @@ export function ReturnToAgentPanel({
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-foreground">
-            {evidenceAttention?.kind === "failed" ? "Retomar validação" : "Devolver ao agente"}
+            {evidenceAttention?.kind === "failed"
+              ? t("issue.returnToAgent.resumeValidation")
+              : t("issue.returnToAgent.returnToAgent")}
           </div>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {evidenceAttention?.kind === "failed" ? (
-              <>
-                A última tentativa de evidência não passou no VALIDATE gate. Retome em{" "}
-                <span className="font-medium text-foreground">{reworkTarget}</span> para corrigir o ambiente,
-                rerodar testes e atualizar o manifest.
-              </>
-            ) : (
-              <>
-                Esta issue está em revisão humana. Escolha o motivo, ajuste a instrução se quiser, e retome em{" "}
-                <span className="font-medium text-foreground">{reworkTarget}</span>.
-              </>
-            )}
+            {evidenceAttention?.kind === "failed"
+              ? t("issue.returnToAgent.failedGateDescription", { target: reworkTarget })
+              : t("issue.returnToAgent.humanReviewDescription", { target: reworkTarget })}
           </p>
           <p className="mt-2 text-[11px] text-muted-foreground">{summaryLine}</p>
         </div>
@@ -140,7 +141,7 @@ export function ReturnToAgentPanel({
                 : "border-border/70 bg-background/60 text-muted-foreground hover:text-foreground",
             )}
           >
-            {returnToAgentTemplateLabel(option)}
+            {returnToAgentTemplateLabel(option, t)}
           </button>
         ))}
       </div>
@@ -150,14 +151,16 @@ export function ReturnToAgentPanel({
         onChange={(event) => setInstructions(event.target.value)}
         disabled={pending}
         rows={8}
-        placeholder="Instruções específicas para o agente (opcional)"
+        placeholder={t("issue.returnToAgent.instructionsPlaceholder")}
         className="mt-3 min-h-0 resize-y text-sm"
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button type="button" size="sm" disabled={pending} onClick={() => void continueWork()}>
           {pending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-          {pending ? "Retomando…" : `Voltar para ${reworkTarget} e retomar`}
+          {pending
+            ? t("issue.returnToAgent.resuming")
+            : t("issue.returnToAgent.resumeButton", { target: reworkTarget })}
         </Button>
         {statusMessage ? <span className="text-xs text-muted-foreground">{statusMessage}</span> : null}
       </div>

@@ -23,6 +23,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     :ok
   end
 
+  test "tool_specs includes the phase 2/3 tools" do
+    names = Enum.map(ToolExecutor.tool_specs(), & &1["name"])
+
+    for tool <-
+          ~w(link_pull_request get_issue_orchestrator_state explain_dispatch_eligibility manage_blockers sync_issue list_running_agents steer_agent) do
+      assert tool in names, "expected #{tool} in tool_specs"
+    end
+  end
+
   test "creates an issue through the project tracker adapter" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
@@ -30,7 +39,6 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
              ToolExecutor.execute("macro-markets", "create_issue", %{
                "title" => "Add assistant panel",
                "description" => "Global project assistant",
-               "status" => "Todo",
                "priority" => 2
              })
 
@@ -38,6 +46,48 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert result.message == "Created issue MAC-1: Add assistant panel"
     assert result.data.identifier == "MAC-1"
     assert result.data.title == "Add assistant panel"
+    assert result.data.status.name == "Backlog"
+  end
+
+  test "create_issue rejects orchestrator queue statuses such as Todo" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:error, message} =
+             ToolExecutor.execute("macro-markets", "create_issue", %{
+               "title" => "Skip intake",
+               "status" => "Todo"
+             })
+
+    assert is_binary(message)
+    assert message =~ "Backlog"
+    assert message =~ "Todo"
+  end
+
+  test "dispatch_codex rejects issues outside orchestrator queue" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Still in intake", "status" => "Backlog"})
+
+    assert {:error, message} =
+             ToolExecutor.execute("macro-markets", "dispatch_codex", %{
+               "identifier" => "MAC-1",
+               "instructions" => "Start work."
+             })
+
+    assert message =~ "orchestrator queue"
+    assert message =~ "Backlog"
+  end
+
+  test "create_issue defaults to Backlog when status is omitted" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:ok, result} =
+             ToolExecutor.execute("macro-markets", "create_issue", %{
+               "title" => "Intake from assistant",
+               "description" => "VIP bonus adjustment"
+             })
+
+    assert result.data.status.name == "Backlog"
+    assert result.data.title == "Intake from assistant"
   end
 
   test "dispatches Codex work by adding a comment and moving the issue into progress" do
@@ -277,8 +327,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
            end)
 
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "add_comment"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_comments"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "update_comment"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_pull_requests"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_preview"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "check_handoff_gate"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "get_evidence_status"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_dev_env"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "scan_project_setup"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "suggest_project_setup"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_project_repositories"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "update_project_repositories"))
 
@@ -322,6 +379,30 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
                })
 
       assert [%{body: "Note", author: "human"}] = result.data.comments
+    end
+
+    test "list_comments returns issue comments" do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "list_comments", %{"identifier" => "MAC-1"})
+
+      assert result.tool == "list_comments"
+      assert [%{body: "Note", author: "human"}] = result.data.comments
+    end
+
+    test "update_comment edits an existing comment" do
+      assert {:ok, listed} =
+               ToolExecutor.execute("macro-markets", "list_comments", %{"identifier" => "MAC-1"})
+
+      comment_id = hd(listed.data.comments).id
+
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "update_comment", %{
+                 "identifier" => "MAC-1",
+                 "comment_id" => comment_id,
+                 "body" => "Updated workpad"
+               })
+
+      assert result.data.comment.body == "Updated workpad"
     end
 
     test "get_project returns setup and statuses without listing issues" do
@@ -526,17 +607,20 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       :ok
     end
 
-    test "exposes only existing-issue tools with schemas constrained to the bound issue" do
+    test "exposes issue-bound authoring and subtask tools" do
       specs = ToolExecutor.issue_bound_tool_specs("MAC-1")
       names = Enum.map(specs, & &1["name"])
 
-      refute "create_issue" in names
-      refute "create_draft_issue" in names
-      refute "add_comment" in names
+      assert "create_issue" in names
+      assert "create_draft_issue" in names
+      assert "create_subtask" in names
+      assert "get_workflow" in names
+      assert "list_project_repositories" in names
+      assert "add_comment" in names
       assert "get_issue" in names
       assert "read_workspace_file" in names
 
-      for tool <- ["update_issue", "move_issue", "dispatch_codex"] do
+      for tool <- ["update_issue", "move_issue", "add_comment", "dispatch_codex"] do
         spec = Enum.find(specs, &(&1["name"] == tool))
         assert get_in(spec, ["inputSchema", "properties", "identifier", "const"]) == "MAC-1"
       end
@@ -546,6 +630,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       refute "identifier" in required_fields(specs, "dispatch_codex")
       assert "status" in required_fields(specs, "move_issue")
       assert "instructions" in required_fields(specs, "dispatch_codex")
+    end
+
+    test "rejects create_subtask with mismatched parent_identifier" do
+      executor = ToolExecutor.issue_bound_codex_tool_executor("macro-markets", "MAC-1")
+
+      assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} =
+               executor.("create_subtask", %{"parent_identifier" => "MAC-2", "title" => "Wrong parent"})
+
+      assert error_text =~ "mismatch"
     end
 
     test "injects the bound identifier when a mutable tool omits it" do
@@ -560,13 +653,16 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       assert issue.title == "Bound issue (clarified)"
     end
 
-    test "rejects add_comment in the issue-bound chat since chat replies are not comments" do
+    test "injects the bound identifier when add_comment omits it" do
       executor = ToolExecutor.issue_bound_codex_tool_executor("macro-markets", "MAC-1")
 
-      assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} =
-               executor.("add_comment", %{"body" => "Should not be posted"})
+      assert %{
+               "success" => true,
+               "toolResult" => %{"tool" => "add_comment", "message" => "Added comment to MAC-1."}
+             } = executor.("add_comment", %{"body" => "Operational note from authoring"})
 
-      assert error_text =~ "unsupported_issue_bound_tool"
+      assert {:ok, comments} = Context.list_comments("macro-markets", "MAC-1")
+      assert Enum.any?(comments, &(&1.body == "Operational note from authoring"))
     end
 
     test "rejects mutable tool calls for a different issue identifier" do
@@ -575,6 +671,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       for {tool, arguments} <- [
             {"update_issue", %{"identifier" => "MAC-2", "title" => "Wrong issue"}},
             {"move_issue", %{"identifier" => "MAC-2", "status" => "In Progress"}},
+            {"add_comment", %{"identifier" => "MAC-2", "body" => "Wrong issue"}},
             {"dispatch_codex", %{"identifier" => "MAC-2", "instructions" => "Wrong issue"}}
           ] do
         assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} = executor.(tool, arguments)

@@ -1,3 +1,6 @@
+import type { TFunction } from "i18next";
+
+import { i18n } from "@/i18n";
 import type { AgentKind } from "@/types/issue";
 
 export type AssistantEffort = string;
@@ -53,85 +56,112 @@ export interface AssistantComposerState {
 const COMPOSER_STATE_KEY = "symphony.assistant.composer.v2";
 const CATALOGS_STORAGE_KEY = "symphony.assistant.catalogs";
 
-const FALLBACK_EFFORTS: AssistantEffortOption[] = [
-  { id: "low", label: "Low" },
-  { id: "medium", label: "Medium" },
-  { id: "high", label: "High" },
-  { id: "xhigh", label: "Extra high" },
-];
+type Translate = TFunction;
 
-const EFFORT_LABELS: Record<string, string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra high",
-  max: "Max",
-};
-
-function efforts(...ids: string[]): AssistantEffortOption[] {
-  return ids.map((id) => ({ id, label: EFFORT_LABELS[id] ?? id }));
+function catalogModelKey(modelId: string): string {
+  return modelId.replace(/\./g, "_");
 }
 
-export function fallbackCodexCatalog(command = "codex app-server"): AssistantAgentCatalog {
+export function catalogAgentLabel(
+  agent: AgentKind,
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): string {
+  return t(`assistant.catalog.agents.${agent}`);
+}
+
+function catalogModelLabel(
+  modelId: string,
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): string {
+  const key = `assistant.catalog.models.${catalogModelKey(modelId)}`;
+  const translated = t(key);
+  return translated === key ? modelId : translated;
+}
+
+function effortLabelForId(id: string, t: Translate = i18n.t.bind(i18n) as Translate): string {
+  if (!id) return "";
+  const key = `assistant.effort.${id}`;
+  const translated = t(key);
+  return translated === key ? id : translated;
+}
+
+function efforts(t: Translate, ...ids: string[]): AssistantEffortOption[] {
+  return ids.map((id) => ({ id, label: effortLabelForId(id, t) }));
+}
+
+function fallbackEfforts(t: Translate = i18n.t.bind(i18n) as Translate): AssistantEffortOption[] {
+  return efforts(t, "low", "medium", "high", "xhigh");
+}
+
+export function fallbackCodexCatalog(
+  command = "codex app-server",
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): AssistantAgentCatalog {
   const defaultModel = "gpt-5.5";
 
   return {
     agent: "codex",
-    agentLabel: "Codex CLI",
+    agentLabel: catalogAgentLabel("codex", t),
     command,
     defaultModel,
     models: [
-      fallbackModel("gpt-5.5", "GPT-5.5", true, "medium", FALLBACK_EFFORTS),
-      fallbackModel("gpt-5.4", "GPT-5.4", false, "medium", FALLBACK_EFFORTS),
-      fallbackModel("gpt-5.3-codex", "GPT-5.3 Codex", false, "medium", FALLBACK_EFFORTS),
+      fallbackModel("gpt-5.5", true, "medium", fallbackEfforts(t), t),
+      fallbackModel("gpt-5.4", false, "medium", fallbackEfforts(t), t),
+      fallbackModel("gpt-5.3-codex", false, "medium", fallbackEfforts(t), t),
     ],
   };
 }
 
-export function fallbackClaudeCatalog(command = "claude"): AssistantAgentCatalog {
+export function fallbackClaudeCatalog(
+  command = "claude",
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): AssistantAgentCatalog {
   // Mirrors SymphonyElixir.Claude.ModelCatalog: xhigh is Opus 4.7+, max is
   // Opus-tier only, Haiku has no effort control, and high is the CLI default.
-  const opusEfforts = efforts("low", "medium", "high", "xhigh", "max");
-  const opusLegacyEfforts = efforts("low", "medium", "high", "max");
-  const sonnetEfforts = efforts("low", "medium", "high");
+  const opusEfforts = efforts(t, "low", "medium", "high", "xhigh", "max");
+  const opusLegacyEfforts = efforts(t, "low", "medium", "high", "max");
+  const sonnetEfforts = efforts(t, "low", "medium", "high");
 
   return {
     agent: "claude",
-    agentLabel: "Claude Code",
+    agentLabel: catalogAgentLabel("claude", t),
     command,
     defaultModel: "claude-opus-4-8",
     models: [
-      fallbackModel("claude-opus-4-8", "Claude Opus 4.8", true, "xhigh", opusEfforts),
-      fallbackModel("claude-opus-4-7", "Claude Opus 4.7", false, "xhigh", opusEfforts),
-      fallbackModel("claude-opus-4-6", "Claude Opus 4.6", false, "high", opusLegacyEfforts),
-      fallbackModel("claude-sonnet-4-6", "Claude Sonnet 4.6", false, "high", sonnetEfforts),
-      fallbackModel("claude-haiku-4-5", "Claude Haiku 4.5", false, "", []),
+      fallbackModel("claude-opus-4-8", true, "xhigh", opusEfforts, t),
+      fallbackModel("claude-opus-4-7", false, "xhigh", opusEfforts, t),
+      fallbackModel("claude-opus-4-6", false, "high", opusLegacyEfforts, t),
+      fallbackModel("claude-sonnet-4-6", false, "high", sonnetEfforts, t),
+      fallbackModel("claude-haiku-4-5", false, "", [], t),
     ],
   };
 }
 
-export function fallbackCursorCatalog(command = "cursor-agent"): AssistantAgentCatalog {
+export function fallbackCursorCatalog(
+  command = "cursor-agent",
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): AssistantAgentCatalog {
   // Mirrors SymphonyElixir.Cursor.ModelCatalog: the cursor-agent CLI has no
   // reasoning-effort flag, so every model hides the effort menu; "auto" lets
   // the CLI pick its own default model.
   return {
     agent: "cursor",
-    agentLabel: "Cursor Agent",
+    agentLabel: catalogAgentLabel("cursor", t),
     command,
     defaultModel: "auto",
     models: [
-      fallbackModel("auto", "Auto", true, "", []),
-      fallbackModel("composer-1", "Composer 1", false, "", []),
-      fallbackModel("gpt-5", "GPT-5", false, "", []),
-      fallbackModel("sonnet-4", "Claude Sonnet 4", false, "", []),
-      fallbackModel("sonnet-4-thinking", "Claude Sonnet 4 Thinking", false, "", []),
+      fallbackModel("auto", true, "", [], t),
+      fallbackModel("composer-1", false, "", [], t),
+      fallbackModel("gpt-5", false, "", [], t),
+      fallbackModel("sonnet-4", false, "", [], t),
+      fallbackModel("sonnet-4-thinking", false, "", [], t),
     ],
   };
 }
 
-export function fallbackCatalogBundle(): AssistantCatalogBundle {
+export function fallbackCatalogBundle(t: Translate = i18n.t.bind(i18n) as Translate): AssistantCatalogBundle {
   return {
-    agents: [fallbackCodexCatalog(), fallbackClaudeCatalog(), fallbackCursorCatalog()],
+    agents: [fallbackCodexCatalog(undefined, t), fallbackClaudeCatalog(undefined, t), fallbackCursorCatalog(undefined, t)],
     defaultAgent: "codex",
   };
 }
@@ -269,7 +299,15 @@ export function modelLabel(catalog: AssistantAgentCatalog, modelId: string): str
   return findModelOption(catalog, modelId)?.label ?? modelId;
 }
 
-export function effortLabel(catalog: AssistantAgentCatalog, modelId: string, effort: AssistantEffort): string {
+export function effortLabel(
+  catalog: AssistantAgentCatalog,
+  modelId: string,
+  effort: AssistantEffort,
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): string {
+  const translated = effortLabelForId(effort, t);
+  if (effort && translated !== effort) return translated;
+
   const model = findModelOption(catalog, modelId);
   return model?.efforts.find((option) => option.id === effort)?.label ?? effort;
 }
@@ -285,15 +323,15 @@ export function normalizeEffort(model: AssistantModelOption, effort?: string | n
 
 function fallbackModel(
   model: string,
-  label: string,
   isDefault: boolean,
   defaultEffort: string,
   efforts: AssistantEffortOption[],
+  t: Translate = i18n.t.bind(i18n) as Translate,
 ): AssistantModelOption {
   return {
     id: model,
     model,
-    label,
+    label: catalogModelLabel(model, t),
     isDefault,
     defaultEffort,
     efforts,

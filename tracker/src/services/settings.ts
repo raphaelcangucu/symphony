@@ -1,6 +1,8 @@
 import { http, trackerPath, unwrapData } from "@/services/http";
 import type { AgentKind } from "@/types/issue";
 
+export type LocalePreference = "auto" | "en" | "pt-BR";
+
 export interface AgentSettings {
   default_agent_kind: AgentKind;
 }
@@ -10,9 +12,14 @@ export interface OrchestratorSettings {
   require_assignee_match: boolean;
 }
 
+export interface UiSettings {
+  locale: LocalePreference;
+}
+
 export interface AllSettings {
   agents: AgentSettings;
   orchestrator: OrchestratorSettings;
+  ui: UiSettings;
 }
 
 export interface AgentAvailabilityEntry {
@@ -47,6 +54,11 @@ export async function updateOrchestratorSettings(
 ): Promise<OrchestratorSettings> {
   const response = await http.put(trackerPath("/settings/orchestrator"), input);
   return unwrapData<OrchestratorSettings>(response);
+}
+
+export async function updateUiSettings(input: Partial<UiSettings>): Promise<UiSettings> {
+  const response = await http.put(trackerPath("/settings/ui"), input);
+  return unwrapData<UiSettings>(response);
 }
 
 export type TrackerProvider = "github" | "jira" | "linear";

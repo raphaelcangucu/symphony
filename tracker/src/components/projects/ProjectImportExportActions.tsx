@@ -1,5 +1,6 @@
 import { Download, Upload } from "lucide-react";
 import { useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ interface ProjectImportExportActionsProps {
 }
 
 export function ProjectImportExportActions({ project, onImported }: ProjectImportExportActionsProps) {
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = async () => {
@@ -24,9 +26,9 @@ export function ProjectImportExportActions({ project, onImported }: ProjectImpor
       anchor.download = `${project.slug}-project.yaml`;
       anchor.click();
       URL.revokeObjectURL(url);
-      toast.success("Project configuration exported");
+      toast.success(t("project.config.importExport.exportSuccess"));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to export project configuration");
+      toast.error(cause instanceof Error ? cause.message : t("project.config.importExport.exportFailed"));
     }
   };
 
@@ -36,7 +38,7 @@ export function ProjectImportExportActions({ project, onImported }: ProjectImpor
     if (!file) return;
 
     const confirmed = window.confirm(
-      `Import configuration from "${file.name}" into "${project.name}"? This replaces the current settings.`,
+      t("project.config.importExport.importConfirm", { fileName: file.name, projectName: project.name }),
     );
     if (!confirmed) return;
 
@@ -44,9 +46,9 @@ export function ProjectImportExportActions({ project, onImported }: ProjectImpor
       const yaml = await file.text();
       const updated = await importProjectConfig(project.slug, yaml);
       onImported(updated);
-      toast.success("Project configuration imported");
+      toast.success(t("project.config.importExport.importSuccess"));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to import project configuration");
+      toast.error(cause instanceof Error ? cause.message : t("project.config.importExport.importFailed"));
     }
   };
 
@@ -61,11 +63,11 @@ export function ProjectImportExportActions({ project, onImported }: ProjectImpor
       />
       <Button type="button" variant="outline" size="sm" onClick={() => void handleExport()}>
         <Download className="h-4 w-4" />
-        Export
+        {t("project.config.importExport.export")}
       </Button>
       <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
         <Upload className="h-4 w-4" />
-        Import
+        {t("project.config.importExport.import")}
       </Button>
     </div>
   );

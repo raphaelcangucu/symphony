@@ -87,6 +87,40 @@ describe("normalizeRuntime", () => {
     expect(normalizeRuntime({ runtime_id: "r1" }).status).toBe("online");
   });
 
+  it("maps and defaults bundle context on running sessions", () => {
+    const runtime = normalizeRuntime({
+      runtime_id: "r1",
+      running: [
+        {
+          issue_identifier: "601",
+          bundle_role: "parent",
+          child_identifiers: ["#602", "#603"],
+        },
+        {
+          issue_identifier: "602",
+          bundle_role: "child",
+          parent_identifier: "#601",
+          unit_id: "be",
+          repo: "macro/be",
+        },
+        { issue_identifier: "999" },
+      ],
+    });
+
+    expect(runtime.running[0]).toMatchObject({ bundleRole: "parent", childIdentifiers: ["602", "603"] });
+    expect(runtime.running[1]).toMatchObject({
+      bundleRole: "child",
+      parentIdentifier: "601",
+      unitId: "be",
+      repo: "macro/be",
+    });
+    expect(runtime.running[2]).toMatchObject({
+      bundleRole: "standalone",
+      parentIdentifier: null,
+      childIdentifiers: [],
+    });
+  });
+
   it("tolerates null running/retrying and null nested tokens", () => {
     const nulled = normalizeRuntime({ runtime_id: "r1", running: null, retrying: null });
     expect(nulled.running).toEqual([]);

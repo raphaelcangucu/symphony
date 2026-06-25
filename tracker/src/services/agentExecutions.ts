@@ -47,9 +47,26 @@ export interface BackendAgentExecutionDto {
   long_running_label?: string | null;
   longRunningLabel?: string | null;
   tokens?: BackendAgentExecutionTokensDto | null;
+  parent_identifier?: string | null;
+  parentIdentifier?: string | null;
+  bundle_role?: string | null;
+  bundleRole?: string | null;
+  unit_id?: string | null;
+  unitId?: string | null;
+  repo?: string | null;
+  child_identifiers?: string[] | null;
+  childIdentifiers?: string[] | null;
 }
 
-const KNOWN_STATUSES: readonly AgentExecutionStatus[] = ["live", "idle", "waiting", "retrying", "error", "aborted"];
+const KNOWN_STATUSES: readonly AgentExecutionStatus[] = [
+  "live",
+  "idle",
+  "waiting",
+  "retrying",
+  "error",
+  "aborted",
+  "saved",
+];
 
 function normalizeStatus(status: string | null | undefined): AgentExecutionStatus {
   return KNOWN_STATUSES.includes(status as AgentExecutionStatus) ? (status as AgentExecutionStatus) : "idle";
@@ -58,6 +75,10 @@ function normalizeStatus(status: string | null | undefined): AgentExecutionStatu
 function normalizeAgentKind(kind: string | null | undefined): "codex" | "claude" | "cursor" | null {
   if (kind === "codex" || kind === "claude" || kind === "cursor") return kind;
   return null;
+}
+
+function normalizeBundleRole(role: string | null | undefined): "parent" | "child" | "standalone" {
+  return role === "parent" || role === "child" ? role : "standalone";
 }
 
 function normalizeGoalKind(kind: unknown): AgentExecutionGoalKind | null {
@@ -80,7 +101,7 @@ function stringArrayValue(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function normalizeGoal(goal: Record<string, unknown> | null | undefined): AgentExecutionGoal | null {
+export function normalizeGoal(goal: Record<string, unknown> | null | undefined): AgentExecutionGoal | null {
   if (!goal) return null;
   const kind = normalizeGoalKind(goal.kind);
   const source = normalizeGoalSource(goal.source);
@@ -129,7 +150,17 @@ export function normalizeAgentExecution(dto: BackendAgentExecutionDto): AgentExe
     longRunningKind,
     longRunningLabel: dto.longRunningLabel ?? dto.long_running_label ?? null,
     tokens,
+    parentIdentifier: bundleParentIdentifier(dto),
+    bundleRole: normalizeBundleRole(dto.bundleRole ?? dto.bundle_role),
+    unitId: dto.unitId ?? dto.unit_id ?? null,
+    repo: dto.repo ?? null,
+    childIdentifiers: (dto.childIdentifiers ?? dto.child_identifiers ?? []).map((id) => normalizeIssueIdentifier(id)),
   });
+}
+
+function bundleParentIdentifier(dto: BackendAgentExecutionDto): string | null {
+  const raw = dto.parentIdentifier ?? dto.parent_identifier;
+  return raw ? normalizeIssueIdentifier(raw) : null;
 }
 
 export async function listAgentExecutions(): Promise<AgentExecution[]> {

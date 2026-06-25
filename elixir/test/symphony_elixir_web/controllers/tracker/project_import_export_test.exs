@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
 
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, Projects}
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.TestSupport
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
@@ -206,6 +207,42 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
     assert serve.primary
   end
 
+  test "import strips legacy process-owned workflow sections from bundles" do
+    slug = create_sample_project()
+
+    yaml = """
+    kind: symphony_project
+    version: 2
+    slug: sample-export
+    name: Sample Export
+    tracker:
+      kind: local
+      config: {}
+    setup:
+      workflow_markdown: |
+        ---
+        github:
+          repo: org/repo
+        polling:
+          interval_ms: 5000
+        editor:
+          enabled: true
+        tracker:
+          active_states: [Todo]
+        ---
+
+        Legacy prompt
+    """
+
+    post(authorized_conn(), "/api/tracker/v1/projects/import", %{"yaml" => yaml})
+
+    setup = Context.get_project_setup(slug)
+    assert setup.workflow_markdown =~ "Legacy prompt"
+    refute setup.workflow_markdown =~ "github:"
+    refute setup.workflow_markdown =~ "polling:"
+    refute setup.workflow_markdown =~ "editor:"
+  end
+
   test "POST /projects/:id/import applies bundle to existing project" do
     source_slug = create_sample_project()
     {:ok, _dest} = Context.ensure_project(%{name: "Dest", slug: "dest", tracker_kind: "local"})
@@ -247,14 +284,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
   end
 
   defp clean_repo do
-    Repo.query!("delete from local_tracker_dev_env_step_runs")
-    Repo.query!("delete from local_tracker_dev_env_runs")
-    Repo.query!("delete from local_tracker_dev_env_steps")
-    Repo.query!("delete from local_tracker_clone_jobs")
-    Repo.query!("delete from local_tracker_repositories")
-    Repo.query!("delete from local_tracker_project_setups")
-    Repo.query!("delete from local_tracker_workflow_statuses")
-    Repo.query!("delete from local_tracker_projects")
+    TestSupport.truncate_tracker!(Repo)
   end
 
   defp authorized_conn do

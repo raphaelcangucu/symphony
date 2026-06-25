@@ -218,7 +218,7 @@ defmodule SymphonyElixir.AgentRunnerTest do
     end
   end
 
-  test "passes issue goal through to Codex app-server sessions" do
+  test "resumes the issue's durable Codex goal thread and pursues its native goal" do
     test_root =
       Path.join(
         System.tmp_dir!(),
@@ -245,8 +245,11 @@ defmodule SymphonyElixir.AgentRunnerTest do
             ;;
           *'"method":"initialized"'*)
             ;;
-          *'"method":"thread/start"'*)
-            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-runner-issue-goal"}}}'
+          *'"method":"thread/resume"'*)
+            printf '%s\\n' '{"id":5,"result":{"thread":{"id":"thread-runner-issue-goal"}}}'
+            ;;
+          *'"method":"thread/goal/get"'*)
+            printf '%s\\n' '{"id":6,"result":{"goal":{"objective":"Ship from issue","status":"active"}}}'
             ;;
           *'"method":"thread/goal/set"'*)
             printf '%s\\n' '{"id":4,"result":{}}'
@@ -270,14 +273,17 @@ defmodule SymphonyElixir.AgentRunnerTest do
 
       enable_goals!()
 
+      # The issue owns a durable Codex goal thread; `agent_goal` is a stale cache
+      # that must NOT be re-seeded onto the native thread.
       issue = %Issue{
         identifier: "MAC-12",
         project_slug: "mac",
-        title: "Pass issue goal",
-        description: "Runner should pass issue goal",
+        title: "Pursue durable goal",
+        description: "Runner should resume the durable Codex goal thread",
         state: "In Progress",
         agent_kind: "codex",
-        agent_goal: "  Ship from issue  "
+        agent_session_id: "thread-runner-issue-goal",
+        agent_goal: "  Stale cached goal  "
       }
 
       assert :ok = AgentRunner.run(issue)
@@ -289,11 +295,18 @@ defmodule SymphonyElixir.AgentRunnerTest do
         |> Enum.map(&String.trim_leading(&1, "JSON:"))
         |> Enum.map(&Jason.decode!/1)
 
-      assert Enum.find(messages, &(Map.get(&1, "method") == "thread/goal/set")) == %{
-               "id" => 4,
-               "method" => "thread/goal/set",
-               "params" => %{"threadId" => "thread-runner-issue-goal", "objective" => "Ship from issue", "status" => "active"}
-             }
+      methods = Enum.map(messages, &Map.get(&1, "method"))
+
+      assert "thread/resume" in methods
+      assert "thread/goal/get" in methods
+      refute "thread/start" in methods
+
+      # The native goal is authoritative: a resumed active goal is not overwritten
+      # with the stale cached objective.
+      refute "thread/goal/set" in methods
+
+      assert Enum.find(messages, &(Map.get(&1, "method") == "thread/resume"))["params"]["threadId"] ==
+               "thread-runner-issue-goal"
     after
       File.rm_rf(test_root)
     end
@@ -444,7 +457,11 @@ defmodule SymphonyElixir.AgentRunnerTest do
                AgentRunner.run(issue, self(),
                  max_turns: 2,
                  continuation_delay_ms: 0,
-                 issue_state_fetcher: issue_state_fetcher
+                 issue_state_fetcher: issue_state_fetcher,
+                 # Keep the outer loop alive: the fake agent does no git work, so the
+                 # handoff gate would otherwise stop early as :completed. This test is
+                 # about exhausting the turn budget, not the handoff gate itself.
+                 handoff_ready_evaluator: fn _ws -> :continue end
                )
 
       assert_received {:agent_outcome, "issue-incomplete", {:incomplete, :max_turns}}
@@ -512,7 +529,10 @@ defmodule SymphonyElixir.AgentRunnerTest do
           AgentRunner.run(issue, self(),
             max_turns: 3,
             continuation_delay_ms: delay_ms,
-            issue_state_fetcher: issue_state_fetcher
+            issue_state_fetcher: issue_state_fetcher,
+            # Keep the outer loop alive so the continuation delay is actually
+            # exercised across turns (the fake agent does no git work).
+            handoff_ready_evaluator: fn _ws -> :continue end
           )
         end)
 

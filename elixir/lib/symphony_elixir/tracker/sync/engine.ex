@@ -26,6 +26,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   import Ecto.Query, only: [from: 2]
 
+  alias SymphonyElixir.GitHub.StateReconciliation
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueAdapter
@@ -276,6 +277,8 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   end
 
   defp seed_statuses(project) do
+    maybe_reconcile_github_statuses(project)
+
     case remote_list_statuses(project) do
       {:ok, statuses} -> LocalStore.merge_remote_statuses(project, statuses)
       {:error, _reason} -> :ok
@@ -285,6 +288,19 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
       Logger.warning("Tracker seed statuses failed for #{project.slug}: #{inspect(error)}")
       :ok
   end
+
+  defp maybe_reconcile_github_statuses(%Project{tracker_kind: "github"} = project) do
+    case StateReconciliation.reconcile_project(project) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("GitHub status reconcile failed for #{project.slug}: #{reason}")
+        :ok
+    end
+  end
+
+  defp maybe_reconcile_github_statuses(_project), do: :ok
 
   defp seed_users(project) do
     case remote_list_assignable_users(project) do

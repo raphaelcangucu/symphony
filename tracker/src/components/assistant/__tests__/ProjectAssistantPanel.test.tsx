@@ -213,6 +213,145 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("prefer the simpler fix")).toBeTruthy();
   });
 
+  it("runs an authoring goal in the chat and shows its banner when /goal is submitted", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+
+    fireEvent.change(textarea, { target: { value: "/goal ship the feature" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("set_goal_mode", { goal_mode: true, objective: "ship the feature" }),
+    );
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({ message: expect.stringContaining("ship the feature") }),
+      ),
+    );
+    // The framed instruction is authoring-only: it explicitly tells Codex NOT to dispatch the
+    // orchestrator and to run the goal directly in the conversation.
+    const goalSend = push.mock.calls.find(
+      ([event, payload]) =>
+        event === "send_message" &&
+        typeof (payload as { message?: string })?.message === "string" &&
+        (payload as { message: string }).message.includes("ship the feature"),
+    );
+    const goalSendMessage = (goalSend?.[1] as { message: string }).message;
+    expect(goalSendMessage).toMatch(/authoring goal/i);
+    expect(goalSendMessage).toMatch(/do not dispatch the orchestrator/i);
+
+    // Resolving the set_goal_mode push surfaces the Authoring goal banner.
+    const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
+    pushReceives[goalCallIndex]?.ok?.({ goal_mode: true, goal_objective: "ship the feature" });
+
+    const banner = await screen.findByRole("status", { name: "Authoring goal" });
+    expect(banner).toHaveTextContent("ship the feature");
+  });
+
+  it("rehydrates the authoring goal banner from the join response", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({ goal_mode: true, goal_objective: "Audit the auth module", thread_id: 1 })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    const banner = await screen.findByRole("status", { name: "Authoring goal" });
+    expect(banner).toHaveTextContent("Audit the auth module");
+  });
+
+  it("shows a Resume button when the last turn was interrupted and pushes resume_turn on click", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({ messages: [], thread_id: 1, last_turn: { status: "interrupted", can_resume: true } })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    const button = await screen.findByRole("button", { name: /resume/i });
+    fireEvent.click(button);
+    expect(push).toHaveBeenCalledWith("resume_turn", {});
+  });
+
+  it("requests native goal status on join and shows pause while a goal is running", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok" ? callback({ goal_mode: true, goal_objective: "Audit", thread_id: 1 }) : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    await screen.findByRole("status", { name: "Authoring goal" });
+
+    // Channel asks for the native goal after join.
+    expect(push).toHaveBeenCalledWith("goal_status", {});
+
+    // Native goal is active and a turn is streaming → the pill shows Pause + timer.
+    channelHandlers["goal_status"]({
+      enabled: true,
+      objective: "Audit",
+      native: true,
+      goal: { kind: "goal", source: "native", status: "active", timeUsedSeconds: 42 },
+      running: true,
+    });
+    channelHandlers["goal_running"]({ running: true });
+
+    const pause = await screen.findByRole("button", { name: "Pause goal" });
+    const pill = screen.getByRole("status", { name: "Authoring goal" });
+    expect(pill.textContent ?? "").toMatch(/\d+s/);
+
+    fireEvent.click(pause);
+    expect(push).toHaveBeenCalledWith("goal_pause", {});
+  });
+
+  it("resumes a stalled native goal from the pill", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok" ? callback({ goal_mode: true, goal_objective: "Audit", thread_id: 1 }) : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    await screen.findByRole("status", { name: "Authoring goal" });
+
+    // Native goal exists and is active but no turn is streaming → stalled, offer Resume.
+    channelHandlers["goal_status"]({
+      enabled: true,
+      objective: "Audit",
+      native: true,
+      goal: { kind: "goal", source: "native", status: "active", timeUsedSeconds: 10 },
+      running: false,
+    });
+
+    const resume = await screen.findByRole("button", { name: "Resume goal" });
+    fireEvent.click(resume);
+    expect(push).toHaveBeenCalledWith("goal_resume", {});
+  });
+
+  it("removes and edits the authoring goal objective from the pill", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok" ? callback({ goal_mode: true, goal_objective: "Audit", thread_id: 1 }) : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    await screen.findByRole("status", { name: "Authoring goal" });
+
+    // Edit: open inline editor, change the objective, save.
+    fireEvent.click(await screen.findByRole("button", { name: "Edit objective" }));
+    const editor = await screen.findByPlaceholderText("Describe the authoring objective…");
+    fireEvent.change(editor, { target: { value: "Audit the admin UI" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save objective" }));
+    expect(push).toHaveBeenCalledWith("goal_set_objective", { objective: "Audit the admin UI" });
+
+    // Remove: clears the goal entirely.
+    fireEvent.click(await screen.findByRole("button", { name: "Remove goal" }));
+    expect(push).toHaveBeenCalledWith("goal_clear", {});
+  });
+
   it("opens an overlay and streams the answer when /btw is submitted", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
     const textarea = await screen.findByPlaceholderText("Write a message...");
@@ -536,5 +675,52 @@ describe("ProjectAssistantPanel", () => {
     channelHandlers["assistant_document_changed"]({ identifier: "MAC-1" });
 
     expect(onDocumentChanged).toHaveBeenCalledWith({ identifier: "MAC-1" });
+  });
+
+  it("renders file-edit tool calls as a file-activity card and keeps other tools generic", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["assistant_completed"]).toEqual(expect.any(Function)));
+
+    channelHandlers["assistant_completed"]({
+      message: {
+        id: 42,
+        role: "assistant",
+        content: "Done.",
+        tool_calls: [
+          { name: "apply_patch", status: "complete", result: { paths: ["lib/foo.ex"], additions: 12, deletions: 3, diff: "@@\n+a" } },
+          { name: "list_issues", status: "complete", result: { issues: [] } },
+        ],
+      },
+    });
+
+    expect(await screen.findByText("lib/foo.ex")).toBeInTheDocument();
+    expect(screen.getByText("+12")).toBeInTheDocument();
+    expect(screen.getByText("−3")).toBeInTheDocument();
+    // Non-file tool call still uses the generic block.
+    expect(screen.getByText("List issues")).toBeInTheDocument();
+  });
+
+  it("replaces the transcript when history_synced arrives after a terminal turn_status", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["history_synced"]).toEqual(expect.any(Function)));
+
+    channelHandlers["history_loaded"]({
+      messages: [{ id: 1, role: "user", content: "go", tool_calls: [] }],
+    });
+
+    channelHandlers["turn_status"]({ status: "completed" });
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("sync_history", {}));
+
+    channelHandlers["history_synced"]({
+      messages: [
+        { id: 1, role: "user", content: "go", tool_calls: [] },
+        { id: 2, role: "assistant", content: "done without refresh", tool_calls: [] },
+      ],
+    });
+
+    expect(await screen.findByText("done without refresh")).toBeInTheDocument();
   });
 });

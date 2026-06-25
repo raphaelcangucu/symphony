@@ -32,6 +32,9 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       repositories: repositories && Enum.map(repositories, &repository/1),
       setup: setup && project_setup(setup),
       archived_at: iso8601(project.archived_at),
+      warmed_at: iso8601(project.warmed_at),
+      warm_up_status: project.warm_up_status,
+      last_warm_up_run_id: project.last_warm_up_run_id,
       inserted_at: iso8601(project.inserted_at),
       updated_at: iso8601(project.updated_at)
     }
@@ -124,7 +127,12 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       started_at: nil,
       completed_at: nil,
       inserted_at: dto.created_at,
-      updated_at: dto.updated_at
+      updated_at: dto.updated_at,
+      group_lead_identifier: dto.group_lead_identifier,
+      group_member_identifiers: dto.group_member_identifiers,
+      repository_full_name: dto.repository_full_name,
+      parent_identifier: dto.parent_identifier,
+      sub_issue_summary: dto.sub_issue_summary
     }
   end
 
@@ -149,7 +157,9 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       started_at: iso8601(issue.started_at),
       completed_at: iso8601(issue.completed_at),
       inserted_at: iso8601(issue.inserted_at),
-      updated_at: iso8601(issue.updated_at)
+      updated_at: iso8601(issue.updated_at),
+      group_lead_identifier: loaded_group_lead_identifier(issue.group_lead),
+      group_member_identifiers: loaded_group_member_identifiers(issue.group_members)
     }
   end
 
@@ -238,9 +248,18 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       long_running: Map.get(execution, :long_running),
       long_running_kind: Map.get(execution, :long_running_kind),
       long_running_label: Map.get(execution, :long_running_label),
+      parent_identifier: Map.get(execution, :parent_identifier),
+      bundle_role: bundle_role_to_string(Map.get(execution, :bundle_role)),
+      unit_id: Map.get(execution, :unit_id),
+      repo: Map.get(execution, :repo),
+      child_identifiers: Map.get(execution, :child_identifiers, []),
       tokens: execution.tokens
     }
   end
+
+  defp bundle_role_to_string(role) when is_atom(role) and not is_nil(role), do: Atom.to_string(role)
+  defp bundle_role_to_string(role) when is_binary(role), do: role
+  defp bundle_role_to_string(_role), do: "standalone"
 
   @spec assistant_thread(map()) :: map()
   def assistant_thread(thread) when is_map(thread) do
@@ -291,6 +310,18 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
 
   defp loaded_issue_identifier(%IssueRecord{} = issue), do: issue.identifier
   defp loaded_issue_identifier(_issue), do: nil
+
+  defp loaded_group_lead_identifier(%IssueRecord{identifier: identifier}) when is_binary(identifier), do: identifier
+  defp loaded_group_lead_identifier(_group_lead), do: nil
+
+  defp loaded_group_member_identifiers(members) when is_list(members) do
+    Enum.flat_map(members, fn
+      %IssueRecord{identifier: identifier} when is_binary(identifier) -> [identifier]
+      _member -> []
+    end)
+  end
+
+  defp loaded_group_member_identifiers(_members), do: []
 
   defp iso8601(%DateTime{} = datetime) do
     datetime

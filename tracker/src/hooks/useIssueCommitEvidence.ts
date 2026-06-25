@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
 import { listCommitEvidence } from "@/services/commitEvidence";
 import type { CommitEvidenceSummary, CommitEvidenceWorkspace } from "@/types/commitEvidence";
 
@@ -44,7 +45,7 @@ export function useIssueCommitEvidence({
       setError(null);
       hasLoadedRef.current = true;
     } catch {
-      setError("Could not load commit evidence.");
+      setError(i18n.t("issue.commits.errors.loadFailed"));
     } finally {
       inFlightRef.current = false;
       setLoading(false);

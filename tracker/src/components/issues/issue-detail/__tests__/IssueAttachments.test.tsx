@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { IssueAttachments } from "../IssueAttachments";
@@ -46,5 +47,22 @@ describe("IssueAttachments", () => {
     render(<IssueAttachments attachments={[image]} projectSlug="advising" />);
 
     expect(screen.getByText("screenshot.png")).toBeInTheDocument();
+  });
+
+  it("shows a remove button when removal is enabled", async () => {
+    const user = userEvent.setup();
+    const onRemoveAttachment = vi.fn().mockResolvedValue(true);
+
+    render(
+      <IssueAttachments
+        attachments={[fileAttachment()]}
+        projectSlug="advising"
+        onRemoveAttachment={onRemoveAttachment}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Remove WHCCD.VAR.docx" }));
+
+    expect(onRemoveAttachment).toHaveBeenCalledWith("10500");
   });
 });

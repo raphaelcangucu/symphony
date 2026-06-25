@@ -41,6 +41,53 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.QueryTest do
     assert dto.project_slug == "demo"
   end
 
+  test "normalize_item maps repository, parent, and sub-issue summary" do
+    item = %{
+      "content" => %{
+        "__typename" => "Issue",
+        "id" => "I_1",
+        "number" => 2,
+        "title" => "Aplicativo IOS",
+        "body" => "",
+        "url" => "https://github.com/xipcash/ios/issues/2",
+        "repository" => %{"nameWithOwner" => "xipcash/ios"},
+        "parent" => nil,
+        "subIssuesSummary" => %{"total" => 4, "completed" => 4, "percentCompleted" => 100}
+      },
+      "fieldValues" => %{"nodes" => []}
+    }
+
+    dto = Query.normalize_item(item, "Status", "xipcash")
+
+    assert dto.identifier == "ios#2"
+    assert dto.repository_full_name == "xipcash/ios"
+    assert dto.parent_identifier == nil
+    assert dto.sub_issue_summary == %{total: 4, completed: 4, percent_completed: 100}
+  end
+
+  test "normalize_item maps a parent issue number into parent_identifier" do
+    item = %{
+      "content" => %{
+        "__typename" => "Issue",
+        "id" => "I_2",
+        "number" => 77,
+        "title" => "Landing wheel",
+        "body" => "",
+        "url" => "https://github.com/xipcash/frontend/issues/77",
+        "repository" => %{"nameWithOwner" => "xipcash/frontend"},
+        "parent" => %{"number" => 2, "repository" => %{"nameWithOwner" => "xipcash/ios"}},
+        "subIssuesSummary" => %{"total" => 0, "completed" => 0, "percentCompleted" => 0}
+      },
+      "fieldValues" => %{"nodes" => []}
+    }
+
+    dto = Query.normalize_item(item, "Status", "xipcash")
+
+    assert dto.identifier == "frontend#77"
+    assert dto.parent_identifier == "ios#2"
+    assert dto.sub_issue_summary == nil
+  end
+
   test "normalize_item skips non-issue content" do
     item = %{"id" => "PVTI_2", "content" => %{"__typename" => "DraftIssue"}, "fieldValues" => %{"nodes" => []}}
     assert Query.normalize_item(item, "Symphony State", "demo") == nil

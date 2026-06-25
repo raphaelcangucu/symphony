@@ -225,7 +225,11 @@ defmodule SymphonyElixir.RunContract.Finalizer do
         _missing -> "(no issue description)"
       end
 
-    marker = IssueMarker.marker_line(issue.identifier, marker_key(issue))
+    marker =
+      [issue.identifier | Map.get(issue, :group_member_identifiers, [])]
+      |> Enum.reject(&(is_nil(&1) or &1 == ""))
+      |> Enum.uniq()
+      |> Enum.map_join("\n", &IssueMarker.marker_line(&1, marker_key(issue)))
 
     """
     ## Summary

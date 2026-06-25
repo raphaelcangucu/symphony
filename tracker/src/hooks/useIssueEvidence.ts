@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
 import { listEvidence } from "@/services/evidence";
 import type { EvidenceRecord } from "@/types/evidence";
 
@@ -41,7 +42,7 @@ export function useIssueEvidence({
       setError(null);
       hasLoadedRef.current = true;
     } catch {
-      setError("Could not load evidence.");
+      setError(i18n.t("issue.evidence.errors.loadFailed"));
     } finally {
       inFlightRef.current = false;
       setLoading(false);

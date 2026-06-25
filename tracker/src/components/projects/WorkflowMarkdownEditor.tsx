@@ -1,6 +1,8 @@
 import { type ReactNode, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Markdown } from "@/components/ui/markdown";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { splitWorkflowMarkdown } from "@/lib/workflowMarkdown";
@@ -11,23 +13,25 @@ interface WorkflowMarkdownEditorProps {
   rows?: number;
 }
 
+type EditorTab = "write" | "preview";
+type PreviewSection = "frontMatter" | "promptBody";
+
 export function WorkflowMarkdownEditor({ value, onChange, rows = 22 }: WorkflowMarkdownEditorProps) {
-  const [tab, setTab] = useState<"write" | "preview">("write");
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<EditorTab>("write");
+  const [previewSection, setPreviewSection] = useState<PreviewSection>("frontMatter");
   const parts = useMemo(() => splitWorkflowMarkdown(value), [value]);
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        YAML front matter (tracker states, agent, hooks, codex/claude, dev_server) plus the agent prompt body below the
-        closing <code className="text-xs">---</code>. Connection settings stay in the Tracker tab.
-      </p>
-      <div className="rounded-md border">
-        <div className="flex gap-1 border-b bg-muted/30 p-1">
+      <p className="text-sm text-muted-foreground">{t("project.config.workflowEditor.hint")}</p>
+      <div className="overflow-hidden rounded-lg border bg-background shadow-sm">
+        <div className="flex gap-1 border-b bg-muted/40 p-1.5">
           <EditorTab active={tab === "write"} onClick={() => setTab("write")}>
-            Edit
+            {t("project.config.workflowEditor.edit")}
           </EditorTab>
           <EditorTab active={tab === "preview"} onClick={() => setTab("preview")}>
-            Preview
+            {t("project.config.workflowEditor.preview")}
           </EditorTab>
         </div>
         {tab === "write" ? (
@@ -36,28 +40,48 @@ export function WorkflowMarkdownEditor({ value, onChange, rows = 22 }: WorkflowM
             value={value}
             rows={rows}
             onChange={(event) => onChange(event.target.value)}
-            aria-label="Project workflow markdown"
+            aria-label={t("project.config.workflowEditor.aria")}
             spellCheck={false}
           />
         ) : (
-          <div className="grid gap-4 p-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Front matter</p>
-              {parts.frontMatter.trim() ? (
-                <pre className="max-h-64 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">{parts.frontMatter}</pre>
-              ) : (
-                <p className="text-sm text-muted-foreground">No YAML front matter.</p>
-              )}
+          <div className="space-y-4 p-4">
+            <div
+              className="inline-flex rounded-full border bg-muted/50 p-1"
+              role="tablist"
+              aria-label={t("project.config.workflowEditor.preview")}
+            >
+              <PreviewPill
+                active={previewSection === "frontMatter"}
+                onClick={() => setPreviewSection("frontMatter")}
+              >
+                {t("project.config.workflowEditor.frontMatter")}
+              </PreviewPill>
+              <PreviewPill
+                active={previewSection === "promptBody"}
+                onClick={() => setPreviewSection("promptBody")}
+              >
+                {t("project.config.workflowEditor.promptBody")}
+              </PreviewPill>
             </div>
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Prompt body</p>
-              {parts.body.trim() ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <Markdown>{parts.body}</Markdown>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No prompt body.</p>
-              )}
+
+            <div className="rounded-lg border bg-muted/20">
+              <ScrollArea className="max-h-[min(28rem,60vh)] p-4">
+                {previewSection === "frontMatter" ? (
+                  parts.frontMatter.trim() ? (
+                    <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground/90">
+                      {parts.frontMatter}
+                    </pre>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t("project.config.workflowEditor.noFrontMatter")}</p>
+                  )
+                ) : parts.body.trim() ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                    <Markdown>{parts.body}</Markdown>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t("project.config.workflowEditor.noPromptBody")}</p>
+                )}
+              </ScrollArea>
             </div>
           </div>
         )}
@@ -70,8 +94,32 @@ function EditorTab({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       type="button"
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
-      className={cn("rounded px-3 py-1 text-sm", active ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+      className={cn(
+        "rounded-md px-3 py-1.5 text-sm transition-colors",
+        active ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PreviewPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "rounded-full px-3.5 py-1 text-xs font-medium transition-all",
+        active
+          ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+          : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
+      )}
     >
       {children}
     </button>

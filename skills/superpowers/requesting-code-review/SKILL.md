@@ -89,6 +89,16 @@ You: [Fix progress indicators]
 - Review before merge
 - Review when stuck
 
+## Evidence-aware review
+
+When the change carries evidence (a `.symphony/evidence/manifest.json` with
+screenshots/video and a `navigations`/`proof` contract), include it in the
+review packet alongside the diff and test files. Ask the reviewer three
+questions: (1) is the generated code sound (architecture, correctness, edge
+cases)?; (2) do the tests actually prove the ticket?; and (3) does the captured
+evidence corroborate the change (real navigated flow, not a fabricated page)?
+Treat a fabricated or substitute-evidence finding as Critical.
+
 ## Red Flags
 
 **Never:**

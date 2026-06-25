@@ -42,7 +42,8 @@ defmodule SymphonyElixir.SettingsTest do
              "orchestrator" => %{
                "require_symphony_label" => true,
                "require_assignee_match" => true
-             }
+             },
+             "ui" => %{"locale" => "auto"}
            }
   end
 
@@ -84,5 +85,24 @@ defmodule SymphonyElixir.SettingsTest do
     assert Settings.Agents.default_agent_kind() == "codex"
     {:ok, _} = Settings.put("agents", "default_agent_kind", "claude")
     assert Settings.Agents.default_agent_kind() == "claude"
+  end
+
+  test "ui group defaults to auto locale" do
+    assert Settings.get_group("ui") == %{"locale" => "auto"}
+  end
+
+  test "ui locale persists and casts valid values" do
+    assert {:ok, "pt-BR"} = Settings.put("ui", "locale", "pt-BR")
+    assert Settings.get("ui", "locale") == "pt-BR"
+    assert Settings.Ui.locale() == "pt-BR"
+    assert Settings.Ui.effective_gettext_locale() == "pt_BR"
+  end
+
+  test "ui auto locale resolves to en for async/push" do
+    assert Settings.Ui.effective_gettext_locale() == "en"
+  end
+
+  test "ui group rejects invalid locale values" do
+    assert {:error, :invalid_value} = Settings.put("ui", "locale", "fr")
   end
 end

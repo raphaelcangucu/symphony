@@ -65,6 +65,60 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceControllerTest do
     assert commit["message"] =~ "agent work"
   end
 
+  test "index lists commits via project repository default_branch without origin/HEAD", %{tmp_dir: tmp_dir} do
+    {:ok, _project} = Context.ensure_project(%{name: "ADV", slug: "advising"})
+    {:ok, _setup} =
+      Context.upsert_project_setup("advising", %{
+        "workflow_markdown" => """
+        ---
+        workspace:
+          root: #{tmp_dir}
+        ---
+        """
+      })
+
+    assert {:ok, _repos} =
+             Context.replace_repositories("advising", [
+               %{
+                 "github_full_name" => "org/advising",
+                 "clone_url" => "https://github.com/org/advising.git",
+                 "default_branch" => "pre-release",
+                 "selected_branch" => "pre-release",
+                 "workspace_path" => "advising",
+                 "role" => "app"
+               }
+             ])
+
+    {:ok, issue} = Context.create_issue("advising", %{"title" => "Shallow clone", "status" => "Todo"})
+
+    repo = Path.join(tmp_dir, "repo-advising")
+    File.mkdir_p!(repo)
+    sh!(repo, "git init -b pre-release")
+    sh!(repo, ~s(git config user.email "agent@test.local"))
+    sh!(repo, "git config user.name \"Symphony Agent\"")
+    sh!(repo, "echo base > README.md && git add README.md && git commit -m 'chore: base'")
+    sh!(repo, "git checkout -b feature/symphony")
+    sh!(repo, "echo work > work.txt && git add work.txt && git commit -m 'feat: agent work'")
+    sh!(repo, "git remote add origin .")
+    sh!(repo, "git update-ref refs/remotes/origin/pre-release pre-release")
+    # Shallow-clone style: no origin/HEAD symbolic ref.
+
+    workspace = Path.join([tmp_dir, "advising", issue.identifier])
+    File.mkdir_p!(workspace)
+    File.rename!(repo, Path.join(workspace, "advising"))
+
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/commit_evidence"
+      )
+
+    assert %{"data" => [commit], "workspace" => workspace_info} = json_response(conn, 200)
+    assert workspace_info["available"] == true
+    assert commit["repo"] == "advising"
+    assert commit["message"] =~ "agent work"
+  end
+
   test "show returns commit file patches", ctx do
     index =
       get(

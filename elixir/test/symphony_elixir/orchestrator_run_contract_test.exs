@@ -132,4 +132,35 @@ defmodule SymphonyElixir.OrchestratorRunContractTest do
     assert body =~
              "![home.png](http://localhost:4000/api/tracker/v1/projects/gam/issues/GAM-9/evidence/20260610-1/artifacts/artifacts/screens/home.png)"
   end
+
+  test "evidence_comment_body escapes markdown-sensitive screenshot names and encodes artifact URLs" do
+    record = %SymphonyElixir.Evidence.Record{
+      run_id: "20260610-1",
+      status: "failed",
+      ui_change: false,
+      manifest: %{
+        "runs" => [
+          %{
+            "kind" => "e2e",
+            "repo" => "frontend",
+            "command" => "cypress run",
+            "status" => "failed",
+            "screenshots" => ["artifacts/cypress-screenshots/Symphony Preview (failed).png"]
+          }
+        ]
+      }
+    }
+
+    issue = %SymphonyElixir.Issue{
+      id: "uuid",
+      identifier: "GAM-9",
+      state: "In Progress",
+      project_slug: "gam"
+    }
+
+    body = Orchestrator.evidence_comment_body(record, issue, "http://localhost:4000")
+
+    assert body =~
+             "![Symphony Preview \\(failed\\).png](http://localhost:4000/api/tracker/v1/projects/gam/issues/GAM-9/evidence/20260610-1/artifacts/artifacts/cypress-screenshots/Symphony%20Preview%20(failed).png)"
+  end
 end

@@ -1,0 +1,7 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Resuming agent work on %{identifier}"
+msgstr "Resuming agent work on %{identifier}"

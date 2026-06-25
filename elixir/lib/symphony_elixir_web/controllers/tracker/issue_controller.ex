@@ -3,8 +3,11 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   use Phoenix.Controller, formats: [:json]
 
+  require Logger
+
   alias Plug.Conn
   alias SymphonyElixir.{AgentPreference, IssueDispatch, Orchestrator, ProjectConfig, Repo}
+  alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.{IssueAdapter, LabelResolver}
@@ -54,12 +57,49 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
            |> normalize_create_attrs(project)
            |> maybe_inject_creator(),
          {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]) do
+      maybe_establish_codex_goal(project, issue, params)
+
       conn
       |> put_status(:created)
-      |> json(%{data: TrackerPresenter.issue(issue)})
+      |> json(%{data: TrackerPresenter.issue(reload_issue(project, issue))})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
       {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  # Codex goals live on the native Codex thread, not on `agent_goal`. When an
+  # issue is created with a Codex goal, establish the native thread + goal now so
+  # the UI and future runs read it from Codex. Best-effort: never fails issue
+  # creation (e.g. when goal mode is disabled or the workspace is unavailable).
+  defp maybe_establish_codex_goal(project, issue, params) do
+    with "codex" <- Map.get(params, "agent"),
+         goal when is_binary(goal) <- Map.get(params, "goal"),
+         trimmed when trimmed != "" <- String.trim(goal),
+         identifier when is_binary(identifier) <- Map.get(issue, :identifier) do
+      case GoalControl.set_objective(project, identifier, trimmed) do
+        {:ok, _goal} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.debug("Skipping Codex goal establishment on create identifier=#{identifier} reason=#{inspect(reason)}")
+          :ok
+      end
+    else
+      _ -> :ok
+    end
+  end
+
+  defp reload_issue(project, issue) do
+    case Map.get(issue, :identifier) do
+      identifier when is_binary(identifier) ->
+        case IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+          {:ok, reloaded} -> reloaded
+          _ -> issue
+        end
+
+      _ ->
+        issue
     end
   end
 
@@ -82,7 +122,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
         |> normalize_update_attrs(project)
 
       if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", "cursor", nil] do
-        TrackerErrors.validation(conn, "agent must be codex, claude, cursor, or null")
+        TrackerErrors.validation_msg(conn, "agent must be codex, claude, cursor, or null")
       else
         case IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
           {:ok, issue} ->
@@ -152,10 +192,85 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       json(conn, %{data: result})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
-      {:error, :invalid_action} -> TrackerErrors.validation(conn, "action must be resume, restart, hard_reset, stop, or continue_work")
+      {:error, :invalid_action} ->
+        TrackerErrors.validation_msg(conn, "action must be resume, restart, hard_reset, stop, or continue_work")
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
+
+  @doc """
+  Drives the native Codex goal controls (pause/resume/clear/edit/budget/get) for
+  an issue's durable goal thread. Mutations map directly onto `thread/goal/*`.
+  """
+  @spec goal_control(Conn.t(), map()) :: Conn.t()
+  def goal_control(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
+    action = Map.get(params, "action", "get")
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, result} <- run_goal_action(project, identifier, action, params) do
+      json(conn, %{data: goal_control_payload(action, result)})
+    else
+      {:error, :project_not_found} ->
+        TrackerErrors.render(conn, :project_not_found)
+
+      {:error, :invalid_action} ->
+        TrackerErrors.validation_msg(conn, "action must be get, pause, resume, clear, set_objective, or set_budget")
+
+      {:error, :empty_objective} ->
+        TrackerErrors.validation_msg(conn, "objective is required for set_objective")
+
+      {:error, :invalid_budget} ->
+        TrackerErrors.validation_msg(conn, "token_budget must be a positive integer or null")
+
+      {:error, :goals_disabled} ->
+        TrackerErrors.validation_msg(conn, "Codex goal mode is disabled for this project")
+
+      {:error, :no_codex_thread} ->
+        TrackerErrors.validation_msg(conn, "no Codex goal thread exists for this issue yet")
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  defp run_goal_action(project, identifier, "get", _params),
+    do: GoalControl.get(project, identifier)
+
+  defp run_goal_action(project, identifier, "pause", _params),
+    do: GoalControl.pause(project, identifier)
+
+  defp run_goal_action(project, identifier, "resume", _params),
+    do: GoalControl.resume(project, identifier)
+
+  defp run_goal_action(project, identifier, "clear", _params),
+    do: GoalControl.clear(project, identifier)
+
+  defp run_goal_action(project, identifier, "set_objective", params),
+    do: GoalControl.set_objective(project, identifier, Map.get(params, "objective", ""))
+
+  defp run_goal_action(project, identifier, "set_budget", params) do
+    case parse_token_budget(Map.get(params, "token_budget")) do
+      {:ok, budget} -> GoalControl.set_budget(project, identifier, budget)
+      :error -> {:error, :invalid_budget}
+    end
+  end
+
+  defp run_goal_action(_project, _identifier, _action, _params), do: {:error, :invalid_action}
+
+  defp parse_token_budget(nil), do: {:ok, nil}
+  defp parse_token_budget(value) when is_integer(value) and value > 0, do: {:ok, value}
+
+  defp parse_token_budget(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {budget, ""} when budget > 0 -> {:ok, budget}
+      _ -> :error
+    end
+  end
+
+  defp parse_token_budget(_value), do: :error
+
+  defp goal_control_payload(action, :cleared), do: %{action: action, cleared: true, goal: nil}
+  defp goal_control_payload(action, goal), do: %{action: action, goal: goal}
 
   defp run_dispatch_action(project, identifier, "resume", opts),
     do: IssueDispatch.resume(project, identifier, opts)
@@ -289,8 +404,10 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   defp maybe_put_agent(attrs, agent) when agent in ["codex", "claude", "cursor"], do: Map.put(attrs, "agent", agent)
   defp maybe_put_agent(attrs, _agent), do: attrs
 
-  # Codex stores this as a native goal; Claude/Cursor consume it as workflow guidance.
-  defp maybe_put_agent_goal(attrs, agent, goal) when agent in ["codex", "claude", "cursor"] and is_binary(goal) do
+  # Claude/Cursor consume `agent_goal` as workflow guidance. Codex goals are not
+  # stored here — they live on the native Codex thread and are established via
+  # `maybe_establish_codex_goal/3` after the issue exists.
+  defp maybe_put_agent_goal(attrs, agent, goal) when agent in ["claude", "cursor"] and is_binary(goal) do
     case String.trim(goal) do
       "" -> attrs
       trimmed -> Map.put(attrs, "agent_goal", trimmed)

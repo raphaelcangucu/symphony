@@ -1,7 +1,17 @@
 defmodule SymphonyElixir.Assistant.CodexSession do
   @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
 
-  alias SymphonyElixir.Assistant.{History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolCallPresenter, ToolExecutor}
+  alias SymphonyElixir.Assistant.{
+    FileActivityPresenter,
+    GitHubAuthoring,
+    History,
+    IssueDocuments,
+    ProjectExploreWorkspace,
+    SubtaskAuthoring,
+    ThreadDocuments,
+    ToolCallPresenter,
+    ToolExecutor
+  }
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.CodingAgent, as: RootCodingAgent
   alias SymphonyElixir.Config
@@ -10,6 +20,11 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   alias SymphonyElixir.Settings.Orchestration
 
   @history_limit 20
+
+  # Brainstorm / spec / plan intent upgrades an authoring thread to complex so the
+  # next prompt dynamically loads the superpowers methodology skills. Matching is
+  # intentionally narrow (word-anchored) to avoid false positives like "respect".
+  @complex_mode_trigger_regex ~r/(\bbrainstorm)|(\bspecs?\b)|(\bdesign\s+docs?\b)|(\bimplementation\s+plans?\b)|(\bplano\s+de\s+implementa)|(\bespecifica)/iu
 
   @type turn_result :: %{
           required(:assistant_message) => String.t(),
@@ -139,12 +154,16 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     # Reload so that agent_thread_ids written by a prior turn are visible even
     # when the caller holds a frozen struct from an earlier socket assign.
     thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
+    # Conversation can drive the authoring depth: a brainstorm/spec/plan request
+    # upgrades the thread to complex so this turn loads the methodology skills.
+    thread = maybe_upgrade_issue_mode(thread, message)
     agent_kind = resolve_thread_agent(thread, context)
 
     opts =
       opts
       |> Keyword.put(:agent_kind, agent_kind)
       |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+      |> maybe_put_authoring_goal(thread, agent_kind)
 
     with {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_issue_workspace(thread),
@@ -167,6 +186,61 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          user_message: History.message_payload(user_message),
          assistant_chat_message: History.message_payload(assistant_message)
        }}
+    end
+  end
+
+  @authoring_goal_continuation_prompt "Continue pursuing the authoring goal for this issue. Review the progress so far in this working tree, keep producing the spec/plan/analysis artifacts the objective calls for, and stop when the artifact is ready for review or you are blocked. This is authoring only: do NOT dispatch the orchestrator and do NOT change the issue's status, labels, or execution goal."
+
+  @doc """
+  Runs an autonomous authoring-goal continuation batch on an issue thread.
+
+  Unlike `send_message_to_issue_thread/4` this does NOT append a user message: it
+  resumes the thread's Codex goal and continues pursuing the objective, streaming
+  each turn through the same callbacks. Used by the "resume" control so a stalled
+  authoring goal can keep going without the operator typing a prompt.
+  """
+  @spec continue_issue_goal(SymphonyElixir.Assistant.Thread.t(), map(), keyword()) ::
+          {:ok, turn_result()} | {:error, term()}
+  def continue_issue_goal(
+        %{scope: "issue", id: thread_id, project_slug: project_slug, issue_identifier: identifier} = thread,
+        context,
+        opts \\ []
+      )
+      when is_map(context) and is_list(opts) do
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
+    agent_kind = resolve_thread_agent(thread, context)
+
+    cond do
+      not History.thread_goal_mode(thread) ->
+        {:error, :goal_mode_disabled}
+
+      agent_kind not in [nil, "codex", :codex] ->
+        {:error, :goal_not_native}
+
+      true ->
+        opts =
+          opts
+          |> Keyword.put(:agent_kind, agent_kind)
+          |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+          |> maybe_put_authoring_goal(thread, agent_kind)
+
+        with {:ok, workspace} <- ensure_issue_workspace(thread),
+             docs_before <- doc_fingerprint(identifier),
+             history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+             prompt <- build_issue_prompt(thread, @authoring_goal_continuation_prompt, context, history),
+             {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, identifier, opts),
+             {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
+             {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result),
+             :ok <- maybe_notify_documents(identifier, docs_before, opts) do
+          {:ok,
+           %{
+             assistant_message: assistant_message.content,
+             tool_calls: assistant_message.tool_calls,
+             codex_thread_id: Map.get(runner_result, :codex_thread_id),
+             turn_id: Map.get(runner_result, :turn_id),
+             assistant_chat_message: History.message_payload(assistant_message)
+           }}
+        end
     end
   end
 
@@ -195,19 +269,26 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   @spec build_prompt(String.t(), String.t(), map(), [map()]) :: String.t()
   def build_prompt(project_slug, message, context, history) do
+    tracker_summary = project_tracker_summary(project_slug)
+
     """
     You are the Symphony Project assistant for `#{project_slug}`.
 
     Behave like a real conversational coding assistant inside the tracker.
     Answer naturally in the user's language. Use tracker tools only when the user asks for tracker data or a concrete tracker action.
-    Prefer get_issue, get_project, list_project_repositories, get_template, list_templates, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
+    Prefer get_issue, get_project, get_issue_form_options, list_project_repositories, get_template, list_templates, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
     Project workflow markdown lives in the database (use get_workflow). Do not expect WORKFLOW.md in the workspace; read_workspace_file redirects that path to project settings.
     For orchestrator/dispatch questions: call get_workflow and read tracker.dispatch_states (queue for new auto-runs), active_states (polled), terminal_states, wait_states in data.config — not board status categories from get_project. Follow the workflow skill when editing workflow YAML.
-    For GitHub Projects use list_github_projects, provision_github_project, or create_github_tracker_project — or github_graphql — with Symphony's server GITHUB_TOKEN. Do not run gh/curl in the shell for tracker setup.
+    #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
-    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_pull_requests, manage_preview (start/stop/restart/status), update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_project, list_project_repositories, get_workflow, read_workspace_file.
-    If the user asks for coding work, create or update tracker context and dispatch Codex through the tracker workflow instead of editing files directly from this chat.
+    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (start/stop/restart/status), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, manage_codex_goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview URLs, configure serve steps with manage_dev_env then manage_preview (start|status).
+    To explain why an issue is or isn't auto-dispatched, call explain_dispatch_eligibility; for live running/retry/idle state call get_issue_orchestrator_state. To see every agent executing right now call list_running_agents, and steer_agent to inject a message into a running agent's turn. After opening a PR call link_pull_request. Manage dependencies with manage_blockers; pull external tracker edits with sync_issue.
+    If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
     When the user attaches an image or file, it is already saved in this project. If they want it on a task (e.g. in the description), embed it using the exact Markdown URL given in the attachment note (`![alt](URL)` for images) when you call create_issue/update_issue/add_comment — never just describe it in words.
+    create_issue places new work in Backlog (intake) by default — omit status. Do not create directly in orchestrator queue statuses (e.g. Todo); use move_issue when the issue is ready for execution.
+    #{github_create_issue_guidance(project_slug)}
+    To assign someone, call get_issue_form_options and pass assignee_ids (GitHub login or remote id) on create_issue/update_issue — never use linear_graphql on non-Linear projects.
     If a request is ambiguous, ask one concise clarifying question before taking action.
 
     Recent conversation:
@@ -423,6 +504,49 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
+  defp github_create_issue_guidance(project_slug) do
+    case GitHubAuthoring.create_issue_guidance_for_slug(project_slug) do
+      "" -> ""
+      text -> text <> "\n"
+    end
+  end
+
+  defp project_tracker_summary(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        project = Repo.preload(project, :setup)
+        config = ProjectConfig.resolve(project)
+        kind = project.tracker_kind || "local"
+        dispatch_states = config.dispatch_states || []
+
+        tracker_tools =
+          case kind do
+            "github" ->
+              "This project uses GitHub Projects (tracker_kind: github). Use github_graphql, get_issue_form_options, list_project_repositories, and Symphony board tools — never linear_graphql or list_linear_projects for this project's issues. On multi-repo boards, create_issue/create_draft_issue require repository (owner/name) unless the task belongs in tracker.config.repo."
+
+            "linear" ->
+              "This project uses Linear (tracker_kind: linear). Use linear_graphql and Symphony board tools for issue operations."
+
+            "jira" ->
+              "This project uses Jira (tracker_kind: jira). Use Symphony board tools for issue operations."
+
+            _ ->
+              "This project uses the local tracker (tracker_kind: #{kind})."
+          end
+
+        """
+        Project tracker:
+        - tracker_kind: #{kind}
+        - orchestrator queue (dispatch_states): #{inspect(dispatch_states)}
+        #{tracker_tools}
+        For GitHub/Jira project setup (not this board's issues), use list_github_projects / provision_github_project with Symphony's server token — do not run gh/curl in the shell.
+        """
+
+      _ ->
+        ""
+    end
+  end
+
   defp build_freeform_prompt(message, context, history) do
     """
     You are the Symphony freeform assistant. There is no existing project or repository context.
@@ -434,8 +558,19 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Create projects: create_tracker_project (local only), create_github_tracker_project, provision_github_project.
 
     Board / issues (require project_slug): list_issues, create_issue, get_issue, update_issue, move_issue, add_comment,
-    list_pull_requests, manage_preview (action: status|start|stop|restart), dispatch_codex, get_agent_executions,
-    get_project, list_project_repositories, get_workflow, read_workspace_file, update_project_workflow, update_project_repositories.
+    list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status,
+    manage_preview (action: status|start|stop|restart), manage_dev_env, scan_project_setup, suggest_project_setup,
+    dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility,
+    list_running_agents, steer_agent, manage_codex_goal, manage_blockers,
+    sync_issue, get_project, list_project_repositories, get_workflow, read_workspace_file,
+    update_project_workflow, update_project_repositories.
+
+    Diagnose / repair: explain_dispatch_eligibility (why an issue isn't dispatching), get_issue_orchestrator_state
+    (live running/retry/idle), list_running_agents (every agent executing now), steer_agent (inject a message into a
+    running agent's turn), manage_blockers (blocked_by relations), sync_issue (pull external tracker edits).
+
+    Project setup flow: scan_project_setup → suggest_project_setup → update_project_workflow / update_project_repositories,
+    then manage_dev_env (propose_steps|save_steps|run) before manage_preview for serve URLs.
 
     Templates: list_templates, get_template (use exact slugs from list_templates, e.g. multi-repo-fullstack). GraphQL escape hatches: github_graphql, linear_graphql.
     Use these structured tools instead of shell commands (gh, curl, ps) for tracker setup, discovery, and board actions.
@@ -455,12 +590,38 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   defp build_issue_prompt(%{metadata: metadata, issue_identifier: identifier, project_slug: project_slug}, message, context, history) do
     mode = Map.get(metadata || %{}, "mode", "triage")
     goal_mode = Map.get(metadata || %{}, "goal_mode", false) == true
+    goal_objective = Map.get(metadata || %{}, "goal_objective")
+    github_create = github_create_issue_guidance(project_slug)
 
     base = """
     You are the Symphony issue authoring assistant for `#{project_slug}`, working on issue `#{identifier}`.
     You are running inside the issue's working tree (the project repositories are cloned here).
-    Answer in the user's language. Use tracker tools to update the bound issue. Do not dispatch Codex unless asked.
-    Do not post issue comments - your replies are shown to the user directly in this chat. Author the issue via the update_issue tool instead of commenting.
+    Answer in the user's language.
+    Dispatching happens through this chat: only when the user explicitly asks to dispatch, start, or hand off the work, call the dispatch_codex tool for `#{identifier}` with concrete instructions. That moves the issue to In Progress so the orchestrator executes it (the orchestrator carries the issue's execution goal). Never dispatch on your own.
+    Use manage_codex_goal (context authoring) to set, adjust, pause, resume, or clear the chat goal; use context execution only when the user explicitly asks to change the orchestrator execution goal.
+    Do not mirror normal chat replies as issue comments — your replies are shown to the user directly in this chat.
+    Use add_comment only when the user explicitly asks to post a comment on the issue; use update_issue for title, description, status, and assignee changes.
+
+    When to call update_issue:
+    - Plan or acceptance criteria are defined and stable
+    - A discovery changes the implementation approach
+    - Final enrichment when authoring is complete (executive summary + links to spec/plan/handoff)
+    - The user explicitly asks to save something to the issue
+
+    Do NOT call update_issue during:
+    - Ongoing exploration (reading code, confirming components, tracing routes)
+    - Unconfirmed hypotheses
+    - Technical context that helps understanding but does not yet change what will be done
+
+    Keep exploratory findings in this chat until they meet the criteria above.
+    The issue description should reflect stable decisions, not a live investigation log.
+
+    New issues belong in Backlog (intake) unless the user asks for a different status — omit status on create_issue or set status to Backlog; do not default to Todo or dispatch Codex unless the user explicitly asks.
+    When splitting work into subtasks or creating related issues, use create_issue (or create_draft_issue before anchoring). Do not assume every new task belongs in the same repository as the parent issue.
+    #{github_create}
+    Assignees: call get_issue_form_options and use assignee_ids on update_issue — never linear_graphql on non-Linear projects.
+
+    #{SubtaskAuthoring.guidance()}
 
     Recent conversation:
     #{format_history(history)}
@@ -486,36 +647,99 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           work or authorizes implementation, acknowledge that direction and you may proceed directly to code.
           When the user signals the task is ready, write a concise `docs/superpowers/handoff.md`
           (key decisions + current state) and enrich the issue description (executive summary +
-          links to the spec/plan files) via the update_issue tool.
+          links to the spec/plan files) via update_issue — not before.
+          Do not call update_issue while still exploring or before spec/plan sections are agreed in chat.
           """
 
         "simple" ->
           """
 
           MODE: SIMPLE. Search the repositories in this working tree for relevant context (README, code,
-          conventions) and produce a fuller, formal issue description. Apply it with the update_issue tool
-          for `#{identifier}`. Do not create spec/plan files.
+          conventions) and produce a fuller, formal issue description. Call update_issue for `#{identifier}`
+          only once the description is stable and agreed in chat — not while still exploring or confirming
+          hypotheses. Do not create spec/plan files.
           """
 
         _ ->
-          "\n\nMODE: TRIAGE. Collect the title and a short description, then help decide simple vs complex."
+          """
+
+          MODE: TRIAGE. Collect the title and a short description, then settle the authoring depth with the user in conversation (no UI toggle needed):
+          - SIMPLE for a polished brief / enriched issue description — no spec or plan files.
+          - COMPLEX when the user wants to brainstorm or design, or needs a spec and implementation plan.
+          If the user asks to brainstorm, or mentions a spec, plan, or design, treat the task as complex.
+          State which path you are taking and proceed.
+          """
       end
 
-    String.trim(base <> mode_section <> goal_mode_section(goal_mode, identifier))
+    String.trim(base <> mode_section <> goal_mode_section(goal_mode, identifier, goal_objective))
   end
 
-  defp goal_mode_section(false, _identifier), do: ""
+  defp maybe_upgrade_issue_mode(%{} = thread, message) when is_binary(message) do
+    if History.thread_mode(thread) != "complex" and complex_intent?(message) do
+      case History.set_mode(thread, "complex") do
+        {:ok, updated} -> updated
+        _ -> thread
+      end
+    else
+      thread
+    end
+  end
 
-  defp goal_mode_section(true, identifier) do
+  defp maybe_upgrade_issue_mode(thread, _message), do: thread
+
+  defp complex_intent?(message) when is_binary(message),
+    do: Regex.match?(@complex_mode_trigger_regex, message)
+
+  defp complex_intent?(_message), do: false
+
+  defp goal_mode_section(false, _identifier, _objective), do: ""
+
+  defp goal_mode_section(true, _identifier, objective) do
+    objective_line =
+      case normalize_goal_objective(objective) do
+        nil ->
+          "Derive the objective from the issue artifacts in this working tree (the executive " <>
+            "summary, the spec's constraints, and the plan's verification steps)."
+
+        text ->
+          "Objective: #{text}"
+      end
+
     """
 
-    GOAL MODE: ENABLED (Codex long-running). When the user asks you to dispatch Codex for
-    `#{identifier}`, call the dispatch_codex tool WITH a `goal` argument. Derive the goal from the
-    issue artifacts in this working tree (the executive summary as the objective, the plan's
-    verification steps as the checks, and the spec's constraints), plus a clear stopping condition
-    (stop when complete or blocked). Keep the goal concise and self-contained so the orchestrator
-    can follow it across multiple turns. Do not dispatch on your own — only when the user asks.
+    AUTHORING GOAL: ACTIVE (Codex long-running, in this conversation). You are pursuing a chat
+    goal directly inside this authoring thread — keep working toward the objective across turns
+    until the artifact is ready for review or you are blocked. #{objective_line}
+    This is authoring only: do NOT dispatch the orchestrator and do NOT change the issue's status,
+    labels, or execution goal. Produce the spec/plan/analysis artifacts the objective calls for.
     """
+  end
+
+  defp normalize_goal_objective(objective) when is_binary(objective) do
+    case String.trim(objective) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_goal_objective(_), do: nil
+
+  # Native Codex goals only apply to the codex agent. `agent_kind` arrives as a
+  # string ("codex") from AgentPreference.normalize/1, so we must accept the
+  # string form here — comparing against the bare `:codex` atom silently skipped
+  # injection and left the authoring goal "enabled" without ever running.
+  defp maybe_put_authoring_goal(opts, thread, agent_kind) do
+    cond do
+      agent_kind not in [nil, "codex", :codex] ->
+        opts
+
+      not History.thread_goal_mode(thread) ->
+        opts
+
+      true ->
+        objective = History.thread_goal_objective(thread) || "Complete the authoring objective for this issue."
+        Keyword.put(opts, :goal, objective)
+    end
   end
 
   defp default_runner(workspace, prompt, issue, opts) do
@@ -565,8 +789,22 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   defp relay_codex_event(message, collector, opts) when is_map(message) do
     payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
     method = Map.get(payload, "method") || Map.get(payload, :method)
+    file_activity = FileActivityPresenter.from_event(message)
 
     cond do
+      match?({:started, _}, file_activity) ->
+        {:started, tool_call} = file_activity
+        maybe_call(opts, :on_tool_call_started, tool_call)
+
+      match?({:completed, _}, file_activity) ->
+        {:completed, tool_call} = file_activity
+
+        Agent.update(collector, fn state ->
+          %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, Map.get(tool_call, :id), tool_call)}
+        end)
+
+        maybe_call(opts, :on_tool_call_completed, tool_call)
+
       method == "item/agentMessage/delta" ->
         case extract_delta(payload) do
           delta when is_binary(delta) and delta != "" ->
@@ -592,6 +830,9 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           item_id: Map.get(message, :item_id),
           questions: Map.get(message, :questions) || []
         })
+
+      match?(%{}, goal = goal_from_codex_event(message)) ->
+        maybe_call(opts, :on_goal_updated, goal)
 
       # The Claude adapter streams partial assistant text as item/progress deltas.
       # Forward them for live token streaming in the UI. The persisted message is
@@ -652,6 +893,31 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp relay_codex_event(_message, _collector, _opts), do: :ok
+
+  defp goal_from_codex_event(message) when is_map(message) do
+    payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
+    method = Map.get(payload, "method") || Map.get(payload, :method)
+
+    goal =
+      case method do
+        "thread/goal/updated" ->
+          get_in(payload, ["params", "goal"]) || get_in(payload, [:params, :goal])
+
+        "turn/completed" ->
+          get_in(payload, ["params", "goal"]) || get_in(payload, [:params, :goal])
+
+        _ ->
+          if Map.get(message, :event) == :turn_completed do
+            get_in(payload, ["params", "goal"]) || get_in(payload, [:params, :goal])
+          else
+            nil
+          end
+      end
+
+    if is_map(goal), do: goal, else: nil
+  end
+
+  defp goal_from_codex_event(_message), do: nil
 
   defp maybe_forward_turn_started(message, opts) when is_map(message) do
     if Map.get(message, :event) == :session_started do
@@ -723,7 +989,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp doc_fingerprint(identifier) do
-    case IssueDocuments.list(identifier) do
+    case IssueDocuments.list_all(identifier) do
       %{documents: documents} when is_list(documents) ->
         documents
         |> Enum.map(fn document ->

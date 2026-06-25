@@ -1,4 +1,7 @@
 import "@testing-library/jest-dom/vitest";
+import { afterEach } from "vitest";
+
+import { initTestI18n } from "@/i18n/testUtils";
 
 // jsdom does not implement PointerEvent. Radix UI primitives open on
 // pointerdown and require `event.button === 0`; without a PointerEvent class,
@@ -29,3 +32,9 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     disconnect() {}
   } as unknown as typeof ResizeObserver;
 }
+
+await initTestI18n("en");
+
+afterEach(async () => {
+  await initTestI18n("en");
+});

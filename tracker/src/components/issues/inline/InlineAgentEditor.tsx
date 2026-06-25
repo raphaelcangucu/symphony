@@ -1,6 +1,8 @@
 import { Bot, Check, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { cn } from "@/lib/utils";
 import type { AgentKind, AgentOption } from "@/types/issue";
 
@@ -14,16 +16,6 @@ interface InlineAgentEditorProps {
   onSave: (agent: AgentKind | null) => Promise<boolean>;
 }
 
-const AGENT_LABELS: Record<AgentKind, string> = {
-  codex: "Codex",
-  claude: "Claude",
-  cursor: "Cursor",
-};
-
-function agentLabel(agent: AgentKind): string {
-  return AGENT_LABELS[agent] ?? agent;
-}
-
 export function InlineAgentEditor({
   agent,
   effectiveAgent,
@@ -33,6 +25,7 @@ export function InlineAgentEditor({
   saving = false,
   onSave,
 }: InlineAgentEditorProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<AgentKind | "inherit">(agent ?? "inherit");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -41,12 +34,13 @@ export function InlineAgentEditor({
     if (options.length > 0) return options;
     return (["codex", "claude", "cursor"] as AgentKind[]).map((value) => ({
       value,
-      label: agentLabel(value),
+      label: agentKindLabel(value, t),
       default: false,
     }));
   }, [options]);
 
-  const currentLabel = agent ? agentLabel(agent) : `Inherit (${agentLabel(effectiveAgent)})`;
+  const inheritLabel = t("issue.create.inherit", { agent: agentKindLabel(effectiveAgent, t) });
+  const currentLabel = agent ? agentKindLabel(agent, t) : inheritLabel;
 
   useEffect(() => {
     if (!open) setDraft(agent ?? "inherit");
@@ -96,17 +90,13 @@ export function InlineAgentEditor({
       {open ? (
         <div className="absolute left-0 z-20 mt-2 w-56 overflow-hidden rounded-xl border border-border/70 bg-popover p-2 shadow-lg">
           <div className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Agent
+            {t("issue.inline.agent.title")}
           </div>
           {optionsLoading ? (
-            <p className="px-1 text-xs text-muted-foreground">Loading agents...</p>
+            <p className="px-1 text-xs text-muted-foreground">{t("issue.inline.agent.loading")}</p>
           ) : (
             <div className="max-h-40 space-y-0.5 overflow-y-auto">
-              <AgentOptionButton
-                active={draft === "inherit"}
-                label={`Inherit (${agentLabel(effectiveAgent)})`}
-                onClick={() => setDraft("inherit")}
-              />
+              <AgentOptionButton active={draft === "inherit"} label={inheritLabel} onClick={() => setDraft("inherit")} />
               {optionItems.map((option) => (
                 <AgentOptionButton
                   key={option.value}
@@ -125,7 +115,7 @@ export function InlineAgentEditor({
               className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               <Check className="h-3.5 w-3.5" />
-              Save
+              {t("issue.inline.agent.save")}
             </button>
             <button
               type="button"
@@ -134,7 +124,7 @@ export function InlineAgentEditor({
               className="inline-flex items-center gap-1 rounded-md border border-border/70 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
             >
               <X className="h-3.5 w-3.5" />
-              Close
+              {t("issue.inline.agent.close")}
             </button>
           </div>
         </div>

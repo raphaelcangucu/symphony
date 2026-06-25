@@ -1,4 +1,5 @@
 import type {
+  BundleRole,
   PrMonitorEvaluation,
   PrMonitorHeartbeat,
   PrMonitorObservability,
@@ -28,6 +29,11 @@ interface BackendRunningDto {
   started_at?: string | null;
   last_event_at?: string | null;
   tokens?: BackendTokensDto | null;
+  parent_identifier?: string | null;
+  bundle_role?: string | null;
+  unit_id?: string | null;
+  repo?: string | null;
+  child_identifiers?: string[] | null;
 }
 
 interface BackendRetryDto {
@@ -57,6 +63,10 @@ function normalizeStatus(status: string | null | undefined): RuntimeStatus {
   return status === "stale" ? "stale" : "online";
 }
 
+function normalizeBundleRole(role: string | null | undefined): BundleRole {
+  return role === "parent" || role === "child" ? role : "standalone";
+}
+
 function normalizeRunning(dto: BackendRunningDto): RunningSession {
   return {
     issueIdentifier: normalizeIssueIdentifier(dto.issue_identifier ?? ""),
@@ -72,6 +82,11 @@ function normalizeRunning(dto: BackendRunningDto): RunningSession {
       outputTokens: dto.tokens?.output_tokens ?? 0,
       totalTokens: dto.tokens?.total_tokens ?? 0,
     },
+    parentIdentifier: dto.parent_identifier ? normalizeIssueIdentifier(dto.parent_identifier) : null,
+    bundleRole: normalizeBundleRole(dto.bundle_role),
+    unitId: dto.unit_id ?? null,
+    repo: dto.repo ?? null,
+    childIdentifiers: (dto.child_identifiers ?? []).map((id) => normalizeIssueIdentifier(id)),
   };
 }
 

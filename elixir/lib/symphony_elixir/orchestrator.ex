@@ -23,6 +23,9 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, Repository}
+  alias SymphonyElixir.Orchestrator.{BundleCoordinator, BundleGate, Grouping}
+  alias SymphonyElixir.Tracker.Workpad
+  alias SymphonyElixir.Workpad.ExecutionBundle
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -509,16 +512,25 @@ defmodule SymphonyElixir.Orchestrator do
   defp terminate_task(_pid), do: :ok
 
   defp choose_issues(issues, state) do
-    issues
-    |> sort_issues_for_dispatch()
-    |> Enum.reduce(state, &maybe_dispatch_candidate(&2, &1))
+    candidates =
+      issues
+      |> Grouping.dispatch_candidates()
+      |> sort_issues_for_dispatch()
+
+    held = held_child_issue_ids(candidates)
+
+    Enum.reduce(candidates, state, fn issue, acc -> maybe_dispatch_candidate(acc, issue, issues, held) end)
   end
 
-  defp maybe_dispatch_candidate(state, issue) do
+  defp maybe_dispatch_candidate(state, issue, all_issues, held) do
     case dispatch_decision(issue) do
       {:ok, sets} ->
-        if should_dispatch_issue?(issue, state, dispatch_set(sets), terminal_set(sets)) do
-          dispatch_issue(state, issue)
+        members = Grouping.members_for(issue, all_issues)
+
+        if should_dispatch_issue?(issue, state, dispatch_set(sets), terminal_set(sets)) and
+             not any_member_blocked?(members, terminal_set(sets)) and
+             not MapSet.member?(held, issue.id) do
+          dispatch_issue(state, issue, nil, members)
         else
           state
         end
@@ -527,6 +539,111 @@ defmodule SymphonyElixir.Orchestrator do
         Logger.warning("Skipping dispatch; project not runnable for #{issue_context(issue)}: #{reason}")
         state
     end
+  end
+
+  @doc false
+  @spec held_child_issue_ids_for_test([Issue.t()], keyword()) :: MapSet.t()
+  def held_child_issue_ids_for_test(candidates, opts) when is_list(candidates) do
+    held_child_issue_ids(candidates, opts)
+  end
+
+  # Bundle-aware dispatch gate: a child_run unit is held until its sibling
+  # dependencies are done and the shared contracts it consumes are ready. The
+  # parent's execution bundle is loaded once per parent per poll cycle (local
+  # tracker only); remote-only parents cannot be resolved here and are left
+  # un-gated (the coordinator prompt still orders them). Liveness: a candidate
+  # whose bundle/units cannot be resolved is never added to the held set.
+  defp held_child_issue_ids(candidates, opts \\ []) do
+    bundle_loader = Keyword.get(opts, :bundle_loader, &load_parent_bundle/1)
+    done_resolver = Keyword.get(opts, :done_units, &resolve_done_units/1)
+
+    candidates
+    |> Enum.filter(&child_candidate?/1)
+    |> Enum.group_by(& &1.parent_identifier)
+    |> Enum.reduce(MapSet.new(), fn {parent_identifier, children}, acc ->
+      case bundle_loader.(parent_identifier) do
+        {:ok, %ExecutionBundle{} = bundle} ->
+          done_units = done_resolver.(bundle)
+          contract_status = BundleCoordinator.contract_status(bundle)
+
+          Enum.reduce(children, acc, fn child, inner ->
+            if BundleGate.held?(bundle, child.identifier, done_units, contract_status) do
+              Logger.info("Holding child dispatch (bundle gate): #{issue_context(child)} parent=#{parent_identifier}")
+              MapSet.put(inner, child.id)
+            else
+              inner
+            end
+          end)
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  defp child_candidate?(%Issue{parent_identifier: parent, id: id})
+       when is_binary(parent) and parent != "" and is_binary(id),
+       do: true
+
+  defp child_candidate?(_issue), do: false
+
+  # Loads and parses the `### Execution bundle` from a parent's local workpad.
+  # Returns `:error` for remote-only parents (no local workpad), which leaves the
+  # child un-gated rather than blocking it.
+  defp load_parent_bundle(parent_identifier) when is_binary(parent_identifier) do
+    with slug when is_binary(slug) <- Context.find_project_slug(parent_identifier),
+         {:ok, comments} <- Context.list_comments(slug, parent_identifier),
+         body when is_binary(body) <- workpad_body_from_comments(comments),
+         {:ok, %ExecutionBundle{} = bundle} <- ExecutionBundle.parse(body) do
+      {:ok, bundle}
+    else
+      _ -> :error
+    end
+  end
+
+  defp load_parent_bundle(_parent_identifier), do: :error
+
+  defp workpad_body_from_comments(comments) when is_list(comments) do
+    Enum.find_value(comments, fn comment ->
+      body = comment_body(comment)
+      if is_binary(body) and Workpad.workpad?(body), do: body
+    end)
+  end
+
+  defp workpad_body_from_comments(_comments), do: nil
+
+  defp comment_body(%{body: body}), do: body
+  defp comment_body(comment) when is_map(comment), do: Map.get(comment, :body) || Map.get(comment, "body")
+  defp comment_body(_comment), do: nil
+
+  # A child_run unit counts as "done" only when its issue resolves to a terminal
+  # state. Unresolved units are treated as not-done so a dependent stays held
+  # (never released on missing data); this keeps the gate conservative for the
+  # local bundles it applies to.
+  defp resolve_done_units(%ExecutionBundle{} = bundle) do
+    bundle
+    |> ExecutionBundle.child_units()
+    |> Enum.reduce(MapSet.new(), fn unit, acc ->
+      if unit_done?(unit), do: MapSet.put(acc, unit.id), else: acc
+    end)
+  end
+
+  defp unit_done?(%{issue: identifier}) when is_binary(identifier) and identifier != "" do
+    with slug when is_binary(slug) <- Context.find_project_slug(identifier),
+         {:ok, record} <- Context.get_issue(slug, identifier) do
+      terminal_record_state?(record)
+    else
+      _ -> false
+    end
+  end
+
+  defp unit_done?(_unit), do: false
+
+  defp terminal_record_state?(%{status: %{is_terminal: terminal}}) when is_boolean(terminal), do: terminal
+  defp terminal_record_state?(_record), do: false
+
+  defp any_member_blocked?(members, terminal_states) when is_list(members) do
+    Enum.any?(members, &issue_blocked_by_non_terminal?(&1, terminal_states))
   end
 
   defp sort_issues_for_dispatch(issues) when is_list(issues) do
@@ -708,10 +825,10 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp dispatch_decision(_issue), do: {:ok, global_state_lists()}
 
-  defp dispatch_issue(%State{} = state, issue, attempt \\ nil) do
+  defp dispatch_issue(%State{} = state, issue, attempt, members) do
     case revalidate_issue_for_dispatch(issue, &Tracker.fetch_issue_states_by_ids/1) do
       {:ok, %Issue{} = refreshed_issue} ->
-        do_dispatch_issue(state, refreshed_issue, attempt)
+        do_dispatch_issue(state, refreshed_issue, attempt, members)
 
       {:skip, :missing} ->
         Logger.info("Skipping dispatch; issue no longer active or visible: #{issue_context(issue)}")
@@ -728,50 +845,28 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  defp do_dispatch_issue(%State{} = state, issue, attempt) do
+  defp do_dispatch_issue(%State{} = state, issue, attempt, members) do
     recipient = self()
     issue = Tracker.enrich_issue(issue)
     agent_kind = AgentRunner.issue_agent_kind(issue)
+    bundle_ctx = bundle_run_context(issue)
 
     case Task.Supervisor.start_child(SymphonyElixir.Orchestrator.TaskSupervisor, fn ->
-           AgentRunner.run(issue, recipient, attempt: attempt)
+           AgentRunner.run(issue, recipient, [attempt: attempt, members: members] ++ bundle_ctx.run_opts)
          end) do
       {:ok, pid} ->
         ref = Process.monitor(pid)
 
-        Logger.info("Dispatching issue to agent: #{issue_context(issue)} pid=#{inspect(pid)} attempt=#{inspect(attempt)}")
+        Logger.info("Dispatching #{if members == [], do: "issue", else: "group"} to agent: #{issue_context(issue)} members=#{length(members)} pid=#{inspect(pid)} attempt=#{inspect(attempt)} role=#{bundle_ctx.role}")
 
-        running =
-          Map.put(state.running, issue.id, %{
-            pid: pid,
-            ref: ref,
-            identifier: issue.identifier,
-            issue: issue,
-            agent_kind: agent_kind,
-            agent_goal: Map.get(issue, :agent_goal),
-            goal: nil,
-            session_id: nil,
-            last_codex_message: nil,
-            last_codex_timestamp: nil,
-            last_codex_event: nil,
-            codex_app_server_pid: nil,
-            agent_input_tokens: 0,
-            agent_output_tokens: 0,
-            agent_total_tokens: 0,
-            codex_last_reported_input_tokens: 0,
-            codex_last_reported_output_tokens: 0,
-            codex_last_reported_total_tokens: 0,
-            turn_count: 0,
-            retry_attempt: normalize_retry_attempt(attempt),
-            started_at: DateTime.utc_now()
-          })
+        running = Map.put(state.running, issue.id, dispatch_running_entry(pid, ref, issue, agent_kind, attempt, members, bundle_ctx))
 
-        %{
-          state
-          | running: running,
-            claimed: MapSet.put(state.claimed, issue.id),
-            retry_attempts: Map.delete(state.retry_attempts, issue.id)
-        }
+        claimed =
+          issue
+          |> Grouping.claim_ids(members)
+          |> Enum.reduce(state.claimed, fn id, acc -> MapSet.put(acc, id) end)
+
+        %{state | running: running, claimed: claimed, retry_attempts: Map.delete(state.retry_attempts, issue.id)}
 
       {:error, reason} ->
         Logger.error("Unable to spawn agent for #{issue_context(issue)}: #{inspect(reason)}")
@@ -784,6 +879,104 @@ defmodule SymphonyElixir.Orchestrator do
         })
     end
   end
+
+  defp dispatch_running_entry(pid, ref, %Issue{} = issue, agent_kind, attempt, members, bundle_ctx) do
+    %{
+      pid: pid,
+      ref: ref,
+      identifier: issue.identifier,
+      issue: issue,
+      members: members,
+      agent_kind: agent_kind,
+      agent_goal: Map.get(issue, :agent_goal),
+      goal: nil,
+      session_id: nil,
+      last_codex_message: nil,
+      last_codex_timestamp: nil,
+      last_codex_event: nil,
+      codex_app_server_pid: nil,
+      agent_input_tokens: 0,
+      agent_output_tokens: 0,
+      agent_total_tokens: 0,
+      codex_last_reported_input_tokens: 0,
+      codex_last_reported_output_tokens: 0,
+      codex_last_reported_total_tokens: 0,
+      turn_count: 0,
+      retry_attempt: normalize_retry_attempt(attempt),
+      started_at: DateTime.utc_now(),
+      bundle_role: bundle_ctx.role,
+      parent_identifier: bundle_ctx.parent_identifier,
+      unit_id: bundle_ctx.unit_id,
+      repo: bundle_ctx.repo,
+      child_identifiers: bundle_ctx.child_identifiers
+    }
+  end
+
+  @typedoc """
+  Bundle execution context computed for an issue at dispatch time, used to route
+  child runs into isolated worktrees and to tag the running entry for the
+  hierarchical observability view.
+  """
+  @type bundle_context :: %{
+          role: :child | :standalone,
+          parent_identifier: String.t() | nil,
+          unit_id: String.t() | nil,
+          repo: String.t() | nil,
+          child_identifiers: [String.t()],
+          run_opts: keyword()
+        }
+
+  @doc """
+  Computes the bundle execution context for an issue at dispatch time.
+
+  A subtask (an issue carrying a `parent_identifier`) runs as a `:child` in a git
+  worktree branched off its parent's checkout when that checkout is a git repo,
+  so siblings never share a working tree; otherwise it gracefully falls back to
+  the standard per-issue workspace. Non-subtask issues are `:standalone` and run
+  unchanged. The workspace resolver and git-repo probe are injectable for tests.
+  """
+  @spec bundle_run_context(Issue.t(), keyword()) :: bundle_context()
+  def bundle_run_context(issue, opts \\ [])
+
+  def bundle_run_context(%Issue{parent_identifier: parent, identifier: identifier} = issue, opts)
+      when is_binary(parent) and parent != "" do
+    workspace_resolver = Keyword.get(opts, :workspace_resolver, &Workspace.path_for_issue/1)
+    git_repo? = Keyword.get(opts, :git_repo?, &git_repo?/1)
+
+    base = workspace_resolver.(parent)
+
+    run_opts =
+      if is_binary(base) and git_repo?.(base) do
+        [
+          worktree: true,
+          worktree_repo: base,
+          worktree_branch: "feat/" <> safe_unit_slug(identifier),
+          unit_id: identifier,
+          parent_identifier: parent
+        ]
+      else
+        []
+      end
+
+    %{
+      role: :child,
+      parent_identifier: parent,
+      unit_id: identifier,
+      repo: issue.repository_full_name,
+      child_identifiers: [],
+      run_opts: run_opts
+    }
+  end
+
+  def bundle_run_context(%Issue{}, _opts) do
+    %{role: :standalone, parent_identifier: nil, unit_id: nil, repo: nil, child_identifiers: [], run_opts: []}
+  end
+
+  defp git_repo?(path) when is_binary(path), do: File.dir?(Path.join(path, ".git"))
+  defp git_repo?(_path), do: false
+
+  defp safe_unit_slug(value) when is_binary(value), do: String.replace(value, ~r/[^A-Za-z0-9_.-]+/, "-")
+  defp safe_unit_slug(_value), do: "child"
 
   defp revalidate_issue_for_dispatch(%Issue{id: issue_id}, issue_fetcher)
        when is_binary(issue_id) and is_function(issue_fetcher, 1) do
@@ -832,6 +1025,57 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp apply_successful_completion(%State{} = state, running_entry, issue_id) do
+    case Map.get(running_entry, :agent_outcome) do
+      {:incomplete, {:validate_gate, _violations}} ->
+        Logger.warning("Validate gate incomplete for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier}; skipping completion transition")
+
+        maybe_annotate_incomplete(running_entry, issue_id)
+        complete_issue(state, issue_id)
+
+      {:incomplete, {:publish_gate, _violations}} ->
+        Logger.warning("Publish gate incomplete for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier}; skipping completion transition")
+
+        maybe_annotate_incomplete(running_entry, issue_id)
+        complete_issue(state, issue_id)
+
+      _other ->
+        if parent_completion_held?(running_entry.issue) do
+          Logger.info("Holding parent completion; child runs incomplete for #{issue_context(running_entry.issue)}")
+
+          complete_issue(state, issue_id)
+        else
+          apply_gated_successful_completion(state, running_entry, issue_id)
+        end
+    end
+  end
+
+  @doc false
+  @spec parent_completion_held_for_test(Issue.t(), keyword()) :: boolean()
+  def parent_completion_held_for_test(%Issue{} = issue, opts) do
+    parent_completion_held?(issue, opts)
+  end
+
+  # A coordinator parent must not transition to a terminal state until all of its
+  # child_run units are done. We re-load the parent's own execution bundle and
+  # check sibling terminal state; on completion the parent is cleared from the
+  # running map (no transition) so the next poll re-dispatches it to re-check,
+  # and it finalises once every child is done. Graceful: a parent whose bundle
+  # cannot be resolved, or that owns no child runs, completes normally.
+  defp parent_completion_held?(%Issue{} = issue, opts \\ []) do
+    bundle_loader = Keyword.get(opts, :bundle_loader, &load_parent_bundle/1)
+    done_resolver = Keyword.get(opts, :done_units, &resolve_done_units/1)
+
+    case bundle_loader.(issue.identifier) do
+      {:ok, %ExecutionBundle{} = bundle} ->
+        BundleCoordinator.coordinator?(bundle) and
+          not BundleCoordinator.children_all_done?(bundle, done_resolver.(bundle))
+
+      _ ->
+        false
+    end
+  end
+
+  defp apply_gated_successful_completion(%State{} = state, running_entry, issue_id) do
     issue = running_entry.issue
     workspace = Workspace.path_for_issue(issue)
     deps = publish_contract_deps_for(issue, state.publish_contract_deps)
@@ -840,6 +1084,7 @@ defmodule SymphonyElixir.Orchestrator do
       {:ok, prs} ->
         remove_label(running_entry, @blocked_run_label)
         record_run_pull_requests(issue, prs)
+        Enum.each(Map.get(running_entry, :members, []), &record_run_pull_requests(&1, prs))
         persist_evidence(running_entry, issue, workspace)
         maybe_annotate_incomplete(running_entry, issue_id)
         apply_transition_after_contract(state, running_entry, issue_id)
@@ -987,9 +1232,7 @@ defmodule SymphonyElixir.Orchestrator do
     case verified_prs do
       [] ->
         if prs != [] do
-          Logger.warning(
-            "Skipping run PR links issue=#{identifier}: no PR matched Symphony-Issue marker #{marker_key}"
-          )
+          Logger.warning("Skipping run PR links issue=#{identifier}: no PR matched Symphony-Issue marker #{marker_key}")
         end
 
         :ok
@@ -1095,10 +1338,13 @@ defmodule SymphonyElixir.Orchestrator do
 
     screenshots =
       runs
-      |> Enum.flat_map(&List.wrap(&1["screenshots"]))
+      |> Enum.flat_map(fn run -> List.wrap(run["screenshots"]) end)
       |> Enum.take(4)
-      |> Enum.map_join("\n", fn rel ->
-        "![#{Path.basename(rel)}](#{evidence_artifact_url(record, issue, rel, base_url)})"
+      |> Enum.map_join("\n", fn entry ->
+        path = SymphonyElixir.Evidence.Manifest.artifact_path(entry)
+        alt = SymphonyElixir.Evidence.Manifest.artifact_label(entry) || path
+
+        "![#{markdown_image_alt(alt)}](#{evidence_artifact_url(record, issue, path, base_url)})"
       end)
 
     ui_note = if record.ui_change, do: " (UI change: e2e + visual capture required)", else: ""
@@ -1124,7 +1370,22 @@ defmodule SymphonyElixir.Orchestrator do
   defp summary_cell(_summary), do: "-"
 
   defp evidence_artifact_url(record, issue, rel, base_url) do
-    "#{base_url}/api/tracker/v1/projects/#{issue.project_slug}/issues/#{issue.identifier}/evidence/#{record.run_id}/artifacts/#{rel}"
+    encoded_rel =
+      rel
+      |> String.split("/")
+      |> Enum.map(&URI.encode/1)
+      |> Enum.join("/")
+
+    "#{base_url}/api/tracker/v1/projects/#{issue.project_slug}/issues/#{issue.identifier}/evidence/#{record.run_id}/artifacts/#{encoded_rel}"
+  end
+
+  defp markdown_image_alt(label) when is_binary(label) do
+    label
+    |> String.replace("\\", "\\\\")
+    |> String.replace("[", "\\[")
+    |> String.replace("]", "\\]")
+    |> String.replace("(", "\\(")
+    |> String.replace(")", "\\)")
   end
 
   # Prefer the publicly reachable tunnel URL so remote renderers (GitHub, Linear,
@@ -1138,6 +1399,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp apply_transition_after_contract(%State{} = state, running_entry, issue_id) do
     case apply_completion_transition(state, issue_id, running_entry.issue) do
       {:transitioned, transitioned_state} ->
+        transition_group_members(running_entry)
         transitioned_state
 
       result when result in [:not_configured, :not_visible] ->
@@ -1155,6 +1417,30 @@ defmodule SymphonyElixir.Orchestrator do
           project_slug: running_entry.issue.project_slug,
           error: "completion transition failed: #{inspect(reason)}"
         })
+    end
+  end
+
+  defp transition_group_members(running_entry) do
+    members = Map.get(running_entry, :members, [])
+
+    Enum.each(members, fn %Issue{} = member ->
+      transitions = completion_transitions_for(member)
+
+      with dest when is_binary(dest) <- member_destination(member, transitions),
+           :ok <- Tracker.update_issue_state(member.id, dest) do
+        Logger.info("Moved grouped member after completion: #{issue_context(member)} -> #{dest}")
+      else
+        _ -> :ok
+      end
+    end)
+
+    :ok
+  end
+
+  defp member_destination(%Issue{id: id, state: state}, transitions) do
+    case Tracker.fetch_issue_states_by_ids([id]) do
+      {:ok, [%Issue{state: current} | _]} -> Map.get(transitions, current)
+      _ -> Map.get(transitions, state)
     end
   end
 
@@ -1269,24 +1555,50 @@ defmodule SymphonyElixir.Orchestrator do
   @doc false
   @spec incomplete_workpad_comment_body(term()) :: String.t()
   def incomplete_workpad_comment_body(reason) do
+    handoff_note = incomplete_handoff_note(reason)
+
     """
     ## Codex Workpad
 
     > ⚠️ Symphony auto-note: this agent run ended **incomplete** (#{incomplete_reason_text(reason)}).
     >
-    > - No pull request was confirmed for this issue at handoff.
-    > - The issue was moved to its review state automatically by the orchestrator, not by the agent finishing the work.
+    > #{handoff_note}
     > - Please review the workspace state and move the issue back to Rework (or re-dispatch) if the task is not actually done.
     """
   end
+
+  defp incomplete_handoff_note({:validate_gate, violations}) do
+    cond do
+      Evidence.Gate.environment_blocked_only?(violations) ->
+        "- The issue was **not** moved to review — required tests could not run in the workspace environment (e.g. no Docker/network). This is an environment blocker, not necessarily a code failure: fix the environment (or sandbox capabilities) and re-dispatch."
+
+      Enum.any?(violations, &(&1.kind == :judge_rejected)) ->
+        reasons = violations |> Enum.filter(&(&1.kind == :judge_rejected)) |> Enum.map_join("; ", & &1.detail)
+        "- The issue was **not** moved to review — the independent validation judge rejected the evidence (#{reasons}). The tests do not yet prove the change; fix the tests/evidence and re-dispatch."
+
+      true ->
+        "- The issue was **not** moved to review — evidence/validation is missing or failing."
+    end
+  end
+
+  defp incomplete_handoff_note({:publish_gate, _}),
+    do: "- The issue was **not** moved to review — publish requirements (PRs / pushed branches) are unsatisfied."
+
+  defp incomplete_handoff_note(_),
+    do: "- No pull request was confirmed for this issue at handoff.\n    > - The issue was moved to its review state automatically by the orchestrator, not by the agent finishing the work."
 
   defp incomplete_reason_text(:max_turns), do: "reached the configured max turns with the issue still active"
 
   defp incomplete_reason_text({:publish_gate, _violations}),
     do: "ended with the publish gate unsatisfied (deliverables missing)"
 
-  defp incomplete_reason_text({:validate_gate, _violations}),
-    do: "ended with the validate gate unsatisfied (test/e2e evidence missing or failing)"
+  defp incomplete_reason_text({:validate_gate, violations}) do
+    if Evidence.Gate.environment_blocked_only?(violations) do
+      "ended with required tests blocked by the workspace environment (e.g. missing Docker/network), not a code failure"
+    else
+      "ended with the validate gate unsatisfied (test/e2e evidence missing or failing)"
+    end
+  end
 
   defp incomplete_reason_text(other), do: "reason=#{inspect(other)}"
 
@@ -1448,7 +1760,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp handle_active_retry(state, issue, attempt, metadata) do
     if retry_candidate_issue?(issue) and
          dispatch_slots_available?(issue, state) do
-      {:noreply, dispatch_issue(state, issue, attempt)}
+      {:noreply, dispatch_issue(state, issue, attempt, [])}
     else
       Logger.debug("No available slots for retrying #{issue_context(issue)}; retrying again")
 
@@ -1631,15 +1943,23 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  @spec steer(String.t(), String.t(), pid() | nil) :: :ok | {:error, term()}
-  def steer(identifier, message, reply_to \\ nil) do
-    steer(__MODULE__, identifier, message, reply_to)
+  @spec steer(String.t(), String.t(), pid() | nil, keyword()) :: :ok | {:error, term()}
+  def steer(identifier, message, reply_to \\ nil, opts \\ [])
+
+  def steer(identifier, message, reply_to, opts) when is_binary(identifier) and is_list(opts) do
+    steer(__MODULE__, identifier, message, reply_to, opts)
   end
 
-  @spec steer(GenServer.server(), String.t(), String.t(), pid() | nil) :: :ok | {:error, term()}
-  def steer(server, identifier, message, reply_to) do
+  def steer(server, identifier, message, reply_to) when is_binary(identifier) do
+    steer(server, identifier, message, reply_to, [])
+  end
+
+  @spec steer(GenServer.server(), String.t(), String.t(), pid() | nil, keyword()) ::
+          :ok | {:error, term()}
+  def steer(server, identifier, message, reply_to, opts)
+      when is_binary(identifier) and is_list(opts) do
     if Process.whereis(server) do
-      GenServer.call(server, {:steer, identifier, message, reply_to})
+      GenServer.call(server, {:steer, identifier, message, reply_to, opts})
     else
       {:error, :unavailable}
     end
@@ -1799,19 +2119,37 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  def handle_call({:steer, identifier, message, reply_to}, _from, state) do
+  def handle_call({:steer, identifier, message, reply_to, opts}, _from, state) when is_list(opts) do
+    alias SymphonyElixir.Assistant.Payload
+
     trimmed = if is_binary(message), do: String.trim(message), else: ""
+    raw_attachments = Keyword.get(opts, :attachments, [])
+    project_slug = Keyword.get(opts, :project_slug, "")
 
-    case find_running_by_identifier(state, identifier) do
-      %{pid: pid} when is_pid(pid) and trimmed != "" ->
-        send(pid, {:codex_steer, [%{"type" => "text", "text" => trimmed}], reply_to})
-        {:reply, :ok, state}
+    normalized =
+      if is_binary(project_slug) and project_slug != "" do
+        Payload.normalize_attachments(raw_attachments, project_slug)
+      else
+        []
+      end
 
-      %{pid: pid} when is_pid(pid) ->
+    enriched = Payload.enrich_message(trimmed, normalized)
+    input = Payload.turn_input_items(enriched, normalized)
+
+    cond do
+      find_running_by_identifier(state, identifier) == nil ->
+        {:reply, {:error, :ActiveTurnNotSteerable}, state}
+
+      enriched == "" and normalized == [] ->
         {:reply, {:error, :empty_message}, state}
 
-      _other ->
-        {:reply, {:error, :ActiveTurnNotSteerable}, state}
+      trimmed != "" and raw_attachments != [] and normalized == [] ->
+        {:reply, {:error, :attachment_processing_failed}, state}
+
+      true ->
+        %{pid: pid} = find_running_by_identifier(state, identifier)
+        send(pid, {:codex_steer, input, reply_to})
+        {:reply, :ok, state}
     end
   end
 
@@ -2077,7 +2415,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp dispatch_issue_for_manual_resume(%State{} = state, issue) do
     case manual_revalidate_issue(issue) do
-      {:ok, refreshed_issue} -> do_dispatch_issue(state, refreshed_issue, nil)
+      {:ok, refreshed_issue} -> do_dispatch_issue(state, refreshed_issue, nil, [])
       _other -> state
     end
   end

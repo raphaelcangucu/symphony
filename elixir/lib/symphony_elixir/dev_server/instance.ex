@@ -11,6 +11,7 @@ defmodule SymphonyElixir.DevServer.Instance do
   require Logger
 
   alias SymphonyElixir.Config
+  alias SymphonyElixir.DevServer.Broadcaster
   alias SymphonyElixir.DevServer.PortAllocator
   alias SymphonyElixir.LocalTracker.DevServerRecord
   alias SymphonyElixir.PublicRouting
@@ -458,6 +459,7 @@ defmodule SymphonyElixir.DevServer.Instance do
 
     case DevServerRecord.upsert(state.project_id, state.identifier, state.slug, attrs) do
       {:ok, _record} ->
+        Broadcaster.notify(state.project_slug, state.identifier)
         :ok
 
       {:error, reason} ->

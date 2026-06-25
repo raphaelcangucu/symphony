@@ -3,6 +3,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   import Phoenix.ChannelTest
 
+  alias SymphonyElixir.Assistant.GoalRun
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -107,6 +108,44 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
   end
 
+  test "issue thread completion pushes history_synced for transcript reconciliation" do
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_assistant_delta).("synced reply")
+      {:ok, %{assistant_message: "synced reply", codex_thread_id: "ct-sync", turn_id: "turn-sync", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, _payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-SYNC")
+
+    assert_push("history_loaded", %{})
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{"view" => "board"}})
+    assert_reply(ref, :ok, %{})
+
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "synced reply"}})
+    assert_push("history_synced", %{messages: messages})
+    assert Enum.map(messages, & &1.content) == ["go", "synced reply"]
+  end
+
+  test "sync_history replies ok and pushes history_synced for durable threads" do
+    {:ok, %{thread_id: thread_id}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-SYNC2")
+
+    assert_push("history_loaded", %{})
+
+    {:ok, thread} = History.get_thread(thread_id)
+    {:ok, _message} = History.append_message(thread, %{role: "user", content: "hello"})
+
+    ref = push(socket, "sync_history", %{})
+    assert_reply(ref, :ok, %{})
+
+    assert_push("history_synced", %{messages: [%{role: "user", content: "hello"}]})
+  end
+
   test "steer_turn persists a steer message and forwards to the running turn" do
     test_pid = self()
 
@@ -143,6 +182,78 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("message_created", %{message: %{role: "user", content: "use the simpler approach"}})
     assert_receive {:steered, [%{"type" => "text", "text" => "use the simpler approach"}]}, 2_000
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
+  end
+
+  test "steer_turn works from a different channel than the one that started the turn" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-steer")
+      send(test_pid, {:runner, self()})
+
+      receive do
+        {:codex_steer, input, reply_to} ->
+          send(test_pid, {:steered, input})
+          send(reply_to, {:steer_ok, %{}})
+      after
+        2_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "ok", codex_thread_id: "ct-steer", turn_id: "turn-steer", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-2"
+
+    {:ok, _join, socket_a} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref = push(socket_a, "send_message", %{"message" => "go", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner, _runner_pid}, 2_000
+
+    {:ok, _join, socket_b} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref2 = push(socket_b, "steer_turn", %{"message" => "actually do Y"})
+    assert_reply(ref2, :ok, %{})
+    assert_receive {:steered, [%{"type" => "text", "text" => "actually do Y"}]}, 2_000
+  end
+
+  test "a send while running steers the live turn instead of starting a second one" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-busy")
+      send(test_pid, {:runner, self()})
+
+      receive do
+        {:codex_steer, input, reply_to} ->
+          send(test_pid, {:steered, input})
+          send(reply_to, {:steer_ok, %{}})
+      after
+        2_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "ok", codex_thread_id: "ct-busy", turn_id: "turn-busy", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-3"
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref = push(socket, "send_message", %{"message" => "first", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner, _pid}, 2_000
+
+    ref2 = push(socket, "send_message", %{"message" => "second", "context" => %{}})
+    assert_reply(ref2, :ok, %{})
+    assert_receive {:steered, [%{"type" => "text", "text" => "second"}]}, 2_000
   end
 
   test "btw runs an ephemeral side query and streams answer without persisting" do
@@ -414,6 +525,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     assert payload.mode == "triage"
     assert payload.goal_mode == false
+    assert payload.goal_objective == nil
   end
 
   test "set_goal_mode persists the flag and the join rehydrates it", %{socket: socket} do
@@ -432,11 +544,215 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert payload.goal_mode == true
   end
 
+  test "set_goal_mode persists the authoring objective and the join rehydrates it", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit the auth module"})
+    assert_reply(ref, :ok, %{goal_mode: true, goal_objective: "Audit the auth module"})
+
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.metadata["goal_objective"] == "Audit the auth module"
+
+    {:ok, payload, _rejoined} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join("assistant:issue:macro-markets:MAC-1", %{})
+
+    assert payload.goal_mode == true
+    assert payload.goal_objective == "Audit the auth module"
+  end
+
   test "set_goal_mode rejects non-issue assistant threads", %{socket: socket} do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:macro-markets", %{})
 
     ref = push(socket, "set_goal_mode", %{"goal_mode" => true})
     assert_reply(ref, :error, %{reason: "this action is only supported for issue assistant threads"})
+  end
+
+  test "goal_clear removes the authoring goal", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    ref = push(socket, "goal_clear", %{})
+    assert_reply(ref, :ok, %{enabled: false})
+
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.metadata["goal_mode"] == false
+    refute Map.has_key?(thread.metadata, "goal_objective")
+  end
+
+  test "goal_set_objective updates the authoring objective", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    ref = push(socket, "goal_set_objective", %{"objective" => "Audit the admin UI"})
+    assert_reply(ref, :ok, %{enabled: true, objective: "Audit the admin UI"})
+
+    assert {:ok, thread} = History.get_thread(thread_id)
+    assert thread.metadata["goal_objective"] == "Audit the admin UI"
+  end
+
+  test "goal controls require an enabled authoring goal", %{socket: socket} do
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "goal_clear", %{})
+    assert_reply(ref, :error, %{})
+  end
+
+  test "goal_resume kicks an autonomous continuation batch that streams into the chat", %{socket: socket} do
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_assistant_delta).("Continuing the goal")
+
+      {:ok,
+       %{
+         assistant_message: "Continued the authoring goal.",
+         codex_thread_id: "thread-goal",
+         turn_id: "turn-goal",
+         tool_calls: []
+       }}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :assistant_runner) end)
+
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    ref = push(socket, "goal_resume", %{})
+    assert_reply(ref, :ok)
+
+    assert_push("assistant_delta", %{delta: "Continuing the goal"})
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "Continued the authoring goal."}})
+  end
+
+  test "goal turn pushes native goal updates and fans streaming to observer tabs", %{socket: socket} do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(test_pid, {:runner_started, self()})
+
+      receive do
+        :stream -> Keyword.fetch!(opts, :on_assistant_delta).("Live goal output")
+        :finish -> :ok
+      end
+
+      Keyword.fetch!(opts, :on_goal_updated).(%{
+        "objective" => "Audit",
+        "status" => "active",
+        "timeUsedSeconds" => 42,
+        "tokensUsed" => 1000
+      })
+
+      {:ok,
+       %{
+         assistant_message: "Done",
+         codex_thread_id: "thread-goal",
+         turn_id: "turn-goal",
+         tool_calls: [],
+         assistant_chat_message: %{role: "assistant", content: "Done", tool_calls: []}
+       }}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :assistant_runner) end)
+
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    ref = push(socket, "send_message", %{"message" => "Start audit", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+
+    assert_receive {:runner_started, runner_pid}, 2_000
+
+    {:ok, _join_payload, _observer} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-1")
+
+    send(runner_pid, :stream)
+    assert_push("assistant_delta", %{delta: "Live goal output"})
+    assert_push("assistant_delta", %{delta: "Live goal output"})
+
+    send(runner_pid, :finish)
+
+    assert_push("goal_status", %{running: true, goal: %{timeUsedSeconds: 42, tokensUsed: 1000}})
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "Done"}})
+    assert_push("history_synced", %{messages: _})
+
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "Done"}})
+    assert_push("history_synced", %{messages: _})
+  end
+
+  test "goal_resume requires an enabled authoring goal", %{socket: socket} do
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "goal_resume", %{})
+    assert_reply(ref, :error, %{})
+  end
+
+  test "join reattaches to a goal run already in flight for the thread", %{socket: socket} do
+    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    # Simulate a run that started before a page refresh: a live process owns the
+    # registry entry for this thread (here, the test process itself).
+    GoalRun.track(thread_id)
+    on_exit(fn -> GoalRun.untrack(thread_id) end)
+
+    {:ok, payload, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join("assistant:issue:macro-markets:MAC-1", %{})
+
+    assert payload.goal_running == true
+    assert is_integer(payload.goal_run_elapsed_seconds)
+    assert payload.goal_run_elapsed_seconds >= 0
+  end
+
+  test "join reports no goal run when the thread is idle", %{socket: socket} do
+    {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    assert payload.goal_running == false
+    assert payload.goal_run_elapsed_seconds == nil
+  end
+
+  test "join exposes last_turn and a reloaded tab re-attaches a running turn" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-attach")
+      send(test_pid, {:runner_started, self()})
+      receive do: (:finish -> :ok)
+      {:ok, %{assistant_message: "ok", codex_thread_id: "ct-attach", turn_id: "turn-attach", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-1"
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner_started, runner_pid}, 2_000
+
+    {:ok, join_payload, _socket2} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    assert %{last_turn: %{status: "running"}} = join_payload
+    assert join_payload.turn_running == true
+
+    send(runner_pid, :finish)
+    assert_push("assistant_completed", %{message: %{role: "assistant"}})
   end
 
   test "dispatch_codex moves the bound issue to In Progress without a goal by default", %{socket: socket} do
@@ -462,6 +778,24 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert issue.status.name == "In Progress"
     assert is_binary(issue.agent_goal)
     assert issue.agent_goal =~ "MAC-1"
+  end
+
+  test "dispatch_codex does not carry an execution goal just because the authoring goal is enabled",
+       %{socket: socket} do
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Dispatch me", "status" => "Todo"})
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    # Enabling the Authoring (chat) goal must NOT auto-promote into an orchestrator execution goal.
+    ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit only"})
+    assert_reply(ref, :ok, %{goal_mode: true})
+
+    # A plain dispatch (no explicit goal_mode) stays decoupled from the authoring goal.
+    ref = push(socket, "dispatch_codex", %{})
+    assert_reply(ref, :ok, %{goal_mode: false})
+
+    assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    assert issue.status.name == "In Progress"
+    assert issue.agent_goal in [nil, ""]
   end
 
   test "dispatch_codex rejects non-issue assistant threads", %{socket: socket} do
@@ -490,7 +824,14 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
       {:ok, %{assistant_message: "freeform reply", tool_calls: []}}
     end)
 
-    {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: System.tmp_dir!()})
+    # Scope the freeform workspace to a unique empty dir. Passing the shared
+    # `System.tmp_dir!()` root makes ThreadDocuments fingerprint the entire /tmp
+    # tree, which stalls the turn and the assistant_completed push never lands.
+    workspace_path = Path.join(System.tmp_dir!(), "symphony-assistant-freeform-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(workspace_path)
+    on_exit(fn -> File.rm_rf!(workspace_path) end)
+
+    {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: workspace_path})
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
 
     ref = push(socket, "send_message", %{"message" => "hi"})
@@ -618,6 +959,53 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   test "join assistant:thread:<id> with unknown id is rejected", %{socket: socket} do
     assert {:error, %{reason: _}} = subscribe_and_join(socket, "assistant:thread:999999999", %{})
+  end
+
+  test "resume_turn re-dispatches the interrupted current turn as a resume turn" do
+    test_pid = self()
+
+    runner = fn _workspace, prompt, _issue, opts ->
+      send(test_pid, {:resumed_prompt, prompt})
+      Keyword.fetch!(opts, :on_turn_started).("turn-resumed")
+      {:ok, %{assistant_message: "resumed ok", codex_thread_id: "ct-r", turn_id: "turn-resumed", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-4"
+
+    {:ok, join_payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    thread_id = join_payload.thread_id
+    {:ok, thread} = History.get_thread(thread_id)
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "original work"})
+    {:ok, _interrupted} = History.interrupt_turn_state(thread, "serve_restart")
+
+    ref = push(socket, "resume_turn", %{})
+    assert_reply(ref, :ok, %{})
+
+    assert_receive {:resumed_prompt, prompt}, 2_000
+    assert prompt =~ "original work"
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "resumed ok"}})
+
+    {:ok, after_thread} = History.get_thread(thread_id)
+    assert History.current_turn(after_thread)["trigger"] == "resume"
+  end
+
+  test "resume_turn rejects when the current turn is not interrupted" do
+    topic = "assistant:issue:macro-markets:DIS-5"
+
+    {:ok, join_payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    {:ok, thread} = History.get_thread(join_payload.thread_id)
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "done"})
+    {:ok, _completed} = History.complete_turn_state(thread, %{})
+
+    ref = push(socket, "resume_turn", %{})
+    assert_reply(ref, :error, %{reason: _})
   end
 
   defp migrate_repo do

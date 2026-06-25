@@ -14,6 +14,12 @@ defmodule SymphonyElixirWeb.Router do
 
   pipeline :tracker_api do
     plug(:accepts, ["json"])
+    plug(SymphonyElixirWeb.Plugs.SetLocale)
+    plug(SymphonyElixirWeb.TrackerAuth)
+  end
+
+  pipeline :tracker_sse do
+    plug(SymphonyElixirWeb.Plugs.SetLocale)
     plug(SymphonyElixirWeb.TrackerAuth)
   end
 
@@ -30,6 +36,18 @@ defmodule SymphonyElixirWeb.Router do
     pipe_through(:browser)
 
     get("/", RootRedirectController, :index)
+  end
+
+  scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
+    pipe_through(:tracker_sse)
+
+    get("/projects/:project_slug/issues/:identifier/dev_servers/events", DevServerController, :events)
+
+    get(
+      "/projects/:project_slug/issues/:identifier/dev_servers/:server_id/output/events",
+      DevServerController,
+      :output_events
+    )
   end
 
   scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
@@ -85,12 +103,14 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/assistant/attachments", AssistantController, :upload_attachment)
     get("/projects/:project_slug/assistant/attachments/*path", AssistantController, :show_attachment)
     get("/projects/:project_slug/jira/attachments/:id", JiraAttachmentController, :show)
+    delete("/projects/:project_slug/jira/attachments/:id", JiraAttachmentController, :delete)
     post("/projects/:project_slug/assistant/messages", AssistantController, :create)
     resources("/projects/:project_slug/issues", IssueController, only: [:index, :create, :show, :update])
     get("/projects/:project_slug/issues/:identifier/documents", IssueDocumentController, :index)
     get("/projects/:project_slug/issues/:identifier/documents/*path", IssueDocumentController, :show)
     post("/projects/:project_slug/issues/:identifier/move", IssueController, :move)
     post("/projects/:project_slug/issues/:identifier/dispatch", IssueController, :dispatch_agent)
+    post("/projects/:project_slug/issues/:identifier/goal", IssueController, :goal_control)
     post("/projects/:project_slug/issues/:identifier/sync", IssueController, :sync)
     post("/projects/:project_slug/issues/:identifier/archive", IssueController, :archive)
     post("/projects/:project_slug/issues/:identifier/restore", IssueController, :restore)
@@ -102,6 +122,9 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/evidence/propose", EvidenceConfigController, :propose)
     put("/projects/:project_slug/evidence", EvidenceConfigController, :save)
     get("/projects/:project_slug/issues/:identifier/evidence", EvidenceController, :index)
+    delete("/projects/:project_slug/issues/:identifier/evidence", EvidenceController, :clear)
+    post("/projects/:project_slug/issues/:identifier/evidence/clear-failed", EvidenceController, :clear_failed)
+    delete("/projects/:project_slug/issues/:identifier/evidence/:run_id", EvidenceController, :delete)
     get("/projects/:project_slug/issues/:identifier/commit_evidence", CommitEvidenceController, :index)
 
     get(
@@ -143,8 +166,11 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :index)
     post("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :create)
     delete("/projects/:project_slug/issues/:identifier/blockers/:blocker_identifier", BlockerController, :delete)
+    post("/projects/:project_slug/issues/:identifier/group", GroupController, :create)
+    delete("/projects/:project_slug/issues/:identifier/group", GroupController, :delete)
     post("/projects/:project_slug/issues/:identifier/terminal", TerminalController, :create)
     get("/projects/:project_slug/issues/:identifier/dev_servers", DevServerController, :index)
+    get("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/output", DevServerController, :output)
     post("/projects/:project_slug/issues/:identifier/dev_servers/start", DevServerController, :start)
     post("/projects/:project_slug/issues/:identifier/dev_servers/stop", DevServerController, :stop)
     post("/projects/:project_slug/issues/:identifier/dev_servers/restart", DevServerController, :restart)
@@ -152,6 +178,7 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/stop", DevServerController, :stop_server)
     post("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/restart", DevServerController, :restart_server)
     post("/tunnel/start", TunnelController, :start)
+    get("/projects/:project_slug/editor", EditorController, :show)
     get("/projects/:project_slug/issues/:identifier/editor", EditorController, :show)
     get("/projects/:project_slug/dev_env/steps", DevEnvController, :index)
     put("/projects/:project_slug/dev_env/steps", DevEnvController, :save)
@@ -168,7 +195,14 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/clone_jobs/:id/retry", CloneJobController, :retry)
   end
 
+  pipeline :observability_api do
+    plug(:accepts, ["json"])
+    plug(SymphonyElixirWeb.Plugs.SetLocale)
+  end
+
   scope "/", SymphonyElixirWeb do
+    pipe_through(:observability_api)
+
     get("/api/v1/state", ObservabilityApiController, :state)
 
     match(:*, "/api/v1/state", ObservabilityApiController, :method_not_allowed)

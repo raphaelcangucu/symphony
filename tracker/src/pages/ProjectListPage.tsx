@@ -1,5 +1,6 @@
 import { Archive, ExternalLink, FolderKanban, Pencil, Plus, RotateCcw, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -34,6 +35,7 @@ function parseStatusFilter(value: string | null): ProjectStatusFilter {
 }
 
 export function ProjectListPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -79,7 +81,7 @@ export function ProjectListPage() {
         if (active) setProjects(items);
       })
       .catch((error: unknown) => {
-        if (active) toast.error(error instanceof Error ? error.message : "Unable to load projects");
+        if (active) toast.error(error instanceof Error ? error.message : t("project.list.toasts.loadFailed"));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -146,9 +148,9 @@ export function ProjectListPage() {
       const yaml = await file.text();
       const imported = await importProject(yaml);
       handleProjectCreated(imported);
-      toast.success(`Imported project "${imported.name}" (existing projects are overwritten)`);
+      toast.success(t("project.list.toasts.imported", { name: imported.name }));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Unable to import project");
+      toast.error(cause instanceof Error ? cause.message : t("project.list.toasts.importFailed"));
     }
   };
 
@@ -158,7 +160,7 @@ export function ProjectListPage() {
       replaceProject(archivedProject);
       notifyTrackerProjectsChanged();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to archive project");
+      toast.error(error instanceof Error ? error.message : t("project.list.toasts.archiveFailed"));
     }
   };
 
@@ -169,12 +171,12 @@ export function ProjectListPage() {
       setStatusFilter("ongoing");
       notifyTrackerProjectsChanged();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to restore project");
+      toast.error(error instanceof Error ? error.message : t("project.list.toasts.restoreFailed"));
     }
   };
 
   const handleDelete = async (project: Project) => {
-    const confirmed = window.confirm(`Delete project "${project.name}" permanently? This cannot be undone.`);
+    const confirmed = window.confirm(t("project.list.deleteConfirm", { name: project.name }));
     if (!confirmed) return;
 
     try {
@@ -182,7 +184,7 @@ export function ProjectListPage() {
       setProjects((current) => current.filter((item) => item.slug !== project.slug));
       notifyTrackerProjectsChanged();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete project");
+      toast.error(error instanceof Error ? error.message : t("project.list.toasts.deleteFailed"));
     }
   };
 
@@ -216,8 +218,8 @@ export function ProjectListPage() {
       <div className="min-h-screen p-6">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold">Projects</h1>
-            <p className="text-sm text-muted-foreground">Choose a local tracker project.</p>
+            <h1 className="text-xl font-semibold">{t("project.list.title")}</h1>
+            <p className="text-sm text-muted-foreground">{t("project.list.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -229,7 +231,7 @@ export function ProjectListPage() {
             />
             <Button type="button" variant="outline" size="sm" onClick={() => importFileInputRef.current?.click()}>
               <Upload className="h-4 w-4" />
-              Import
+              {t("project.list.import")}
             </Button>
             <Button
               type="button"
@@ -238,7 +240,7 @@ export function ProjectListPage() {
               onClick={() => navigate({ pathname: projectsFiltersPath(), search: location.search })}
             >
               <SlidersHorizontal className="h-4 w-4" />
-              Filters
+              {t("project.list.filters")}
             </Button>
             <Button
               type="button"
@@ -246,7 +248,7 @@ export function ProjectListPage() {
               onClick={() => navigate({ pathname: projectsNewPath(), search: location.search })}
             >
               <Plus className="h-4 w-4" />
-              New workspace project
+              {t("project.list.newWorkspace")}
             </Button>
           </div>
         </div>
@@ -255,7 +257,7 @@ export function ProjectListPage() {
           {loading ? <Skeleton className="h-40" /> : null}
           {!loading && filteredProjects.length === 0 ? (
             <div className="rounded-2xl border border-dashed bg-card/70 p-8 text-sm text-muted-foreground">
-              {projects.length === 0 ? "No projects returned by the tracker API." : "No projects match your filters."}
+              {projects.length === 0 ? t("project.list.emptyApi") : t("project.list.emptyFiltered")}
             </div>
           ) : null}
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -271,12 +273,14 @@ export function ProjectListPage() {
                         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
                           <FolderKanban className="h-4 w-4" />
                         </div>
-                        {isArchived ? <Badge variant="muted">Archived</Badge> : null}
+                        {isArchived ? <Badge variant="muted">{t("project.list.archived")}</Badge> : null}
                       </div>
                       <CardTitle>{project.name}</CardTitle>
                       <CardDescription>{project.description || project.slug}</CardDescription>
                     </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">{project.issueCount ?? 0} issues</CardContent>
+                    <CardContent className="text-sm text-muted-foreground">
+                      {t("project.list.issueCount", { count: project.issueCount ?? 0 })}
+                    </CardContent>
                   </Link>
                   <CardContent className="flex justify-end gap-1 border-t pt-3">
                     {trackerUrl ? (
@@ -299,8 +303,8 @@ export function ProjectListPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-muted-foreground"
-                      aria-label={`Edit ${project.name}`}
-                      title="Edit project"
+                      aria-label={t("project.list.editProjectAria", { name: project.name })}
+                      title={t("project.list.editProject")}
                       onClick={() => navigate({ pathname: projectEditPath(project.slug), search: location.search })}
                     >
                       <Pencil className="h-4 w-4" />
@@ -312,8 +316,8 @@ export function ProjectListPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-muted-foreground"
-                          aria-label={`Restore ${project.name}`}
-                          title="Restore project"
+                          aria-label={t("project.list.restoreProjectAria", { name: project.name })}
+                          title={t("project.list.restoreProject")}
                           onClick={() => void handleRestore(project)}
                         >
                           <RotateCcw className="h-4 w-4" />
@@ -323,8 +327,8 @@ export function ProjectListPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          aria-label={`Delete ${project.name} permanently`}
-                          title="Delete project permanently"
+                          aria-label={t("project.list.deletePermanentlyAria", { name: project.name })}
+                          title={t("project.list.deletePermanently")}
                           onClick={() => void handleDelete(project)}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -336,8 +340,8 @@ export function ProjectListPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-muted-foreground"
-                        aria-label={`Archive ${project.name}`}
-                        title="Archive project"
+                        aria-label={t("project.list.archiveProjectAria", { name: project.name })}
+                        title={t("project.list.archiveProject")}
                         onClick={() => void handleArchive(project)}
                       >
                         <Archive className="h-4 w-4" />

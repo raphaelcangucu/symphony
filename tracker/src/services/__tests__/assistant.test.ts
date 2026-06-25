@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchAssistantCodexCatalog, normalizeAssistantCodexCatalog, sendAssistantMessage } from "@/services/assistant";
+import { i18n } from "@/i18n";
+import { fetchAssistantCodexCatalog, normalizeAssistantCodexCatalog, normalizeToolCall, sendAssistantMessage } from "@/services/assistant";
 import { http } from "@/services/http";
 
 describe("assistant service", () => {
@@ -95,7 +96,7 @@ describe("assistant service", () => {
       ],
     });
 
-    expect(catalog.agentLabel).toBe("Codex CLI");
+    expect(catalog.agentLabel).toBe(i18n.t("assistant.catalog.agents.codex"));
     expect(catalog.models[0]?.label).toBe("GPT-5.3 Codex");
   });
 
@@ -178,5 +179,32 @@ describe("assistant service", () => {
   it("fails fast for blank project slugs and messages", async () => {
     await expect(sendAssistantMessage(" ", { message: "hello" })).rejects.toThrow("projectSlug is required");
     await expect(sendAssistantMessage("macro-markets", { message: " " })).rejects.toThrow("message is required");
+  });
+});
+
+describe("normalizeToolCall file activity", () => {
+  it("preserves apply_patch diff/counts/paths and command args over the wire", () => {
+    const edit = normalizeToolCall({
+      name: "apply_patch",
+      status: "complete",
+      arguments: { paths: ["lib/foo.ex"], file_count: 1 },
+      result: { diff: "@@\n+a", additions: 1, deletions: 0, paths: ["lib/foo.ex"] },
+    });
+    expect(edit.name).toBe("apply_patch");
+    expect(edit.result.diff).toBe("@@\n+a");
+    expect(edit.result.additions).toBe(1);
+    expect(edit.result.paths).toEqual(["lib/foo.ex"]);
+    expect(edit.arguments).toEqual({ paths: ["lib/foo.ex"], file_count: 1 });
+
+    const cmd = normalizeToolCall({
+      name: "shell",
+      status: "complete",
+      arguments: { command: "mix test" },
+      output: "1 passed",
+      result: { exit_code: 0 },
+    });
+    expect(cmd.arguments).toEqual({ command: "mix test" });
+    expect(cmd.output).toBe("1 passed");
+    expect(cmd.result.exit_code).toBe(0);
   });
 });

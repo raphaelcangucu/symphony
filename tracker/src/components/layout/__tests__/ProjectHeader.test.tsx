@@ -25,6 +25,8 @@ const createdIssue: Issue = {
   createdAt: "2026-05-31T00:00:00Z",
   updatedAt: "2026-05-31T00:00:00Z",
   attachments: [],
+  groupLeadIdentifier: null,
+  groupMemberIdentifiers: [],
 };
 
 vi.mock("@/components/issues/IssueCreateDialog", () => ({
@@ -59,6 +61,19 @@ function renderHeader(pollingActive: boolean) {
 }
 
 describe("ProjectHeader polling indicator", () => {
+  it("links the project identity to the project board", () => {
+    render(
+      <MemoryRouter>
+        <ProjectHeader projectSlug="distributionmachine" title="Distribution Machine" trackerKind="local" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: /Distribution Machine distributionmachine/i })).toHaveAttribute(
+      "href",
+      "/projects/distributionmachine/board",
+    );
+  });
+
   it("labels the indicator active when polling is active", () => {
     renderHeader(true);
     expect(screen.getByLabelText("Polling active")).toBeInTheDocument();

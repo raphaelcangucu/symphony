@@ -291,6 +291,26 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
       assert {:ok, updated} = History.set_mode(thread, "complex")
       assert updated.metadata["mode"] == "complex"
     end
+
+    test "set_goal_mode/3 persists the authoring goal flag and objective" do
+      {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ws"})
+
+      assert {:ok, updated} = History.set_goal_mode(thread, true, "Audit the auth module")
+      assert History.thread_goal_mode(updated) == true
+      assert History.thread_goal_objective(updated) == "Audit the auth module"
+
+      # A blank objective clears the stored objective without disabling the flag.
+      assert {:ok, cleared} = History.set_goal_mode(updated, true, "   ")
+      assert History.thread_goal_mode(cleared) == true
+      assert History.thread_goal_objective(cleared) == nil
+    end
+
+    test "set_goal_mode/2 leaves the objective untouched and defaults to nil" do
+      {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ws"})
+
+      assert {:ok, enabled} = History.set_goal_mode(thread, true)
+      assert History.thread_goal_objective(enabled) == nil
+    end
   end
 
   describe "promote_project_thread_to_issue/3" do

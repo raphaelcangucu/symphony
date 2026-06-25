@@ -1,12 +1,15 @@
-import { AudioLines, ChevronDown, FileText, Mic, Plus, Square, X } from "lucide-react";
+import { AudioLines, ChevronDown, FileText, Mic, Plus, Send, Square, X } from "lucide-react";
 import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
@@ -18,7 +21,8 @@ import {
   validateAttachmentFile,
 } from "@/components/assistant/assistantAttachments";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
-import { matchingSlashCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
+import { matchingSlashCommands, parseSlashCommand, type SlashCommandContext } from "@/components/assistant/slashCommands";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { isVideoMediaType } from "@/services/attachments";
 import { extractFilesFromClipboard } from "@/lib/clipboardImages";
@@ -55,13 +59,18 @@ function eventHasFiles(event: DragEvent<HTMLElement>): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
 }
 
-export type AssistantComposerSubmitKind = "message" | "infer" | "btw";
+export type AssistantComposerSubmitKind = "message" | "infer" | "btw" | "goal";
 
 export interface AssistantComposerSubmit {
   kind: AssistantComposerSubmitKind;
   message: string;
   agent: AgentKind;
   settings: AssistantComposerSettings;
+  attachments: ReturnType<typeof serializeAttachments>;
+}
+
+export interface ComposerSnapshot {
+  input: string;
   attachments: ReturnType<typeof serializeAttachments>;
 }
 
@@ -72,8 +81,30 @@ interface AssistantComposerProps {
   floating?: boolean;
   hasQueued?: boolean;
   seedMessage?: string | null;
+  slashContext?: SlashCommandContext;
+  placeholder?: string;
+  /** When `null`, the footer hint is hidden. */
+  hint?: string | null;
+  resetToken?: number;
+  composerDisabled?: boolean;
+  agentMenuDisabled?: boolean;
+  canSubmit?: boolean;
+  /** Allow submit (and the default send affordance) with an empty input. */
+  allowEmptySubmit?: boolean;
+  /**
+   * Optional element rendered flush inside the composer card, above the input
+   * (e.g. the authoring-goal pill). Sharing the card makes it read as one piece
+   * with the message box instead of a detached banner.
+   */
+  header?: ReactNode;
+  toolbarAfterAttach?: ReactNode;
+  submitActions?: ReactNode;
+  footer?: ReactNode;
   onForceQueued?: () => void;
+  /** Called when Enter is pressed with an empty input (no attachments). */
+  onEmptySubmit?: () => void;
   onSubmit: (payload: AssistantComposerSubmit) => void;
+  onComposerSnapshot?: (snapshot: ComposerSnapshot) => void;
   /** Reports the currently selected agent (on mount and on every change). */
   onAgentChange?: (agent: AgentKind) => void;
   /**
@@ -91,11 +122,26 @@ export function AssistantComposer({
   floating = false,
   hasQueued = false,
   seedMessage = null,
+  slashContext = "authoring",
+  placeholder,
+  hint,
+  resetToken,
+  composerDisabled = false,
+  agentMenuDisabled = false,
+  canSubmit,
+  allowEmptySubmit = false,
+  header,
+  toolbarAfterAttach,
+  submitActions,
+  footer,
   onForceQueued,
+  onEmptySubmit,
   onSubmit,
+  onComposerSnapshot,
   onAgentChange,
   dropTargetRef,
 }: AssistantComposerProps) {
+  const { t } = useTranslation();
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -104,6 +150,7 @@ export function AssistantComposer({
   const dragDepthRef = useRef(0);
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(bundle));
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recordingRef = useRef(false);
   const speech = useSpeechRecognition();
   const {
@@ -167,9 +214,38 @@ export function AssistantComposer({
     recordingRef.current = recording;
   }, [recording]);
 
-  const canSend = !recording && !uploadingImage && (input.trim().length > 0 || attachments.length > 0);
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
 
-  const paletteCommands = matchingSlashCommands(input);
+    textarea.scrollTop = textarea.scrollHeight;
+  }, [input]);
+
+  useEffect(() => {
+    if (resetToken === undefined) return;
+    setInput("");
+    setAttachments([]);
+  }, [resetToken]);
+
+  useEffect(() => {
+    onComposerSnapshot?.({
+      input,
+      attachments: serializeAttachments(attachments),
+    });
+  }, [attachments, input, onComposerSnapshot]);
+
+  const parsedInput = parseSlashCommand(input, t, slashContext);
+  const hasComposerContent =
+    parsedInput.kind === "goal" || input.trim().length > 0 || attachments.length > 0;
+  const canSend =
+    !recording &&
+    !uploadingImage &&
+    (hasComposerContent || allowEmptySubmit) &&
+    (canSubmit ?? true) &&
+    !composerDisabled &&
+    !disabled;
+
+  const paletteCommands = matchingSlashCommands(input, t, slashContext);
   const showPalette = paletteCommands.length > 0 && input.trim().split(" ").length === 1;
 
   function updateAgent(agent: AgentKind) {
@@ -228,7 +304,7 @@ export function AssistantComposer({
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
     if (!projectSlug.trim()) {
-      toast.error("Attachments are not available in this conversation.");
+      toast.error(t("assistant.composer.attachmentsUnavailable"));
       return;
     }
 
@@ -240,7 +316,7 @@ export function AssistantComposer({
         const attachment = createAttachmentPreview(file, uploaded);
         setAttachments((current) => [...current, attachment]);
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Failed to upload file.");
+        toast.error(cause instanceof Error ? cause.message : t("assistant.composer.uploadFailed"));
       } finally {
         setUploadingImage(false);
       }
@@ -354,8 +430,10 @@ export function AssistantComposer({
   function submitCurrent() {
     if (!canSend) return;
 
-    const parsed = parseSlashCommand(input);
-    if (parsed.kind !== "message" && parsed.argument.length === 0) return;
+    const parsed = parseSlashCommand(input, t, slashContext);
+    // `/goal` may be issued with no objective (the assistant derives it from the
+    // issue artifacts); every other command requires an argument.
+    if (parsed.kind !== "message" && parsed.kind !== "goal" && parsed.argument.length === 0) return;
 
     onSubmit({
       kind: parsed.kind,
@@ -394,7 +472,11 @@ export function AssistantComposer({
         submitCurrent();
         return;
       }
-      if (hasQueued) onForceQueued?.();
+      if (hasQueued) {
+        onForceQueued?.();
+        return;
+      }
+      onEmptySubmit?.();
       return;
     }
 
@@ -411,7 +493,7 @@ export function AssistantComposer({
     }
 
     if (!speechSupported) {
-      toast.error("Voice dictation is not supported in this browser.");
+      toast.error(t("assistant.composer.voiceNotSupported"));
       return;
     }
 
@@ -425,7 +507,7 @@ export function AssistantComposer({
 
   const dropOverlay = dragActive ? (
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-primary/60 bg-background/85 text-sm font-medium text-primary">
-      Drop files to attach
+      {t("assistant.composer.dropFiles")}
     </div>
   ) : null;
 
@@ -445,11 +527,13 @@ export function AssistantComposer({
         : dropOverlay}
       <div
         className={cn(
-          "rounded-2xl border bg-card transition-shadow",
+          "overflow-hidden rounded-2xl border bg-card transition-shadow",
           floating ? "shadow-lg" : "shadow-sm",
           recording && "ring-2 ring-primary/30",
         )}
       >
+        {header ?? null}
+
         {attachments.length > 0 ? (
           <div className="flex flex-wrap gap-2 border-b px-3 py-2">
             {attachments.map((attachment) => {
@@ -463,7 +547,7 @@ export function AssistantComposer({
                     />
                     <button
                       type="button"
-                      aria-label={`Remove ${attachment.name}`}
+                      aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
                       onClick={() => removeAttachment(attachment.id)}
                       className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
                     >
@@ -476,7 +560,6 @@ export function AssistantComposer({
               if (attachment.type === "file" && attachment.previewUrl && isVideoMediaType(attachment.mediaType)) {
                 return (
                   <div key={attachment.id} className="group relative">
-                    {/* eslint-disable-next-line jsx-a11y/media-has-caption -- composer preview has no captions */}
                     <video
                       src={attachment.previewUrl}
                       controls
@@ -487,7 +570,7 @@ export function AssistantComposer({
                     />
                     <button
                       type="button"
-                      aria-label={`Remove ${attachment.name}`}
+                      aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
                       onClick={() => removeAttachment(attachment.id)}
                       className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
                     >
@@ -507,7 +590,7 @@ export function AssistantComposer({
                   <span className="max-w-[12rem] truncate">{attachment.name}</span>
                   <button
                     type="button"
-                    aria-label={`Remove ${attachment.name}`}
+                    aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
                     onClick={() => removeAttachment(attachment.id)}
                     className="rounded p-0.5 text-muted-foreground hover:text-foreground"
                   >
@@ -532,16 +615,17 @@ export function AssistantComposer({
                 <span className="truncate text-xs text-muted-foreground">{command.description}</span>
               </button>
             ))}
-            <p className="px-2 pt-1 text-[10px] text-muted-foreground">Tab to complete</p>
+            <p className="px-2 pt-1 text-[10px] text-muted-foreground">{t("assistant.composer.tabToComplete")}</p>
           </div>
         ) : null}
 
         <Textarea
+          ref={textareaRef}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Write a message..."
+          placeholder={placeholder ?? t("assistant.composer.placeholder")}
           className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
         />
 
@@ -559,25 +643,26 @@ export function AssistantComposer({
               variant="ghost"
               size="icon"
               className="h-8 w-8 rounded-full"
-              disabled={disabled || uploadingImage}
-              aria-label="Attach file"
+              disabled={disabled || composerDisabled || uploadingImage}
+              aria-label={t("assistant.composer.attachFile")}
               onClick={() => fileInputRef.current?.click()}
             >
               <Plus className="h-4 w-4" />
             </Button>
+            {toolbarAfterAttach}
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-1">
             <AgentMenu
               bundle={bundle}
               agent={composerState.agent}
-              disabled={disabled}
+              disabled={disabled || agentMenuDisabled}
               onChange={updateAgent}
             />
             <ModelMenu
               catalog={catalog}
               model={settings.model}
-              disabled={disabled}
+              disabled={disabled || composerDisabled}
               onChange={updateModel}
             />
             {effortOptions.length > 0 ? (
@@ -586,7 +671,7 @@ export function AssistantComposer({
                 model={settings.model}
                 effort={settings.effort}
                 options={effortOptions}
-                disabled={disabled}
+                disabled={disabled || composerDisabled}
                 onChange={updateEffort}
               />
             ) : null}
@@ -599,8 +684,8 @@ export function AssistantComposer({
                 recording &&
                   "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50",
               )}
-              disabled={disabled}
-              aria-label={recording ? "Stop recording" : "Record audio"}
+              disabled={disabled || composerDisabled}
+              aria-label={recording ? t("assistant.composer.stopRecording") : t("assistant.composer.recordAudio")}
               onClick={() => void toggleRecording()}
             >
               {recording ? (
@@ -622,17 +707,35 @@ export function AssistantComposer({
             {recording ? (
               <span className="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground" aria-live="polite">
                 <AudioLines className="h-3.5 w-3.5 animate-pulse text-primary" />
-                Recording
+                {t("assistant.composer.recording")}
               </span>
             ) : null}
+            {submitActions ?? (
+              <Button
+                type="submit"
+                variant="default"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                disabled={!canSend}
+                aria-label={t("assistant.composer.sendMessage")}
+                title={t("assistant.composer.sendMessage")}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
-      <p className={cn("text-xs text-muted-foreground", floating ? "mt-1.5" : "mt-2")}>
-        Enter to send · Shift+Enter for a new line · paste or drop files · Models from {catalog.command}
-        {speechError ? <span className="text-destructive"> · Voice dictation unavailable ({speechError})</span> : null}
-      </p>
+      {hint === null ? null : (
+        <p className={cn("text-xs text-muted-foreground", floating ? "mt-1.5" : "mt-2")}>
+          {hint ?? t("assistant.composer.hint", { command: catalog.command })}
+          {speechError ? (
+            <span className="text-destructive">{t("assistant.composer.voiceUnavailable", { error: speechError })}</span>
+          ) : null}
+        </p>
+      )}
+      {footer}
     </form>
   );
 }
@@ -648,22 +751,23 @@ function AgentMenu({
   disabled?: boolean;
   onChange: (agent: AgentKind) => void;
 }) {
+  const { t } = useTranslation();
   const current = catalogFor(bundle, agent);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {current.agentLabel}
+          {agentKindLabel(current.agent, t)}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Agent</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("assistant.composer.agentMenu")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={agent} onValueChange={(v) => onChange(v as AgentKind)}>
           {bundle.agents.map((catalog) => (
             <DropdownMenuRadioItem key={catalog.agent} value={catalog.agent}>
-              {catalog.agentLabel}
+              {agentKindLabel(catalog.agent, t)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
@@ -687,6 +791,8 @@ function EffortMenu({
   disabled?: boolean;
   onChange: (effort: AssistantEffort) => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -696,7 +802,7 @@ function EffortMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Reasoning effort</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("assistant.composer.reasoningEffort")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={effort} onValueChange={onChange}>
           {options.map((option) => (

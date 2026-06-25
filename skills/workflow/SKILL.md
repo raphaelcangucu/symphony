@@ -29,6 +29,21 @@ auto-dispatch** and how workflow status names map to behavior.
 
 Always call `get_workflow` first when answering orchestrator or workflow questions.
 
+## GitHub multi-repo projects
+
+When one Project V2 spans several GitHub repositories:
+
+- List every repo in project **`repositories:`** (import YAML) or via
+  **`update_project_repositories`** — not only `tracker.config.repo`.
+- Document a **routing table** in the workflow body (which repo owns backend,
+  admin, mobile, etc.) and require **`repository`** on `create_issue` when the
+  assistant creates subtasks.
+- `tracker.config.repo` is the default/fallback create target, not the only repo
+  on the board.
+
+See the **github-projects** skill for `create_issue` / `create_draft_issue`
+behavior on multi-repo boards.
+
 ## YAML keys (`tracker:` section)
 
 ```yaml
@@ -96,6 +111,18 @@ Use `update_project_workflow` with the **full** markdown string:
 
 `get_project` returns board statuses and categories — use it for column names, then `get_workflow` for orchestrator config.
 
+## Project setup & dev environment (assistants)
+
+For new or incomplete projects, use the setup wizard tools (require `project_slug` in freeform chat):
+
+1. **`scan_project_setup`** — scan linked repositories for stack hints (package manager, test/lint scripts).
+2. **`suggest_project_setup`** — generate workflow markdown, hooks, and validation command suggestions from scans.
+3. **`update_project_workflow`** / **`update_project_repositories`** — persist the chosen setup.
+4. **`manage_dev_env`** — `propose_steps` → review → `save_steps` → `run` (setup + serve steps).
+5. **`manage_preview`** — after serve steps exist, `start` / `status` for preview URLs used in e2e.
+
+Coding agents get a subset of **`manage_dev_env`** (`list_steps`, `run`, `run_step`, `list_runs`) bound to the current issue — they cannot `propose_steps` or `save_steps`.
+
 ## Examples
 
 ### GitHub / Gamba-style
@@ -133,6 +160,18 @@ Check in order:
 5. Assignee matches if `require_assignee_match`?
 6. Not in `terminal_states`, not blocked by open blocker issues
 7. Orchestrator logs: `Dispatching issue to agent` vs skip reasons
+
+### Tools to diagnose and repair
+
+- **`explain_dispatch_eligibility`** (assistant) — one call returns `eligible` + concrete `reasons` (`status_not_in_dispatch_states`, `terminal_state`, `wait_state`, `missing_symphony_label`) and the active gate flags. Prefer this over reading config by hand.
+- **`get_issue_orchestrator_state`** (assistant) — whether the issue is running, retrying, or idle right now (live snapshot + persisted status).
+- **`list_running_agents`** (assistant) — every agent the orchestrator is running/retrying right now (live, in-memory). Use it to see what is executing before steering.
+- **`steer_agent`** (assistant) — inject a message into a running agent's current turn (the agent reads it mid-run); no restart needed. Returns `agent_not_running` when there is no steerable active turn.
+- **`manage_blockers`** (assistant) — `list` / `create` / `delete` `blocked_by` relations; a non-terminal blocker keeps an issue out of the queue.
+- **`sync_issue`** (assistant) — pull the latest remote state after the issue was edited outside Symphony.
+- **`link_pull_request`** (assistant + coding agent) — attach a PR URL so the publish gate and board see it.
+
+From a shell against the running daemon (`make serve` first): `mix symphony.tracker dispatch-explain <slug> <id>`, `mix symphony.tracker orchestrator <slug> <id>`, `mix symphony.tracker running [slug]`, `mix symphony.tracker steer <slug> <id> "<message>"`, `mix symphony.tracker blockers <slug> <id>`, `mix symphony.tracker sync <slug> <id>`, `mix symphony.tracker pr-link <slug> <id> <url>` (add `--json` for structured output). See `elixir/README.md`.
 
 ## References
 

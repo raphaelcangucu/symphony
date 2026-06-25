@@ -20,7 +20,12 @@ defmodule SymphonyElixir.DevServer.PortAllocator do
 
   def allocate(_range, _claimed), do: {:error, :no_free_port}
 
-  defp bindable?(port) do
+  @doc """
+  Returns `true` when `127.0.0.1:port` can be bound right now (nothing is
+  listening on it). The probe socket is opened and immediately closed.
+  """
+  @spec bindable?(pos_integer()) :: boolean()
+  def bindable?(port) when is_integer(port) and port > 0 and port <= 65_535 do
     case :gen_tcp.listen(port, [:binary, ip: {127, 0, 0, 1}, reuseaddr: true]) do
       {:ok, socket} ->
         :gen_tcp.close(socket)
@@ -30,4 +35,6 @@ defmodule SymphonyElixir.DevServer.PortAllocator do
         false
     end
   end
+
+  def bindable?(_port), do: false
 end

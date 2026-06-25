@@ -23,14 +23,22 @@ defmodule SymphonyElixir.Ctl do
   # are picked up even when :code.modified_modules/0 is empty in a long-lived node.
   @assistant_reload_modules [
     SymphonyElixir.Assistant.AttachmentStore,
+    SymphonyElixir.Assistant.BlockerTools,
     SymphonyElixir.Assistant.CodexSession,
     SymphonyElixir.Assistant.DiscoveryTools,
+    SymphonyElixir.Assistant.DispatchTools,
+    SymphonyElixir.Assistant.OrchestratorTools,
     SymphonyElixir.Assistant.Payload,
     SymphonyElixir.Assistant.ProjectBoardTools,
     SymphonyElixir.Assistant.PullRequestLookup,
+    SymphonyElixir.Assistant.PullRequestTools,
     SymphonyElixir.Assistant.ReadTools,
+    SymphonyElixir.Assistant.RunningAgentsTools,
+    SymphonyElixir.Assistant.SteerTools,
+    SymphonyElixir.Assistant.SyncTools,
     SymphonyElixir.Assistant.ToolExecutor,
-    SymphonyElixir.Assistant.ToolSchema
+    SymphonyElixir.Assistant.ToolSchema,
+    SymphonyElixir.Tracker.Cli
   ]
 
   @spec restart([target()], keyword()) :: {:ok, %{reloaded: [module()], restarted: [target()]}}

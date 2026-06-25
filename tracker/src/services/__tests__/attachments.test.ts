@@ -1,11 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  deleteJiraAttachment,
+  isEvidenceArtifactUrl,
   isInternalAttachmentUrl,
+  isJiraAttachmentUrl,
+  isTrackerAuthenticatedMediaUrl,
   isVideoAttachmentSource,
   isVideoMediaType,
+  jiraAttachmentUrl,
   projectAttachmentUrl,
+  toSameOriginTrackerRequestUrl,
 } from "@/services/attachments";
+
+const httpDeleteMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/http", () => ({
+  http: {
+    delete: (...args: unknown[]) => httpDeleteMock(...args),
+  },
+  trackerPath: (path: string) => `/api/tracker/v1${path}`,
+}));
 
 describe("projectAttachmentUrl", () => {
   it("builds an authenticated tracker API path for a stored attachment", () => {
@@ -47,6 +62,92 @@ describe("isInternalAttachmentUrl", () => {
   });
 });
 
+describe("isEvidenceArtifactUrl", () => {
+  it("recognizes relative evidence artifact paths", () => {
+    expect(
+      isEvidenceArtifactUrl(
+        "/api/tracker/v1/projects/gamba/issues/1878/evidence/20260610-1/artifacts/artifacts/screens/home.png",
+      ),
+    ).toBe(true);
+  });
+
+  it("recognizes absolute evidence artifact URLs", () => {
+    expect(
+      isEvidenceArtifactUrl(
+        "http://localhost:4000/api/tracker/v1/projects/gamba/issues/1878/evidence/20260610-1/artifacts/artifacts/videos/flow.webm",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects external URLs", () => {
+    expect(isEvidenceArtifactUrl("https://example.com/evidence/artifacts/x.png")).toBe(false);
+  });
+});
+
+describe("isJiraAttachmentUrl", () => {
+  it("recognizes the relative jira attachment proxy path", () => {
+    expect(isJiraAttachmentUrl(jiraAttachmentUrl("advising", "60658"))).toBe(true);
+    expect(isJiraAttachmentUrl("/api/tracker/v1/projects/advising/jira/attachments/60658")).toBe(true);
+  });
+
+  it("recognizes absolute jira attachment URLs", () => {
+    expect(
+      isJiraAttachmentUrl("http://localhost:4000/api/tracker/v1/projects/advising/jira/attachments/60658"),
+    ).toBe(true);
+  });
+
+  it("rejects external, data, blob, and unrelated tracker URLs", () => {
+    expect(isJiraAttachmentUrl("https://example.com/jira/attachments/60658")).toBe(false);
+    expect(isJiraAttachmentUrl("data:image/png;base64,AAAA")).toBe(false);
+    expect(isJiraAttachmentUrl("blob:http://localhost/x")).toBe(false);
+    expect(isJiraAttachmentUrl("/api/tracker/v1/projects/advising/issues/CDE-1139")).toBe(false);
+    expect(isJiraAttachmentUrl("")).toBe(false);
+    expect(isJiraAttachmentUrl(null)).toBe(false);
+  });
+});
+
+describe("toSameOriginTrackerRequestUrl", () => {
+  it("rewrites absolute tracker API URLs to same-origin paths", () => {
+    expect(
+      toSameOriginTrackerRequestUrl(
+        "http://127.0.0.1:4000/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png",
+      ),
+    ).toBe("/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png");
+  });
+
+  it("leaves relative tracker paths unchanged", () => {
+    expect(
+      toSameOriginTrackerRequestUrl(
+        "/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png",
+      ),
+    ).toBe("/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png");
+  });
+
+  it("leaves external URLs unchanged", () => {
+    expect(toSameOriginTrackerRequestUrl("https://example.com/x.png")).toBe("https://example.com/x.png");
+  });
+});
+
+describe("isTrackerAuthenticatedMediaUrl", () => {
+  it("includes assistant attachments, evidence artifacts, and jira attachments", () => {
+    expect(
+      isTrackerAuthenticatedMediaUrl(
+        "/api/tracker/v1/projects/gamba/assistant/attachments/uploads/x.png",
+      ),
+    ).toBe(true);
+    expect(
+      isTrackerAuthenticatedMediaUrl(
+        "http://localhost:4000/api/tracker/v1/projects/gamba/issues/1878/evidence/run/artifacts/s.png",
+      ),
+    ).toBe(true);
+    expect(
+      isTrackerAuthenticatedMediaUrl(
+        "/api/tracker/v1/projects/advising/jira/attachments/60658",
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("isVideoMediaType", () => {
   it("recognizes video MIME types", () => {
     expect(isVideoMediaType("video/webm")).toBe(true);
@@ -71,5 +172,17 @@ describe("isVideoAttachmentSource", () => {
   it("rejects other extensions", () => {
     expect(isVideoAttachmentSource("/uploads/shot.png")).toBe(false);
     expect(isVideoAttachmentSource("")).toBe(false);
+  });
+});
+
+describe("deleteJiraAttachment", () => {
+  it("calls the JIRA attachment delete endpoint", async () => {
+    httpDeleteMock.mockResolvedValue(undefined);
+
+    await deleteJiraAttachment("advising", "10501");
+
+    expect(httpDeleteMock).toHaveBeenCalledWith(
+      "/api/tracker/v1/projects/advising/jira/attachments/10501",
+    );
   });
 });

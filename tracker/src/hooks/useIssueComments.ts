@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { i18n } from "@/i18n";
 import { createComment, deleteComment, listComments, updateComment } from "@/services/comments";
 import type { Comment, CreateCommentInput, UpdateCommentInput } from "@/types/comment";
 
@@ -21,12 +22,18 @@ export interface UseIssueCommentsResult {
 }
 
 function sortByCreatedAt(comments: Comment[]): Comment[] {
-  return [...comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return [...comments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 function latestWorkpad(comments: Comment[]): Comment | null {
-  const workpads = comments.filter((comment) => comment.kind === "workpad");
-  return workpads.length > 0 ? workpads[workpads.length - 1] : null;
+  let latest: Comment | null = null;
+  for (const comment of comments) {
+    if (comment.kind !== "workpad") continue;
+    if (!latest || comment.createdAt.localeCompare(latest.createdAt) > 0) {
+      latest = comment;
+    }
+  }
+  return latest;
 }
 
 /**
@@ -56,7 +63,7 @@ export function useIssueComments({
       setComments(sortByCreatedAt(items));
       setError(null);
     } catch {
-      setError("Could not load comments.");
+      setError(i18n.t("issue.comments.errors.loadFailed"));
     } finally {
       inFlightRef.current = false;
       setLoading(false);
@@ -75,7 +82,9 @@ export function useIssueComments({
 
   const addComment = useCallback(
     async (input: CreateCommentInput) => {
-      if (!identifier || !projectSlug) throw new Error("issue is required");
+      if (!identifier || !projectSlug) {
+        throw new Error(i18n.t("project.services.validation.fieldRequired", { field: "issue" }));
+      }
       const created = await createComment(projectSlug, identifier, input);
       setComments((current) => sortByCreatedAt([...current, created]));
       return created;
@@ -85,7 +94,9 @@ export function useIssueComments({
 
   const updateCommentById = useCallback(
     async (commentId: string, input: UpdateCommentInput) => {
-      if (!identifier || !projectSlug) throw new Error("issue is required");
+      if (!identifier || !projectSlug) {
+        throw new Error(i18n.t("project.services.validation.fieldRequired", { field: "issue" }));
+      }
       const updated = await updateComment(projectSlug, identifier, commentId, input);
       setComments((current) => sortByCreatedAt(current.map((comment) => (comment.id === commentId ? updated : comment))));
       return updated;
@@ -95,7 +106,9 @@ export function useIssueComments({
 
   const deleteCommentById = useCallback(
     async (commentId: string) => {
-      if (!identifier || !projectSlug) throw new Error("issue is required");
+      if (!identifier || !projectSlug) {
+        throw new Error(i18n.t("project.services.validation.fieldRequired", { field: "issue" }));
+      }
       await deleteComment(projectSlug, identifier, commentId);
       setComments((current) => current.filter((comment) => comment.id !== commentId));
     },

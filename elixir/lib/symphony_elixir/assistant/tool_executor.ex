@@ -5,13 +5,38 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.AgentPreference
-  alias SymphonyElixir.Assistant.{DiscoveryTools, GitHubTools, ProjectBoardTools, PullRequestLookup, ReadTools}
-  alias SymphonyElixir.{Config, DevServer}
-  alias SymphonyElixir.DevServer.Manager
+
+  alias SymphonyElixir.Assistant.{
+    BlockerTools,
+    DiscoveryTools,
+    DevEnvTools,
+    DispatchTools,
+    EvidenceTools,
+    GitHubTools,
+    GoalTools,
+    HandoffTools,
+    OrchestratorTools,
+    PreviewTools,
+    ProjectBoardTools,
+    PullRequestLookup,
+    PullRequestTools,
+    ReadTools,
+    RunningAgentsTools,
+    SetupTools,
+    SteerTools,
+    SyncTools,
+    ToolText
+  }
+
+  alias SymphonyElixir.Config
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.ProjectConfig
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
+  alias SymphonyElixir.Tracker.Workpad
+  alias SymphonyElixir.Workpad.ExecutionBundle
+  alias SymphonyElixir.Workpad.ExecutionBundle.{Classifier, Store, Validator}
   alias SymphonyElixirWeb.TrackerPresenter
 
   @tracker_tools ~w(
@@ -21,6 +46,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     update_issue
     move_issue
     add_comment
+    list_comments
+    update_comment
     list_pull_requests
     manage_preview
     update_project_workflow
@@ -28,6 +55,26 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     get_agent_executions
     dispatch_coding_agent
     dispatch_codex
+    check_handoff_gate
+    get_evidence_status
+    manage_dev_env
+    scan_project_setup
+    suggest_project_setup
+    link_pull_request
+    get_issue_orchestrator_state
+    explain_dispatch_eligibility
+    manage_blockers
+    sync_issue
+    list_running_agents
+    steer_agent
+    manage_codex_goal
+    classify_execution_unit
+    create_subtask
+    set_issue_parent
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
@@ -36,8 +83,38 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   @supported_tools @tracker_tools ++ @read_tools ++ @github_tools
   # Routine assistant chat replies should not be mirrored as issue comments; use
   # `add_comment` only when the user asks to record a comment on the issue.
-  @issue_bound_mutable_tools ~w(update_issue move_issue dispatch_coding_agent dispatch_codex)
-  @issue_bound_supported_tools ~w(list_issues get_issue read_workspace_file update_issue move_issue get_agent_executions dispatch_coding_agent dispatch_codex)
+  @issue_bound_mutable_tools ~w(update_issue move_issue add_comment dispatch_coding_agent dispatch_codex)
+  @issue_bound_parent_tools ~w(
+    create_subtask
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
+  )
+  @issue_bound_supported_tools ~w(
+    list_issues
+    get_issue
+    read_workspace_file
+    update_issue
+    move_issue
+    add_comment
+    get_agent_executions
+    dispatch_coding_agent
+    dispatch_codex
+    manage_codex_goal
+    create_issue
+    create_draft_issue
+    list_project_repositories
+    get_workflow
+    get_issue_form_options
+    classify_execution_unit
+    create_subtask
+    set_issue_parent
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
+  )
   @in_progress_state "In Progress"
 
   @type result :: %{
@@ -51,6 +128,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   @spec tool_specs() :: [map()]
   def tool_specs do
+    build_tool_specs() |> ToolText.localize_specs()
+  end
+
+  defp build_tool_specs do
     [
       tool_spec("list_issues", "List tracker issues in the current project (prefer get_issue when you know the identifier).", %{
         "type" => "object",
@@ -64,8 +145,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "properties" => %{
           "title" => string_schema("Issue title."),
           "description" => string_schema("Optional issue description."),
-          "status" => string_schema("Optional workflow status. Defaults to Todo."),
-          "priority" => %{"type" => ["integer", "null"], "description" => "Optional numeric priority."}
+          "repository" =>
+            string_schema(
+              "GitHub repo owner/name where the issue should be filed (e.g. GambaLabs/backend). Required on multi-repo GitHub boards when the task is not owned by tracker.config.repo. Call list_project_repositories first."
+            ),
+          "status" => string_schema("Optional workflow status. Omit to create in Backlog (intake). Do not use orchestrator queue statuses (e.g. Todo) on create — move_issue after intake when ready."),
+          "priority" => %{"type" => ["integer", "null"], "description" => "Optional numeric priority."},
+          "assignee_ids" => string_list_schema("Optional assignee logins or remote ids. Call get_issue_form_options first.")
         }
       }),
       tool_spec("create_draft_issue", "Create a draft tracker issue (non-actionable status) to anchor the authoring chat.", %{
@@ -74,7 +160,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "required" => ["title"],
         "properties" => %{
           "title" => string_schema("Issue title."),
-          "description" => string_schema("Optional short description.")
+          "description" => string_schema("Optional short description."),
+          "repository" =>
+            string_schema(
+              "GitHub repo owner/name where the draft issue should be filed on multi-repo GitHub boards."
+            )
         }
       }),
       tool_spec("update_issue", "Update mutable fields on an existing tracker issue.", %{
@@ -85,7 +175,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "identifier" => string_schema("Issue identifier, for example MAC-1."),
           "title" => string_schema("Optional new title."),
           "description" => string_schema("Optional new description."),
-          "status" => string_schema("Optional workflow status.")
+          "status" => string_schema("Optional workflow status."),
+          "assignee_ids" => string_list_schema("Optional assignee logins or remote ids. Call get_issue_form_options first.")
         }
       }),
       tool_spec("move_issue", "Move an issue to a workflow status.", %{
@@ -111,8 +202,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         }
       ),
       tool_spec(
-        "list_pull_requests",
-        "List pull requests linked to an issue (GitHub discovery + persisted links).",
+        "list_comments",
+        "List comments on a tracker issue (use to find workpad comment ids before update_comment).",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -123,19 +214,31 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         }
       ),
       tool_spec(
-        "manage_preview",
-        "Inspect or control the issue dev-server preview (start, stop, restart, or status).",
+        "update_comment",
+        "Edit an existing issue comment in place (for workpad updates).",
         %{
           "type" => "object",
           "additionalProperties" => false,
-          "required" => ["identifier", "action"],
+          "required" => ["identifier", "comment_id", "body"],
           "properties" => %{
             "identifier" => string_schema("Issue identifier, for example MAC-1."),
-            "action" => %{
-              "type" => "string",
-              "enum" => ["status", "start", "stop", "restart"],
-              "description" => "Preview action."
-            }
+            "comment_id" => %{
+              "type" => ["string", "integer"],
+              "description" => "Comment id from list_comments."
+            },
+            "body" => string_schema("Replacement comment body markdown/text.")
+          }
+        }
+      ),
+      tool_spec(
+        "list_pull_requests",
+        "List pull requests linked to an issue (GitHub discovery + persisted links).",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["identifier"],
+          "properties" => %{
+            "identifier" => string_schema("Issue identifier, for example MAC-1.")
           }
         }
       ),
@@ -191,8 +294,127 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "instructions" => string_schema("Concrete coding instructions for Codex."),
           "goal" => string_schema("Optional long-running Codex goal to persist for the orchestrator.")
         }
-      })
-    ] ++ ReadTools.tool_specs() ++ GitHubTools.tool_specs()
+      }),
+      tool_spec(
+        "classify_execution_unit",
+        "Deterministically classify a planned subtask as workpad_task (inline) or child_run (own run/worktree/PR). Preview only; no writes.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "properties" => %{
+            "repo" => string_schema("Target repo full name (owner/name) for the unit."),
+            "parent_repo" => string_schema("The parent task's repo full name (owner/name)."),
+            "deliverable" => string_schema("Optional deliverable hint, e.g. 'pr' for an independent shippable unit."),
+            "produces" => string_list_schema("Optional shared-contract ids this unit produces."),
+            "consumes" => string_list_schema("Optional shared-contract ids this unit consumes."),
+            "depends_on" => string_list_schema("Optional unit ids this unit depends on.")
+          }
+        }
+      ),
+      tool_spec(
+        "create_subtask",
+        "Create a child issue under a parent and attach it to the parent's execution bundle. Omit unit_type to auto-classify (workpad_task inline vs child_run with its own PR/worktree). Use for breaking a task into subtasks.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier", "title"],
+          "properties" => %{
+            "parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42."),
+            "title" => string_schema("Subtask title."),
+            "description" => string_schema("Optional subtask description."),
+            "repo" => string_schema("Target repository full name; defaults to the parent's primary repo."),
+            "unit_type" => string_schema("Optional: 'workpad_task' or 'child_run'. Omit to auto-classify."),
+            "produces" => string_list_schema("Optional shared-contract ids this subtask produces."),
+            "consumes" => string_list_schema("Optional shared-contract ids this subtask consumes."),
+            "depends_on" => string_list_schema("Optional unit ids this subtask depends on."),
+            "deliverable" => string_schema("Optional: 'pr' for an independently shippable unit.")
+          }
+        }
+      ),
+      tool_spec(
+        "set_issue_parent",
+        "Change or clear a subtask's parent. Omit parent_identifier (or pass null) to detach to standalone. Rejects cycles; moves the unit between parent execution bundles.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["identifier"],
+          "properties" => %{
+            "identifier" => string_schema("Subtask issue identifier, e.g. MAC-101."),
+            "parent_identifier" => %{
+              "type" => ["string", "null"],
+              "description" => "New parent identifier, or null to detach."
+            }
+          }
+        }
+      ),
+      tool_spec(
+        "get_execution_bundle",
+        "Read the parent's execution bundle (units, shared contracts, dependencies) from its workpad. Read-only.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier"],
+          "properties" => %{"parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42.")}
+        }
+      ),
+      tool_spec(
+        "preview_execution_plan",
+        "Validate the parent's execution bundle (dependency cycles, contracts consumed but never produced, cross-repo inline units). Returns ok + warnings. Read-only.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier"],
+          "properties" => %{"parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42.")}
+        }
+      ),
+      tool_spec(
+        "define_shared_contract",
+        "Define a shared contract (e.g. an API schema) in the parent bundle to coordinate child_run units across repos. Owner is the producing unit; consumers depend on it.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier", "id", "owner_unit", "kind"],
+          "properties" => %{
+            "parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42."),
+            "id" => string_schema("Contract id (slug), e.g. lottery-wheel-api."),
+            "owner_unit" => string_schema("Unit id that produces the contract."),
+            "kind" => string_schema("Contract kind, e.g. graphql_mutation, rest_endpoint, event_schema."),
+            "consumers" => string_list_schema("Unit ids that consume the contract."),
+            "body" => string_schema("Optional contract body to append to the parent workpad."),
+            "artifact_path" => string_schema("Optional path to the contract artifact in the repo.")
+          }
+        }
+      ),
+      tool_spec(
+        "update_shared_contract",
+        "Update a shared contract's body or status. Changing the body of an already-ready contract flips it to 'changing' so consumers re-sync.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier", "id"],
+          "properties" => %{
+            "parent_identifier" => string_schema("Parent issue identifier, e.g. MAC-42."),
+            "id" => string_schema("Contract id to update."),
+            "body" => string_schema("Optional new contract body."),
+            "status" => string_schema("Optional status: draft, ready, or changing.")
+          }
+        }
+      )
+    ] ++
+      [HandoffTools.assistant_tool_spec(), EvidenceTools.assistant_tool_spec(), PreviewTools.assistant_tool_spec()] ++
+      SetupTools.tool_specs() ++
+      [DevEnvTools.assistant_tool_spec()] ++
+      [
+        PullRequestTools.assistant_tool_spec(),
+        OrchestratorTools.assistant_tool_spec(),
+        DispatchTools.assistant_tool_spec(),
+        BlockerTools.assistant_tool_spec(),
+        SyncTools.assistant_tool_spec(),
+        RunningAgentsTools.assistant_tool_spec(),
+        SteerTools.assistant_tool_spec(),
+        GoalTools.assistant_tool_spec()
+      ] ++
+      ReadTools.tool_specs() ++ GitHubTools.tool_specs()
   end
 
   @spec combined_tool_specs() :: [map()]
@@ -240,11 +462,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       ReadTools.tool_specs()
       |> Enum.filter(&(&1["name"] in @freeform_project_agnostic_read_tools))
 
-    DiscoveryTools.tool_specs() ++
-      ProjectBoardTools.tool_specs() ++
-      GitHubTools.tool_specs() ++
-      read_specs ++
-      DynamicTool.tool_specs()
+    (DiscoveryTools.tool_specs() ++
+       ProjectBoardTools.tool_specs() ++
+       GitHubTools.tool_specs() ++
+       read_specs ++
+       DynamicTool.tool_specs())
+    |> ToolText.localize_specs()
   end
 
   @spec freeform_codex_tool_executor(keyword()) :: (String.t() | nil, term() -> map())
@@ -282,8 +505,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   def issue_bound_tool_specs(issue_identifier) when is_binary(issue_identifier) do
     identifier = normalize_issue_identifier!(issue_identifier)
 
-    tool_specs()
+    build_tool_specs()
     |> Enum.filter(&(Map.get(&1, "name") in @issue_bound_supported_tools))
+    |> Enum.reject(&(&1["name"] == "manage_codex_goal"))
+    |> Kernel.++([GoalTools.issue_bound_tool_spec()])
+    |> ToolText.localize_specs()
     |> Enum.map(&bind_tool_spec_identifier(&1, identifier))
   end
 
@@ -395,7 +621,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp do_execute(project, "create_issue", arguments, _opts) do
     with {:ok, title} <- normalize_required_string(Map.get(arguments, "title"), :title),
-         attrs <- build_create_attrs(arguments, title),
+         {:ok, status} <- resolve_create_status(project, Map.get(arguments, "status")),
+         attrs <- build_create_attrs(arguments, title, status),
          {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]) do
       presented = TrackerPresenter.issue(issue)
 
@@ -426,7 +653,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp do_execute(project, "update_issue", arguments, _opts) do
     with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
-         attrs <- Map.drop(arguments, ["identifier"]),
+         attrs <- arguments |> Map.drop(["identifier"]) |> normalize_assignee_arguments(),
          {:ok, issue} <- IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
       presented = TrackerPresenter.issue(issue)
 
@@ -469,6 +696,79 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
+  defp do_execute(project, "check_handoff_gate", arguments, opts) do
+    slug = project_slug(project)
+
+    case HandoffTools.execute(slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "get_evidence_status", arguments, opts) do
+    slug = project_slug(project)
+
+    case EvidenceTools.execute(slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "manage_dev_env", arguments, opts) do
+    slug = project_slug(project)
+
+    case DevEnvTools.execute(slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "scan_project_setup", arguments, opts) do
+    slug = project_slug(project)
+
+    case SetupTools.execute("scan_project_setup", slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "suggest_project_setup", arguments, opts) do
+    slug = project_slug(project)
+
+    case SetupTools.execute("suggest_project_setup", slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "list_comments", arguments, _opts) do
+    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
+         {:ok, comments} <- IssueAdapter.dispatch(project, :list_comments, [identifier]) do
+      presented = Enum.map(comments, &TrackerPresenter.comment/1)
+
+      {:ok,
+       %{
+         tool: "list_comments",
+         message: "Found #{length(presented)} comment(s) for #{identifier}.",
+         data: %{comments: presented}
+       }}
+    end
+  end
+
+  defp do_execute(project, "update_comment", arguments, _opts) do
+    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
+         {:ok, comment_id} <- normalize_comment_id(Map.get(arguments, "comment_id")),
+         {:ok, body} <- normalize_required_string(Map.get(arguments, "body"), :body),
+         {:ok, comment} <- IssueAdapter.dispatch(project, :update_comment, [identifier, comment_id, body]) do
+      {:ok,
+       %{
+         tool: "update_comment",
+         message: "Updated comment on #{identifier}.",
+         data: %{comment: TrackerPresenter.comment(comment)}
+       }}
+    end
+  end
+
   defp do_execute(project, "list_pull_requests", arguments, opts) do
     with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
          {:ok, payload} <- PullRequestLookup.list_for_issue(project, identifier, opts) do
@@ -483,44 +783,62 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp do_execute(project, "manage_preview", arguments, _opts) do
+  defp do_execute(project, "manage_preview", arguments, opts) do
     slug = project_slug(project)
 
-    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
-         {:ok, action} <- normalize_preview_action(Map.get(arguments, "action")) do
-      case action do
-        :status ->
-          with {:ok, view} <- DevServer.issue_targets(slug, identifier) do
-            {:ok,
-             %{
-               tool: "manage_preview",
-               message: "Preview status for #{identifier}.",
-               data: view
-             }}
-          end
+    case PreviewTools.execute(slug, arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-        :start ->
-          case Manager.start_for_issue(slug, identifier) do
-            {:ok, _} ->
-              {:ok, preview_action_result("Started preview for #{identifier}.", slug, identifier)}
+  defp do_execute(project, "link_pull_request", arguments, opts) do
+    case PullRequestTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-            {:error, reason} ->
-              {:error, reason}
-          end
+  defp do_execute(project, "get_issue_orchestrator_state", arguments, opts) do
+    case OrchestratorTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-        :stop ->
-          Manager.stop_for_issue(slug, identifier)
-          {:ok, preview_action_result("Stopped preview for #{identifier}.", slug, identifier)}
+  defp do_execute(project, "explain_dispatch_eligibility", arguments, opts) do
+    case DispatchTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-        :restart ->
-          case Manager.restart_for_issue(slug, identifier) do
-            {:ok, _} ->
-              {:ok, preview_action_result("Restarted preview for #{identifier}.", slug, identifier)}
+  defp do_execute(project, "manage_blockers", arguments, opts) do
+    case BlockerTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-            {:error, reason} ->
-              {:error, reason}
-          end
-      end
+  defp do_execute(project, "sync_issue", arguments, opts) do
+    case SyncTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp do_execute(project, "list_running_agents", arguments, opts) do
+    RunningAgentsTools.execute(project_slug(project), arguments, opts)
+  end
+
+  defp do_execute(project, "steer_agent", arguments, opts) do
+    SteerTools.execute(project_slug(project), arguments, opts)
+  end
+
+  defp do_execute(project, "manage_codex_goal", arguments, opts) do
+    case GoalTools.execute(project_slug(project), arguments, opts) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, goal_tool_error(reason)}
     end
   end
 
@@ -587,6 +905,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   defp do_execute(project, "dispatch_coding_agent", arguments, _opts) do
     with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
          {:ok, instructions} <- normalize_required_string(Map.get(arguments, "instructions"), :instructions),
+         {:ok, current} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
+         :ok <- ensure_in_dispatch_queue(project, current),
          :ok <- ensure_status_available(project, @in_progress_state),
          {:ok, agent} <- resolve_dispatch_agent(project, identifier, Map.get(arguments, "agent")),
          {:ok, _comment} <- IssueAdapter.dispatch(project, :add_comment, [identifier, codex_comment(instructions), %{"author" => "assistant"}]),
@@ -602,7 +922,357 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
+  defp do_execute(_project, "classify_execution_unit", arguments, _opts) do
+    unit = %{
+      repo: normalize_optional_string(Map.get(arguments, "repo")),
+      deliverable: normalize_optional_string(Map.get(arguments, "deliverable")),
+      produces: normalize_string_list(Map.get(arguments, "produces")),
+      consumes: normalize_string_list(Map.get(arguments, "consumes")),
+      depends_on: normalize_string_list(Map.get(arguments, "depends_on"))
+    }
+
+    parent_repo = normalize_optional_string(Map.get(arguments, "parent_repo"))
+
+    {classification, rule} =
+      case SymphonyElixir.Workpad.ExecutionBundle.Classifier.classify(unit, parent_repo: parent_repo) do
+        {:ok, type, rule} -> {to_string(type), to_string(rule)}
+        {:ambiguous, reason} -> {"ambiguous", to_string(reason)}
+      end
+
+    {:ok,
+     %{
+       tool: "classify_execution_unit",
+       message: "Classified as #{classification} (#{rule}).",
+       data: %{classification: classification, rule: rule}
+     }}
+  end
+
+  defp do_execute(project, "create_subtask", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, title} <- normalize_required_string(Map.get(arguments, "title"), :title),
+         {:ok, parent} <- IssueAdapter.dispatch(project, :get_issue, [parent_id]),
+         repo <- normalize_optional_string(Map.get(arguments, "repo")) || parent.repository_full_name,
+         {:ok, type} <- resolve_unit_type(arguments, repo, parent.repository_full_name),
+         attrs <- build_subtask_attrs(arguments, title, repo),
+         {:ok, child} <- IssueAdapter.dispatch(project, :create_issue, [attrs]),
+         :ok <- link_subtask_parent(project, parent, child),
+         {:ok, _comment} <- upsert_bundle_unit(project, parent, child, repo, type, arguments) do
+      {:ok,
+       %{
+         tool: "create_subtask",
+         message: "Created #{type} subtask #{child.identifier} under #{parent.identifier}.",
+         data: %{
+           parent: parent.identifier,
+           subtask: child.identifier,
+           unit_type: to_string(type),
+           repo: repo
+         }
+       }}
+    end
+  end
+
+  defp do_execute(project, "set_issue_parent", arguments, _opts) do
+    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
+         new_parent <- normalize_optional_string(Map.get(arguments, "parent_identifier")),
+         :ok <- reject_reparent_cycle(project, identifier, new_parent) do
+      reparent_subtask(project, identifier, new_parent)
+    end
+  end
+
+  defp do_execute(project, "get_execution_bundle", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, _comment, body} <- read_parent_workpad(project, parent_id) do
+      bundle = parsed_bundle(body)
+
+      {:ok,
+       %{
+         tool: "get_execution_bundle",
+         message: "Bundle for #{parent_id}: #{length(bundle.units)} unit(s), #{length(bundle.shared_contracts)} contract(s).",
+         data: bundle_data(bundle)
+       }}
+    end
+  end
+
+  defp do_execute(project, "preview_execution_plan", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, parent} <- IssueAdapter.dispatch(project, :get_issue, [parent_id]),
+         {:ok, _comment, body} <- read_parent_workpad(project, parent_id) do
+      bundle = parsed_bundle(body)
+
+      {ok?, warnings} =
+        case Validator.validate(bundle, parent_repo: parent.repository_full_name) do
+          :ok -> {true, []}
+          {:error, warns} -> {false, warns}
+        end
+
+      {:ok,
+       %{
+         tool: "preview_execution_plan",
+         message: if(ok?, do: "Execution plan is valid.", else: "Execution plan has #{length(warnings)} warning(s)."),
+         data: %{ok: ok?, warnings: warnings}
+       }}
+    end
+  end
+
+  defp do_execute(project, "define_shared_contract", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, id} <- normalize_required_string(Map.get(arguments, "id"), :id),
+         {:ok, owner_unit} <- normalize_required_string(Map.get(arguments, "owner_unit"), :owner_unit),
+         {:ok, kind} <- normalize_required_string(Map.get(arguments, "kind"), :kind),
+         {:ok, comment, body} <- read_parent_workpad(project, parent_id) do
+      contract = %{
+        id: id,
+        kind: kind,
+        owner_unit: owner_unit,
+        consumers: normalize_string_list(Map.get(arguments, "consumers")),
+        artifact: normalize_optional_string(Map.get(arguments, "artifact_path")),
+        status: :draft
+      }
+
+      with {:ok, updated} <- Store.upsert_contract(body, contract),
+           updated <- append_contract_body(updated, id, normalize_optional_string(Map.get(arguments, "body"))),
+           {:ok, _comment} <- write_parent_workpad(project, parent_id, comment, updated) do
+        {:ok,
+         %{
+           tool: "define_shared_contract",
+           message: "Defined shared contract #{id} (owner #{owner_unit}).",
+           data: %{id: id, owner_unit: owner_unit, status: "draft"}
+         }}
+      end
+    end
+  end
+
+  defp do_execute(project, "update_shared_contract", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, id} <- normalize_required_string(Map.get(arguments, "id"), :id),
+         {:ok, comment, body} <- read_parent_workpad(project, parent_id) do
+      bundle = parsed_bundle(body)
+      existing = Enum.find(bundle.shared_contracts, &(&1.id == id))
+      new_body = normalize_optional_string(Map.get(arguments, "body"))
+      requested_status = normalize_optional_string(Map.get(arguments, "status"))
+      status = resolve_contract_status(existing, requested_status, new_body)
+
+      contract =
+        %{
+          id: id,
+          kind: contract_field(existing, :kind),
+          owner_unit: contract_field(existing, :owner_unit),
+          consumers: contract_field(existing, :consumers) || [],
+          artifact: contract_field(existing, :artifact),
+          status: status
+        }
+
+      with {:ok, updated} <- Store.upsert_contract(body, contract),
+           updated <- append_contract_body(updated, id, new_body),
+           {:ok, _comment} <- write_parent_workpad(project, parent_id, comment, updated) do
+        {:ok,
+         %{
+           tool: "update_shared_contract",
+           message: "Updated shared contract #{id} (status #{status}).",
+           data: %{id: id, status: to_string(status)}
+         }}
+      end
+    end
+  end
+
   defp do_execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
+
+  defp parsed_bundle(body) do
+    case ExecutionBundle.parse(body) do
+      {:ok, bundle} -> bundle
+      :absent -> %ExecutionBundle{version: 1, mode: "bundle", units: [], shared_contracts: []}
+    end
+  end
+
+  defp bundle_data(%ExecutionBundle{} = bundle) do
+    %{
+      parent: bundle.parent,
+      mode: bundle.mode,
+      units: bundle.units,
+      shared_contracts: bundle.shared_contracts
+    }
+  end
+
+  # A body change to an already-ready contract flips it back to :changing so
+  # consumers know to re-sync; otherwise honor the requested status.
+  defp resolve_contract_status(%{status: :ready}, _requested, body) when is_binary(body), do: :changing
+  defp resolve_contract_status(_existing, "ready", _body), do: :ready
+  defp resolve_contract_status(_existing, "changing", _body), do: :changing
+  defp resolve_contract_status(_existing, "draft", _body), do: :draft
+  defp resolve_contract_status(%{status: status}, nil, _body) when not is_nil(status), do: status
+  defp resolve_contract_status(_existing, _requested, _body), do: :draft
+
+  defp contract_field(nil, _key), do: nil
+  defp contract_field(contract, key), do: Map.get(contract, key)
+
+  defp append_contract_body(workpad, _id, nil), do: workpad
+
+  defp append_contract_body(workpad, id, body) do
+    section = "### Shared contract: #{id}\n\n#{body}\n"
+
+    if String.contains?(workpad, "### Shared contract: #{id}") do
+      workpad
+    else
+      String.trim_trailing(workpad) <> "\n\n" <> section
+    end
+  end
+
+  # A new parent must not be the issue itself nor one of its descendants.
+  defp reject_reparent_cycle(_project, _identifier, nil), do: :ok
+
+  defp reject_reparent_cycle(_project, identifier, identifier), do: {:error, {:reparent_cycle, identifier}}
+
+  defp reject_reparent_cycle(project, identifier, new_parent) do
+    if new_parent in descendant_identifiers(project, identifier, MapSet.new()) do
+      {:error, {:reparent_cycle, new_parent}}
+    else
+      :ok
+    end
+  end
+
+  defp descendant_identifiers(project, identifier, seen) do
+    if MapSet.member?(seen, identifier) do
+      []
+    else
+      seen = MapSet.put(seen, identifier)
+
+      case Context.list_subtask_children(project_slug(project), identifier) do
+        {:ok, children} ->
+          children ++ Enum.flat_map(children, &descendant_identifiers(project, &1, seen))
+
+        _error ->
+          []
+      end
+    end
+  end
+
+  defp reparent_subtask(project, identifier, new_parent) do
+    slug = project_slug(project)
+    subtask_type = SymphonyElixir.LocalTracker.IssueRelation.subtask_type()
+
+    {:ok, child} = IssueAdapter.dispatch(project, :get_issue, [identifier])
+    old_parent = child.parent_identifier
+
+    if old_parent do
+      Context.delete_blocker(slug, identifier, old_parent, subtask_type)
+      remove_bundle_unit(project, old_parent, identifier)
+    end
+
+    if new_parent do
+      Context.add_blocker(slug, identifier, new_parent, subtask_type)
+      {:ok, parent} = IssueAdapter.dispatch(project, :get_issue, [new_parent])
+
+      type =
+        case resolve_unit_type(%{}, child.repository_full_name, parent.repository_full_name) do
+          {:ok, resolved} -> resolved
+          _ -> :workpad_task
+        end
+
+      upsert_bundle_unit(project, parent, child, child.repository_full_name, type, %{})
+    end
+
+    {:ok,
+     %{
+       tool: "set_issue_parent",
+       message: reparent_message(identifier, new_parent),
+       data: %{subtask: identifier, parent: new_parent}
+     }}
+  end
+
+  defp reparent_message(identifier, nil), do: "Detached #{identifier} to standalone."
+  defp reparent_message(identifier, parent), do: "Reparented #{identifier} under #{parent}."
+
+  defp remove_bundle_unit(project, parent_identifier, unit_id) do
+    with {:ok, comment, body} when not is_nil(comment) <- read_parent_workpad(project, parent_identifier),
+         {:ok, updated} <- Store.remove_unit(body, unit_id) do
+      write_parent_workpad(project, parent_identifier, comment, updated)
+    else
+      _ -> {:ok, :noop}
+    end
+  end
+
+  defp build_subtask_attrs(arguments, title, repo) do
+    %{"title" => title}
+    |> maybe_put_attr("description", normalize_optional_string(Map.get(arguments, "description")))
+    |> maybe_put_attr("repository", repo)
+  end
+
+  defp resolve_unit_type(%{"unit_type" => t}, _repo, _parent_repo) when t in ["workpad_task", "child_run"],
+    do: {:ok, String.to_existing_atom(t)}
+
+  defp resolve_unit_type(arguments, repo, parent_repo) do
+    unit = %{
+      repo: repo,
+      deliverable: normalize_optional_string(Map.get(arguments, "deliverable")),
+      produces: normalize_string_list(Map.get(arguments, "produces")),
+      consumes: normalize_string_list(Map.get(arguments, "consumes")),
+      depends_on: normalize_string_list(Map.get(arguments, "depends_on"))
+    }
+
+    case Classifier.classify(unit, parent_repo: parent_repo) do
+      {:ok, type, _rule} -> {:ok, type}
+      {:ambiguous, reason} -> {:error, {:ambiguous_classification, reason}}
+    end
+  end
+
+  # Records a local parent relation (source = child, target = parent). Works for
+  # local projects and mirrors the relationship locally for synced trackers.
+  defp link_subtask_parent(project, parent, child) do
+    case Context.add_blocker(
+           project_slug(project),
+           child.identifier,
+           parent.identifier,
+           SymphonyElixir.LocalTracker.IssueRelation.subtask_type()
+         ) do
+      {:ok, _relation} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp upsert_bundle_unit(project, parent, child, repo, type, arguments) do
+    unit = %{
+      id: child.identifier,
+      type: type,
+      issue: child.identifier,
+      repo: repo,
+      produces: normalize_string_list(Map.get(arguments, "produces")),
+      consumes: normalize_string_list(Map.get(arguments, "consumes")),
+      depends_on: normalize_string_list(Map.get(arguments, "depends_on")),
+      deliverable: normalize_optional_string(Map.get(arguments, "deliverable"))
+    }
+
+    with {:ok, comment, body} <- read_parent_workpad(project, parent.identifier),
+         {:ok, updated} <- Store.upsert_unit(body, unit) do
+      write_parent_workpad(project, parent.identifier, comment, updated)
+    end
+  end
+
+  # Returns `{:ok, comment_or_nil, body}` for the parent's `## Codex Workpad`
+  # comment, defaulting to a blank workpad body when none exists yet.
+  defp read_parent_workpad(project, parent_identifier) do
+    with {:ok, comments} <- IssueAdapter.dispatch(project, :list_comments, [parent_identifier]) do
+      case Enum.find(comments, &Workpad.workpad?(workpad_body(&1))) do
+        nil -> {:ok, nil, "## Codex Workpad\n"}
+        comment -> {:ok, comment, workpad_body(comment)}
+      end
+    end
+  end
+
+  defp write_parent_workpad(project, parent_identifier, nil, body) do
+    IssueAdapter.dispatch(project, :add_comment, [parent_identifier, body, %{"author" => "assistant"}])
+  end
+
+  defp write_parent_workpad(project, parent_identifier, comment, body) do
+    IssueAdapter.dispatch(project, :update_comment, [parent_identifier, workpad_comment_id(comment), body])
+  end
+
+  defp workpad_body(%{body: body}), do: body
+  defp workpad_body(comment) when is_map(comment), do: Map.get(comment, :body) || Map.get(comment, "body")
+  defp workpad_body(_comment), do: nil
+
+  defp workpad_comment_id(%{id: id}), do: id
+  defp workpad_comment_id(comment) when is_map(comment), do: Map.get(comment, :id) || Map.get(comment, "id")
+  defp workpad_comment_id(_comment), do: nil
 
   defp bind_tool_spec_identifier(%{"name" => "get_issue", "inputSchema" => schema} = spec, identifier) do
     schema =
@@ -619,7 +1289,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     issue_schema = %{
       "type" => "string",
       "const" => identifier,
-      "description" => "Bound issue workspace for #{identifier}."
+      "description" => ToolText.msg("Bound issue workspace for %{identifier}.", %{identifier: identifier})
     }
 
     schema =
@@ -636,7 +1306,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     identifier_schema = %{
       "type" => "string",
       "const" => identifier,
-      "description" => "Bound issue identifier. Must be #{identifier}."
+      "description" => ToolText.msg("Bound issue identifier. Must be %{identifier}.", %{identifier: identifier})
     }
 
     schema =
@@ -655,7 +1325,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     %{
       "type" => "string",
       "const" => identifier,
-      "description" => "Bound issue identifier. Must be #{identifier}."
+      "description" => ToolText.msg("Bound issue identifier. Must be %{identifier}.", %{identifier: identifier})
     }
   end
 
@@ -664,6 +1334,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp remove_bound_identifier_requirement(required), do: required
+
+  defp bind_issue_tool_arguments(tool_name, arguments, identifier)
+       when tool_name in @issue_bound_parent_tools do
+    bind_parent_identifier(tool_name, arguments, identifier)
+  end
 
   defp bind_issue_tool_arguments(tool_name, _arguments, _identifier) when tool_name not in @issue_bound_supported_tools do
     {:error, {:unsupported_issue_bound_tool, tool_name}}
@@ -696,6 +1371,19 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
+  defp bind_parent_identifier(_tool_name, arguments, identifier) do
+    case normalize_optional_string(Map.get(arguments, "parent_identifier")) do
+      nil ->
+        {:ok, Map.put(arguments, "parent_identifier", identifier)}
+
+      ^identifier ->
+        {:ok, Map.put(arguments, "parent_identifier", identifier)}
+
+      actual ->
+        {:error, {:parent_identifier_mismatch, identifier, actual}}
+    end
+  end
+
   defp maybe_put_bound_issue(opts) do
     case Keyword.get(opts, :bound_issue_identifier) do
       identifier when is_binary(identifier) -> Keyword.put_new(opts, :bound_issue_identifier, identifier)
@@ -708,6 +1396,71 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp string_schema(description), do: %{"type" => ["string", "null"], "description" => description}
+
+  defp string_list_schema(description) do
+    %{
+      "type" => ["array", "null"],
+      "items" => %{"type" => "string"},
+      "description" => description
+    }
+  end
+
+  defp normalize_assignee_arguments(arguments) when is_map(arguments) do
+    cond do
+      Map.has_key?(arguments, "assignee_ids") ->
+        arguments
+
+      Map.has_key?(arguments, "assignee_id") ->
+        case normalize_optional_string(Map.get(arguments, "assignee_id")) do
+          nil -> Map.delete(arguments, "assignee_id")
+          login -> arguments |> Map.delete("assignee_id") |> Map.put("assignee_ids", [login])
+        end
+
+      true ->
+        arguments
+    end
+  end
+
+  defp maybe_put_assignee_ids(attrs, arguments) do
+    ids =
+      arguments
+      |> normalize_assignee_arguments()
+      |> Map.get("assignee_ids")
+      |> normalize_string_list()
+
+    maybe_put_attr(attrs, "assignee_ids", ids)
+  end
+
+  defp ensure_in_dispatch_queue(project, issue) do
+    dispatch_states = project_dispatch_states(project)
+    current = issue_status_name(issue)
+
+    if Enum.any?(dispatch_states, &(normalize_status_name(&1) == normalize_status_name(current))) do
+      :ok
+    else
+      {:error, "Issue must be in orchestrator queue #{inspect(dispatch_states)} before dispatch. Current status: #{current}. Use move_issue first."}
+    end
+  end
+
+  defp dispatch_queue_status?(project, status) do
+    normalized = normalize_status_name(status)
+
+    project_dispatch_states(project)
+    |> Enum.any?(&(normalize_status_name(&1) == normalized))
+  end
+
+  defp project_dispatch_states(project) do
+    project
+    |> Repo.preload(:setup)
+    |> ProjectConfig.resolve()
+    |> Map.get(:dispatch_states, Config.dispatch_states())
+    |> List.wrap()
+  end
+
+  defp issue_status_name(%{status: %{name: name}}) when is_binary(name), do: name
+  defp issue_status_name(%{status: %{"name" => name}}) when is_binary(name), do: name
+  defp issue_status_name(%IssueDTO{status: %{name: name}}) when is_binary(name), do: name
+  defp issue_status_name(_issue), do: ""
 
   defp repository_list_schema do
     %{
@@ -746,6 +1499,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp goal_tool_error(reason) when is_binary(reason), do: reason
+  defp goal_tool_error(reason), do: reason
 
   defp codex_success_response(result) do
     payload = stringify_keys(%{tool: result.tool, message: result.message, data: result.data})
@@ -817,6 +1573,30 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     codex_failure_response("Missing required field: #{field}.")
   end
 
+  defp codex_failure_response(:missing_action) do
+    codex_failure_response("action is required for manage_codex_goal.")
+  end
+
+  defp codex_failure_response(:invalid_context) do
+    codex_failure_response("context must be authoring or execution.")
+  end
+
+  defp codex_failure_response(:empty_objective) do
+    codex_failure_response("objective is required for set_objective.")
+  end
+
+  defp codex_failure_response(:invalid_budget) do
+    codex_failure_response("token_budget must be a positive integer or null.")
+  end
+
+  defp codex_failure_response(:goals_disabled) do
+    codex_failure_response("Codex goal mode is disabled for this project.")
+  end
+
+  defp codex_failure_response({:invalid_action, action}) do
+    codex_failure_response("Invalid manage_codex_goal action: #{inspect(action)}.")
+  end
+
   defp codex_failure_response(reason) do
     payload = %{"error" => %{"message" => "Assistant tool execution failed.", "reason" => inspect(reason)}}
 
@@ -861,16 +1641,51 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp build_create_attrs(arguments, title) do
+  defp resolve_create_status(project, status) when is_binary(status) do
+    case normalize_optional_string(status) do
+      nil ->
+        resolve_create_status(project, nil)
+
+      explicit ->
+        if dispatch_queue_status?(project, explicit) do
+          {:error, "Cannot create issues directly in #{explicit}. Omit status to use Backlog (intake), then move_issue to #{explicit} when ready for agent execution."}
+        else
+          {:ok, explicit}
+        end
+    end
+  end
+
+  defp resolve_create_status(project, _status) do
+    case IssueAdapter.dispatch(project, :list_statuses, []) do
+      {:ok, statuses} when is_list(statuses) and statuses != [] ->
+        {:ok, pick_create_status(statuses)}
+
+      _ ->
+        {:ok, "Backlog"}
+    end
+  end
+
+  defp pick_create_status(statuses) do
+    case Enum.find(statuses, &(normalize_status_name(status_field(&1, :name)) == "backlog" && !terminal_status?(&1))) do
+      match when is_map(match) ->
+        status_field(match, :name) || "Backlog"
+
+      _ ->
+        non_dispatchable_draft_status(statuses) || "Backlog"
+    end
+  end
+
+  defp build_create_attrs(arguments, title, status) do
     %{
       "title" => title,
       "description" => Map.get(arguments, "description"),
-      "status" => normalize_optional_string(Map.get(arguments, "status")) || "Todo"
+      "status" => status
     }
     |> maybe_put_attr("priority", Map.get(arguments, "priority"))
     |> maybe_put_attr("agent", normalize_optional_string(Map.get(arguments, "agent")))
     |> maybe_put_attr("label_ids", normalize_string_list(Map.get(arguments, "label_ids")))
-    |> maybe_put_attr("assignee_ids", normalize_string_list(Map.get(arguments, "assignee_ids")))
+    |> maybe_put_create_repository(arguments)
+    |> maybe_put_assignee_ids(arguments)
   end
 
   defp build_draft_attrs(arguments, title, status) do
@@ -879,6 +1694,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       "description" => normalize_optional_string(Map.get(arguments, "description")),
       "status" => status
     }
+    |> maybe_put_create_repository(arguments)
+  end
+
+  defp maybe_put_create_repository(attrs, arguments) do
+    case normalize_optional_string(Map.get(arguments, "repository")) do
+      nil -> attrs
+      repo -> Map.put(attrs, "repository", repo)
+    end
   end
 
   @draft_category_priority %{"backlog" => 0, "unstarted" => 1}
@@ -1004,6 +1827,17 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp normalize_required_string(_value, field), do: {:error, {:missing_required_field, field}}
 
+  defp normalize_comment_id(id) when is_integer(id), do: {:ok, id}
+
+  defp normalize_comment_id(id) when is_binary(id) do
+    case String.trim(id) do
+      "" -> {:error, :missing_comment_id}
+      trimmed -> {:ok, trimmed}
+    end
+  end
+
+  defp normalize_comment_id(_id), do: {:error, :missing_comment_id}
+
   defp normalize_issue_identifier!(issue_identifier) do
     case normalize_required_string(issue_identifier, :issue_identifier) do
       {:ok, identifier} -> identifier
@@ -1041,28 +1875,6 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp project_slug(%{slug: slug}) when is_binary(slug), do: slug
   defp project_slug(%{"slug" => slug}) when is_binary(slug), do: slug
-
-  defp preview_action_result(message, project_slug, identifier) do
-    {:ok, view} = DevServer.issue_targets(project_slug, identifier)
-
-    %{
-      tool: "manage_preview",
-      message: message,
-      data: view
-    }
-  end
-
-  defp normalize_preview_action(action) when is_binary(action) do
-    case String.trim(action) |> String.downcase() do
-      "status" -> {:ok, :status}
-      "start" -> {:ok, :start}
-      "stop" -> {:ok, :stop}
-      "restart" -> {:ok, :restart}
-      other -> {:error, {:invalid_preview_action, other}}
-    end
-  end
-
-  defp normalize_preview_action(action), do: {:error, {:invalid_preview_action, action}}
 
   defp validate_workflow_markdown(markdown) when is_binary(markdown) do
     case Config.parse_workflow_markdown(markdown) do

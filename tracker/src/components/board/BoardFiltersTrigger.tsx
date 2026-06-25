@@ -1,4 +1,5 @@
 import { ListFilter } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,7 @@ import { countActiveFilters, filtersFromSearchParams } from "@/lib/issueFilters"
 import { filtersPath, viewFromPathname, workspaceBasePath } from "@/lib/workspaceRoutes";
 
 export function BoardFiltersTrigger() {
+  const { t } = useTranslation();
   const { projectSlug = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -15,7 +17,8 @@ export function BoardFiltersTrigger() {
   const isOpen = location.pathname === filtersPath(projectSlug, view);
   const activeCount = countActiveFilters(filtersFromSearchParams(searchParams));
 
-  const label = activeCount === 0 ? "Filters" : `Filters · ${activeCount}`;
+  const label =
+    activeCount === 0 ? t("board.filtersTrigger.filters") : t("board.filtersTrigger.filtersCount", { count: activeCount });
 
   function toggle() {
     const target = isOpen ? workspaceBasePath(projectSlug, view) : filtersPath(projectSlug, view);

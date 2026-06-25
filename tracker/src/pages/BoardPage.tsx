@@ -18,14 +18,15 @@ export function BoardPage() {
     statusNames,
     workflowStatuses,
     loading,
-    issues,
-    trackerKind,
     agentExecutions,
     collapsed,
     toggleCollapse,
     moveIssueOptimistically,
+    groupIssueOptimistically,
+    ungroupIssueOptimistically,
     setIssues,
     reloadProject,
+    trackerKind,
   } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,14 +43,9 @@ export function BoardPage() {
   );
 
   const handleMoveIssue = useCallback(
-    (identifier: string, status: WorkflowStatusName, position: number) => {
-      if (trackerKind !== "local") {
-        const current = issues.find((issue) => issue.identifier === identifier);
-        if (current && current.status === status) return;
-      }
-      return moveIssueOptimistically(identifier, status, position);
-    },
-    [trackerKind, issues, moveIssueOptimistically],
+    (identifier: string, status: WorkflowStatusName, position: number) =>
+      moveIssueOptimistically(identifier, status, position),
+    [moveIssueOptimistically],
   );
 
   return (
@@ -74,6 +70,8 @@ export function BoardPage() {
           collapsedStatuses={collapsed}
           onToggleCollapse={toggleCollapse}
           agentExecutions={agentExecutions}
+          onGroupIssue={groupIssueOptimistically}
+          onUngroupIssue={ungroupIssueOptimistically}
         />
       ) : null}
       <Outlet />

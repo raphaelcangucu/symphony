@@ -1,5 +1,7 @@
 import type { ReactElement, ReactNode, SVGProps } from "react";
+import type { TFunction } from "i18next";
 
+import { i18n } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { AgentKind } from "@/types/issue";
 
@@ -34,7 +36,22 @@ export const AGENT_ICONS: Record<AgentKind, (props: SVGProps<SVGSVGElement>) => 
   cursor: CursorIcon,
 };
 
-export const AGENT_LABELS: Record<AgentKind, string> = { codex: "Codex", claude: "Claude Code", cursor: "Cursor Agent" };
+export const AGENT_KINDS: AgentKind[] = ["codex", "claude", "cursor"];
+
+const AGENT_LABEL_KEYS: Record<AgentKind, string> = {
+  codex: "issue.sessionLog.agentLabels.codex",
+  claude: "issue.sessionLog.agentLabels.claude",
+  cursor: "issue.sessionLog.agentLabels.cursor",
+};
+
+type Translate = TFunction;
+
+export function agentKindLabel(
+  kind: AgentKind,
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): string {
+  return t(AGENT_LABEL_KEYS[kind]);
+}
 
 export interface AgentChipProps {
   label: string;

@@ -1,0 +1,43 @@
+msgid ""
+msgstr ""
+"Language: pt_BR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Backup id=%{id} completed"
+msgstr "Backup id=%{id} concluído"
+
+msgid "category must be database or all"
+msgstr "category deve ser database ou all"
+
+msgid "invalid backup id"
+msgstr "id de backup inválido"
+
+msgid "Restored backup id=%{id}"
+msgstr "Backup id=%{id} restaurado"
+
+msgid "Removed %{count} expired backup(s)"
+msgstr "Removido(s) %{count} backup(s) expirado(s)"
+
+msgid "Deleted backup id=%{id}"
+msgstr "Backup id=%{id} excluído"
+
+msgid "backup file missing on disk"
+msgstr "arquivo de backup ausente no disco"
+
+msgid "Backup %{id} not found"
+msgstr "Backup %{id} não encontrado"
+
+msgid "Database file not found: %{path}"
+msgstr "Arquivo de banco não encontrado: %{path}"
+
+msgid "Database file is too small to backup (%{bytes} bytes): %{path}"
+msgstr "Arquivo de banco pequeno demais para backup (%{bytes} bytes): %{path}"
+
+msgid "Backup file is too small to restore (%{bytes} bytes): %{path}"
+msgstr "Arquivo de backup pequeno demais para restaurar (%{bytes} bytes): %{path}"
+
+msgid "Refusing restore: current database has %{current} project(s) but backup has %{backup}. Pass force=true to override."
+msgstr "Restauração recusada: banco atual tem %{current} projeto(s) mas backup tem %{backup}. Passe force=true para forçar."
+
+msgid "Backup file not found: %{path}"
+msgstr "Arquivo de backup não encontrado: %{path}"

@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 interface StateMultiSelectProps {
   label: string;
   description?: string;
@@ -7,6 +9,7 @@ interface StateMultiSelectProps {
 }
 
 export function StateMultiSelect({ label, description, available, value, onChange }: StateMultiSelectProps) {
+  const { t } = useTranslation();
   const selected = new Set(value);
 
   function toggle(state: string) {
@@ -19,7 +22,7 @@ export function StateMultiSelect({ label, description, available, value, onChang
       <p className="text-sm font-medium">{label}</p>
       {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
       {available.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No statuses defined for this project yet.</p>
+        <p className="text-xs text-muted-foreground">{t("project.config.stateSelect.empty")}</p>
       ) : (
         <div className="flex flex-wrap gap-2">
           {available.map((state) => {

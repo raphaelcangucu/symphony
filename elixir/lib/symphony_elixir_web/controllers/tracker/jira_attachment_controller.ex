@@ -33,6 +33,22 @@ defmodule SymphonyElixirWeb.Tracker.JiraAttachmentController do
     end
   end
 
+  @spec delete(Conn.t(), map()) :: Conn.t()
+  def delete(conn, %{"project_slug" => project_slug, "id" => id}) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         :ok <- ensure_jira(project),
+         :ok <- Attachments.delete(id) do
+      send_resp(conn, 204, "")
+    else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, :not_jira} -> TrackerErrors.render(conn, :issue_not_found)
+      {:error, :missing_jira_credentials} -> TrackerErrors.render(conn, :remote_unauthorized)
+      {:error, {:jira_api_status, status}} when status in [401, 403] -> TrackerErrors.render(conn, :remote_unauthorized)
+      {:error, {:jira_api_status, 404}} -> TrackerErrors.render(conn, :attachment_not_found)
+      {:error, _reason} -> TrackerErrors.render(conn, :remote_unavailable)
+    end
+  end
+
   defp ensure_jira(%{tracker_kind: "jira"}), do: :ok
   defp ensure_jira(_project), do: {:error, :not_jira}
 end

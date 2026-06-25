@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,7 @@ interface AssigneeAvatarProps {
 }
 
 export function AssigneeAvatar({ login, size = "sm", className }: AssigneeAvatarProps) {
+  const { t } = useTranslation();
   const dimension = size === "md" ? "h-7 w-7 text-[11px]" : "h-5 w-5 text-[9px]";
   const pixels = size === "md" ? 56 : 40;
   const avatarUrl = login ? githubAvatarUrl(login, pixels) : null;
@@ -55,7 +57,7 @@ export function AssigneeAvatar({ login, size = "sm", className }: AssigneeAvatar
   if (!login) {
     return (
       <span
-        title="Unassigned"
+        title={t("issue.drawer.unassigned")}
         className={cn(
           "inline-flex items-center justify-center rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground",
           dimension,
