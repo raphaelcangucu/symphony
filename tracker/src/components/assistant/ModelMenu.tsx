@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { agentKindLabel } from "@/components/shared/AgentChip";
 import { modelLabel, type AssistantAgentCatalog } from "@/lib/assistantSettings";
 import { cn } from "@/lib/utils";
@@ -71,11 +72,15 @@ export function ModelMenu({
           {showChevron && <ChevronDown className="h-3 w-3 opacity-60" />}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>
+      <DropdownMenuContent
+        align="end"
+        collisionPadding={12}
+        className="flex w-64 max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] flex-col overflow-hidden p-1"
+      >
+        <DropdownMenuLabel className="shrink-0">
           {agentKindLabel(catalog.agent, t)} · {t("assistant.modelMenu.modelSuffix")}
         </DropdownMenuLabel>
-        <div className="px-1 pb-1">
+        <div className="shrink-0 px-1 pb-1">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-50" />
             <input
@@ -89,21 +94,23 @@ export function ModelMenu({
             />
           </div>
         </div>
-        <DropdownMenuSeparator />
+        <DropdownMenuSeparator className="shrink-0" />
         {filtered.length === 0 ? (
           <div className="px-2 py-3 text-center text-xs text-muted-foreground">{t("assistant.modelMenu.noMatch")}</div>
         ) : (
-          <DropdownMenuRadioGroup
-            value={model}
-            onValueChange={onChange}
-            className="max-h-[280px] overflow-y-auto"
+          <ScrollArea
+            data-testid="model-menu-scroll"
+            className="min-h-0 max-h-60 flex-1"
+            onWheel={(event) => event.stopPropagation()}
           >
-            {filtered.map((option) => (
-              <DropdownMenuRadioItem key={option.id} value={option.model}>
-                {option.label}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
+            <DropdownMenuRadioGroup value={model} onValueChange={onChange}>
+              {filtered.map((option) => (
+                <DropdownMenuRadioItem key={option.id} value={option.model}>
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </ScrollArea>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
