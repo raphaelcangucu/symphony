@@ -21,11 +21,13 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { AgentTab } from "./AgentTab";
+import { BundlePanel } from "./BundlePanel";
 
 interface AgentTabsProps {
   issue: Issue;
   projectSlug: string;
   execution?: AgentExecution;
+  executions?: AgentExecution[];
   view: WorkspaceView;
   workflowMarkdown?: string | null;
   evidenceRecords?: import("@/types/evidence").EvidenceRecord[];
@@ -36,6 +38,7 @@ export function AgentTabs({
   issue,
   projectSlug,
   execution,
+  executions,
   view,
   workflowMarkdown = null,
   evidenceRecords = [],
@@ -122,8 +125,9 @@ export function AgentTabs({
       </TabsContent>
       <TabsContent
         value="execution"
-        className={cn("mt-0 min-h-0 flex-1 overflow-y-auto pb-1", SCROLLBAR_THIN)}
+        className={cn("mt-0 min-h-0 flex-1 space-y-3 overflow-y-auto pb-1", SCROLLBAR_THIN)}
       >
+        <BundlePanel issue={issue} executions={executions ?? (execution ? [execution] : [])} />
         <AgentTab
           issue={issue}
           execution={execution}

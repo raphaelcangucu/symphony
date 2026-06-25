@@ -235,3 +235,27 @@ describe("normalizeIssue group fields", () => {
     expect(lead.groupMemberIdentifiers).toEqual(["MAC-2"]);
   });
 });
+
+describe("normalizeIssue subtask metadata", () => {
+  it("maps repository, parent, and sub-issue summary", () => {
+    const issue = normalizeIssue({
+      id: 2,
+      identifier: "2",
+      title: "Aplicativo IOS",
+      repository_full_name: "xipcash/ios",
+      parent_identifier: "1",
+      sub_issue_summary: { total: 4, completed: 4, percent_completed: 100 },
+    });
+
+    expect(issue.repositoryFullName).toBe("xipcash/ios");
+    expect(issue.parentIdentifier).toBe("1");
+    expect(issue.subIssueSummary).toEqual({ total: 4, completed: 4, percentCompleted: 100 });
+  });
+
+  it("defaults missing metadata to null", () => {
+    const issue = normalizeIssue({ id: 9, identifier: "9", title: "No metadata" });
+    expect(issue.repositoryFullName).toBeNull();
+    expect(issue.parentIdentifier).toBeNull();
+    expect(issue.subIssueSummary).toBeNull();
+  });
+});

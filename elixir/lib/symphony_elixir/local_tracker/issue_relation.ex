@@ -8,6 +8,12 @@ defmodule SymphonyElixir.LocalTracker.IssueRelation do
 
   @type t :: %__MODULE__{}
 
+  @subtask_type "sub_issue_of"
+
+  @doc "Relation type for a subtask pointing at its parent (source = child, target = parent)."
+  @spec subtask_type() :: String.t()
+  def subtask_type, do: @subtask_type
+
   schema "local_tracker_issue_relations" do
     field(:type, :string)
     field(:remote_origin, :boolean, default: false)

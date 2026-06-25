@@ -108,6 +108,12 @@
     }
   },
   "issue": {
+    "bundle": {
+      "title": "Execution bundle",
+      "contracts": "Shared contracts",
+      "dependsOn": "depends on {{units}}",
+      "consumes": "consumes {{contracts}}"
+    },
     "agent": {
       "advancedControls": "Advanced controls",
       "controlTitle": "Agent control",
@@ -1442,6 +1448,11 @@
     "runningSessions": "Running sessions",
     "runningSessionsHint": "All active sessions across runtimes.",
     "noActiveSessions": "No active sessions.",
+    "childRuns": {
+      "count": "{{count}} child runs",
+      "show": "Show child runs",
+      "hide": "Hide child runs"
+    },
     "openBoard": "Open board",
     "pursuingGoal": "Pursuing goal: {{objective}}",
     "table": {
@@ -1930,6 +1941,12 @@
       "removeMember": "Remove {{identifier}} from group",
       "disband": "Ungroup all",
       "runningLocked": "Can't change the group while it's running"
+    },
+    "subtasks": {
+      "count": "{{count}} subtasks",
+      "expand": "Show subtasks",
+      "collapse": "Hide subtasks",
+      "empty": "Open the parent to view its subtasks"
     },
     "issueCard": {
       "openOnTracker": "Open on tracker",

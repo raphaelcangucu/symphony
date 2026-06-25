@@ -34,6 +34,13 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     list_running_agents
     steer_agent
     manage_codex_goal
+    classify_execution_unit
+    create_subtask
+    set_issue_parent
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
   )
 
   @tools @scoped_tools ++ ~w(create_tracker_project)

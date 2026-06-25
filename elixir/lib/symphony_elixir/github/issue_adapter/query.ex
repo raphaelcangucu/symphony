@@ -17,6 +17,9 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
                 assignees(first: 1) { nodes { login } }
                 labels(first: 20) { nodes { name } }
                 createdAt updatedAt
+                repository { nameWithOwner }
+                parent { number repository { nameWithOwner } }
+                subIssuesSummary { total completed percentCompleted }
               }
             }
             fieldValues(first: 30) {
@@ -313,11 +316,24 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
       status: status_from_field_values(item["fieldValues"], status_field),
       project_slug: project_slug,
       created_at: content["createdAt"],
-      updated_at: content["updatedAt"]
+      updated_at: content["updatedAt"],
+      repository_full_name: get_in(content, ["repository", "nameWithOwner"]),
+      parent_identifier: parent_identifier(content["parent"]),
+      sub_issue_summary: sub_issue_summary(content["subIssuesSummary"])
     })
   end
 
   def normalize_item(_item, _status_field, _project_slug), do: nil
+
+  defp parent_identifier(%{"number" => number}) when is_integer(number), do: to_string(number)
+  defp parent_identifier(_), do: nil
+
+  defp sub_issue_summary(%{"total" => total, "completed" => completed, "percentCompleted" => percent})
+       when is_integer(total) and total > 0 do
+    %{total: total, completed: completed, percent_completed: percent}
+  end
+
+  defp sub_issue_summary(_), do: nil
 
   @spec status_options(map()) :: [IssueDTO.status()]
   def status_options(%{"data" => %{"node" => %{"fields" => %{"nodes" => nodes}}}}) do

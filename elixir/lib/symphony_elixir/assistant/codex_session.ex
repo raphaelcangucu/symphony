@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Assistant.CodexSession do
   @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
 
-  alias SymphonyElixir.Assistant.{FileActivityPresenter, History, IssueDocuments, ProjectExploreWorkspace, ThreadDocuments, ToolCallPresenter, ToolExecutor}
+  alias SymphonyElixir.Assistant.{FileActivityPresenter, History, IssueDocuments, ProjectExploreWorkspace, SubtaskAuthoring, ThreadDocuments, ToolCallPresenter, ToolExecutor}
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.CodingAgent, as: RootCodingAgent
   alias SymphonyElixir.Config
@@ -599,6 +599,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
     New issues belong in Backlog (intake) unless the user asks for a different status — omit status on create_issue or set status to Backlog; do not default to Todo or dispatch Codex unless the user explicitly asks.
     Assignees: call get_issue_form_options and use assignee_ids on update_issue — never linear_graphql on non-Linear projects.
+
+    #{SubtaskAuthoring.guidance()}
 
     Recent conversation:
     #{format_history(history)}

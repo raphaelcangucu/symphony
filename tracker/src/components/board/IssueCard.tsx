@@ -1,6 +1,6 @@
 import { CSS } from "@dnd-kit/utilities";
 import { useSortable } from "@dnd-kit/sortable";
-import { AlertTriangle, ExternalLink, GitBranch, MessageSquare } from "lucide-react";
+import { AlertTriangle, ExternalLink, GitBranch, GitFork, Layers, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { AgentLongRunningBadge, AgentStatusDot, agentStatusLabel } from "@/components/issues/AgentStatusBadge";
@@ -111,6 +111,29 @@ export function IssueCard({
             <GitBranch className="h-3 w-3 shrink-0" />
             <span className="truncate">{issue.branchName}</span>
           </span>
+        </div>
+      ) : null}
+
+      {issue.repositoryFullName || issue.subIssueSummary ? (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          {issue.repositoryFullName ? (
+            <span
+              title={issue.repositoryFullName}
+              className="inline-flex max-w-full items-center gap-1 truncate rounded-md border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+            >
+              <GitFork className="h-3 w-3 shrink-0" />
+              <span className="truncate">{issue.repositoryFullName}</span>
+            </span>
+          ) : null}
+          {issue.subIssueSummary ? (
+            <span
+              title={`${issue.subIssueSummary.completed} / ${issue.subIssueSummary.total}`}
+              className="inline-flex items-center gap-1 rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+            >
+              <Layers className="h-3 w-3 shrink-0" />
+              {issue.subIssueSummary.completed} / {issue.subIssueSummary.total}
+            </span>
+          ) : null}
         </div>
       ) : null}
 

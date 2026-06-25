@@ -3,30 +3,25 @@ defmodule SymphonyElixir.Tracker.IssueDTOTest do
 
   alias SymphonyElixir.Tracker.IssueDTO
 
-  test "build/1 fills defaults and keeps provided values" do
+  test "build/1 carries repository, parent, and sub-issue summary" do
     dto =
       IssueDTO.build(%{
-        id: "1",
-        identifier: "#42",
-        title: "Hello",
-        status: %{name: "In Progress", category: "started", position: 2, is_terminal: false},
-        project_slug: "demo"
+        identifier: "2",
+        title: "Aplicativo IOS",
+        repository_full_name: "xipcash/ios",
+        parent_identifier: nil,
+        sub_issue_summary: %{total: 4, completed: 4, percent_completed: 100}
       })
 
-    assert dto.identifier == "42"
-    assert dto.title == "Hello"
-    assert dto.status.name == "In Progress"
-    assert dto.labels == []
-    assert dto.blocked_by == []
-    assert dto.priority == nil
-    assert dto.position == nil
+    assert dto.repository_full_name == "xipcash/ios"
+    assert dto.parent_identifier == nil
+    assert dto.sub_issue_summary == %{total: 4, completed: 4, percent_completed: 100}
   end
 
-  test "build/1 defaults and keeps group fields" do
-    assert IssueDTO.build(%{identifier: "MAC-1", title: "T"}).group_member_identifiers == []
-    assert IssueDTO.build(%{identifier: "MAC-1", title: "T"}).group_lead_identifier == nil
-
-    dto = IssueDTO.build(%{identifier: "MAC-2", title: "T", group_lead_identifier: "MAC-1"})
-    assert dto.group_lead_identifier == "MAC-1"
+  test "build/1 defaults the new fields" do
+    dto = IssueDTO.build(%{identifier: "9", title: "No metadata"})
+    assert dto.repository_full_name == nil
+    assert dto.parent_identifier == nil
+    assert dto.sub_issue_summary == nil
   end
 end

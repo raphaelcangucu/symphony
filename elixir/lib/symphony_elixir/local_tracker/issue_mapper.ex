@@ -34,7 +34,8 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
       created_at: record.inserted_at,
       updated_at: record.updated_at,
       group_lead_identifier: group_lead_identifier(record.group_lead),
-      group_member_identifiers: group_member_identifiers(record.group_members)
+      group_member_identifiers: group_member_identifiers(record.group_members),
+      parent_identifier: subtask_parent_identifier(record.source_relations)
     }
   end
 
@@ -96,6 +97,17 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
 
   defp blockers(%NotLoaded{}), do: []
   defp blockers(_relations), do: []
+
+  defp subtask_parent_identifier(relations) when is_list(relations) do
+    subtask_type = IssueRelation.subtask_type()
+
+    Enum.find_value(relations, fn
+      %IssueRelation{type: ^subtask_type, target_issue: %IssueRecord{identifier: identifier}} -> identifier
+      _relation -> nil
+    end)
+  end
+
+  defp subtask_parent_identifier(_relations), do: nil
 
   defp status_name(%WorkflowStatus{name: name}), do: name
   defp status_name(%NotLoaded{}), do: nil

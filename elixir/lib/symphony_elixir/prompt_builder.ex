@@ -37,11 +37,114 @@ defmodule SymphonyElixir.PromptBuilder do
       workpad_bootstrap_section() <>
       workflow_guidance_section(issue, Keyword.get(opts, :agent_kind)) <>
       group_members_section(Keyword.get(opts, :members, [])) <>
+      bundle_coordinator_section(Keyword.get(opts, :bundle)) <>
+      child_unit_section(
+        Keyword.get(opts, :bundle_unit),
+        Keyword.get(opts, :parent_identifier),
+        Keyword.get(opts, :shared_contracts, [])
+      ) <>
       validate_section(config) <>
       preview_context_section(issue) <>
       discussion_section(issue) <>
       artifacts_section(Keyword.get(opts, :workspace))
   end
+
+  @doc """
+  Parent coordinator section. When a run carries a parsed execution `bundle`, the
+  parent acts as a coordinator: it executes `workpad_task` units inline and
+  dispatches one child run per `child_run` unit. Returns "" for non-bundle runs.
+  """
+  @spec bundle_coordinator_section(SymphonyElixir.Workpad.ExecutionBundle.t() | nil) :: String.t()
+  def bundle_coordinator_section(%SymphonyElixir.Workpad.ExecutionBundle{units: units} = bundle)
+      when is_list(units) and units != [] do
+    unit_lines =
+      Enum.map_join(units, "\n", fn unit ->
+        deps = if unit.depends_on == [], do: "", else: " — depends on: #{Enum.join(unit.depends_on, ", ")}"
+        consumes = if unit.consumes == [], do: "", else: " — consumes: #{Enum.join(unit.consumes, ", ")}"
+        produces = if unit.produces == [], do: "", else: " — produces: #{Enum.join(unit.produces, ", ")}"
+        repo = if is_binary(unit.repo), do: " [#{unit.repo}]", else: ""
+        "- **#{unit.id}** (#{unit.type})#{repo}#{produces}#{consumes}#{deps}"
+      end)
+
+    contract_lines =
+      case bundle.shared_contracts do
+        [] ->
+          ""
+
+        contracts ->
+          lines =
+            Enum.map_join(contracts, "\n", fn contract ->
+              consumers = if contract.consumers == [], do: "", else: " → #{Enum.join(contract.consumers, ", ")}"
+              "- **#{contract.id}** (#{contract.kind || "contract"}, status: #{contract.status}) owned by #{contract.owner_unit}#{consumers}"
+            end)
+
+          "\n\nShared contracts:\n#{lines}"
+      end
+
+    """
+
+    ## Execution bundle (coordinator)
+
+    You are the **coordinator** for this parent task. The plan below is authoritative — do not re-derive it.
+
+    Units:
+    #{unit_lines}#{contract_lines}
+
+    Rules:
+    - Execute every `workpad_task` unit yourself, inline, in this workspace.
+    - **Do not implement `child_run` units yourself.** Each `child_run` is dispatched as its own run in an isolated worktree, branch, and PR.
+    - A unit that `consumes` a shared contract must wait until that contract is `ready`. Produce the contract (as its owner) before consumers start.
+    - The parent only completes once every `workpad_task` is done AND every `child_run` has reached a terminal state (PR opened or closed).
+    """
+  end
+
+  def bundle_coordinator_section(_bundle), do: ""
+
+  @doc """
+  Child-scoped section for a single `child_run` unit. Scopes the agent to its
+  unit, the shared contracts it touches, and a back-link to the parent.
+  Returns "" when there is no unit context.
+  """
+  @spec child_unit_section(map() | nil, String.t() | nil, [map()]) :: String.t()
+  def child_unit_section(unit, parent_identifier, shared_contracts)
+      when is_map(unit) do
+    repo = if is_binary(unit[:repo]), do: " in `#{unit[:repo]}`", else: ""
+    produces = if (unit[:produces] || []) == [], do: "", else: "\n- You **produce** shared contract(s): #{Enum.join(unit[:produces], ", ")}"
+    consumes = if (unit[:consumes] || []) == [], do: "", else: "\n- You **consume** shared contract(s): #{Enum.join(unit[:consumes], ", ")} (treat them as fixed inputs)"
+
+    parent_line =
+      if is_binary(parent_identifier),
+        do: "\n- Parent task: **#{parent_identifier}** (this run is one unit of its execution bundle).",
+        else: ""
+
+    relevant =
+      Enum.filter(shared_contracts, fn contract ->
+        contract.id in (unit[:produces] || []) or contract.id in (unit[:consumes] || [])
+      end)
+
+    contract_block =
+      case relevant do
+        [] ->
+          ""
+
+        contracts ->
+          lines =
+            Enum.map_join(contracts, "\n", fn contract ->
+              "- **#{contract.id}** (status: #{contract.status}) owned by #{contract[:owner_unit]}"
+            end)
+
+          "\n\nRelevant shared contracts:\n#{lines}"
+      end
+
+    """
+
+    ## Child run scope (unit `#{unit[:id]}`)
+
+    This run delivers a **single unit**#{repo} of a larger parent task. Stay within this unit's scope; open one focused PR for it.#{parent_line}#{produces}#{consumes}#{contract_block}
+    """
+  end
+
+  def child_unit_section(_unit, _parent_identifier, _shared_contracts), do: ""
 
   @doc false
   @spec group_members_section([SymphonyElixir.Issue.t()]) :: String.t()

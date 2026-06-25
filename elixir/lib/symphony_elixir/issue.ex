@@ -24,7 +24,9 @@ defmodule SymphonyElixir.Issue do
     created_at: nil,
     updated_at: nil,
     group_lead_identifier: nil,
-    group_member_identifiers: []
+    group_member_identifiers: [],
+    parent_identifier: nil,
+    repository_full_name: nil
   ]
 
   @type t :: %__MODULE__{
@@ -47,7 +49,9 @@ defmodule SymphonyElixir.Issue do
           created_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil,
           group_lead_identifier: String.t() | nil,
-          group_member_identifiers: [String.t()]
+          group_member_identifiers: [String.t()],
+          parent_identifier: String.t() | nil,
+          repository_full_name: String.t() | nil
         }
 
   @spec label_names(t()) :: [String.t()]

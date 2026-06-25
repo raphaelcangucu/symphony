@@ -151,6 +151,37 @@ defmodule SymphonyElixir.LocalTracker.IssueMapperTest do
     assert IssueMapper.to_issue(record).project_slug == nil
   end
 
+  test "to_issue surfaces the subtask parent identifier from a sub_issue_of relation" do
+    record = %IssueRecord{
+      id: 10,
+      identifier: "MAC-101",
+      status: %WorkflowStatus{name: "Todo"},
+      labels: [],
+      comments: [],
+      source_relations: [
+        %IssueRelation{
+          type: IssueRelation.subtask_type(),
+          target_issue: %IssueRecord{id: 1, identifier: "MAC-1", status: %WorkflowStatus{name: "Todo"}}
+        }
+      ]
+    }
+
+    assert IssueMapper.to_issue(record).parent_identifier == "MAC-1"
+  end
+
+  test "to_issue leaves parent_identifier nil without a sub_issue_of relation" do
+    record = %IssueRecord{
+      id: 11,
+      identifier: "MAC-102",
+      status: %WorkflowStatus{name: "Todo"},
+      labels: [],
+      comments: [],
+      source_relations: []
+    }
+
+    assert IssueMapper.to_issue(record).parent_identifier == nil
+  end
+
   test "to_issue surfaces group lead and member identifiers" do
     member_record = %IssueRecord{identifier: "MAC-2", group_lead: %IssueRecord{identifier: "MAC-1"}}
     lead_record = %IssueRecord{identifier: "MAC-1", group_members: [%IssueRecord{identifier: "MAC-2"}]}

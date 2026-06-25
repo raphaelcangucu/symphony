@@ -83,6 +83,9 @@ export interface Issue {
   attachments: IssueAttachment[];
   groupLeadIdentifier: string | null;
   groupMemberIdentifiers: string[];
+  repositoryFullName?: string | null;
+  parentIdentifier?: string | null;
+  subIssueSummary?: { total: number; completed: number; percentCompleted: number } | null;
 }
 
 export const AGENT_KINDS = ["codex", "claude", "cursor"] as const;

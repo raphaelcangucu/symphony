@@ -260,6 +260,49 @@ describe("ObservabilityPage", () => {
     expect(screen.getByText("Ship the i18n migration")).toBeInTheDocument();
   });
 
+  it("nests child runs under their coordinating parent", async () => {
+    const parent = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "601",
+      sessionId: "p",
+      bundleRole: "parent" as const,
+      childIdentifiers: ["602", "603"],
+    };
+    const childA = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "602",
+      sessionId: "ca",
+      bundleRole: "child" as const,
+      parentIdentifier: "601",
+      repo: "macro/be",
+    };
+    const childB = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "603",
+      sessionId: "cb",
+      bundleRole: "child" as const,
+      parentIdentifier: "601",
+      repo: "macro/fe",
+    };
+    runtimes = [{ ...macroRuntime, counts: { running: 3, retrying: 0 }, running: [parent, childA, childB] }];
+
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("link", { name: "601" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "602" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "603" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /child runs/i }));
+
+    expect(screen.queryByRole("link", { name: "602" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "603" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "601" })).toBeInTheDocument();
+  });
+
   it("links each runtime summary card to the project board", async () => {
     render(
       <MemoryRouter>

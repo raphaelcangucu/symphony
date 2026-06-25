@@ -25,6 +25,7 @@ defmodule SymphonyElixir.AgentRunner do
   alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Workpad.ExecutionContract
+  alias SymphonyElixir.Workspace.Worktree
 
   # The open-PR check runs every turn for "In Progress" issues; cache it per
   # repo+issue so a long-running issue does not re-query GitHub each turn.
@@ -63,7 +64,7 @@ defmodule SymphonyElixir.AgentRunner do
 
   @spec do_run(map(), pid() | nil, keyword()) :: run_outcome()
   defp do_run(issue, codex_update_recipient, opts) do
-    case Workspace.create_for_issue(issue) do
+    case resolve_workspace(issue, opts) do
       {:ok, workspace} ->
         try do
           case Workspace.run_before_run_hook(workspace, issue) do
@@ -87,6 +88,38 @@ defmodule SymphonyElixir.AgentRunner do
   defp handle_turns_result(:completed, _issue), do: :completed
   defp handle_turns_result({:incomplete, _reason} = outcome, _issue), do: outcome
   defp handle_turns_result({:error, reason}, issue), do: failed_run(issue, reason)
+
+  @doc """
+  Resolves the working tree for a run. A `child_run` of an execution bundle runs
+  in an isolated git worktree (`worktree: true` + `worktree_repo`) so multiple
+  children of the same repository never share a checkout; every other run uses
+  the standard per-issue workspace.
+  """
+  @spec resolve_workspace(map(), keyword()) :: {:ok, Path.t()} | {:error, term()}
+  def resolve_workspace(issue, opts) do
+    if Keyword.get(opts, :worktree) == true do
+      with {:ok, repo} <- fetch_worktree_repo(opts) do
+        slug = worktree_slug(issue, opts)
+        branch = Keyword.get(opts, :worktree_branch) || "feat/#{slug}"
+        Worktree.ensure(repo, slug, branch)
+      end
+    else
+      Workspace.create_for_issue(issue)
+    end
+  end
+
+  defp fetch_worktree_repo(opts) do
+    case Keyword.get(opts, :worktree_repo) do
+      repo when is_binary(repo) and repo != "" -> {:ok, repo}
+      _ -> {:error, :missing_worktree_repo}
+    end
+  end
+
+  defp worktree_slug(issue, opts) do
+    (Keyword.get(opts, :unit_id) || Map.get(issue, :identifier) || "child")
+    |> to_string()
+    |> String.replace(~r/[^A-Za-z0-9_.-]+/, "-")
+  end
 
   @spec failed_run(map(), term()) :: {:error, term()}
   defp failed_run(issue, reason) do
@@ -184,7 +217,14 @@ defmodule SymphonyElixir.AgentRunner do
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
     agent_kind = Keyword.fetch!(opts, :agent_kind)
-    workspace_root = Workspace.workspace_root_for(issue)
+
+    # A worktree-backed child run lives under `<repo>/.worktrees/<slug>`, outside
+    # the configured workspace root, so the cwd guard is anchored to the worktree
+    # itself instead of the shared workspace root.
+    workspace_root =
+      if Keyword.get(opts, :worktree) == true,
+        do: workspace,
+        else: Workspace.workspace_root_for(issue)
 
     session_opts =
       [workspace_root: workspace_root]

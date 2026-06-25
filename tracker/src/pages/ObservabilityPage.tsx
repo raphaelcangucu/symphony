@@ -1,4 +1,4 @@
-import { Eraser, Loader2, Pause, RotateCcw, Target } from "lucide-react";
+import { ChevronDown, ChevronRight, Eraser, GitFork, Layers, Loader2, Pause, RotateCcw, Target } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -84,6 +84,43 @@ function flattenRows(runtimeViews: RuntimeView[]): ProjectRunningRow[] {
   );
 }
 
+interface RunningRowGroup {
+  parent: ProjectRunningRow;
+  children: ProjectRunningRow[];
+}
+
+// Groups child_run sessions under their coordinating parent so the table renders
+// a hierarchy instead of flat siblings. A child whose parent is not in the
+// visible set falls back to rendering as its own top-level row.
+function groupRunningRows(rows: ProjectRunningRow[]): RunningRowGroup[] {
+  const byIdentifier = new Map(rows.map((row) => [normalizeIssueIdentifier(row.issueIdentifier), row]));
+  const childrenByParent = new Map<string, ProjectRunningRow[]>();
+
+  for (const row of rows) {
+    if ((row.bundleRole ?? "standalone") !== "child" || !row.parentIdentifier) continue;
+    const parentKey = normalizeIssueIdentifier(row.parentIdentifier);
+    if (!byIdentifier.has(parentKey)) continue;
+    const list = childrenByParent.get(parentKey) ?? [];
+    list.push(row);
+    childrenByParent.set(parentKey, list);
+  }
+
+  const attachedChildKeys = new Set(
+    Array.from(childrenByParent.values()).flatMap((list) =>
+      list.map((row) => normalizeIssueIdentifier(row.issueIdentifier)),
+    ),
+  );
+
+  const groups: RunningRowGroup[] = [];
+  for (const row of rows) {
+    const key = normalizeIssueIdentifier(row.issueIdentifier);
+    if (attachedChildKeys.has(key)) continue;
+    groups.push({ parent: row, children: childrenByParent.get(key) ?? [] });
+  }
+
+  return groups;
+}
+
 function normalizeProjectKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -167,6 +204,7 @@ export function ObservabilityPage() {
     [runtimeViews, selectedProject],
   );
   const rows = useMemo(() => flattenRows(visibleRuntimeViews), [visibleRuntimeViews]);
+  const runningGroups = useMemo(() => groupRunningRows(rows), [rows]);
   const prMonitorEvaluations = useMemo(() => {
     const evaluations = prMonitor?.evaluations ?? [];
     if (selectedProject === ALL_PROJECTS) return evaluations;
@@ -233,39 +271,14 @@ export function ObservabilityPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr key={`${row.runtimeId}:${row.issueIdentifier}`} className="border-t">
-                    <td className="p-2">{row.projectLabel}</td>
-                    <td className="p-2 font-medium">
-                      {row.resolvedProjectSlug && row.issueIdentifier.trim() ? (
-                        <Link
-                          className="text-primary underline-offset-2 hover:underline"
-                          to={withAgentSection(
-                            issuePath(row.resolvedProjectSlug, "board", row.issueIdentifier, "agent"),
-                            "",
-                            "execution",
-                          )}
-                        >
-                          {row.issueIdentifier}
-                        </Link>
-                      ) : (
-                        row.issueIdentifier
-                      )}
-                    </td>
-                    <td className="p-2">
-                      <GoalCell execution={executions.get(normalizeIssueIdentifier(row.issueIdentifier))} />
-                    </td>
-                    <td className="p-2">{row.state ?? "--"}</td>
-                    <td className="p-2 tabular-nums">
-                      {formatRuntime(row.startedAt, nowMs)}
-                      {row.turnCount > 0 ? ` / ${row.turnCount}` : ""}
-                    </td>
-                    <td className="p-2">{row.lastMessage ?? row.lastEvent ?? "--"}</td>
-                    <td className="p-2 tabular-nums">{row.tokens.totalTokens.toLocaleString()}</td>
-                    <td className="p-2">
-                      <SessionRowActions projectSlug={row.resolvedProjectSlug} identifier={row.issueIdentifier} />
-                    </td>
-                  </tr>
+                {runningGroups.map((group) => (
+                  <SessionGroupRows
+                    key={`${group.parent.runtimeId}:${group.parent.issueIdentifier}`}
+                    group={group}
+                    executions={executions}
+                    nowMs={nowMs}
+                    t={t}
+                  />
                 ))}
               </tbody>
             </table>
@@ -275,6 +288,114 @@ export function ObservabilityPage() {
 
       <PrMonitorSection heartbeat={prMonitor?.heartbeat ?? null} evaluations={prMonitorEvaluations} nowMs={nowMs} />
     </div>
+  );
+}
+
+function SessionIssueLink({ row }: { row: ProjectRunningRow }) {
+  if (row.resolvedProjectSlug && row.issueIdentifier.trim()) {
+    return (
+      <Link
+        className="text-primary underline-offset-2 hover:underline"
+        to={withAgentSection(issuePath(row.resolvedProjectSlug, "board", row.issueIdentifier, "agent"), "", "execution")}
+      >
+        {row.issueIdentifier}
+      </Link>
+    );
+  }
+  return <>{row.issueIdentifier}</>;
+}
+
+function SessionRowCells({
+  row,
+  executions,
+  nowMs,
+}: {
+  row: ProjectRunningRow;
+  executions: ReadonlyMap<string, AgentExecution>;
+  nowMs: number;
+}) {
+  return (
+    <>
+      <td className="p-2">
+        <GoalCell execution={executions.get(normalizeIssueIdentifier(row.issueIdentifier))} />
+      </td>
+      <td className="p-2">{row.state ?? "--"}</td>
+      <td className="p-2 tabular-nums">
+        {formatRuntime(row.startedAt, nowMs)}
+        {row.turnCount > 0 ? ` / ${row.turnCount}` : ""}
+      </td>
+      <td className="p-2">{row.lastMessage ?? row.lastEvent ?? "--"}</td>
+      <td className="p-2 tabular-nums">{row.tokens.totalTokens.toLocaleString()}</td>
+      <td className="p-2">
+        <SessionRowActions projectSlug={row.resolvedProjectSlug} identifier={row.issueIdentifier} />
+      </td>
+    </>
+  );
+}
+
+function SessionGroupRows({
+  group,
+  executions,
+  nowMs,
+  t,
+}: {
+  group: RunningRowGroup;
+  executions: ReadonlyMap<string, AgentExecution>;
+  nowMs: number;
+  t: TFunction;
+}) {
+  const { parent, children } = group;
+  const [expanded, setExpanded] = useState(true);
+  const hasChildren = children.length > 0;
+
+  return (
+    <>
+      <tr className="border-t">
+        <td className="p-2">{parent.projectLabel}</td>
+        <td className="p-2 font-medium">
+          <div className="flex items-center gap-1.5">
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={() => setExpanded((value) => !value)}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label={expanded ? t("observability.childRuns.hide") : t("observability.childRuns.show")}
+                title={t("observability.childRuns.count", { count: children.length })}
+              >
+                {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </button>
+            ) : null}
+            <SessionIssueLink row={parent} />
+            {hasChildren ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <Layers className="h-3 w-3" />
+                {children.length}
+              </span>
+            ) : null}
+          </div>
+        </td>
+        <SessionRowCells row={parent} executions={executions} nowMs={nowMs} />
+      </tr>
+      {hasChildren && expanded
+        ? children.map((child) => (
+            <tr key={`${child.runtimeId}:${child.issueIdentifier}`} className="border-t bg-muted/20">
+              <td className="p-2" />
+              <td className="p-2 font-medium">
+                <div className="flex items-center gap-1.5 pl-5">
+                  <SessionIssueLink row={child} />
+                  {child.repo ? (
+                    <span className="inline-flex items-center gap-0.5 font-mono text-[10px] text-muted-foreground">
+                      <GitFork className="h-3 w-3" />
+                      {child.repo}
+                    </span>
+                  ) : null}
+                </div>
+              </td>
+              <SessionRowCells row={child} executions={executions} nowMs={nowMs} />
+            </tr>
+          ))
+        : null}
+    </>
   );
 }
 

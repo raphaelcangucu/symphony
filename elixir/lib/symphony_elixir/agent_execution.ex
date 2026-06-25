@@ -45,6 +45,11 @@ defmodule SymphonyElixir.AgentExecution do
           long_running: boolean(),
           long_running_kind: String.t() | nil,
           long_running_label: String.t() | nil,
+          parent_identifier: String.t() | nil,
+          bundle_role: :parent | :child | :standalone,
+          unit_id: String.t() | nil,
+          repo: String.t() | nil,
+          child_identifiers: [String.t()],
           tokens: %{input: non_neg_integer(), output: non_neg_integer(), total: non_neg_integer()} | nil
         }
 
@@ -144,6 +149,11 @@ defmodule SymphonyElixir.AgentExecution do
       long_running: not is_nil(goal) and not interrupted?,
       long_running_kind: if(interrupted?, do: nil, else: long_running_kind(goal)),
       long_running_label: if(interrupted?, do: nil, else: long_running_label(goal)),
+      parent_identifier: bundle_parent_identifier(entry),
+      bundle_role: bundle_role(entry),
+      unit_id: bundle_unit_id(entry),
+      repo: bundle_repo(entry),
+      child_identifiers: bundle_child_identifiers(entry),
       tokens: %{
         input: Map.get(entry, :agent_input_tokens, 0),
         output: Map.get(entry, :agent_output_tokens, 0),
@@ -203,6 +213,11 @@ defmodule SymphonyElixir.AgentExecution do
       long_running: false,
       long_running_kind: nil,
       long_running_label: nil,
+      parent_identifier: bundle_parent_identifier(entry),
+      bundle_role: bundle_role(entry),
+      unit_id: bundle_unit_id(entry),
+      repo: bundle_repo(entry),
+      child_identifiers: bundle_child_identifiers(entry),
       tokens: nil
     }
   end
@@ -293,6 +308,11 @@ defmodule SymphonyElixir.AgentExecution do
       long_running: true,
       long_running_kind: long_running_kind(goal),
       long_running_label: long_running_label(goal),
+      parent_identifier: nil,
+      bundle_role: :standalone,
+      unit_id: nil,
+      repo: nil,
+      child_identifiers: [],
       tokens: nil
     }
   end
@@ -393,6 +413,11 @@ defmodule SymphonyElixir.AgentExecution do
       long_running: not is_nil(goal),
       long_running_kind: long_running_kind(goal),
       long_running_label: if(is_nil(goal), do: nil, else: "Interrupted"),
+      parent_identifier: nil,
+      bundle_role: :standalone,
+      unit_id: nil,
+      repo: nil,
+      child_identifiers: [],
       tokens: nil
     }
   end
@@ -404,6 +429,27 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp identifier(entry), do: Map.get(entry, :identifier)
   defp issue_id(entry), do: entry |> Map.get(:issue_id) |> maybe_to_string()
+
+  # Bundle context is threaded onto the orchestrator run entry by the coordinator
+  # (parent run carries `child_identifiers`; child runs carry `parent_identifier`
+  # + `unit_id` + `repo`). Non-bundle runs default to `:standalone`.
+  defp bundle_role(entry) do
+    case Map.get(entry, :bundle_role) do
+      role when role in [:parent, :child, :standalone] -> role
+      _ -> :standalone
+    end
+  end
+
+  defp bundle_parent_identifier(entry), do: entry |> Map.get(:parent_identifier) |> maybe_to_string()
+  defp bundle_unit_id(entry), do: entry |> Map.get(:unit_id) |> maybe_to_string()
+  defp bundle_repo(entry), do: entry |> Map.get(:repo) |> maybe_to_string()
+
+  defp bundle_child_identifiers(entry) do
+    case Map.get(entry, :child_identifiers) do
+      ids when is_list(ids) -> Enum.map(ids, &to_string/1)
+      _ -> []
+    end
+  end
 
   defp execution_goal(entry) do
     Map.get(entry, :goal) || fallback_goal(entry)
