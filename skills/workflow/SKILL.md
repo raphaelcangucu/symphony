@@ -29,6 +29,21 @@ auto-dispatch** and how workflow status names map to behavior.
 
 Always call `get_workflow` first when answering orchestrator or workflow questions.
 
+## GitHub multi-repo projects
+
+When one Project V2 spans several GitHub repositories:
+
+- List every repo in project **`repositories:`** (import YAML) or via
+  **`update_project_repositories`** — not only `tracker.config.repo`.
+- Document a **routing table** in the workflow body (which repo owns backend,
+  admin, mobile, etc.) and require **`repository`** on `create_issue` when the
+  assistant creates subtasks.
+- `tracker.config.repo` is the default/fallback create target, not the only repo
+  on the board.
+
+See the **github-projects** skill for `create_issue` / `create_draft_issue`
+behavior on multi-repo boards.
+
 ## YAML keys (`tracker:` section)
 
 ```yaml

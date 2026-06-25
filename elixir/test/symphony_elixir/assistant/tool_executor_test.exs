@@ -607,12 +607,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       :ok
     end
 
-    test "exposes only existing-issue tools with schemas constrained to the bound issue" do
+    test "exposes issue-bound authoring and subtask tools" do
       specs = ToolExecutor.issue_bound_tool_specs("MAC-1")
       names = Enum.map(specs, & &1["name"])
 
-      refute "create_issue" in names
-      refute "create_draft_issue" in names
+      assert "create_issue" in names
+      assert "create_draft_issue" in names
+      assert "create_subtask" in names
+      assert "get_workflow" in names
+      assert "list_project_repositories" in names
       refute "add_comment" in names
       assert "get_issue" in names
       assert "read_workspace_file" in names
@@ -627,6 +630,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       refute "identifier" in required_fields(specs, "dispatch_codex")
       assert "status" in required_fields(specs, "move_issue")
       assert "instructions" in required_fields(specs, "dispatch_codex")
+    end
+
+    test "rejects create_subtask with mismatched parent_identifier" do
+      executor = ToolExecutor.issue_bound_codex_tool_executor("macro-markets", "MAC-1")
+
+      assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} =
+               executor.("create_subtask", %{"parent_identifier" => "MAC-2", "title" => "Wrong parent"})
+
+      assert error_text =~ "mismatch"
     end
 
     test "injects the bound identifier when a mutable tool omits it" do

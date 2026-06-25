@@ -660,6 +660,72 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     end
   end
 
+  defmodule MultiRepoCreateClientStub do
+    def graphql(query, vars, _opts) do
+      cond do
+        String.contains?(query, "SymphonyUiRepoMetadata") ->
+          send(self(), {:repo_metadata, vars["owner"], vars["name"]})
+
+          repo_id = "REPO_#{vars["owner"]}_#{vars["name"]}"
+
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "id" => repo_id,
+                 "labels" => %{
+                   "nodes" => [
+                     %{"id" => "L1", "name" => "bug", "color" => "ff0000"},
+                     %{"id" => "AGC", "name" => "symphony:codex", "color" => nil}
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiStatusOptions") ->
+          {:ok,
+           %{
+             "data" => %{
+               "node" => %{
+                 "fields" => %{
+                   "nodes" => [
+                     %{
+                       "__typename" => "ProjectV2SingleSelectField",
+                       "id" => "FIELD_1",
+                       "name" => "Symphony State",
+                       "options" => [%{"id" => "OPT_TODO", "name" => "Todo"}]
+                     }
+                   ]
+                 }
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiCreateIssue") ->
+          send(self(), {:create_input, vars["input"]})
+
+          {:ok,
+           %{
+             "data" => %{
+               "createIssue" => %{
+                 "issue" => %{"id" => "I_10", "number" => 10, "url" => "https://x/10", "title" => "New"}
+               }
+             }
+           }}
+
+        String.contains?(query, "SymphonyUiAddProjectItem") ->
+          {:ok, %{"data" => %{"addProjectV2ItemById" => %{"item" => %{"id" => "PVTI_10"}}}}}
+
+        String.contains?(query, "SymphonyUiSetStatus") ->
+          {:ok, %{"data" => %{"updateProjectV2ItemFieldValue" => %{"projectV2Item" => %{"id" => "PVTI_10"}}}}}
+
+        true ->
+          {:ok, %{"data" => %{}}}
+      end
+    end
+  end
+
   defmodule CreateClientStub do
     def graphql(query, vars, _opts) do
       cond do
@@ -765,6 +831,71 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     test "returns validation error when title is blank" do
       assert {:error, {:remote_validation, %{title: ["is required"]}}} =
                IssueAdapter.create_issue(project(), %{"title" => "  ", "status" => "Todo"})
+    end
+
+    test "creates issue in explicit repository on multi-repo project" do
+      Application.put_env(:symphony_elixir, :github_client_module, MultiRepoCreateClientStub)
+
+      migrate_repo()
+      clean_repo()
+
+      {:ok, _} = SymphonyElixir.LocalTracker.Context.ensure_project(%{name: "Gamba", slug: "gamba"})
+
+      {:ok, _} =
+        SymphonyElixir.LocalTracker.Context.replace_repositories("gamba", [
+          %{"github_full_name" => "GambaLabs/frontend", "workspace_path" => "frontend", "role" => "primary"},
+          %{"github_full_name" => "GambaLabs/backend", "workspace_path" => "backend", "role" => "backend"}
+        ])
+
+      project = %{
+        project()
+        | slug: "gamba",
+          tracker_config: %{
+            "repo" => "GambaLabs/frontend",
+            "project_id" => "PVT_1",
+            "status_field" => "Symphony State"
+          }
+      }
+
+      assert {:ok, %IssueDTO{identifier: "10"}} =
+               IssueAdapter.create_issue(project, %{
+                 "title" => "Backend task",
+                 "status" => "Todo",
+                 "repository" => "GambaLabs/backend"
+               })
+
+      assert_received {:repo_metadata, "GambaLabs", "backend"}
+      assert_received {:create_input, %{"repositoryId" => "REPO_GambaLabs_backend"}}
+    end
+
+    test "rejects repository outside linked project repos" do
+      migrate_repo()
+      clean_repo()
+
+      {:ok, _} = SymphonyElixir.LocalTracker.Context.ensure_project(%{name: "Gamba", slug: "gamba"})
+
+      {:ok, _} =
+        SymphonyElixir.LocalTracker.Context.replace_repositories("gamba", [
+          %{"github_full_name" => "GambaLabs/frontend", "workspace_path" => "frontend", "role" => "primary"}
+        ])
+
+      project = %{
+        project()
+        | slug: "gamba",
+          tracker_config: %{
+            "repo" => "GambaLabs/frontend",
+            "project_id" => "PVT_1",
+            "status_field" => "Symphony State"
+          }
+      }
+
+      assert {:error, {:remote_validation, %{repository: [message]}}} =
+               IssueAdapter.create_issue(project, %{
+                 "title" => "Wrong repo",
+                 "repository" => "GambaLabs/backend"
+               })
+
+      assert message =~ "not linked"
     end
   end
 

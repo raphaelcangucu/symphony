@@ -1,7 +1,17 @@
 defmodule SymphonyElixir.Assistant.CodexSession do
   @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
 
-  alias SymphonyElixir.Assistant.{FileActivityPresenter, History, IssueDocuments, ProjectExploreWorkspace, SubtaskAuthoring, ThreadDocuments, ToolCallPresenter, ToolExecutor}
+  alias SymphonyElixir.Assistant.{
+    FileActivityPresenter,
+    GitHubAuthoring,
+    History,
+    IssueDocuments,
+    ProjectExploreWorkspace,
+    SubtaskAuthoring,
+    ThreadDocuments,
+    ToolCallPresenter,
+    ToolExecutor
+  }
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.CodingAgent, as: RootCodingAgent
   alias SymphonyElixir.Config
@@ -277,6 +287,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
     When the user attaches an image or file, it is already saved in this project. If they want it on a task (e.g. in the description), embed it using the exact Markdown URL given in the attachment note (`![alt](URL)` for images) when you call create_issue/update_issue/add_comment — never just describe it in words.
     create_issue places new work in Backlog (intake) by default — omit status. Do not create directly in orchestrator queue statuses (e.g. Todo); use move_issue when the issue is ready for execution.
+    #{github_create_issue_guidance(project_slug)}
     To assign someone, call get_issue_form_options and pass assignee_ids (GitHub login or remote id) on create_issue/update_issue — never use linear_graphql on non-Linear projects.
     If a request is ambiguous, ask one concise clarifying question before taking action.
 
@@ -493,6 +504,13 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
+  defp github_create_issue_guidance(project_slug) do
+    case GitHubAuthoring.create_issue_guidance_for_slug(project_slug) do
+      "" -> ""
+      text -> text <> "\n"
+    end
+  end
+
   defp project_tracker_summary(project_slug) do
     case Context.get_project(project_slug) do
       {:ok, project} ->
@@ -504,7 +522,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         tracker_tools =
           case kind do
             "github" ->
-              "This project uses GitHub Projects (tracker_kind: github). Use github_graphql, get_issue_form_options, and Symphony board tools — never linear_graphql or list_linear_projects for this project's issues."
+              "This project uses GitHub Projects (tracker_kind: github). Use github_graphql, get_issue_form_options, list_project_repositories, and Symphony board tools — never linear_graphql or list_linear_projects for this project's issues. On multi-repo boards, create_issue/create_draft_issue require repository (owner/name) unless the task belongs in tracker.config.repo."
 
             "linear" ->
               "This project uses Linear (tracker_kind: linear). Use linear_graphql and Symphony board tools for issue operations."
@@ -573,6 +591,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     mode = Map.get(metadata || %{}, "mode", "triage")
     goal_mode = Map.get(metadata || %{}, "goal_mode", false) == true
     goal_objective = Map.get(metadata || %{}, "goal_objective")
+    github_create = github_create_issue_guidance(project_slug)
 
     base = """
     You are the Symphony issue authoring assistant for `#{project_slug}`, working on issue `#{identifier}`.
@@ -598,6 +617,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     The issue description should reflect stable decisions, not a live investigation log.
 
     New issues belong in Backlog (intake) unless the user asks for a different status — omit status on create_issue or set status to Backlog; do not default to Todo or dispatch Codex unless the user explicitly asks.
+    When splitting work into subtasks or creating related issues, use create_issue (or create_draft_issue before anchoring). Do not assume every new task belongs in the same repository as the parent issue.
+    #{github_create}
     Assignees: call get_issue_form_options and use assignee_ids on update_issue — never linear_graphql on non-Linear projects.
 
     #{SubtaskAuthoring.guidance()}

@@ -375,6 +375,29 @@ query ProjectItemFieldValues($nodeId: ID!) {
 }
 ```
 
+## Multi-repo boards (Symphony create_issue)
+
+One GitHub Project V2 can track issues from **many repositories**. Symphony
+links them via `update_project_repositories` / project YAML `repositories:`.
+
+When the assistant creates tasks on a GitHub board with multiple linked repos:
+
+1. Call **`list_project_repositories`** first — do not assume `tracker.config.repo`.
+2. Pass **`repository: "owner/name"`** on **`create_issue`** / **`create_draft_issue`**
+   for the repo that owns the work (backend API vs admin UI vs mobile, etc.).
+3. Optional: add **`area:*`** labels (e.g. `area:backend`) — Symphony can infer
+   the repo from linked repositories, but explicit `repository` is preferred.
+4. **`tracker.config.repo`** is only the fallback when `repository` is omitted
+   and no `area:*` label matches.
+
+Parent and child issues may live in **different** repos on the same board.
+Issue authoring chat and project board chat both include this guidance when
+`tracker_kind: github` and multiple repositories are linked.
+
+Prefer Symphony board tools (`create_issue`, `update_issue`, `move_issue`) for
+day-to-day work. Use GraphQL in this skill for project-field setup, adding
+existing content to a project, or operations not exposed as board tools.
+
 ## Usage rules
 
 - Use `gh api graphql` for GitHub Projects v2 operations that are not covered

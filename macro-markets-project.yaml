@@ -240,7 +240,16 @@ setup:
     - Use Symphony's issue-bound tools first: `set_issue_status`, `list_comments`, `add_comment`, `update_comment`.
     - Title, description, and synced comments come from the local tracker mirror — do not re-fetch the issue from GitHub MCP unless local data is missing or stale.
     - If you need the GitHub repo for an API call, derive it from `{{ issue.url }}`, not from `tracker.config.repo` or this workflow file.
-    
+
+    ## Creating tasks (multi-repo)
+
+    Before `create_issue` / `create_draft_issue`, call `list_project_repositories` and pass **`repository: "owner/name"`** when the task is not owned by `clouapp/front`:
+
+    | Work type | Repository |
+    |-----------|------------|
+    | Next.js frontend | `clouapp/front` |
+    | Laravel backend | `clouapp/back` |
+
     ## Repositories
     
     This is a **multi-repository** workspace on a single GitHub Project. Each issue has its own canonical URL (`{{ issue.url }}`) pointing to the repo where it was filed (front, back, or another linked repo). Implementation may still touch `front/`, `back/`, or both.

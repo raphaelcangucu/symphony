@@ -84,7 +84,36 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   # Routine assistant chat replies should not be mirrored as issue comments; use
   # `add_comment` only when the user asks to record a comment on the issue.
   @issue_bound_mutable_tools ~w(update_issue move_issue dispatch_coding_agent dispatch_codex)
-  @issue_bound_supported_tools ~w(list_issues get_issue read_workspace_file update_issue move_issue get_agent_executions dispatch_coding_agent dispatch_codex manage_codex_goal)
+  @issue_bound_parent_tools ~w(
+    create_subtask
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
+  )
+  @issue_bound_supported_tools ~w(
+    list_issues
+    get_issue
+    read_workspace_file
+    update_issue
+    move_issue
+    get_agent_executions
+    dispatch_coding_agent
+    dispatch_codex
+    manage_codex_goal
+    create_issue
+    create_draft_issue
+    list_project_repositories
+    get_workflow
+    get_issue_form_options
+    classify_execution_unit
+    create_subtask
+    set_issue_parent
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
+  )
   @in_progress_state "In Progress"
 
   @type result :: %{
@@ -115,6 +144,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "properties" => %{
           "title" => string_schema("Issue title."),
           "description" => string_schema("Optional issue description."),
+          "repository" =>
+            string_schema(
+              "GitHub repo owner/name where the issue should be filed (e.g. GambaLabs/backend). Required on multi-repo GitHub boards when the task is not owned by tracker.config.repo. Call list_project_repositories first."
+            ),
           "status" => string_schema("Optional workflow status. Omit to create in Backlog (intake). Do not use orchestrator queue statuses (e.g. Todo) on create — move_issue after intake when ready."),
           "priority" => %{"type" => ["integer", "null"], "description" => "Optional numeric priority."},
           "assignee_ids" => string_list_schema("Optional assignee logins or remote ids. Call get_issue_form_options first.")
@@ -126,7 +159,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "required" => ["title"],
         "properties" => %{
           "title" => string_schema("Issue title."),
-          "description" => string_schema("Optional short description.")
+          "description" => string_schema("Optional short description."),
+          "repository" =>
+            string_schema(
+              "GitHub repo owner/name where the draft issue should be filed on multi-repo GitHub boards."
+            )
         }
       }),
       tool_spec("update_issue", "Update mutable fields on an existing tracker issue.", %{
@@ -915,7 +952,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          {:ok, parent} <- IssueAdapter.dispatch(project, :get_issue, [parent_id]),
          repo <- normalize_optional_string(Map.get(arguments, "repo")) || parent.repository_full_name,
          {:ok, type} <- resolve_unit_type(arguments, repo, parent.repository_full_name),
-         attrs <- build_subtask_attrs(arguments, title),
+         attrs <- build_subtask_attrs(arguments, title, repo),
          {:ok, child} <- IssueAdapter.dispatch(project, :create_issue, [attrs]),
          :ok <- link_subtask_parent(project, parent, child),
          {:ok, _comment} <- upsert_bundle_unit(project, parent, child, repo, type, arguments) do
@@ -1153,9 +1190,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp build_subtask_attrs(arguments, title) do
+  defp build_subtask_attrs(arguments, title, repo) do
     %{"title" => title}
     |> maybe_put_attr("description", normalize_optional_string(Map.get(arguments, "description")))
+    |> maybe_put_attr("repository", repo)
   end
 
   defp resolve_unit_type(%{"unit_type" => t}, _repo, _parent_repo) when t in ["workpad_task", "child_run"],
@@ -1296,6 +1334,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp remove_bound_identifier_requirement(required), do: required
 
+  defp bind_issue_tool_arguments(tool_name, arguments, identifier)
+       when tool_name in @issue_bound_parent_tools do
+    bind_parent_identifier(tool_name, arguments, identifier)
+  end
+
   defp bind_issue_tool_arguments(tool_name, _arguments, _identifier) when tool_name not in @issue_bound_supported_tools do
     {:error, {:unsupported_issue_bound_tool, tool_name}}
   end
@@ -1324,6 +1367,19 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
       actual ->
         {:error, {:issue_identifier_mismatch, identifier, actual}}
+    end
+  end
+
+  defp bind_parent_identifier(_tool_name, arguments, identifier) do
+    case normalize_optional_string(Map.get(arguments, "parent_identifier")) do
+      nil ->
+        {:ok, Map.put(arguments, "parent_identifier", identifier)}
+
+      ^identifier ->
+        {:ok, Map.put(arguments, "parent_identifier", identifier)}
+
+      actual ->
+        {:error, {:parent_identifier_mismatch, identifier, actual}}
     end
   end
 
@@ -1627,6 +1683,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     |> maybe_put_attr("priority", Map.get(arguments, "priority"))
     |> maybe_put_attr("agent", normalize_optional_string(Map.get(arguments, "agent")))
     |> maybe_put_attr("label_ids", normalize_string_list(Map.get(arguments, "label_ids")))
+    |> maybe_put_create_repository(arguments)
     |> maybe_put_assignee_ids(arguments)
   end
 
@@ -1636,6 +1693,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       "description" => normalize_optional_string(Map.get(arguments, "description")),
       "status" => status
     }
+    |> maybe_put_create_repository(arguments)
+  end
+
+  defp maybe_put_create_repository(attrs, arguments) do
+    case normalize_optional_string(Map.get(arguments, "repository")) do
+      nil -> attrs
+      repo -> Map.put(attrs, "repository", repo)
+    end
   end
 
   @draft_category_priority %{"backlog" => 0, "unstarted" => 1}
