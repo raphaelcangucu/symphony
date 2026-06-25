@@ -16,6 +16,13 @@ config :symphony_elixir, ecto_repos: [SymphonyElixir.Repo]
 # `Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)`.
 config :symphony_elixir, :tracker, sync_enabled: Mix.env() != :test
 
+# Knowledge base: after each KB edit (write/move/delete), enqueue a background
+# git reconciliation (merge default branch -> symphony-docs, ensure PR, auto-merge
+# when checks pass). Disabled under :test so unrelated KB suites stay hermetic and
+# do not spawn background git/network work; the flow itself is covered by the
+# GitFlow/SyncWorker suites, and `request_sync/2` can still be called explicitly.
+config :symphony_elixir, :kb_sync_on_edit, Mix.env() != :test
+
 # Process-level default agent kind for global-less per-project orchestration.
 # A project's own WORKFLOW front matter (codex:/claude:) takes precedence; this
 # is the fallback when a project declares no agent section. Override per

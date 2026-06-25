@@ -2,6 +2,7 @@
   "common": {
     "loading": "Carregando…",
     "close": "Fechar",
+    "cancel": "Cancelar",
     "save": "Salvar",
     "refresh": "Atualizar"
   },
@@ -643,7 +644,25 @@
         "progress": "{{completed}} de {{total}}",
         "expand": "Mostrar sub-issues",
         "collapse": "Ocultar sub-issues",
-        "empty": "As sub-issues ainda não foram carregadas."
+        "empty": "As sub-issues ainda não foram carregadas.",
+        "createSubIssue": "Criar sub-issue",
+        "titlePlaceholder": "Título da sub-issue",
+        "create": "Criar",
+        "cancel": "Cancelar"
+      },
+      "relations": {
+        "parent": "Pai",
+        "parentTitle": "Definir issue pai",
+        "noParent": "Sem pai",
+        "clearParent": "Remover pai",
+        "groupLead": "Líder do grupo",
+        "groupLeadTitle": "Definir líder do grupo",
+        "noGroupLead": "Sem líder de grupo",
+        "clearGroupLead": "Remover do grupo",
+        "searchPlaceholder": "Buscar issues…",
+        "empty": "Nenhuma issue encontrada.",
+        "unavailable": "Fora da visão atual",
+        "clear": "Limpar"
       },
       "status": "Status",
       "priority": "Prioridade",
@@ -800,7 +819,17 @@
       "synced": "{{identifier}} sincronizada do remoto",
       "syncFailed": "Falha ao sincronizar issue do remoto",
       "attachmentRemoved": "Anexo removido",
-      "attachmentRemoveFailed": "Falha ao remover anexo"
+      "attachmentRemoveFailed": "Falha ao remover anexo",
+      "subtaskCreated": "Sub-issue {{identifier}} criada",
+      "subtaskCreateFailed": "Falha ao criar sub-issue",
+      "parentSet": "Pai definido como {{identifier}}",
+      "parentSetFailed": "Falha ao definir pai",
+      "parentCleared": "Pai removido",
+      "parentClearFailed": "Falha ao remover pai",
+      "groupLeadSet": "Agrupada sob {{identifier}}",
+      "groupLeadSetFailed": "Falha ao definir líder do grupo",
+      "groupLeadCleared": "Removida do grupo",
+      "groupLeadClearFailed": "Falha ao remover do grupo"
     },
     "attachments": {
       "imageUnavailable": "Upload de imagens não está disponível aqui.",
@@ -1137,6 +1166,7 @@
       "title": "Projetos",
       "subtitle": "Escolha um projeto do tracker local.",
       "import": "Importar",
+      "importFromUrl": "Importar URL",
       "filters": "Filtros",
       "newWorkspace": "Novo projeto workspace",
       "emptyApi": "Nenhum projeto retornado pela API do tracker.",
@@ -1347,6 +1377,22 @@
       "importExport": {
         "export": "Exportar",
         "import": "Importar",
+        "importTitle": "Importar projeto",
+        "importDescription": "Importe um YAML de projeto a partir de uma URL HTTPS compartilhada ou de um arquivo.",
+        "importDescriptionNamed": "Importar configuração para \"{{projectName}}\" a partir de URL ou arquivo.",
+        "importOrFile": "ou",
+        "importChooseFile": "Escolher arquivo YAML",
+        "importSubmit": "Importar da URL",
+        "importFromUrl": "Importar URL",
+        "importFromUrlTitle": "Importar de URL",
+        "importFromUrlDescription": "Cole uma URL raw de GitHub Gist ou qualquer link HTTPS para um arquivo YAML do projeto.",
+        "importFromUrlDescriptionNamed": "Importar configuração para \"{{projectName}}\" a partir de uma URL HTTPS compartilhada.",
+        "importFromUrlLabel": "URL do YAML",
+        "importFromUrlSubmit": "Importar",
+        "share": "Compartilhar",
+        "shareSuccess": "Link de compartilhamento copiado",
+        "shareFailed": "Falha ao compartilhar configuração do projeto",
+        "openShareLink": "Abrir gist",
         "exportSuccess": "Configuração do projeto exportada",
         "exportFailed": "Falha ao exportar configuração do projeto",
         "importConfirm": "Importar configuração de \"{{fileName}}\" para \"{{projectName}}\"? Isso substitui as configurações atuais.",
@@ -1854,6 +1900,7 @@
       "openProjectWorkspaceCode": "Abrir workspace do projeto no Code",
       "board": "Board",
       "list": "Lista",
+      "knowledgeBase": "Base de Conhecimento",
       "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
     },
     "recents": {
@@ -1974,12 +2021,58 @@
       "wipPlaceholder": "ex.: 5"
     }
   },
+  "kb": {
+    "loading": "Carregando…",
+    "saved": "Salvo",
+    "sidebar": { "noDocs": "Sem docs ainda" },
+    "editor": { "save": "Salvar", "saving": "Salvando…" },
+    "search": {
+      "placeholder": "Buscar na base de conhecimento…",
+      "loading": "Buscando…",
+      "empty": "Nenhum resultado"
+    },
+    "sync": {
+      "now": "Sincronizar",
+      "viewPr": "Ver PR",
+      "status": {
+        "idle": "Ocioso",
+        "syncing": "Sincronizando",
+        "open_pr": "PR aberto",
+        "merged": "Mesclado",
+        "conflict": "Conflito",
+        "checks_failed": "Checks falharam",
+        "error": "Erro"
+      }
+    },
+    "home": {
+      "title": "Base de Conhecimento de {{project}}",
+      "intro": "Navegue pela documentação por repositório.",
+      "noRepositories": "Nenhum repositório configurado para este projeto.",
+      "openDocs": "Abrir docs"
+    },
+    "empty": { "selectPage": "Selecione uma página para ler ou editar." },
+    "errors": {
+      "loadFailed": "Falha ao carregar esta página.",
+      "saveFailed": "Falha ao salvar a página."
+    },
+    "general": {
+      "title": "Minha Base de Conhecimento",
+      "connect": "Conectar symphony-kb",
+      "connecting": "Conectando…",
+      "connected": "Conectado",
+      "connectFailed": "Falha ao conectar a base de conhecimento pessoal.",
+      "connectHint": "Conecte seu repositório pessoal symphony-kb para guardar notas entre projetos.",
+      "regenerate": "Regenerar início",
+      "regenerated": "Página inicial regenerada"
+    }
+  },
   "nav": {
     "brandTitle": "Symphony Tracker",
     "brandSubtitle": "Board de projetos local",
     "expandSidebar": "Expandir barra lateral",
     "collapseSidebar": "Recolher barra lateral",
     "projects": "Projetos",
+    "knowledgeBase": "Base de Conhecimento",
     "templates": "Templates",
     "observability": "Observabilidade",
     "backups": "Backups",

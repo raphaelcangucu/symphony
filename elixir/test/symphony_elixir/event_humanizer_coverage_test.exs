@@ -5,14 +5,14 @@ defmodule SymphonyElixir.EventHumanizerCoverageTest do
   @lib_dir Path.expand("../../lib", __DIR__)
 
   @passthrough_pt_msgids MapSet.new([
-    " (%{details})",
-    "%{base} (%{tool})",
-    "%{event} (%{msg_type})",
-    "%{method} (%{msg_type})",
-    "item %{state}: %{type}%{suffix}",
-    "ok",
-    "total"
-  ])
+                           " (%{details})",
+                           "%{base} (%{tool})",
+                           "%{event} (%{msg_type})",
+                           "%{method} (%{msg_type})",
+                           "item %{state}: %{type}%{suffix}",
+                           "ok",
+                           "total"
+                         ])
 
   test "events.po covers every EventHumanizer.Text msgid used in lib" do
     code_msgids = collect_code_msgids()

@@ -45,6 +45,12 @@ defmodule SymphonyElixir.LocalTracker.Broadcaster do
     broadcast(project_slug, event_name, payload)
   end
 
+  @spec kb_event(String.t(), String.t(), map()) :: :ok
+  def kb_event(project_slug, event_name, payload)
+      when is_binary(project_slug) and is_binary(event_name) and is_map(payload) do
+    broadcast(project_slug, event_name, payload)
+  end
+
   @spec topic(String.t()) :: String.t()
   def topic(project_slug) when is_binary(project_slug), do: "project:#{project_slug}"
 

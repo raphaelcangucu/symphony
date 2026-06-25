@@ -28,7 +28,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
   alias SymphonyElixir.Tracker.Identity
-  alias SymphonyElixir.Tracker.Sync.{GroupStatus, LocalStore, Outbox}
+  alias SymphonyElixir.Tracker.Sync.{GroupStatus, LocalStore, Outbox, SubtaskRollup}
 
   @impl true
   def project_identity, do: remote_adapter().project_identity()
@@ -162,20 +162,38 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   def update_issue_state(issue_id, state_name) when is_binary(issue_id) and is_binary(state_name) do
     with {:ok, project} <- resolve_project_for_issue(issue_id),
          {:ok, identifier} <- resolve_identifier(project, issue_id),
+         parent_before = SubtaskRollup.parent_snapshot(project, identifier),
          {:ok, issue} <- Context.update_issue_state(project.slug, identifier, state_name) do
       issue
       |> GroupStatus.push_identifiers()
-      |> Enum.each(fn id ->
-        LocalStore.mark_dirty(id, project.slug, [:state])
-        payload = %{"identifier" => id, "state" => state_name}
-        enqueue(project, id, "state", "move", payload, "state:move:#{project.id}:#{id}")
-      end)
+      |> Enum.each(fn id -> enqueue_state_move(project, id, state_name) end)
+
+      maybe_enqueue_parent_rollup(project, identifier, parent_before)
 
       :ok
     else
       :skip -> {:error, :project_not_resolved}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # Pushes the issue's parent when the local `Context.update_issue_state` rolled it
+  # to a new status (a parent follows the least-advanced child). No-op otherwise.
+  defp maybe_enqueue_parent_rollup(project, identifier, parent_before) do
+    case SubtaskRollup.changed_parent(parent_before, project, identifier) do
+      {parent_identifier, status_name} ->
+        enqueue_state_move(project, parent_identifier, status_name)
+        :ok
+
+      nil ->
+        :ok
+    end
+  end
+
+  defp enqueue_state_move(project, identifier, state_name) do
+    LocalStore.mark_dirty(identifier, project.slug, [:state])
+    payload = %{"identifier" => identifier, "state" => state_name}
+    enqueue(project, identifier, "state", "move", payload, "state:move:#{project.id}:#{identifier}")
   end
 
   # -- reads -------------------------------------------------------------------

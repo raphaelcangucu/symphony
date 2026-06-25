@@ -132,7 +132,7 @@ This is a **single-repository** workspace for a Python standalone application.
 ## Issue preview servers
 
 Symphony exposes a **Preview** tab when `dev_server.enabled` is true and DevEnv
-serve steps are saved for this project (imported via `distributionmachine-project.yaml`
+serve steps are saved for this project (imported via `distributionmachine.yaml`
 → `dev_env_steps`).
 
 ### Preview flow

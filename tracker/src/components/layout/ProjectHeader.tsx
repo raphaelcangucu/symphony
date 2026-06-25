@@ -1,4 +1,4 @@
-import { AlertTriangle, LayoutDashboard, List, RefreshCw } from "lucide-react";
+import { AlertTriangle, BookOpen, LayoutDashboard, List, RefreshCw } from "lucide-react";
 import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
 import { cn } from "@/lib/utils";
+import { kbProjectPath } from "@/lib/kbRoutes";
 import { workspaceBasePath } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 import type { ProjectSyncState, TrackerKind } from "@/types/project";
@@ -131,6 +132,15 @@ export function ProjectHeader({
           >
             <List className="h-4 w-4" />
             {t("layout.projectHeader.list")}
+          </NavLink>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <NavLink
+            to={kbProjectPath(projectSlug)}
+            className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+          >
+            <BookOpen className="h-4 w-4" />
+            {t("layout.projectHeader.knowledgeBase")}
           </NavLink>
         </Button>
         <NewIssueMenu projectSlug={projectSlug} size="sm" onCreated={onIssueCreated} />

@@ -15,7 +15,17 @@ import {
   workspaceBasePath,
   type IssueTab,
 } from "@/lib/workspaceRoutes";
-import { archiveIssue, deleteIssue, forceSyncIssue, getIssue } from "@/services/issues";
+import {
+  archiveIssue,
+  clearIssueParent,
+  createSubtask,
+  deleteIssue,
+  forceSyncIssue,
+  getIssue,
+  groupIssue,
+  setIssueParent,
+  ungroupIssue,
+} from "@/services/issues";
 import { deleteJiraAttachment } from "@/services/attachments";
 import type { Issue } from "@/types/issue";
 
@@ -42,6 +52,8 @@ export function IssueDetailRoute() {
 
   const group = issue ? resolveIssueGroup(issue, issues) : null;
   const subtasks = issue ? collectSubtasks(issue.identifier, issues) : [];
+  const parentCandidates = issue ? collectParentCandidates(issue, issues) : [];
+  const groupLeadCandidates = issue ? collectGroupLeadCandidates(issue, issues) : [];
 
   const basePath = workspaceBasePath(projectSlug, view);
 
@@ -109,6 +121,81 @@ export function IssueDetailRoute() {
     }
   }
 
+  function upsertIssue(next: Issue) {
+    setIssues((current) => {
+      const exists = current.some((candidate) => candidate.identifier === next.identifier);
+      return exists
+        ? current.map((candidate) => (candidate.identifier === next.identifier ? next : candidate))
+        : [...current, next];
+    });
+  }
+
+  async function handleCreateSubtask(title: string): Promise<boolean> {
+    if (!issue) return false;
+    try {
+      const child = await createSubtask(projectSlug, issue.identifier, { title });
+      upsertIssue(child);
+      toast.success(t("issue.route.subtaskCreated", { identifier: child.identifier }));
+      return true;
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.subtaskCreateFailed"));
+      return false;
+    }
+  }
+
+  async function handleSetParent(parentIdentifier: string): Promise<boolean> {
+    if (!issue) return false;
+    try {
+      const updated = await setIssueParent(projectSlug, issue.identifier, parentIdentifier);
+      handleIssueUpdated(updated);
+      toast.success(t("issue.route.parentSet", { identifier: parentIdentifier }));
+      return true;
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.parentSetFailed"));
+      return false;
+    }
+  }
+
+  async function handleClearParent(): Promise<boolean> {
+    if (!issue) return false;
+    try {
+      const updated = await clearIssueParent(projectSlug, issue.identifier);
+      handleIssueUpdated(updated);
+      toast.success(t("issue.route.parentCleared"));
+      return true;
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.parentClearFailed"));
+      return false;
+    }
+  }
+
+  async function handleSetGroupLead(leadIdentifier: string): Promise<boolean> {
+    if (!issue) return false;
+    try {
+      const updated = await groupIssue(projectSlug, issue.identifier, leadIdentifier);
+      handleIssueUpdated(updated);
+      toast.success(t("issue.route.groupLeadSet", { identifier: leadIdentifier }));
+      return true;
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.groupLeadSetFailed"));
+      return false;
+    }
+  }
+
+  async function handleClearGroupLead(): Promise<boolean> {
+    if (!issue) return false;
+    try {
+      await ungroupIssue(projectSlug, issue.identifier);
+      const refreshed = await getIssue(projectSlug, issue.identifier);
+      handleIssueUpdated(refreshed);
+      toast.success(t("issue.route.groupLeadCleared"));
+      return true;
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.route.groupLeadClearFailed"));
+      return false;
+    }
+  }
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -157,6 +244,8 @@ export function IssueDetailRoute() {
       issue={issue}
       execution={issue ? agentExecutions.get(issue.identifier) : undefined}
       subtasks={subtasks}
+      parentCandidates={parentCandidates}
+      groupLeadCandidates={groupLeadCandidates}
       workflowMarkdown={project?.setup?.workflowMarkdown ?? null}
       open
       onOpenChange={(open) => {
@@ -184,6 +273,11 @@ export function IssueDetailRoute() {
       onOpenIssue={(targetIdentifier) => {
         navigate({ pathname: issuePath(projectSlug, view, targetIdentifier), search: location.search });
       }}
+      onCreateSubtask={handleCreateSubtask}
+      onSetParent={handleSetParent}
+      onClearParent={issue?.parentIdentifier ? handleClearParent : undefined}
+      onSetGroupLead={handleSetGroupLead}
+      onClearGroupLead={issue?.groupLeadIdentifier ? handleClearGroupLead : undefined}
     />
   );
 }
@@ -200,4 +294,46 @@ function collectSubtasks(parentIdentifier: string, issues: readonly Issue[]): Is
         normalizeIssueIdentifier(candidate.parentIdentifier) === parentKey,
     )
     .sort((left, right) => left.position - right.position);
+}
+
+/**
+ * Valid parents for an issue: every other issue except itself and its own
+ * (transitive) descendants — picking one of those would create a cycle, which
+ * the backend rejects too.
+ */
+function collectParentCandidates(issue: Issue, issues: readonly Issue[]): Issue[] {
+  const blocked = collectDescendantKeys(issue.identifier, issues);
+  blocked.add(normalizeIssueIdentifier(issue.identifier));
+  return issues.filter((candidate) => !blocked.has(normalizeIssueIdentifier(candidate.identifier)));
+}
+
+/** Valid group leads: every other issue (backend rejects nested/lead-member). */
+function collectGroupLeadCandidates(issue: Issue, issues: readonly Issue[]): Issue[] {
+  const selfKey = normalizeIssueIdentifier(issue.identifier);
+  return issues.filter((candidate) => normalizeIssueIdentifier(candidate.identifier) !== selfKey);
+}
+
+function collectDescendantKeys(identifier: string, issues: readonly Issue[]): Set<string> {
+  const childrenByParent = new Map<string, string[]>();
+  for (const candidate of issues) {
+    if (candidate.parentIdentifier == null) continue;
+    const parentKey = normalizeIssueIdentifier(candidate.parentIdentifier);
+    const list = childrenByParent.get(parentKey) ?? [];
+    list.push(normalizeIssueIdentifier(candidate.identifier));
+    childrenByParent.set(parentKey, list);
+  }
+
+  const descendants = new Set<string>();
+  const stack = [normalizeIssueIdentifier(identifier)];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current == null) continue;
+    for (const child of childrenByParent.get(current) ?? []) {
+      if (descendants.has(child)) continue;
+      descendants.add(child);
+      stack.push(child);
+    }
+  }
+
+  return descendants;
 }

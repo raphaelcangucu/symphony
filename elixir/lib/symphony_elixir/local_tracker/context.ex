@@ -512,6 +512,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       case with_write_retry(fn -> persist_group_move(project.id, issue, status, attrs, position_only) end) do
         {:ok, {moved_lead, events}} ->
           emit_move_events(events)
+          roll_up_parent_status(moved_lead)
           {:ok, moved_lead}
 
         {:error, reason} ->
@@ -563,6 +564,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
       |> preload_issue_result()
       |> tap_issue_event("issue_updated", %{status: status.name})
       |> move_group_members(status)
+      |> tap_roll_up_parent()
     end
   end
 
@@ -820,6 +822,48 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
+  @doc """
+  The parent issue of `identifier` (the target of its `sub_issue_of` relation),
+  or `{:ok, nil}` when it has no parent. Used by the sync layer to push a
+  parent's rolled-up status to the remote.
+  """
+  @spec parent_issue(String.t(), String.t()) ::
+          {:ok, IssueRecord.t() | nil} | {:error, missing_error()}
+  def parent_issue(project_slug, identifier)
+      when is_binary(project_slug) and is_binary(identifier) do
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
+      case parent_issue_record(issue.id) do
+        %IssueRecord{} = parent -> {:ok, Repo.preload(parent, @issue_preloads)}
+        nil -> {:ok, nil}
+      end
+    end
+  end
+
+  @doc """
+  Recomputes every parent's status from its children across a project and
+  persists the changes (a parent takes the least-advanced status among its
+  children). Returns `{:ok, [{identifier, status_name}]}` for the parents that
+  changed, so the caller can push them to the remote. Used after a remote pull.
+  """
+  @spec reconcile_parent_statuses(String.t()) ::
+          {:ok, [{String.t(), String.t()}]} | {:error, missing_error()}
+  def reconcile_parent_statuses(project_slug) when is_binary(project_slug) do
+    with {:ok, project} <- fetch_project(project_slug) do
+      changed =
+        project.id
+        |> parent_issue_records()
+        |> Enum.flat_map(fn parent ->
+          case recompute_parent_status(parent) do
+            {:ok, {identifier, status_name}} -> [{identifier, status_name}]
+            _ -> []
+          end
+        end)
+
+      {:ok, changed}
+    end
+  end
+
   @spec delete_blocker(String.t(), String.t(), String.t(), String.t()) ::
           {:ok, IssueRelation.t()} | {:error, Ecto.Changeset.t() | missing_error()}
   def delete_blocker(project_slug, source_identifier, target_identifier, type \\ "blocked_by")
@@ -848,6 +892,100 @@ defmodule SymphonyElixir.LocalTracker.Context do
       |> Repo.update()
       |> preload_issue_result()
       |> tap_issue_event("issue_updated", %{previous_assignee: assignee_snapshot(member)})
+    end
+  end
+
+  @doc """
+  Sets (or re-parents) the hierarchical parent of an issue as a local
+  `sub_issue_of` relation. Removes any existing parent first so an issue has at
+  most one parent. Rejects self-parenting and cycles. Returns the updated child.
+  """
+  @spec set_issue_parent(String.t(), String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, atom() | Ecto.Changeset.t() | missing_error()}
+  def set_issue_parent(project_slug, identifier, parent_identifier)
+      when is_binary(project_slug) and is_binary(identifier) and is_binary(parent_identifier) do
+    subtask_type = IssueRelation.subtask_type()
+
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, child} <- fetch_project_issue(project.id, identifier),
+         {:ok, parent} <- fetch_project_issue(project.id, parent_identifier),
+         :ok <- validate_parent_pair(child, parent) do
+      delete_parent_relations(child.id, subtask_type)
+
+      %IssueRelation{}
+      |> IssueRelation.changeset(%{
+        source_issue_id: child.id,
+        target_issue_id: parent.id,
+        type: subtask_type
+      })
+      |> Repo.insert()
+      |> case do
+        {:ok, _relation} ->
+          {:ok, child}
+          |> preload_issue_result()
+          |> tap_issue_event("issue_updated", %{previous_assignee: assignee_snapshot(child)})
+
+        {:error, _changeset} = error ->
+          error
+      end
+    end
+  end
+
+  @doc """
+  Clears the hierarchical parent of an issue by removing its local
+  `sub_issue_of` relation. Idempotent: returns the issue even when it had no
+  parent. Returns the updated child.
+  """
+  @spec clear_issue_parent(String.t(), String.t()) ::
+          {:ok, IssueRecord.t()} | {:error, atom() | Ecto.Changeset.t() | missing_error()}
+  def clear_issue_parent(project_slug, identifier)
+      when is_binary(project_slug) and is_binary(identifier) do
+    subtask_type = IssueRelation.subtask_type()
+
+    with {:ok, project} <- fetch_project(project_slug),
+         {:ok, child} <- fetch_project_issue(project.id, identifier) do
+      delete_parent_relations(child.id, subtask_type)
+
+      {:ok, child}
+      |> preload_issue_result()
+      |> tap_issue_event("issue_updated", %{previous_assignee: assignee_snapshot(child)})
+    end
+  end
+
+  defp delete_parent_relations(child_id, subtask_type) do
+    Repo.delete_all(
+      from(relation in IssueRelation,
+        where: relation.source_issue_id == ^child_id and relation.type == ^subtask_type
+      )
+    )
+  end
+
+  defp validate_parent_pair(%IssueRecord{id: id}, %IssueRecord{id: id}), do: {:error, :cannot_parent_self}
+
+  defp validate_parent_pair(%IssueRecord{} = child, %IssueRecord{id: parent_id}) do
+    if parent_id in descendant_issue_ids(child.id, MapSet.new()) do
+      {:error, :parent_cycle}
+    else
+      :ok
+    end
+  end
+
+  # Collects every issue id reachable as a sub_issue_of descendant of `issue_id`,
+  # so a parent cannot be set to the issue's own (transitive) child.
+  defp descendant_issue_ids(issue_id, seen) do
+    if MapSet.member?(seen, issue_id) do
+      []
+    else
+      seen = MapSet.put(seen, issue_id)
+      subtask_type = IssueRelation.subtask_type()
+
+      child_ids =
+        IssueRelation
+        |> where([relation], relation.target_issue_id == ^issue_id and relation.type == ^subtask_type)
+        |> select([relation], relation.source_issue_id)
+        |> Repo.all()
+
+      child_ids ++ Enum.flat_map(child_ids, &descendant_issue_ids(&1, seen))
     end
   end
 
@@ -1363,6 +1501,102 @@ defmodule SymphonyElixir.LocalTracker.Context do
     |> Repo.all()
   end
 
+  # Direct sub-issues (`sub_issue_of` children) of a parent, as full issue
+  # records. A parent card drags its sub-issues along on a board move (see
+  # `persist_subtask_child_moves/2`), mirroring how a group lead drags members.
+  defp subtask_child_records(parent_id) do
+    subtask_type = IssueRelation.subtask_type()
+
+    IssueRelation
+    |> where([relation], relation.target_issue_id == ^parent_id and relation.type == ^subtask_type)
+    |> join(:inner, [relation], child in IssueRecord, on: child.id == relation.source_issue_id)
+    |> order_by([_relation, child], asc: child.inserted_at, asc: child.id)
+    |> select([_relation, child], child)
+    |> Repo.all()
+  end
+
+  # The parent issue of a sub-issue (the target of its `sub_issue_of` relation),
+  # or nil when the issue has no parent.
+  defp parent_issue_record(child_id) do
+    subtask_type = IssueRelation.subtask_type()
+
+    IssueRelation
+    |> where([relation], relation.source_issue_id == ^child_id and relation.type == ^subtask_type)
+    |> join(:inner, [relation], parent in IssueRecord, on: parent.id == relation.target_issue_id)
+    |> select([_relation, parent], parent)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  # Every issue in a project that has at least one sub-issue (i.e. is a parent).
+  # SQLite cannot DISTINCT a single column, so duplicates (a parent with several
+  # children) are collapsed in Elixir.
+  defp parent_issue_records(project_id) do
+    subtask_type = IssueRelation.subtask_type()
+
+    IssueRelation
+    |> join(:inner, [relation], parent in IssueRecord, on: parent.id == relation.target_issue_id)
+    |> where([relation, parent], relation.type == ^subtask_type and parent.project_id == ^project_id)
+    |> select([_relation, parent], parent)
+    |> Repo.all()
+    |> Enum.uniq_by(& &1.id)
+  end
+
+  # The least-advanced (leftmost workflow column) status among a parent's direct
+  # sub-issues, or nil when it has no children. Drives the parent rollup: a parent
+  # is only as advanced as its most-behind child.
+  defp least_advanced_child_status(parent_id) do
+    subtask_type = IssueRelation.subtask_type()
+
+    IssueRelation
+    |> where([relation], relation.target_issue_id == ^parent_id and relation.type == ^subtask_type)
+    |> join(:inner, [relation], child in IssueRecord, on: child.id == relation.source_issue_id)
+    |> join(:inner, [_relation, child], status in WorkflowStatus, on: status.id == child.status_id)
+    |> order_by([_relation, _child, status], asc: status.position)
+    |> select([_relation, _child, status], status)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  # Rolls a child's status change up to its parent: the parent takes the
+  # least-advanced status among its direct children, so it reflects its
+  # most-behind child and only reaches a terminal status once every child does.
+  # Best-effort, idempotent, and broadcast-only (no push notification) like a
+  # group member move. Returns `{:ok, {parent_identifier, status_name}}` when the
+  # parent changed, otherwise `{:ok, :noop}`.
+  defp roll_up_parent_status(%IssueRecord{} = child) do
+    case parent_issue_record(child.id) do
+      %IssueRecord{} = parent -> recompute_parent_status(parent)
+      nil -> {:ok, :noop}
+    end
+  end
+
+  defp recompute_parent_status(%IssueRecord{} = parent) do
+    case least_advanced_child_status(parent.id) do
+      %WorkflowStatus{id: status_id, name: status_name} when status_id != parent.status_id ->
+        case parent |> IssueRecord.changeset(%{status_id: status_id}) |> Repo.update() do
+          {:ok, updated} ->
+            updated = Repo.preload(updated, @issue_preloads)
+            insert_event(updated.id, "issue_moved", %{status: status_name, position_only: false})
+            Broadcaster.issue_changed("issue_moved", updated)
+            {:ok, {updated.identifier, status_name}}
+
+          {:error, _changeset} = error ->
+            error
+        end
+
+      _ ->
+        {:ok, :noop}
+    end
+  end
+
+  defp tap_roll_up_parent({:ok, %IssueRecord{} = issue} = result) do
+    roll_up_parent_status(issue)
+    result
+  end
+
+  defp tap_roll_up_parent(result), do: result
+
   defp detach_group_member(%IssueRecord{} = member) do
     member
     |> IssueRecord.changeset(%{group_lead_id: nil})
@@ -1461,22 +1695,26 @@ defmodule SymphonyElixir.LocalTracker.Context do
     :rand.uniform(ceiling + 1) - 1
   end
 
-  # Atomic group move: reorder + update the lead, update every group member, and
-  # record each issue's "issue_moved" activity event inside one transaction.
-  # Returns `{:ok, {moved_lead, events}}` where `events` are the post-commit
-  # side-effects to emit. DB writes only — no broadcasts or push notifications run
-  # while the write lock is held.
+  # Atomic unit move: reorder + update the lead, drag every group member AND every
+  # direct sub-issue into the same status, and record each issue's "issue_moved"
+  # activity event inside one transaction. Returns `{:ok, {moved_lead, events}}`
+  # where `events` are the post-commit side-effects to emit. DB writes only — no
+  # broadcasts or push notifications run while the write lock is held.
   defp persist_group_move(project_id, %IssueRecord{} = lead, %WorkflowStatus{} = status, attrs, position_only) do
     Repo.transaction(fn ->
       lead_metadata = %{status: status.name, position_only: position_only}
 
       with {:ok, moved_lead} <- persist_moved_issue_changes(project_id, lead, status, attrs),
            {:ok, _event} <- insert_event(moved_lead.id, "issue_moved", lead_metadata),
-           {:ok, moved_members} <- persist_group_member_moves(moved_lead.id, status) do
-        member_events =
-          Enum.map(moved_members, &{&1, "issue_moved", %{status: status.name, position_only: false}})
+           {:ok, moved_members} <- persist_group_member_moves(moved_lead.id, status),
+           {:ok, moved_children} <- persist_subtask_child_moves(moved_lead.id, status, position_only) do
+        follower_events =
+          Enum.map(
+            moved_members ++ moved_children,
+            &{&1, "issue_moved", %{status: status.name, position_only: false}}
+          )
 
-        {moved_lead, [{moved_lead, "issue_moved", lead_metadata} | member_events]}
+        {moved_lead, [{moved_lead, "issue_moved", lead_metadata} | follower_events]}
       else
         {:error, reason} -> Repo.rollback(reason)
       end
@@ -1507,6 +1745,36 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end)
     |> case do
       {:ok, members} -> {:ok, Enum.reverse(members)}
+      error -> error
+    end
+  end
+
+  # A reorder within the same column (position-only) must not yank a parent's
+  # sub-issues across columns — only a real status change drags them along.
+  defp persist_subtask_child_moves(_parent_id, %WorkflowStatus{}, true = _position_only), do: {:ok, []}
+
+  # Drags a parent's direct sub-issues into the parent's target status so a
+  # parent card and its subtasks travel together on a board move (mirrors
+  # `persist_group_member_moves/2`). Children already in the target status are
+  # skipped so we don't emit misleading "moved" events for them — and because a
+  # subtask that is also a group member was already moved in the same
+  # transaction, it is filtered out here (its status now matches the target).
+  defp persist_subtask_child_moves(parent_id, %WorkflowStatus{} = status, false = _position_only) do
+    parent_id
+    |> subtask_child_records()
+    |> Enum.reject(fn child -> child.status_id == status.id end)
+    |> Enum.reduce_while({:ok, []}, fn child, {:ok, acc} ->
+      with {:ok, updated} <- child |> IssueRecord.changeset(%{status_id: status.id}) |> Repo.update(),
+           updated = Repo.preload(updated, @issue_preloads),
+           {:ok, _event} <-
+             insert_event(updated.id, "issue_moved", %{status: status.name, position_only: false}) do
+        {:cont, {:ok, [updated | acc]}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, children} -> {:ok, Enum.reverse(children)}
       error -> error
     end
   end

@@ -4,11 +4,15 @@ import {
   type CollisionDetection,
 } from "@dnd-kit/core";
 
-import { GROUP_DRAG_PREFIX, ISSUE_DRAG_PREFIX } from "./board-utils";
+import { GROUP_DRAG_PREFIX, ISSUE_DRAG_PREFIX, PARENT_DRAG_PREFIX } from "./board-utils";
 
 function isUnitId(id: unknown): boolean {
   const value = String(id);
-  return value.startsWith(ISSUE_DRAG_PREFIX) || value.startsWith(GROUP_DRAG_PREFIX);
+  return (
+    value.startsWith(ISSUE_DRAG_PREFIX) ||
+    value.startsWith(GROUP_DRAG_PREFIX) ||
+    value.startsWith(PARENT_DRAG_PREFIX)
+  );
 }
 
 /** Prefer issue/group cards under the pointer; fall back to column droppables for cross-column moves. */

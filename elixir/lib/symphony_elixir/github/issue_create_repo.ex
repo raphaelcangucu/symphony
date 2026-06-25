@@ -28,9 +28,7 @@ defmodule SymphonyElixir.GitHub.IssueCreateRepo do
       {:ok, repo}
     else
       false ->
-        {:error,
-         {:invalid_repository,
-          "repository is required — pass repository on create_issue or set tracker.config.repo"}}
+        {:error, {:invalid_repository, "repository is required — pass repository on create_issue or set tracker.config.repo"}}
 
       {:error, _} = error ->
         error

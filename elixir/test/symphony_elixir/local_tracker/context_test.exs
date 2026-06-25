@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.LocalTracker.ContextTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.LocalTracker.{Context, ProjectSetup}
+  alias SymphonyElixir.LocalTracker.{Context, IssueMapper, ProjectSetup}
   alias SymphonyElixir.Repo
 
   setup do
@@ -750,6 +750,53 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert {:error, :member_is_lead} = Context.set_issue_group("macro-markets", "MAC-1", "MAC-3")
   end
 
+  test "set_issue_parent records a sub_issue_of relation surfaced as parent_identifier" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Backlog"})
+
+    assert {:ok, child} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    assert IssueMapper.to_issue(child).parent_identifier == "MAC-1"
+    assert {:ok, ["MAC-2"]} = Context.list_subtask_children("macro-markets", "MAC-1")
+  end
+
+  test "set_issue_parent replaces an existing parent" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _p1} = Context.create_issue("macro-markets", %{title: "P1", status: "Todo"})
+    {:ok, _p2} = Context.create_issue("macro-markets", %{title: "P2", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Todo"})
+
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
+    assert {:ok, child} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-2")
+
+    assert IssueMapper.to_issue(child).parent_identifier == "MAC-2"
+    assert {:ok, ["MAC-3"]} = Context.list_subtask_children("macro-markets", "MAC-2")
+    assert {:ok, []} = Context.list_subtask_children("macro-markets", "MAC-1")
+  end
+
+  test "set_issue_parent rejects self-parenting and cycles" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Todo"})
+
+    assert {:error, :cannot_parent_self} = Context.set_issue_parent("macro-markets", "MAC-1", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    assert {:error, :parent_cycle} = Context.set_issue_parent("macro-markets", "MAC-1", "MAC-2")
+  end
+
+  test "clear_issue_parent removes the parent relation idempotently" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+
+    assert {:ok, child} = Context.clear_issue_parent("macro-markets", "MAC-2")
+    assert IssueMapper.to_issue(child).parent_identifier == nil
+    assert {:ok, []} = Context.list_subtask_children("macro-markets", "MAC-1")
+
+    assert {:ok, _} = Context.clear_issue_parent("macro-markets", "MAC-2")
+  end
+
   test "remove_from_group detaches a member and disbands on the lead" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
@@ -817,6 +864,146 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
       assert Enum.any?(events, &(&1.event_type == "issue_moved")),
              "expected an issue_moved event for #{identifier}"
     end
+  end
+
+  test "move_issue drags a parent's sub-issues to the parent's new status" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _c1} = Context.create_issue("macro-markets", %{title: "C1", status: "Backlog"})
+    {:ok, _c2} = Context.create_issue("macro-markets", %{title: "C2", status: "Backlog"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, parent} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+    assert parent.status.name == "In Progress"
+
+    assert {:ok, c1} = Context.get_issue("macro-markets", "MAC-2")
+    assert {:ok, c2} = Context.get_issue("macro-markets", "MAC-3")
+    assert c1.status.name == "In Progress"
+    assert c2.status.name == "In Progress"
+  end
+
+  test "move_issue on a sub-issue leaves its parent and siblings in place" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _c1} = Context.create_issue("macro-markets", %{title: "C1", status: "Todo"})
+    {:ok, _c2} = Context.create_issue("macro-markets", %{title: "C2", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, moved} = Context.move_issue("macro-markets", "MAC-2", %{status: "In Progress"})
+    assert moved.identifier == "MAC-2"
+    assert moved.status.name == "In Progress"
+
+    assert {:ok, parent} = Context.get_issue("macro-markets", "MAC-1")
+    assert {:ok, sibling} = Context.get_issue("macro-markets", "MAC-3")
+    assert parent.status.name == "Todo"
+    assert sibling.status.name == "Todo"
+  end
+
+  test "move_issue skips a sub-issue already in the parent's target status" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _c1} = Context.create_issue("macro-markets", %{title: "C1", status: "Backlog"})
+    {:ok, _c2} = Context.create_issue("macro-markets", %{title: "C2", status: "In Progress"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
+
+    assert {:ok, _parent} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+
+    assert {:ok, c1_events} = Context.list_activity_events("macro-markets", "MAC-2")
+    assert Enum.any?(c1_events, &(&1.event_type == "issue_moved"))
+
+    assert {:ok, c2_events} = Context.list_activity_events("macro-markets", "MAC-3")
+    refute Enum.any?(c2_events, &(&1.event_type == "issue_moved"))
+  end
+
+  test "move_issue rolls a parent up to its child's new status" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+
+    assert {:ok, _moved} = Context.move_issue("macro-markets", "MAC-2", %{status: "In Progress"})
+
+    assert {:ok, parent} = Context.get_issue("macro-markets", "MAC-1")
+    assert parent.status.name == "In Progress"
+  end
+
+  test "move_issue holds a parent at its least-advanced child" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _c1} = Context.create_issue("macro-markets", %{title: "C1", status: "Todo"})
+    {:ok, _c2} = Context.create_issue("macro-markets", %{title: "C2", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
+
+    {:ok, _} = Context.move_issue("macro-markets", "MAC-2", %{status: "Human Review"})
+    {:ok, _} = Context.move_issue("macro-markets", "MAC-3", %{status: "In Progress"})
+
+    # One child in review and another still in progress -> the parent stays at the
+    # least-advanced status (In Progress).
+    assert {:ok, parent} = Context.get_issue("macro-markets", "MAC-1")
+    assert parent.status.name == "In Progress"
+  end
+
+  test "move_issue rolls a parent to Done only once every child is Done" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _c1} = Context.create_issue("macro-markets", %{title: "C1", status: "Todo"})
+    {:ok, _c2} = Context.create_issue("macro-markets", %{title: "C2", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
+
+    {:ok, _} = Context.move_issue("macro-markets", "MAC-2", %{status: "Done"})
+
+    assert {:ok, parent} = Context.get_issue("macro-markets", "MAC-1")
+    assert parent.status.name == "Todo"
+
+    {:ok, _} = Context.move_issue("macro-markets", "MAC-3", %{status: "Done"})
+
+    assert {:ok, parent} = Context.get_issue("macro-markets", "MAC-1")
+    assert parent.status.name == "Done"
+  end
+
+  test "update_issue_state rolls the parent up to follow an agent move" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+
+    assert {:ok, _child} = Context.update_issue_state("macro-markets", "MAC-2", "In Progress")
+
+    assert {:ok, parent} = Context.get_issue("macro-markets", "MAC-1")
+    assert parent.status.name == "In Progress"
+  end
+
+  test "reconcile_parent_statuses recomputes parents from out-of-sync children" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "In Progress"})
+    # Attaching an already-advanced child leaves the parent out of sync (attach
+    # does not roll up); reconcile is what a remote pull uses to repair it.
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+
+    assert {:ok, parent_before} = Context.get_issue("macro-markets", "MAC-1")
+    assert parent_before.status.name == "Todo"
+
+    assert {:ok, changed} = Context.reconcile_parent_statuses("macro-markets")
+    assert {"MAC-1", "In Progress"} in changed
+
+    assert {:ok, parent} = Context.get_issue("macro-markets", "MAC-1")
+    assert parent.status.name == "In Progress"
+  end
+
+  test "parent_issue returns the parent issue or nil" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+
+    assert {:ok, %{identifier: "MAC-1"}} = Context.parent_issue("macro-markets", "MAC-2")
+    assert {:ok, nil} = Context.parent_issue("macro-markets", "MAC-1")
   end
 
   test "move_issue sends a human review push only for the group lead" do

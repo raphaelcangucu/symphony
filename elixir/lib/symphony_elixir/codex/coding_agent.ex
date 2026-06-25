@@ -552,9 +552,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
             {:ok, resumed_id, :resumed}
 
           {:error, reason} ->
-            Logger.warning(
-              "Codex thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}"
-            )
+            Logger.warning("Codex thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}")
 
             start_fresh_thread(port, workspace, session_policies, opts)
         end
@@ -658,9 +656,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
 
       {:error, reason} ->
-        Logger.warning(
-          "Codex thread/goal/get failed on resume thread_id=#{thread_id}; falling back to provided goal: #{inspect(reason)}"
-        )
+        Logger.warning("Codex thread/goal/get failed on resume thread_id=#{thread_id}; falling back to provided goal: #{inspect(reason)}")
 
         maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
     end
@@ -727,9 +723,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
             {:ok, resumed_id, :resumed}
 
           {:error, reason} ->
-            Logger.warning(
-              "Codex control thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}"
-            )
+            Logger.warning("Codex control thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}")
 
             start_control_thread(port, workspace, session_policies, opts)
         end

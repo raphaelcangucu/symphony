@@ -128,13 +128,9 @@ defmodule SymphonyElixir.WorkspaceTest do
 
     assert {:ok, ^workspace} = Workspace.create_for_issue(issue)
     assert File.dir?(front)
-    assert File.regular?(
-             Path.join([workspace, ".codex", "skills", "subagent-driven-development", "SKILL.md"])
-           )
+    assert File.regular?(Path.join([workspace, ".codex", "skills", "subagent-driven-development", "SKILL.md"]))
 
-    assert File.regular?(
-             Path.join([front, ".claude", "skills", "subagent-driven-development", "SKILL.md"])
-           )
+    assert File.regular?(Path.join([front, ".claude", "skills", "subagent-driven-development", "SKILL.md"]))
 
     refute File.exists?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
 

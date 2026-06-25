@@ -37,9 +37,11 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceController do
          {:ok, commit} <- Commits.show(workspace, repo, sha) do
       json(conn, %{data: commit})
     else
-      {:error, :commit_not_found} -> TrackerErrors.render(conn, :commit_not_found)
+      {:error, :commit_not_found} ->
+        TrackerErrors.render(conn, :commit_not_found)
 
-      {:error, :repo_not_found} -> TrackerErrors.render(conn, :repo_not_found)
+      {:error, :repo_not_found} ->
+        TrackerErrors.render(conn, :repo_not_found)
 
       {:error, reason} ->
         TrackerErrors.render(conn, reason)

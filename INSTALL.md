@@ -7,7 +7,7 @@
 
 Symphony is an agent orchestration service written in **Elixir** (directory `elixir/`) with a
 tracker frontend in **TypeScript/React** (directory `tracker/`). It imports "projects"
-(e.g. `gamba-project.yaml`), dispatches GitHub issues to coding agents
+(e.g. `projects/gamba.yaml`), dispatches GitHub issues to coding agents
 (**Codex**, **Claude**, or **Cursor**), and exposes a web tracker on port `4000`.
 
 Important rules for an agent following this guide:
@@ -161,20 +161,22 @@ make migrate     # creates the DB (if needed) and applies migrations — idempot
 
 ---
 
-## 7. Import a project (e.g. `gamba-project.yaml`)
+## 7. Import a project (e.g. `projects/gamba.yaml`)
 
-Projects are defined in YAML at the repo root (e.g. `gamba-project.yaml`) and
-imported into the local tracker.
+Project YAML bundles live in the `projects/` directory at the repo root. This folder is
+**gitignored** — each developer keeps their own copies (export from an existing setup or
+create from scratch).
 
 ```bash
+mkdir -p /home/gabriel/projetos/Gamba/symphony/projects
 cd /home/gabriel/projetos/Gamba/symphony/elixir
-make project-import FILE=../gamba-project.yaml
+make project-import FILE=../projects/gamba.yaml
 ```
 
 Expected at the end:
 
 ```
-✓  Imported project gamba (Gamba) from ../gamba-project.yaml
+✓  Imported project gamba (Gamba) from ../projects/gamba.yaml
 ```
 
 This registers the project, the repositories, the `dev_env_steps`, and the `workflow_markdown`.
@@ -183,10 +185,17 @@ Related commands:
 
 ```bash
 # Import into a specific slug
-make project-import FILE=../gamba-project.yaml INTO=gamba
+make project-import FILE=../projects/gamba.yaml INTO=gamba
 
-# Export an existing project back to YAML
-make project-export SLUG=gamba FILE=../gamba-project.yaml
+# Import from a shared URL (raw gist or HTTPS YAML link)
+make project-import FILE=https://gist.githubusercontent.com/you/abc123/raw/gamba.yaml
+
+# Export an existing project back to YAML (writes to projects/ by default)
+make project-export SLUG=gamba
+make project-export SLUG=gamba FILE=../projects/gamba.yaml
+
+# Share via GitHub Gist (requires GITHUB_TOKEN; prints import URL)
+make project-share SLUG=gamba
 ```
 
 ---
@@ -318,7 +327,7 @@ make build
 
 # 5) Database + project
 make migrate
-make project-import FILE=../gamba-project.yaml
+make project-import FILE=../projects/gamba.yaml
 
 # 6) Cursor agent (outside elixir/, it's a global installer)
 curl https://cursor.com/install -fsS | bash

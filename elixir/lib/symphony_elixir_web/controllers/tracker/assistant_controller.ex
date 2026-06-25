@@ -32,15 +32,26 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
       |> put_status(:created)
       |> json(%{data: attachment})
     else
-      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
-      {:error, :unsupported_file_type} -> TrackerErrors.validation_msg(conn, "This file type is not supported.")
+      {:error, :project_not_found} ->
+        TrackerErrors.render(conn, :project_not_found)
+
+      {:error, :unsupported_file_type} ->
+        TrackerErrors.validation_msg(conn, "This file type is not supported.")
+
       {:error, :unsupported_image_type} ->
         TrackerErrors.validation_msg(conn, "Only PNG, JPEG, GIF, and WebP images are supported.")
 
-      {:error, :file_too_large} -> TrackerErrors.validation_msg(conn, "Files must be 5 MB or smaller.")
-      {:error, :image_too_large} -> TrackerErrors.validation_msg(conn, "Images must be 4 MB or smaller.")
-      {:error, :invalid_upload} -> TrackerErrors.validation_msg(conn, "Invalid upload.")
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+      {:error, :file_too_large} ->
+        TrackerErrors.validation_msg(conn, "Files must be 5 MB or smaller.")
+
+      {:error, :image_too_large} ->
+        TrackerErrors.validation_msg(conn, "Images must be 4 MB or smaller.")
+
+      {:error, :invalid_upload} ->
+        TrackerErrors.validation_msg(conn, "Invalid upload.")
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
     end
   end
 
@@ -75,14 +86,17 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
       |> put_status(:created)
       |> json(%{data: result})
     else
-      {:error, :message_required} -> TrackerErrors.validation_msg(conn, "message is required")
+      {:error, :message_required} ->
+        TrackerErrors.validation_msg(conn, "message is required")
+
       {:error, {:missing_required_field, field}} ->
         TrackerErrors.validation_msg(conn, "%{field} is required", %{field: field})
 
       {:error, {:unsupported_tool, tool}} ->
         TrackerErrors.validation_msg(conn, "unsupported assistant tool: %{tool}", %{tool: tool})
 
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
     end
   end
 

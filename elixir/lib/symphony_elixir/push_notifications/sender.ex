@@ -51,9 +51,7 @@ defmodule SymphonyElixir.PushNotifications.Sender do
     end
   rescue
     error ->
-      Logger.warning(
-        "Push notification encryption failed endpoint=#{subscription.endpoint}: #{Exception.message(error)}"
-      )
+      Logger.warning("Push notification encryption failed endpoint=#{subscription.endpoint}: #{Exception.message(error)}")
 
       :ok
   end

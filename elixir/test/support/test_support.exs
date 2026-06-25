@@ -142,9 +142,21 @@ defmodule SymphonyElixir.TestSupport do
         repo.query!("PRAGMA defer_foreign_keys = ON")
 
         %{rows: rows} =
-          repo.query!("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations'")
+          repo.query!("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations'")
 
-        Enum.each(rows, fn [name] -> repo.query!("DELETE FROM \"#{name}\"") end)
+        virtual_tables =
+          for [name, sql] <- rows,
+              is_binary(sql) and String.starts_with?(String.upcase(sql), "CREATE VIRTUAL TABLE"),
+              do: name
+
+        shadow_or_virtual? = fn name ->
+          Enum.any?(virtual_tables, fn v -> name == v or String.starts_with?(name, v <> "_") end)
+        end
+
+        for [name, _sql] <- rows, not shadow_or_virtual?.(name) do
+          repo.query!("DELETE FROM \"#{name}\"")
+        end
+
         :ok
       end)
 

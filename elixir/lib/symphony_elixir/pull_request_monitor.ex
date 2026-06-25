@@ -204,9 +204,7 @@ defmodule SymphonyElixir.PullRequestMonitor do
         last_action_at: DateTime.utc_now()
       })
 
-    Logger.info(
-      "PR monitor merge conflict issue_identifier=#{identifier} project_slug=#{project.slug} pr_number=#{inspect(number)} head_sha=#{head_sha}"
-    )
+    Logger.info("PR monitor merge conflict issue_identifier=#{identifier} project_slug=#{project.slug} pr_number=#{inspect(number)} head_sha=#{head_sha}")
 
     :ok
   end
@@ -262,9 +260,7 @@ defmodule SymphonyElixir.PullRequestMonitor do
         :ok
 
       _ ->
-        Logger.info(
-          "PR monitor partial merge issue_identifier=#{identifier} project_slug=#{project.slug} pr_url=#{inspect(pr_url)} awaiting_other_prs=true"
-        )
+        Logger.info("PR monitor partial merge issue_identifier=#{identifier} project_slug=#{project.slug} pr_url=#{inspect(pr_url)} awaiting_other_prs=true")
 
         MonitorState.upsert(project.slug, identifier, pr_url, %{
           last_action: "merged_awaiting_others",

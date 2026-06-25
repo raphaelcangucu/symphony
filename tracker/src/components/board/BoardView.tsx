@@ -26,6 +26,7 @@ import {
   workflowStatusNames,
   GROUP_DRAG_PREFIX,
   ISSUE_DRAG_PREFIX,
+  PARENT_DRAG_PREFIX,
   type BoardState,
   type DropIndicator,
 } from "./board-utils";
@@ -156,7 +157,10 @@ export function BoardView({
     }
 
     const overId = String(event.over.id);
-    const overIsUnit = overId.startsWith(ISSUE_DRAG_PREFIX) || overId.startsWith(GROUP_DRAG_PREFIX);
+    const overIsUnit =
+      overId.startsWith(ISSUE_DRAG_PREFIX) ||
+      overId.startsWith(GROUP_DRAG_PREFIX) ||
+      overId.startsWith(PARENT_DRAG_PREFIX);
     const overIsOtherUnit = overIsUnit && overId !== String(event.active.id);
     const pointerY = dragPointerY(event);
 

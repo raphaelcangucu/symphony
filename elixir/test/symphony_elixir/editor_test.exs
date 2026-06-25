@@ -198,13 +198,9 @@ defmodule SymphonyElixir.EditorTest do
 
       assert Editor.editor_target("project", "MAC-SKILLS") == {:ok, expected_url}
 
-      assert File.regular?(
-               Path.join([path, ".codex", "skills", "subagent-driven-development", "SKILL.md"])
-             )
+      assert File.regular?(Path.join([path, ".codex", "skills", "subagent-driven-development", "SKILL.md"]))
 
-      assert File.regular?(
-               Path.join([path, ".claude", "skills", "subagent-driven-development", "SKILL.md"])
-             )
+      assert File.regular?(Path.join([path, ".claude", "skills", "subagent-driven-development", "SKILL.md"]))
 
       refute File.exists?(Path.join([path, ".codex", "skills", "brainstorming", "SKILL.md"]))
     end

@@ -2,6 +2,7 @@
   "common": {
     "loading": "Loading…",
     "close": "Close",
+    "cancel": "Cancel",
     "save": "Save",
     "refresh": "Refresh"
   },
@@ -643,7 +644,25 @@
         "progress": "{{completed}} of {{total}}",
         "expand": "Show sub-issues",
         "collapse": "Hide sub-issues",
-        "empty": "Sub-issues are not loaded yet."
+        "empty": "Sub-issues are not loaded yet.",
+        "createSubIssue": "Create sub-issue",
+        "titlePlaceholder": "Sub-issue title",
+        "create": "Create",
+        "cancel": "Cancel"
+      },
+      "relations": {
+        "parent": "Parent",
+        "parentTitle": "Set parent issue",
+        "noParent": "No parent",
+        "clearParent": "Remove parent",
+        "groupLead": "Group lead",
+        "groupLeadTitle": "Set group lead",
+        "noGroupLead": "No group lead",
+        "clearGroupLead": "Remove from group",
+        "searchPlaceholder": "Search issues…",
+        "empty": "No matching issues.",
+        "unavailable": "Not in current view",
+        "clear": "Clear"
       },
       "status": "Status",
       "priority": "Priority",
@@ -800,7 +819,17 @@
       "synced": "{{identifier}} synced from remote",
       "syncFailed": "Failed to sync issue from remote",
       "attachmentRemoved": "Attachment removed",
-      "attachmentRemoveFailed": "Failed to remove attachment"
+      "attachmentRemoveFailed": "Failed to remove attachment",
+      "subtaskCreated": "Sub-issue {{identifier}} created",
+      "subtaskCreateFailed": "Failed to create sub-issue",
+      "parentSet": "Parent set to {{identifier}}",
+      "parentSetFailed": "Failed to set parent",
+      "parentCleared": "Parent removed",
+      "parentClearFailed": "Failed to remove parent",
+      "groupLeadSet": "Grouped under {{identifier}}",
+      "groupLeadSetFailed": "Failed to set group lead",
+      "groupLeadCleared": "Removed from group",
+      "groupLeadClearFailed": "Failed to remove from group"
     },
     "attachments": {
       "imageUnavailable": "Image uploads are not available here.",
@@ -1137,6 +1166,7 @@
       "title": "Projects",
       "subtitle": "Choose a local tracker project.",
       "import": "Import",
+      "importFromUrl": "Import URL",
       "filters": "Filters",
       "newWorkspace": "New workspace project",
       "emptyApi": "No projects returned by the tracker API.",
@@ -1347,6 +1377,22 @@
       "importExport": {
         "export": "Export",
         "import": "Import",
+        "importTitle": "Import project",
+        "importDescription": "Import a project YAML file from a shared HTTPS URL or from disk.",
+        "importDescriptionNamed": "Import configuration into \"{{projectName}}\" from a URL or file.",
+        "importOrFile": "or",
+        "importChooseFile": "Choose YAML file",
+        "importSubmit": "Import from URL",
+        "importFromUrl": "Import URL",
+        "importFromUrlTitle": "Import from URL",
+        "importFromUrlDescription": "Paste a raw GitHub Gist URL or any HTTPS link to a project YAML file.",
+        "importFromUrlDescriptionNamed": "Import configuration into \"{{projectName}}\" from a shared HTTPS URL.",
+        "importFromUrlLabel": "YAML URL",
+        "importFromUrlSubmit": "Import",
+        "share": "Share",
+        "shareSuccess": "Share link copied to clipboard",
+        "shareFailed": "Failed to share project configuration",
+        "openShareLink": "Open gist",
         "exportSuccess": "Project configuration exported",
         "exportFailed": "Failed to export project configuration",
         "importConfirm": "Import configuration from \"{{fileName}}\" into \"{{projectName}}\"? This replaces the current settings.",
@@ -1854,6 +1900,7 @@
       "openProjectWorkspaceCode": "Open project workspace in Code",
       "board": "Board",
       "list": "List",
+      "knowledgeBase": "Knowledge Base",
       "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
     },
     "recents": {
@@ -1974,12 +2021,58 @@
       "wipPlaceholder": "e.g. 5"
     }
   },
+  "kb": {
+    "loading": "Loading…",
+    "saved": "Saved",
+    "sidebar": { "noDocs": "No docs yet" },
+    "editor": { "save": "Save", "saving": "Saving…" },
+    "search": {
+      "placeholder": "Search the knowledge base…",
+      "loading": "Searching…",
+      "empty": "No results"
+    },
+    "sync": {
+      "now": "Sync now",
+      "viewPr": "View PR",
+      "status": {
+        "idle": "Idle",
+        "syncing": "Syncing",
+        "open_pr": "PR open",
+        "merged": "Merged",
+        "conflict": "Conflict",
+        "checks_failed": "Checks failed",
+        "error": "Error"
+      }
+    },
+    "home": {
+      "title": "{{project}} Knowledge Base",
+      "intro": "Browse documentation per repository.",
+      "noRepositories": "No repositories configured for this project.",
+      "openDocs": "Open docs"
+    },
+    "empty": { "selectPage": "Select a page to start reading or editing." },
+    "errors": {
+      "loadFailed": "Failed to load this page.",
+      "saveFailed": "Failed to save the page."
+    },
+    "general": {
+      "title": "My Knowledge Base",
+      "connect": "Connect symphony-kb",
+      "connecting": "Connecting…",
+      "connected": "Connected",
+      "connectFailed": "Failed to connect the personal knowledge base.",
+      "connectHint": "Connect your personal symphony-kb repository to store cross-project notes.",
+      "regenerate": "Regenerate home",
+      "regenerated": "Home page regenerated"
+    }
+  },
   "nav": {
     "brandTitle": "Symphony Tracker",
     "brandSubtitle": "Local project board",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
     "projects": "Projects",
+    "knowledgeBase": "Knowledge Base",
     "templates": "Templates",
     "observability": "Observability",
     "backups": "Backups",

@@ -68,6 +68,57 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     end
   end
 
+  @spec create_subtask(Conn.t(), map()) :: Conn.t()
+  def create_subtask(conn, %{"project_slug" => project_slug, "identifier" => parent_identifier} = params) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _parent} <- IssueAdapter.dispatch(project, :get_issue, [parent_identifier]),
+         attrs =
+           params
+           |> Map.drop(["project_slug", "identifier"])
+           |> normalize_create_attrs(project)
+           |> maybe_inject_creator(),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]),
+         {:ok, _child} <- Context.set_issue_parent(project_slug, issue.identifier, parent_identifier) do
+      maybe_establish_codex_goal(project, issue, params)
+
+      conn
+      |> put_status(:created)
+      |> json(%{data: TrackerPresenter.issue(reload_issue(project, issue))})
+    else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec set_parent(Conn.t(), map()) :: Conn.t()
+  def set_parent(conn, %{
+        "project_slug" => project_slug,
+        "identifier" => identifier,
+        "parent_identifier" => parent_identifier
+      })
+      when is_binary(parent_identifier) and parent_identifier != "" do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _child} <- Context.set_issue_parent(project_slug, identifier, parent_identifier),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      json(conn, %{data: TrackerPresenter.issue(issue)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def set_parent(conn, _params), do: TrackerErrors.validation_msg(conn, "parent_identifier is required")
+
+  @spec clear_parent(Conn.t(), map()) :: Conn.t()
+  def clear_parent(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _child} <- Context.clear_issue_parent(project_slug, identifier),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      json(conn, %{data: TrackerPresenter.issue(issue)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   # Codex goals live on the native Codex thread, not on `agent_goal`. When an
   # issue is created with a Codex goal, establish the native thread + goal now so
   # the UI and future runs read it from Codex. Best-effort: never fails issue
@@ -191,10 +242,14 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
          {:ok, result} <- run_dispatch_action(project, identifier, action, opts) do
       json(conn, %{data: result})
     else
-      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, :project_not_found} ->
+        TrackerErrors.render(conn, :project_not_found)
+
       {:error, :invalid_action} ->
         TrackerErrors.validation_msg(conn, "action must be resume, restart, hard_reset, stop, or continue_work")
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
     end
   end
 

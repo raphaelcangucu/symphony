@@ -66,6 +66,21 @@ defmodule SymphonyElixirWeb.Tracker.ProjectImportExportTest do
     assert markdown =~ "Hello"
   end
 
+  test "POST /projects/import accepts an HTTPS url" do
+    source_slug = create_sample_project()
+    {:ok, yaml} = Projects.export_yaml(source_slug)
+    clean_repo()
+
+    Application.put_env(:symphony_elixir, :project_yaml_http_get, fn _url -> {:ok, yaml} end)
+
+    conn =
+      post(authorized_conn(), "/api/tracker/v1/projects/import", %{
+        "url" => "https://example.com/sample-export.yaml"
+      })
+
+    assert %{"data" => %{"slug" => "sample-export"}} = json_response(conn, 201)
+  end
+
   test "POST /projects/import overwrites an existing project configuration" do
     slug = create_sample_project()
     {:ok, yaml} = Projects.export_yaml(slug)

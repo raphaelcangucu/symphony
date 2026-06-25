@@ -1,10 +1,16 @@
-import { Download, Upload } from "lucide-react";
-import { useRef } from "react";
+import { Download, Share2, Upload } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ProjectImportDialog } from "@/components/projects/ProjectImportDialog";
 import { Button } from "@/components/ui/button";
-import { exportProject, importProjectConfig } from "@/services/projectImportExport";
+import {
+  exportProject,
+  importProjectConfig,
+  importProjectConfigFromUrl,
+  shareProject,
+} from "@/services/projectImportExport";
 import type { Project } from "@/types/project";
 
 interface ProjectImportExportActionsProps {
@@ -14,7 +20,8 @@ interface ProjectImportExportActionsProps {
 
 export function ProjectImportExportActions({ project, onImported }: ProjectImportExportActionsProps) {
   const { t } = useTranslation();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const handleExport = async () => {
     try {
@@ -23,7 +30,7 @@ export function ProjectImportExportActions({ project, onImported }: ProjectImpor
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `${project.slug}-project.yaml`;
+      anchor.download = `${project.slug}.yaml`;
       anchor.click();
       URL.revokeObjectURL(url);
       toast.success(t("project.config.importExport.exportSuccess"));
@@ -32,43 +39,78 @@ export function ProjectImportExportActions({ project, onImported }: ProjectImpor
     }
   };
 
-  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    const confirmed = window.confirm(
-      t("project.config.importExport.importConfirm", { fileName: file.name, projectName: project.name }),
-    );
-    if (!confirmed) return;
-
+  const handleImportFile = async (yaml: string, _fileName: string) => {
     try {
-      const yaml = await file.text();
       const updated = await importProjectConfig(project.slug, yaml);
       onImported(updated);
       toast.success(t("project.config.importExport.importSuccess"));
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t("project.config.importExport.importFailed"));
+      throw cause;
+    }
+  };
+
+  const handleImportUrl = async (url: string) => {
+    try {
+      const updated = await importProjectConfigFromUrl(project.slug, url);
+      onImported(updated);
+      toast.success(t("project.config.importExport.importSuccess"));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("project.config.importExport.importFailed"));
+      throw cause;
+    }
+  };
+
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      const info = await shareProject(project.slug);
+      const shareUrl = info.raw_url ?? info.html_url;
+      if (shareUrl) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+      toast.success(t("project.config.importExport.shareSuccess"), {
+        description: shareUrl,
+        action: shareUrl
+          ? {
+              label: t("project.config.importExport.openShareLink"),
+              onClick: () => window.open(info.html_url, "_blank", "noopener,noreferrer"),
+            }
+          : undefined,
+      });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("project.config.importExport.shareFailed"));
+    } finally {
+      setSharing(false);
     }
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".yaml,.yml,text/yaml,application/x-yaml"
-        className="hidden"
-        onChange={(event) => void handleImportFile(event)}
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => void handleExport()}>
+          <Download className="h-4 w-4" />
+          {t("project.config.importExport.export")}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+          <Upload className="h-4 w-4" />
+          {t("project.config.importExport.import")}
+        </Button>
+        <Button type="button" variant="outline" size="sm" disabled={sharing} onClick={() => void handleShare()}>
+          <Share2 className="h-4 w-4" />
+          {t("project.config.importExport.share")}
+        </Button>
+      </div>
+      <ProjectImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        projectName={project.name}
+        confirmMessage={(sourceLabel) =>
+          t("project.config.importExport.importConfirm", { fileName: sourceLabel, projectName: project.name })
+        }
+        onImportFile={handleImportFile}
+        onImportUrl={handleImportUrl}
       />
-      <Button type="button" variant="outline" size="sm" onClick={() => void handleExport()}>
-        <Download className="h-4 w-4" />
-        {t("project.config.importExport.export")}
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-        <Upload className="h-4 w-4" />
-        {t("project.config.importExport.import")}
-      </Button>
-    </div>
+    </>
   );
 }

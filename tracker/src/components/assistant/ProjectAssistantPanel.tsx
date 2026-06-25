@@ -918,7 +918,7 @@ export function ProjectAssistantPanel({
       <AssistantComposer
         projectSlug={projectSlug ?? ""}
         bundle={bundle ?? fallbackCatalogBundle()}
-        disabled={isRunning}
+        agentMenuDisabled={isRunning}
         floating={isPageMode}
         hasQueued={queued.length > 0}
         seedMessage={composerSeedMessage}

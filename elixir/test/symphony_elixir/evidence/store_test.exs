@@ -90,14 +90,10 @@ defmodule SymphonyElixir.Evidence.StoreTest do
 
   test "delete_failed removes only non-passing records", ctx do
     {:ok, passed} =
-      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => [%{"kind" => "unit", "status" => "passed"}]},
-        evidence_root: ctx.evidence_root
-      )
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => [%{"kind" => "unit", "status" => "passed"}]}, evidence_root: ctx.evidence_root)
 
     {:ok, failed} =
-      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => [%{"kind" => "unit", "status" => "failed"}]},
-        evidence_root: ctx.evidence_root
-      )
+      Store.persist("gam", "GAM-9", ctx.workspace, %{"issue" => "GAM-9", "runs" => [%{"kind" => "unit", "status" => "failed"}]}, evidence_root: ctx.evidence_root)
 
     assert {:ok, 1} = Store.delete_failed("gam", "GAM-9")
     assert {:ok, [remaining]} = Store.list("gam", "GAM-9")

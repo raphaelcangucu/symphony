@@ -140,6 +140,53 @@ export async function ungroupIssue(projectSlug: string, identifier: string): Pro
   );
 }
 
+export async function setIssueParent(
+  projectSlug: string,
+  identifier: string,
+  parentIdentifier: string,
+): Promise<Issue> {
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
+  const parent = requireNonBlank(parentIdentifier, "parentIdentifier");
+  const response = await http.post(
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/parent`),
+    { parent_identifier: parent },
+  );
+  return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}
+
+export async function clearIssueParent(projectSlug: string, identifier: string): Promise<Issue> {
+  const slug = requireProjectSlug(projectSlug);
+  const issueId = requireNonBlank(identifier, "identifier");
+  const response = await http.delete(
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/parent`),
+  );
+  return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}
+
+export interface CreateSubtaskInput {
+  title: string;
+  description?: string | null;
+}
+
+export async function createSubtask(
+  projectSlug: string,
+  parentIdentifier: string,
+  input: CreateSubtaskInput,
+): Promise<Issue> {
+  const slug = requireProjectSlug(projectSlug);
+  const parent = requireNonBlank(parentIdentifier, "parentIdentifier");
+  const title = requireNonBlank(input.title, "title");
+  const payload: Record<string, unknown> = { title };
+  if (input.description != null && input.description.trim()) payload.description = input.description.trim();
+
+  const response = await http.post(
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(parent)}/subtasks`),
+    payload,
+  );
+  return normalizeIssue(unwrapData<BackendIssueDto>(response));
+}
+
 export async function forceSyncIssue(projectSlug: string, identifier: string): Promise<Issue> {
   const slug = requireProjectSlug(projectSlug);
   const issueId = requireNonBlank(identifier, "identifier");

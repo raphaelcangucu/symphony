@@ -18,6 +18,8 @@ import { getTrackerToken } from "@/config";
 import { AssistantPage } from "@/pages/AssistantPage";
 import { BoardPage } from "@/pages/BoardPage";
 import { ListPage } from "@/pages/ListPage";
+import { KbGeneralPage } from "@/pages/KbGeneralPage";
+import { KbProjectPage } from "@/pages/KbProjectPage";
 import { BackupPage } from "@/pages/BackupPage";
 import { ObservabilityPage } from "@/pages/ObservabilityPage";
 import { SettingsPage } from "@/pages/SettingsPage";
@@ -80,6 +82,7 @@ export function App() {
                 <Route path="assistant/issue/:issueId" element={<IssueAssistantRoute />} />
                 <Route path="settings" element={<ProjectSettingsPage />} />
                 <Route path="settings/:tab" element={<ProjectSettingsPage />} />
+                <Route path="kb/*" element={<KbProjectPage />} />
               </Route>
               <Route path="templates" element={<TemplateListPage />} />
               <Route path="templates/:slug" element={<TemplateEditPage />} />
@@ -88,6 +91,7 @@ export function App() {
               <Route path="settings" element={<SettingsPage />} />
               <Route path="assistant" element={<AssistantPage />} />
               <Route path="assistant/:threadId" element={<AssistantPage />} />
+              <Route path="kb/*" element={<KbGeneralPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/projects" replace />} />

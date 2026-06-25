@@ -6,7 +6,7 @@ import {
   findIssueStatus,
   flattenBoardState,
   moveGroupLocally,
-  resolveGroupMoveLead,
+  resolveMoveUnit,
   upsertIssue,
 } from "@/components/board/board-utils";
 import type { IssueFilters } from "@/lib/issueFilters";
@@ -89,13 +89,14 @@ export function useIssueBoard(
       const sourceStatus = findIssueStatus(previousBoard, identifier, statuses);
       if (!sourceStatus) return;
 
-      // A group moves as one unit: resolve lead when a member is dragged or when
-      // status changes from the issue drawer so every card stays in sync.
-      const { leadIdentifier, memberIdentifiers } = resolveGroupMoveLead(issues, identifier);
+      // A unit moves together: resolve the group lead when a member is dragged,
+      // and drag a parent's sub-issues along so the parent card and its subtasks
+      // land in the same column. Mirrors the server cascade in `persist_group_move`.
+      const { anchorIdentifier, followerIdentifiers } = resolveMoveUnit(issues, identifier);
       const nextBoard = moveGroupLocally(
         previousBoard,
-        leadIdentifier,
-        memberIdentifiers,
+        anchorIdentifier,
+        followerIdentifiers,
         status,
         position,
         statuses,
@@ -103,7 +104,7 @@ export function useIssueBoard(
       setIssues(flattenBoardState(nextBoard));
 
       try {
-        await moveIssue(projectSlug, leadIdentifier, { status, position });
+        await moveIssue(projectSlug, anchorIdentifier, { status, position });
       } catch (cause) {
         setIssues(flattenBoardState(previousBoard));
         const message = cause instanceof Error ? cause.message : i18n.t("issue.board.moveFailed");

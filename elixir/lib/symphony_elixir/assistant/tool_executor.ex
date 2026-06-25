@@ -15,6 +15,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     GitHubTools,
     GoalTools,
     HandoffTools,
+    KnowledgeBaseTools,
     OrchestratorTools,
     PreviewTools,
     ProjectBoardTools,
@@ -78,9 +79,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
+  @kb_tools KnowledgeBaseTools.tools()
   @discovery_tools DiscoveryTools.tools()
   @dynamic_tools Enum.map(DynamicTool.tool_specs(), & &1["name"])
-  @supported_tools @tracker_tools ++ @read_tools ++ @github_tools
+  @supported_tools @tracker_tools ++ @read_tools ++ @github_tools ++ @kb_tools
   # Routine assistant chat replies should not be mirrored as issue comments; use
   # `add_comment` only when the user asks to record a comment on the issue.
   @issue_bound_mutable_tools ~w(update_issue move_issue add_comment dispatch_coding_agent dispatch_codex)
@@ -161,10 +163,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "properties" => %{
           "title" => string_schema("Issue title."),
           "description" => string_schema("Optional short description."),
-          "repository" =>
-            string_schema(
-              "GitHub repo owner/name where the draft issue should be filed on multi-repo GitHub boards."
-            )
+          "repository" => string_schema("GitHub repo owner/name where the draft issue should be filed on multi-repo GitHub boards.")
         }
       }),
       tool_spec("update_issue", "Update mutable fields on an existing tracker issue.", %{
@@ -414,7 +413,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         SteerTools.assistant_tool_spec(),
         GoalTools.assistant_tool_spec()
       ] ++
-      ReadTools.tool_specs() ++ GitHubTools.tool_specs()
+      ReadTools.tool_specs() ++ GitHubTools.tool_specs() ++ KnowledgeBaseTools.tool_specs()
   end
 
   @spec combined_tool_specs() :: [map()]
@@ -617,6 +616,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp do_execute(_project, tool, arguments, opts) when tool in @github_tools do
     GitHubTools.execute(tool, arguments, opts)
+  end
+
+  defp do_execute(project, tool, arguments, opts) when tool in @kb_tools do
+    KnowledgeBaseTools.execute(project_slug(project), tool, arguments, opts)
   end
 
   defp do_execute(project, "create_issue", arguments, _opts) do
@@ -1595,6 +1598,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp codex_failure_response({:invalid_action, action}) do
     codex_failure_response("Invalid manage_codex_goal action: #{inspect(action)}.")
+  end
+
+  defp codex_failure_response(:kb_page_not_found) do
+    codex_failure_response("Knowledge base page not found. Use kb_search_pages to locate the correct path.")
+  end
+
+  defp codex_failure_response(:kb_page_exists) do
+    codex_failure_response("That knowledge base page already exists. Use kb_update_page to modify it.")
+  end
+
+  defp codex_failure_response(:kb_repository_not_found) do
+    codex_failure_response("Repository not found in this project. Call kb_list_repositories to see valid repositories.")
+  end
+
+  defp codex_failure_response(:repo_not_checked_out) do
+    codex_failure_response("No repository is checked out for this project's knowledge base.")
   end
 
   defp codex_failure_response(reason) do

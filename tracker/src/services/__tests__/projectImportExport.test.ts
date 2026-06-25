@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { http } from "@/services/http";
-import { exportProject, importProject, importProjectConfig } from "@/services/projectImportExport";
+import { exportProject, importProject, importProjectConfig, importProjectFromUrl } from "@/services/projectImportExport";
 
 vi.mock("@/services/http", () => ({
   http: {
@@ -34,6 +34,25 @@ describe("projectImportExport service", () => {
 
     await importProject("slug: gamba\nname: Gamba\n");
     expect(http.post).toHaveBeenCalledWith(expect.stringContaining("/projects/import"), { yaml: "slug: gamba\nname: Gamba\n" });
+  });
+
+  it("importProjectFromUrl posts url", async () => {
+    vi.mocked(http.post).mockResolvedValue({
+      data: {
+        data: {
+          id: "1",
+          slug: "gamba",
+          name: "Gamba",
+          description: null,
+          tracker: { kind: "local", config: {} },
+        },
+      },
+    });
+
+    await importProjectFromUrl("https://gist.githubusercontent.com/you/abc/raw/gamba.yaml");
+    expect(http.post).toHaveBeenCalledWith(expect.stringContaining("/projects/import"), {
+      url: "https://gist.githubusercontent.com/you/abc/raw/gamba.yaml",
+    });
   });
 
   it("importProjectConfig posts yaml to project import endpoint", async () => {

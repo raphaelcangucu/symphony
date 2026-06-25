@@ -11,6 +11,7 @@ import {
   parseDragIssueId,
   resolveBoardMove,
   resolveGroupMoveLead,
+  resolveMoveUnit,
   upsertIssue,
 } from "../board-utils";
 
@@ -153,6 +154,46 @@ describe("board-utils", () => {
     });
   });
 
+  it("resolveMoveUnit drags a parent's sub-issues along with it", () => {
+    const issues = [
+      issue({ identifier: "MAC-1" }),
+      issue({ identifier: "MAC-2", parentIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-3", parentIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-9" }),
+    ];
+
+    expect(resolveMoveUnit(issues, "MAC-1")).toEqual({
+      anchorIdentifier: "MAC-1",
+      followerIdentifiers: ["MAC-2", "MAC-3"],
+    });
+  });
+
+  it("resolveMoveUnit moves only the dragged sub-issue, not its parent or siblings", () => {
+    const issues = [
+      issue({ identifier: "MAC-1" }),
+      issue({ identifier: "MAC-2", parentIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-3", parentIdentifier: "MAC-1" }),
+    ];
+
+    expect(resolveMoveUnit(issues, "MAC-2")).toEqual({
+      anchorIdentifier: "MAC-2",
+      followerIdentifiers: [],
+    });
+  });
+
+  it("resolveMoveUnit merges group members and sub-issues without duplicates", () => {
+    const issues = [
+      issue({ identifier: "MAC-1", groupMemberIdentifiers: ["MAC-2"] }),
+      issue({ identifier: "MAC-2", groupLeadIdentifier: "MAC-1", parentIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-3", parentIdentifier: "MAC-1" }),
+    ];
+
+    expect(resolveMoveUnit(issues, "MAC-1")).toEqual({
+      anchorIdentifier: "MAC-1",
+      followerIdentifiers: ["MAC-2", "MAC-3"],
+    });
+  });
+
   it("leaves a lead with no members as a plain single-issue move", () => {
     const board = buildBoardState([
       issue({ identifier: "MAC-1", status: "Todo", position: 0 }),
@@ -168,6 +209,7 @@ describe("board-utils", () => {
   it("parses sortable card ids defensively", () => {
     expect(parseDragIssueId("issue:MAC-1")).toBe("MAC-1");
     expect(parseDragIssueId("group:MAC-1")).toBe("MAC-1");
+    expect(parseDragIssueId("parent:MAC-1")).toBe("MAC-1");
     expect(parseDragIssueId("MAC-1")).toBe("MAC-1");
     expect(parseDragIssueId(null)).toBeNull();
     expect(parseDragIssueId("")).toBeNull();
@@ -209,6 +251,7 @@ describe("groupIssuesIntoUnits parent/subtask", () => {
     const parentUnit = units.find((unit) => unit.kind === "parent");
     expect(parentUnit).toBeTruthy();
     if (parentUnit?.kind === "parent") {
+      expect(parentUnit.id).toBe("parent:2");
       expect(parentUnit.issue.identifier).toBe("2");
       expect(parentUnit.subtasks.map((subtask) => subtask.identifier)).toEqual(["3", "4"]);
     }

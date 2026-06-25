@@ -49,6 +49,8 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.LocalTracker.Viewer.Server,
       SymphonyElixir.Tracker.Identity.Cache,
       {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
+      {Registry, keys: :unique, name: SymphonyElixir.KnowledgeBase.SyncRegistry},
+      SymphonyElixir.KnowledgeBase.SyncSupervisor,
       SymphonyElixir.GitHub.ReadCache,
       SymphonyElixir.GitHub.RequestGateway,
       SymphonyElixir.Tracker.Sync.Engine,

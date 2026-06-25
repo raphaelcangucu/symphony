@@ -12,6 +12,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     ToolCallPresenter,
     ToolExecutor
   }
+
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.CodingAgent, as: RootCodingAgent
   alias SymphonyElixir.Config
@@ -282,6 +283,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
     Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (start/stop/restart/status), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, manage_codex_goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    Knowledge base tools (docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_link_task, kb_sync. Projects can span multiple repositories; KB pages are addressed by (repository, path-within-docs). When the project has more than one repository and the user does not name one, the tool returns a remediation asking which repository — ASK the user, then retry with the `repository` argument (owner/name, workspace path, or slug). Use kb_search_pages before creating pages to avoid duplicates, kb_create_page for new pages and kb_update_page for existing ones, kb_link_task to reference a tracker issue inside a page, and kb_sync to push docs and open/auto-merge the PR.
     Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview URLs, configure serve steps with manage_dev_env then manage_preview (start|status).
     To explain why an issue is or isn't auto-dispatched, call explain_dispatch_eligibility; for live running/retry/idle state call get_issue_orchestrator_state. To see every agent executing right now call list_running_agents, and steer_agent to inject a message into a running agent's turn. After opening a PR call link_pull_request. Manage dependencies with manage_blockers; pull external tracker edits with sync_issue.
     If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
@@ -568,6 +570,11 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Diagnose / repair: explain_dispatch_eligibility (why an issue isn't dispatching), get_issue_orchestrator_state
     (live running/retry/idle), list_running_agents (every agent executing now), steer_agent (inject a message into a
     running agent's turn), manage_blockers (blocked_by relations), sync_issue (pull external tracker edits).
+
+    Knowledge base (require project_slug; docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page,
+    kb_create_page, kb_update_page, kb_link_task, kb_sync. Projects can span multiple repositories; when more than one is
+    linked and the user does not name one, the tool returns a remediation asking which repository — ASK, then retry with
+    the `repository` argument. Search before creating to avoid duplicates.
 
     Project setup flow: scan_project_setup → suggest_project_setup → update_project_workflow / update_project_repositories,
     then manage_dev_env (propose_steps|save_steps|run) before manage_preview for serve URLs.

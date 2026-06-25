@@ -1,9 +1,9 @@
 defmodule SymphonyElixir.Assistant.ProjectBoardTools do
   @moduledoc false
 
-  alias SymphonyElixir.Assistant.{ToolExecutor, ToolSchema}
+  alias SymphonyElixir.Assistant.{KnowledgeBaseTools, ToolExecutor, ToolSchema}
 
-  @scoped_tools ~w(
+  @board_tools ~w(
     list_issues
     create_issue
     create_draft_issue
@@ -42,6 +42,8 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     define_shared_contract
     update_shared_contract
   )
+
+  @scoped_tools @board_tools ++ KnowledgeBaseTools.tools()
 
   @tools @scoped_tools ++ ~w(create_tracker_project)
 

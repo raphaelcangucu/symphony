@@ -56,7 +56,11 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
         Repo.checkout(fn ->
           Ecto.Adapters.SQL.query!(Repo, "BEGIN IMMEDIATE", [])
           send(parent, :write_lock_held)
-          receive do :release_write_lock -> :ok end
+
+          receive do
+            :release_write_lock -> :ok
+          end
+
           Ecto.Adapters.SQL.query!(Repo, "COMMIT", [])
         end)
       end)

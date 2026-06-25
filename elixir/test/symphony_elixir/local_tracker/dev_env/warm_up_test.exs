@@ -97,6 +97,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.WarmUpTest do
     test "runs under an isolated <slug>-warmup compose project with the tenant" do
       base = tmp_repo(with_serve: true)
       test_pid = self()
+
       exec = fn _dir, cmd, _opts ->
         send(test_pid, {:warm_up_cmd, cmd})
         {"Preview is healthy", 0}

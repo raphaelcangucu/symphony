@@ -125,6 +125,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     with :ok <- seed_statuses(project),
          :ok <- seed_users(project),
          {:ok, %{pulled: pulled, enriched: enriched}} <- pull_remote(project, driver, pr_driver) do
+      reconcile_parents_after_pull(project)
       mark_state(project, success_attrs(project))
       {:ok, Map.merge(push_summary, %{pulled: pulled, enriched: enriched, skipped_pull: false})}
     else
@@ -662,6 +663,42 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
       {:error, _reason} = error ->
         error
+    end
+  end
+
+  # After applying a pull, recompute every parent's status from its (possibly
+  # remotely-changed) children. A parent takes the least-advanced status among its
+  # children, so an externally-moved child rolls up to its parent. Changed parents
+  # are marked dirty and enqueued so the next push writes them back to the remote;
+  # a follow-up sync flushes that push promptly.
+  defp reconcile_parents_after_pull(project) do
+    case Context.reconcile_parent_statuses(project.slug) do
+      {:ok, [_ | _] = changed} ->
+        Enum.each(changed, fn {identifier, status_name} ->
+          LocalStore.mark_dirty(identifier, project.slug, [:state])
+
+          Outbox.enqueue(%{
+            project_id: project.id,
+            issue_id: rollup_issue_id(project, identifier),
+            entity_type: "state",
+            operation: "move",
+            payload: %{"identifier" => identifier, "state" => status_name},
+            dedup_key: "state:move:#{project.id}:#{identifier}"
+          })
+        end)
+
+        request_sync_project(project.slug)
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp rollup_issue_id(project, identifier) do
+    case Context.get_issue(project.slug, identifier) do
+      {:ok, issue} -> issue.id
+      _ -> nil
     end
   end
 

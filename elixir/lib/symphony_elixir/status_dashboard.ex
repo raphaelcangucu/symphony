@@ -1100,6 +1100,7 @@ defmodule SymphonyElixir.StatusDashboard do
 
   def humanize_codex_message(%{message: message}) do
     put_event_locale()
+
     message
     |> unwrap_codex_message_payload()
     |> humanize_codex_payload()
@@ -1108,6 +1109,7 @@ defmodule SymphonyElixir.StatusDashboard do
 
   def humanize_codex_message(message) do
     put_event_locale()
+
     message
     |> unwrap_codex_message_payload()
     |> humanize_codex_payload()
@@ -1172,6 +1174,7 @@ defmodule SymphonyElixir.StatusDashboard do
 
   defp humanize_codex_event(:startup_failed, message, _payload),
     do: EventText.t("startup failed: %{reason}", reason: format_reason(message))
+
   defp humanize_codex_event(:turn_failed, _message, payload), do: SymphonyElixir.EventHumanizer.humanize_method("turn/failed", payload)
   defp humanize_codex_event(:turn_cancelled, _message, _payload), do: EventText.t("turn cancelled")
   defp humanize_codex_event(:malformed, _message, _payload), do: EventText.t("malformed JSON event from codex")
