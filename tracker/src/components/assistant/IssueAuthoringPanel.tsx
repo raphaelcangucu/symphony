@@ -1,5 +1,5 @@
 import { ArrowUpRight, Sparkles } from "lucide-react";
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { memo, useCallback, useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -31,7 +31,7 @@ interface IssueAuthoringPanelProps {
   onDocumentsChanged?: () => void;
 }
 
-export function IssueAuthoringPanel({
+export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
   projectSlug,
   threadId,
   identifier,
@@ -186,4 +186,4 @@ export function IssueAuthoringPanel({
       </aside>
     </main>
   );
-}
+});

@@ -1,9 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentTabs } from "@/components/issues/issue-detail/AgentTabs";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
+
+const authoringRenderCount = vi.hoisted(() => ({ value: 0 }));
 
 vi.mock("@/hooks/useIssueDocuments", () => ({
   useIssueDocuments: () => ({
@@ -16,7 +19,10 @@ vi.mock("@/hooks/useIssueDocuments", () => ({
 }));
 
 vi.mock("@/components/assistant/IssueAuthoringPanel", () => ({
-  IssueAuthoringPanel: () => <div data-testid="issue-authoring-panel">Authoring</div>,
+  IssueAuthoringPanel: () => {
+    authoringRenderCount.value += 1;
+    return <div data-testid="issue-authoring-panel">Authoring ({authoringRenderCount.value})</div>;
+  },
 }));
 
 vi.mock("@/components/issues/issue-detail/AgentTab", () => ({
@@ -45,7 +51,31 @@ const issue: Issue = {
   groupMemberIdentifiers: [],
 };
 
+const execution: AgentExecution = {
+  issueIdentifier: "DIS-6",
+  status: "live",
+  agentKind: "codex",
+  sessionId: "sess-1",
+  lastEvent: "turn_started",
+  lastMessage: null,
+  lastEventAt: null,
+  turnCount: 2,
+  runtimeSeconds: null,
+  startedAt: null,
+  retryAttempt: 0,
+  error: null,
+  goal: null,
+  longRunning: true,
+  longRunningKind: null,
+  longRunningLabel: "Running",
+  tokens: null,
+};
+
 describe("AgentTabs documents drawer", () => {
+  beforeEach(() => {
+    authoringRenderCount.value = 0;
+  });
+
   it("shows documents on the execution section", () => {
     render(
       <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=execution"]}>
@@ -56,5 +86,28 @@ describe("AgentTabs documents drawer", () => {
     expect(screen.getByRole("button", { name: /documents/i })).toBeInTheDocument();
     expect(screen.getByTestId("agent-execution-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("issue-authoring-panel")).not.toBeInTheDocument();
+  });
+
+  it("does not re-render the authoring panel when only execution status changes", () => {
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=authoring"]}>
+        <AgentTabs issue={issue} projectSlug="distributionmachine" view="board" execution={execution} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("issue-authoring-panel")).toHaveTextContent("Authoring (1)");
+
+    rerender(
+      <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=authoring"]}>
+        <AgentTabs
+          issue={issue}
+          projectSlug="distributionmachine"
+          view="board"
+          execution={{ ...execution, lastEvent: "turn_completed", turnCount: 3 }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("issue-authoring-panel")).toHaveTextContent("Authoring (1)");
   });
 });

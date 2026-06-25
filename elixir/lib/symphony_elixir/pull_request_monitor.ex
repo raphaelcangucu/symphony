@@ -68,9 +68,12 @@ defmodule SymphonyElixir.PullRequestMonitor do
   # and merge the machine-readable block into the issue's workpad. Idempotent and
   # best-effort — failures here must never block the monitor's transition logic.
   defp reconcile_task_pull_requests(project, identifier, prs, opts) do
+    dismissed = LocalStore.dismissed_urls(project.id, identifier)
+
     records =
       prs
       |> Enum.filter(&is_binary(pr_field(&1, :url)))
+      |> Enum.reject(fn pr -> MapSet.member?(dismissed, pr_field(pr, :url)) end)
       |> Enum.map(fn pr ->
         %{
           remote_id: pr_field(pr, :url),

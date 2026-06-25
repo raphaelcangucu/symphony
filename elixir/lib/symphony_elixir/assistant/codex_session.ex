@@ -24,7 +24,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   # Brainstorm / spec / plan intent upgrades an authoring thread to complex so the
   # next prompt dynamically loads the superpowers methodology skills. Matching is
   # intentionally narrow (word-anchored) to avoid false positives like "respect".
-  @complex_mode_trigger_regex ~r/(\bbrainstorm)|(\bspecs?\b)|(\bdesign\s+docs?\b)|(\bimplementation\s+plans?\b)|(\bplano\s+de\s+implementa)|(\bespecifica)/iu
+  @complex_mode_trigger_regex ~r/(\bbrainstorm)|(\bcomplex\b)|(\bspecs?\b)|(\bdesign\s+docs?\b)|(\bimplementation\s+plans?\b)|(\bplano\s+de\s+implementa)|(\bespecifica)/iu
 
   @type turn_result :: %{
           required(:assistant_message) => String.t(),

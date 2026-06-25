@@ -328,6 +328,28 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
       assert json_response(conn, 200)["data"]["unlinked"] == true
     end
 
+    test "unlink dismisses auto-discovered PRs so they stay hidden on refresh" do
+      url = "https://github.com/o/r/pull/7"
+
+      conn =
+        get(authorized_conn(), "/api/tracker/v1/projects/remote/issues/510/pull_requests")
+
+      assert url in Enum.map(json_response(conn, 200)["data"], & &1["url"])
+
+      conn =
+        delete(authorized_conn(), "/api/tracker/v1/projects/remote/issues/510/pull_requests/link", %{
+          url: url
+        })
+
+      assert json_response(conn, 200)["data"]["unlinked"] == true
+
+      conn =
+        get(authorized_conn(), "/api/tracker/v1/projects/remote/issues/510/pull_requests?refresh=1")
+
+      urls = Enum.map(json_response(conn, 200)["data"], & &1["url"])
+      refute url in urls
+    end
+
     test "rejects an invalid PR url on link" do
       conn =
         post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/510/pull_requests/link", %{

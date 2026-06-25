@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { TFunction } from "i18next";
 import { i18n } from "@/i18n";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
@@ -140,6 +140,78 @@ interface ProjectAssistantPanelProps {
 }
 
 const STREAMING_ASSISTANT_ID = "assistant-streaming";
+const STICK_TO_BOTTOM_THRESHOLD_PX = 48;
+
+function attachChatScrollStickiness(
+  scroller: HTMLDivElement,
+  stickToBottomRef: MutableRefObject<boolean>,
+  pinnedScrollTopRef: MutableRefObject<number | null>,
+): () => void {
+  const updateStickiness = () => {
+    const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    const atBottom = distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD_PX;
+    stickToBottomRef.current = atBottom;
+    pinnedScrollTopRef.current = atBottom ? null : scroller.scrollTop;
+  };
+
+  const detachFromBottom = () => {
+    stickToBottomRef.current = false;
+    pinnedScrollTopRef.current = scroller.scrollTop;
+    // Stop an in-flight smooth scroll by pinning the current position.
+    scroller.scrollTo({ top: scroller.scrollTop, behavior: "auto" });
+  };
+
+  const onWheel = (event: WheelEvent) => {
+    if (event.deltaY < 0) detachFromBottom();
+  };
+
+  let touchStartY: number | null = null;
+  const onTouchStart = (event: TouchEvent) => {
+    touchStartY = event.touches[0]?.clientY ?? null;
+  };
+  const onTouchMove = (event: TouchEvent) => {
+    const y = event.touches[0]?.clientY;
+    if (touchStartY != null && y != null && y - touchStartY > 8) detachFromBottom();
+  };
+
+  updateStickiness();
+  scroller.addEventListener("scroll", updateStickiness, { passive: true });
+  scroller.addEventListener("wheel", onWheel, { passive: true });
+  scroller.addEventListener("touchstart", onTouchStart, { passive: true });
+  scroller.addEventListener("touchmove", onTouchMove, { passive: true });
+
+  const content = scroller.firstElementChild;
+  const resizeObserver = content ? new ResizeObserver(updateStickiness) : null;
+  if (content) resizeObserver?.observe(content);
+
+  return () => {
+    scroller.removeEventListener("scroll", updateStickiness);
+    scroller.removeEventListener("wheel", onWheel);
+    scroller.removeEventListener("touchstart", onTouchStart);
+    scroller.removeEventListener("touchmove", onTouchMove);
+    resizeObserver?.disconnect();
+  };
+}
+
+function setMessagesPreservingScroll(
+  scroller: HTMLDivElement | null,
+  stickToBottomRef: MutableRefObject<boolean>,
+  history: AssistantChatMessage[],
+  setMessages: (messages: AssistantChatMessage[]) => void,
+) {
+  if (scroller && !stickToBottomRef.current) {
+    const prevScrollHeight = scroller.scrollHeight;
+    const prevScrollTop = scroller.scrollTop;
+    setMessages(history);
+    requestAnimationFrame(() => {
+      if (!scroller.isConnected) return;
+      scroller.scrollTop = prevScrollTop + (scroller.scrollHeight - prevScrollHeight);
+    });
+    return;
+  }
+
+  setMessages(history);
+}
 
 interface QueuedMessage {
   id: string;
@@ -204,6 +276,15 @@ export function ProjectAssistantPanel({
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const scrollBehaviorRef = useRef<"initial" | "smooth">("initial");
+  const stickToBottomRef = useRef(true);
+  const pinnedScrollTopRef = useRef<number | null>(null);
+  const scrollStickinessCleanupRef = useRef<(() => void) | null>(null);
+  const onDocumentChangedRef = useRef(onDocumentChanged);
+  const onDraftIssueCreatedRef = useRef(onDraftIssueCreated);
+  const onEffectiveAgentResolvedRef = useRef(onEffectiveAgentResolved);
+  const onIssueCreatedRef = useRef(onIssueCreated);
+  const onIssueGoalModeChangedRef = useRef(onIssueGoalModeChanged);
+  const onIssueModeChangedRef = useRef(onIssueModeChanged);
   const panelRef = useRef<HTMLElement | null>(null);
   const lastConfirmedIssueModeRef = useRef<IssueAssistantMode | null>(null);
   const pendingIssueModeRef = useRef<{ mode: IssueAssistantMode; requestId: number } | null>(null);
@@ -224,9 +305,41 @@ export function ProjectAssistantPanel({
   const isExploreMode = resolvedAssistantMode === "explore";
 
   bundleRef.current = bundle;
+  onDocumentChangedRef.current = onDocumentChanged;
+  onDraftIssueCreatedRef.current = onDraftIssueCreated;
+  onEffectiveAgentResolvedRef.current = onEffectiveAgentResolved;
+  onIssueCreatedRef.current = onIssueCreated;
+  onIssueGoalModeChangedRef.current = onIssueGoalModeChanged;
+  onIssueModeChangedRef.current = onIssueModeChanged;
+
+  const setScrollContainerRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node && scrollRef.current && !stickToBottomRef.current) {
+      pinnedScrollTopRef.current = scrollRef.current.scrollTop;
+    }
+
+    scrollStickinessCleanupRef.current?.();
+    scrollStickinessCleanupRef.current = null;
+    scrollRef.current = node;
+    if (node) {
+      scrollStickinessCleanupRef.current = attachChatScrollStickiness(node, stickToBottomRef, pinnedScrollTopRef);
+    }
+  }, []);
+
+  useEffect(() => () => scrollStickinessCleanupRef.current?.(), []);
+
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    const pinnedTop = pinnedScrollTopRef.current;
+    if (!scroller || stickToBottomRef.current || pinnedTop == null) return;
+    if (Math.abs(scroller.scrollTop - pinnedTop) > 1) {
+      scroller.scrollTop = pinnedTop;
+    }
+  });
 
   useEffect(() => {
     scrollBehaviorRef.current = "initial";
+    stickToBottomRef.current = true;
+    pinnedScrollTopRef.current = null;
   }, [issueIdentifier, threadId]);
 
   useEffect(() => {
@@ -297,9 +410,10 @@ export function ProjectAssistantPanel({
     channelRef.current = channel;
 
     bindAssistantEvents(channel, {
-      onHistoryLoaded: (history) => setMessages(history),
+      onHistoryLoaded: (history) =>
+        setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages),
       onHistorySynced: (history) => {
-        setMessages(history);
+        setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages);
         setIsRunning(false);
         setPendingQuestions(null);
       },
@@ -315,7 +429,7 @@ export function ProjectAssistantPanel({
         setIsRunning(false);
         setPendingQuestions(null);
         const createdIssue = draftIssueCreatedFromMessage(message);
-        if (createdIssue) onDraftIssueCreated?.(createdIssue);
+        if (createdIssue) onDraftIssueCreatedRef.current?.(createdIssue);
       },
       onAssistantError: (message) => {
         setMessages((current) => appendMessage(current, assistantMessage("assistant-error", message)));
@@ -324,8 +438,8 @@ export function ProjectAssistantPanel({
         setPendingQuestions(null);
       },
       onUserInputRequired: (request) => setPendingQuestions(request),
-      onAssistantDocumentChanged: onDocumentChanged,
-      onAssistantIssueCreated: onIssueCreated,
+      onAssistantDocumentChanged: (payload) => onDocumentChangedRef.current?.(payload),
+      onAssistantIssueCreated: (payload) => onIssueCreatedRef.current?.(payload),
       onSteerFailed: ({ message }) => {
         if (!message) return;
         const activeBundle = bundleRef.current ?? fallbackCatalogBundle();
@@ -395,13 +509,13 @@ export function ProjectAssistantPanel({
       const hydratedMode = modeFromResponse(response);
       if (issueIdentifier && hydratedMode && hydratedMode !== "triage") {
         lastConfirmedIssueModeRef.current = hydratedMode;
-        onIssueModeChanged?.(hydratedMode);
+        onIssueModeChangedRef.current?.(hydratedMode);
       }
 
       if (issueIdentifier) {
         const hydratedGoalMode = goalModeFromResponse(response) ?? false;
         lastConfirmedGoalModeRef.current = hydratedGoalMode;
-        if (hydratedGoalMode) onIssueGoalModeChanged?.(true);
+        if (hydratedGoalMode) onIssueGoalModeChangedRef.current?.(true);
         // Reattach to a goal turn already in flight (e.g. started before this
         // refresh): seed the pill timer from the server's run-elapsed and mark the
         // assistant running so the pill renders "executing" immediately.
@@ -420,7 +534,7 @@ export function ProjectAssistantPanel({
       }
 
       const agent = effectiveAgentFromResponse(response);
-      if (agent) onEffectiveAgentResolved?.(agent);
+      if (agent) onEffectiveAgentResolvedRef.current?.(agent);
     });
     joinPush.receive("error", (reason) => {
       setConnectionError(errorMessage(reason));
@@ -433,7 +547,7 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, isExploreMode, issueIdentifier, onDocumentChanged, onDraftIssueCreated, onEffectiveAgentResolved, onIssueCreated, onIssueGoalModeChanged, onIssueModeChanged, projectSlug, threadId]);
+  }, [active, isExploreMode, issueIdentifier, projectSlug, threadId]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;
@@ -541,6 +655,8 @@ export function ProjectAssistantPanel({
       };
 
       setConnectionError(null);
+      stickToBottomRef.current = true;
+      scrollBehaviorRef.current = "initial";
       setIsRunning(true);
       channel.push("send_message", payload).receive("error", (reason) => {
         setConnectionError(errorMessage(reason));
@@ -778,16 +894,19 @@ export function ProjectAssistantPanel({
   }, [isFullPageProjectAssistant, bundle, catalogError]);
 
   useEffect(() => {
-    if (!isPanelMode) return;
+    if (!isPanelMode || !stickToBottomRef.current) return undefined;
     const scroller = scrollRef.current;
-    if (!scroller) return;
+    if (!scroller) return undefined;
 
-    const behavior = scrollBehaviorRef.current === "initial" ? "auto" : "smooth";
-    scrollBehaviorRef.current = "smooth";
+    const frame = requestAnimationFrame(() => {
+      if (!stickToBottomRef.current) return;
 
-    requestAnimationFrame(() => {
+      const behavior = isRunning && scrollBehaviorRef.current !== "initial" ? "smooth" : "auto";
+      scrollBehaviorRef.current = "smooth";
       scroller.scrollTo({ top: scroller.scrollHeight, behavior });
     });
+
+    return () => cancelAnimationFrame(frame);
   }, [isPanelMode, visibleMessages, isRunning]);
 
   const runtime = useExternalStoreRuntime<AssistantChatMessage>(
@@ -966,7 +1085,7 @@ export function ProjectAssistantPanel({
             </div>
           )}
 
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={setScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
             <div
               className={cn(
                 "flex w-full flex-col",

@@ -64,6 +64,16 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStorePullRequestsTest do
     assert prs == []
   end
 
+  test "dismiss_pull_request records a url excluded from rediscovery", %{project: project} do
+    url = "https://github.com/clouapp/front/pull/527"
+
+    :ok = LocalStore.dismiss_pull_request(project.id, "MAC-1", url)
+    assert MapSet.member?(LocalStore.dismissed_urls(project.id, "MAC-1"), url)
+
+    :ok = LocalStore.undismiss_pull_request(project.id, "MAC-1", url)
+    assert LocalStore.dismissed_urls(project.id, "MAC-1") == MapSet.new()
+  end
+
   test "upsert_discovered_pull_requests stores repo and origin auto", %{project: project} do
     :ok =
       LocalStore.upsert_discovered_pull_requests(project.id, "510", [

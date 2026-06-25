@@ -48,6 +48,31 @@ defmodule SymphonyElixir.Workpad.PullRequestBlock do
     "## Codex Workpad\n\n" <> render(prs) <> "\n"
   end
 
+  @spec remove_url(String.t() | nil, String.t()) :: String.t() | nil
+  def remove_url(body, url) when is_binary(body) and is_binary(url) do
+    refs = parse(body)
+
+    cond do
+      refs == [] ->
+        body
+
+      true ->
+        remaining = Enum.reject(refs, &(&1.url == url))
+
+        if remaining == [] do
+          body
+          |> then(&Regex.replace(@block_regex, &1, ""))
+          |> String.replace(~r/\n{3,}/, "\n\n")
+          |> String.trim()
+        else
+          upsert_block(body, remaining)
+        end
+    end
+  end
+
+  def remove_url(body, _url) when is_binary(body), do: body
+  def remove_url(nil, _url), do: nil
+
   defp render_one(pr) do
     [
       "- repo: #{field(pr, :repo)}",
