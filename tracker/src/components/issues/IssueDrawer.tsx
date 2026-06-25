@@ -76,6 +76,7 @@ interface IssueDrawerProps {
   projectSlug: string;
   view: WorkspaceView;
   execution?: AgentExecution;
+  subtasks?: Issue[];
   workflowMarkdown?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -96,6 +97,7 @@ export function IssueDrawer({
   projectSlug,
   view,
   execution,
+  subtasks = [],
   workflowMarkdown = null,
   open,
   onOpenChange,
@@ -400,7 +402,9 @@ export function IssueDrawer({
                     projectSlug={projectSlug}
                     pullRequests={pr.pullRequests}
                     workpad={commentsState.workpad}
+                    subtasks={subtasks}
                     saving={issueUpdater.saving}
+                    onOpenIssue={onOpenIssue}
                     onOpenPullRequest={() => onTabChange?.("pr")}
                     onOpenComments={() => onTabChange?.("comments")}
                     onSaveDescription={async (description) => {

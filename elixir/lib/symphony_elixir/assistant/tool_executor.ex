@@ -83,7 +83,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   @supported_tools @tracker_tools ++ @read_tools ++ @github_tools
   # Routine assistant chat replies should not be mirrored as issue comments; use
   # `add_comment` only when the user asks to record a comment on the issue.
-  @issue_bound_mutable_tools ~w(update_issue move_issue dispatch_coding_agent dispatch_codex)
+  @issue_bound_mutable_tools ~w(update_issue move_issue add_comment dispatch_coding_agent dispatch_codex)
   @issue_bound_parent_tools ~w(
     create_subtask
     get_execution_bundle
@@ -97,6 +97,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     read_workspace_file
     update_issue
     move_issue
+    add_comment
     get_agent_executions
     dispatch_coding_agent
     dispatch_codex

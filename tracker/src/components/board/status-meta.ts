@@ -126,3 +126,8 @@ export function getStatusMeta(name: WorkflowStatusName, category?: WorkflowStatu
   if (category && CATEGORY_TO_KIND[category]) return KIND_META[CATEGORY_TO_KIND[category]];
   return KIND_META.todo;
 }
+
+/** True when a status represents finished work (done/completed/terminal). */
+export function isCompletedStatus(name: WorkflowStatusName, category?: WorkflowStatusCategory | null): boolean {
+  return getStatusMeta(name, category) === KIND_META.done;
+}

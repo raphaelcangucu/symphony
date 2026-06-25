@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.LocalTracker.{Context, IssueRecord}
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, IssueRelation}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.LocalStore
 
@@ -53,6 +53,78 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     issues = Repo.all(IssueRecord)
     assert length(issues) == 1
     assert hd(issues).title == "Renamed remotely"
+  end
+
+  test "stores same GitHub issue number from different repositories with repo-scoped identifiers", %{project: project} do
+    {:ok, ios_issue} =
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{
+          remote_id: "I_ios_5",
+          remote_number: 5,
+          identifier: "ios#5",
+          title: "iOS BLE PoC",
+          remote_url: "https://github.com/xipcash/ios/issues/5"
+        })
+      )
+
+    {:ok, admin_issue} =
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{
+          remote_id: "I_admin_5",
+          remote_number: 5,
+          identifier: "admin#5",
+          title: "Admin state cleanup",
+          remote_url: "https://github.com/xipcash/admin/issues/5"
+        })
+      )
+
+    assert ios_issue.identifier == "ios#5"
+    assert admin_issue.identifier == "admin#5"
+    assert ios_issue.remote_number == 5
+    assert admin_issue.remote_number == 5
+    assert Repo.aggregate(IssueRecord, :count) == 2
+  end
+
+  test "links remote child issues to an existing remote parent without grouping execution", %{project: project} do
+    {:ok, parent} =
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{
+          remote_id: "I_ios_2",
+          remote_number: 2,
+          identifier: "ios#2",
+          title: "Aplicativo IOS",
+          remote_url: "https://github.com/xipcash/ios/issues/2"
+        })
+      )
+
+    {:ok, child} =
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{
+          remote_id: "I_ios_3",
+          remote_number: 3,
+          identifier: "ios#3",
+          title: "Build iOS app",
+          remote_url: "https://github.com/xipcash/ios/issues/3",
+          parent_identifier: "ios#2"
+        })
+      )
+
+    loaded_child = Repo.get!(IssueRecord, child.id)
+    loaded_parent = Repo.get!(IssueRecord, parent.id) |> Repo.preload(target_relations: :source_issue)
+
+    assert loaded_child.group_lead_id == nil
+
+    assert [
+             %IssueRelation{
+               type: "sub_issue_of",
+               remote_origin: true,
+               source_issue: %IssueRecord{identifier: "ios#3"}
+             }
+           ] = loaded_parent.target_relations
   end
 
   test "associates labels by name and remote_id", %{project: project} do

@@ -638,6 +638,13 @@
       "noDescription": "No description yet.",
       "agentWorkpad": "Agent Workpad",
       "viewAllComments": "View all comments",
+      "subIssues": {
+        "title": "Sub-issues",
+        "progress": "{{completed}} of {{total}}",
+        "expand": "Show sub-issues",
+        "collapse": "Hide sub-issues",
+        "empty": "Sub-issues are not loaded yet."
+      },
       "status": "Status",
       "priority": "Priority",
       "assignee": "Assignee",

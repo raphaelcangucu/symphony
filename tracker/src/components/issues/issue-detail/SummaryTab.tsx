@@ -36,13 +36,16 @@ import type { WorkflowStatusName } from "@/types/workflow-status";
 import { BlockedBanner } from "./BlockedBanner";
 import { CommentCard, SyncBadge, WorkpadBadge } from "./CommentCard";
 import { IssueAttachments } from "./IssueAttachments";
+import { SubIssuesSection } from "./SubIssuesSection";
 
 interface SummaryTabProps {
   issue: Issue;
   projectSlug: string;
   pullRequests?: PullRequest[];
   workpad?: Comment | null;
+  subtasks?: Issue[];
   saving?: boolean;
+  onOpenIssue?: (identifier: string) => void;
   onOpenPullRequest?: () => void;
   onOpenComments?: () => void;
   onSaveDescription?: (description: string) => Promise<boolean>;
@@ -65,7 +68,9 @@ export function SummaryTab({
   projectSlug,
   pullRequests = [],
   workpad = null,
+  subtasks = [],
   saving = false,
+  onOpenIssue,
   onOpenPullRequest,
   onOpenComments,
   onSaveDescription,
@@ -192,6 +197,7 @@ export function SummaryTab({
             <p className="text-sm text-muted-foreground">{t("issue.summary.noDescription")}</p>
           )}
         </section>
+        <SubIssuesSection subtasks={subtasks} summary={issue.subIssueSummary} onOpenIssue={onOpenIssue} />
         <IssueAttachments
           attachments={issue.attachments}
           projectSlug={projectSlug || issue.projectSlug}

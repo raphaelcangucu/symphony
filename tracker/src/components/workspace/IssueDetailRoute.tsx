@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
 import { resolveIssueGroup } from "@/components/issues/issue-detail/issueGroup";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import {
   isHiddenIssueTab,
   issueAgentTabPath,
@@ -40,6 +41,7 @@ export function IssueDetailRoute() {
   const issue = matchedFetched ?? issueFromList;
 
   const group = issue ? resolveIssueGroup(issue, issues) : null;
+  const subtasks = issue ? collectSubtasks(issue.identifier, issues) : [];
 
   const basePath = workspaceBasePath(projectSlug, view);
 
@@ -154,6 +156,7 @@ export function IssueDetailRoute() {
       view={view}
       issue={issue}
       execution={issue ? agentExecutions.get(issue.identifier) : undefined}
+      subtasks={subtasks}
       workflowMarkdown={project?.setup?.workflowMarkdown ?? null}
       open
       onOpenChange={(open) => {
@@ -183,4 +186,18 @@ export function IssueDetailRoute() {
       }}
     />
   );
+}
+
+/** Children whose parentIdentifier points at this issue, ordered like the board. */
+function collectSubtasks(parentIdentifier: string, issues: readonly Issue[]): Issue[] {
+  const parentKey = normalizeIssueIdentifier(parentIdentifier);
+  if (!parentKey) return [];
+
+  return issues
+    .filter(
+      (candidate) =>
+        candidate.parentIdentifier != null &&
+        normalizeIssueIdentifier(candidate.parentIdentifier) === parentKey,
+    )
+    .sort((left, right) => left.position - right.position);
 }

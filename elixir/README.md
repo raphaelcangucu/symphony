@@ -447,9 +447,10 @@ Notes:
     already exist and should be outside `tracker.active_states` so drafts are not auto-dispatched.
   - Complex issue authoring injects vendored skill files from `skills/superpowers/...`; update that
     folder manually when changing the assistant methodology.
-  - The assistant chat does **not** post its replies as GitHub issue comments (they stream in the
-    chat UI); it records changes via `update_issue`. Only `dispatch_codex` posts a single milestone
-    comment. This keeps the chat from spamming GitHub and triggering rate limits.
+  - Issue authoring chat does **not** mirror normal replies as tracker comments (they stream in the
+    chat UI). Stable fields go through `update_issue`; `add_comment` is available when the user
+    explicitly asks to record a comment on the issue. `dispatch_codex` still posts a single
+    milestone comment on handoff. This keeps the chat from spamming the remote tracker.
 - **GitHub request gateway** (`github.*`, optional): GitHub REST/GraphQL calls flow through
   `SymphonyElixir.GitHub.RequestGateway`, which follows GitHub's API best practices — spacing
   mutations at least one second apart and, on a `429`/`403`/GraphQL rate-limit response, opening a

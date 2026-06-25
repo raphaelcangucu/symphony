@@ -616,11 +616,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       assert "create_subtask" in names
       assert "get_workflow" in names
       assert "list_project_repositories" in names
-      refute "add_comment" in names
+      assert "add_comment" in names
       assert "get_issue" in names
       assert "read_workspace_file" in names
 
-      for tool <- ["update_issue", "move_issue", "dispatch_codex"] do
+      for tool <- ["update_issue", "move_issue", "add_comment", "dispatch_codex"] do
         spec = Enum.find(specs, &(&1["name"] == tool))
         assert get_in(spec, ["inputSchema", "properties", "identifier", "const"]) == "MAC-1"
       end
@@ -653,13 +653,16 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       assert issue.title == "Bound issue (clarified)"
     end
 
-    test "rejects add_comment in the issue-bound chat since chat replies are not comments" do
+    test "injects the bound identifier when add_comment omits it" do
       executor = ToolExecutor.issue_bound_codex_tool_executor("macro-markets", "MAC-1")
 
-      assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} =
-               executor.("add_comment", %{"body" => "Should not be posted"})
+      assert %{
+               "success" => true,
+               "toolResult" => %{"tool" => "add_comment", "message" => "Added comment to MAC-1."}
+             } = executor.("add_comment", %{"body" => "Operational note from authoring"})
 
-      assert error_text =~ "unsupported_issue_bound_tool"
+      assert {:ok, comments} = Context.list_comments("macro-markets", "MAC-1")
+      assert Enum.any?(comments, &(&1.body == "Operational note from authoring"))
     end
 
     test "rejects mutable tool calls for a different issue identifier" do
@@ -668,6 +671,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       for {tool, arguments} <- [
             {"update_issue", %{"identifier" => "MAC-2", "title" => "Wrong issue"}},
             {"move_issue", %{"identifier" => "MAC-2", "status" => "In Progress"}},
+            {"add_comment", %{"identifier" => "MAC-2", "body" => "Wrong issue"}},
             {"dispatch_codex", %{"identifier" => "MAC-2", "instructions" => "Wrong issue"}}
           ] do
         assert %{"success" => false, "contentItems" => [%{"text" => error_text}]} = executor.(tool, arguments)

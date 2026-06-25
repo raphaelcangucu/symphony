@@ -599,8 +599,8 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Answer in the user's language.
     Dispatching happens through this chat: only when the user explicitly asks to dispatch, start, or hand off the work, call the dispatch_codex tool for `#{identifier}` with concrete instructions. That moves the issue to In Progress so the orchestrator executes it (the orchestrator carries the issue's execution goal). Never dispatch on your own.
     Use manage_codex_goal (context authoring) to set, adjust, pause, resume, or clear the chat goal; use context execution only when the user explicitly asks to change the orchestrator execution goal.
-    Do not post issue comments — your replies are shown to the user directly in this chat.
-    Persist stable issue fields (title, description, status, assignees) with update_issue, not add_comment.
+    Do not mirror normal chat replies as issue comments — your replies are shown to the user directly in this chat.
+    Use add_comment only when the user explicitly asks to post a comment on the issue; use update_issue for title, description, status, and assignee changes.
 
     When to call update_issue:
     - Plan or acceptance criteria are defined and stable

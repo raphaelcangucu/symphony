@@ -99,7 +99,7 @@ setup:
       max_concurrent_agents: 5
       max_turns: 40
     assistant:
-      draft_status: Todo
+      draft_status: Planning
     codex:
       approval_policy: never
       command: codex --config shell_environment_policy.inherit=all app-server
@@ -127,6 +127,8 @@ setup:
       dispatch_states:
         - Todo
       field_states:
+        - Backlog
+        - Planning
         - Todo
         - In Progress
         - In Review
@@ -207,6 +209,8 @@ setup:
 
     | Status | Role |
     |--------|------|
+    | Backlog | Intake — new tasks land here; not auto-dispatched |
+    | Planning | Authoring — spec/plan/handoff with the issue assistant; do not dispatch |
     | Todo | Orchestrator queue |
     | In Progress | Active implementation |
     | In Review | Human review — no coding turns |
@@ -233,26 +237,34 @@ tracker:
     repo: "xipcash/admin"
     status_field: "Status"
 workflow_statuses:
+  - category: "backlog"
+    is_terminal: false
+    name: "Backlog"
+    position: 0
+  - category: "unstarted"
+    is_terminal: false
+    name: "Planning"
+    position: 1
   - category: "unstarted"
     is_terminal: false
     name: "Todo"
-    position: 0
+    position: 2
   - category: "started"
     is_terminal: false
     name: "In Progress"
-    position: 1
+    position: 3
   - category: "started"
     is_terminal: false
     name: "In Review"
-    position: 2
+    position: 4
   - category: "completed"
     is_terminal: true
     name: "Done"
-    position: 3
+    position: 5
   - category: "backlog"
     is_terminal: false
     name: "Resources"
-    position: 4
+    position: 6
 metadata:
   exported_at: "2026-06-24T00:00:00Z"
   source_project_slug: "xip"

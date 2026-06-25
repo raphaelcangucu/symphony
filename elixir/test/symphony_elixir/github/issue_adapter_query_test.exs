@@ -59,6 +59,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.QueryTest do
 
     dto = Query.normalize_item(item, "Status", "xipcash")
 
+    assert dto.identifier == "ios#2"
     assert dto.repository_full_name == "xipcash/ios"
     assert dto.parent_identifier == nil
     assert dto.sub_issue_summary == %{total: 4, completed: 4, percent_completed: 100}
@@ -82,7 +83,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.QueryTest do
 
     dto = Query.normalize_item(item, "Status", "xipcash")
 
-    assert dto.parent_identifier == "2"
+    assert dto.identifier == "frontend#77"
+    assert dto.parent_identifier == "ios#2"
     assert dto.sub_issue_summary == nil
   end
 

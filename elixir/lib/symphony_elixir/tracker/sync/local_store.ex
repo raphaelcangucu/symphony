@@ -10,7 +10,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   import Ecto.Query
 
-  alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, Label, Project, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, IssueRelation, Label, Project, WorkflowStatus}
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.PushNotifications.MentionNotifier
   alias SymphonyElixir.Repo
@@ -61,8 +61,9 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
     :ok = maybe_upsert_labels!(project, issue, Map.get(remote, :labels, []))
     :ok = upsert_comments!(issue, Map.get(remote, :comments, []))
+    :ok = maybe_upsert_remote_parent_relation!(project.id, issue, remote[:parent_identifier])
 
-    Repo.preload(issue, [:status, :labels, :comments], force: true)
+    Repo.preload(issue, [:status, :labels, :comments, source_relations: :target_issue], force: true)
   end
 
   @doc """
@@ -542,6 +543,49 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   defp existing_issue(project_id, remote_id) do
     IssueRecord
     |> where([i], i.project_id == ^project_id and i.remote_id == ^remote_id)
+    |> Repo.one()
+  end
+
+  defp maybe_upsert_remote_parent_relation!(project_id, %IssueRecord{} = issue, parent_identifier)
+       when is_binary(parent_identifier) and parent_identifier != "" do
+    case existing_issue_by_identifier(project_id, parent_identifier) do
+      %IssueRecord{id: parent_id} when parent_id != issue.id ->
+        attrs = %{
+          source_issue_id: issue.id,
+          target_issue_id: parent_id,
+          type: IssueRelation.subtask_type(),
+          remote_origin: true
+        }
+
+        case existing_relation(issue.id, parent_id, IssueRelation.subtask_type()) do
+          nil -> %IssueRelation{}
+          %IssueRelation{} = relation -> relation
+        end
+        |> IssueRelation.changeset(attrs)
+        |> Repo.insert_or_update!()
+
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp maybe_upsert_remote_parent_relation!(_project_id, _issue, _parent_identifier), do: :ok
+
+  defp existing_issue_by_identifier(project_id, identifier) do
+    IssueRecord
+    |> where([i], i.project_id == ^project_id and i.identifier == ^identifier)
+    |> Repo.one()
+  end
+
+  defp existing_relation(source_issue_id, target_issue_id, type) do
+    IssueRelation
+    |> where(
+      [relation],
+      relation.source_issue_id == ^source_issue_id and relation.target_issue_id == ^target_issue_id and
+        relation.type == ^type
+    )
     |> Repo.one()
   end
 

@@ -23,6 +23,9 @@ defmodule SymphonyElixir.Tracker.Sync.Normalize do
       creator: dto.creator,
       position: dto.position,
       remote_updated_at: parse_dt(dto.updated_at),
+      repository_full_name: dto.repository_full_name,
+      parent_identifier: dto.parent_identifier,
+      sub_issue_summary: dto.sub_issue_summary,
       labels: Enum.map(List.wrap(dto.labels), &label/1),
       comments: opts |> Keyword.get(:comments, []) |> Enum.map(&comment/1)
     }
@@ -50,7 +53,12 @@ defmodule SymphonyElixir.Tracker.Sync.Normalize do
   defp parse_int(value) when is_integer(value), do: value
 
   defp parse_int(value) when is_binary(value) do
-    case Integer.parse(value) do
+    value
+    |> String.split("#")
+    |> List.last()
+    |> String.trim()
+    |> Integer.parse()
+    |> case do
       {int, _rest} -> int
       :error -> nil
     end
