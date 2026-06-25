@@ -384,6 +384,9 @@
       "editAria": "Editar comentário",
       "deleteAria": "Excluir comentário",
       "linkPlaceholder": "texto",
+      "mentions": {
+        "listLabel": "Mencionar um usuário"
+      },
       "card": {
         "unknownAuthor": "Desconhecido",
         "commented": "comentou",

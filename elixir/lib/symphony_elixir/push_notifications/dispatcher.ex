@@ -10,10 +10,9 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   alias Gettext, as: GettextCore
   alias SymphonyElixir.Evidence.Record, as: EvidenceRecord
   alias SymphonyElixir.Issue
-  alias SymphonyElixir.LocalTracker.IssueRecord
-  alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.LocalTracker.{Comment, IssueRecord, Project}
   alias SymphonyElixir.ProjectConfig
-  alias SymphonyElixir.PushNotifications.{Config, Sender}
+  alias SymphonyElixir.PushNotifications.{Config, MentionParser, Sender}
   alias SymphonyElixir.Settings.Ui
   alias SymphonyElixir.Tracker.Identity
   alias SymphonyElixirWeb.Gettext, as: GettextBackend
@@ -30,6 +29,7 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   @pr_ci_unrelated_kind "pr_ci_unrelated"
   @pr_merge_conflict_kind "pr_merge_conflict"
   @issue_assigned_kind "issue_assigned"
+  @comment_mention_kind "comment_mention"
 
   @spec human_review_needed(IssueRecord.t(), String.t()) :: :ok
   def human_review_needed(%IssueRecord{} = issue, status_name) when is_binary(status_name) do
@@ -222,6 +222,43 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
 
   def issue_assigned(_issue, _previous), do: :ok
 
+  @spec comment_mentioned(Project.t(), IssueRecord.t(), Comment.t(), [map()]) :: :ok
+  def comment_mentioned(%Project{} = project, %IssueRecord{} = issue, %Comment{} = comment, mentioned_users)
+      when is_list(mentioned_users) do
+    slug = project.slug
+    identifier = issue.identifier
+
+    with true <- is_binary(slug) and slug != "",
+         true <- is_binary(identifier) and identifier != "" do
+      author_keys = author_identity_keys(comment.author)
+      snippet = comment_snippet(comment.body)
+
+      Enum.each(mentioned_users, fn user ->
+        target_keys = MentionParser.identity_keys_for_user(user)
+
+        if mentions_author?(target_keys, author_keys) do
+          :ok
+        else
+          with_push_locale(fn ->
+            notify_to_identities(target_keys, @comment_mention_kind, %{
+              title:
+                dgettext("push", "%{author} mentioned you",
+                  author: comment.author || dgettext("push", "Someone")
+                ),
+              body: "#{identifier}: #{snippet}",
+              url: issue_url(slug, identifier),
+              tag: "comment_mention:#{slug}:#{identifier}:#{comment.id}"
+            })
+          end)
+        end
+      end)
+    else
+      _ -> :ok
+    end
+  end
+
+  def comment_mentioned(_project, _issue, _comment, _mentioned_users), do: :ok
+
   @spec notify(String.t(), map()) :: :ok
   def notify(kind, payload) when is_binary(kind) and is_map(payload) do
     if Config.enabled?() do
@@ -325,4 +362,39 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   end
 
   defp assignee_matches_operator?(_issue), do: false
+
+  defp notify_to_identities(keys, kind, payload) when is_list(keys) and is_binary(kind) and is_map(payload) do
+    if Config.enabled?() do
+      Sender.deliver_to_identities(keys, kind, payload)
+    else
+      :ok
+    end
+  end
+
+  defp author_identity_keys(author) when is_binary(author) do
+    author |> String.trim() |> String.downcase() |> List.wrap()
+  end
+
+  defp author_identity_keys(_author), do: []
+
+  defp mentions_author?(target_keys, author_keys) when is_list(target_keys) and is_list(author_keys) do
+    author_set = MapSet.new(author_keys)
+    Enum.any?(target_keys, &MapSet.member?(author_set, &1))
+  end
+
+  defp comment_snippet(body) when is_binary(body) do
+    body
+    |> String.split("\n", parts: 2)
+    |> List.first()
+    |> case do
+      snippet when is_binary(snippet) ->
+        trimmed = String.trim(snippet)
+        if trimmed == "", do: dgettext("push", "New comment"), else: String.slice(trimmed, 0, 120)
+
+      _ ->
+        dgettext("push", "New comment")
+    end
+  end
+
+  defp comment_snippet(_body), do: dgettext("push", "New comment")
 end

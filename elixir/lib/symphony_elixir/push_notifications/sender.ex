@@ -10,14 +10,22 @@ defmodule SymphonyElixir.PushNotifications.Sender do
 
   @spec deliver_all(String.t(), map()) :: :ok
   def deliver_all(kind, payload) when is_binary(kind) and is_map(payload) do
+    deliver_to_subscriptions(Subscriptions.list(), kind, payload)
+  end
+
+  @spec deliver_to_identities([String.t()], String.t(), map()) :: :ok
+  def deliver_to_identities(identity_keys, kind, payload)
+      when is_list(identity_keys) and is_binary(kind) and is_map(payload) do
+    deliver_to_subscriptions(Subscriptions.list_for_identities(identity_keys), kind, payload)
+  end
+
+  defp deliver_to_subscriptions(subscriptions, kind, payload) when is_list(subscriptions) do
     body =
       payload
       |> Map.put("kind", kind)
       |> Jason.encode!()
 
-    Subscriptions.list()
-    |> Enum.each(&deliver_one(&1, body))
-
+    Enum.each(subscriptions, &deliver_one(&1, body))
     :ok
   end
 

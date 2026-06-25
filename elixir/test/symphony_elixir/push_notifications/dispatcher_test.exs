@@ -4,7 +4,7 @@ defmodule SymphonyElixir.PushNotifications.DispatcherTest do
   alias Gettext
   alias SymphonyElixir.Evidence.Record, as: EvidenceRecord
   alias SymphonyElixir.Issue
-  alias SymphonyElixir.LocalTracker.{IssueRecord, Project, Viewer}
+  alias SymphonyElixir.LocalTracker.{Comment, IssueRecord, Project, Viewer}
   alias SymphonyElixir.PushNotifications.Dispatcher
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings
@@ -141,6 +141,28 @@ defmodule SymphonyElixir.PushNotifications.DispatcherTest do
     }
 
     assert :ok = Dispatcher.issue_assigned(issue, %{assignee_id: nil, assignee_remote_id: nil})
+  end
+
+  test "comment_mentioned builds payload for mentioned users" do
+    project = %Project{slug: "macro-markets"}
+    issue = %IssueRecord{identifier: "MAC-11", title: "Fix bug"}
+    comment = %Comment{id: 42, body: "Please review @raphael", author: "bob"}
+
+    assert :ok =
+             Dispatcher.comment_mentioned(project, issue, comment, [
+               %{login: "raphael", remote_id: "U1", name: nil}
+             ])
+  end
+
+  test "comment_mentioned skips self-mention" do
+    project = %Project{slug: "macro-markets"}
+    issue = %IssueRecord{identifier: "MAC-12", title: "Fix bug"}
+    comment = %Comment{id: 43, body: "Note to self @bob", author: "bob"}
+
+    assert :ok =
+             Dispatcher.comment_mentioned(project, issue, comment, [
+               %{login: "bob", remote_id: "B1", name: nil}
+             ])
   end
 
   defp ensure_viewer_server do

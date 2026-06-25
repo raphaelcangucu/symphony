@@ -51,4 +51,36 @@ defmodule SymphonyElixir.PushNotifications.Subscriptions do
     Repo.delete(subscription)
     :ok
   end
+
+  @spec list_for_identities([String.t()]) :: [Subscription.t()]
+  def list_for_identities(keys) when is_list(keys) do
+    wanted = normalized_keys(keys)
+
+    if wanted == [] do
+      []
+    else
+      wanted_set = MapSet.new(wanted)
+
+      list()
+      |> Enum.filter(fn subscription ->
+        subscription.identity_keys
+        |> normalized_keys()
+        |> Enum.any?(fn key -> MapSet.member?(wanted_set, key) end)
+      end)
+    end
+  end
+
+  defp normalized_keys(keys) when is_list(keys) do
+    keys
+    |> Enum.map(fn
+      key when is_binary(key) ->
+        trimmed = String.trim(key)
+        if trimmed == "", do: nil, else: String.downcase(trimmed)
+
+      _ ->
+        nil
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
 end

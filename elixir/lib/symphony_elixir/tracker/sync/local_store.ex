@@ -12,6 +12,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, Label, Project, WorkflowStatus}
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
+  alias SymphonyElixir.PushNotifications.MentionNotifier
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.{Merge, PullRequestRecord, UserRecord}
 
@@ -392,9 +393,18 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
         {:error, :not_found}
 
       comment ->
-        comment
-        |> Ecto.Changeset.change(%{sync_status: status, last_synced_at: sync_timestamp(status)})
-        |> Repo.update()
+        previous_status = comment.sync_status
+
+        with {:ok, updated} <-
+               comment
+               |> Ecto.Changeset.change(%{sync_status: status, last_synced_at: sync_timestamp(status)})
+               |> Repo.update() do
+          if previous_status == "pending" and status == "synced" do
+            MentionNotifier.deliver_if_needed(updated, :after_remote_sync)
+          end
+
+          {:ok, updated}
+        end
     end
   end
 

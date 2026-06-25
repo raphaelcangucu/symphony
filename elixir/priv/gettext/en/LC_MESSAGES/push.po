@@ -17,3 +17,12 @@ msgstr "Symphony test"
 
 msgid "Push notification test — tap to open Settings"
 msgstr "Push notification test — tap to open Settings"
+
+msgid "%{author} mentioned you"
+msgstr "%{author} mentioned you"
+
+msgid "Someone"
+msgstr "Someone"
+
+msgid "New comment"
+msgstr "New comment"

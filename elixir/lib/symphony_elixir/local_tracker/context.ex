@@ -27,6 +27,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   alias SymphonyElixir.Repo
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
+  alias SymphonyElixir.PushNotifications.MentionNotifier
   alias SymphonyElixir.Tracker.LabelResolver
   alias SymphonyElixir.Tracker.Sync.UserRecord
   alias SymphonyElixir.Tracker.Workpad
@@ -1950,6 +1951,11 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp tap_comment_event({:ok, %Comment{} = comment} = result, issue) do
     insert_event(issue.id, "comment_created", %{comment_id: comment.id})
     Broadcaster.comment_created(Repo.preload(issue, :project), comment)
+
+    if comment.sync_status == "synced" do
+      MentionNotifier.deliver_if_needed(comment, :local_only)
+    end
+
     result
   end
 

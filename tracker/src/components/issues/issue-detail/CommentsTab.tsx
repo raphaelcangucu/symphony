@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, ReactNode, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Bold, Code, Heading, Italic, Link2, List, ListChecks, ListOrdered, Pencil, Trash2, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -6,11 +6,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { Textarea } from "@/components/ui/textarea";
+import { useCommentMentions } from "@/hooks/useCommentMentions";
 import { useMarkdownImagePaste } from "@/hooks/useMarkdownImagePaste";
 import { cn } from "@/lib/utils";
+import { getIssueFormOptions } from "@/services/issues";
 import type { Comment, CreateCommentInput, UpdateCommentInput } from "@/types/comment";
+import type { IssueAssigneeOption } from "@/types/issue";
 
 import { CommentCard, EvidenceBadge, SyncBadge, WorkpadBadge } from "./CommentCard";
+import { MentionAutocomplete } from "./MentionAutocomplete";
 
 interface CommentsTabProps {
   comments: Comment[];
@@ -37,8 +41,31 @@ export function CommentsTab({
   const [body, setBody] = useState("");
   const [mode, setMode] = useState<ComposerMode>("write");
   const [submitting, setSubmitting] = useState(false);
+  const [assignees, setAssignees] = useState<IssueAssigneeOption[]>([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { handlePaste, uploading } = useMarkdownImagePaste({ projectSlug, setValue: setBody });
+  const mentions = useCommentMentions(body, assignees);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getIssueFormOptions(projectSlug)
+      .then((options) => {
+        if (!cancelled) setAssignees(options.assignees);
+      })
+      .catch(() => {
+        if (!cancelled) setAssignees([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectSlug]);
+
+  useEffect(() => {
+    if (!mentions.open) {
+      setMentionIndex(0);
+    }
+  }, [mentions.open, mentions.query]);
 
   const canSubmit = body.trim().length > 0 && !submitting && !uploading;
 
@@ -123,12 +150,51 @@ export function CommentsTab({
     }
   }
 
+  function applyMention(login: string) {
+    const next = mentions.selectMention(login);
+    if (!next) return;
+    setBody(next);
+    const cursor = next.length;
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(cursor, cursor);
+    });
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void submit();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentions.open && mentions.filteredAssignees.length > 0) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setMentionIndex((current) => (current + 1) % mentions.filteredAssignees.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setMentionIndex((current) =>
+          current === 0 ? mentions.filteredAssignees.length - 1 : current - 1,
+        );
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        const login = mentions.filteredAssignees[mentionIndex]?.login;
+        if (login) applyMention(login);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        mentions.close();
+        return;
+      }
+    }
+
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       void submit();
@@ -166,15 +232,27 @@ export function CommentsTab({
         </div>
         <div className="p-3">
           {mode === "write" ? (
-            <Textarea
-              ref={textareaRef}
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              placeholder={t("issue.comments.placeholder")}
-              className="min-h-28 resize-y border-0 bg-transparent p-0 shadow-none ring-offset-0 focus-visible:ring-0"
-            />
+            <div className="relative">
+              <Textarea
+                ref={textareaRef}
+                value={body}
+                onChange={(event) => {
+                  setBody(event.target.value);
+                  mentions.handleChange(event.target.value, event.target.selectionStart);
+                }}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                placeholder={t("issue.comments.placeholder")}
+                className="min-h-28 resize-y border-0 bg-transparent p-0 shadow-none ring-offset-0 focus-visible:ring-0"
+              />
+              <MentionAutocomplete
+                open={mentions.open}
+                options={mentions.filteredAssignees}
+                activeIndex={mentionIndex}
+                onSelect={applyMention}
+                className="bottom-full mb-1"
+              />
+            </div>
           ) : body.trim() ? (
             <Markdown>{body}</Markdown>
           ) : (

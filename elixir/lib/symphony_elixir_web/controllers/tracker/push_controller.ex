@@ -6,7 +6,7 @@ defmodule SymphonyElixirWeb.Tracker.PushController do
 
   alias Gettext, as: GettextCore
   alias Plug.Conn
-  alias SymphonyElixir.PushNotifications.{Config, Subscription, Subscriptions}
+  alias SymphonyElixir.PushNotifications.{Config, IdentityKeys, Subscription, Subscriptions}
   alias SymphonyElixir.Settings.Ui
   alias SymphonyElixirWeb.Gettext, as: GettextBackend
   alias SymphonyElixirWeb.TrackerErrors
@@ -30,6 +30,7 @@ defmodule SymphonyElixirWeb.Tracker.PushController do
         params
         |> Map.put("user_agent", user_agent(conn))
         |> Subscription.from_browser_map()
+        |> Map.put(:identity_keys, IdentityKeys.collect())
 
       case Subscriptions.upsert(attrs) do
         {:ok, subscription} ->
@@ -78,6 +79,7 @@ defmodule SymphonyElixirWeb.Tracker.PushController do
     %{
       id: subscription.id,
       endpoint: subscription.endpoint,
+      identity_keys: subscription.identity_keys || [],
       inserted_at: subscription.inserted_at
     }
   end

@@ -384,6 +384,9 @@
       "editAria": "Edit comment",
       "deleteAria": "Delete comment",
       "linkPlaceholder": "text",
+      "mentions": {
+        "listLabel": "Mention a user"
+      },
       "card": {
         "unknownAuthor": "Unknown",
         "commented": "commented",
