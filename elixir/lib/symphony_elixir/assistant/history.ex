@@ -56,7 +56,7 @@ defmodule SymphonyElixir.Assistant.History do
     with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
          {:ok, repo} <- normalize_required_string(repo_slug, :repo_slug),
          {:ok, path} <- normalize_required_string(page_path, :page_path),
-         {:ok, _project} <- Context.get_project(slug) do
+         {:ok, _scope} <- ensure_kb_project_scope(slug) do
       key = repo <> ":" <> path
 
       case active_kb_thread(slug, key) do
@@ -592,6 +592,11 @@ defmodule SymphonyElixir.Assistant.History do
     |> limit(1)
     |> Repo.one()
   end
+
+  # The personal KB (`@user`) is a pseudo-project with no tracker row, so its KB
+  # assistant thread is allowed without a `Context.get_project/1` lookup.
+  defp ensure_kb_project_scope("@user"), do: {:ok, :general}
+  defp ensure_kb_project_scope(slug), do: Context.get_project(slug)
 
   defp kb_workspace(project_slug) do
     root = SymphonyElixir.Config.workspace_root() |> Path.expand()

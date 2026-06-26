@@ -34,6 +34,48 @@ defmodule SymphonyElixir.KnowledgeBase.GitTest do
     assert {:ok, ^wt} = Git.ensure_worktree(checkout, "symphony-docs")
   end
 
+  test "ensure_worktree self-heals an unborn worktree once the checkout has commits" do
+    base = Path.join(System.tmp_dir!(), "kb-heal-#{System.unique_integer([:positive])}")
+    checkout = Path.join(base, "repo")
+    File.mkdir_p!(checkout)
+    on_exit(fn -> File.rm_rf(base) end)
+
+    # Repository with no commits yet — mimics a clone that is still in progress,
+    # so the docs worktree is created from an unborn HEAD (the production bug).
+    sh(checkout, ["init", "-q", "-b", "main"])
+    assert {:ok, wt} = Git.ensure_worktree(checkout, "symphony-docs")
+    refute worktree_born?(wt)
+
+    # The default branch lands its first commit (the clone completes).
+    File.mkdir_p!(Path.join(checkout, "docs"))
+    File.write!(Path.join(checkout, "docs/PAGE.md"), "# page\n")
+    sh(checkout, ["-c", "user.email=t@t", "-c", "user.name=t", "add", "docs/PAGE.md"])
+    sh(checkout, ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "init"])
+
+    # A later ensure must rebuild the worktree from the now-available base.
+    assert {:ok, ^wt} = Git.ensure_worktree(checkout, "symphony-docs", base_branch: "main")
+    assert worktree_born?(wt)
+    assert {:ok, "symphony-docs"} = Git.current_branch(wt)
+    assert File.exists?(Path.join(wt, "docs/PAGE.md"))
+  end
+
+  test "ensure_worktree keeps the orphan branch for a commitless repository" do
+    base = Path.join(System.tmp_dir!(), "kb-empty-#{System.unique_integer([:positive])}")
+    checkout = Path.join(base, "repo")
+    File.mkdir_p!(checkout)
+    on_exit(fn -> File.rm_rf(base) end)
+
+    # A genuinely empty repository (e.g. a brand-new general KB) has no base to
+    # heal to, so the orphan branch must be preserved for the first write to seed.
+    sh(checkout, ["init", "-q", "-b", "main"])
+    assert {:ok, wt} = Git.ensure_worktree(checkout, "symphony-docs")
+    refute worktree_born?(wt)
+
+    assert {:ok, ^wt} = Git.ensure_worktree(checkout, "symphony-docs")
+    refute worktree_born?(wt)
+    assert {:ok, "symphony-docs"} = Git.current_branch(wt)
+  end
+
   test "add + commit persist a file on the worktree branch", %{checkout: checkout} do
     {:ok, wt} = Git.ensure_worktree(checkout, "symphony-docs")
     File.mkdir_p!(Path.join(wt, "docs"))
@@ -108,4 +150,14 @@ defmodule SymphonyElixir.KnowledgeBase.GitTest do
   end
 
   defp sh(dir, args), do: {_o, 0} = System.cmd("git", args, cd: dir, stderr_to_stdout: true)
+
+  defp worktree_born?(worktree) do
+    match?(
+      {_o, 0},
+      System.cmd("git", ["rev-parse", "--verify", "--quiet", "HEAD"],
+        cd: worktree,
+        stderr_to_stdout: true
+      )
+    )
+  end
 end

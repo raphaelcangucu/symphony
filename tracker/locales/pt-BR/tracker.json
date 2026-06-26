@@ -2027,7 +2027,7 @@
   "kb": {
     "loading": "Carregando…",
     "saved": "Salvo",
-    "sidebar": { "noDocs": "Sem docs ainda" },
+    "sidebar": { "noDocs": "Sem docs ainda", "pages": "Páginas" },
     "actions": {
       "more": "Ações para {{title}}",
       "rename": "Renomear",
@@ -2039,6 +2039,7 @@
       "folderPrompt": "Nome da pasta",
       "folderCreated": "Pasta criada",
       "delete": "Excluir",
+      "deleteFolder": "Excluir pasta",
       "deleteConfirm": "Mover “{{title}}” para a lixeira?",
       "deleted": "Página excluída",
       "renamed": "Página renomeada",
@@ -2051,6 +2052,11 @@
       "unsaved": "Alterações não salvas",
       "askAi": "Perguntar à IA",
       "closeAssistant": "Fechar assistente",
+      "toc": {
+        "button": "Índice",
+        "label": "Nesta página",
+        "untitled": "Sem título"
+      },
       "placeholder": "Escreva algo, ou passe o mouse numa linha e clique “+” para adicionar um bloco… · cole imagens",
       "headingPlaceholder": "Título",
       "paste": {
@@ -2095,6 +2101,15 @@
         "sizeMedium": "Médio",
         "sizeFull": "Largura total",
         "delete": "Excluir imagem"
+      },
+      "imagePicker": {
+        "insertTitle": "Inserir imagem",
+        "replaceTitle": "Trocar imagem",
+        "description": "Envie uma nova imagem ou escolha uma da galeria de assets.",
+        "upload": "Enviar imagem",
+        "searchPlaceholder": "Buscar imagens…",
+        "galleryEmpty": "Nenhuma imagem na pasta assets ainda.",
+        "noMatches": "Nenhuma imagem corresponde à busca."
       }
     },
     "assistant": {
@@ -2117,6 +2132,8 @@
     "asset": {
       "openTab": "Abrir em nova aba",
       "download": "Baixar",
+      "loading": "Carregando imagem…",
+      "loadFailed": "Não foi possível carregar esta imagem.",
       "rename": "Renomear imagem",
       "renamePlaceholder": "Nome da imagem…",
       "renamed": "Imagem renomeada",
@@ -2129,6 +2146,10 @@
         "insert": "Inserir",
         "skip": "Pular"
       }
+    },
+    "folder": {
+      "deleteConfirm": "Excluir a pasta “{{title}}” e tudo dentro dela (todas as páginas e imagens)? Isso não pode ser desfeito.",
+      "deleted": "Pasta excluída"
     },
     "search": {
       "label": "Buscar",

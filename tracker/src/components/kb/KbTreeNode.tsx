@@ -5,7 +5,6 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { assetBaseName } from "@/lib/kbAssets";
-import { kbPagePath } from "@/lib/kbRoutes";
 import { parentPathOf } from "@/lib/kbTreeUtils";
 import { cn } from "@/lib/utils";
 import type { KbTreeNode as KbTreeNodeType } from "@/types/knowledgeBase";
@@ -25,9 +24,11 @@ interface Props {
   activePath: string | null;
   handlers: KbTreeHandlers;
   inlineEdit: KbInlineEdit;
+  /** Builds the route for a page/asset so the tree works in both KB scopes. */
+  pageHref: (repoSlug: string, pagePath: string) => string;
 }
 
-export function KbTreeNode({ projectSlug, repoSlug, node, depth, activePath, handlers, inlineEdit }: Props) {
+export function KbTreeNode({ projectSlug, repoSlug, node, depth, activePath, handlers, inlineEdit, pageHref }: Props) {
   const [open, setOpen] = useState(true);
   const indent = depth * 12 + 4;
   const folderHasDraft = draftMatchesList(inlineEdit.draft, repoSlug, node.path);
@@ -64,6 +65,7 @@ export function KbTreeNode({ projectSlug, repoSlug, node, depth, activePath, han
             variant="folder"
             onCreateFolder={() => handlers.onCreateFolder(repoSlug, node.path)}
             onAddPage={() => handlers.onStartAddPage(repoSlug, node.path, null)}
+            onDelete={() => handlers.onDelete(repoSlug, node.path, node.title || node.name, "folder")}
           />
         </div>
         {open ? (
@@ -77,6 +79,7 @@ export function KbTreeNode({ projectSlug, repoSlug, node, depth, activePath, han
               activePath={activePath}
               handlers={handlers}
               inlineEdit={inlineEdit}
+              pageHref={pageHref}
             />
           ) : (
             <p
@@ -94,39 +97,39 @@ export function KbTreeNode({ projectSlug, repoSlug, node, depth, activePath, han
   if (node.type === "asset") {
     return (
       <KbTreeAssetRow
-        projectSlug={projectSlug}
         repoSlug={repoSlug}
         node={node}
         depth={depth}
         activePath={activePath}
         handlers={handlers}
         inlineEdit={inlineEdit}
+        pageHref={pageHref}
       />
     );
   }
 
   return (
     <KbTreePageRow
-      projectSlug={projectSlug}
       repoSlug={repoSlug}
       node={node}
       depth={depth}
       activePath={activePath}
       handlers={handlers}
       inlineEdit={inlineEdit}
+      pageHref={pageHref}
     />
   );
 }
 
 function KbTreeAssetRow({
-  projectSlug,
   repoSlug,
   node,
   depth,
   activePath,
   handlers,
   inlineEdit,
-}: Pick<Props, "projectSlug" | "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit">) {
+  pageHref,
+}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref">) {
   const indent = depth * 12 + 4;
   const startRename = () => handlers.onRename(repoSlug, node.path, assetBaseName(node.path));
 
@@ -151,7 +154,7 @@ function KbTreeAssetRow({
       style={{ paddingLeft: indent + 20 }}
     >
       <NavLink
-        to={kbPagePath(projectSlug, repoSlug, node.path)}
+        to={pageHref(repoSlug, node.path)}
         className={({ isActive }) =>
           cn(
             "flex min-w-0 flex-1 items-center gap-1.5 py-1 text-sm",
@@ -173,21 +176,21 @@ function KbTreeAssetRow({
         title={node.title || node.name}
         variant="asset"
         onRename={startRename}
-        onDelete={() => handlers.onDelete(repoSlug, node.path, assetBaseName(node.path))}
+        onDelete={() => handlers.onDelete(repoSlug, node.path, assetBaseName(node.path), "asset")}
       />
     </div>
   );
 }
 
 function KbTreePageRow({
-  projectSlug,
   repoSlug,
   node,
   depth,
   activePath,
   handlers,
   inlineEdit,
-}: Pick<Props, "projectSlug" | "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit">) {
+  pageHref,
+}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref">) {
   const indent = depth * 12 + 4;
   const parentPath = parentPathOf(node.path);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -228,7 +231,7 @@ function KbTreePageRow({
         <GripVertical className="h-3.5 w-3.5" />
       </button>
       <NavLink
-        to={kbPagePath(projectSlug, repoSlug, node.path)}
+        to={pageHref(repoSlug, node.path)}
         className={({ isActive }) =>
           cn(
             "flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1 text-sm",
@@ -259,7 +262,7 @@ function KbTreePageRow({
         variant="page"
         onRename={() => handlers.onRename(repoSlug, node.path, node.title || node.name)}
         onToggleFavorite={() => handlers.onToggleFavorite(repoSlug, node.path, node.favorite)}
-        onDelete={() => handlers.onDelete(repoSlug, node.path, node.title || node.name)}
+        onDelete={() => handlers.onDelete(repoSlug, node.path, node.title || node.name, "page")}
         onCreateFolder={() => handlers.onCreateFolder(repoSlug, parentPath)}
         onAddPage={() => handlers.onStartAddPage(repoSlug, parentPath, node.path)}
       />

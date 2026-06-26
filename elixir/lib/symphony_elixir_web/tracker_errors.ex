@@ -395,6 +395,9 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :kb_page_not_found),
     do: not_found(conn, "kb_page_not_found", dgettext("errors", "Knowledge base page not found"))
 
+  def render(conn, :kb_folder_not_found),
+    do: not_found(conn, "kb_folder_not_found", dgettext("errors", "Knowledge base folder not found"))
+
   def render(conn, :kb_frontmatter_invalid),
     do:
       error(

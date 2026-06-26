@@ -53,6 +53,29 @@ defmodule SymphonyElixir.KnowledgeBase.Writer do
     end
   end
 
+  @spec delete_folder(ws(), [String.t()] | String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def delete_folder(ws, rel, opts \\ []) do
+    with {:ok, abs} <- Paths.resolve_folder_in(ws.docs_root, rel),
+         {:ok, folder_rel} <- Paths.safe_folder_relative_path(rel),
+         :ok <- ensure_dir(abs) do
+      pages = folder_page_paths(ws.docs_root, folder_rel)
+      File.rm_rf!(abs)
+
+      case stage_and_commit(
+             ws,
+             ["docs/#{folder_rel}"],
+             commit_message(opts, "delete folder #{folder_rel}"),
+             opts
+           ) do
+        {:ok, commit} ->
+          {:ok, %{path: folder_rel, pages: pages, commit: commit, pushed: maybe_push(ws, opts)}}
+
+        error ->
+          error
+      end
+    end
+  end
+
   @spec delete_asset(ws(), [String.t()] | String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def delete_asset(ws, rel, opts \\ []) do
     with {:ok, asset_rel} <- safe_existing_asset(ws.docs_root, rel),
@@ -240,5 +263,17 @@ defmodule SymphonyElixir.KnowledgeBase.Writer do
   end
 
   defp ensure_exists(abs), do: if(File.regular?(abs), do: :ok, else: {:error, :kb_page_not_found})
+  defp ensure_dir(abs), do: if(File.dir?(abs), do: :ok, else: {:error, :kb_folder_not_found})
+
+  # Markdown pages nested under the folder, used to evict them from the search
+  # index after the directory is removed. Assets are skipped by `Tree.page_paths`.
+  defp folder_page_paths(docs_root, folder_rel) do
+    prefix = folder_rel <> "/"
+
+    docs_root
+    |> Tree.page_paths()
+    |> Enum.filter(&String.starts_with?(&1, prefix))
+  end
+
   defp commit_message(opts, default), do: Keyword.get(opts, :message, "docs(kb): #{default}")
 end

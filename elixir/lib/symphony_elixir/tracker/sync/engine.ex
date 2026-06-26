@@ -606,14 +606,27 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     if Map.has_key?(payload, payload_key), do: [dirty_key | fields], else: fields
   end
 
+  # Bookkeeping for a single failed push must never crash the whole project sync.
+  # `mark_failed/3` recovers the known `in_flight -> pending` dedup race itself; if
+  # any other write error slips through we log it and skip the entry rather than
+  # raising a `MatchError` that takes the entire sync task (and the project's sync
+  # state) down with it.
   defp record_failed(acc, entry, reason, max_attempts) do
-    {:ok, updated} = Outbox.mark_failed(entry, inspect(reason), max_attempts)
+    case Outbox.mark_failed(entry, inspect(reason), max_attempts) do
+      {:ok, %{status: "failed"} = updated} ->
+        mark_comment_push_exhausted(updated)
+        %{acc | failed: acc.failed + 1}
 
-    if updated.status == "failed" do
-      mark_comment_push_exhausted(updated)
-      %{acc | failed: acc.failed + 1}
-    else
-      acc
+      {:ok, _updated} ->
+        acc
+
+      {:error, changeset} ->
+        Logger.warning(
+          "Tracker sync could not record outbox failure entry_id=#{entry.id} " <>
+            "dedup_key=#{entry.dedup_key} errors=#{inspect(changeset.errors)}"
+        )
+
+        acc
     end
   end
 

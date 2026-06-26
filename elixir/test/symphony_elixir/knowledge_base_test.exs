@@ -88,6 +88,21 @@ defmodule SymphonyElixir.KnowledgeBaseTest do
     assert Enum.all?(results, &(&1.repo_slug == "web"))
   end
 
+  test "docs committed on disk become searchable after the repo tree is loaded" do
+    # The seed commits docs to disk without ever calling write_page, so the
+    # search index starts empty for this repo (the bug: only UI-authored pages
+    # were indexed, leaving Git-committed docs unsearchable).
+    assert {:ok, []} = KnowledgeBase.search_project("acme", "Backend", [])
+
+    # Loading the repo tree is what the KB UI does on open; it must reindex the
+    # repository's docs from disk so every committed page becomes findable.
+    assert {:ok, _tree} = KnowledgeBase.repo_tree("acme", "web")
+
+    assert {:ok, results} = KnowledgeBase.search_project("acme", "Backend", [])
+    assert Enum.any?(results, &(&1.path == "architecture/backend.md"))
+    assert Enum.all?(results, &(&1.repo_slug == "web"))
+  end
+
   test "deleting a saved page removes it from search results" do
     {:ok, _} =
       KnowledgeBase.write_page("acme", "web", "temp.md", %{
@@ -102,6 +117,81 @@ defmodule SymphonyElixir.KnowledgeBaseTest do
 
   test "sync_status returns idle for a never-synced repo" do
     assert {:ok, %{status: "idle"}} = KnowledgeBase.sync_status("acme", "web")
+  end
+
+  describe "personal KB (@user scope)" do
+    @general_repo_slug "@user~symphony-kb"
+
+    setup %{root: root} do
+      origin = Path.join(root, "kb-origin")
+      File.mkdir_p!(Path.join(origin, "docs"))
+      File.write!(Path.join(origin, "docs/keep.md"), "---\ntitle: Keep\n---\n# Keep\n")
+      git(origin, ["init", "-q", "-b", "main"])
+      git(origin, ["add", "-A"])
+      git(origin, ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "seed"])
+
+      deps = [
+        ensure_repo: fn ->
+          {:ok,
+           %{
+             full_name: "octocat/symphony-kb",
+             clone_url: origin,
+             default_branch: "main",
+             created: false
+           }}
+        end,
+        clone: fn _clone_url, dest ->
+          {_o, 0} = System.cmd("git", ["clone", "-q", origin, dest], stderr_to_stdout: true)
+          {:ok, dest}
+        end
+      ]
+
+      Application.put_env(:symphony_elixir, :kb_general_deps, deps)
+      on_exit(fn -> Application.delete_env(:symphony_elixir, :kb_general_deps) end)
+      :ok
+    end
+
+    test "project_overview reports the synthetic Personal repo, disconnected before connect" do
+      assert {:ok, overview} = KnowledgeBase.project_overview("@user")
+      assert overview.project.slug == "@user"
+      assert [%{repo_slug: @general_repo_slug, docs_present?: false}] = overview.repositories
+
+      assert {:ok, _} = KnowledgeBase.general_connect()
+
+      assert {:ok, connected} = KnowledgeBase.project_overview("@user")
+      assert [%{repo_slug: @general_repo_slug, docs_present?: true}] = connected.repositories
+    end
+
+    test "repo_tree and read_page resolve against the personal checkout" do
+      assert {:ok, _} = KnowledgeBase.general_connect()
+
+      assert {:ok, tree} = KnowledgeBase.repo_tree("@user", @general_repo_slug)
+      assert tree.repository.repo_slug == @general_repo_slug
+      assert tree.docs_present == true
+      assert Enum.any?(tree.tree, &(&1.name == "keep.md"))
+
+      assert {:ok, page} = KnowledgeBase.read_page("@user", @general_repo_slug, ["keep.md"])
+      assert page.title == "Keep"
+      assert page.repo_slug == @general_repo_slug
+    end
+
+    test "a saved personal page is findable via @user search" do
+      assert {:ok, _} = KnowledgeBase.general_connect()
+
+      {:ok, _} =
+        KnowledgeBase.general_write_page("notes/zebra.md", %{
+          frontmatter: %{"title" => "Z"},
+          body: "a unique zebra phrase"
+        })
+
+      assert {:ok, results} = KnowledgeBase.search_project("@user", "zebra", [])
+      assert Enum.any?(results, &(&1.path == "notes/zebra.md"))
+    end
+
+    test "sync helpers are inert no-ops for the personal KB" do
+      assert :ok = KnowledgeBase.request_sync("@user", @general_repo_slug)
+      assert {:ok, %{status: :idle}} = KnowledgeBase.sync_status("@user", @general_repo_slug)
+    end
   end
 
   defp migrate_repo do

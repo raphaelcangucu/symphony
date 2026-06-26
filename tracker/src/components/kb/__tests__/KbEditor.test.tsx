@@ -13,4 +13,16 @@ describe("KbEditor", () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(typeof onSave.mock.calls[0]?.[0]).toBe("string");
   });
+
+  it("force-saves on Ctrl+S and prevents the browser save dialog", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<KbEditor title="Backend" markdown={"# Backend\n\nbody"} onSave={onSave} saving={false} />);
+
+    const event = new KeyboardEvent("keydown", { key: "s", ctrlKey: true, cancelable: true });
+    const prevented = !window.dispatchEvent(event);
+
+    expect(prevented).toBe(true);
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(typeof onSave.mock.calls[0]?.[0]).toBe("string");
+  });
 });

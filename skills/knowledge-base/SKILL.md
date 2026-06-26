@@ -141,6 +141,15 @@ PUT  /kb/pages/*path     # create/update page
 - `KnowledgeBase.search_project/3` and `search_general/2` rank with `bm25` and
   return `snippet` excerpts; both accept an optional `repo_slug` filter.
 - `KnowledgeBase.reindex_repo/2` rebuilds a repo's index from disk.
+- `repo_tree/2` reindexes a repository (best-effort) every time its tree is
+  listed, so docs committed to Git — not just pages authored through Symphony —
+  become searchable as soon as the KB is opened.
+- `repo_tree/2` reindexes a repository (best-effort) every time its tree is
+  listed, so docs committed to Git — not just pages authored through Symphony —
+  become searchable as soon as the KB is opened.
+- `repo_tree/2` reindexes a repository (best-effort) every time its tree is
+  listed, so docs committed to Git — not just pages authored through Symphony —
+  become searchable as soon as the KB is opened.
 
 ## Core Elixir surface
 

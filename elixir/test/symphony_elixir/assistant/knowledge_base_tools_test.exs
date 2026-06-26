@@ -81,4 +81,63 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseToolsTest do
     assert {:error, {:missing_required_field, "query"}} =
              KnowledgeBaseTools.execute("acme", "kb_search_pages", %{}, [])
   end
+
+  test "tool_specs declares the destructive delete tools" do
+    names = Enum.map(KnowledgeBaseTools.tool_specs(), & &1["name"])
+    assert "kb_delete_page" in names
+    assert "kb_delete_asset" in names
+    assert "kb_delete_folder" in names
+  end
+
+  test "kb_delete_page removes an existing page" do
+    KnowledgeBaseTools.execute(
+      "acme",
+      "kb_create_page",
+      %{"repository" => "acme/web", "path" => "guides/tmp.md", "title" => "T", "body" => "x"},
+      []
+    )
+
+    assert {:ok, result} =
+             KnowledgeBaseTools.execute("acme", "kb_delete_page", %{"repository" => "acme/web", "path" => "guides/tmp.md"}, [])
+
+    assert result.tool == "kb_delete_page"
+
+    assert {:error, :kb_page_not_found} =
+             KnowledgeBaseTools.execute("acme", "kb_read_page", %{"repository" => "acme/web", "path" => "guides/tmp.md"}, [])
+  end
+
+  test "kb_delete_page on a missing page returns page_not_found" do
+    assert {:error, :kb_page_not_found} =
+             KnowledgeBaseTools.execute("acme", "kb_delete_page", %{"repository" => "acme/web", "path" => "nope.md"}, [])
+  end
+
+  test "kb_delete_folder removes a folder and all pages within it" do
+    KnowledgeBaseTools.execute(
+      "acme",
+      "kb_create_page",
+      %{"repository" => "acme/web", "path" => "trash/a.md", "title" => "A", "body" => "x"},
+      []
+    )
+
+    KnowledgeBaseTools.execute(
+      "acme",
+      "kb_create_page",
+      %{"repository" => "acme/web", "path" => "trash/sub/b.md", "title" => "B", "body" => "y"},
+      []
+    )
+
+    assert {:ok, result} =
+             KnowledgeBaseTools.execute("acme", "kb_delete_folder", %{"repository" => "acme/web", "path" => "trash"}, [])
+
+    assert result.tool == "kb_delete_folder"
+    assert length(result.data.pages) == 2
+
+    assert {:error, :kb_page_not_found} =
+             KnowledgeBaseTools.execute("acme", "kb_read_page", %{"repository" => "acme/web", "path" => "trash/a.md"}, [])
+  end
+
+  test "kb_delete_folder on a missing folder returns folder_not_found" do
+    assert {:error, :kb_folder_not_found} =
+             KnowledgeBaseTools.execute("acme", "kb_delete_folder", %{"repository" => "acme/web", "path" => "ghost"}, [])
+  end
 end

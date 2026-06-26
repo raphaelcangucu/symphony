@@ -230,6 +230,17 @@ export async function deleteAsset(
   return unwrapData<SaveResultDto>(response);
 }
 
+export async function deleteFolder(
+  projectSlug: string,
+  repoSlug: string,
+  path: string,
+): Promise<KbSaveResult> {
+  const response = await http.delete(
+    trackerPath(`${repoBase(projectSlug, repoSlug)}/folders/${encodePagePath(path)}`),
+  );
+  return unwrapData<SaveResultDto>(response);
+}
+
 export async function searchProject(
   projectSlug: string,
   q: string,

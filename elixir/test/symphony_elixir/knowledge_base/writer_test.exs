@@ -140,5 +140,28 @@ defmodule SymphonyElixir.KnowledgeBase.WriterTest do
     assert {:error, :kb_invalid_path} = Writer.delete_asset(ws, "../../etc/passwd")
   end
 
+  test "delete_folder removes the directory recursively and reports nested pages", %{ws: ws} do
+    {:ok, _} = Writer.write_page(ws, ["guides", "intro.md"], %{frontmatter: %{}, body: "a"})
+    {:ok, _} = Writer.write_page(ws, ["guides", "deep", "more.md"], %{frontmatter: %{}, body: "b"})
+    {:ok, _} = Writer.store_asset(ws, "x.png", <<137, 80, 78, 71>>, name: "inside")
+
+    assert {:ok, result} = Writer.delete_folder(ws, ["guides"])
+    assert result.path == "guides"
+    assert Enum.sort(result.pages) == ["guides/deep/more.md", "guides/intro.md"]
+    refute File.dir?(Path.join(ws.docs_root, "guides"))
+    # Sibling content outside the folder is untouched.
+    assert File.exists?(Path.join(ws.docs_root, "assets/inside.png"))
+    assert {:ok, ""} = SymphonyElixir.KnowledgeBase.Git.status_porcelain(ws.worktree)
+  end
+
+  test "delete_folder reports a missing directory", %{ws: ws} do
+    assert {:error, :kb_folder_not_found} = Writer.delete_folder(ws, ["ghost"])
+  end
+
+  test "delete_folder rejects path traversal", %{ws: ws} do
+    assert {:error, :kb_invalid_path} = Writer.delete_folder(ws, ["..", "etc"])
+    assert {:error, :kb_invalid_path} = Writer.delete_folder(ws, [""])
+  end
+
   defp sh(dir, args), do: {_o, 0} = System.cmd("git", args, cd: dir, stderr_to_stdout: true)
 end

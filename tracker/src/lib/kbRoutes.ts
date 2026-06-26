@@ -35,6 +35,15 @@ export function kbPagePath(projectSlug: string, repoSlug: string, pagePath: stri
   return `${kbRepoPath(projectSlug, repoSlug)}/${encodePagePath(pagePath)}`;
 }
 
+/**
+ * The personal (cross-project) KB is modeled as a single-repository
+ * pseudo-project under the `@user` scope so it can reuse every project-KB
+ * component, hook, endpoint, and the assistant. These mirror the Elixir
+ * `Paths.user_scope/0` and `Paths.general_repo_slug/0` constants.
+ */
+export const GENERAL_KB_PROJECT_SLUG = "@user";
+export const GENERAL_KB_REPO_SLUG = "@user~symphony-kb";
+
 export function kbGeneralPath(): string {
   return "/kb";
 }

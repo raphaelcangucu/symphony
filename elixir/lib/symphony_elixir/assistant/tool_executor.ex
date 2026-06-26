@@ -577,6 +577,18 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   @spec execute(String.t(), String.t(), map(), keyword()) :: {:ok, result()} | {:error, term()}
+  # The personal KB (`@user`) is a pseudo-project with no tracker row. Its
+  # assistant only operates on knowledge-base tools, so dispatch those directly
+  # and reject project-board tools that would require a real `%Project{}`.
+  def execute("@user", tool, arguments, opts)
+      when is_binary(tool) and is_map(arguments) do
+    if tool in @kb_tools do
+      KnowledgeBaseTools.execute("@user", tool, arguments, opts)
+    else
+      {:error, :invalid_arguments}
+    end
+  end
+
   def execute(project_slug, tool, arguments, opts)
       when is_binary(project_slug) and is_binary(tool) and is_map(arguments) do
     with {:ok, project_slug} <- normalize_required_string(project_slug, :project_slug),

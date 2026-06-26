@@ -9,8 +9,8 @@ defmodule SymphonyElixir.KnowledgeBase.HomePageTest do
     assert {:ok, page} = MarkdownPage.parse(out)
     assert page.frontmatter["generated"] == true
     assert page.frontmatter["title"] == "Knowledge Base"
-    assert page.body =~ "- [Acme](/projects/acme/kb)"
-    assert page.body =~ "- [Beta](/projects/beta/kb)"
+    assert page.body =~ "- [Acme](/tracker/projects/acme/kb)"
+    assert page.body =~ "- [Beta](/tracker/projects/beta/kb)"
   end
 
   test "render handles an empty project list with a placeholder" do

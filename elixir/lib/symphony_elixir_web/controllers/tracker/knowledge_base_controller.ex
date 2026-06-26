@@ -52,6 +52,14 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
     end
   end
 
+  @spec delete_folder(Conn.t(), map()) :: Conn.t()
+  def delete_folder(conn, %{"project_slug" => slug, "repo" => repo, "path" => path}) do
+    case KnowledgeBase.delete_folder(slug, repo, path) do
+      {:ok, result} -> json(conn, %{data: result})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec move_page(Conn.t(), map()) :: Conn.t()
   def move_page(conn, %{"project_slug" => slug, "repo" => repo, "from" => from, "to" => to}) do
     case KnowledgeBase.move_page(slug, repo, String.split(from, "/"), String.split(to, "/")) do
@@ -108,7 +116,8 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
     case KnowledgeBase.read_asset(slug, repo, path) do
       {:ok, bytes, content_type} ->
         conn
-        |> put_resp_content_type(content_type, nil)
+        |> put_resp_content_type(content_type, asset_charset(content_type))
+        |> put_resp_header("x-content-type-options", "nosniff")
         |> put_resp_header("cache-control", "private, max-age=300")
         |> send_resp(200, bytes)
 
@@ -116,6 +125,9 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
         TrackerErrors.render(conn, reason)
     end
   end
+
+  defp asset_charset("text/" <> _), do: "utf-8"
+  defp asset_charset(_), do: nil
 
   @spec search_project(Conn.t(), map()) :: Conn.t()
   def search_project(conn, %{"project_slug" => slug} = params) do
@@ -169,8 +181,10 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
 
   @spec general_connect(Conn.t(), map()) :: Conn.t()
   def general_connect(conn, _params) do
-    case KnowledgeBase.general_connect() do
-      {:ok, _ws} -> json(conn, %{data: %{connected: true}})
+    with {:ok, _ws} <- KnowledgeBase.general_connect(),
+         {:ok, _home} <- KnowledgeBase.general_ensure_home() do
+      json(conn, %{data: %{connected: true}})
+    else
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end

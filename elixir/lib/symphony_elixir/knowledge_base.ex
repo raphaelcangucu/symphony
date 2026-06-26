@@ -26,6 +26,8 @@ defmodule SymphonyElixir.KnowledgeBase do
   alias SymphonyElixir.LocalTracker.Context
 
   @user_scope "@user"
+  @general_repo_workspace "symphony-kb"
+  @general_project_name "Personal"
 
   @type error ::
           :project_not_found
@@ -44,6 +46,18 @@ defmodule SymphonyElixir.KnowledgeBase do
           | {:kb_clone_failed, term()}
 
   @spec project_overview(String.t()) :: {:ok, map()} | {:error, :project_not_found}
+  # The personal KB is exposed as a single-repository pseudo-project under the
+  # `@user` scope so it can reuse every project-KB component, endpoint, and the
+  # assistant. Connection state is inferred from the local checkout without
+  # cloning, so loading the overview has no side effects.
+  def project_overview(@user_scope) do
+    {:ok,
+     %{
+       project: %{slug: @user_scope, name: @general_project_name},
+       repositories: [general_repo_info(general_docs_present?())]
+     }}
+  end
+
   def project_overview(project_slug) when is_binary(project_slug) do
     with {:ok, project} <- Context.get_project(project_slug) do
       {:ok,
@@ -55,10 +69,23 @@ defmodule SymphonyElixir.KnowledgeBase do
   end
 
   @spec repo_tree(String.t(), String.t()) :: {:ok, map()} | {:error, error()}
+  def repo_tree(@user_scope, _repo_slug) do
+    with {:ok, ws} <- general_workspace() do
+      {:ok,
+       %{
+         repository: general_repo_summary(),
+         docs_present: File.dir?(ws.docs_root),
+         tree: Tree.build(ws.docs_root)
+       }}
+    end
+  end
+
   def repo_tree(project_slug, repo_slug) when is_binary(project_slug) and is_binary(repo_slug) do
     with {:ok, _project} <- Context.get_project(project_slug),
          {:ok, repo} <- RepoDocs.fetch_repository(project_slug, repo_slug),
          {:ok, docs_root} <- ensure_docs_root(project_slug, repo) do
+      reindex_docs_root(project_slug, repo_slug, docs_root)
+
       {:ok,
        %{
          repository: repo_summary(repo),
@@ -70,6 +97,24 @@ defmodule SymphonyElixir.KnowledgeBase do
 
   @spec read_page(String.t(), String.t(), [String.t()] | String.t()) ::
           {:ok, map()} | {:error, error()}
+  def read_page(@user_scope, _repo_slug, rel) do
+    with {:ok, ws} <- general_workspace(),
+         {:ok, abs} <- Paths.resolve_page_in(ws.docs_root, rel),
+         :ok <- ensure_regular_file(abs),
+         {:ok, content} <- read_file(abs),
+         {:ok, page} <- MarkdownPage.parse(content, default_title: default_title(rel)) do
+      {:ok,
+       %{
+         repo_slug: Paths.general_repo_slug(),
+         path: normalize_rel(rel),
+         title: page.title,
+         frontmatter: page.frontmatter,
+         body: page.body,
+         content: content
+       }}
+    end
+  end
+
   def read_page(project_slug, repo_slug, rel)
       when is_binary(project_slug) and is_binary(repo_slug) do
     with {:ok, _project} <- Context.get_project(project_slug),
@@ -140,6 +185,22 @@ defmodule SymphonyElixir.KnowledgeBase do
     end
   end
 
+  @spec delete_folder(String.t(), String.t(), [String.t()] | String.t()) ::
+          {:ok, map()} | {:error, error()}
+  def delete_folder(project_slug, repo_slug, rel) do
+    with {:ok, ws} <- ensure_workspace(project_slug, repo_slug),
+         {:ok, result} <- Writer.delete_folder(ws, rel, push: true) do
+      Enum.each(result.pages, &Indexer.remove_page(project_slug, repo_slug, &1))
+
+      Broadcaster.kb_event(project_slug, "kb_folder_deleted", %{
+        repo_slug: repo_slug,
+        path: result.path
+      })
+
+      {:ok, result}
+    end
+  end
+
   @spec store_asset(String.t(), String.t(), String.t(), binary(), keyword()) ::
           {:ok, map()} | {:error, error()}
   def store_asset(project_slug, repo_slug, filename, bytes, opts \\ []) do
@@ -182,21 +243,57 @@ defmodule SymphonyElixir.KnowledgeBase do
 
   @spec read_asset(String.t(), String.t(), [String.t()] | String.t()) ::
           {:ok, binary(), String.t()} | {:error, error()}
-  def read_asset(project_slug, repo_slug, rel)
-      when is_binary(project_slug) and is_binary(repo_slug) do
-    with {:ok, _project} <- Context.get_project(project_slug),
-         {:ok, repo} <- RepoDocs.fetch_repository(project_slug, repo_slug),
-         {:ok, docs_root} <- ensure_docs_root(project_slug, repo),
-         {:ok, abs} <- Paths.resolve_asset_in(docs_root, rel),
-         :ok <- ensure_regular_file(abs),
+  def read_asset(@user_scope, _repo_slug, rel) do
+    with {:ok, ws} <- general_workspace(),
+         {:ok, abs} <- resolve_readable_asset(ws.docs_root, rel),
          {:ok, bytes} <- read_file(abs) do
       {:ok, bytes, asset_content_type(abs)}
     end
   end
 
+  def read_asset(project_slug, repo_slug, rel)
+      when is_binary(project_slug) and is_binary(repo_slug) do
+    with {:ok, _project} <- Context.get_project(project_slug),
+         {:ok, repo} <- RepoDocs.fetch_repository(project_slug, repo_slug),
+         {:ok, docs_root} <- ensure_docs_root(project_slug, repo),
+         {:ok, abs} <- resolve_readable_asset(docs_root, rel),
+         {:ok, bytes} <- read_file(abs) do
+      {:ok, bytes, asset_content_type(abs)}
+    end
+  end
+
+  # Resolves an asset path against the docs/ folder first (KB-uploaded assets
+  # under `assets/`), then against the repository worktree root, so pages can
+  # reference any project file (e.g. `../advisestream/web/css/images/logo.png`).
+  # Each root confines resolution to itself; symlinks are skipped so reads can
+  # never escape the worktree.
+  defp resolve_readable_asset(docs_root, rel) do
+    with {:ok, _safe_rel} <- Paths.safe_asset_relative_path(rel) do
+      worktree_root = Path.dirname(docs_root)
+
+      candidate =
+        [docs_root, worktree_root]
+        |> Enum.map(fn root ->
+          case Paths.resolve_asset_in(root, rel) do
+            {:ok, abs} -> abs
+            _ -> nil
+          end
+        end)
+        |> Enum.find(fn abs -> is_binary(abs) and regular_file?(abs) end)
+
+      if candidate, do: {:ok, candidate}, else: {:error, :kb_page_not_found}
+    end
+  end
+
   @spec search_project(String.t(), String.t(), keyword()) ::
           {:ok, [map()]} | {:error, error()}
-  def search_project(project_slug, query, opts \\ []) when is_binary(project_slug) do
+  def search_project(project_slug, query, opts \\ [])
+
+  def search_project(@user_scope, query, opts) when is_binary(query) do
+    Search.search_global(@user_scope, query, opts)
+  end
+
+  def search_project(project_slug, query, opts) when is_binary(project_slug) do
     with {:ok, _project} <- Context.get_project(project_slug) do
       Search.search_project(project_slug, query, opts)
     end
@@ -210,6 +307,10 @@ defmodule SymphonyElixir.KnowledgeBase do
   @doc "Connects (cloning if needed) the user's personal `symphony-kb` repository."
   @spec general_connect() :: {:ok, map()} | {:error, error()}
   def general_connect, do: GeneralKb.connect(general_deps())
+
+  @doc "Ensures the general KB home page exists, generating it when missing."
+  @spec general_ensure_home() :: {:ok, map()} | {:error, error()}
+  def general_ensure_home, do: GeneralKb.ensure_home(general_deps())
 
   @doc "Returns the general KB overview (connection state + page tree)."
   @spec general_overview() :: {:ok, map()} | {:error, error()}
@@ -259,6 +360,10 @@ defmodule SymphonyElixir.KnowledgeBase do
   end
 
   @spec request_sync(String.t(), String.t()) :: :ok | {:error, term()}
+  # The personal KB pushes edits directly to its own branch, so there is no
+  # default-branch merge / PR sync worker to schedule.
+  def request_sync(@user_scope, _repo_slug), do: :ok
+
   def request_sync(project_slug, repo_slug) do
     case SyncSupervisor.ensure_worker(project_slug, repo_slug) do
       {:ok, pid} -> SyncWorker.run_now(pid)
@@ -267,6 +372,10 @@ defmodule SymphonyElixir.KnowledgeBase do
   end
 
   @spec sync_status(String.t(), String.t()) :: {:ok, map()} | {:error, error()}
+  def sync_status(@user_scope, _repo_slug) do
+    {:ok, %{status: :idle, pr_number: nil, pr_url: nil, last_error: nil, last_synced_at: nil}}
+  end
+
   def sync_status(project_slug, repo_slug) do
     with {:ok, _project} <- Context.get_project(project_slug) do
       state = SyncState.get(project_slug, repo_slug)
@@ -282,6 +391,19 @@ defmodule SymphonyElixir.KnowledgeBase do
     end
   end
 
+  # Best-effort: full reindex of a repository's docs straight from the worktree.
+  # The sidebar tree is read directly from disk, so listing a repo is the moment
+  # to make every page on disk searchable — including docs cloned from Git that
+  # were never authored through Symphony (so `index_page` never saw them). The
+  # reindex is idempotent (upsert + prune of vanished files) and must never abort
+  # a tree listing, so all failures are swallowed.
+  defp reindex_docs_root(project_slug, repo_slug, docs_root) do
+    Indexer.reindex_dir(project_slug, repo_slug, docs_root)
+    :ok
+  rescue
+    _ -> :ok
+  end
+
   # Best-effort: re-read the just-written file from the worktree and refresh the
   # search index. Index failures never abort a successful Git write.
   defp index_path(project_slug, repo_slug, %{docs_root: docs_root}, rel) do
@@ -293,12 +415,42 @@ defmodule SymphonyElixir.KnowledgeBase do
     :ok
   end
 
+  defp ensure_workspace(@user_scope, _repo_slug), do: general_workspace()
+
   defp ensure_workspace(project_slug, repo_slug) do
     with {:ok, _project} <- Context.get_project(project_slug),
          {:ok, repo} <- RepoDocs.fetch_repository(project_slug, repo_slug),
          {:ok, checkout} <- ensure_checkout(project_slug, repo) do
       Workspace.ensure(checkout, base_branch: configured_branch(repo))
     end
+  end
+
+  defp general_workspace, do: GeneralKb.connect(general_deps())
+
+  # Reports whether the personal KB has a docs/ tree without ever cloning: when
+  # the checkout is not present yet it is simply "not connected" (no docs).
+  defp general_docs_present? do
+    if File.dir?(Path.join(Paths.general_kb_checkout(), ".git")) do
+      case general_workspace() do
+        {:ok, ws} -> File.dir?(ws.docs_root)
+        _ -> false
+      end
+    else
+      false
+    end
+  end
+
+  defp general_repo_summary do
+    %{
+      repo_slug: Paths.general_repo_slug(),
+      workspace_path: @general_repo_workspace,
+      github_full_name: nil,
+      role: nil
+    }
+  end
+
+  defp general_repo_info(docs_present) when is_boolean(docs_present) do
+    Map.put(general_repo_summary(), :docs_present?, docs_present)
   end
 
   defp ensure_docs_root(project_slug, repo) do
@@ -362,6 +514,12 @@ defmodule SymphonyElixir.KnowledgeBase do
     end
   end
 
+  # `File.lstat/1` does not follow symlinks, so a symlinked path is rejected
+  # here - this keeps asset reads inside the worktree even if a link points out.
+  defp regular_file?(abs) do
+    match?({:ok, %File.Stat{type: :regular}}, File.lstat(abs))
+  end
+
   defp read_file(abs) do
     case File.read(abs) do
       {:ok, content} -> {:ok, content}
@@ -385,6 +543,16 @@ defmodule SymphonyElixir.KnowledgeBase do
     rel |> normalize_rel() |> Path.basename() |> String.replace_suffix(".md", "")
   end
 
+  @text_asset_extensions ~w(.txt .md .markdown .log .csv .tsv .json .yml .yaml
+                            .xml .sql .sh .bash .zsh .js .mjs .cjs .ts .tsx .jsx
+                            .css .scss .sass .less .php .py .rb .go .rs .java .kt
+                            .c .h .cc .cpp .hpp .cs .swift .vue .svelte .toml
+                            .ini .conf .cfg .properties .gradle .lock .gitignore
+                            .dockerignore .editorconfig .html .htm)
+
+  # Known extensions render inline; everything else (including unknown binaries)
+  # falls back to a download. Code/text is served as `text/plain` so the browser
+  # shows the source rather than executing it (no same-origin HTML/JS execution).
   defp asset_content_type(path) do
     case Path.extname(path) |> String.downcase() do
       ".png" -> "image/png"
@@ -392,7 +560,11 @@ defmodule SymphonyElixir.KnowledgeBase do
       ".jpeg" -> "image/jpeg"
       ".gif" -> "image/gif"
       ".webp" -> "image/webp"
-      _ -> "application/octet-stream"
+      ".svg" -> "image/svg+xml"
+      ".bmp" -> "image/bmp"
+      ".ico" -> "image/x-icon"
+      ".pdf" -> "application/pdf"
+      ext -> if ext in @text_asset_extensions, do: "text/plain", else: "application/octet-stream"
     end
   end
 end

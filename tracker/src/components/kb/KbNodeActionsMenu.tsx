@@ -76,12 +76,12 @@ export function KbNodeActionsMenu({
             {t("kb.actions.createFolder")}
           </DropdownMenuItem>
         ) : null}
-        {(variant === "page" || variant === "asset") && onDelete ? (
+        {onDelete ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
               <Trash2 className="mr-2 h-4 w-4" />
-              {t("kb.actions.delete")}
+              {variant === "folder" ? t("kb.actions.deleteFolder") : t("kb.actions.delete")}
             </DropdownMenuItem>
           </>
         ) : null}

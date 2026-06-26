@@ -47,16 +47,35 @@ defmodule SymphonyElixir.KnowledgeBase.PathsTest do
   end
 
   describe "safe_asset_relative_path/1" do
-    test "accepts assets under docs/assets" do
+    test "accepts KB-uploaded assets under assets/" do
       assert Paths.safe_asset_relative_path(["assets", "logo.png"]) == {:ok, "assets/logo.png"}
     end
 
-    test "accepts image files elsewhere under docs" do
+    test "accepts image files elsewhere in the worktree" do
       assert Paths.safe_asset_relative_path(["images", "diagram.png"]) == {:ok, "images/diagram.png"}
     end
 
-    test "rejects non-image paths outside assets" do
-      assert Paths.safe_asset_relative_path(["notes.txt"]) == {:error, :kb_invalid_path}
+    test "accepts arbitrary project files (images and non-images)" do
+      assert Paths.safe_asset_relative_path(["advisestream", "web", "css", "images", "logo.png"]) ==
+               {:ok, "advisestream/web/css/images/logo.png"}
+
+      assert Paths.safe_asset_relative_path(["docs", "DBDUMP.sql"]) == {:ok, "docs/DBDUMP.sql"}
+      assert Paths.safe_asset_relative_path(["notes.txt"]) == {:ok, "notes.txt"}
+    end
+
+    test "rejects parent traversal, empty segments, and absolute paths" do
+      assert Paths.safe_asset_relative_path(["..", "secret.png"]) == {:error, :kb_invalid_path}
+      assert Paths.safe_asset_relative_path(["a", "", "b.png"]) == {:error, :kb_invalid_path}
+      assert Paths.safe_asset_relative_path([]) == {:error, :kb_invalid_path}
+      assert Paths.safe_asset_relative_path("/etc/passwd") == {:error, :kb_invalid_path}
+    end
+
+    test "rejects git internals and secret dotfiles" do
+      assert Paths.safe_asset_relative_path([".git", "config"]) == {:error, :kb_invalid_path}
+      assert Paths.safe_asset_relative_path(["sub", ".git", "HEAD"]) == {:error, :kb_invalid_path}
+      assert Paths.safe_asset_relative_path([".env"]) == {:error, :kb_invalid_path}
+      assert Paths.safe_asset_relative_path(["config", ".env.production"]) ==
+               {:error, :kb_invalid_path}
     end
   end
 end

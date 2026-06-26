@@ -103,6 +103,39 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseWriteControllerTest do
     assert byte_size(conn.resp_body) > 0
   end
 
+  test "GET asset serves a project file stored outside docs/ (worktree root)" do
+    commit_project_file("advisestream/web/css/images/logo.png", <<137, 80, 78, 71, 13, 10, 26, 10>>)
+
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/acme/kb/repos/web/assets/advisestream/web/css/images/logo.png"
+      )
+
+    assert conn.status == 200
+    assert hd(get_resp_header(conn, "content-type")) |> String.starts_with?("image/png")
+    assert byte_size(conn.resp_body) > 0
+    assert "nosniff" in get_resp_header(conn, "x-content-type-options")
+  end
+
+  test "GET asset serves a project code file as text/plain" do
+    commit_project_file("advisestream/web/config/app.php", "<?php echo 'hi'; ?>\n")
+
+    conn =
+      get(authorized_conn(), "/api/tracker/v1/projects/acme/kb/repos/web/assets/advisestream/web/config/app.php")
+
+    assert conn.status == 200
+    assert hd(get_resp_header(conn, "content-type")) |> String.starts_with?("text/plain")
+  end
+
+  test "GET asset rejects git internals and secret dotfiles" do
+    git_conn = get(authorized_conn(), "/api/tracker/v1/projects/acme/kb/repos/web/assets/.git/config")
+    assert json_response(git_conn, 422)["error"]["code"] == "kb_invalid_path"
+
+    env_conn = get(authorized_conn(), "/api/tracker/v1/projects/acme/kb/repos/web/assets/.env")
+    assert json_response(env_conn, 422)["error"]["code"] == "kb_invalid_path"
+  end
+
   test "PUT with traversal path is rejected" do
     conn =
       put(authorized_conn(), "/api/tracker/v1/projects/acme/kb/repos/web/pages/notes.txt", %{
@@ -114,6 +147,18 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseWriteControllerTest do
   end
 
   defp authorized_conn, do: build_conn() |> put_req_header("authorization", "Bearer secret")
+
+  # Commits a file into the repo checkout on `main`. The KB's `symphony-docs`
+  # worktree branches from main, so the file becomes a servable project asset
+  # that lives outside the `docs/` folder.
+  defp commit_project_file(rel, contents) do
+    checkout = SymphonyElixir.KnowledgeBase.Paths.repo_checkout("acme", "web")
+    abs = Path.join(checkout, rel)
+    File.mkdir_p!(Path.dirname(abs))
+    File.write!(abs, contents)
+    git(checkout, ["add", "-A"])
+    git(checkout, ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "add #{rel}"])
+  end
 
   defp write_tmp_png do
     p = Path.join(System.tmp_dir!(), "kb-#{System.unique_integer([:positive])}.png")

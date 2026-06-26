@@ -21,17 +21,27 @@ defmodule SymphonyElixir.GitHub.AttachmentRewriter do
   `restore/3` is the inverse, applied when reading remote bodies back during sync
   so the local store keeps local-first attachment URLs (the tracker renders those
   through its own authenticated endpoint) while GitHub keeps the raw URLs.
+
+  Assets uploaded from another machine/project are not present in this project's
+  local uploads, so `restore/3` cannot map them back. `proxy_remote_assets/2`
+  rewrites those still-remote managed URLs to a bearer-authenticated tracker proxy
+  path (`.../github/assets/<owner>/<repo>/<basename>`) so the SPA can render them
+  without persisting anything locally; `download_asset/4` is the matching fetch the
+  proxy controller uses to stream the bytes from GitHub with the configured token.
   """
 
   require Logger
 
   alias SymphonyElixir.Assistant.AttachmentStore
-  alias SymphonyElixir.GitHub.Client
+  alias SymphonyElixir.GitHub.{Client, Config}
 
   @assets_branch "symphony-assets"
   @assets_dir "assets"
   @api_prefix "/api/tracker/v1"
   @managed_marker "/raw/#{@assets_branch}/#{@assets_dir}/"
+  @rest_endpoint "https://api.github.com"
+  @request_timeout_ms 30_000
+  @asset_basename_regex ~r/^[0-9a-fA-F]+\.[A-Za-z0-9]+$/
 
   @doc """
   Returns true when `body` references at least one Symphony-local attachment for
@@ -98,6 +108,51 @@ defmodule SymphonyElixir.GitHub.AttachmentRewriter do
   end
 
   def restore(body, _slug, _opts), do: body
+
+  @doc """
+  Rewrites Symphony-managed GitHub raw asset URLs that remain in `body` (i.e. that
+  `restore/3` could not map to a local upload) into the project-scoped tracker
+  proxy path. Nothing is persisted: the proxy streams the bytes on demand.
+
+  Non-binary bodies and bodies without a managed asset are returned unchanged.
+  """
+  @spec proxy_remote_assets(term(), String.t()) :: term()
+  def proxy_remote_assets(body, slug) when is_binary(body) and is_binary(slug) do
+    if has_managed_asset?(body) do
+      Regex.replace(proxy_regex(), body, fn _full, owner, repo, basename ->
+        github_asset_proxy_url(slug, owner, repo, basename)
+      end)
+    else
+      body
+    end
+  end
+
+  def proxy_remote_assets(body, _slug), do: body
+
+  @doc """
+  Downloads the bytes of a Symphony-managed asset (`<owner>/<repo>/assets/<basename>`
+  on the assets branch) through the GitHub Contents API, authenticated with the
+  configured token. Returns `{:ok, %{content_type, body}}` for the proxy controller.
+
+  `basename` must be the content-addressed `<sha>.<ext>` form; anything else is
+  rejected with `{:error, :invalid_asset}` so the proxy cannot fetch arbitrary repo
+  paths. HTTP can be injected via the `:download_fun` option (or the
+  `:github_asset_download_fun` application env) and the token via `:token` for tests.
+  """
+  @spec download_asset(String.t(), String.t(), String.t(), keyword()) ::
+          {:ok, %{content_type: String.t(), body: binary()}} | {:error, term()}
+  def download_asset(owner, repo, basename, opts \\ [])
+
+  def download_asset(owner, repo, basename, opts)
+      when is_binary(owner) and is_binary(repo) and is_binary(basename) and is_list(opts) do
+    if valid_asset_basename?(basename) do
+      do_download_asset(owner, repo, basename, opts)
+    else
+      {:error, :invalid_asset}
+    end
+  end
+
+  def download_asset(_owner, _repo, _basename, _opts), do: {:error, :invalid_asset}
 
   defp replace_managed_asset(full, basename, index, slug) do
     case Map.get(index, basename) do
@@ -283,6 +338,99 @@ defmodule SymphonyElixir.GitHub.AttachmentRewriter do
   defp resolve_client(opts) do
     Keyword.get(opts, :client) || Application.get_env(:symphony_elixir, :github_rest_client, Client)
   end
+
+  defp proxy_regex do
+    Regex.compile!(
+      "https://github\\.com/([^/\\s]+)/([^/\\s]+)/raw/" <>
+        Regex.escape(@assets_branch) <>
+        "/" <>
+        Regex.escape(@assets_dir) <>
+        "/([0-9a-fA-F]+\\.[A-Za-z0-9]+)"
+    )
+  end
+
+  defp github_asset_proxy_url(slug, owner, repo, basename) do
+    "#{@api_prefix}/projects/#{encode_segment(slug)}/github/assets/" <>
+      "#{encode_segment(owner)}/#{encode_segment(repo)}/#{encode_segment(basename)}"
+  end
+
+  defp do_download_asset(owner, repo, basename, opts) do
+    case asset_token(opts) do
+      token when is_binary(token) and token != "" ->
+        request_fun = resolve_download_fun(opts)
+        url = asset_api_url(owner, repo, basename)
+        headers = asset_request_headers(token)
+
+        case request_fun.(url, headers) do
+          {:ok, %{status: status, body: body}} when status in 200..299 and is_binary(body) ->
+            {:ok, %{content_type: asset_content_type(basename), body: body}}
+
+          {:ok, %{status: status}} ->
+            Logger.warning("GitHub asset download failed status=#{status} #{owner}/#{repo}/#{basename}")
+            {:error, {:github_api_status, status}}
+
+          {:error, reason} ->
+            Logger.warning("GitHub asset download failed #{owner}/#{repo}/#{basename}: #{inspect(reason)}")
+            {:error, {:github_api_request, reason}}
+        end
+
+      _ ->
+        {:error, :missing_github_token}
+    end
+  end
+
+  defp asset_token(opts) do
+    case Keyword.get(opts, :token) do
+      token when is_binary(token) and token != "" -> token
+      _ -> Config.token()
+    end
+  end
+
+  defp resolve_download_fun(opts) do
+    Keyword.get(opts, :download_fun) ||
+      Application.get_env(:symphony_elixir, :github_asset_download_fun) ||
+      (&default_asset_download/2)
+  end
+
+  defp default_asset_download(url, headers) do
+    case Req.request(
+           method: :get,
+           url: url,
+           headers: headers,
+           decode_body: false,
+           redirect: true,
+           connect_options: [timeout: @request_timeout_ms]
+         ) do
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:ok, %{status: status, body: body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp asset_api_url(owner, repo, basename) do
+    "#{@rest_endpoint}/repos/#{encode_segment(owner)}/#{encode_segment(repo)}/" <>
+      "contents/#{@assets_dir}/#{encode_segment(basename)}?ref=#{@assets_branch}"
+  end
+
+  defp asset_request_headers(token) do
+    [
+      {"Authorization", "Bearer #{token}"},
+      {"Accept", "application/vnd.github.raw"},
+      {"X-GitHub-Api-Version", "2022-11-28"}
+    ]
+  end
+
+  defp asset_content_type(basename), do: AttachmentStore.content_type(basename)
+
+  defp valid_asset_basename?(basename) when is_binary(basename),
+    do: Regex.match?(@asset_basename_regex, basename)
+
+  defp valid_asset_basename?(_basename), do: false
+
+  defp encode_segment(value) when is_binary(value),
+    do: URI.encode(value, &URI.char_unreserved?/1)
 
   defp uri_path(path) do
     path

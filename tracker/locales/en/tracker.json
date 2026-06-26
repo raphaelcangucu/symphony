@@ -2027,7 +2027,7 @@
   "kb": {
     "loading": "Loading…",
     "saved": "Saved",
-    "sidebar": { "noDocs": "No docs yet" },
+    "sidebar": { "noDocs": "No docs yet", "pages": "Pages" },
     "actions": {
       "more": "Actions for {{title}}",
       "rename": "Rename",
@@ -2039,6 +2039,7 @@
       "folderPrompt": "Folder name",
       "folderCreated": "Folder created",
       "delete": "Delete",
+      "deleteFolder": "Delete folder",
       "deleteConfirm": "Move “{{title}}” to trash?",
       "deleted": "Page deleted",
       "renamed": "Page renamed",
@@ -2051,6 +2052,11 @@
       "unsaved": "Unsaved changes",
       "askAi": "Ask AI",
       "closeAssistant": "Close assistant",
+      "toc": {
+        "button": "Contents",
+        "label": "On this page",
+        "untitled": "Untitled"
+      },
       "placeholder": "Write something, or hover a line and click “+” to add a block… · paste images",
       "headingPlaceholder": "Heading",
       "paste": {
@@ -2095,6 +2101,15 @@
         "sizeMedium": "Medium",
         "sizeFull": "Full width",
         "delete": "Delete image"
+      },
+      "imagePicker": {
+        "insertTitle": "Insert image",
+        "replaceTitle": "Replace image",
+        "description": "Upload a new image or choose one from the assets gallery.",
+        "upload": "Upload image",
+        "searchPlaceholder": "Search images…",
+        "galleryEmpty": "No images in the assets folder yet.",
+        "noMatches": "No images match your search."
       }
     },
     "assistant": {
@@ -2117,6 +2132,8 @@
     "asset": {
       "openTab": "Open in new tab",
       "download": "Download",
+      "loading": "Loading image…",
+      "loadFailed": "Could not load this image.",
       "rename": "Rename image",
       "renamePlaceholder": "Image name…",
       "renamed": "Image renamed",
@@ -2129,6 +2146,10 @@
         "insert": "Insert",
         "skip": "Skip"
       }
+    },
+    "folder": {
+      "deleteConfirm": "Delete the folder “{{title}}” and everything inside it (all pages and images)? This cannot be undone.",
+      "deleted": "Folder deleted"
     },
     "search": {
       "label": "Search",

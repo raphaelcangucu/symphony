@@ -5,6 +5,7 @@ import { I18nextProvider } from "react-i18next";
 
 import { KbSidebar } from "@/components/kb/KbSidebar";
 import { i18n, initI18n } from "@/i18n";
+import { kbPagePath } from "@/lib/kbRoutes";
 import type { KbProjectOverview, KbTreeNode } from "@/types/knowledgeBase";
 
 await initI18n("en");
@@ -60,6 +61,7 @@ describe("KbSidebar", () => {
           onSelectRepo={() => {}}
           onSearchSelect={() => {}}
           treeHandlers={treeHandlers}
+          pageHref={(repoSlug, path) => kbPagePath("acme", repoSlug, path)}
           inlineEdit={{
             draft: null,
             rename: null,

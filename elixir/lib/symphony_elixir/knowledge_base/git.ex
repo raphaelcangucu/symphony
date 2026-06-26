@@ -44,18 +44,59 @@ defmodule SymphonyElixir.KnowledgeBase.Git do
   def ensure_worktree(checkout, branch, opts \\ []) do
     path = Path.join([checkout, ".worktrees", branch])
 
-    if File.dir?(path) do
-      {:ok, path}
-    else
-      File.mkdir_p!(Path.dirname(path))
-      args = worktree_add_args(checkout, branch, path, opts)
+    cond do
+      not File.dir?(path) ->
+        create_worktree(checkout, branch, path, opts)
 
-      case run(checkout, args, opts) do
-        {:ok, _} -> {:ok, path}
-        {:error, reason} -> {:error, {:worktree_failed, reason}}
-      end
+      healthy_worktree?(path, opts) ->
+        {:ok, path}
+
+      # The worktree exists but its branch is unborn (no commits). This happens
+      # when it was created from an unborn HEAD while the repository was still
+      # being cloned (a clone/worktree race). Self-heal by rebuilding it from a
+      # real base commit once one is available; if the repository is genuinely
+      # empty (e.g. a brand-new general KB) keep the orphan branch so the first
+      # write can seed it.
+      base_available?(checkout, opts) ->
+        heal_worktree(checkout, branch, path, opts)
+
+      true ->
+        {:ok, path}
     end
   end
+
+  defp create_worktree(checkout, branch, path, opts) do
+    File.mkdir_p!(Path.dirname(path))
+    args = worktree_add_args(checkout, branch, path, opts)
+
+    case run(checkout, args, opts) do
+      {:ok, _} -> {:ok, path}
+      {:error, reason} -> {:error, {:worktree_failed, reason}}
+    end
+  end
+
+  # Tears down a broken (unborn) worktree, then recreates it from a valid base.
+  # `worktree remove` is best-effort because an orphan worktree can refuse a
+  # clean removal; the explicit delete + prune guarantees a recreatable state.
+  defp heal_worktree(checkout, branch, path, opts) do
+    _ = run(checkout, ["worktree", "remove", "--force", path], opts)
+    if File.dir?(path), do: File.rm_rf!(path)
+    _ = run(checkout, ["worktree", "prune"], opts)
+    create_worktree(checkout, branch, path, opts)
+  end
+
+  # A worktree is healthy when its checked-out branch resolves to a commit.
+  defp healthy_worktree?(path, opts) do
+    match?({:ok, _}, run(path, ["rev-parse", "--verify", "--quiet", "HEAD"], opts))
+  end
+
+  # Whether a real base commit exists to branch the docs worktree from: either a
+  # resolvable configured base branch or a born HEAD on the checkout.
+  defp base_available?(checkout, opts) do
+    not is_nil(base_ref(checkout, opts)) or head_born?(checkout, opts)
+  end
+
+  defp head_born?(checkout, opts), do: ref_exists?(checkout, "HEAD", opts)
 
   @spec add(Path.t(), [String.t()], keyword()) :: :ok | {:error, term()}
   def add(dir, paths, opts \\ []) when is_list(paths) do

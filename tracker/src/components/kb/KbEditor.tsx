@@ -9,6 +9,7 @@ import { Placeholder } from "@tiptap/extension-placeholder";
 import { Markdown } from "tiptap-markdown";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
   Bold,
   Check,
@@ -24,14 +25,19 @@ import {
 
 import { useKbEditorPaste, type KbEditorPasteHandlers } from "@/hooks/useKbEditorPaste";
 import { type KbAssetContext, editorizeKbMarkdown, persistKbMarkdown } from "@/lib/kbAssets";
+import type { KbGalleryAsset } from "@/lib/kbGallery";
 import { cn } from "@/lib/utils";
 import { KbAssetNameDialog } from "./KbAssetNameDialog";
 import { KbImage } from "./KbImageExtension";
+import { KbImagePickerDialog } from "./KbImagePickerDialog";
 import { KbSpacerParagraph } from "./KbSpacerParagraph";
 import { KbBlockHandle } from "./KbBlockHandle";
+import { KbTableOfContents } from "./KbTableOfContents";
 import { KbPageActionsMenu } from "./KbPageActionsMenu";
 import { KbSyncBadge } from "./KbSyncBadge";
 import type { KbSyncState } from "@/types/knowledgeBase";
+
+type ImagePickerState = { mode: "insert"; pos?: number } | { mode: "replace"; pos: number };
 
 const AUTO_SAVE_DELAY_MS = 1500;
 
@@ -52,6 +58,8 @@ interface Props {
   onToggleFavorite?: () => void;
   onDelete?: () => void;
   assetContext?: KbAssetContext | null;
+  /** Existing image assets offered in the insert/replace gallery. */
+  assets?: KbGalleryAsset[];
   syncState?: KbSyncState | null;
   syncLoading?: boolean;
   onSync?: () => void;
@@ -114,6 +122,7 @@ export function KbEditor({
   onToggleFavorite,
   onDelete,
   assetContext = null,
+  assets = [],
   syncState,
   syncLoading = false,
   onSync,
@@ -123,6 +132,9 @@ export function KbEditor({
 }: Props) {
   const { t } = useTranslation();
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The scrollable editor surface, shared with the table of contents so it can
+  // resolve scroll targets and observe the active section.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const assetContextRef = useRef<KbAssetContext | null>(assetContext);
   const onRegisterContextRef = useRef<Props["onRegisterContext"]>(onRegisterContext);
   onRegisterContextRef.current = onRegisterContext;
@@ -196,15 +208,61 @@ export function KbEditor({
     onContainerDrop,
     pickAndInsertImage,
     replaceImage,
+    insertAssetReference,
+    replaceWithAssetReference,
   } = useKbEditorPaste({
     editor,
     assetContext,
     handlersRef,
   });
 
+  const [imagePicker, setImagePicker] = useState<ImagePickerState | null>(null);
+
+  const openInsertPicker = useCallback(
+    (pos?: number) => {
+      if (!assetContextRef.current) {
+        toast.error(t("kb.editor.paste.unavailable"));
+        return;
+      }
+      setImagePicker({ mode: "insert", pos });
+    },
+    [t],
+  );
+
+  // The image node view triggers replace through this ref; route it to the same
+  // picker dialog (upload or gallery) used for insertion.
   useEffect(() => {
-    replaceImageRef.current = replaceImage;
-  }, [replaceImage]);
+    replaceImageRef.current = (pos: number) => {
+      if (!assetContextRef.current) {
+        toast.error(t("kb.editor.paste.unavailable"));
+        return;
+      }
+      setImagePicker({ mode: "replace", pos });
+    };
+  }, [t]);
+
+  const closeImagePicker = useCallback(() => setImagePicker(null), []);
+
+  const handlePickerUpload = useCallback(() => {
+    setImagePicker((current) => {
+      if (!current) return null;
+      if (current.mode === "replace") replaceImage(current.pos);
+      else pickAndInsertImage(current.pos);
+      return null;
+    });
+  }, [pickAndInsertImage, replaceImage]);
+
+  const handlePickerSelect = useCallback(
+    (asset: KbGalleryAsset) => {
+      setImagePicker((current) => {
+        if (!current) return null;
+        if (current.mode === "replace") replaceWithAssetReference(current.pos, asset.path, asset.name);
+        else insertAssetReference(current.pos, asset.path, asset.name);
+        return null;
+      });
+    },
+    [insertAssetReference, replaceWithAssetReference],
+  );
 
   const serializeForSave = useCallback(
     (editorInstance: Editor) => {
@@ -227,6 +285,15 @@ export function KbEditor({
     },
     [editor, onSave, serializeForSave],
   );
+
+  // Force-save handler read lazily by the global Ctrl/Cmd+S listener. Keeping it
+  // in a ref lets the listener register once while always seeing the latest
+  // guards (saving/uploading) and persist closure without re-binding.
+  const forceSaveRef = useRef<() => void>(() => {});
+  forceSaveRef.current = () => {
+    if (saving || uploading) return;
+    void persist(true);
+  };
 
   // Load incoming page content without emitting an update (so loading a page
   // never triggers auto-save) and reset the baseline to its normalized form.
@@ -275,6 +342,25 @@ export function KbEditor({
     };
   }, [editor, persist]);
 
+  // Intercept Ctrl/Cmd+S so Chrome's native "Save page" dialog never opens and
+  // the shortcut force-saves the open document instead. preventDefault is called
+  // for the combo regardless of save guards so the browser dialog is always
+  // suppressed while a KB page is being edited.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isSaveCombo =
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "s";
+      if (!isSaveCombo) return;
+      event.preventDefault();
+      forceSaveRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const status = useMemo(() => {
     if (uploading) {
       return { icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />, label: t("kb.editor.paste.uploading") };
@@ -308,6 +394,9 @@ export function KbEditor({
             </span>
           )}
           {onSync ? <KbSyncBadge state={syncState ?? null} /> : null}
+          {editor ? (
+            <KbTableOfContents editor={editor} scrollContainerRef={scrollContainerRef} />
+          ) : null}
           {onToggleAssistant ? (
             <button
               type="button"
@@ -406,9 +495,10 @@ export function KbEditor({
         </BubbleMenu>
       )}
 
-      {editor && <KbBlockHandle editor={editor} onInsertImage={pickAndInsertImage} />}
+      {editor && <KbBlockHandle editor={editor} onInsertImage={openInsertPicker} />}
 
       <div
+        ref={scrollContainerRef}
         className="kb-editor flex-1 overflow-y-auto scrollbar-discrete"
         onDragOver={onContainerDragOver}
         onDrop={onContainerDrop}
@@ -425,6 +515,18 @@ export function KbEditor({
           suggestedName={pending.suggestedName}
           onConfirm={confirmPending}
           onCancel={cancelPending}
+        />
+      ) : null}
+
+      {imagePicker && assetContext ? (
+        <KbImagePickerDialog
+          mode={imagePicker.mode}
+          assetContext={assetContext}
+          assets={assets}
+          uploading={uploading}
+          onUpload={handlePickerUpload}
+          onSelect={handlePickerSelect}
+          onClose={closeImagePicker}
         />
       ) : null}
     </div>

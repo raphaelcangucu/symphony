@@ -105,6 +105,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/assistant/attachments/*path", AssistantController, :show_attachment)
     get("/projects/:project_slug/jira/attachments/:id", JiraAttachmentController, :show)
     delete("/projects/:project_slug/jira/attachments/:id", JiraAttachmentController, :delete)
+    get("/projects/:project_slug/github/assets/:owner/:repo/:basename", GitHubAssetController, :show)
     post("/projects/:project_slug/assistant/messages", AssistantController, :create)
     resources("/projects/:project_slug/issues", IssueController, only: [:index, :create, :show, :update])
     get("/projects/:project_slug/issues/:identifier/documents", IssueDocumentController, :index)
@@ -214,6 +215,12 @@ defmodule SymphonyElixirWeb.Router do
       "/projects/:project_slug/kb/repos/:repo/pages/*path",
       KnowledgeBaseController,
       :delete_page
+    )
+
+    delete(
+      "/projects/:project_slug/kb/repos/:repo/folders/*path",
+      KnowledgeBaseController,
+      :delete_folder
     )
 
     post("/projects/:project_slug/kb/repos/:repo/move", KnowledgeBaseController, :move_page)

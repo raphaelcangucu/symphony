@@ -91,9 +91,6 @@ defmodule SymphonyElixir.KnowledgeBase.Paths do
   @spec safe_asset_relative_path([String.t()] | String.t()) ::
           {:ok, String.t()} | {:error, :kb_invalid_path}
   def safe_asset_relative_path(segments) when is_list(segments) do
-    rel = Enum.join(segments, "/")
-    ext = rel |> Path.extname() |> String.downcase()
-
     cond do
       segments == [] ->
         {:error, :kb_invalid_path}
@@ -101,19 +98,45 @@ defmodule SymphonyElixir.KnowledgeBase.Paths do
       Enum.any?(segments, &unsafe_segment?/1) ->
         {:error, :kb_invalid_path}
 
-      String.starts_with?(rel, "assets/") ->
-        {:ok, rel}
-
-      image_extension?(ext) ->
-        {:ok, rel}
+      sensitive_asset_path?(segments) ->
+        {:error, :kb_invalid_path}
 
       true ->
-        {:error, :kb_invalid_path}
+        {:ok, Enum.join(segments, "/")}
     end
   end
 
   def safe_asset_relative_path(path) when is_binary(path),
     do: path |> String.split("/", trim: false) |> safe_asset_relative_path()
+
+  @spec safe_folder_relative_path([String.t()] | String.t()) ::
+          {:ok, String.t()} | {:error, :kb_invalid_path}
+  def safe_folder_relative_path(segments) when is_list(segments) do
+    cond do
+      segments == [] -> {:error, :kb_invalid_path}
+      Enum.any?(segments, &unsafe_segment?/1) -> {:error, :kb_invalid_path}
+      true -> {:ok, Enum.join(segments, "/")}
+    end
+  end
+
+  def safe_folder_relative_path(path) when is_binary(path),
+    do: path |> String.split("/", trim: false) |> safe_folder_relative_path()
+
+  @spec resolve_folder_in(Path.t(), [String.t()] | String.t()) ::
+          {:ok, Path.t()} | {:error, :kb_invalid_path}
+  def resolve_folder_in(docs_root, segments) when is_binary(docs_root) do
+    with {:ok, rel} <- safe_folder_relative_path(segments) do
+      root = Path.expand(docs_root)
+      full = root |> Path.join(rel) |> Path.expand()
+
+      # A folder must live strictly under docs/ - deleting the docs root itself is rejected.
+      if String.starts_with?(full, root <> "/") do
+        {:ok, full}
+      else
+        {:error, :kb_invalid_path}
+      end
+    end
+  end
 
   @spec resolve_asset_in(Path.t(), [String.t()] | String.t()) ::
           {:ok, Path.t()} | {:error, :kb_invalid_path}
@@ -136,5 +159,15 @@ defmodule SymphonyElixir.KnowledgeBase.Paths do
       not Regex.match?(@segment_regex, segment)
   end
 
-  defp image_extension?(ext), do: ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]
+  # Project files are served from the repository worktree, but the git internals
+  # and secret dotfiles must never be exposed - not even to authenticated
+  # operators who can read the rest of the tree.
+  defp sensitive_asset_path?(segments) do
+    Enum.any?(segments, &(&1 == ".git")) or secret_dotfile?(List.last(segments))
+  end
+
+  defp secret_dotfile?(name) when is_binary(name),
+    do: name == ".env" or String.starts_with?(name, ".env.")
+
+  defp secret_dotfile?(_), do: false
 end

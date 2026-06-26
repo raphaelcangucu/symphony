@@ -33,6 +33,22 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   } as unknown as typeof ResizeObserver;
 }
 
+// jsdom does not implement IntersectionObserver, which the KB editor's table of
+// contents uses to highlight the active section while the panel is open.
+if (typeof globalThis.IntersectionObserver === "undefined") {
+  globalThis.IntersectionObserver = class {
+    readonly root = null;
+    readonly rootMargin = "";
+    readonly thresholds: ReadonlyArray<number> = [];
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  } as unknown as typeof IntersectionObserver;
+}
+
 // jsdom does not implement layout, so Range geometry returns nothing. ProseMirror
 // (Tiptap) measures selection rects on every transaction; without these it throws
 // while rendering the editor in tests.

@@ -42,6 +42,10 @@ interface Props {
   onSearchSelect: (result: KbSearchResult) => void;
   treeHandlers: KbTreeHandlers;
   inlineEdit: KbInlineEdit;
+  /** Builds the route for a page/asset so the tree works in both KB scopes. */
+  pageHref: (repoSlug: string, pagePath: string) => string;
+  /** Hides the per-repository header chrome when the scope has one implicit repo. */
+  singleRepo?: boolean;
 }
 
 export function KbSidebar({
@@ -54,6 +58,8 @@ export function KbSidebar({
   onSearchSelect,
   treeHandlers,
   inlineEdit,
+  pageHref,
+  singleRepo = false,
 }: Props) {
   const { t } = useTranslation();
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(() => readCollapsedRepos());
@@ -89,44 +95,56 @@ export function KbSidebar({
       <div className="flex-1 overflow-y-auto p-2 pt-0 scrollbar-discrete">
         {overview.repositories.map((repo) => {
           const nodes = treesByRepo[repo.repoSlug] ?? [];
-          const collapsed = collapsedRepos.has(repo.repoSlug);
+          const collapsed = !singleRepo && collapsedRepos.has(repo.repoSlug);
           const isActiveRepo = activeRepo === repo.repoSlug;
           const repoDraftActive =
             inlineEdit.draft?.repoSlug === repo.repoSlug && inlineEdit.draft.parentPath === "";
 
           return (
             <section key={repo.repoSlug} className="mb-3">
-              <div
-                className={cn(
-                  "group/repo flex min-w-0 items-center rounded-md hover:bg-accent/50",
-                  isActiveRepo && "bg-accent/30",
-                )}
-              >
-                <button
-                  type="button"
-                  className="flex h-7 w-6 shrink-0 items-center justify-center text-muted-foreground"
-                  aria-expanded={!collapsed}
-                  onClick={() => toggleRepo(repo.repoSlug)}
-                >
-                  <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", !collapsed && "rotate-90")} />
-                </button>
-                <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <button
-                  type="button"
+              {singleRepo ? (
+                <div className="flex items-center justify-between px-1 pt-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("kb.sidebar.pages")}
+                  </span>
+                  <KbAddNodeButton
+                    onAddPage={() => treeHandlers.onStartAddPage(repo.repoSlug, "", null)}
+                    onCreateFolder={() => treeHandlers.onCreateFolder(repo.repoSlug, "")}
+                  />
+                </div>
+              ) : (
+                <div
                   className={cn(
-                    "min-w-0 flex-1 truncate px-1 py-1.5 text-left text-xs font-semibold uppercase tracking-wide",
-                    isActiveRepo ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                    "group/repo flex min-w-0 items-center rounded-md hover:bg-accent/50",
+                    isActiveRepo && "bg-accent/30",
                   )}
-                  title={repo.githubFullName ?? repo.workspacePath}
-                  onClick={() => onSelectRepo(repo.repoSlug)}
                 >
-                  {repo.workspacePath}
-                </button>
-                <KbAddNodeButton
-                  onAddPage={() => treeHandlers.onStartAddPage(repo.repoSlug, "", null)}
-                  onCreateFolder={() => treeHandlers.onCreateFolder(repo.repoSlug, "")}
-                />
-              </div>
+                  <button
+                    type="button"
+                    className="flex h-7 w-6 shrink-0 items-center justify-center text-muted-foreground"
+                    aria-expanded={!collapsed}
+                    onClick={() => toggleRepo(repo.repoSlug)}
+                  >
+                    <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", !collapsed && "rotate-90")} />
+                  </button>
+                  <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <button
+                    type="button"
+                    className={cn(
+                      "min-w-0 flex-1 truncate px-1 py-1.5 text-left text-xs font-semibold uppercase tracking-wide",
+                      isActiveRepo ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                    title={repo.githubFullName ?? repo.workspacePath}
+                    onClick={() => onSelectRepo(repo.repoSlug)}
+                  >
+                    {repo.workspacePath}
+                  </button>
+                  <KbAddNodeButton
+                    onAddPage={() => treeHandlers.onStartAddPage(repo.repoSlug, "", null)}
+                    onCreateFolder={() => treeHandlers.onCreateFolder(repo.repoSlug, "")}
+                  />
+                </div>
+              )}
 
               {!collapsed ? (
                 <div className="mt-0.5">
@@ -138,6 +156,7 @@ export function KbSidebar({
                       activePath={isActiveRepo ? activePath : null}
                       handlers={treeHandlers}
                       inlineEdit={inlineEdit}
+                      pageHref={pageHref}
                     />
                   ) : null}
                   {nodes.length === 0 && !repo.docsPresent && !repoDraftActive ? (

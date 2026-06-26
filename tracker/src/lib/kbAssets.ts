@@ -70,6 +70,20 @@ function relativeAssetLink(pagePath: string, assetPath: string): string {
   return relativePath(pageDir, assetPath);
 }
 
+/**
+ * Builds a link from the current page to a file stored at the repository
+ * worktree root (a project source file, not a KB-uploaded asset). Pages live
+ * under `docs/<pagePath>`, so reaching the worktree root means climbing out of
+ * the page's directory plus the `docs/` folder itself. Keeps the saved Markdown
+ * portable (e.g. `../advisestream/web/css/images/logo.png`).
+ */
+function repoRootRelativeLink(pagePath: string, assetPath: string): string {
+  const pageDir = pageDirectory(pagePath);
+  const depth = pageDir.length === 0 ? 0 : pageDir.split("/").filter(Boolean).length;
+  const ups = depth + 1;
+  return [...Array.from({ length: ups }, () => ".."), assetPath].join("/");
+}
+
 function relativePath(fromDir: string, targetPath: string): string {
   const from = fromDir.split("/").filter(Boolean);
   const to = targetPath.split("/").filter(Boolean);
@@ -110,17 +124,21 @@ export function resolveKbAssetUrl(src: string, ctx: KbAssetContext): string {
 }
 
 export function absolutizeKbAssetUrl(src: string, ctx: KbAssetContext): string | null {
-  const marker = "/assets/";
-  const idx = src.indexOf(marker);
+  if (!src || isExternalAssetSrc(src)) return null;
+
+  // Only rewrite our own KB asset API URLs; anything else is left untouched.
+  const apiPrefix = kbAssetApiPath(ctx.projectSlug, ctx.repoSlug, "");
+  const idx = src.indexOf(apiPrefix);
   if (idx === -1) return null;
 
-  const apiPrefix = kbAssetApiPath(ctx.projectSlug, ctx.repoSlug, "");
-  if (!src.startsWith(apiPrefix) && !src.includes(`${marker}`)) return null;
-
-  const encoded = src.slice(idx + marker.length).split("?")[0]?.split("#")[0] ?? "";
+  const encoded = src.slice(idx + apiPrefix.length).split("?")[0]?.split("#")[0] ?? "";
   const assetPath = decodeURIComponent(encoded);
-  if (!assetPath.startsWith("assets/")) return null;
-  return relativeAssetLink(ctx.pagePath, assetPath);
+  if (assetPath.length === 0) return null;
+
+  // KB-uploaded assets live under `docs/assets/`; everything else is a project
+  // file stored at the worktree root (referenced via `../`).
+  if (assetPath.startsWith("assets/")) return relativeAssetLink(ctx.pagePath, assetPath);
+  return repoRootRelativeLink(ctx.pagePath, assetPath);
 }
 
 function editorizeSrc(src: string, ctx: KbAssetContext): string {

@@ -105,6 +105,58 @@ defmodule SymphonyElixir.GitHub.AttachmentRewriterTest do
     assert AttachmentRewriter.restore(body, @slug) == body
   end
 
+  test "proxy_remote_assets/2 rewrites managed asset URLs to the project proxy path" do
+    raw = "https://github.com/#{@owner}/#{@repo}/raw/symphony-assets/assets/abc123.png"
+    body = "![image.png](#{raw})"
+
+    assert AttachmentRewriter.proxy_remote_assets(body, @slug) ==
+             "![image.png](/api/tracker/v1/projects/#{@slug}/github/assets/#{@owner}/#{@repo}/abc123.png)"
+  end
+
+  test "proxy_remote_assets/2 leaves local attachment URLs untouched" do
+    body = "![x](#{local_url("uploads/abc.png")})"
+    assert AttachmentRewriter.proxy_remote_assets(body, @slug) == body
+  end
+
+  test "proxy_remote_assets/2 passes non-binary bodies through unchanged" do
+    assert AttachmentRewriter.proxy_remote_assets(nil, @slug) == nil
+  end
+
+  test "download_asset/4 fetches bytes via the contents API for a managed asset" do
+    bytes = <<137, 80, 78, 71>>
+
+    download_fun = fn url, headers ->
+      send(self(), {:download, url, headers})
+      {:ok, %{status: 200, body: bytes}}
+    end
+
+    assert {:ok, %{content_type: "image/png", body: ^bytes}} =
+             AttachmentRewriter.download_asset(@owner, @repo, "abcDEF12.png",
+               token: "ghp_test",
+               download_fun: download_fun
+             )
+
+    assert_received {:download, url, headers}
+    assert url == "https://api.github.com/repos/#{@owner}/#{@repo}/contents/assets/abcDEF12.png?ref=symphony-assets"
+    assert {"Accept", "application/vnd.github.raw"} in headers
+    assert {"Authorization", "Bearer ghp_test"} in headers
+  end
+
+  test "download_asset/4 rejects a basename that is not content-addressed" do
+    assert {:error, :invalid_asset} =
+             AttachmentRewriter.download_asset(@owner, @repo, "../secret.png", token: "ghp_test")
+  end
+
+  test "download_asset/4 maps a remote 404 to a github_api_status error" do
+    download_fun = fn _url, _headers -> {:ok, %{status: 404, body: ""}} end
+
+    assert {:error, {:github_api_status, 404}} =
+             AttachmentRewriter.download_asset(@owner, @repo, "abc123.png",
+               token: "ghp_test",
+               download_fun: download_fun
+             )
+  end
+
   test "has_managed_asset?/1 detects Symphony-managed GitHub asset URLs" do
     assert AttachmentRewriter.has_managed_asset?("https://github.com/o/r/raw/symphony-assets/assets/abc.png")
 

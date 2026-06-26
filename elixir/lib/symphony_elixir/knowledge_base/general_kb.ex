@@ -92,13 +92,38 @@ defmodule SymphonyElixir.KnowledgeBase.GeneralKb do
   @spec search(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def search(query, opts \\ []), do: Search.search_global(Paths.user_scope(), query, opts)
 
+  @doc """
+  Ensures the general KB has a home page and returns it. Generates `index.md`
+  only when it is missing so reconnecting never clobbers an existing (possibly
+  edited) home page. Always resolves to the page record (with `body`).
+  """
+  @spec ensure_home(keyword()) :: {:ok, map()} | {:error, term()}
+  def ensure_home(deps \\ []) do
+    case read_page("index.md", deps) do
+      {:ok, page} ->
+        {:ok, page}
+
+      {:error, _reason} ->
+        with {:ok, _result} <- regenerate_home(deps) do
+          read_page("index.md", deps)
+        end
+    end
+  end
+
   defp clone_and_open(checkout, deps) do
     ensure_repo = Keyword.get(deps, :ensure_repo, &default_ensure_repo/0)
     clone = Keyword.get(deps, :clone, &default_clone/2)
 
     with {:ok, repo} <- ensure_repo.(),
-         {:ok, _} <- clone.(repo.clone_url, checkout) do
+         {:ok, _} <- clone_repo(clone, repo.clone_url, checkout) do
       Workspace.ensure(checkout)
+    end
+  end
+
+  defp clone_repo(clone, clone_url, checkout) do
+    case clone.(clone_url, checkout) do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, {:kb_clone_failed, reason}}
     end
   end
 

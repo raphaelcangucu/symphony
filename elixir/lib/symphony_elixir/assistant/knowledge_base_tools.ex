@@ -10,7 +10,9 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
   alias SymphonyElixir.KnowledgeBase.Paths
   alias SymphonyElixir.LocalTracker.Context
 
-  @tools ~w(kb_list_repositories kb_search_pages kb_read_page kb_create_page kb_update_page kb_link_task kb_sync)
+  @tools ~w(kb_list_repositories kb_search_pages kb_read_page kb_create_page kb_update_page kb_delete_page kb_delete_asset kb_delete_folder kb_link_task kb_sync)
+
+  @general_repo_workspace "symphony-kb"
 
   @spec tools() :: [String.t()]
   def tools, do: @tools
@@ -39,6 +41,37 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
       spec("kb_read_page", "Read a knowledge base page's content.", page_schema(["path"])),
       spec("kb_create_page", "Create a new knowledge base page (fails if it already exists).", page_write_schema()),
       spec("kb_update_page", "Update an existing knowledge base page.", page_write_schema()),
+      spec(
+        "kb_delete_page",
+        "Delete a knowledge base page (markdown file under docs/). Destructive: confirm the user's intent first.",
+        page_schema(["path"])
+      ),
+      spec(
+        "kb_delete_asset",
+        "Delete a knowledge base asset/image (file under docs/assets/). Destructive and may break pages that embed it; confirm first.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["path"],
+          "properties" => %{
+            "path" => string_schema("Asset path within docs, e.g. assets/diagram.png."),
+            "repository" => repository_schema()
+          }
+        }
+      ),
+      spec(
+        "kb_delete_folder",
+        "Delete a knowledge base folder and everything inside it (pages and assets), recursively. Highly destructive: always confirm the exact folder with the user first.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["path"],
+          "properties" => %{
+            "path" => string_schema("Folder path within docs, e.g. guides or architecture/backend."),
+            "repository" => repository_schema()
+          }
+        }
+      ),
       spec(
         "kb_link_task",
         "Append a reference to a tracker issue into a knowledge base page.",
@@ -103,6 +136,46 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
 
   def execute(project_slug, "kb_update_page", args, _opts) do
     write_page(project_slug, args, "kb_update_page", :must_exist)
+  end
+
+  def execute(project_slug, "kb_delete_page", args, _opts) do
+    with {:ok, path} <- required(args, "path"),
+         {:ok, repo} <- resolve_repo(project_slug, args) do
+      maybe_remediation(repo, fn slug ->
+        case KnowledgeBase.delete_page(project_slug, slug, String.split(path, "/")) do
+          {:ok, result} -> {:ok, ok("kb_delete_page", "Deleted page #{path} from #{slug}.", result)}
+          {:error, reason} -> {:error, reason}
+        end
+      end)
+    end
+  end
+
+  def execute(project_slug, "kb_delete_asset", args, _opts) do
+    with {:ok, path} <- required(args, "path"),
+         {:ok, repo} <- resolve_repo(project_slug, args) do
+      maybe_remediation(repo, fn slug ->
+        case KnowledgeBase.delete_asset(project_slug, slug, String.split(path, "/")) do
+          {:ok, result} -> {:ok, ok("kb_delete_asset", "Deleted asset #{path} from #{slug}.", result)}
+          {:error, reason} -> {:error, reason}
+        end
+      end)
+    end
+  end
+
+  def execute(project_slug, "kb_delete_folder", args, _opts) do
+    with {:ok, path} <- required(args, "path"),
+         {:ok, repo} <- resolve_repo(project_slug, args) do
+      maybe_remediation(repo, fn slug ->
+        case KnowledgeBase.delete_folder(project_slug, slug, String.split(path, "/")) do
+          {:ok, result} ->
+            count = result |> Map.get(:pages, []) |> length()
+            {:ok, ok("kb_delete_folder", "Deleted folder #{path} (#{count} page(s)) from #{slug}.", result)}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      end)
+    end
   end
 
   def execute(project_slug, "kb_link_task", args, _opts) do
@@ -217,6 +290,12 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
   end
 
   # --- helpers ---------------------------------------------------------------
+
+  # The personal KB (`@user`) has no tracker repository rows; it is a single
+  # synthetic repo whose slug `KnowledgeBase` resolves to the `symphony-kb`
+  # checkout. Returning it here lets `resolve_repo/2` pick it automatically.
+  defp list_repos("@user"),
+    do: [%{workspace_path: @general_repo_workspace, github_full_name: nil, role: nil}]
 
   defp list_repos(project_slug), do: Context.list_repositories(project_slug)
 

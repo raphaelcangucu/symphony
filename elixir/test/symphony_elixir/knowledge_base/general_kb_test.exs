@@ -50,7 +50,33 @@ defmodule SymphonyElixir.KnowledgeBase.GeneralKbTest do
     assert result.path == "index.md"
 
     {:ok, page} = GeneralKb.read_page("index.md", deps)
-    assert page.body =~ "[Acme](/projects/acme/kb)"
+    assert page.body =~ "[Acme](/tracker/projects/acme/kb)"
+  end
+
+  test "ensure_home generates the home page when it is missing", %{deps: deps} do
+    {:ok, _} = GeneralKb.connect(deps)
+    refute match?({:ok, _}, GeneralKb.read_page("index.md", deps))
+
+    projects_fun = fn -> [%{name: "Acme", slug: "acme"}] end
+    assert {:ok, page} = GeneralKb.ensure_home(Keyword.put(deps, :projects, projects_fun))
+    assert page.path == "index.md"
+    assert page.body =~ "[Acme](/tracker/projects/acme/kb)"
+  end
+
+  test "ensure_home preserves an existing home page", %{deps: deps} do
+    {:ok, _} = GeneralKb.connect(deps)
+
+    {:ok, _} =
+      GeneralKb.write_page(
+        "index.md",
+        %{frontmatter: %{"title" => "Home"}, body: "manually edited"},
+        deps
+      )
+
+    projects_fun = fn -> [%{name: "Acme", slug: "acme"}] end
+    assert {:ok, page} = GeneralKb.ensure_home(Keyword.put(deps, :projects, projects_fun))
+    assert page.body =~ "manually edited"
+    refute page.body =~ "[Acme](/projects/acme/kb)"
   end
 
   test "write_page persists and indexes a general KB page", %{deps: deps} do

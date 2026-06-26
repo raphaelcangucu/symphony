@@ -21,11 +21,13 @@ import { draftMatchesList, type KbInlineEdit } from "@/types/kbPageDraft";
 import { KbInlineNameInput } from "./KbInlineNameInput";
 import { KbTreeNode } from "./KbTreeNode";
 
+export type KbDeleteKind = "page" | "asset" | "folder";
+
 export interface KbTreeHandlers {
   onReorder: (repoSlug: string, parentPath: string, activePath: string, overPath: string) => void;
   onRename: (repoSlug: string, path: string, title: string) => void;
   onToggleFavorite: (repoSlug: string, path: string, favorite: boolean) => void;
-  onDelete: (repoSlug: string, path: string, title: string) => void;
+  onDelete: (repoSlug: string, path: string, title: string, kind: KbDeleteKind) => void;
   onCreateFolder: (repoSlug: string, parentPath: string) => void;
   onStartAddPage: (repoSlug: string, parentPath: string, insertAfterPath?: string | null) => void;
 }
@@ -39,6 +41,8 @@ interface Props {
   activePath: string | null;
   handlers: KbTreeHandlers;
   inlineEdit: KbInlineEdit;
+  /** Builds the route for a page/asset so the tree works in both KB scopes. */
+  pageHref: (repoSlug: string, pagePath: string) => string;
 }
 
 export function KbTreeList({
@@ -50,6 +54,7 @@ export function KbTreeList({
   activePath,
   handlers,
   inlineEdit,
+  pageHref,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -86,6 +91,7 @@ export function KbTreeList({
               activePath={activePath}
               handlers={handlers}
               inlineEdit={inlineEdit}
+              pageHref={pageHref}
             />
             {listDraft?.insertAfterPath === node.path ? (
               <KbInlineNameInput

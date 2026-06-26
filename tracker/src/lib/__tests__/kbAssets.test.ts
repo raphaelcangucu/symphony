@@ -64,6 +64,32 @@ describe("kbAssets", () => {
     expect(absolutizeKbAssetUrl(preview.match(/\(([^)]+)\)/)?.[1] ?? "", ctx)).toBe("../assets/abc.png");
   });
 
+  it("editorizes a project file referenced via ../ into an API URL", () => {
+    const docCtx = { projectSlug: "advising", repoSlug: "advising", pagePath: "DBDUMP.md" };
+    const md = "![civitas](../advisestream/web/css/images/logo.png)";
+    const out = editorizeKbMarkdown(md, docCtx);
+    expect(out).toContain(
+      "/kb/repos/advising/assets/advisestream/web/css/images/logo.png",
+    );
+  });
+
+  it("round-trips a project file back to its ../ relative link on save", () => {
+    const docCtx = { projectSlug: "advising", repoSlug: "advising", pagePath: "DBDUMP.md" };
+    const apiUrl = resolveKbAssetUrl("../advisestream/web/css/images/logo.png", docCtx);
+    const out = persistKbMarkdown(`![civitas](${apiUrl})`, docCtx);
+    expect(out).toBe("![civitas](../advisestream/web/css/images/logo.png)");
+  });
+
+  it("round-trips a project file for a page in a subdirectory", () => {
+    const docCtx = { projectSlug: "advising", repoSlug: "advising", pagePath: "guides/setup.md" };
+    const apiUrl = resolveKbAssetUrl("../../advisestream/logo.png", docCtx);
+    expect(absolutizeKbAssetUrl(apiUrl, docCtx)).toBe("../../advisestream/logo.png");
+  });
+
+  it("leaves external image URLs untouched on save", () => {
+    expect(absolutizeKbAssetUrl("https://example.com/assets/x.png", ctx)).toBeNull();
+  });
+
   it("detects image asset paths by extension", () => {
     expect(isKbImageAssetPath("assets/diagram.png")).toBe(true);
     expect(isKbImageAssetPath("assets/logo.SVG")).toBe(true);

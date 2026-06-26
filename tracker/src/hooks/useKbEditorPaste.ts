@@ -45,6 +45,10 @@ interface UseKbEditorPasteResult {
   pickAndInsertImage: (insertPos?: number) => void;
   /** Opens a file picker and swaps the image node at `pos` with the uploaded asset. */
   replaceImage: (pos: number) => void;
+  /** Inserts a reference to an existing repo asset at `insertPos` (or the selection). */
+  insertAssetReference: (insertPos: number | undefined, assetPath: string, name: string) => void;
+  /** Swaps the image node at `pos` with an existing repo asset. */
+  replaceWithAssetReference: (pos: number, assetPath: string, name: string) => void;
 }
 
 interface QueuedImage extends KbPendingPasteImage {
@@ -203,6 +207,48 @@ export function useKbEditorPaste({
     [replaceUploaded],
   );
 
+  // Gallery picks reference an already-stored asset, so they skip upload and
+  // only touch the document (the display URL is relativized again on save).
+  const insertAssetReference = useCallback(
+    (insertPos: number | undefined, assetPath: string, name: string) => {
+      const ctx = assetContextRef.current;
+      const activeEditor = editorRef.current;
+      if (!ctx || !activeEditor) {
+        toast.error(i18n.t("kb.editor.paste.unavailable"));
+        return;
+      }
+      const markdown = kbImageMarkdown(sanitizeAlt(name), assetPath, ctx);
+      const chain = activeEditor.chain().focus();
+      if (typeof insertPos === "number") {
+        const clamped = Math.min(Math.max(insertPos, 0), activeEditor.state.doc.content.size);
+        chain.setTextSelection(clamped);
+      }
+      chain.insertContent(markdown).run();
+    },
+    [],
+  );
+
+  const replaceWithAssetReference = useCallback((pos: number, assetPath: string, name: string) => {
+    const ctx = assetContextRef.current;
+    const activeEditor = editorRef.current;
+    if (!ctx || !activeEditor) {
+      toast.error(i18n.t("kb.editor.paste.unavailable"));
+      return;
+    }
+    const src = resolveKbAssetUrl(assetPath, ctx);
+    const alt = sanitizeAlt(name);
+    activeEditor
+      .chain()
+      .focus()
+      .command(({ tr }) => {
+        const target = tr.doc.nodeAt(pos);
+        if (!target || target.type.name !== "image") return false;
+        tr.setNodeMarkup(pos, undefined, { ...target.attrs, src, alt });
+        return true;
+      })
+      .run();
+  }, []);
+
   // Dropped files keep their original name; nothing to confirm.
   const uploadPreservingNames = useCallback(
     async (files: File[]) => {
@@ -312,5 +358,7 @@ export function useKbEditorPaste({
     onContainerDrop,
     pickAndInsertImage,
     replaceImage,
+    insertAssetReference,
+    replaceWithAssetReference,
   };
 }

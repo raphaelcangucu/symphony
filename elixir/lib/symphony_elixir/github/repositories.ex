@@ -18,11 +18,17 @@ defmodule SymphonyElixir.GitHub.Repositories do
     client = Keyword.get(opts, :client, Client)
 
     with {:ok, login} <- resolve_login(opts) do
+      # `Client.rest_get/2` classifies any non-2xx response into an error tuple
+      # (`{:error, {:github_api_status, status}}`), so a missing repo arrives as
+      # `{:error, {:github_api_status, 404}}` rather than `{:ok, %{status: 404}}`.
+      # Both shapes are matched so the find-or-create flow works against the real
+      # client as well as test stubs that return the raw `{:ok, ...}` shape.
       case client.rest_get("/repos/#{login}/#{name}", []) do
         {:ok, %{status: 200, body: body}} -> {:ok, to_repo(body, false)}
         {:ok, %{status: 404}} -> create(client, name)
-        {:ok, %{status: s}} -> {:error, {:github_api_status, s}}
-        error -> error
+        {:ok, %{status: status}} -> {:error, {:github_api_status, status}}
+        {:error, {:github_api_status, 404}} -> create(client, name)
+        {:error, reason} -> {:error, reason}
       end
     end
   end
@@ -36,9 +42,11 @@ defmodule SymphonyElixir.GitHub.Repositories do
     }
 
     case client.rest_post("/user/repos", payload, []) do
-      {:ok, %{status: s, body: body}} when s in 200..299 -> {:ok, to_repo(body, true)}
-      {:ok, %{status: s}} -> {:error, {:kb_repo_create_failed, s}}
-      error -> error
+      {:ok, %{status: status, body: body}} when status in 200..299 -> {:ok, to_repo(body, true)}
+      {:ok, %{status: status}} -> {:error, {:kb_repo_create_failed, status}}
+      {:error, {:rate_limited, _} = reason} -> {:error, reason}
+      {:error, {:github_api_status, status}} -> {:error, {:kb_repo_create_failed, status}}
+      {:error, reason} -> {:error, {:kb_repo_create_failed, reason}}
     end
   end
 
