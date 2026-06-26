@@ -94,6 +94,48 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     def delete_comment(_project, _identifier, _comment_id), do: {:error, :not_supported_on_remote}
   end
 
+  defmodule LocalAliasBoardClientStub do
+    def graphql(_query, _vars, _opts) do
+      {:ok,
+       %{
+         "data" => %{
+           "node" => %{
+             "items" => %{
+               "nodes" => [
+                 %{
+                   "id" => "PVTI_288",
+                   "content" => %{
+                     "__typename" => "Issue",
+                     "id" => "I_back_288",
+                     "number" => 288,
+                     "title" => "DAR withdrawal cap",
+                     "body" => "remote body",
+                     "url" => "https://github.com/clouapp/back/issues/288",
+                     "repository" => %{"nameWithOwner" => "clouapp/back"},
+                     "assignees" => %{"nodes" => []},
+                     "labels" => %{"nodes" => []},
+                     "createdAt" => "2026-06-25T00:00:00Z",
+                     "updatedAt" => "2026-06-26T00:00:00Z"
+                   },
+                   "fieldValues" => %{
+                     "nodes" => [
+                       %{
+                         "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                         "name" => "In Progress",
+                         "field" => %{"name" => "Symphony State"}
+                       }
+                     ]
+                   }
+                 }
+               ],
+               "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+             }
+           }
+         }
+       }}
+    end
+  end
+
   defmodule MixedStateDriver do
     @behaviour SymphonyElixir.Tracker.Sync.Driver
 
@@ -426,6 +468,54 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
 
     prs = Repo.all(SymphonyElixir.Tracker.Sync.PullRequestRecord)
     assert Enum.map(prs, & &1.remote_id) == ["PR_1"]
+  end
+
+  test "sync_issue resolves local Symphony aliases through the GitHub adapter" do
+    prev_tracker = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+    Application.put_env(:symphony_elixir, :github_client_module, LocalAliasBoardClientStub)
+
+    on_exit(fn ->
+      restore_env(:tracker, prev_tracker)
+      Application.delete_env(:symphony_elixir, :github_client_module)
+    end)
+
+    migrate_repo()
+    clean_repo()
+
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Macro Markets",
+        slug: "macro-markets-sync",
+        tracker_kind: "github",
+        tracker_config: %{
+          "repo" => "clouapp/front",
+          "project_id" => "PVT_1",
+          "status_field" => "Symphony State"
+        }
+      })
+
+    {:ok, _repos} =
+      Context.replace_repositories("macro-markets-sync", [
+        %{"github_full_name" => "clouapp/front", "workspace_path" => "front", "role" => "primary"},
+        %{"github_full_name" => "clouapp/back", "workspace_path" => "back", "role" => "backend"}
+      ])
+
+    {:ok, issue} = Context.create_issue("macro-markets-sync", %{title: "Draft", status: "Todo"})
+
+    issue
+    |> IssueRecord.changeset(%{
+      remote_number: 288,
+      remote_id: "I_back_288",
+      remote_url: "https://github.com/clouapp/back/issues/288",
+      url: "https://github.com/clouapp/back/issues/288"
+    })
+    |> Repo.update!()
+
+    assert {:ok, synced} = Engine.sync_issue(project, issue.identifier, pr_driver: FakeDriver)
+    assert synced.identifier == issue.identifier
+    assert synced.title == "DAR withdrawal cap"
+    assert synced.remote_number == 288
   end
 
   test "sync_issue is not supported on local projects", %{project: project} do
