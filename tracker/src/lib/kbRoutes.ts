@@ -42,3 +42,36 @@ export function kbGeneralPath(): string {
 export function kbGeneralPagePath(pagePath: string): string {
   return `/kb/${encodePagePath(pagePath)}`;
 }
+
+/**
+ * Turns a human title into a file-name base that satisfies the backend path
+ * segment rule (`^[a-zA-Z0-9._-]+$`): lowercased, accents stripped, and any
+ * run of unsupported characters collapsed to a single hyphen.
+ */
+export function slugifyPageName(title: string): string {
+  const slug = title
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
+  return slug || "untitled";
+}
+
+/**
+ * Returns a `.md` file name within `dir` that does not collide with any path in
+ * `existingPaths`, appending `-2`, `-3`, … when needed.
+ */
+export function uniquePagePath(existingPaths: Iterable<string>, dir: string, title: string): string {
+  const taken = new Set(existingPaths);
+  const base = slugifyPageName(title);
+  const prefix = dir ? `${dir}/` : "";
+  let candidate = `${prefix}${base}.md`;
+  let counter = 2;
+  while (taken.has(candidate)) {
+    candidate = `${prefix}${base}-${counter}.md`;
+    counter += 1;
+  }
+  return candidate;
+}

@@ -16,12 +16,16 @@ config :symphony_elixir, ecto_repos: [SymphonyElixir.Repo]
 # `Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)`.
 config :symphony_elixir, :tracker, sync_enabled: Mix.env() != :test
 
-# Knowledge base: after each KB edit (write/move/delete), enqueue a background
-# git reconciliation (merge default branch -> symphony-docs, ensure PR, auto-merge
-# when checks pass). Disabled under :test so unrelated KB suites stay hermetic and
-# do not spawn background git/network work; the flow itself is covered by the
-# GitFlow/SyncWorker suites, and `request_sync/2` can still be called explicitly.
-config :symphony_elixir, :kb_sync_on_edit, Mix.env() != :test
+# Knowledge base promotion cadence. KB edits commit + push to the `symphony-docs`
+# branch immediately; a daily promoter then opens (and auto-merges when checks are
+# green) a pull request from `symphony-docs` into each repo's default branch.
+# `kb_promote_interval_ms` controls the cadence; `kb_promote_on_boot` lets dev
+# trigger a cycle shortly after start. Promotion is inert under :test so suites
+# stay hermetic (no background git/network); the flow is covered by the
+# GitFlow/SyncWorker suites and `request_sync/2` can be called explicitly.
+config :symphony_elixir, :kb_promote_interval_ms, 86_400_000
+config :symphony_elixir, :kb_promote_enabled, Mix.env() != :test
+config :symphony_elixir, :kb_promote_on_boot, false
 
 # Process-level default agent kind for global-less per-project orchestration.
 # A project's own WORKFLOW front matter (codex:/claude:) takes precedence; this

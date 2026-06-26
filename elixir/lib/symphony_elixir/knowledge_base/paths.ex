@@ -88,9 +88,53 @@ defmodule SymphonyElixir.KnowledgeBase.Paths do
   def resolve_page(project_slug, workspace_path, segments),
     do: resolve_page_in(docs_root(project_slug, workspace_path), segments)
 
+  @spec safe_asset_relative_path([String.t()] | String.t()) ::
+          {:ok, String.t()} | {:error, :kb_invalid_path}
+  def safe_asset_relative_path(segments) when is_list(segments) do
+    rel = Enum.join(segments, "/")
+    ext = rel |> Path.extname() |> String.downcase()
+
+    cond do
+      segments == [] ->
+        {:error, :kb_invalid_path}
+
+      Enum.any?(segments, &unsafe_segment?/1) ->
+        {:error, :kb_invalid_path}
+
+      String.starts_with?(rel, "assets/") ->
+        {:ok, rel}
+
+      image_extension?(ext) ->
+        {:ok, rel}
+
+      true ->
+        {:error, :kb_invalid_path}
+    end
+  end
+
+  def safe_asset_relative_path(path) when is_binary(path),
+    do: path |> String.split("/", trim: false) |> safe_asset_relative_path()
+
+  @spec resolve_asset_in(Path.t(), [String.t()] | String.t()) ::
+          {:ok, Path.t()} | {:error, :kb_invalid_path}
+  def resolve_asset_in(docs_root, segments) when is_binary(docs_root) do
+    with {:ok, rel} <- safe_asset_relative_path(segments) do
+      root = Path.expand(docs_root)
+      full = root |> Path.join(rel) |> Path.expand()
+
+      if full == root or String.starts_with?(full, root <> "/") do
+        {:ok, full}
+      else
+        {:error, :kb_invalid_path}
+      end
+    end
+  end
+
   defp unsafe_segment?(segment) do
     segment in ["", ".", ".."] or
       String.contains?(segment, "\0") or
       not Regex.match?(@segment_regex, segment)
   end
+
+  defp image_extension?(ext), do: ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]
 end

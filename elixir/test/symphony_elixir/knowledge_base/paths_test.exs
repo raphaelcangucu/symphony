@@ -45,4 +45,18 @@ defmodule SymphonyElixir.KnowledgeBase.PathsTest do
                {:error, :kb_invalid_path}
     end
   end
+
+  describe "safe_asset_relative_path/1" do
+    test "accepts assets under docs/assets" do
+      assert Paths.safe_asset_relative_path(["assets", "logo.png"]) == {:ok, "assets/logo.png"}
+    end
+
+    test "accepts image files elsewhere under docs" do
+      assert Paths.safe_asset_relative_path(["images", "diagram.png"]) == {:ok, "images/diagram.png"}
+    end
+
+    test "rejects non-image paths outside assets" do
+      assert Paths.safe_asset_relative_path(["notes.txt"]) == {:error, :kb_invalid_path}
+    end
+  end
 end

@@ -7,11 +7,12 @@ export interface KbRepositorySummary {
 }
 
 export interface KbTreeNode {
-  type: "page" | "folder";
+  type: "page" | "folder" | "asset";
   name: string;
   path: string;
   title: string;
   order: number | null;
+  favorite: boolean;
   children: KbTreeNode[];
 }
 
@@ -57,6 +58,7 @@ export interface KbSearchResult {
 export type KbSyncStatus =
   | "idle"
   | "syncing"
+  | "synced"
   | "open_pr"
   | "merged"
   | "conflict"

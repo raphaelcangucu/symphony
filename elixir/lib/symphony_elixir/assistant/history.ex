@@ -44,6 +44,44 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
+  @doc """
+  Finds or creates the knowledge base assistant thread for a single open page,
+  scoped by `(project, repository, path-within-docs)`. The page identity is stored
+  in metadata (`kb_page_key`/`kb_repo_slug`/`kb_page_path`) so each open document
+  keeps its own revisitable conversation history.
+  """
+  @spec ensure_kb_thread(String.t(), String.t(), String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
+  def ensure_kb_thread(project_slug, repo_slug, page_path, attrs \\ %{})
+      when is_binary(project_slug) and is_binary(repo_slug) and is_binary(page_path) and is_map(attrs) do
+    with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
+         {:ok, repo} <- normalize_required_string(repo_slug, :repo_slug),
+         {:ok, path} <- normalize_required_string(page_path, :page_path),
+         {:ok, _project} <- Context.get_project(slug) do
+      key = repo <> ":" <> path
+
+      case active_kb_thread(slug, key) do
+        %Thread{} = thread ->
+          {:ok, thread}
+
+        nil ->
+          metadata =
+            attrs
+            |> Map.get(:metadata, %{})
+            |> Map.merge(%{"kb_page_key" => key, "kb_repo_slug" => repo, "kb_page_path" => path})
+
+          attrs
+          |> Map.put(:scope, "kb")
+          |> Map.put(:project_slug, slug)
+          |> Map.put(:metadata, metadata)
+          |> Map.put_new(:status, "active")
+          |> Map.put_new(:workspace_path, kb_workspace(slug))
+          |> Map.put_new(:title, kb_thread_title(path))
+          |> then(&Thread.changeset(%Thread{}, &1))
+          |> Repo.insert()
+      end
+    end
+  end
+
   @spec ensure_issue_thread(String.t(), String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
   def ensure_issue_thread(project_slug, issue_identifier, attrs \\ %{})
       when is_binary(project_slug) and is_binary(issue_identifier) and is_map(attrs) do
@@ -545,6 +583,32 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp active_project_explore_thread(project_slug) do
     Repo.get_by(Thread, project_slug: project_slug, scope: "project_explore", status: "active")
+  end
+
+  defp active_kb_thread(project_slug, page_key) do
+    Thread
+    |> where([t], t.project_slug == ^project_slug and t.scope == "kb" and t.status == "active")
+    |> where([t], fragment("json_extract(?, '$.kb_page_key')", t.metadata) == ^page_key)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  defp kb_workspace(project_slug) do
+    root = SymphonyElixir.Config.workspace_root() |> Path.expand()
+    Path.join([root, "assistant", "kb", safe_workspace_segment(project_slug)])
+  end
+
+  defp kb_thread_title(page_path) do
+    page_path
+    |> Path.basename()
+    |> String.replace(~r/\.md$/i, "")
+  end
+
+  defp safe_workspace_segment(value) when is_binary(value) do
+    case String.replace(value, ~r/[^a-zA-Z0-9_-]/, "_") do
+      "" -> "project"
+      sanitized -> sanitized
+    end
   end
 
   defp active_issue_thread(slug, identifier) do

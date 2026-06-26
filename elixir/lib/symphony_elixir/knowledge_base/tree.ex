@@ -3,15 +3,17 @@ defmodule SymphonyElixir.KnowledgeBase.Tree do
 
   alias SymphonyElixir.KnowledgeBase.MarkdownPage
 
-  @ignored_dirs ["assets", ".git"]
+  @ignored_dot_dirs [".git"]
+  @asset_extensions MapSet.new([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"])
   @no_order 1_000_000
 
   @type tree_node :: %{
-          type: :folder | :page,
+          type: :folder | :page | :asset,
           name: String.t(),
           path: String.t(),
           title: String.t(),
           order: integer() | nil,
+          favorite: boolean(),
           children: [tree_node()]
         }
 
@@ -28,7 +30,7 @@ defmodule SymphonyElixir.KnowledgeBase.Tree do
   defp walk(abs_dir, rel_dir) do
     abs_dir
     |> File.ls!()
-    |> Enum.reject(&ignored?/1)
+    |> Enum.reject(&ignored_for_walk?/1)
     |> Enum.flat_map(fn name ->
       abs = Path.join(abs_dir, name)
       rel = join_rel(rel_dir, name)
@@ -44,7 +46,7 @@ defmodule SymphonyElixir.KnowledgeBase.Tree do
   defp build_dir(abs_dir, rel_dir) do
     abs_dir
     |> File.ls!()
-    |> Enum.reject(&ignored?/1)
+    |> Enum.reject(&ignored_for_tree?/1)
     |> Enum.map(&entry(abs_dir, rel_dir, &1))
     |> Enum.reject(&is_nil/1)
     |> Enum.sort_by(&{&1.order || @no_order, String.downcase(&1.title)})
@@ -56,14 +58,37 @@ defmodule SymphonyElixir.KnowledgeBase.Tree do
 
     cond do
       File.dir?(abs) ->
-        %{type: :folder, name: name, path: rel, title: humanize(name), order: nil, children: build_dir(abs, rel)}
+        %{
+          type: :folder,
+          name: name,
+          path: rel,
+          title: humanize(name),
+          order: nil,
+          favorite: false,
+          children: build_dir(abs, rel)
+        }
 
       page?(name) ->
         page_node(abs, rel, name)
 
+      asset?(name) ->
+        asset_node(rel, name)
+
       true ->
         nil
     end
+  end
+
+  defp asset_node(rel, name) do
+    %{
+      type: :asset,
+      name: name,
+      path: rel,
+      title: asset_title(name),
+      order: nil,
+      favorite: false,
+      children: []
+    }
   end
 
   defp page_node(abs, rel, name) do
@@ -75,15 +100,36 @@ defmodule SymphonyElixir.KnowledgeBase.Tree do
         _ -> {%{}, default_title(name)}
       end
 
-    %{type: :page, name: name, path: rel, title: title, order: order(frontmatter), children: []}
+    %{
+      type: :page,
+      name: name,
+      path: rel,
+      title: title,
+      order: order(frontmatter),
+      favorite: favorite?(frontmatter),
+      children: []
+    }
   end
 
-  defp ignored?(name), do: name in @ignored_dirs or String.starts_with?(name, ".")
+  defp ignored_for_walk?(name), do: name == "assets" or dot_ignored?(name)
+  defp ignored_for_tree?(name), do: dot_ignored?(name)
+  defp dot_ignored?(name), do: name in @ignored_dot_dirs or String.starts_with?(name, ".")
   defp page?(name), do: String.ends_with?(name, ".md")
+
+  defp asset?(name) do
+    name
+    |> Path.extname()
+    |> String.downcase()
+    |> then(&(&1 in @asset_extensions))
+  end
   defp join_rel("", name), do: name
   defp join_rel(rel_dir, name), do: rel_dir <> "/" <> name
   defp default_title(name), do: name |> String.replace_suffix(".md", "") |> humanize()
+  defp asset_title(name), do: name |> Path.rootname() |> humanize()
   defp humanize(name), do: name |> String.replace(["-", "_"], " ") |> String.trim()
   defp order(%{"order" => order}) when is_integer(order), do: order
   defp order(_), do: nil
+
+  defp favorite?(%{"favorite" => true}), do: true
+  defp favorite?(_), do: false
 end

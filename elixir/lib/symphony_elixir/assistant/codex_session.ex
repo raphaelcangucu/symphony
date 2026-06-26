@@ -143,6 +143,52 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
+  @kb_write_tools ~w(kb_create_page kb_update_page kb_link_task)
+
+  @spec send_message_to_kb_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
+          {:ok, turn_result()} | {:error, term()}
+  def send_message_to_kb_thread(
+        %{scope: "kb", id: thread_id, project_slug: project_slug} = thread,
+        message,
+        context,
+        opts \\ []
+      )
+      when is_binary(message) and is_map(context) and is_list(opts) do
+    # Reload so that agent_thread_ids written by a prior turn are visible even
+    # when the caller holds a frozen struct from an earlier socket assign.
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
+    agent_kind = resolve_thread_agent(thread, context)
+
+    opts =
+      opts
+      |> Keyword.put(:agent_kind, agent_kind)
+      |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+
+    with {:ok, trimmed} <- normalize_message(message),
+         workspace <- kb_thread_workspace(thread),
+         :ok <- File.mkdir_p(workspace),
+         history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         {:ok, user_message} <-
+           History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
+         prompt <- build_kb_prompt(project_slug, trimmed, context, history),
+         :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
+         {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
+         {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
+         {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
+      maybe_notify_kb_documents(assistant_message, context, opts)
+
+      {:ok,
+       %{
+         assistant_message: assistant_message.content,
+         tool_calls: assistant_message.tool_calls,
+         codex_thread_id: Map.get(runner_result, :codex_thread_id),
+         turn_id: Map.get(runner_result, :turn_id),
+         user_message: History.message_payload(user_message),
+         assistant_chat_message: History.message_payload(assistant_message)
+       }}
+    end
+  end
+
   @spec send_message_to_issue_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
           {:ok, turn_result()} | {:error, term()}
   def send_message_to_issue_thread(
@@ -484,6 +530,105 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     """
     |> String.trim()
   end
+
+  @kb_body_limit 20_000
+
+  defp build_kb_prompt(project_slug, message, context, history) do
+    kb = kb_context(context)
+    repo = Map.get(kb, "repoSlug") || Map.get(kb, "repo_slug") || ""
+    path = Map.get(kb, "pagePath") || Map.get(kb, "page_path") || ""
+    title = Map.get(kb, "title") || ""
+    body = kb |> Map.get("body") |> truncate_kb_body()
+    selection = kb |> Map.get("selection") |> normalize_kb_selection()
+
+    """
+    You are the Symphony Knowledge Base assistant for project `#{project_slug}`.
+    You help the user write and maintain THIS knowledge base page, like a Notion AI side chat. Answer naturally in the user's language. Keep doc edits small and reviewable, and always say which repository and path you changed.
+
+    The page the user is currently editing is already loaded for you:
+    - Repository: #{repo}
+    - Path: #{path}
+    - Title: #{title}
+    #{kb_selection_block(selection)}
+    Current page content:
+    ----------------------------------------
+    #{body}
+    ----------------------------------------
+
+    Knowledge base tools (docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_link_task, kb_sync. Pages are addressed by (repository, path-within-docs).
+    To edit THIS page, call kb_update_page with repository "#{repo}" and path "#{path}" (it already exists — never kb_create_page it). Pass that repository explicitly so you never need to ask which repository. Use kb_search_pages/kb_read_page to consult other pages, kb_create_page only for brand-new pages, kb_link_task to reference a tracker issue inside a page, and kb_sync to push docs.
+    You also have the project board tools (list_issues, create_issue, update_issue, add_comment, ...) for tracker actions when the user asks. Do not dispatch coding agents unless explicitly asked. Your replies are shown directly in this chat — do not mirror them as issue comments.
+    If a request is ambiguous, ask one concise clarifying question first.
+
+    Recent conversation:
+    #{format_history(history)}
+
+    Current user message:
+    #{message}
+    """
+    |> String.trim()
+  end
+
+  defp kb_context(context) when is_map(context) do
+    case Map.get(context, "kb") || Map.get(context, :kb) do
+      kb when is_map(kb) -> kb
+      _ -> %{}
+    end
+  end
+
+  defp kb_context(_context), do: %{}
+
+  defp truncate_kb_body(body) when is_binary(body) do
+    if String.length(body) > @kb_body_limit do
+      String.slice(body, 0, @kb_body_limit) <> "\n\n…(truncated; use kb_read_page for the full document)"
+    else
+      body
+    end
+  end
+
+  defp truncate_kb_body(_body), do: "(empty page)"
+
+  defp normalize_kb_selection(selection) when is_binary(selection) do
+    case String.trim(selection) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_kb_selection(_selection), do: nil
+
+  defp kb_selection_block(nil), do: ""
+
+  defp kb_selection_block(selection) do
+    "- The user has selected this text (focus your help here when relevant):\n  \"\"\"\n  #{selection}\n  \"\"\"\n"
+  end
+
+  defp kb_thread_workspace(%{workspace_path: path}) when is_binary(path) and path != "", do: path
+
+  defp kb_thread_workspace(_thread) do
+    Path.join([Config.workspace_root() |> Path.expand(), "assistant", "kb", "default"])
+  end
+
+  defp maybe_notify_kb_documents(%{tool_calls: tool_calls}, context, opts) when is_list(tool_calls) do
+    if Enum.any?(tool_calls, &kb_write_tool_call?/1) do
+      identifier = kb_context(context) |> Map.get("pagePath") || "kb"
+      _ = maybe_call(opts, :on_documents_changed, identifier)
+    end
+
+    :ok
+  end
+
+  defp maybe_notify_kb_documents(_assistant_message, _context, _opts), do: :ok
+
+  defp kb_write_tool_call?(tool_call) when is_map(tool_call) do
+    # Name-only: any kb write tool invocation triggers a reload. Reloading after a
+    # failed/partial write is harmless (the editor just re-reads the same content),
+    # so this avoids depending on the exact tool-call status shape.
+    name = Map.get(tool_call, "name") || Map.get(tool_call, :name)
+    name in @kb_write_tools
+  end
+
+  defp kb_write_tool_call?(_tool_call), do: false
 
   defp orchestrator_config_summary(project_slug) do
     case Context.get_project(project_slug) do

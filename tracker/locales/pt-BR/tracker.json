@@ -1890,6 +1890,9 @@
       "pollingPaused": "Polling pausado (janela sem foco)",
       "syncError": "Erro de sync",
       "syncErrorTitle": "Sync em background com o tracker remoto está falhando.",
+      "syncErrorCopyHint": "Clique para copiar o erro para sua IDE",
+      "syncErrorCopied": "Erro de sync copiado para a área de transferência",
+      "syncErrorCopyFailed": "Não foi possível copiar o erro de sync",
       "lastError": "Último erro: {{error}}",
       "lastSync": "Último sync bem-sucedido: {{when}}",
       "lessThanMinute": "há menos de um minuto",
@@ -2025,8 +2028,111 @@
     "loading": "Carregando…",
     "saved": "Salvo",
     "sidebar": { "noDocs": "Sem docs ainda" },
-    "editor": { "save": "Salvar", "saving": "Salvando…" },
+    "actions": {
+      "more": "Ações para {{title}}",
+      "rename": "Renomear",
+      "renamePrompt": "Novo título da página",
+      "favorite": "Adicionar aos favoritos",
+      "unfavorite": "Remover dos favoritos",
+      "addPage": "Adicionar página",
+      "createFolder": "Criar pasta",
+      "folderPrompt": "Nome da pasta",
+      "folderCreated": "Pasta criada",
+      "delete": "Excluir",
+      "deleteConfirm": "Mover “{{title}}” para a lixeira?",
+      "deleted": "Página excluída",
+      "renamed": "Página renomeada",
+      "add": "Adicionar"
+    },
+    "editor": {
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "saved": "Salvo",
+      "unsaved": "Alterações não salvas",
+      "askAi": "Perguntar à IA",
+      "closeAssistant": "Fechar assistente",
+      "placeholder": "Escreva algo, ou passe o mouse numa linha e clique “+” para adicionar um bloco… · cole imagens",
+      "headingPlaceholder": "Título",
+      "paste": {
+        "uploading": "Enviando imagem…",
+        "uploadFailed": "Falha ao enviar a imagem.",
+        "unavailable": "Colar imagem não está disponível nesta página."
+      },
+      "format": {
+        "bold": "Negrito",
+        "italic": "Itálico",
+        "strike": "Tachado",
+        "code": "Código inline"
+      },
+      "block": {
+        "add": "Adicionar bloco abaixo",
+        "actions": "Arraste para mover · clique para ações",
+        "duplicate": "Duplicar",
+        "delete": "Excluir"
+      },
+      "insert": {
+        "text": "Texto",
+        "h1": "Título 1",
+        "h2": "Título 2",
+        "h3": "Título 3",
+        "bulletList": "Lista com marcadores",
+        "orderedList": "Lista numerada",
+        "quote": "Citação",
+        "codeBlock": "Bloco de código",
+        "image": "Imagem",
+        "table": "Tabela",
+        "divider": "Divisor"
+      },
+      "image": {
+        "replace": "Trocar imagem",
+        "editAlt": "Editar texto alternativo",
+        "altPlaceholder": "Descreva a imagem…",
+        "alignLeft": "Alinhar à esquerda",
+        "alignCenter": "Centralizar",
+        "alignRight": "Alinhar à direita",
+        "size": "Tamanho",
+        "sizeSmall": "Pequeno",
+        "sizeMedium": "Médio",
+        "sizeFull": "Largura total",
+        "delete": "Excluir imagem"
+      }
+    },
+    "assistant": {
+      "title": "Assistente",
+      "subtitle": "Escreva e mantenha esta página com IA",
+      "contextLabel": "No contexto",
+      "close": "Fechar assistente",
+      "launcher": {
+        "open": "Falar com o maestro",
+        "working": "O maestro está trabalhando…"
+      }
+    },
+    "create": {
+      "newPage": "Nova página",
+      "placeholder": "Título da página…",
+      "folderPlaceholder": "Nome da pasta…",
+      "created": "Página criada",
+      "failed": "Falha ao criar a página."
+    },
+    "asset": {
+      "openTab": "Abrir em nova aba",
+      "download": "Baixar",
+      "rename": "Renomear imagem",
+      "renamePlaceholder": "Nome da imagem…",
+      "renamed": "Imagem renomeada",
+      "deleteConfirm": "Excluir a imagem “{{title}}”? Isso não pode ser desfeito e pode quebrar páginas que a referenciam.",
+      "deleted": "Imagem excluída",
+      "nameDialog": {
+        "title": "Nomeie esta imagem",
+        "description": "Escolha um nome amigável. As referências são atualizadas automaticamente quando você renomear depois.",
+        "placeholder": "Nome da imagem…",
+        "insert": "Inserir",
+        "skip": "Pular"
+      }
+    },
     "search": {
+      "label": "Buscar",
+      "shortcut": "Ctrl+K",
       "placeholder": "Buscar na base de conhecimento…",
       "loading": "Buscando…",
       "empty": "Nenhum resultado"
@@ -2037,6 +2143,7 @@
       "status": {
         "idle": "Ocioso",
         "syncing": "Sincronizando",
+        "synced": "Sincronizado",
         "open_pr": "PR aberto",
         "merged": "Mesclado",
         "conflict": "Conflito",
@@ -2050,10 +2157,16 @@
       "noRepositories": "Nenhum repositório configurado para este projeto.",
       "openDocs": "Abrir docs"
     },
-    "empty": { "selectPage": "Selecione uma página para ler ou editar." },
+    "empty": {
+      "title": "Nada aqui ainda",
+      "selectPage": "Selecione uma página para ler ou editar.",
+      "repoBody": "Este repositório ainda não tem documentos. Crie o primeiro para começar."
+    },
     "errors": {
       "loadFailed": "Falha ao carregar esta página.",
-      "saveFailed": "Falha ao salvar a página."
+      "saveFailed": "Falha ao salvar a página.",
+      "deleteFailed": "Falha ao excluir a página.",
+      "reorderFailed": "Falha ao reordenar as páginas."
     },
     "general": {
       "title": "Minha Base de Conhecimento",

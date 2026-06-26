@@ -23,6 +23,22 @@ defmodule SymphonyElixir.KnowledgeBase.GitFlow do
     end
   end
 
+  @doc """
+  Whether the docs branch has commits the default branch does not, i.e. there is
+  something to open a pull request for. A freshly created `symphony-docs` branch
+  that merely mirrors the default branch has nothing to promote, so attempting a
+  PR would be a no-op (GitHub answers 422 "No commits between …"). When the count
+  cannot be determined we assume there are changes so edits are never silently
+  dropped.
+  """
+  @spec pending_changes?(map(), String.t(), keyword()) :: boolean()
+  def pending_changes?(ws, default_branch, opts \\ []) do
+    case Git.rev_list_count(ws.worktree, "origin/#{default_branch}..#{ws.branch}", opts) do
+      {:ok, count} -> count > 0
+      {:error, _reason} -> true
+    end
+  end
+
   @spec ensure_pull_request(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def ensure_pull_request(repo, head_branch, opts \\ []) do
     PullRequestCreate.ensure(repo, head_branch, opts)

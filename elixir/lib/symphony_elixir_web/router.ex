@@ -217,6 +217,15 @@ defmodule SymphonyElixirWeb.Router do
     )
 
     post("/projects/:project_slug/kb/repos/:repo/move", KnowledgeBaseController, :move_page)
+    post("/projects/:project_slug/kb/repos/:repo/assets/rename", KnowledgeBaseController, :rename_asset)
+    get("/projects/:project_slug/kb/repos/:repo/assets/*path", KnowledgeBaseController, :show_asset)
+
+    delete(
+      "/projects/:project_slug/kb/repos/:repo/assets/*path",
+      KnowledgeBaseController,
+      :delete_asset
+    )
+
     post("/projects/:project_slug/kb/repos/:repo/assets", KnowledgeBaseController, :upload_asset)
     get("/projects/:project_slug/kb/repos/:repo/sync", KnowledgeBaseController, :sync_status)
     post("/projects/:project_slug/kb/repos/:repo/sync", KnowledgeBaseController, :request_sync)

@@ -29,6 +29,7 @@ defmodule SymphonyElixir.KnowledgeBase.WorkspaceTest do
     assert {:ok, %{worktree: wt, docs_root: docs}} = Workspace.ensure(checkout)
     assert File.dir?(wt)
     assert docs == Path.join(wt, "docs")
+    assert File.dir?(Path.join(docs, "assets"))
     assert {:ok, "symphony-docs"} = SymphonyElixir.KnowledgeBase.Git.current_branch(wt)
   end
 

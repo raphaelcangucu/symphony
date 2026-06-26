@@ -25,6 +25,21 @@ defmodule SymphonyElixir.KnowledgeBase.Git do
   @spec status_porcelain(Path.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def status_porcelain(dir, opts \\ []), do: run(dir, ["status", "--porcelain"], opts)
 
+  @doc """
+  Whether the index has changes staged for commit. `git diff --cached --quiet`
+  exits 0 with no staged changes and 1 when there are some. On any other error we
+  assume there are changes so a commit is still attempted rather than silently
+  dropped.
+  """
+  @spec staged_changes?(Path.t(), keyword()) :: boolean()
+  def staged_changes?(dir, opts \\ []) do
+    case run(dir, ["diff", "--cached", "--quiet"], opts) do
+      {:ok, _} -> false
+      {:error, {1, _}} -> true
+      {:error, _} -> true
+    end
+  end
+
   @spec ensure_worktree(Path.t(), String.t(), keyword()) :: {:ok, Path.t()} | {:error, term()}
   def ensure_worktree(checkout, branch, opts \\ []) do
     path = Path.join([checkout, ".worktrees", branch])
@@ -74,6 +89,26 @@ defmodule SymphonyElixir.KnowledgeBase.Git do
     case run(dir, ["fetch", "origin"], opts) do
       {:ok, _} -> :ok
       error -> error
+    end
+  end
+
+  @doc """
+  Counts commits reachable from `range` (e.g. `"origin/main..symphony-docs"`),
+  i.e. how far the docs branch is ahead of its base. Zero means there is nothing
+  to promote.
+  """
+  @spec rev_list_count(Path.t(), String.t(), keyword()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def rev_list_count(dir, range, opts \\ []) when is_binary(range) do
+    case run(dir, ["rev-list", "--count", range], opts) do
+      {:ok, output} ->
+        case Integer.parse(String.trim(output)) do
+          {count, _rest} -> {:ok, count}
+          :error -> {:error, {:invalid_count, output}}
+        end
+
+      error ->
+        error
     end
   end
 

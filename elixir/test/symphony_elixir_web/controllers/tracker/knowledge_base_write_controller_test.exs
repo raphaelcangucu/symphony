@@ -86,6 +86,23 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseWriteControllerTest do
     assert data["markdown_link"] == data["asset_path"]
   end
 
+  test "GET asset returns stored image bytes" do
+    upload = %Plug.Upload{path: write_tmp_png(), filename: "logo.png", content_type: "image/png"}
+
+    post_conn =
+      post(authorized_conn(), "/api/tracker/v1/projects/acme/kb/repos/web/assets", %{
+        "file" => upload,
+        "page_path" => "index.md"
+      })
+
+    asset_path = json_response(post_conn, 201)["data"]["asset_path"]
+
+    conn = get(authorized_conn(), "/api/tracker/v1/projects/acme/kb/repos/web/assets/#{asset_path}")
+    assert conn.status == 200
+    assert hd(get_resp_header(conn, "content-type")) |> String.starts_with?("image/png")
+    assert byte_size(conn.resp_body) > 0
+  end
+
   test "PUT with traversal path is rejected" do
     conn =
       put(authorized_conn(), "/api/tracker/v1/projects/acme/kb/repos/web/pages/notes.txt", %{

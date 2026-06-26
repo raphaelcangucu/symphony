@@ -19,7 +19,13 @@ defmodule SymphonyElixir.KnowledgeBase.Workspace do
   @spec ensure(Path.t(), keyword()) :: {:ok, t()} | {:error, term()}
   def ensure(checkout, opts \\ []) when is_binary(checkout) do
     with {:ok, worktree} <- Git.ensure_worktree(checkout, @docs_branch, opts) do
-      {:ok, %{worktree: worktree, docs_root: Paths.docs_root_in(worktree), branch: @docs_branch}}
+      docs_root = Paths.docs_root_in(worktree)
+      ensure_assets_dir!(docs_root)
+      {:ok, %{worktree: worktree, docs_root: docs_root, branch: @docs_branch}}
     end
+  end
+
+  defp ensure_assets_dir!(docs_root) do
+    File.mkdir_p!(Path.join(docs_root, "assets"))
   end
 end

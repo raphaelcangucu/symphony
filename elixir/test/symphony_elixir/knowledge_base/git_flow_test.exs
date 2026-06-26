@@ -40,6 +40,19 @@ defmodule SymphonyElixir.KnowledgeBase.GitFlowTest do
     assert output =~ "symphony-docs"
   end
 
+  test "pending_changes? is false when the docs branch mirrors the default branch", %{ws: ws} do
+    assert {:ok, _} = GitFlow.sync_branch(ws, "main")
+    refute GitFlow.pending_changes?(ws, "main")
+  end
+
+  test "pending_changes? is true once the docs branch has a new commit", %{ws: ws} do
+    assert {:ok, _} = GitFlow.sync_branch(ws, "main")
+    File.write!(Path.join(ws.worktree, "docs-note.md"), "# note\n")
+    sh(ws.worktree, ["add", "-A"])
+    sh(ws.worktree, ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "edit"])
+    assert GitFlow.pending_changes?(ws, "main")
+  end
+
   test "ensure_pull_request returns a PR via the injected client", %{ws: _ws} do
     assert {:ok, %{number: 11, created: true}} =
              GitFlow.ensure_pull_request("acme/web", "symphony-docs", client: PrStub)

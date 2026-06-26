@@ -18,6 +18,7 @@ defmodule SymphonyElixir.KnowledgeBase.SyncWorkerTest do
         {:ok, %{repo: "acme/web", default_branch: "main", project: :proj, ws: %{}}}
       end,
       sync: fn _ws, "main", _ -> {:ok, :merged} end,
+      pending?: fn _ws, "main", _ -> true end,
       ensure_pr: fn "acme/web", "symphony-docs", _ -> {:ok, %{number: 5, url: "u", created: true}} end,
       evaluate: fn _ctx, 5, _ -> {:ok, :merged} end
     }
@@ -29,12 +30,33 @@ defmodule SymphonyElixir.KnowledgeBase.SyncWorkerTest do
     assert_receive {:tracker_event, "kb_sync_updated", %{status: "merged"}}, 1_000
   end
 
+  test "no pending changes records synced state without opening a PR" do
+    flow = %{
+      resolve: fn _, _ ->
+        {:ok, %{repo: "acme/web", default_branch: "main", project: :proj, ws: %{}}}
+      end,
+      sync: fn _ws, "main", _ -> {:ok, :merged} end,
+      pending?: fn _ws, "main", _ -> false end,
+      ensure_pr: fn _, _, _ -> flunk("should not open a PR when there are no pending changes") end,
+      evaluate: fn _, _, _ -> flunk("should not evaluate when there are no pending changes") end
+    }
+
+    {:ok, pid} = SyncWorker.start_link(project_slug: "acme", repo_slug: "web", flow: flow, name: nil)
+    assert :ok = SyncWorker.run_now(pid)
+
+    state = SyncState.get("acme", "web")
+    assert state.status == "synced"
+    assert is_nil(state.pr_number)
+    assert is_nil(state.pr_url)
+  end
+
   test "a merge conflict records conflict state and does not crash" do
     flow = %{
       resolve: fn _, _ ->
         {:ok, %{repo: "acme/web", default_branch: "main", project: :proj, ws: %{}}}
       end,
       sync: fn _ws, "main", _ -> {:error, :merge_conflict} end,
+      pending?: fn _ws, "main", _ -> true end,
       ensure_pr: fn _, _, _ -> flunk("should not reach PR step") end,
       evaluate: fn _, _, _ -> flunk("should not evaluate") end
     }
@@ -50,6 +72,7 @@ defmodule SymphonyElixir.KnowledgeBase.SyncWorkerTest do
         {:ok, %{repo: "acme/web", default_branch: "main", project: :proj, ws: %{}}}
       end,
       sync: fn _ws, "main", _ -> {:ok, :merged} end,
+      pending?: fn _ws, "main", _ -> true end,
       ensure_pr: fn _, _, _ -> {:ok, %{number: 8, url: "u", created: true}} end,
       evaluate: fn _, 8, _ -> {:ok, :pending} end
     }

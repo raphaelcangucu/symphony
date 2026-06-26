@@ -69,7 +69,10 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
       ) do
     with {:ok, bytes} <- File.read(upload.path),
          {:ok, result} <-
-           KnowledgeBase.store_asset(slug, repo, upload.filename || "asset.png", bytes, page_path: params["page_path"]) do
+           KnowledgeBase.store_asset(slug, repo, upload.filename || "asset.png", bytes,
+             page_path: params["page_path"],
+             name: params["name"]
+           ) do
       conn |> put_status(:created) |> json(%{data: result})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -77,6 +80,42 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
   end
 
   def upload_asset(conn, _params), do: TrackerErrors.render(conn, :kb_unsupported_asset)
+
+  @spec rename_asset(Conn.t(), map()) :: Conn.t()
+  def rename_asset(conn, %{"project_slug" => slug, "repo" => repo, "from" => from, "name" => name})
+      when is_binary(from) and is_binary(name) do
+    case KnowledgeBase.rename_asset(slug, repo, from, name) do
+      {:ok, result} ->
+        json(conn, %{data: %{from: result.from, asset_path: result.asset_path, pages: result.pages}})
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def rename_asset(conn, _params), do: TrackerErrors.render(conn, :kb_invalid_path)
+
+  @spec delete_asset(Conn.t(), map()) :: Conn.t()
+  def delete_asset(conn, %{"project_slug" => slug, "repo" => repo, "path" => path}) do
+    case KnowledgeBase.delete_asset(slug, repo, path) do
+      {:ok, result} -> json(conn, %{data: result})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec show_asset(Conn.t(), map()) :: Conn.t()
+  def show_asset(conn, %{"project_slug" => slug, "repo" => repo, "path" => path}) do
+    case KnowledgeBase.read_asset(slug, repo, path) do
+      {:ok, bytes, content_type} ->
+        conn
+        |> put_resp_content_type(content_type, nil)
+        |> put_resp_header("cache-control", "private, max-age=300")
+        |> send_resp(200, bytes)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
 
   @spec search_project(Conn.t(), map()) :: Conn.t()
   def search_project(conn, %{"project_slug" => slug} = params) do

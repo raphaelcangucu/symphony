@@ -1,11 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
 import type { Issue } from "@/types/issue";
 import type { ProjectSyncState } from "@/types/project";
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const createdIssue: Issue = {
   id: "issue-1",
@@ -61,6 +66,10 @@ function renderHeader(pollingActive: boolean) {
 }
 
 describe("ProjectHeader polling indicator", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("links the project identity to the project board", () => {
     render(
       <MemoryRouter>
@@ -114,6 +123,69 @@ describe("ProjectHeader polling indicator", () => {
     const badge = screen.getByLabelText("Sync error");
     expect(badge).toBeInTheDocument();
     expect(badge).toHaveAttribute("title", expect.stringContaining(":remote_unavailable"));
+  });
+
+  it("copies a debug-friendly sync error report to the clipboard when clicked", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    const syncState: ProjectSyncState = {
+      status: "error",
+      lastError: ":remote_unavailable",
+      lastPullAt: "2026-06-10T21:00:00Z",
+      lastPushAt: "2026-06-10T21:05:00Z",
+      lastFullSyncAt: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <ProjectHeader projectSlug="macro-markets" trackerKind="github" syncState={syncState} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByLabelText("Sync error"));
+
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain("Symphony sync error");
+    expect(copied).toContain("Project: macro-markets (github)");
+    expect(copied).toContain(":remote_unavailable");
+    expect(copied).toContain("Last pull: 2026-06-10T21:00:00Z");
+    await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows an error toast when copying the sync error fails", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const execCommand = vi.fn().mockReturnValue(false);
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+
+    const syncState: ProjectSyncState = {
+      status: "error",
+      lastError: "boom",
+      lastPullAt: null,
+      lastPushAt: null,
+      lastFullSyncAt: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <ProjectHeader projectSlug="macro-markets" trackerKind="github" syncState={syncState} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByLabelText("Sync error"));
+
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
   });
 
   it("does not show the sync error badge when sync is healthy", () => {

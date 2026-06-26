@@ -123,7 +123,7 @@ describe("knowledgeBaseService", () => {
 
   it("general KB endpoints map connection + tree", async () => {
     (http.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: { data: { connected: true, tree: [{ type: "page", name: "index.md", path: "index.md", title: "Home", order: null, children: [] }] } },
+      data: { data: { connected: true, tree: [{ type: "page", name: "index.md", path: "index.md", title: "Home", order: null, favorite: false, children: [] }] } },
     });
     (http.post as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { data: { connected: true } } });
 

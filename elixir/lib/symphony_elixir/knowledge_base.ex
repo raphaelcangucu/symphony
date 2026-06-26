@@ -102,7 +102,6 @@ defmodule SymphonyElixir.KnowledgeBase do
          {:ok, result} <- Writer.write_page(ws, rel, page, push: true) do
       index_path(project_slug, repo_slug, ws, result.path)
       Broadcaster.kb_event(project_slug, "kb_page_saved", %{repo_slug: repo_slug, path: result.path})
-      enqueue_sync(project_slug, repo_slug)
       {:ok, result}
     end
   end
@@ -121,7 +120,6 @@ defmodule SymphonyElixir.KnowledgeBase do
         path: result.path
       })
 
-      enqueue_sync(project_slug, repo_slug)
       {:ok, result}
     end
   end
@@ -138,7 +136,6 @@ defmodule SymphonyElixir.KnowledgeBase do
         path: result.path
       })
 
-      enqueue_sync(project_slug, repo_slug)
       {:ok, result}
     end
   end
@@ -148,6 +145,52 @@ defmodule SymphonyElixir.KnowledgeBase do
   def store_asset(project_slug, repo_slug, filename, bytes, opts \\ []) do
     with {:ok, ws} <- ensure_workspace(project_slug, repo_slug) do
       Writer.store_asset(ws, filename, bytes, Keyword.put(opts, :push, true))
+    end
+  end
+
+  @spec rename_asset(String.t(), String.t(), String.t(), String.t()) ::
+          {:ok, map()} | {:error, error()}
+  def rename_asset(project_slug, repo_slug, from, name)
+      when is_binary(from) and is_binary(name) do
+    with {:ok, ws} <- ensure_workspace(project_slug, repo_slug),
+         {:ok, result} <- Writer.rename_asset(ws, from, name, push: true) do
+      Enum.each(result.pages, &index_path(project_slug, repo_slug, ws, &1))
+
+      Broadcaster.kb_event(project_slug, "kb_asset_renamed", %{
+        repo_slug: repo_slug,
+        from: result.from,
+        path: result.asset_path
+      })
+
+      {:ok, result}
+    end
+  end
+
+  @spec delete_asset(String.t(), String.t(), [String.t()] | String.t()) ::
+          {:ok, map()} | {:error, error()}
+  def delete_asset(project_slug, repo_slug, rel) do
+    with {:ok, ws} <- ensure_workspace(project_slug, repo_slug),
+         {:ok, result} <- Writer.delete_asset(ws, rel, push: true) do
+      Broadcaster.kb_event(project_slug, "kb_asset_deleted", %{
+        repo_slug: repo_slug,
+        path: result.path
+      })
+
+      {:ok, result}
+    end
+  end
+
+  @spec read_asset(String.t(), String.t(), [String.t()] | String.t()) ::
+          {:ok, binary(), String.t()} | {:error, error()}
+  def read_asset(project_slug, repo_slug, rel)
+      when is_binary(project_slug) and is_binary(repo_slug) do
+    with {:ok, _project} <- Context.get_project(project_slug),
+         {:ok, repo} <- RepoDocs.fetch_repository(project_slug, repo_slug),
+         {:ok, docs_root} <- ensure_docs_root(project_slug, repo),
+         {:ok, abs} <- Paths.resolve_asset_in(docs_root, rel),
+         :ok <- ensure_regular_file(abs),
+         {:ok, bytes} <- read_file(abs) do
+      {:ok, bytes, asset_content_type(abs)}
     end
   end
 
@@ -237,19 +280,6 @@ defmodule SymphonyElixir.KnowledgeBase do
          last_synced_at: state.last_synced_at
        }}
     end
-  end
-
-  # Best-effort, fire-and-forget background reconciliation after an edit. A worker
-  # hiccup must never block or fail the edit response, so it runs in a supervised
-  # task. Gated by config so test suites stay hermetic.
-  defp enqueue_sync(project_slug, repo_slug) do
-    if Application.get_env(:symphony_elixir, :kb_sync_on_edit, true) do
-      Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
-        request_sync(project_slug, repo_slug)
-      end)
-    end
-
-    :ok
   end
 
   # Best-effort: re-read the just-written file from the worktree and refresh the
@@ -353,5 +383,16 @@ defmodule SymphonyElixir.KnowledgeBase do
 
   defp default_title(rel) do
     rel |> normalize_rel() |> Path.basename() |> String.replace_suffix(".md", "")
+  end
+
+  defp asset_content_type(path) do
+    case Path.extname(path) |> String.downcase() do
+      ".png" -> "image/png"
+      ".jpg" -> "image/jpeg"
+      ".jpeg" -> "image/jpeg"
+      ".gif" -> "image/gif"
+      ".webp" -> "image/webp"
+      _ -> "application/octet-stream"
+    end
   end
 end

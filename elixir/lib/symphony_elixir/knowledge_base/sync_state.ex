@@ -8,7 +8,7 @@ defmodule SymphonyElixir.KnowledgeBase.SyncState do
 
   @type t :: %__MODULE__{}
 
-  @statuses ~w(idle syncing open_pr merged conflict checks_failed error)
+  @statuses ~w(idle syncing synced open_pr merged conflict checks_failed error)
 
   schema "kb_sync_states" do
     field(:project_slug, :string)

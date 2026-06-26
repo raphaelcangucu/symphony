@@ -25,6 +25,36 @@ defmodule SymphonyElixir.KnowledgeBase.Assets do
     digest <> ext
   end
 
+  @doc """
+  Turns a human-supplied asset name into a file-name base that satisfies the
+  path segment rule (`^[a-zA-Z0-9._-]+$`): a trailing image extension is dropped,
+  accents are stripped, the result is lowercased, and unsupported character runs
+  collapse to a single hyphen. Falls back to `"image"` when nothing remains.
+  """
+  @spec slug_base(String.t()) :: String.t()
+  def slug_base(name) when is_binary(name) do
+    base =
+      name
+      |> drop_image_extension()
+      |> :unicode.characters_to_nfd_binary()
+      |> String.replace(~r/[\x{0300}-\x{036f}]/u, "")
+      |> String.downcase()
+      |> String.replace(~r/[^a-z0-9._-]+/u, "-")
+      |> String.replace(~r/-{2,}/, "-")
+      |> String.trim("-")
+      |> String.trim(".")
+
+    if base == "", do: "image", else: base
+  end
+
+  defp drop_image_extension(name) do
+    ext = name |> Path.extname() |> String.downcase()
+
+    if ext in @allowed_extensions or ext == ".jpeg" or ext == ".svg",
+      do: Path.rootname(name),
+      else: name
+  end
+
   @spec relative_link(String.t(), String.t()) :: String.t()
   def relative_link(page_rel_path, asset_rel_path) do
     page_dir = Path.dirname(page_rel_path)

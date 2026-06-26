@@ -36,9 +36,18 @@ defmodule SymphonyElixir.KnowledgeBase.SyncWorker do
     set_status(project, repo, %{status: "syncing", last_error: nil})
 
     with {:ok, ctx} <- flow.resolve.(project, repo),
-         {:ok, _} <- flow.sync.(ctx.ws, ctx.default_branch, []),
-         {:ok, pr} <- flow.ensure_pr.(ctx.repo, @docs_branch, []) do
-      handle_evaluation(project, repo, ctx, pr, flow, state)
+         {:ok, _} <- flow.sync.(ctx.ws, ctx.default_branch, []) do
+      if flow.pending?.(ctx.ws, ctx.default_branch, []) do
+        promote(project, repo, ctx, flow, state)
+      else
+        set_status(project, repo, %{
+          status: "synced",
+          last_error: nil,
+          pr_number: nil,
+          pr_url: nil,
+          last_synced_at: DateTime.utc_now()
+        })
+      end
     else
       {:error, :merge_conflict} ->
         set_status(project, repo, %{status: "conflict", last_error: "merge conflict"})
@@ -48,6 +57,13 @@ defmodule SymphonyElixir.KnowledgeBase.SyncWorker do
     end
 
     state
+  end
+
+  defp promote(project, repo, ctx, flow, state) do
+    case flow.ensure_pr.(ctx.repo, @docs_branch, []) do
+      {:ok, pr} -> handle_evaluation(project, repo, ctx, pr, flow, state)
+      {:error, reason} -> set_status(project, repo, %{status: "error", last_error: inspect(reason)})
+    end
   end
 
   defp handle_evaluation(project, repo, ctx, pr, flow, state) do
@@ -83,6 +99,7 @@ defmodule SymphonyElixir.KnowledgeBase.SyncWorker do
     %{
       resolve: &SymphonyElixir.KnowledgeBase.resolve_sync_context/2,
       sync: &GitFlow.sync_branch/3,
+      pending?: &GitFlow.pending_changes?/3,
       ensure_pr: &GitFlow.ensure_pull_request/3,
       evaluate: &GitFlow.evaluate_and_merge/3
     }

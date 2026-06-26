@@ -8,6 +8,8 @@ const ATTACHMENT_PATH_SEGMENT = "/assistant/attachments/";
 const EVIDENCE_ARTIFACT_PATH_SEGMENT = "/evidence/";
 const EVIDENCE_ARTIFACT_FILE_SEGMENT = "/artifacts/";
 const JIRA_ATTACHMENT_PATH_SEGMENT = "/jira/attachments/";
+const KB_ASSET_PATH_SEGMENT = "/kb/repos/";
+const KB_ASSET_FILE_SEGMENT = "/assets/";
 
 /**
  * Builds the authenticated tracker API path that serves a stored project
@@ -89,9 +91,25 @@ export function isJiraAttachmentUrl(src: string | null | undefined): boolean {
   );
 }
 
+export function isKbAssetUrl(src: string | null | undefined): boolean {
+  if (typeof src !== "string" || src.length === 0) return false;
+  if (/^(data:|blob:)/i.test(src)) return false;
+
+  const path = src.replace(/^https?:\/\/[^/]+/i, "");
+  return (
+    (path.includes(`${API_PREFIX}${KB_ASSET_PATH_SEGMENT}`) || path.includes(KB_ASSET_PATH_SEGMENT)) &&
+    path.includes(KB_ASSET_FILE_SEGMENT)
+  );
+}
+
 /** Tracker-hosted media that must be fetched with the bearer token. */
 export function isTrackerAuthenticatedMediaUrl(src: string | null | undefined): boolean {
-  return isInternalAttachmentUrl(src) || isEvidenceArtifactUrl(src) || isJiraAttachmentUrl(src);
+  return (
+    isInternalAttachmentUrl(src) ||
+    isEvidenceArtifactUrl(src) ||
+    isJiraAttachmentUrl(src) ||
+    isKbAssetUrl(src)
+  );
 }
 
 export function isVideoMediaType(mediaType: string | null | undefined): boolean {

@@ -27,11 +27,12 @@ interface RepoDto {
 }
 
 interface TreeDto {
-  type: "page" | "folder";
+  type: "page" | "folder" | "asset";
   name: string;
   path: string;
   title: string;
   order: number | null;
+  favorite?: boolean;
   children: TreeDto[];
 }
 
@@ -83,6 +84,7 @@ function mapTree(dto: TreeDto): KbTreeNode {
     path: dto.path,
     title: dto.title,
     order: dto.order ?? null,
+    favorite: dto.favorite ?? false,
     children: (dto.children ?? []).map(mapTree),
   };
 }
@@ -154,6 +156,18 @@ export async function savePage(
   return unwrapData<SaveResultDto>(response);
 }
 
+export async function createPage(
+  projectSlug: string,
+  repoSlug: string,
+  path: string,
+  title: string,
+): Promise<KbSaveResult> {
+  return savePage(projectSlug, repoSlug, path, {
+    frontmatter: {},
+    body: `# ${title}\n`,
+  });
+}
+
 export async function movePage(
   projectSlug: string,
   repoSlug: string,
@@ -174,13 +188,46 @@ export async function uploadAsset(
   repoSlug: string,
   file: File,
   pagePath: string,
+  name?: string,
 ): Promise<KbAssetResult> {
   const form = new FormData();
   form.append("file", file);
   form.append("page_path", pagePath);
+  if (name && name.trim().length > 0) form.append("name", name.trim());
   const response = await http.post(trackerPath(`${repoBase(projectSlug, repoSlug)}/assets`), form);
   const data = unwrapData<{ asset_path: string; markdown_link: string }>(response);
   return { assetPath: data.asset_path, markdownLink: data.markdown_link };
+}
+
+export interface KbAssetRenameResult {
+  from: string;
+  assetPath: string;
+  pages: string[];
+}
+
+export async function renameAsset(
+  projectSlug: string,
+  repoSlug: string,
+  from: string,
+  name: string,
+): Promise<KbAssetRenameResult> {
+  const response = await http.post(trackerPath(`${repoBase(projectSlug, repoSlug)}/assets/rename`), {
+    from,
+    name,
+  });
+  const data = unwrapData<{ from: string; asset_path: string; pages: string[] }>(response);
+  return { from: data.from, assetPath: data.asset_path, pages: data.pages ?? [] };
+}
+
+export async function deleteAsset(
+  projectSlug: string,
+  repoSlug: string,
+  path: string,
+): Promise<KbSaveResult> {
+  const response = await http.delete(
+    trackerPath(`${repoBase(projectSlug, repoSlug)}/assets/${encodePagePath(path)}`),
+  );
+  return unwrapData<SaveResultDto>(response);
 }
 
 export async function searchProject(

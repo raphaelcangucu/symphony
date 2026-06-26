@@ -7,6 +7,8 @@ import {
   kbPagePath,
   kbProjectPath,
   kbRepoPath,
+  slugifyPageName,
+  uniquePagePath,
 } from "@/lib/kbRoutes";
 
 describe("kbRoutes", () => {
@@ -33,5 +35,19 @@ describe("kbRoutes", () => {
   it("builds the general KB paths", () => {
     expect(kbGeneralPath()).toBe("/kb");
     expect(kbGeneralPagePath("notes/idea.md")).toBe("/kb/notes/idea.md");
+  });
+
+  it("slugifies titles into valid file-name bases", () => {
+    expect(slugifyPageName("Getting Started")).toBe("getting-started");
+    expect(slugifyPageName("Análise de Métricas!")).toBe("analise-de-metricas");
+    expect(slugifyPageName("  ---  ")).toBe("untitled");
+    expect(slugifyPageName("API & GraphQL")).toBe("api-graphql");
+  });
+
+  it("returns a unique .md path avoiding collisions", () => {
+    expect(uniquePagePath([], "", "Notes")).toBe("notes.md");
+    expect(uniquePagePath(["notes.md"], "", "Notes")).toBe("notes-2.md");
+    expect(uniquePagePath(["notes.md", "notes-2.md"], "", "Notes")).toBe("notes-3.md");
+    expect(uniquePagePath(["guides/intro.md"], "guides", "Intro")).toBe("guides/intro-2.md");
   });
 });

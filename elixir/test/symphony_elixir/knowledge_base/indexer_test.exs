@@ -6,6 +6,7 @@ defmodule SymphonyElixir.KnowledgeBase.IndexerTest do
 
   setup do
     migrate_repo()
+    Repo.delete_all(PageRecord)
     on_exit(fn -> Repo.delete_all(PageRecord) end)
 
     docs = Path.join(System.tmp_dir!(), "kb-idx-#{System.unique_integer([:positive])}")

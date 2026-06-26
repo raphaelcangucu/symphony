@@ -120,7 +120,6 @@ export function KbGeneralPage() {
       setSaving(true);
       try {
         await saveGeneralPage(pagePath, { frontmatter: page?.frontmatter ?? {}, body: markdown });
-        toast.success(t("kb.saved"));
       } catch {
         toast.error(t("kb.errors.saveFailed"));
       } finally {

@@ -35,9 +35,28 @@ defmodule SymphonyElixir.KnowledgeBase.TreeTest do
              folder.children
   end
 
-  test "excludes assets/ and dotfiles from the tree", %{root: root} do
+  test "includes assets folder with image files in the tree", %{root: root} do
+    tree = Tree.build(root)
+    names = Enum.map(tree, & &1.name)
+    assert "assets" in names
+
+    assets = Enum.find(tree, &(&1.name == "assets"))
+    assert assets.type == :folder
+    assert Enum.any?(assets.children, &(&1.type == :asset and &1.name == "logo.png"))
+  end
+
+  test "includes image files inside nested folders", %{root: root} do
+    File.mkdir_p!(Path.join(root, "images"))
+    File.write!(Path.join([root, "images", "diagram.png"]), "binary")
+
+    tree = Tree.build(root)
+    images = Enum.find(tree, &(&1.name == "images"))
+    assert [%{type: :asset, name: "diagram.png", path: "images/diagram.png"}] = images.children
+  end
+
+  test "excludes dotfiles from the tree", %{root: root} do
     names = root |> Tree.build() |> Enum.map(& &1.name)
-    refute "assets" in names
+    refute ".hidden" in names
   end
 
   test "derives page title from frontmatter, H1, then humanized filename", %{root: root} do
