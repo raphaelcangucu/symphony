@@ -45,4 +45,9 @@ case "${FAKE_CURSOR_MODE:-happy}" in
     echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"fresh session reply"}]},"session_id":"chat-fresh"}'
     echo '{"type":"result","subtype":"success","is_error":false,"result":"fresh session reply","session_id":"chat-fresh"}'
     ;;
+  glob-error)
+    echo '{"type":"system","subtype":"init","session_id":"chat-glob"}'
+    echo '{"type":"tool_call","subtype":"completed","call_id":"tc-glob","tool_call":{"globToolCall":{"result":{"error":{"error":"Glob pattern \"**/*\" matches every file and is not allowed. Use a more specific glob or no glob."}}}},"session_id":"chat-glob"}'
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"chat-glob"}'
+    ;;
 esac

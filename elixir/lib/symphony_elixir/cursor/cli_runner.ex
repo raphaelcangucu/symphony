@@ -344,7 +344,8 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   end
 
   defp process_event(%{"type" => "tool_call", "subtype" => "completed", "call_id" => call_id} = payload, on_event, state) do
-    {_name, result, is_error} = tool_call_result(Map.get(payload, "tool_call") || %{})
+    tool_call = Map.get(payload, "tool_call") || %{}
+    {name, input, result, is_error} = tool_call_completion(tool_call)
 
     on_event.(%{
       "method" => "item/created",
@@ -352,6 +353,8 @@ defmodule SymphonyElixir.Cursor.CliRunner do
         "item" => %{
           "type" => "tool_result",
           "tool_use_id" => call_id,
+          "name" => name,
+          "input" => input,
           "content" => result,
           "is_error" => is_error
         }
@@ -393,29 +396,126 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   # `writeToolCall`, ...) wrapping `args`/`result`, or as a generic
   # `function` with `name`/`arguments`.
   defp tool_call_details(%{"function" => %{"name" => name} = function}) do
-    {name, decode_arguments(Map.get(function, "arguments"))}
+    {display_tool_name(name), decode_arguments(Map.get(function, "arguments"))}
   end
 
   defp tool_call_details(tool_call) when is_map(tool_call) do
-    case Enum.find(tool_call, fn {_key, value} -> is_map(value) end) do
-      {key, value} -> {tool_name(key), Map.get(value, "args") || %{}}
-      nil -> {"unknown", %{}}
+    case typed_tool_entry(tool_call) do
+      {key, value} ->
+        {display_tool_name(tool_name(key)), tool_args(value)}
+
+      nil ->
+        {infer_tool_name(tool_call), %{}}
     end
   end
 
-  defp tool_call_result(%{"function" => %{"name" => name} = function}) do
-    {name, encode_content(Map.get(function, "result")), false}
+  defp tool_call_completion(%{"function" => %{"name" => name} = function}) do
+    result = Map.get(function, "result")
+
+    {
+      display_tool_name(name),
+      decode_arguments(Map.get(function, "arguments")),
+      encode_content(result),
+      tool_result_error?(result)
+    }
   end
 
-  defp tool_call_result(tool_call) when is_map(tool_call) do
-    case Enum.find(tool_call, fn {_key, value} -> is_map(value) end) do
+  defp tool_call_completion(tool_call) when is_map(tool_call) do
+    case typed_tool_entry(tool_call) do
       {key, value} ->
         result = Map.get(value, "result") || %{}
-        is_error = is_map(result) and not Map.has_key?(result, "success") and result != %{}
-        {tool_name(key), encode_content(result), is_error}
+
+        {
+          display_tool_name(tool_name(key)),
+          tool_args(value),
+          encode_content(result),
+          tool_result_error?(result)
+        }
 
       nil ->
-        {"unknown", "", false}
+        encoded = encode_content(tool_call)
+        {infer_tool_name(tool_call), %{}, encoded, tool_result_error?(tool_call)}
+    end
+  end
+
+  defp typed_tool_entry(tool_call) when is_map(tool_call) do
+    case Enum.find(tool_call, fn {_key, value} -> is_map(value) end) do
+      {key, value} -> {key, value}
+      nil -> nil
+    end
+  end
+
+  defp tool_args(value) when is_map(value) do
+    Map.get(value, "args") || Map.get(value, "arguments") || %{}
+  end
+
+  defp tool_args(_value), do: %{}
+
+  defp tool_result_error?(result) when is_map(result) do
+    Map.has_key?(result, "error") or
+      (not Map.has_key?(result, "success") and result != %{})
+  end
+
+  defp tool_result_error?(result) when is_binary(result) do
+    case Jason.decode(result) do
+      {:ok, decoded} when is_map(decoded) -> tool_result_error?(decoded)
+      _ -> false
+    end
+  end
+
+  defp tool_result_error?(_result), do: false
+
+  defp infer_tool_name(tool_call) when is_map(tool_call) do
+    tool_call
+    |> Jason.encode!()
+    |> infer_tool_name_from_text()
+  end
+
+  defp infer_tool_name_from_text(text) when is_binary(text) do
+    cond do
+      String.contains?(text, "Glob pattern") -> "Glob"
+      String.contains?(text, "glob_pattern") -> "Glob"
+      true -> "unknown"
+    end
+  end
+
+  @cursor_tool_labels %{
+    "glob" => "Glob",
+    "grep" => "Grep",
+    "read" => "Read",
+    "write" => "Write",
+    "edit" => "Edit",
+    "shell" => "Bash",
+    "semsearch" => "SemanticSearch",
+    "ls" => "List",
+    "delete" => "Delete"
+  }
+
+  defp display_tool_name(name) when is_binary(name) do
+    normalized = String.downcase(name)
+
+    cond do
+      Map.has_key?(@cursor_tool_labels, normalized) ->
+        Map.fetch!(@cursor_tool_labels, normalized)
+
+      String.starts_with?(name, "mcp__") ->
+        name
+
+      true ->
+        humanize_tool_name(name)
+    end
+  end
+
+  defp display_tool_name(_name), do: "unknown"
+
+  defp humanize_tool_name(name) when is_binary(name) do
+    name
+    |> String.replace("_", " ")
+    |> String.split()
+    |> Enum.filter(&(&1 != ""))
+    |> case do
+      [] -> name
+      [first | rest] -> String.capitalize(first) <> Enum.map_join(rest, " ", &String.capitalize/1)
     end
   end
 

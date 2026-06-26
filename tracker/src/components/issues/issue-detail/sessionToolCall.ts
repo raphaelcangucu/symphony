@@ -1,4 +1,5 @@
 import type { ToolBlockLanguage, ToolCallView } from "@/components/shared/ToolCallBlock";
+import { formatToolOutput, resolveToolDisplayName } from "@/lib/toolCallDisplay";
 import type { SessionLogEntry, SessionLogEntryLanguage } from "@/types/session-log";
 
 export type SessionLogRenderItem =
@@ -30,19 +31,21 @@ export function pairSessionLogItems(entries: SessionLogEntry[]): SessionLogRende
 }
 
 export function sessionPairToView(call: SessionLogEntry, result: SessionLogEntry | null): ToolCallView {
+  const outputBody = result?.body ? formatToolOutput(result.body) : null;
+
   return {
-    toolType: toolTypeLabel(call.title),
+    toolType: toolTypeLabel(call.title, call.body, outputBody),
     description: deriveDescription(call.body),
     status: pairStatus(call, result),
     input: call.body ? { value: call.body, language: toBlockLanguage(call.language) } : null,
-    output: result?.body ? { value: result.body, language: toBlockLanguage(result.language) } : null,
+    output: outputBody ? { value: outputBody, language: toBlockLanguage(result?.language ?? "text") } : null,
     defaultCollapsed: false,
   };
 }
 
-function toolTypeLabel(title: string): string {
+function toolTypeLabel(title: string, input: string | null, output: string | null): string {
   if (title === "exec_command" || title === "shell") return "Bash";
-  return humanize(title);
+  return resolveToolDisplayName(title, input, output);
 }
 
 function deriveDescription(body: string | null): string | null {
@@ -78,11 +81,3 @@ function toBlockLanguage(language: SessionLogEntryLanguage): ToolBlockLanguage {
   return "text";
 }
 
-function humanize(value: string): string {
-  return value
-    .replace(/_/g, " ")
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}

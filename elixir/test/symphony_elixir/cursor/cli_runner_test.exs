@@ -141,8 +141,24 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
         _ -> nil
       end)
 
-    assert tool_item["name"] == "read"
+    assert tool_item["name"] == "Read"
     assert tool_item["input"] == %{"path" => "file.txt"}
+  end
+
+  test "glob error completed event preserves the tool name and error flag" do
+    {result, events} = run("glob-error")
+
+    assert {:ok, %{cli_session_id: "chat-glob", status: :completed}} = result
+
+    tool_result =
+      Enum.find_value(events, fn
+        %{"method" => "item/created", "params" => %{"item" => %{"type" => "tool_result"} = item}} -> item
+        _ -> nil
+      end)
+
+    assert tool_result["name"] == "Glob"
+    assert tool_result["is_error"] == true
+    assert tool_result["content"] =~ "Glob pattern"
   end
 
   test "a --resume to a missing chat is surfaced as resume_session_not_found" do

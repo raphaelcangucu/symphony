@@ -56,4 +56,18 @@ describe("pairSessionLogItems", () => {
     expect(view.status).toBe("completed");
     expect(view.defaultCollapsed).toBe(false);
   });
+
+  it("labels a blocked glob error as Glob instead of Unknown", () => {
+    const error =
+      '{"error":{"error":"Glob pattern \\"**/*\\" matches every file and is not allowed. Use a more specific glob or no glob."}}';
+
+    const view = sessionPairToView(
+      entry({ kind: "tool_call", title: "unknown", body: null, language: "json", status: "running", callId: "c4" }),
+      entry({ kind: "tool_result", title: "Tool output", body: error, language: "text", status: "failed", callId: "c4" }),
+    );
+
+    expect(view.toolType).toBe("Glob");
+    expect(view.output?.value).toContain("Glob pattern");
+    expect(view.status).toBe("failed");
+  });
 });

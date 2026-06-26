@@ -1,5 +1,6 @@
 import type { ToolCallView } from "@/components/shared/ToolCallBlock";
 import { i18n } from "@/i18n";
+import { formatToolOutput, resolveToolDisplayName } from "@/lib/toolCallDisplay";
 import type { AssistantToolCall, AssistantToolStatus } from "@/services/assistant";
 
 const ACTION_TOOLS = new Set<string>([
@@ -22,14 +23,15 @@ export function isActionTool(name: string): boolean {
 export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallView {
   const action = isActionTool(toolCall.name);
   const input = serializeArguments(toolCall.arguments);
+  const output = toolCall.output ? formatToolOutput(toolCall.output) : null;
 
   return {
-    toolType: localizeToolName(toolCall.name),
+    toolType: localizeToolName(toolCall.name, input, output),
     description: null,
     status: mapStatus(toolCall.status),
     input: input ? { value: input, language: "json" } : null,
-    output: toolCall.output ? { value: toolCall.output, language: "text" } : null,
-    defaultCollapsed: true,
+    output: output ? { value: output, language: "text" } : null,
+    defaultCollapsed: !action,
   };
 }
 
@@ -48,12 +50,8 @@ function mapStatus(status: AssistantToolStatus): ToolCallView["status"] {
   return "completed";
 }
 
-function localizeToolName(name: string): string {
-  return i18n.t(`issue.toolCall.tools.${name}`, { defaultValue: humanize(name) });
-}
-
-function humanize(value: string): string {
-  const words = value.replace(/_/g, " ").split(" ").filter(Boolean).join(" ");
-  if (words.length === 0) return value;
-  return words.charAt(0).toUpperCase() + words.slice(1);
+function localizeToolName(name: string, input: string | null, output: string | null): string {
+  const symphonyLabel = i18n.t(`issue.toolCall.tools.${name}`, { defaultValue: "" });
+  if (symphonyLabel) return symphonyLabel;
+  return resolveToolDisplayName(name, input, output);
 }

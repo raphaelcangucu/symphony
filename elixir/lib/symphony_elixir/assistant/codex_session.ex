@@ -867,7 +867,20 @@ defmodule SymphonyElixir.Assistant.CodexSession do
             content = Map.get(item, "content") || Map.get(item, :content) || ""
             is_error = Map.get(item, "is_error") || Map.get(item, :is_error) || false
             status = if is_error, do: "error", else: "complete"
-            tool_call = %{name: nil, status: status, arguments: nil, output: content, result: %{}, id: id}
+            name = Map.get(item, "name") || Map.get(item, :name)
+            input = Map.get(item, "input") || Map.get(item, :input)
+            name = name || infer_cursor_tool_name(content)
+            output = format_cursor_tool_output(content)
+
+            tool_call = %{
+              name: name,
+              status: status,
+              arguments: input,
+              output: output,
+              result: %{},
+              id: id
+            }
+
             Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, id, tool_call)} end)
             maybe_call(opts, :on_tool_call_completed, tool_call)
 
@@ -1187,4 +1200,25 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     hash = :crypto.hash(:sha256, project_slug) |> Base.encode16(case: :lower) |> binary_part(0, 12)
     "#{safe}-#{hash}"
   end
+
+  defp infer_cursor_tool_name(content) when is_binary(content) do
+    cond do
+      String.contains?(content, "Glob pattern") -> "Glob"
+      String.contains?(content, "glob_pattern") -> "Glob"
+      true -> "unknown"
+    end
+  end
+
+  defp infer_cursor_tool_name(_content), do: "unknown"
+
+  defp format_cursor_tool_output(content) when is_binary(content) do
+    case Jason.decode(content) do
+      {:ok, %{"error" => %{"error" => message}}} when is_binary(message) -> message
+      {:ok, %{"error" => %{"message" => message}}} when is_binary(message) -> message
+      {:ok, %{"error" => message}} when is_binary(message) -> message
+      _ -> content
+    end
+  end
+
+  defp format_cursor_tool_output(content), do: content
 end
