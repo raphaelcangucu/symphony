@@ -102,6 +102,41 @@ defmodule SymphonyElixir.Tracker.Sync.OutboxTest do
     assert failed.attempts == 2
   end
 
+  test "mark_failed coalesces into an existing pending sibling instead of violating the dedup index", %{
+    project: project
+  } do
+    attrs = %{
+      project_id: project.id,
+      entity_type: "state",
+      operation: "move",
+      payload: %{"identifier" => "MM-1", "state" => "Todo"},
+      dedup_key: "state:move:#{project.id}:MM-1"
+    }
+
+    # A first write is claimed into `in_flight` by a sync pass.
+    {:ok, _first} = Outbox.enqueue(attrs)
+    [in_flight] = Outbox.claim_pending(project.id, 10)
+    assert in_flight.status == "in_flight"
+
+    # While that one is in flight, a newer local write enqueues a `pending`
+    # sibling for the same dedup_key (allowed: the partial index only forbids two
+    # *pending* rows per key, and the first is now `in_flight`).
+    {:ok, pending_sibling} = Outbox.enqueue(%{attrs | payload: %{"identifier" => "MM-1", "state" => "Done"}})
+    assert pending_sibling.status == "pending"
+
+    # The in-flight push fails and is requeued. Before the fix this returned an
+    # `{:error, changeset}` dedup violation that crashed the whole sync task.
+    assert {:ok, kept} = Outbox.mark_failed(in_flight, "boom", 5)
+    assert kept.status == "pending"
+
+    # Exactly one pending row survives per dedup_key, carrying the newer payload,
+    # and the redundant in-flight row is dropped.
+    assert kept.id == pending_sibling.id
+    assert kept.payload["state"] == "Done"
+    assert Outbox.pending_count(project.id) == 1
+    refute Repo.get(OutboxEntry, in_flight.id)
+  end
+
   test "requeue_failed_issue_creates revives only matching failed creates", %{project: project} do
     {:ok, _matching} =
       Outbox.enqueue(%{

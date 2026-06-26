@@ -208,8 +208,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
   defp warm_up_remediation("image_pull_auth") do
     %{
       needs_user_input: true,
-      summary:
-        "The app image could not be pulled from the private ECR registry (HTTP 403 / not authorized). Valid AWS credentials are required and must come from the user.",
+      summary: "The app image could not be pulled from the private ECR registry (HTTP 403 / not authorized). Valid AWS credentials are required and must come from the user.",
       ask: [
         "What is the AWS_ACCESS_KEY_ID for the ECR registry?",
         "What is the AWS_SECRET_ACCESS_KEY for that key?",
@@ -268,8 +267,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
       needs_user_input: false,
       summary: "The stack booted but /health for the default tenant did not become healthy in time.",
       ask: [],
-      apply:
-        "Read the app logs (docker logs) to find the cause; if the default-tenant DB is missing/unseeded, seed it. Ask the user only if a decision or secret is required."
+      apply: "Read the app logs (docker logs) to find the cause; if the default-tenant DB is missing/unseeded, seed it. Ask the user only if a decision or secret is required."
     }
   end
 

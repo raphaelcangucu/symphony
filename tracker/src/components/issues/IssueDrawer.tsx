@@ -77,6 +77,8 @@ interface IssueDrawerProps {
   view: WorkspaceView;
   execution?: AgentExecution;
   subtasks?: Issue[];
+  parentCandidates?: Issue[];
+  groupLeadCandidates?: Issue[];
   workflowMarkdown?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -90,6 +92,11 @@ interface IssueDrawerProps {
   onIssueUpdated?: (updated: Issue) => void;
   group?: ResolvedIssueGroup | null;
   onOpenIssue?: (identifier: string) => void;
+  onCreateSubtask?: (title: string) => Promise<boolean>;
+  onSetParent?: (parentIdentifier: string) => Promise<boolean>;
+  onClearParent?: () => Promise<boolean>;
+  onSetGroupLead?: (leadIdentifier: string) => Promise<boolean>;
+  onClearGroupLead?: () => Promise<boolean>;
 }
 
 export function IssueDrawer({
@@ -98,6 +105,8 @@ export function IssueDrawer({
   view,
   execution,
   subtasks = [],
+  parentCandidates = [],
+  groupLeadCandidates = [],
   workflowMarkdown = null,
   open,
   onOpenChange,
@@ -111,6 +120,11 @@ export function IssueDrawer({
   onIssueUpdated,
   group = null,
   onOpenIssue,
+  onCreateSubtask,
+  onSetParent,
+  onClearParent,
+  onSetGroupLead,
+  onClearGroupLead,
 }: IssueDrawerProps) {
   const { t } = useTranslation();
   const meta = issue ? getStatusMeta(issue.status) : null;
@@ -403,8 +417,15 @@ export function IssueDrawer({
                     pullRequests={pr.pullRequests}
                     workpad={commentsState.workpad}
                     subtasks={subtasks}
+                    parentCandidates={parentCandidates}
+                    groupLeadCandidates={groupLeadCandidates}
                     saving={issueUpdater.saving}
                     onOpenIssue={onOpenIssue}
+                    onCreateSubtask={onCreateSubtask}
+                    onSetParent={onSetParent}
+                    onClearParent={onClearParent}
+                    onSetGroupLead={onSetGroupLead}
+                    onClearGroupLead={onClearGroupLead}
                     onOpenPullRequest={() => onTabChange?.("pr")}
                     onOpenComments={() => onTabChange?.("comments")}
                     onSaveDescription={async (description) => {

@@ -21,6 +21,7 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceControllerTest do
     on_exit(fn -> restore_env(@token_env, previous_token) end)
 
     {:ok, project} = Context.ensure_project(%{name: "ADV", slug: "advising"})
+
     {:ok, _setup} =
       Context.upsert_project_setup("advising", %{
         "workflow_markdown" => """
@@ -67,6 +68,7 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceControllerTest do
 
   test "index lists commits via project repository default_branch without origin/HEAD", %{tmp_dir: tmp_dir} do
     {:ok, _project} = Context.ensure_project(%{name: "ADV", slug: "advising"})
+
     {:ok, _setup} =
       Context.upsert_project_setup("advising", %{
         "workflow_markdown" => """

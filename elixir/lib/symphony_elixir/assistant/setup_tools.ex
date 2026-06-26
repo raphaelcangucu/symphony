@@ -105,15 +105,13 @@ defmodule SymphonyElixir.Assistant.SetupTools do
   defp no_repositories_remediation do
     %{
       needs_user_input: true,
-      summary:
-        "This project has no linked repositories, so setup cannot infer the stack, workflow, or dev-env steps. The user must say which repositories to use.",
+      summary: "This project has no linked repositories, so setup cannot infer the stack, workflow, or dev-env steps. The user must say which repositories to use.",
       ask: [
         "Which repositories should this project use? (GitHub full name, e.g. org/repo)",
         "What is each repository's role? (e.g. primary, backend, frontend)",
         "What workspace path should each repository check out to?"
       ],
-      apply:
-        "Do NOT invent repositories. After the user lists them, link them to the project (or pass them as the repositories argument) and re-run scan_project_setup / suggest_project_setup."
+      apply: "Do NOT invent repositories. After the user lists them, link them to the project (or pass them as the repositories argument) and re-run scan_project_setup / suggest_project_setup."
     }
   end
 

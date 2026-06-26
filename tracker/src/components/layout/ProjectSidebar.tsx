@@ -1,5 +1,6 @@
 import {
   Activity,
+  BookOpen,
   HardDrive,
   KeyRound,
   type LucideIcon,
@@ -36,6 +37,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/projects", labelKey: "nav.projects", icon: ListTodo },
+  { to: "/kb", labelKey: "nav.knowledgeBase", icon: BookOpen },
   { to: "/templates", labelKey: "nav.templates", icon: LayoutTemplate },
   { to: "/observability", labelKey: "nav.observability", icon: Activity },
   { to: "/backups", labelKey: "nav.backups", icon: HardDrive },

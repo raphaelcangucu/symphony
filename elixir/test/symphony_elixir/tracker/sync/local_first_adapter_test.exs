@@ -210,6 +210,50 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
     assert Enum.all?(entries, &(&1.payload["state"] == "Done"))
   end
 
+  test "move_issue enqueues remote status moves for a parent's sub-issues", %{project: project} do
+    {:ok, parent} = Context.create_issue(project.slug, %{title: "Parent", status: "Todo"})
+    {:ok, child} = Context.create_issue(project.slug, %{title: "Child", status: "Backlog"})
+    {:ok, _} = Context.set_issue_parent(project.slug, child.identifier, parent.identifier)
+
+    assert {:ok, _dto} = LocalFirstAdapter.move_issue(project, parent.identifier, %{"status" => "Done"})
+
+    assert Outbox.pending_count(project.id) == 2
+    entries = Outbox.claim_pending(project.id, 10)
+    identifiers = entries |> Enum.map(& &1.payload["identifier"]) |> Enum.sort()
+    assert identifiers == Enum.sort([parent.identifier, child.identifier])
+    assert Enum.all?(entries, &(&1.payload["state"] == "Done"))
+  end
+
+  test "move_issue enqueues a parent rollup push when a child move rolls the parent up", %{project: project} do
+    {:ok, parent} = Context.create_issue(project.slug, %{title: "Parent", status: "Todo"})
+    {:ok, child} = Context.create_issue(project.slug, %{title: "Child", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent(project.slug, child.identifier, parent.identifier)
+
+    assert {:ok, _dto} = LocalFirstAdapter.move_issue(project, child.identifier, %{"status" => "Done"})
+
+    assert Outbox.pending_count(project.id) == 2
+    entries = Outbox.claim_pending(project.id, 10)
+    identifiers = entries |> Enum.map(& &1.payload["identifier"]) |> Enum.sort()
+    assert identifiers == Enum.sort([parent.identifier, child.identifier])
+    assert Enum.all?(entries, &(&1.payload["state"] == "Done"))
+  end
+
+  test "move_issue does not push the parent when a sibling holds it back", %{project: project} do
+    {:ok, parent} = Context.create_issue(project.slug, %{title: "Parent", status: "Todo"})
+    {:ok, c1} = Context.create_issue(project.slug, %{title: "C1", status: "Todo"})
+    {:ok, c2} = Context.create_issue(project.slug, %{title: "C2", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent(project.slug, c1.identifier, parent.identifier)
+    {:ok, _} = Context.set_issue_parent(project.slug, c2.identifier, parent.identifier)
+
+    assert {:ok, _dto} = LocalFirstAdapter.move_issue(project, c1.identifier, %{"status" => "In Progress"})
+
+    # The parent stays at the least-advanced child (c2 is still Todo), so only the
+    # moved child is pushed.
+    assert Outbox.pending_count(project.id) == 1
+    [entry] = Outbox.claim_pending(project.id, 10)
+    assert entry.payload["identifier"] == c1.identifier
+  end
+
   test "add_comment stores locally and enqueues", %{project: project} do
     assert {:ok, _comment} = LocalFirstAdapter.add_comment(project, "1", "hello", %{})
     assert Outbox.pending_count(project.id) == 1

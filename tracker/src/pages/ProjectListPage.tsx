@@ -1,9 +1,10 @@
 import { Archive, ExternalLink, FolderKanban, Pencil, Plus, RotateCcw, SlidersHorizontal, Trash2, Upload } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { ProjectImportDialog } from "@/components/projects/ProjectImportDialog";
 import { ProjectsIndexProvider, type ProjectStatusFilter } from "@/components/projects/ProjectsIndexContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import { githubProjectBoardUrl, projectTrackerLinkLabel, resolveProjectTrackerUr
 import { projectEditPath, projectsFiltersPath, projectsNewPath } from "@/lib/workspaceRoutes";
 import { discoverGitHubProjects } from "@/services/remoteTrackers";
 import { archiveProject, deleteProject, listProjects, restoreProject } from "@/services/projects";
-import { importProject } from "@/services/projectImportExport";
+import { importProject, importProjectFromUrl } from "@/services/projectImportExport";
 import type { Project } from "@/types/project";
 
 function projectMatchesStatus(project: Project, statusFilter: ProjectStatusFilter) {
@@ -42,7 +43,7 @@ export function ProjectListPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [githubBoardUrls, setGithubBoardUrls] = useState<Record<string, string>>({});
-  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const statusFilter = parseStatusFilter(searchParams.get("status"));
   const keyword = searchParams.get("q") ?? "";
@@ -139,18 +140,25 @@ export function ProjectListPage() {
     notifyTrackerProjectsChanged();
   };
 
-  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
+  const handleImportFile = async (yaml: string, _fileName: string) => {
     try {
-      const yaml = await file.text();
       const imported = await importProject(yaml);
       handleProjectCreated(imported);
       toast.success(t("project.list.toasts.imported", { name: imported.name }));
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t("project.list.toasts.importFailed"));
+      throw cause;
+    }
+  };
+
+  const handleImportFromUrl = async (url: string) => {
+    try {
+      const imported = await importProjectFromUrl(url);
+      handleProjectCreated(imported);
+      toast.success(t("project.list.toasts.imported", { name: imported.name }));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("project.list.toasts.importFailed"));
+      throw cause;
     }
   };
 
@@ -222,14 +230,7 @@ export function ProjectListPage() {
             <p className="text-sm text-muted-foreground">{t("project.list.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept=".yaml,.yml,text/yaml,application/x-yaml"
-              className="hidden"
-              onChange={(event) => void handleImportFile(event)}
-            />
-            <Button type="button" variant="outline" size="sm" onClick={() => importFileInputRef.current?.click()}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload className="h-4 w-4" />
               {t("project.list.import")}
             </Button>
@@ -354,6 +355,12 @@ export function ProjectListPage() {
           </div>
         </main>
       </div>
+      <ProjectImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImportFile={handleImportFile}
+        onImportUrl={handleImportFromUrl}
+      />
       <Outlet />
     </ProjectsIndexProvider>
   );

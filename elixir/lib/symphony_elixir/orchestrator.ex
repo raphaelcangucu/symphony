@@ -857,7 +857,9 @@ defmodule SymphonyElixir.Orchestrator do
       {:ok, pid} ->
         ref = Process.monitor(pid)
 
-        Logger.info("Dispatching #{if members == [], do: "issue", else: "group"} to agent: #{issue_context(issue)} members=#{length(members)} pid=#{inspect(pid)} attempt=#{inspect(attempt)} role=#{bundle_ctx.role}")
+        Logger.info(
+          "Dispatching #{if members == [], do: "issue", else: "group"} to agent: #{issue_context(issue)} members=#{length(members)} pid=#{inspect(pid)} attempt=#{inspect(attempt)} role=#{bundle_ctx.role}"
+        )
 
         running = Map.put(state.running, issue.id, dispatch_running_entry(pid, ref, issue, agent_kind, attempt, members, bundle_ctx))
 

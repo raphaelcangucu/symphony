@@ -262,7 +262,6 @@ defmodule SymphonyElixir.Evidence.Commits do
     }
   end
 
-
   defp git(path, args) do
     case System.cmd("git", args, cd: path, stderr_to_stdout: true) do
       {output, 0} -> {:ok, String.trim_trailing(output)}

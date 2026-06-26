@@ -22,12 +22,15 @@ defmodule SymphonyElixir.Cursor.SessionLog do
     |> Path.join("**/*.jsonl")
     |> Path.wildcard()
     |> Enum.filter(&File.regular?/1)
-    |> Enum.sort_by(fn path ->
-      case File.stat(path) do
-        {:ok, %File.Stat{mtime: mtime}} -> mtime
-        _ -> {{1970, 1, 1}, {0, 0, 0}}
-      end
-    end, :desc)
+    |> Enum.sort_by(
+      fn path ->
+        case File.stat(path) do
+          {:ok, %File.Stat{mtime: mtime}} -> mtime
+          _ -> {{1970, 1, 1}, {0, 0, 0}}
+        end
+      end,
+      :desc
+    )
     |> case do
       [latest | _] -> {:ok, latest}
       [] -> :error

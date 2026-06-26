@@ -19,6 +19,7 @@ export type BoardState = Record<WorkflowStatusName, Issue[]>;
 
 export const ISSUE_DRAG_PREFIX = "issue:";
 export const GROUP_DRAG_PREFIX = "group:";
+export const PARENT_DRAG_PREFIX = "parent:";
 
 export function issueDragId(identifier: string): string {
   requireNonBlank(identifier, "identifier");
@@ -31,6 +32,9 @@ export function parseDragIssueId(id: unknown): string | null {
   // A group's drag id encodes its lead, so dragging the group resolves to moving
   // (and reordering against) the lead issue.
   if (id.startsWith(GROUP_DRAG_PREFIX)) return id.slice(GROUP_DRAG_PREFIX.length);
+  // A parent card wraps its own issue card (like a group wraps its lead), so its
+  // drag id resolves to the parent issue for move/reorder/group intent.
+  if (id.startsWith(PARENT_DRAG_PREFIX)) return id.slice(PARENT_DRAG_PREFIX.length);
   return id;
 }
 
@@ -180,6 +184,35 @@ export function resolveGroupMoveLead(
 }
 
 /**
+ * Resolves the anchor issue and the followers that travel with it on a board
+ * move. A group moves as one unit (dragging a member resolves to its lead +
+ * siblings); a parent additionally drags its direct sub-issues so the parent
+ * card and its subtasks land in the same column together. Followers are
+ * de-duplicated so an issue that is both a group member and a sub-issue is moved
+ * only once. Mirrors the server cascade in `persist_group_move`.
+ */
+export function resolveMoveUnit(
+  issues: readonly Issue[],
+  identifier: string,
+): { anchorIdentifier: string; followerIdentifiers: string[] } {
+  const { leadIdentifier, memberIdentifiers } = resolveGroupMoveLead(issues, identifier);
+
+  const subtaskIdentifiers = issues
+    .filter((issue) => issue.parentIdentifier === leadIdentifier)
+    .map((issue) => issue.identifier);
+
+  const seen = new Set<string>([leadIdentifier]);
+  const followerIdentifiers: string[] = [];
+  for (const candidate of [...memberIdentifiers, ...subtaskIdentifiers]) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    followerIdentifiers.push(candidate);
+  }
+
+  return { anchorIdentifier: leadIdentifier, followerIdentifiers };
+}
+
+/**
  * Moves an issue and, when it leads a group, drags its members into the same
  * column right behind the lead so the whole group travels as one unit. Pure
  * board transform used for optimistic updates; the server mirrors this through
@@ -260,9 +293,10 @@ export function groupIssuesIntoUnits(issues: readonly Issue[]): BoardUnit[] {
     if (hasSubtasks) {
       // Additive (not absorbing): the parent renders an expandable subtask list,
       // but each subtask still gets its own issue unit below (it may live in a
-      // different column/repo). The drag id stays the plain issue id so the
-      // parent reorders/moves like a normal card.
-      units.push({ kind: "parent", id: issueDragId(issue.identifier), issue, subtasks });
+      // different column/repo). Its drag id uses the parent prefix so the wrapper
+      // card is the single draggable unit (the inner issue card is presentational),
+      // mirroring how a group wraps its lead.
+      units.push({ kind: "parent", id: `${PARENT_DRAG_PREFIX}${issue.identifier}`, issue, subtasks });
     } else {
       units.push({ kind: "issue", id: issueDragId(issue.identifier), issue });
     }

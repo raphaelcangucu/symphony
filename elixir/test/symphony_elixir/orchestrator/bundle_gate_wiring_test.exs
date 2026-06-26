@@ -38,7 +38,7 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
   test "releases the dependent child once its dependency is done and contract is ready" do
     candidates = [child("id-2", "MAC-2"), child("id-3", "MAC-3")]
 
-    ready_bundle = %{bundle() | shared_contracts: [%{bundle().shared_contracts |> hd() | status: :ready}]}
+    ready_bundle = %{bundle() | shared_contracts: [%{(bundle().shared_contracts |> hd()) | status: :ready}]}
 
     held =
       Orchestrator.held_child_issue_ids_for_test(candidates,

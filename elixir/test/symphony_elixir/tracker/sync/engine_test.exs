@@ -178,6 +178,42 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     def pull_pull_requests(_project, _issue), do: {:ok, []}
   end
 
+  # Models an external change: the remote keeps a child in "Done" while the parent
+  # is still "Todo". After the pull, the engine reconciles the parent up to its
+  # least-advanced child and enqueues the resulting parent push.
+  defmodule RollupPullDriver do
+    @behaviour SymphonyElixir.Tracker.Sync.Driver
+
+    @impl true
+    def pull(_project, _opts), do: {:ok, [issue("10", "Todo"), issue("11", "Done")]}
+
+    @impl true
+    def push(_project, _entry), do: {:ok, "REMOTE"}
+
+    @impl true
+    def pull_pull_requests(_project, _issue), do: {:ok, []}
+
+    defp issue(id, state) do
+      %{
+        remote_id: "I_#{id}",
+        remote_number: String.to_integer(id),
+        identifier: id,
+        title: "Issue #{id}",
+        description: "body",
+        state: state,
+        priority: nil,
+        assignee_id: nil,
+        branch_name: nil,
+        remote_url: "u",
+        creator: "octo",
+        position: 0,
+        remote_updated_at: DateTime.utc_now(),
+        labels: [],
+        comments: []
+      }
+    end
+  end
+
   @enrich_table :symphony_tracker_enrich_ttl
 
   setup do
@@ -203,6 +239,22 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     state = Repo.get_by(StateRecord, project_id: project.id)
     assert state.status == "idle"
     refute is_nil(state.last_pull_at)
+  end
+
+  test "sync_project rolls a parent up after a pull moves its child and enqueues the parent push", %{project: project} do
+    # Seed both issues from the remote, then declare the parent/child link locally.
+    assert {:ok, _} = Engine.sync_project(project, driver: RollupPullDriver, force: true)
+    {:ok, _} = Context.set_issue_parent(project.slug, "11", "10")
+
+    # A second pull leaves the child in Done; the post-pull reconcile rolls the
+    # parent up to follow its only child.
+    assert {:ok, _} = Engine.sync_project(project, driver: RollupPullDriver, force: true)
+
+    assert {:ok, parent} = Context.get_issue(project.slug, "10")
+    assert parent.status.name == "Done"
+
+    entries = Outbox.claim_pending(project.id, 10)
+    assert Enum.any?(entries, &(&1.payload["identifier"] == "10" and &1.payload["state"] == "Done"))
   end
 
   test "sync_project stores pull requests for pulled issues", %{project: project} do

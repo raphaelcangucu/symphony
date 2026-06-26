@@ -222,8 +222,7 @@ defmodule SymphonyElixir.GitHub.StateReconciliation do
         {:ok, field, url}
 
       {:ok, %{"data" => %{"node" => %{"field" => nil}}}} ->
-        {:error,
-         "GitHub Project #{inspect(status_field_name)} field not found or is not a single-select field."}
+        {:error, "GitHub Project #{inspect(status_field_name)} field not found or is not a single-select field."}
 
       {:ok, body} ->
         {:error, "Unexpected read status field response: #{inspect(body)}"}

@@ -682,6 +682,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     end
   end
 
+  describe "personal KB (@user) scope" do
+    test "dispatches knowledge-base tools without requiring a tracker project" do
+      assert {:ok, result} = ToolExecutor.execute("@user", "kb_list_repositories", %{}, [])
+      assert result.tool == "kb_list_repositories"
+      assert Enum.any?(result.data.repositories, &(&1.workspace_path == "symphony-kb"))
+    end
+
+    test "rejects project-board tools that would require a real project" do
+      assert {:error, :invalid_arguments} =
+               ToolExecutor.execute("@user", "create_issue", %{"title" => "Nope"}, [])
+
+      assert {:error, :invalid_arguments} =
+               ToolExecutor.execute("@user", "list_issues", %{}, [])
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

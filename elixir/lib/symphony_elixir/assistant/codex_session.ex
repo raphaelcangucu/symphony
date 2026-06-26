@@ -12,6 +12,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     ToolCallPresenter,
     ToolExecutor
   }
+
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.CodingAgent, as: RootCodingAgent
   alias SymphonyElixir.Config
@@ -130,6 +131,52 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          {:ok, runner_result} <- run_project_explore_turn(workspace, prompt, project_slug, opts),
          {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
+      {:ok,
+       %{
+         assistant_message: assistant_message.content,
+         tool_calls: assistant_message.tool_calls,
+         codex_thread_id: Map.get(runner_result, :codex_thread_id),
+         turn_id: Map.get(runner_result, :turn_id),
+         user_message: History.message_payload(user_message),
+         assistant_chat_message: History.message_payload(assistant_message)
+       }}
+    end
+  end
+
+  @kb_write_tools ~w(kb_create_page kb_update_page kb_link_task kb_delete_page kb_delete_asset kb_delete_folder)
+
+  @spec send_message_to_kb_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
+          {:ok, turn_result()} | {:error, term()}
+  def send_message_to_kb_thread(
+        %{scope: "kb", id: thread_id, project_slug: project_slug} = thread,
+        message,
+        context,
+        opts \\ []
+      )
+      when is_binary(message) and is_map(context) and is_list(opts) do
+    # Reload so that agent_thread_ids written by a prior turn are visible even
+    # when the caller holds a frozen struct from an earlier socket assign.
+    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
+    agent_kind = resolve_thread_agent(thread, context)
+
+    opts =
+      opts
+      |> Keyword.put(:agent_kind, agent_kind)
+      |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+
+    with {:ok, trimmed} <- normalize_message(message),
+         workspace <- kb_thread_workspace(thread),
+         :ok <- File.mkdir_p(workspace),
+         history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         {:ok, user_message} <-
+           History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
+         prompt <- build_kb_prompt(project_slug, trimmed, context, history),
+         :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
+         {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
+         {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
+         {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
+      maybe_notify_kb_documents(assistant_message, context, opts)
+
       {:ok,
        %{
          assistant_message: assistant_message.content,
@@ -282,6 +329,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
     Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (start/stop/restart/status), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, manage_codex_goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    Knowledge base tools (docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Projects can span multiple repositories; KB pages are addressed by (repository, path-within-docs). When the project has more than one repository and the user does not name one, the tool returns a remediation asking which repository — ASK the user, then retry with the `repository` argument (owner/name, workspace path, or slug). Use kb_search_pages before creating pages to avoid duplicates, kb_create_page for new pages and kb_update_page for existing ones, kb_link_task to reference a tracker issue inside a page, and kb_sync to push docs and open/auto-merge the PR. The delete tools (kb_delete_page, kb_delete_asset, kb_delete_folder) are destructive — kb_delete_folder removes a directory and everything inside it — so confirm the exact target with the user before calling them.
     Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview URLs, configure serve steps with manage_dev_env then manage_preview (start|status).
     To explain why an issue is or isn't auto-dispatched, call explain_dispatch_eligibility; for live running/retry/idle state call get_issue_orchestrator_state. To see every agent executing right now call list_running_agents, and steer_agent to inject a message into a running agent's turn. After opening a PR call link_pull_request. Manage dependencies with manage_blockers; pull external tracker edits with sync_issue.
     If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
@@ -483,6 +531,105 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     |> String.trim()
   end
 
+  @kb_body_limit 20_000
+
+  defp build_kb_prompt(project_slug, message, context, history) do
+    kb = kb_context(context)
+    repo = Map.get(kb, "repoSlug") || Map.get(kb, "repo_slug") || ""
+    path = Map.get(kb, "pagePath") || Map.get(kb, "page_path") || ""
+    title = Map.get(kb, "title") || ""
+    body = kb |> Map.get("body") |> truncate_kb_body()
+    selection = kb |> Map.get("selection") |> normalize_kb_selection()
+
+    """
+    You are the Symphony Knowledge Base assistant for project `#{project_slug}`.
+    You help the user write and maintain THIS knowledge base page, like a Notion AI side chat. Answer naturally in the user's language. Keep doc edits small and reviewable, and always say which repository and path you changed.
+
+    The page the user is currently editing is already loaded for you:
+    - Repository: #{repo}
+    - Path: #{path}
+    - Title: #{title}
+    #{kb_selection_block(selection)}
+    Current page content:
+    ----------------------------------------
+    #{body}
+    ----------------------------------------
+
+    Knowledge base tools (docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Pages are addressed by (repository, path-within-docs).
+    To edit THIS page, call kb_update_page with repository "#{repo}" and path "#{path}" (it already exists — never kb_create_page it). Pass that repository explicitly so you never need to ask which repository. Use kb_search_pages/kb_read_page to consult other pages, kb_create_page only for brand-new pages, kb_link_task to reference a tracker issue inside a page, and kb_sync to push docs. Use kb_delete_page/kb_delete_asset/kb_delete_folder to remove content — they are destructive (kb_delete_folder deletes a whole directory and its contents), so confirm the exact target with the user first.
+    You also have the project board tools (list_issues, create_issue, update_issue, add_comment, ...) for tracker actions when the user asks. Do not dispatch coding agents unless explicitly asked. Your replies are shown directly in this chat — do not mirror them as issue comments.
+    If a request is ambiguous, ask one concise clarifying question first.
+
+    Recent conversation:
+    #{format_history(history)}
+
+    Current user message:
+    #{message}
+    """
+    |> String.trim()
+  end
+
+  defp kb_context(context) when is_map(context) do
+    case Map.get(context, "kb") || Map.get(context, :kb) do
+      kb when is_map(kb) -> kb
+      _ -> %{}
+    end
+  end
+
+  defp kb_context(_context), do: %{}
+
+  defp truncate_kb_body(body) when is_binary(body) do
+    if String.length(body) > @kb_body_limit do
+      String.slice(body, 0, @kb_body_limit) <> "\n\n…(truncated; use kb_read_page for the full document)"
+    else
+      body
+    end
+  end
+
+  defp truncate_kb_body(_body), do: "(empty page)"
+
+  defp normalize_kb_selection(selection) when is_binary(selection) do
+    case String.trim(selection) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_kb_selection(_selection), do: nil
+
+  defp kb_selection_block(nil), do: ""
+
+  defp kb_selection_block(selection) do
+    "- The user has selected this text (focus your help here when relevant):\n  \"\"\"\n  #{selection}\n  \"\"\"\n"
+  end
+
+  defp kb_thread_workspace(%{workspace_path: path}) when is_binary(path) and path != "", do: path
+
+  defp kb_thread_workspace(_thread) do
+    Path.join([Config.workspace_root() |> Path.expand(), "assistant", "kb", "default"])
+  end
+
+  defp maybe_notify_kb_documents(%{tool_calls: tool_calls}, context, opts) when is_list(tool_calls) do
+    if Enum.any?(tool_calls, &kb_write_tool_call?/1) do
+      identifier = kb_context(context) |> Map.get("pagePath") || "kb"
+      _ = maybe_call(opts, :on_documents_changed, identifier)
+    end
+
+    :ok
+  end
+
+  defp maybe_notify_kb_documents(_assistant_message, _context, _opts), do: :ok
+
+  defp kb_write_tool_call?(tool_call) when is_map(tool_call) do
+    # Name-only: any kb write tool invocation triggers a reload. Reloading after a
+    # failed/partial write is harmless (the editor just re-reads the same content),
+    # so this avoids depending on the exact tool-call status shape.
+    name = Map.get(tool_call, "name") || Map.get(tool_call, :name)
+    name in @kb_write_tools
+  end
+
+  defp kb_write_tool_call?(_tool_call), do: false
+
   defp orchestrator_config_summary(project_slug) do
     case Context.get_project(project_slug) do
       {:ok, project} ->
@@ -568,6 +715,12 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     Diagnose / repair: explain_dispatch_eligibility (why an issue isn't dispatching), get_issue_orchestrator_state
     (live running/retry/idle), list_running_agents (every agent executing now), steer_agent (inject a message into a
     running agent's turn), manage_blockers (blocked_by relations), sync_issue (pull external tracker edits).
+
+    Knowledge base (require project_slug; docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page,
+    kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Projects can
+    span multiple repositories; when more than one is linked and the user does not name one, the tool returns a remediation
+    asking which repository — ASK, then retry with the `repository` argument. Search before creating to avoid duplicates.
+    The delete tools are destructive (kb_delete_folder removes a directory and everything inside it) — confirm the target first.
 
     Project setup flow: scan_project_setup → suggest_project_setup → update_project_workflow / update_project_repositories,
     then manage_dev_env (propose_steps|save_steps|run) before manage_preview for serve URLs.

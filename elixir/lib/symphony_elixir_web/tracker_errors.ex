@@ -363,6 +363,188 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :not_in_group),
     do: error(conn, 422, "not_in_group", dgettext("errors", "This issue is not part of a group."))
 
+  def render(conn, :cannot_parent_self),
+    do: error(conn, 422, "cannot_parent_self", dgettext("errors", "An issue cannot be its own parent."))
+
+  def render(conn, :parent_cycle),
+    do:
+      error(
+        conn,
+        422,
+        "parent_cycle",
+        dgettext("errors", "That parent is already a sub-issue of this issue.")
+      )
+
+  def render(conn, :repo_not_checked_out),
+    do:
+      not_found(
+        conn,
+        "repo_not_checked_out",
+        dgettext("errors", "Repository checkout is not available yet")
+      )
+
+  def render(conn, :kb_invalid_path),
+    do:
+      error(
+        conn,
+        422,
+        "kb_invalid_path",
+        dgettext("errors", "Knowledge base path must be a markdown file under docs/.")
+      )
+
+  def render(conn, :kb_page_not_found),
+    do: not_found(conn, "kb_page_not_found", dgettext("errors", "Knowledge base page not found"))
+
+  def render(conn, :kb_folder_not_found),
+    do: not_found(conn, "kb_folder_not_found", dgettext("errors", "Knowledge base folder not found"))
+
+  def render(conn, :kb_frontmatter_invalid),
+    do:
+      error(
+        conn,
+        422,
+        "kb_frontmatter_invalid",
+        dgettext("errors", "Knowledge base page frontmatter is invalid")
+      )
+
+  def render(conn, :kb_unsupported_asset),
+    do:
+      error(
+        conn,
+        422,
+        "kb_unsupported_asset",
+        dgettext("errors", "Only PNG, JPEG, GIF, and WebP assets are supported.")
+      )
+
+  def render(conn, :kb_asset_too_large),
+    do:
+      error(
+        conn,
+        413,
+        "kb_asset_too_large",
+        dgettext("errors", "Assets must be 4 MB or smaller.")
+      )
+
+  def render(conn, :kb_git_dirty),
+    do:
+      error(
+        conn,
+        409,
+        "kb_git_dirty",
+        dgettext("errors", "The knowledge base working tree has unrelated changes.")
+      )
+
+  def render(conn, {:kb_commit_failed, _reason}),
+    do:
+      error(
+        conn,
+        500,
+        "kb_commit_failed",
+        dgettext("errors", "Failed to commit the knowledge base change.")
+      )
+
+  def render(conn, :kb_merge_conflict),
+    do:
+      error(
+        conn,
+        409,
+        "kb_merge_conflict",
+        dgettext(
+          "errors",
+          "The knowledge base branch has a merge conflict with the default branch."
+        )
+      )
+
+  def render(conn, :kb_checks_failed),
+    do:
+      error(
+        conn,
+        422,
+        "kb_checks_failed",
+        dgettext("errors", "Pull request checks failed for the knowledge base branch.")
+      )
+
+  def render(conn, :kb_not_connected),
+    do:
+      error(
+        conn,
+        409,
+        "kb_not_connected",
+        dgettext("errors", "The general knowledge base is not connected.")
+      )
+
+  def render(conn, {:kb_repo_create_failed, _reason}),
+    do:
+      error(
+        conn,
+        502,
+        "kb_repo_create_failed",
+        dgettext("errors", "Failed to provision the personal knowledge base repository.")
+      )
+
+  def render(conn, {:kb_clone_failed, _reason}),
+    do:
+      error(
+        conn,
+        502,
+        "kb_clone_failed",
+        dgettext("errors", "Failed to clone the repository for the knowledge base.")
+      )
+
+  def render(conn, :yaml_or_url_required),
+    do:
+      error(
+        conn,
+        422,
+        "yaml_or_url_required",
+        dgettext("errors", "Provide either yaml or url.")
+      )
+
+  def render(conn, :invalid_import_url),
+    do:
+      error(
+        conn,
+        422,
+        "invalid_import_url",
+        dgettext("errors", "Import URL must be a valid HTTPS address.")
+      )
+
+  def render(conn, :import_url_blocked),
+    do:
+      error(
+        conn,
+        422,
+        "import_url_blocked",
+        dgettext("errors", "Import URL points to a blocked host.")
+      )
+
+  def render(conn, :import_url_too_large),
+    do:
+      error(
+        conn,
+        422,
+        "import_url_too_large",
+        dgettext("errors", "Import URL returned a file that is too large.")
+      )
+
+  def render(conn, :import_url_not_found),
+    do:
+      error(
+        conn,
+        404,
+        "import_url_not_found",
+        dgettext("errors", "Import URL was not found.")
+      )
+
+  def render(conn, {:import_url_fetch_failed, _reason}),
+    do:
+      error(
+        conn,
+        422,
+        "import_url_fetch_failed",
+        dgettext("errors", "Failed to fetch project YAML from the import URL.")
+      )
+
   def render(conn, message) when is_binary(message), do: server_error(conn, message)
   def render(conn, _reason), do: server_error(conn)
 

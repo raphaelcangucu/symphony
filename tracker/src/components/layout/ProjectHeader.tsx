@@ -1,13 +1,15 @@
-import { AlertTriangle, LayoutDashboard, List, RefreshCw } from "lucide-react";
+import { AlertTriangle, BookOpen, LayoutDashboard, List, RefreshCw } from "lucide-react";
 import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router-dom";
+import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
 import { cn } from "@/lib/utils";
+import { kbProjectPath } from "@/lib/kbRoutes";
 import { workspaceBasePath } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 import type { ProjectSyncState, TrackerKind } from "@/types/project";
@@ -44,6 +46,51 @@ function syncErrorTitle(syncState: ProjectSyncState, t: TFunction): string {
   return lines.join("\n");
 }
 
+// Locale-independent, debug-friendly text so it can be pasted straight into an
+// IDE/assistant regardless of the UI language.
+function buildSyncErrorReport(
+  syncState: ProjectSyncState,
+  projectSlug: string,
+  trackerKind: TrackerKind | undefined,
+): string {
+  const lines = ["Symphony sync error"];
+  lines.push(`Project: ${projectSlug}${trackerKind ? ` (${trackerKind})` : ""}`);
+  lines.push(`Status: ${syncState.status}`);
+  if (syncState.lastError) lines.push(`Last error: ${syncState.lastError}`);
+  if (syncState.lastPullAt) lines.push(`Last pull: ${syncState.lastPullAt}`);
+  if (syncState.lastPushAt) lines.push(`Last push: ${syncState.lastPushAt}`);
+  if (syncState.lastFullSyncAt) lines.push(`Last full sync: ${syncState.lastFullSyncAt}`);
+  return lines.join("\n");
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall back to the legacy path below (e.g. non-secure contexts).
+    }
+  }
+
+  if (typeof document === "undefined") return false;
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
 export function ProjectHeader({
   projectSlug,
   title,
@@ -63,6 +110,17 @@ export function ProjectHeader({
   const syncFailing = remoteTracker && syncState?.status === "error";
   const syncErrorLabel = t("layout.projectHeader.syncError");
 
+  async function handleCopySyncError() {
+    if (!syncState) return;
+    const report = buildSyncErrorReport(syncState, projectSlug, trackerKind);
+    const copied = await copyTextToClipboard(report);
+    if (copied) {
+      toast.success(t("layout.projectHeader.syncErrorCopied"));
+    } else {
+      toast.error(t("layout.projectHeader.syncErrorCopyFailed"));
+    }
+  }
+
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
       <NavLink
@@ -80,16 +138,19 @@ export function ProjectHeader({
           </span>
         ) : null}
         {syncFailing && syncState ? (
-          <Badge
-            variant="destructive"
-            role="status"
+          <button
+            type="button"
+            onClick={handleCopySyncError}
             aria-label={syncErrorLabel}
-            title={syncErrorTitle(syncState, t)}
-            className="gap-1"
+            title={`${syncErrorTitle(syncState, t)}\n\n${t("layout.projectHeader.syncErrorCopyHint")}`}
+            className={cn(
+              badgeVariants({ variant: "destructive" }),
+              "gap-1 cursor-pointer hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            )}
           >
             <AlertTriangle className="h-3 w-3" />
             {syncErrorLabel}
-          </Badge>
+          </button>
         ) : null}
         {remoteTracker ? (
           <div className="flex items-center gap-2">
@@ -131,6 +192,15 @@ export function ProjectHeader({
           >
             <List className="h-4 w-4" />
             {t("layout.projectHeader.list")}
+          </NavLink>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <NavLink
+            to={kbProjectPath(projectSlug)}
+            className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+          >
+            <BookOpen className="h-4 w-4" />
+            {t("layout.projectHeader.knowledgeBase")}
           </NavLink>
         </Button>
         <NewIssueMenu projectSlug={projectSlug} size="sm" onCreated={onIssueCreated} />

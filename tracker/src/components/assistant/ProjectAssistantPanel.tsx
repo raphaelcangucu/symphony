@@ -51,6 +51,7 @@ import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
   assistantExploreTopic,
   assistantIssueTopic,
+  assistantKbTopic,
   assistantThreadTopic,
   assistantTopic,
   bindAssistantEvents,
@@ -110,7 +111,7 @@ export interface DraftIssueCreated {
   identifier: string;
 }
 
-export type ProjectAssistantMode = "project" | "explore" | "freeform";
+export type ProjectAssistantMode = "project" | "explore" | "freeform" | "kb";
 
 interface ProjectAssistantPanelProps {
   projectSlug?: string;
@@ -118,6 +119,17 @@ interface ProjectAssistantPanelProps {
   issueIdentifier?: string;
   view: WorkspaceView;
   assistantMode?: ProjectAssistantMode;
+  /** Knowledge base page the chat is bound to (drives the `assistant:kb:*` topic). */
+  kbRepoSlug?: string;
+  kbPagePath?: string;
+  /**
+   * Returns extra fields merged into every outgoing `send_message` context at
+   * send time. Used by the KB chat to inject the live open-document snapshot
+   * (body + selection) so the snapshot is always current, not captured on mount.
+   */
+  getExtraContext?: () => Record<string, unknown> | undefined;
+  /** Notifies the parent whenever the assistant turn running state changes. */
+  onRunningChange?: (running: boolean) => void;
   mode?: "sheet" | "page" | "embedded";
   issueMode?: IssueAssistantMode;
   issueModeRequestId?: number;
@@ -230,6 +242,10 @@ export function ProjectAssistantPanel({
   issueIdentifier,
   view,
   assistantMode,
+  kbRepoSlug,
+  kbPagePath,
+  getExtraContext,
+  onRunningChange,
   mode = "sheet",
   issueMode,
   issueModeRequestId = 0,
@@ -294,6 +310,10 @@ export function ProjectAssistantPanel({
   // The composer owns agent selection; mirror it here so dispatch + the parent
   // panel can follow the live choice. A ref keeps the dispatch effect stable.
   const composerAgentRef = useRef<AgentKind | null>(null);
+  // Keep the live extra-context getter in a ref so `dispatchSend` reads the
+  // latest open-document snapshot at send time without re-subscribing the channel.
+  const getExtraContextRef = useRef<typeof getExtraContext>(getExtraContext);
+  getExtraContextRef.current = getExtraContext;
   const [composerHeight, setComposerHeight] = useState(0);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
@@ -303,6 +323,7 @@ export function ProjectAssistantPanel({
   const resolvedAssistantMode: ProjectAssistantMode =
     assistantMode ?? (projectSlug ? (issueIdentifier ? "project" : "project") : "freeform");
   const isExploreMode = resolvedAssistantMode === "explore";
+  const isKbMode = resolvedAssistantMode === "kb" && Boolean(kbRepoSlug) && Boolean(kbPagePath);
 
   bundleRef.current = bundle;
   onDocumentChangedRef.current = onDocumentChanged;
@@ -348,6 +369,10 @@ export function ProjectAssistantPanel({
       return null;
     });
   }, [isRunning]);
+
+  useEffect(() => {
+    onRunningChange?.(isRunning);
+  }, [isRunning, onRunningChange]);
 
   useEffect(() => {
     if (!active) return;
@@ -403,9 +428,11 @@ export function ProjectAssistantPanel({
         ? assistantThreadTopic(threadId)
         : issueIdentifier
           ? assistantIssueTopic(projectSlug ?? "", issueIdentifier)
-          : isExploreMode
-            ? assistantExploreTopic(projectSlug ?? "")
-            : assistantTopic(projectSlug ?? "");
+          : isKbMode
+            ? assistantKbTopic(projectSlug ?? "", kbRepoSlug ?? "", kbPagePath ?? "")
+            : isExploreMode
+              ? assistantExploreTopic(projectSlug ?? "")
+              : assistantTopic(projectSlug ?? "");
     const channel = socket.channel(topic);
     channelRef.current = channel;
 
@@ -547,7 +574,7 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, isExploreMode, issueIdentifier, projectSlug, threadId]);
+  }, [active, isExploreMode, isKbMode, kbRepoSlug, kbPagePath, issueIdentifier, projectSlug, threadId]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;
@@ -643,6 +670,7 @@ export function ProjectAssistantPanel({
         return;
       }
 
+      const extraContext = getExtraContextRef.current?.() ?? {};
       const payload = {
         message: trimmed || fallbackAttachmentMessage(submit.attachments, t),
         context: {
@@ -650,6 +678,7 @@ export function ProjectAssistantPanel({
           agent: submit.agent,
           model: submit.settings.model,
           effort: submit.settings.effort,
+          ...extraContext,
         },
         attachments: submit.attachments,
       };
@@ -1037,7 +1066,7 @@ export function ProjectAssistantPanel({
       <AssistantComposer
         projectSlug={projectSlug ?? ""}
         bundle={bundle ?? fallbackCatalogBundle()}
-        disabled={isRunning}
+        agentMenuDisabled={isRunning}
         floating={isPageMode}
         hasQueued={queued.length > 0}
         seedMessage={composerSeedMessage}

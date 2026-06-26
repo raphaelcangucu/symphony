@@ -1,2 +1,5 @@
 # Git worktrees for isolated agent runs
 .worktrees/
+
+# Per-developer project YAML bundles (make project-import / project-export)
+projects/

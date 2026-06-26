@@ -8,7 +8,7 @@ defmodule SymphonyElixir.Assistant.Thread do
 
   @type t :: %__MODULE__{}
 
-  @scopes ["project", "project_explore", "freeform", "issue"]
+  @scopes ["project", "project_explore", "freeform", "issue", "kb"]
   @cast_fields [
     :scope,
     :project_slug,
@@ -58,6 +58,7 @@ defmodule SymphonyElixir.Assistant.Thread do
     case get_field(changeset, :scope) do
       "project" -> validate_required(changeset, [:project_slug])
       "project_explore" -> validate_required(changeset, [:project_slug])
+      "kb" -> validate_required(changeset, [:project_slug])
       "issue" -> validate_required(changeset, [:project_slug, :issue_identifier])
       "freeform" -> reject_project(changeset)
       _ -> changeset

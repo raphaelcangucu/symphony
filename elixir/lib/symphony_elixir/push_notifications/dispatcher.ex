@@ -180,8 +180,7 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
     with_push_locale(fn ->
       notify(@pr_merge_conflict_kind, %{
         title: dgettext("push", "PR has merge conflicts"),
-        body:
-          dgettext("push", "%{identifier}: resolve merge conflicts before merging", identifier: identifier),
+        body: dgettext("push", "%{identifier}: resolve merge conflicts before merging", identifier: identifier),
         url: issue_url(slug, identifier, "pull-request"),
         tag: "pr_merge_conflict:#{slug}:#{identifier}"
       })
@@ -241,10 +240,7 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
         else
           with_push_locale(fn ->
             notify_to_identities(target_keys, @comment_mention_kind, %{
-              title:
-                dgettext("push", "%{author} mentioned you",
-                  author: comment.author || dgettext("push", "Someone")
-                ),
+              title: dgettext("push", "%{author} mentioned you", author: comment.author || dgettext("push", "Someone")),
               body: "#{identifier}: #{snippet}",
               url: issue_url(slug, identifier),
               tag: "comment_mention:#{slug}:#{identifier}:#{comment.id}"

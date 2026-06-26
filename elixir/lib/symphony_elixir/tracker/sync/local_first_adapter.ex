@@ -12,7 +12,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
 
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter, IssueRecord, Project}
   alias SymphonyElixir.Repo
-  alias SymphonyElixir.Tracker.Sync.{Engine, GroupStatus, LocalStore, Outbox}
+  alias SymphonyElixir.Tracker.Sync.{Engine, GroupStatus, LocalStore, Outbox, SubtaskRollup}
 
   @impl true
   def kind, do: :github
@@ -65,10 +65,29 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
 
   @impl true
   def move_issue(%Project{} = project, identifier, attrs) do
+    # Snapshot the parent BEFORE the move so we can detect the rollup the local
+    # `Context.move_issue` applies (a parent follows the least-advanced child).
+    parent_before = SubtaskRollup.parent_snapshot(project, identifier)
+
     with {:ok, before} <- Context.get_issue(project.slug, identifier),
          {:ok, dto} <- IssueAdapter.move_issue(project, identifier, attrs),
          :ok <- maybe_enqueue_status_move(project, dto, before, attrs) do
+      maybe_enqueue_parent_rollup(project, identifier, parent_before)
       {:ok, dto}
+    end
+  end
+
+  # When a child move rolls its parent to a new status locally, push that parent
+  # too so the next pull does not revert it. No-op when the parent is unchanged.
+  defp maybe_enqueue_parent_rollup(project, identifier, parent_before) do
+    case SubtaskRollup.changed_parent(parent_before, project, identifier) do
+      {parent_identifier, status_name} ->
+        enqueue_status_move(project, parent_identifier, status_name)
+        Engine.request_sync_project(project.slug, force: true)
+        :ok
+
+      nil ->
+        :ok
     end
   end
 
@@ -161,8 +180,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
         :ok
 
       status_name ->
-        dto
-        |> GroupStatus.push_identifiers()
+        project
+        |> push_identifiers_with_subtasks(dto)
         |> Enum.each(&enqueue_status_move(project, &1, status_name))
 
         # Flush this project's outbox once for the whole (possibly grouped) move,
@@ -173,6 +192,20 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
         Engine.request_sync_project(project.slug, force: true)
         :ok
     end
+  end
+
+  # Identifiers whose remote status must follow the moved issue: the group lead
+  # plus its members, AND a parent's direct sub-issues. The local move already
+  # dragged the sub-issues (see `Context.persist_group_move`); pushing them too
+  # keeps the remote in sync so the next pull does not revert them.
+  defp push_identifiers_with_subtasks(%Project{} = project, dto) do
+    subtasks =
+      case Context.list_subtask_children(project.slug, dto.identifier) do
+        {:ok, identifiers} -> identifiers
+        _ -> []
+      end
+
+    (GroupStatus.push_identifiers(dto) ++ subtasks) |> Enum.uniq()
   end
 
   defp enqueue_status_move(project, identifier, status_name) do

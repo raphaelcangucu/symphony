@@ -1,0 +1,53 @@
+import { describe, expect, it } from "vitest";
+import {
+  decodeRepoSlug,
+  encodeRepoSlug,
+  kbGeneralPagePath,
+  kbGeneralPath,
+  kbPagePath,
+  kbProjectPath,
+  kbRepoPath,
+  slugifyPageName,
+  uniquePagePath,
+} from "@/lib/kbRoutes";
+
+describe("kbRoutes", () => {
+  it("encodes and decodes repo slugs round-trip (workspace path <-> slug)", () => {
+    expect(encodeRepoSlug("services/api")).toBe("services~api");
+    expect(decodeRepoSlug("services~api")).toBe("services/api");
+    expect(encodeRepoSlug("web")).toBe("web");
+  });
+
+  it("builds the project KB base path", () => {
+    expect(kbProjectPath("acme")).toBe("/projects/acme/kb");
+  });
+
+  it("builds a repo path using the URL-safe repo slug verbatim", () => {
+    expect(kbRepoPath("acme", "services~api")).toBe("/projects/acme/kb/services~api");
+  });
+
+  it("builds a page path with the repo slug and encoded splat path", () => {
+    expect(kbPagePath("acme", "services~api", "architecture/backend.md")).toBe(
+      "/projects/acme/kb/services~api/architecture/backend.md",
+    );
+  });
+
+  it("builds the general KB paths", () => {
+    expect(kbGeneralPath()).toBe("/kb");
+    expect(kbGeneralPagePath("notes/idea.md")).toBe("/kb/notes/idea.md");
+  });
+
+  it("slugifies titles into valid file-name bases", () => {
+    expect(slugifyPageName("Getting Started")).toBe("getting-started");
+    expect(slugifyPageName("Análise de Métricas!")).toBe("analise-de-metricas");
+    expect(slugifyPageName("  ---  ")).toBe("untitled");
+    expect(slugifyPageName("API & GraphQL")).toBe("api-graphql");
+  });
+
+  it("returns a unique .md path avoiding collisions", () => {
+    expect(uniquePagePath([], "", "Notes")).toBe("notes.md");
+    expect(uniquePagePath(["notes.md"], "", "Notes")).toBe("notes-2.md");
+    expect(uniquePagePath(["notes.md", "notes-2.md"], "", "Notes")).toBe("notes-3.md");
+    expect(uniquePagePath(["guides/intro.md"], "guides", "Intro")).toBe("guides/intro-2.md");
+  });
+});

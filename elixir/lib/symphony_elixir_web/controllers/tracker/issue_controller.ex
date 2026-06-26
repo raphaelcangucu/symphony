@@ -8,6 +8,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   alias Plug.Conn
   alias SymphonyElixir.{AgentPreference, IssueDispatch, Orchestrator, ProjectConfig, Repo}
   alias SymphonyElixir.Codex.GoalControl
+  alias SymphonyElixir.GitHub.AttachmentRewriter
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.{IssueAdapter, LabelResolver}
@@ -21,7 +22,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, filters} <- build_filters(params),
          {:ok, issues} <- IssueAdapter.dispatch(project, :list_issues, [filters]) do
-      json(conn, %{data: Enum.map(issues, &TrackerPresenter.issue/1)})
+      json(conn, %{data: Enum.map(issues, &present_issue(project, &1))})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -61,9 +62,60 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
       conn
       |> put_status(:created)
-      |> json(%{data: TrackerPresenter.issue(reload_issue(project, issue))})
+      |> json(%{data: present_issue(project, reload_issue(project, issue))})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec create_subtask(Conn.t(), map()) :: Conn.t()
+  def create_subtask(conn, %{"project_slug" => project_slug, "identifier" => parent_identifier} = params) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _parent} <- IssueAdapter.dispatch(project, :get_issue, [parent_identifier]),
+         attrs =
+           params
+           |> Map.drop(["project_slug", "identifier"])
+           |> normalize_create_attrs(project)
+           |> maybe_inject_creator(),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]),
+         {:ok, _child} <- Context.set_issue_parent(project_slug, issue.identifier, parent_identifier) do
+      maybe_establish_codex_goal(project, issue, params)
+
+      conn
+      |> put_status(:created)
+      |> json(%{data: present_issue(project, reload_issue(project, issue))})
+    else
+      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec set_parent(Conn.t(), map()) :: Conn.t()
+  def set_parent(conn, %{
+        "project_slug" => project_slug,
+        "identifier" => identifier,
+        "parent_identifier" => parent_identifier
+      })
+      when is_binary(parent_identifier) and parent_identifier != "" do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _child} <- Context.set_issue_parent(project_slug, identifier, parent_identifier),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      json(conn, %{data: present_issue(project, issue)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def set_parent(conn, _params), do: TrackerErrors.validation_msg(conn, "parent_identifier is required")
+
+  @spec clear_parent(Conn.t(), map()) :: Conn.t()
+  def clear_parent(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _child} <- Context.clear_issue_parent(project_slug, identifier),
+         {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      json(conn, %{data: present_issue(project, issue)})
+    else
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
@@ -103,11 +155,28 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     end
   end
 
+  # Symphony-managed GitHub asset URLs that could not be mapped to a local upload
+  # are rewritten to the bearer-authenticated tracker proxy path so the SPA can
+  # render private-repo images. This is a render-time concern only — nothing is
+  # persisted and agent-facing presenters are left untouched.
+  defp present_issue(project, issue) do
+    issue
+    |> rewrite_remote_assets(project)
+    |> TrackerPresenter.issue()
+  end
+
+  defp rewrite_remote_assets(%{description: description} = issue, %{slug: slug})
+       when is_binary(description) and is_binary(slug) do
+    %{issue | description: AttachmentRewriter.proxy_remote_assets(description, slug)}
+  end
+
+  defp rewrite_remote_assets(issue, _project), do: issue
+
   @spec show(Conn.t(), map()) :: Conn.t()
   def show(conn, %{"project_slug" => project_slug, "id" => identifier}) do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
-      json(conn, %{data: TrackerPresenter.issue(issue)})
+      json(conn, %{data: present_issue(project, issue)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
@@ -131,7 +200,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
               Orchestrator.request_refresh()
             end
 
-            json(conn, %{data: TrackerPresenter.issue(issue)})
+            json(conn, %{data: present_issue(project, issue)})
 
           {:error, reason} ->
             TrackerErrors.render(conn, reason)
@@ -149,7 +218,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, attrs]) do
-      json(conn, %{data: TrackerPresenter.issue(issue)})
+      json(conn, %{data: present_issue(project, issue)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
@@ -160,7 +229,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, _record} <- SymphonyElixir.Tracker.Sync.Engine.sync_issue(project, identifier),
          {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
-      json(conn, %{data: TrackerPresenter.issue(issue)})
+      json(conn, %{data: present_issue(project, issue)})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -191,10 +260,14 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
          {:ok, result} <- run_dispatch_action(project, identifier, action, opts) do
       json(conn, %{data: result})
     else
-      {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, :project_not_found} ->
+        TrackerErrors.render(conn, :project_not_found)
+
       {:error, :invalid_action} ->
         TrackerErrors.validation_msg(conn, "action must be resume, restart, hard_reset, stop, or continue_work")
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
     end
   end
 
@@ -301,7 +374,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   defp dispatch_issue_action(conn, project_slug, action, args) do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, issue} <- IssueAdapter.dispatch(project, action, args) do
-      json(conn, %{data: TrackerPresenter.issue(issue)})
+      json(conn, %{data: present_issue(project, issue)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end

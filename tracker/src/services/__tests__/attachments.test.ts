@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   deleteJiraAttachment,
   isEvidenceArtifactUrl,
+  isGitHubAssetUrl,
   isInternalAttachmentUrl,
   isJiraAttachmentUrl,
   isTrackerAuthenticatedMediaUrl,
@@ -106,6 +107,31 @@ describe("isJiraAttachmentUrl", () => {
   });
 });
 
+describe("isGitHubAssetUrl", () => {
+  it("recognizes the project-scoped github asset proxy path", () => {
+    expect(
+      isGitHubAssetUrl("/api/tracker/v1/projects/gamba/github/assets/GambaLabs/frontend/abc123.png"),
+    ).toBe(true);
+  });
+
+  it("recognizes absolute github asset proxy URLs", () => {
+    expect(
+      isGitHubAssetUrl(
+        "http://localhost:4000/api/tracker/v1/projects/gamba/github/assets/GambaLabs/frontend/abc123.png",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects raw github URLs, external, data, blob, and unrelated tracker URLs", () => {
+    expect(isGitHubAssetUrl("https://github.com/GambaLabs/frontend/raw/symphony-assets/assets/abc.png")).toBe(false);
+    expect(isGitHubAssetUrl("data:image/png;base64,AAAA")).toBe(false);
+    expect(isGitHubAssetUrl("blob:http://localhost/x")).toBe(false);
+    expect(isGitHubAssetUrl("/api/tracker/v1/projects/gamba/issues/GAM-17")).toBe(false);
+    expect(isGitHubAssetUrl("")).toBe(false);
+    expect(isGitHubAssetUrl(null)).toBe(false);
+  });
+});
+
 describe("toSameOriginTrackerRequestUrl", () => {
   it("rewrites absolute tracker API URLs to same-origin paths", () => {
     expect(
@@ -129,7 +155,7 @@ describe("toSameOriginTrackerRequestUrl", () => {
 });
 
 describe("isTrackerAuthenticatedMediaUrl", () => {
-  it("includes assistant attachments, evidence artifacts, and jira attachments", () => {
+  it("includes assistant attachments, evidence artifacts, jira attachments, and github assets", () => {
     expect(
       isTrackerAuthenticatedMediaUrl(
         "/api/tracker/v1/projects/gamba/assistant/attachments/uploads/x.png",
@@ -143,6 +169,11 @@ describe("isTrackerAuthenticatedMediaUrl", () => {
     expect(
       isTrackerAuthenticatedMediaUrl(
         "/api/tracker/v1/projects/advising/jira/attachments/60658",
+      ),
+    ).toBe(true);
+    expect(
+      isTrackerAuthenticatedMediaUrl(
+        "/api/tracker/v1/projects/gamba/github/assets/GambaLabs/frontend/abc123.png",
       ),
     ).toBe(true);
   });

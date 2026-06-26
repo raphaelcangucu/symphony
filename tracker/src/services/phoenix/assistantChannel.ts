@@ -159,6 +159,14 @@ export function assistantExploreTopic(projectSlug: string): string {
   return `assistant:explore:${encodeURIComponent(slug)}`;
 }
 
+export function assistantKbTopic(projectSlug: string, repoSlug: string, pagePath: string): string {
+  const slug = requireProjectSlug(projectSlug);
+  const repo = requireNonBlank(repoSlug, "repoSlug");
+  const path = requireNonBlank(pagePath, "pagePath");
+
+  return `assistant:kb:${encodeURIComponent(slug)}:${encodeURIComponent(repo)}:${encodeURIComponent(path)}`;
+}
+
 export function assistantThreadTopic(threadId: number | string): string {
   const id = requireNonBlank(String(threadId), "threadId");
   return `assistant:thread:${id}`;

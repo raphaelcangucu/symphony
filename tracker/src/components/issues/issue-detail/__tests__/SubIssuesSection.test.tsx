@@ -90,4 +90,22 @@ describe("SubIssuesSection", () => {
     fireEvent.click(screen.getByText("Sub-issues"));
     expect(screen.queryByText("Build")).not.toBeInTheDocument();
   });
+
+  it("renders a create button when creation is allowed even without sub-issues", () => {
+    render(<SubIssuesSection subtasks={[]} summary={null} onCreateSubtask={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /create sub-issue/i })).toBeInTheDocument();
+  });
+
+  it("creates a sub-issue from the inline form", async () => {
+    const onCreateSubtask = vi.fn().mockResolvedValue(true);
+    render(<SubIssuesSection subtasks={[]} summary={null} onCreateSubtask={onCreateSubtask} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /create sub-issue/i }));
+    fireEvent.change(screen.getByPlaceholderText("Sub-issue title"), {
+      target: { value: "  New child  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(onCreateSubtask).toHaveBeenCalledWith("New child");
+  });
 });

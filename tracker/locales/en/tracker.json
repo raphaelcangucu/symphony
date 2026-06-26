@@ -2,6 +2,7 @@
   "common": {
     "loading": "Loading…",
     "close": "Close",
+    "cancel": "Cancel",
     "save": "Save",
     "refresh": "Refresh"
   },
@@ -643,7 +644,25 @@
         "progress": "{{completed}} of {{total}}",
         "expand": "Show sub-issues",
         "collapse": "Hide sub-issues",
-        "empty": "Sub-issues are not loaded yet."
+        "empty": "Sub-issues are not loaded yet.",
+        "createSubIssue": "Create sub-issue",
+        "titlePlaceholder": "Sub-issue title",
+        "create": "Create",
+        "cancel": "Cancel"
+      },
+      "relations": {
+        "parent": "Parent",
+        "parentTitle": "Set parent issue",
+        "noParent": "No parent",
+        "clearParent": "Remove parent",
+        "groupLead": "Group lead",
+        "groupLeadTitle": "Set group lead",
+        "noGroupLead": "No group lead",
+        "clearGroupLead": "Remove from group",
+        "searchPlaceholder": "Search issues…",
+        "empty": "No matching issues.",
+        "unavailable": "Not in current view",
+        "clear": "Clear"
       },
       "status": "Status",
       "priority": "Priority",
@@ -800,7 +819,17 @@
       "synced": "{{identifier}} synced from remote",
       "syncFailed": "Failed to sync issue from remote",
       "attachmentRemoved": "Attachment removed",
-      "attachmentRemoveFailed": "Failed to remove attachment"
+      "attachmentRemoveFailed": "Failed to remove attachment",
+      "subtaskCreated": "Sub-issue {{identifier}} created",
+      "subtaskCreateFailed": "Failed to create sub-issue",
+      "parentSet": "Parent set to {{identifier}}",
+      "parentSetFailed": "Failed to set parent",
+      "parentCleared": "Parent removed",
+      "parentClearFailed": "Failed to remove parent",
+      "groupLeadSet": "Grouped under {{identifier}}",
+      "groupLeadSetFailed": "Failed to set group lead",
+      "groupLeadCleared": "Removed from group",
+      "groupLeadClearFailed": "Failed to remove from group"
     },
     "attachments": {
       "imageUnavailable": "Image uploads are not available here.",
@@ -1137,6 +1166,7 @@
       "title": "Projects",
       "subtitle": "Choose a local tracker project.",
       "import": "Import",
+      "importFromUrl": "Import URL",
       "filters": "Filters",
       "newWorkspace": "New workspace project",
       "emptyApi": "No projects returned by the tracker API.",
@@ -1347,6 +1377,22 @@
       "importExport": {
         "export": "Export",
         "import": "Import",
+        "importTitle": "Import project",
+        "importDescription": "Import a project YAML file from a shared HTTPS URL or from disk.",
+        "importDescriptionNamed": "Import configuration into \"{{projectName}}\" from a URL or file.",
+        "importOrFile": "or",
+        "importChooseFile": "Choose YAML file",
+        "importSubmit": "Import from URL",
+        "importFromUrl": "Import URL",
+        "importFromUrlTitle": "Import from URL",
+        "importFromUrlDescription": "Paste a raw GitHub Gist URL or any HTTPS link to a project YAML file.",
+        "importFromUrlDescriptionNamed": "Import configuration into \"{{projectName}}\" from a shared HTTPS URL.",
+        "importFromUrlLabel": "YAML URL",
+        "importFromUrlSubmit": "Import",
+        "share": "Share",
+        "shareSuccess": "Share link copied to clipboard",
+        "shareFailed": "Failed to share project configuration",
+        "openShareLink": "Open gist",
         "exportSuccess": "Project configuration exported",
         "exportFailed": "Failed to export project configuration",
         "importConfirm": "Import configuration from \"{{fileName}}\" into \"{{projectName}}\"? This replaces the current settings.",
@@ -1844,6 +1890,9 @@
       "pollingPaused": "Polling paused (window not focused)",
       "syncError": "Sync error",
       "syncErrorTitle": "Background sync with the remote tracker is failing.",
+      "syncErrorCopyHint": "Click to copy the error for your IDE",
+      "syncErrorCopied": "Sync error copied to clipboard",
+      "syncErrorCopyFailed": "Could not copy the sync error",
       "lastError": "Last error: {{error}}",
       "lastSync": "Last successful sync: {{when}}",
       "lessThanMinute": "less than a minute ago",
@@ -1854,6 +1903,7 @@
       "openProjectWorkspaceCode": "Open project workspace in Code",
       "board": "Board",
       "list": "List",
+      "knowledgeBase": "Knowledge Base",
       "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
     },
     "recents": {
@@ -1974,12 +2024,189 @@
       "wipPlaceholder": "e.g. 5"
     }
   },
+  "kb": {
+    "loading": "Loading…",
+    "saved": "Saved",
+    "sidebar": { "noDocs": "No docs yet", "pages": "Pages" },
+    "actions": {
+      "more": "Actions for {{title}}",
+      "rename": "Rename",
+      "renamePrompt": "New page title",
+      "favorite": "Add to favorites",
+      "unfavorite": "Remove from favorites",
+      "addPage": "Add page",
+      "createFolder": "Create folder",
+      "folderPrompt": "Folder name",
+      "folderCreated": "Folder created",
+      "delete": "Delete",
+      "deleteFolder": "Delete folder",
+      "deleteConfirm": "Move “{{title}}” to trash?",
+      "deleted": "Page deleted",
+      "renamed": "Page renamed",
+      "add": "Add"
+    },
+    "editor": {
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "unsaved": "Unsaved changes",
+      "askAi": "Ask AI",
+      "closeAssistant": "Close assistant",
+      "toc": {
+        "button": "Contents",
+        "label": "On this page",
+        "untitled": "Untitled"
+      },
+      "placeholder": "Write something, or hover a line and click “+” to add a block… · paste images",
+      "headingPlaceholder": "Heading",
+      "paste": {
+        "uploading": "Uploading image…",
+        "uploadFailed": "Failed to upload the image.",
+        "unavailable": "Image paste is unavailable for this page."
+      },
+      "format": {
+        "bold": "Bold",
+        "italic": "Italic",
+        "strike": "Strikethrough",
+        "code": "Inline code"
+      },
+      "block": {
+        "add": "Add block below",
+        "actions": "Drag to move · click for actions",
+        "duplicate": "Duplicate",
+        "delete": "Delete"
+      },
+      "insert": {
+        "text": "Text",
+        "h1": "Heading 1",
+        "h2": "Heading 2",
+        "h3": "Heading 3",
+        "bulletList": "Bulleted list",
+        "orderedList": "Numbered list",
+        "quote": "Quote",
+        "codeBlock": "Code block",
+        "image": "Image",
+        "table": "Table",
+        "divider": "Divider"
+      },
+      "image": {
+        "replace": "Replace image",
+        "editAlt": "Edit alt text",
+        "altPlaceholder": "Describe the image…",
+        "alignLeft": "Align left",
+        "alignCenter": "Align center",
+        "alignRight": "Align right",
+        "size": "Size",
+        "sizeSmall": "Small",
+        "sizeMedium": "Medium",
+        "sizeFull": "Full width",
+        "delete": "Delete image"
+      },
+      "imagePicker": {
+        "insertTitle": "Insert image",
+        "replaceTitle": "Replace image",
+        "description": "Upload a new image or choose one from the assets gallery.",
+        "upload": "Upload image",
+        "searchPlaceholder": "Search images…",
+        "galleryEmpty": "No images in the assets folder yet.",
+        "noMatches": "No images match your search."
+      }
+    },
+    "assistant": {
+      "title": "Assistant",
+      "subtitle": "Write and maintain this page with AI",
+      "contextLabel": "In context",
+      "close": "Close assistant",
+      "launcher": {
+        "open": "Ask the maestro",
+        "working": "The maestro is working…"
+      }
+    },
+    "create": {
+      "newPage": "New page",
+      "placeholder": "Page title…",
+      "folderPlaceholder": "Folder name…",
+      "created": "Page created",
+      "failed": "Failed to create the page."
+    },
+    "asset": {
+      "openTab": "Open in new tab",
+      "download": "Download",
+      "loading": "Loading image…",
+      "loadFailed": "Could not load this image.",
+      "rename": "Rename image",
+      "renamePlaceholder": "Image name…",
+      "renamed": "Image renamed",
+      "deleteConfirm": "Delete image “{{title}}”? This cannot be undone and may break pages that reference it.",
+      "deleted": "Image deleted",
+      "nameDialog": {
+        "title": "Name this image",
+        "description": "Choose a friendly file name. References update automatically when you rename it later.",
+        "placeholder": "Image name…",
+        "insert": "Insert",
+        "skip": "Skip"
+      }
+    },
+    "folder": {
+      "deleteConfirm": "Delete the folder “{{title}}” and everything inside it (all pages and images)? This cannot be undone.",
+      "deleted": "Folder deleted"
+    },
+    "search": {
+      "label": "Search",
+      "shortcut": "Ctrl+K",
+      "placeholder": "Search the knowledge base…",
+      "loading": "Searching…",
+      "empty": "No results"
+    },
+    "sync": {
+      "now": "Sync now",
+      "viewPr": "View PR",
+      "status": {
+        "idle": "Idle",
+        "syncing": "Syncing",
+        "synced": "Synced",
+        "open_pr": "PR open",
+        "merged": "Merged",
+        "conflict": "Conflict",
+        "checks_failed": "Checks failed",
+        "error": "Error"
+      }
+    },
+    "home": {
+      "title": "{{project}} Knowledge Base",
+      "intro": "Browse documentation per repository.",
+      "noRepositories": "No repositories configured for this project.",
+      "openDocs": "Open docs"
+    },
+    "empty": {
+      "title": "Nothing here yet",
+      "selectPage": "Select a page to start reading or editing.",
+      "repoBody": "This repository has no documents yet. Create the first one to get started."
+    },
+    "errors": {
+      "loadFailed": "Failed to load this page.",
+      "saveFailed": "Failed to save the page.",
+      "deleteFailed": "Failed to delete the page.",
+      "reorderFailed": "Failed to reorder pages."
+    },
+    "general": {
+      "title": "My Knowledge Base",
+      "connect": "Connect symphony-kb",
+      "connecting": "Connecting…",
+      "connected": "Connected",
+      "connectFailed": "Failed to connect the personal knowledge base.",
+      "connectHint": "Connect your personal symphony-kb repository to store cross-project notes.",
+      "regenerate": "Regenerate home",
+      "regenerated": "Home page regenerated"
+    }
+  },
   "nav": {
     "brandTitle": "Symphony Tracker",
     "brandSubtitle": "Local project board",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
     "projects": "Projects",
+    "knowledgeBase": "Knowledge Base",
     "templates": "Templates",
     "observability": "Observability",
     "backups": "Backups",

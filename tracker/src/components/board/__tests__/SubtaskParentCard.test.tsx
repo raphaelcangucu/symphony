@@ -1,10 +1,19 @@
-import { render, screen } from "@testing-library/react";
+import { DndContext } from "@dnd-kit/core";
+import { SortableContext } from "@dnd-kit/sortable";
+import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { SubtaskParentCard } from "@/components/board/SubtaskParentCard";
 import type { Issue } from "@/types/issue";
+
+function renderInBoard(ui: React.ReactElement, sortableId: string) {
+  return render(
+    <DndContext>
+      <SortableContext items={[sortableId]}>{ui}</SortableContext>
+    </DndContext>,
+  );
+}
 
 function issue(overrides: Partial<Issue>): Issue {
   return {
@@ -45,11 +54,16 @@ describe("SubtaskParentCard", () => {
     issue({ identifier: "4", title: "BLE", repositoryFullName: "xipcash/android" }),
   ];
 
-  it("shows the subtask count and expands to list subtasks", async () => {
-    render(<SubtaskParentCard issue={parent} subtasks={subtasks} onSelectIssue={() => {}} />);
+  it("shows the subtask count and expands to list subtasks", () => {
+    renderInBoard(
+      <SubtaskParentCard id="parent:2" issue={parent} subtasks={subtasks} onSelectIssue={() => {}} />,
+      "parent:2",
+    );
 
     expect(screen.getByText("2 subtasks")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /subtask/i }));
+    // Plain click event (not pointer) so the bare DndContext's default sensor
+    // doesn't treat the press as a drag and swallow the toggle.
+    fireEvent.click(screen.getByTitle("Show subtasks"));
     expect(screen.getByText("NFC")).toBeInTheDocument();
     expect(screen.getByText("BLE")).toBeInTheDocument();
   });

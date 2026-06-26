@@ -231,6 +231,7 @@ export function BoardColumn({
               ) : unit.kind === "parent" ? (
                 <SubtaskParentCard
                   key={unit.id}
+                  id={unit.id}
                   issue={unit.issue}
                   subtasks={unit.subtasks}
                   onSelectIssue={onSelectIssue}

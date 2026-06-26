@@ -91,6 +91,31 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
+  def join("assistant:kb:" <> raw_kb_topic, _payload, socket) do
+    with true <- authorized?(socket),
+         {:ok, project_slug, repo_slug, page_path} <- parse_kb_topic(raw_kb_topic),
+         {:ok, thread} <- History.ensure_kb_thread(project_slug, repo_slug, page_path) do
+      TurnManager.subscribe(thread.id)
+
+      payload = %{
+        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
+        thread_id: thread.id,
+        last_turn: History.turn_payload(thread),
+        turn_running: TurnManager.running?(thread.id),
+        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
+        effective_agent: thread_effective_agent(thread)
+      }
+
+      socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
+      send(self(), {:assistant_history_loaded, payload})
+      {:ok, payload, socket}
+    else
+      false -> {:error, %{reason: "unauthorized"}}
+      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+      _ -> {:error, %{reason: "invalid_topic"}}
+    end
+  end
+
   def join("assistant:thread:" <> raw_id, _payload, socket) do
     with true <- authorized?(socket),
          {:ok, id} <- parse_id(raw_id),
@@ -889,6 +914,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     CodexSession.send_message_to_project_explore_thread(thread, trimmed, context, opts)
   end
 
+  defp run_send_turn(%{scope: "kb"} = thread, _project_slug, trimmed, context, opts) do
+    CodexSession.send_message_to_kb_thread(thread, trimmed, context, opts)
+  end
+
   defp run_send_turn(_thread, project_slug, trimmed, context, opts) do
     CodexSession.send_message(project_slug, trimmed, context, opts)
   end
@@ -926,6 +955,20 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     case Integer.parse(raw) do
       {id, ""} -> {:ok, id}
       _ -> {:error, :invalid_id}
+    end
+  end
+
+  defp parse_kb_topic(raw_kb_topic) do
+    case String.split(raw_kb_topic, ":", parts: 3) do
+      [raw_project_slug, raw_repo_slug, raw_page_path] ->
+        with {:ok, project_slug} <- decode_required_topic_segment(raw_project_slug, :project_slug),
+             {:ok, repo_slug} <- decode_required_topic_segment(raw_repo_slug, :repo_slug),
+             {:ok, page_path} <- decode_required_topic_segment(raw_page_path, :page_path) do
+          {:ok, project_slug, repo_slug, page_path}
+        end
+
+      _ ->
+        {:error, :invalid_topic}
     end
   end
 
@@ -991,7 +1034,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp normalize_context(_context), do: %{}
 
   defp project_scoped_socket?(%Socket{assigns: %{thread: %{scope: scope}}})
-       when scope in ["issue", "freeform", "project_explore"],
+       when scope in ["issue", "freeform", "project_explore", "kb"],
        do: false
 
   defp project_scoped_socket?(%Socket{assigns: %{project_slug: project_slug}}) when is_binary(project_slug), do: true

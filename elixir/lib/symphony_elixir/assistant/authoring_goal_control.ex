@@ -269,11 +269,11 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
         case Context.get_project(slug) do
           {:ok, project} ->
             case GoalControl.clear(project, identifier) do
-              {:ok, _} -> :ok
+              {:ok, _} ->
+                :ok
+
               {:error, reason} ->
-                Logger.debug(
-                  "AuthoringGoalControl execution goal clear skipped identifier=#{identifier} reason=#{inspect(reason)}"
-                )
+                Logger.debug("AuthoringGoalControl execution goal clear skipped identifier=#{identifier} reason=#{inspect(reason)}")
             end
 
           _ ->

@@ -71,9 +71,7 @@ defmodule SymphonyElixir.WorkspaceSkillsTest do
 
     assert :ok = WorkspaceSkills.prepare(workspace)
 
-    assert File.regular?(
-             Path.join([workspace, ".codex", "skills", "subagent-driven-development", "SKILL.md"])
-           )
+    assert File.regular?(Path.join([workspace, ".codex", "skills", "subagent-driven-development", "SKILL.md"]))
 
     refute File.exists?(Path.join([workspace, ".codex", "skills", "using-superpowers", "SKILL.md"]))
     refute File.exists?(Path.join([workspace, ".codex", "skills", "brainstorming", "SKILL.md"]))
@@ -98,9 +96,7 @@ defmodule SymphonyElixir.WorkspaceSkillsTest do
 
     refute File.exists?(Path.join(mirror, "brainstorming"))
     refute File.exists?(Path.join(codex_skills, "brainstorming"))
-    assert File.regular?(
-             Path.join([codex_skills, "subagent-driven-development", "SKILL.md"])
-           )
+    assert File.regular?(Path.join([codex_skills, "subagent-driven-development", "SKILL.md"]))
   end
 
   test "returns a clear error when a file blocks an agent configuration directory", %{workspace: workspace} do

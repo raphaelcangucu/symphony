@@ -56,7 +56,11 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
         Repo.checkout(fn ->
           Ecto.Adapters.SQL.query!(Repo, "BEGIN IMMEDIATE", [])
           send(parent, :write_lock_held)
-          receive do :release_write_lock -> :ok end
+
+          receive do
+            :release_write_lock -> :ok
+          end
+
           Ecto.Adapters.SQL.query!(Repo, "COMMIT", [])
         end)
       end)
@@ -262,6 +266,43 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
 
     assert {:ok, ^issue_thread} = History.copy_messages_to_empty_thread(issue_thread, project_messages)
     assert length(History.list_messages_for_thread(issue_thread.id)) == 2
+  end
+
+  describe "ensure_kb_thread/4" do
+    test "creates a kb thread for the personal (@user) scope without a tracker project" do
+      assert {:ok, thread} =
+               History.ensure_kb_thread("@user", "@user~symphony-kb", "index.md", %{
+                 workspace_path: "/tmp/kb/user"
+               })
+
+      assert thread.scope == "kb"
+      assert thread.project_slug == "@user"
+      assert thread.metadata["kb_page_path"] == "index.md"
+
+      assert {:ok, same} =
+               History.ensure_kb_thread("@user", "@user~symphony-kb", "index.md", %{
+                 workspace_path: "/tmp/ignored"
+               })
+
+      assert same.id == thread.id
+    end
+
+    test "creates a kb thread for an existing tracker project" do
+      {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
+
+      assert {:ok, thread} =
+               History.ensure_kb_thread("macro", "web", "guides/x.md", %{
+                 workspace_path: "/tmp/kb/macro"
+               })
+
+      assert thread.scope == "kb"
+      assert thread.project_slug == "macro"
+    end
+
+    test "rejects a kb thread for an unknown non-@user project" do
+      assert {:error, :project_not_found} =
+               History.ensure_kb_thread("ghost", "web", "x.md", %{workspace_path: "/tmp/kb/ghost"})
+    end
   end
 
   describe "ensure_issue_thread/3" do

@@ -209,20 +209,31 @@ tracker-dev:
 # --- Project import/export (CLI) -------------------------------------------
 
 project-import:
-	@test -n "$(FILE)" || { echo "Usage: make project-import FILE=path/to/project.yaml [INTO=slug]"; exit 1; }
+	@test -n "$(SOURCE)" || test -n "$(FILE)" || test -n "$(URL)" || { echo "Usage: make project-import FILE=path/to/project.yaml | URL=https://... [INTO=slug]"; exit 1; }
 	@set -a; [ -f .env ] && . ./.env; set +a; \
+	source="$(URL)"; \
+	if [ -z "$$source" ]; then source="$(FILE)"; fi; \
+	if [ -z "$$source" ]; then source="$(SOURCE)"; fi; \
 	if [ -n "$(INTO)" ]; then \
-		$(MIX) symphony.project import "$(FILE)" --into "$(INTO)"; \
+		$(MIX) symphony.project import "$$source" --into "$(INTO)"; \
 	else \
-		$(MIX) symphony.project import "$(FILE)"; \
+		$(MIX) symphony.project import "$$source"; \
 	fi
 
 project-export:
 	@test -n "$(SLUG)" || { echo "Usage: make project-export SLUG=project-slug [FILE=out.yaml]"; exit 1; }
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	output="$(FILE)"; \
-	if [ -z "$$output" ]; then output="../$(SLUG)-project.yaml"; fi; \
+	if [ -z "$$output" ]; then output="../projects/$(SLUG).yaml"; fi; \
 	$(MIX) symphony.project export "$(SLUG)" --output "$$output"
+
+project-share:
+	@test -n "$(SLUG)" || { echo "Usage: make project-share SLUG=project-slug [GIST_ID=id] [PUBLIC=1]"; exit 1; }
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	args=""; \
+	if [ -n "$(GIST_ID)" ]; then args="$$args --gist-id $(GIST_ID)"; fi; \
+	if [ -n "$(PUBLIC)" ]; then args="$$args --public"; fi; \
+	$(MIX) symphony.project share "$(SLUG)" $$args
 
 # --- Public preview tunnel -------------------------------------------------
 

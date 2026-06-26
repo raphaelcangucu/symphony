@@ -272,5 +272,4 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
       _ -> false
     end
   end
-
 end

@@ -236,8 +236,7 @@ defmodule SymphonyElixir.Cursor.CliRunner do
     if String.contains?(line, "Authentication required") do
       %{
         state
-        | error:
-            "Authentication required — run `cursor agent login` or set CURSOR_API_KEY"
+        | error: "Authentication required — run `cursor agent login` or set CURSOR_API_KEY"
       }
     else
       state

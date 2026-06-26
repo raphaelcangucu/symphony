@@ -71,7 +71,43 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
   def mark_failed(%OutboxEntry{} = entry, error, max_attempts) when is_integer(max_attempts) do
     attempts = entry.attempts + 1
     status = if attempts >= max_attempts, do: "failed", else: "pending"
-    entry |> OutboxEntry.changeset(%{status: status, attempts: attempts, last_error: error}) |> Repo.update()
+
+    entry
+    |> OutboxEntry.changeset(%{status: status, attempts: attempts, last_error: error})
+    |> Repo.update()
+    |> case do
+      {:error, %Ecto.Changeset{} = changeset} when status == "pending" ->
+        coalesce_requeue_conflict(entry, changeset)
+
+      result ->
+        result
+    end
+  end
+
+  # Requeueing a failed `in_flight` entry back to `pending` can collide with the
+  # partial unique index when a newer write enqueued a `pending` sibling for the
+  # same `dedup_key` while this entry was in flight (the index only forbids two
+  # *pending* rows per key, so the enqueue was allowed). That sibling already
+  # represents — and supersedes — this logical write, so fold this attempt's
+  # payload into it (sibling values win, mirroring `enqueue/1` coalescing) and
+  # drop the now-redundant row instead of letting the constraint error crash the
+  # sync pass. Any non-dedup error still bubbles unchanged.
+  defp coalesce_requeue_conflict(%OutboxEntry{} = entry, changeset) do
+    with true <- dedup_conflict?(changeset),
+         %OutboxEntry{} = pending <- pending_by_dedup(entry.project_id, entry.dedup_key) do
+      merged_payload = Map.merge(entry.payload || %{}, pending.payload || %{})
+
+      case pending |> OutboxEntry.changeset(%{payload: merged_payload, status: "pending"}) |> Repo.update() do
+        {:ok, kept} ->
+          Repo.delete(entry)
+          {:ok, kept}
+
+        {:error, _changeset} = error ->
+          error
+      end
+    else
+      _ -> {:error, changeset}
+    end
   end
 
   @spec pending_count(integer()) :: non_neg_integer()

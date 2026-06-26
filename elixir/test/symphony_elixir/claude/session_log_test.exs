@@ -20,14 +20,15 @@ defmodule SymphonyElixir.Claude.SessionLogTest do
 
   describe "parse_line/1" do
     test "parses assistant text block as assistant entry" do
-      line = Jason.encode!(%{
-        "type" => "assistant",
-        "message" => %{
-          "content" => [
-            %{"type" => "text", "text" => "**Done**"}
-          ]
-        }
-      })
+      line =
+        Jason.encode!(%{
+          "type" => "assistant",
+          "message" => %{
+            "content" => [
+              %{"type" => "text", "text" => "**Done**"}
+            ]
+          }
+        })
 
       result = SessionLog.parse_line(line)
       assert result["kind"] == "assistant"
@@ -38,19 +39,20 @@ defmodule SymphonyElixir.Claude.SessionLogTest do
     end
 
     test "parses tool_use block as tool_call entry" do
-      line = Jason.encode!(%{
-        "type" => "assistant",
-        "message" => %{
-          "content" => [
-            %{
-              "type" => "tool_use",
-              "id" => "toolu_123",
-              "name" => "Bash",
-              "input" => %{"command" => "pwd"}
-            }
-          ]
-        }
-      })
+      line =
+        Jason.encode!(%{
+          "type" => "assistant",
+          "message" => %{
+            "content" => [
+              %{
+                "type" => "tool_use",
+                "id" => "toolu_123",
+                "name" => "Bash",
+                "input" => %{"command" => "pwd"}
+              }
+            ]
+          }
+        })
 
       result = SessionLog.parse_line(line)
       assert result["kind"] == "tool_call"
@@ -61,18 +63,19 @@ defmodule SymphonyElixir.Claude.SessionLogTest do
     end
 
     test "parses tool_result block as tool_result entry with call_id" do
-      line = Jason.encode!(%{
-        "type" => "user",
-        "message" => %{
-          "content" => [
-            %{
-              "type" => "tool_result",
-              "tool_use_id" => "toolu_123",
-              "content" => [%{"type" => "text", "text" => "output text"}]
-            }
-          ]
-        }
-      })
+      line =
+        Jason.encode!(%{
+          "type" => "user",
+          "message" => %{
+            "content" => [
+              %{
+                "type" => "tool_result",
+                "tool_use_id" => "toolu_123",
+                "content" => [%{"type" => "text", "text" => "output text"}]
+              }
+            ]
+          }
+        })
 
       result = SessionLog.parse_line(line)
       assert result["kind"] == "tool_result"
@@ -82,14 +85,15 @@ defmodule SymphonyElixir.Claude.SessionLogTest do
     end
 
     test "parses thinking block as reasoning entry (collapsed)" do
-      line = Jason.encode!(%{
-        "type" => "assistant",
-        "message" => %{
-          "content" => [
-            %{"type" => "thinking", "thinking" => "Let me reason through this."}
-          ]
-        }
-      })
+      line =
+        Jason.encode!(%{
+          "type" => "assistant",
+          "message" => %{
+            "content" => [
+              %{"type" => "thinking", "thinking" => "Let me reason through this."}
+            ]
+          }
+        })
 
       result = SessionLog.parse_line(line)
       assert result["kind"] == "reasoning"
@@ -138,14 +142,15 @@ defmodule SymphonyElixir.Claude.SessionLogTest do
       assert length(tailed) == 2
       assert offset > 0
 
-      extra = Jason.encode!(%{
-        "type" => "user",
-        "message" => %{
-          "content" => [
-            %{"type" => "tool_result", "tool_use_id" => "toolu_1", "content" => [%{"type" => "text", "text" => "ok"}]}
-          ]
-        }
-      })
+      extra =
+        Jason.encode!(%{
+          "type" => "user",
+          "message" => %{
+            "content" => [
+              %{"type" => "tool_result", "tool_use_id" => "toolu_1", "content" => [%{"type" => "text", "text" => "ok"}]}
+            ]
+          }
+        })
 
       File.write!(path, extra <> "\n", [:append])
 

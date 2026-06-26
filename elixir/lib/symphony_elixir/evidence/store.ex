@@ -74,12 +74,13 @@ defmodule SymphonyElixir.Evidence.Store do
           )
         )
 
-      count = Enum.reduce(records, 0, fn record, acc ->
-        case delete_record(record) do
-          {:ok, _} -> acc + 1
-          {:error, _} -> acc
-        end
-      end)
+      count =
+        Enum.reduce(records, 0, fn record, acc ->
+          case delete_record(record) do
+            {:ok, _} -> acc + 1
+            {:error, _} -> acc
+          end
+        end)
 
       {:ok, count}
     end
@@ -97,12 +98,13 @@ defmodule SymphonyElixir.Evidence.Store do
           )
         )
 
-      count = Enum.reduce(records, 0, fn record, acc ->
-        case delete_record(record) do
-          {:ok, _} -> acc + 1
-          {:error, _} -> acc
-        end
-      end)
+      count =
+        Enum.reduce(records, 0, fn record, acc ->
+          case delete_record(record) do
+            {:ok, _} -> acc + 1
+            {:error, _} -> acc
+          end
+        end)
 
       {:ok, count}
     end

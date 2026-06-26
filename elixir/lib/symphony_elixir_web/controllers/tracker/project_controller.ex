@@ -5,8 +5,8 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
 
   alias Plug.Conn
   alias SymphonyElixir.Config
-  alias SymphonyElixir.LocalTracker.Context
-  alias SymphonyElixir.LocalTracker.Projects
+  alias SymphonyElixir.LocalTracker.{Context, ProjectYamlSource, Projects}
+  alias SymphonyElixir.GitHub.Gist
   alias SymphonyElixir.Tracker.Sync.Engine, as: SyncEngine
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
@@ -98,7 +98,9 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   @spec update_setup(Conn.t(), map()) :: Conn.t()
   def update_setup(conn, %{"id" => slug, "setup" => setup}) when is_map(setup) do
     case validate_workflow_markdown(setup) do
-      :ok -> upsert_setup(conn, slug, setup)
+      :ok ->
+        upsert_setup(conn, slug, setup)
+
       {:error, :workflow_markdown_must_be_string} ->
         TrackerErrors.validation_msg(conn, "workflow_markdown must be a string")
 
@@ -185,10 +187,14 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   @spec delete(Conn.t(), map()) :: Conn.t()
   def delete(conn, %{"id" => project_slug}) do
     case Context.delete_project(project_slug) do
-      {:ok, _project} -> send_resp(conn, :no_content, "")
+      {:ok, _project} ->
+        send_resp(conn, :no_content, "")
+
       {:error, :project_not_archived} ->
         TrackerErrors.validation_msg(conn, "Project must be archived before permanent deletion")
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
     end
   end
 
@@ -201,49 +207,81 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   end
 
   @spec import_bundle(Conn.t(), map()) :: Conn.t()
-  def import_bundle(conn, %{"yaml" => yaml}) when is_binary(yaml) do
-    case Projects.import_yaml(yaml) do
-      {:ok, project} ->
-        statuses = Context.list_statuses(project.slug)
-        repositories = Context.list_repositories(project.slug)
-        setup = Context.get_project_setup(project.slug)
+  def import_bundle(conn, params) do
+    with {:ok, yaml} <- resolve_yaml(params),
+         {:ok, project} <- Projects.import_yaml(yaml) do
+      statuses = Context.list_statuses(project.slug)
+      repositories = Context.list_repositories(project.slug)
+      setup = Context.get_project_setup(project.slug)
 
-        conn
-        |> put_status(:created)
-        |> json(%{data: TrackerPresenter.project(project, statuses, repositories, setup)})
-
+      conn
+      |> put_status(:created)
+      |> json(%{data: TrackerPresenter.project(project, statuses, repositories, setup)})
+    else
       {:error, :invalid_yaml} ->
         TrackerErrors.validation_msg(conn, "Invalid YAML")
 
       {:error, {:invalid_workflow_markdown, reason}} ->
         TrackerErrors.validation_msg(conn, "invalid workflow_markdown: %{reason}", %{reason: reason})
 
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+
       {:error, reason} ->
         TrackerErrors.render(conn, reason)
     end
   end
-
-  def import_bundle(conn, _params), do: TrackerErrors.validation_msg(conn, "yaml is required")
 
   @spec import_config(Conn.t(), map()) :: Conn.t()
-  def import_config(conn, %{"id" => project_slug, "yaml" => yaml}) when is_binary(yaml) do
-    case Projects.import_yaml_into(project_slug, yaml) do
-      {:ok, project} ->
-        statuses = Context.list_statuses(project.slug)
-        repositories = Context.list_repositories(project.slug)
-        setup = Context.get_project_setup(project.slug)
-        json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup)})
+  def import_config(conn, %{"id" => project_slug} = params) do
+    with {:ok, yaml} <- resolve_yaml(params),
+         {:ok, project} <- Projects.import_yaml_into(project_slug, yaml) do
+      statuses = Context.list_statuses(project.slug)
+      repositories = Context.list_repositories(project.slug)
+      setup = Context.get_project_setup(project.slug)
+      json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup)})
 
+    else
       {:error, :invalid_yaml} ->
         TrackerErrors.validation_msg(conn, "Invalid YAML")
 
       {:error, {:invalid_workflow_markdown, reason}} ->
         TrackerErrors.validation_msg(conn, "invalid workflow_markdown: %{reason}", %{reason: reason})
 
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+
       {:error, reason} ->
         TrackerErrors.render(conn, reason)
     end
   end
 
-  def import_config(conn, _params), do: TrackerErrors.validation_msg(conn, "yaml is required")
+  @spec share(Conn.t(), map()) :: Conn.t()
+  def share(conn, %{"id" => project_slug}) do
+    gist_id = conn.params["gist_id"]
+
+    with {:ok, yaml} <- Projects.export_yaml(project_slug),
+         {:ok, info} <- Gist.share(project_slug, yaml, gist_id: gist_id) do
+      json(conn, %{data: info})
+    else
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  defp resolve_yaml(params) do
+    yaml = Map.get(params, "yaml")
+    url = Map.get(params, "url")
+
+    cond do
+      is_binary(yaml) and String.trim(yaml) != "" ->
+        {:ok, yaml}
+
+      is_binary(url) and String.trim(url) != "" ->
+        ProjectYamlSource.fetch(String.trim(url))
+
+      true ->
+        {:error, :yaml_or_url_required}
+    end
+  end
 end

@@ -9,6 +9,7 @@ import { agentKindLabel } from "@/components/shared/AgentChip";
 import { InlineAgentEditor } from "@/components/issues/inline/InlineAgentEditor";
 import { InlineAssigneeEditor } from "@/components/issues/inline/InlineAssigneeEditor";
 import { InlineEditableMarkdown } from "@/components/issues/inline/InlineEditableMarkdown";
+import { InlineIssuePicker } from "@/components/issues/inline/InlineIssuePicker";
 import { InlineLabelEditor } from "@/components/issues/inline/InlineLabelEditor";
 import { InlinePriorityEditor } from "@/components/issues/inline/InlinePriorityEditor";
 import { InlineStatusEditor } from "@/components/issues/inline/InlineStatusEditor";
@@ -44,6 +45,8 @@ interface SummaryTabProps {
   pullRequests?: PullRequest[];
   workpad?: Comment | null;
   subtasks?: Issue[];
+  parentCandidates?: Issue[];
+  groupLeadCandidates?: Issue[];
   saving?: boolean;
   onOpenIssue?: (identifier: string) => void;
   onOpenPullRequest?: () => void;
@@ -55,6 +58,11 @@ interface SummaryTabProps {
   onSaveAssignee?: (assigneeIds: string[]) => Promise<boolean>;
   onSaveAgent?: (agent: AgentKind | null) => Promise<boolean>;
   onRemoveAttachment?: (attachmentId: string) => Promise<boolean>;
+  onCreateSubtask?: (title: string) => Promise<boolean>;
+  onSetParent?: (parentIdentifier: string) => Promise<boolean>;
+  onClearParent?: () => Promise<boolean>;
+  onSetGroupLead?: (leadIdentifier: string) => Promise<boolean>;
+  onClearGroupLead?: () => Promise<boolean>;
 }
 
 function issueLinkLabel(url: string, t: TFunction): string {
@@ -69,6 +77,8 @@ export function SummaryTab({
   pullRequests = [],
   workpad = null,
   subtasks = [],
+  parentCandidates = [],
+  groupLeadCandidates = [],
   saving = false,
   onOpenIssue,
   onOpenPullRequest,
@@ -80,6 +90,11 @@ export function SummaryTab({
   onSaveAssignee,
   onSaveAgent,
   onRemoveAttachment,
+  onCreateSubtask,
+  onSetParent,
+  onClearParent,
+  onSetGroupLead,
+  onClearGroupLead,
 }: SummaryTabProps) {
   const { t } = useTranslation();
   const [labelOptions, setLabelOptions] = useState<IssueLabelOption[]>([]);
@@ -197,7 +212,12 @@ export function SummaryTab({
             <p className="text-sm text-muted-foreground">{t("issue.summary.noDescription")}</p>
           )}
         </section>
-        <SubIssuesSection subtasks={subtasks} summary={issue.subIssueSummary} onOpenIssue={onOpenIssue} />
+        <SubIssuesSection
+          subtasks={subtasks}
+          summary={issue.subIssueSummary}
+          onOpenIssue={onOpenIssue}
+          onCreateSubtask={onCreateSubtask}
+        />
         <IssueAttachments
           attachments={issue.attachments}
           projectSlug={projectSlug || issue.projectSlug}
@@ -293,6 +313,38 @@ export function SummaryTab({
               </span>
             )}
           </Field>
+          {onSetParent ? (
+            <Field label={t("issue.summary.relations.parent")}>
+              <InlineIssuePicker
+                value={issue.parentIdentifier ?? null}
+                candidates={parentCandidates}
+                title={t("issue.summary.relations.parentTitle")}
+                placeholder={t("issue.summary.relations.noParent")}
+                searchPlaceholder={t("issue.summary.relations.searchPlaceholder")}
+                emptyLabel={t("issue.summary.relations.empty")}
+                clearLabel={t("issue.summary.relations.clearParent")}
+                saving={saving}
+                onSelect={onSetParent}
+                onClear={onClearParent}
+              />
+            </Field>
+          ) : null}
+          {onSetGroupLead ? (
+            <Field label={t("issue.summary.relations.groupLead")}>
+              <InlineIssuePicker
+                value={issue.groupLeadIdentifier ?? null}
+                candidates={groupLeadCandidates}
+                title={t("issue.summary.relations.groupLeadTitle")}
+                placeholder={t("issue.summary.relations.noGroupLead")}
+                searchPlaceholder={t("issue.summary.relations.searchPlaceholder")}
+                emptyLabel={t("issue.summary.relations.empty")}
+                clearLabel={t("issue.summary.relations.clearGroupLead")}
+                saving={saving}
+                onSelect={onSetGroupLead}
+                onClear={onClearGroupLead}
+              />
+            </Field>
+          ) : null}
           <Field label={t("issue.summary.updated")}>
             <span className="text-muted-foreground">{formatDateTime(issue.updatedAt)}</span>
           </Field>

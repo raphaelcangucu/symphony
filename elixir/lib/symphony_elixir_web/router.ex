@@ -89,6 +89,7 @@ defmodule SymphonyElixirWeb.Router do
     put("/projects/:id/setup", ProjectController, :update_setup)
     put("/projects/:id/repositories", ProjectController, :update_repositories)
     get("/projects/:id/export", ProjectController, :export)
+    post("/projects/:id/share", ProjectController, :share)
     post("/projects/import", ProjectController, :import_bundle)
     post("/projects/:id/import", ProjectController, :import_config)
     resources("/projects", ProjectController, only: [:index, :create, :show, :update, :delete])
@@ -104,6 +105,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/assistant/attachments/*path", AssistantController, :show_attachment)
     get("/projects/:project_slug/jira/attachments/:id", JiraAttachmentController, :show)
     delete("/projects/:project_slug/jira/attachments/:id", JiraAttachmentController, :delete)
+    get("/projects/:project_slug/github/assets/:owner/:repo/:basename", GitHubAssetController, :show)
     post("/projects/:project_slug/assistant/messages", AssistantController, :create)
     resources("/projects/:project_slug/issues", IssueController, only: [:index, :create, :show, :update])
     get("/projects/:project_slug/issues/:identifier/documents", IssueDocumentController, :index)
@@ -168,6 +170,9 @@ defmodule SymphonyElixirWeb.Router do
     delete("/projects/:project_slug/issues/:identifier/blockers/:blocker_identifier", BlockerController, :delete)
     post("/projects/:project_slug/issues/:identifier/group", GroupController, :create)
     delete("/projects/:project_slug/issues/:identifier/group", GroupController, :delete)
+    post("/projects/:project_slug/issues/:identifier/subtasks", IssueController, :create_subtask)
+    post("/projects/:project_slug/issues/:identifier/parent", IssueController, :set_parent)
+    delete("/projects/:project_slug/issues/:identifier/parent", IssueController, :clear_parent)
     post("/projects/:project_slug/issues/:identifier/terminal", TerminalController, :create)
     get("/projects/:project_slug/issues/:identifier/dev_servers", DevServerController, :index)
     get("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/output", DevServerController, :output)
@@ -193,6 +198,44 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/save_as_template", TemplateController, :save_as_template)
     get("/projects/:project_slug/clone_jobs", CloneJobController, :index)
     post("/projects/:project_slug/clone_jobs/:id/retry", CloneJobController, :retry)
+
+    get("/kb/search", KnowledgeBaseController, :search_general)
+    post("/kb/connect", KnowledgeBaseController, :general_connect)
+    post("/kb/home", KnowledgeBaseController, :general_regenerate_home)
+    get("/kb/pages/*path", KnowledgeBaseController, :general_show_page)
+    put("/kb/pages/*path", KnowledgeBaseController, :general_save_page)
+    get("/kb", KnowledgeBaseController, :general_overview)
+    get("/projects/:project_slug/kb/search", KnowledgeBaseController, :search_project)
+    get("/projects/:project_slug/kb", KnowledgeBaseController, :project_overview)
+    get("/projects/:project_slug/kb/repos/:repo", KnowledgeBaseController, :repo_tree)
+    get("/projects/:project_slug/kb/repos/:repo/pages/*path", KnowledgeBaseController, :show_page)
+    put("/projects/:project_slug/kb/repos/:repo/pages/*path", KnowledgeBaseController, :save_page)
+
+    delete(
+      "/projects/:project_slug/kb/repos/:repo/pages/*path",
+      KnowledgeBaseController,
+      :delete_page
+    )
+
+    delete(
+      "/projects/:project_slug/kb/repos/:repo/folders/*path",
+      KnowledgeBaseController,
+      :delete_folder
+    )
+
+    post("/projects/:project_slug/kb/repos/:repo/move", KnowledgeBaseController, :move_page)
+    post("/projects/:project_slug/kb/repos/:repo/assets/rename", KnowledgeBaseController, :rename_asset)
+    get("/projects/:project_slug/kb/repos/:repo/assets/*path", KnowledgeBaseController, :show_asset)
+
+    delete(
+      "/projects/:project_slug/kb/repos/:repo/assets/*path",
+      KnowledgeBaseController,
+      :delete_asset
+    )
+
+    post("/projects/:project_slug/kb/repos/:repo/assets", KnowledgeBaseController, :upload_asset)
+    get("/projects/:project_slug/kb/repos/:repo/sync", KnowledgeBaseController, :sync_status)
+    post("/projects/:project_slug/kb/repos/:repo/sync", KnowledgeBaseController, :request_sync)
   end
 
   pipeline :observability_api do

@@ -282,6 +282,19 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
     assert Outbox.pending_count(project.id) == 1
   end
 
+  test "update_issue_state pushes the parent when an agent move rolls it up", %{project: project} do
+    stub_assignee({:ok, "alice"})
+    {:ok, _} = Context.set_issue_parent(project.slug, "2", "1")
+
+    assert :ok = LocalFirstTracker.update_issue_state("2", "Done")
+
+    assert Outbox.pending_count(project.id) == 2
+    entries = Outbox.claim_pending(project.id, 10)
+    identifiers = entries |> Enum.map(& &1.payload["identifier"]) |> Enum.sort()
+    assert identifiers == Enum.sort(["1", "2"])
+    assert Enum.all?(entries, &(&1.payload["state"] == "Done"))
+  end
+
   defp upsert_with_remote_assignee(project, identifier, assignee_display, assignee_remote_id) do
     {:ok, _} =
       LocalStore.upsert_remote_issue(project, %{
