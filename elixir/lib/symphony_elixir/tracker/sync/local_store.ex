@@ -14,7 +14,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.PushNotifications.MentionNotifier
   alias SymphonyElixir.Repo
-  alias SymphonyElixir.Tracker.Sync.{Merge, PullRequestRecord, UserRecord}
+  alias SymphonyElixir.Tracker.Sync.{DismissedPullRequestRecord, Merge, PullRequestRecord, UserRecord}
 
   # Fields subject to LWW merge on update (untouched-locally take remote).
   @syncable_fields ~w(title description priority assignee_id)a
@@ -340,7 +340,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   end
 
   @doc """
-  Removes a manual pull request association (by `url`) from an issue.
+  Removes a pull request association (by `url`) from an issue.
   """
   @spec unlink_pull_request(integer(), String.t(), String.t()) :: :ok
   def unlink_pull_request(project_id, identifier, url)
@@ -351,11 +351,62 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
       from(pr in PullRequestRecord,
         where:
           pr.project_id == ^project_id and pr.issue_identifier == ^identifier and
-            pr.remote_id == ^url
+            (pr.remote_id == ^url or pr.url == ^url)
       )
     )
 
     :ok
+  end
+
+  @doc """
+  Records that the user explicitly unlinked a PR from an issue. Dismissed URLs
+  are excluded from live discovery and monitor reconciliation until manually
+  re-linked.
+  """
+  @spec dismiss_pull_request(integer(), String.t(), String.t()) :: :ok
+  def dismiss_pull_request(project_id, identifier, url)
+      when is_integer(project_id) and is_binary(url) do
+    identifier = normalize_identifier(identifier)
+
+    %DismissedPullRequestRecord{}
+    |> DismissedPullRequestRecord.changeset(%{
+      project_id: project_id,
+      issue_identifier: identifier,
+      url: url
+    })
+    |> Repo.insert(on_conflict: :nothing, conflict_target: [:project_id, :issue_identifier, :url])
+
+    :ok
+  end
+
+  @doc """
+  Clears a dismissed PR URL so it can be linked again (e.g. manual link).
+  """
+  @spec undismiss_pull_request(integer(), String.t(), String.t()) :: :ok
+  def undismiss_pull_request(project_id, identifier, url)
+      when is_integer(project_id) and is_binary(url) do
+    identifier = normalize_identifier(identifier)
+
+    Repo.delete_all(
+      from(d in DismissedPullRequestRecord,
+        where:
+          d.project_id == ^project_id and d.issue_identifier == ^identifier and d.url == ^url
+      )
+    )
+
+    :ok
+  end
+
+  @spec dismissed_urls(integer(), String.t()) :: MapSet.t(String.t())
+  def dismissed_urls(project_id, identifier) when is_integer(project_id) and is_binary(identifier) do
+    identifier = normalize_identifier(identifier)
+
+    from(d in DismissedPullRequestRecord,
+      where: d.project_id == ^project_id and d.issue_identifier == ^identifier,
+      select: d.url
+    )
+    |> Repo.all()
+    |> MapSet.new()
   end
 
   defp upsert_one!(project_id, identifier, %{remote_id: remote_id} = attrs)

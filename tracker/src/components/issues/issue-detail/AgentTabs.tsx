@@ -1,5 +1,5 @@
 import { PenLine, Play } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -22,6 +22,28 @@ import type { Issue } from "@/types/issue";
 
 import { AgentTab } from "./AgentTab";
 import { BundlePanel } from "./BundlePanel";
+
+const AgentAuthoringPanel = memo(function AgentAuthoringPanel({
+  projectSlug,
+  identifier,
+  view,
+  onDocumentsChanged,
+}: {
+  projectSlug: string;
+  identifier: string;
+  view: WorkspaceView;
+  onDocumentsChanged: () => void;
+}) {
+  return (
+    <IssueAuthoringPanel
+      projectSlug={projectSlug}
+      identifier={identifier}
+      view={view}
+      compact
+      onDocumentsChanged={onDocumentsChanged}
+    />
+  );
+});
 
 interface AgentTabsProps {
   issue: Issue;
@@ -51,6 +73,10 @@ export function AgentTabs({
   const [steerSeedMessage, setSteerSeedMessage] = useState<string | null>(null);
   const [returnToAgentTemplate, setReturnToAgentTemplate] = useState<ReturnToAgentTemplate | null>(null);
   const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0);
+
+  const handleDocumentsChanged = useCallback(() => {
+    setDocumentsRefreshKey((current) => current + 1);
+  }, []);
 
   const setSection = useCallback(
     (nextSection: AgentSection) => {
@@ -115,12 +141,11 @@ export function AgentTabs({
       </div>
 
       <TabsContent value="authoring" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <IssueAuthoringPanel
+        <AgentAuthoringPanel
           projectSlug={projectSlug}
           identifier={issue.identifier}
           view={view}
-          compact
-          onDocumentsChanged={() => setDocumentsRefreshKey((current) => current + 1)}
+          onDocumentsChanged={handleDocumentsChanged}
         />
       </TabsContent>
       <TabsContent

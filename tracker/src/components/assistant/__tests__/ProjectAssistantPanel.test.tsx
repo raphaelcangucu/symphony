@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
@@ -677,6 +677,37 @@ describe("ProjectAssistantPanel", () => {
     expect(onDocumentChanged).toHaveBeenCalledWith({ identifier: "MAC-1" });
   });
 
+  it("does not reconnect the channel when onDocumentChanged identity changes", async () => {
+    const onDocumentChanged = vi.fn();
+
+    const { rerender } = render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="embedded"
+        onDocumentChanged={onDocumentChanged}
+      />,
+    );
+
+    await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
+
+    const leaveCallsBefore = leave.mock.calls.length;
+
+    rerender(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="embedded"
+        onDocumentChanged={vi.fn()}
+      />,
+    );
+
+    expect(leave).toHaveBeenCalledTimes(leaveCallsBefore);
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
   it("renders file-edit tool calls as a file-activity card and keeps other tools generic", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
 
@@ -722,5 +753,51 @@ describe("ProjectAssistantPanel", () => {
     });
 
     expect(await screen.findByText("done without refresh")).toBeInTheDocument();
+  });
+
+  it("does not auto-scroll when the user has scrolled away from the bottom", async () => {
+    render(
+      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="embedded" />,
+    );
+
+    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+
+    await act(async () => {
+      channelHandlers["history_loaded"]({
+        messages: [
+          { id: 1, role: "user", content: "hello", tool_calls: [] },
+          { id: 2, role: "assistant", content: "initial reply", tool_calls: [] },
+        ],
+      });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+
+    const scroller = screen.getByText("initial reply").closest(".overflow-y-auto") as HTMLDivElement;
+    const scrollTo = vi.spyOn(scroller, "scrollTo").mockImplementation(() => undefined);
+
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 2000 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    scroller.scrollTop = 0;
+
+    await act(async () => {
+      fireEvent.scroll(scroller);
+      scroller.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+    });
+
+    scrollTo.mockClear();
+
+    await act(async () => {
+      channelHandlers["history_synced"]({
+        messages: [
+          { id: 1, role: "user", content: "hello", tool_calls: [] },
+          { id: 2, role: "assistant", content: "reconciled reply", tool_calls: [] },
+        ],
+      });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+
+    expect(screen.getByText("reconciled reply")).toBeInTheDocument();
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(scroller.scrollTop).toBe(0);
   });
 });

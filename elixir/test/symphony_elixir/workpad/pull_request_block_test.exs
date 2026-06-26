@@ -45,4 +45,27 @@ defmodule SymphonyElixir.Workpad.PullRequestBlockTest do
     assert updated =~ "## Codex Workpad"
     assert PullRequestBlock.parse(updated) |> length() == 2
   end
+
+  test "remove_url is a no-op when the workpad has no symphony block" do
+    body = "## Codex Workpad\n\n### Plan\n- [x] done"
+    assert PullRequestBlock.remove_url(body, "https://github.com/clouapp/front/pull/527") == body
+  end
+
+  test "remove_url drops one ref and removes the block when empty" do
+    body = PullRequestBlock.upsert_block("## Codex Workpad\n\n### Plan\n- [x] done", @prs)
+    url = "https://github.com/GambaLabs/frontend/pull/1866"
+
+    updated = PullRequestBlock.remove_url(body, url)
+
+    assert updated =~ "### Plan"
+    assert updated =~ "symphony:prs"
+    assert PullRequestBlock.parse(updated) == [
+             %{
+               repo: "GambaLabs/backend",
+               number: 3997,
+               branch: "symphony/1857",
+               url: "https://github.com/GambaLabs/backend/pull/3997"
+             }
+           ]
+  end
 end

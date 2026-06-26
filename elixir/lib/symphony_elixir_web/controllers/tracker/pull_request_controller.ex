@@ -18,10 +18,12 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
 
   alias Plug.Conn
   alias SymphonyElixir.GitHub.{Api, PullRequests, PullRequestUrl, ReadCache}
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.PullRequestMonitor.MonitorState
+  alias SymphonyElixir.Tracker
   alias SymphonyElixir.Tracker.Sync.LocalStore
   alias SymphonyElixir.Tracker.Sync.PullRequests, as: SyncPullRequests
+  alias SymphonyElixir.Workpad.PullRequestBlock
   alias SymphonyElixirWeb.TrackerErrors
 
   require Logger
@@ -44,6 +46,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
              repo: parsed.repo,
              number: parsed.number
            }) do
+      :ok = LocalStore.undismiss_pull_request(project.id, identifier, url)
       invalidate_pr_caches(project, identifier, url)
 
       json(conn, %{
@@ -60,7 +63,9 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   @spec unlink(Conn.t(), map()) :: Conn.t()
   def unlink(conn, %{"project_slug" => project_slug, "identifier" => identifier, "url" => url}) do
     with {:ok, project} <- Context.get_project(project_slug),
+         :ok <- LocalStore.dismiss_pull_request(project.id, identifier, url),
          :ok <- LocalStore.unlink_pull_request(project.id, identifier, url) do
+      remove_from_workpad(project, identifier, url)
       invalidate_pr_caches(project, identifier, url)
       json(conn, %{data: %{unlinked: true}})
     else
@@ -74,27 +79,40 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
     if PullRequests.supported?(project) do
       respond_github(conn, project, identifier, refresh?)
     else
-      data = persisted(project.slug, identifier) |> MonitorState.attach(project.slug, identifier)
+      dismissed = LocalStore.dismissed_urls(project.id, identifier)
+
+      data =
+        persisted(project.slug, identifier)
+        |> reject_dismissed(dismissed)
+        |> MonitorState.attach(project.slug, identifier)
+
       json(conn, %{data: data, supported: false, available: false})
     end
   end
 
   defp respond_github(conn, project, identifier, refresh?) do
+    dismissed = LocalStore.dismissed_urls(project.id, identifier)
+
     if PullRequests.available?() do
-      live = discover_live(project, identifier, refresh?)
-      data = merge(live, persisted(project.slug, identifier)) |> MonitorState.attach(project.slug, identifier)
+      live = discover_live(project, identifier, refresh?, dismissed)
+      data = merge(live, persisted(project.slug, identifier), dismissed) |> MonitorState.attach(project.slug, identifier)
       json(conn, %{data: data, supported: true, available: true})
     else
-      data = persisted(project.slug, identifier) |> MonitorState.attach(project.slug, identifier)
+      data =
+        persisted(project.slug, identifier)
+        |> reject_dismissed(dismissed)
+        |> MonitorState.attach(project.slug, identifier)
+
       json(conn, %{data: data, supported: true, available: false})
     end
   end
 
-  defp discover_live(project, identifier, refresh?) do
+  defp discover_live(project, identifier, refresh?, dismissed) do
     if refresh?, do: invalidate_issue_pr_cache(project.slug, identifier)
 
     case cached_for_issue(project, identifier) do
       {:ok, prs} ->
+        prs = reject_dismissed(prs, dismissed)
         persist_discovered(project, identifier, prs)
         Enum.map(prs, fn pr -> Map.put_new(pr, :origin, "auto") end)
 
@@ -152,7 +170,10 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
     }
   end
 
-  defp merge(live, persisted) do
+  defp merge(live, persisted, dismissed) do
+    live = reject_dismissed(live, dismissed)
+    persisted = reject_dismissed(persisted, dismissed)
+
     live_urls = live |> Enum.map(& &1[:url]) |> Enum.reject(&is_nil/1) |> MapSet.new()
 
     extras =
@@ -161,6 +182,28 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
       |> Enum.map(&enrich_with_live_checks/1)
 
     live ++ extras
+  end
+
+  defp reject_dismissed(prs, dismissed) when is_list(prs) do
+    Enum.reject(prs, fn pr ->
+      url = Map.get(pr, :url) || Map.get(pr, "url")
+      is_binary(url) and MapSet.member?(dismissed, url)
+    end)
+  end
+
+  defp remove_from_workpad(%Project{} = project, identifier, url) do
+    with {:ok, %{body: body}} when is_binary(body) <- Context.latest_workpad(project.slug, identifier),
+         new_body when is_binary(new_body) <- PullRequestBlock.remove_url(body, url),
+         true <- new_body != body,
+         {:ok, issue} <- Context.get_issue(project.slug, identifier) do
+      Tracker.upsert_workpad(to_string(issue.id), new_body)
+    else
+      _ -> :ok
+    end
+  rescue
+    error ->
+      Logger.warning("Failed to remove PR from workpad issue=#{identifier} url=#{url}: #{inspect(error)}")
+      :ok
   end
 
   # Issue-scoped discovery only surfaces PRs in the issue's own repo, so a

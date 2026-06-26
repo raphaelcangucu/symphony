@@ -443,6 +443,26 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       refute prompt =~ "Do not start writing feature code"
     end
 
+    test "explicit complex request upgrades the thread and loads the methodology skills", %{thread: thread} do
+      assert History.thread_mode(thread) == "triage"
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               CodexSession.send_message_to_issue_thread(thread, "quero que utilize o complex", %{}, runner: runner)
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "MODE: COMPLEX"
+      assert prompt =~ "docs/superpowers/specs"
+
+      persisted = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
+      assert History.thread_mode(persisted) == "complex"
+    end
+
     test "brainstorm intent upgrades the thread to complex and loads the methodology skills", %{thread: thread} do
       assert History.thread_mode(thread) == "triage"
       test_pid = self()
