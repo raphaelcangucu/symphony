@@ -20,6 +20,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useTranslation } from "react-i18next";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
+import {
+  STREAMING_ASSISTANT_ID,
+  appendAssistantDelta,
+  appendMessage,
+  assistantMessage,
+  replaceStreamingMessage,
+  updateStreamingToolCall,
+} from "@/components/assistant/assistantStream";
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
@@ -151,7 +159,6 @@ interface ProjectAssistantPanelProps {
   composerSeedMessage?: string | null;
 }
 
-const STREAMING_ASSISTANT_ID = "assistant-streaming";
 const STICK_TO_BOTTOM_THRESHOLD_PX = 48;
 
 function attachChatScrollStickiness(
@@ -1480,42 +1487,6 @@ function fallbackAttachmentMessage(
     return t("assistant.panel.attachmentFallback.image");
   }
   return t("assistant.panel.attachmentFallback.files");
-}
-
-function assistantMessage(id: string, content: string): AssistantChatMessage {
-  return { id, role: "assistant", content, toolCalls: [], metadata: {} };
-}
-
-function appendMessage(messages: AssistantChatMessage[], message: AssistantChatMessage): AssistantChatMessage[] {
-  if (messages.some((current) => current.id === message.id)) return messages;
-  return [...messages, message];
-}
-
-function appendAssistantDelta(messages: AssistantChatMessage[], delta: string): AssistantChatMessage[] {
-  const existing = messages.find((message) => message.id === STREAMING_ASSISTANT_ID);
-  if (!existing) return [...messages, assistantMessage(STREAMING_ASSISTANT_ID, delta)];
-
-  return messages.map((message) =>
-    message.id === STREAMING_ASSISTANT_ID ? { ...message, content: `${message.content}${delta}` } : message,
-  );
-}
-
-function updateStreamingToolCall(messages: AssistantChatMessage[], toolCall: AssistantToolCall): AssistantChatMessage[] {
-  const existing = messages.find((message) => message.id === STREAMING_ASSISTANT_ID);
-  const target = existing ?? assistantMessage(STREAMING_ASSISTANT_ID, "");
-  const nextToolCalls = [...target.toolCalls.filter((current) => current.name !== toolCall.name), toolCall];
-  const nextTarget = { ...target, toolCalls: nextToolCalls };
-
-  if (!existing) return [...messages, nextTarget];
-  return messages.map((message) => (message.id === STREAMING_ASSISTANT_ID ? nextTarget : message));
-}
-
-function replaceStreamingMessage(messages: AssistantChatMessage[], message: AssistantChatMessage): AssistantChatMessage[] {
-  if (messages.some((current) => current.id === STREAMING_ASSISTANT_ID)) {
-    return messages.map((current) => (current.id === STREAMING_ASSISTANT_ID ? message : current));
-  }
-
-  return appendMessage(messages, message);
 }
 
 function draftIssueCreatedFromMessage(message: AssistantChatMessage): DraftIssueCreated | null {
