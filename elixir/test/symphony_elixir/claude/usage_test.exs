@@ -65,7 +65,7 @@ defmodule SymphonyElixir.Claude.UsageTest do
   end
 
   describe "fetch/1" do
-    test "fetches and normalizes when authenticated" do
+    test "fetches and normalizes a fresh token without refreshing" do
       path = write_creds(%{"accessToken" => "tok", "subscriptionType" => "pro", "expiresAt" => future_ms()})
 
       http = fn url, headers ->
@@ -75,24 +75,84 @@ defmodule SymphonyElixir.Claude.UsageTest do
         {:ok, %{status: 200, body: @api_body}}
       end
 
+      refresh_http = fn _url, _headers, _body -> flunk("must not refresh a fresh token") end
+
       assert {:ok, %Snapshot{agent_kind: "claude", plan: "pro"} = snap} =
-               Usage.fetch(credentials_path: path, http: http)
+               Usage.fetch(credentials_path: path, http: http, refresh_http: refresh_http)
 
       assert Enum.any?(snap.windows, &(&1.kind == :session))
     end
 
-    test "does not call the API when the token is expired" do
-      path = write_creds(%{"accessToken" => "tok", "expiresAt" => 1})
-      http = fn _url, _headers -> flunk("must not call API with expired token") end
+    test "refreshes an expired token, persists rotation, then fetches with the new token" do
+      path =
+        write_creds(%{
+          "accessToken" => "old",
+          "refreshToken" => "refresh-old",
+          "subscriptionType" => "max",
+          "expiresAt" => 1
+        })
 
-      assert {:error, :token_expired} = Usage.fetch(credentials_path: path, http: http)
+      refresh_http = fn url, _headers, body ->
+        assert url == "https://platform.claude.com/v1/oauth/token"
+        assert body["grant_type"] == "refresh_token"
+        assert body["refresh_token"] == "refresh-old"
+        assert body["client_id"] == "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+        {:ok, %{status: 200, body: %{"access_token" => "new", "refresh_token" => "refresh-new", "expires_in" => 3600}}}
+      end
+
+      http = fn _url, headers ->
+        assert {"authorization", "Bearer new"} in downcase_headers(headers)
+        {:ok, %{status: 200, body: @api_body}}
+      end
+
+      assert {:ok, %Snapshot{agent_kind: "claude"}} =
+               Usage.fetch(credentials_path: path, http: http, refresh_http: refresh_http)
+
+      # rotation is written back so the CLI's refresh token stays valid
+      persisted = path |> File.read!() |> Jason.decode!()
+      assert persisted["claudeAiOauth"]["accessToken"] == "new"
+      assert persisted["claudeAiOauth"]["refreshToken"] == "refresh-new"
     end
 
-    test "maps 401 to :token_expired" do
-      path = write_creds(%{"accessToken" => "tok", "expiresAt" => future_ms()})
-      http = fn _url, _headers -> {:ok, %{status: 401, body: %{}}} end
+    test "retries once with a refreshed token when usage returns 401" do
+      path =
+        write_creds(%{
+          "accessToken" => "tok",
+          "refreshToken" => "refresh-old",
+          "expiresAt" => future_ms()
+        })
 
-      assert {:error, :token_expired} = Usage.fetch(credentials_path: path, http: http)
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      http = fn _url, _headers ->
+        n = Agent.get_and_update(calls, fn n -> {n, n + 1} end)
+        if n == 0, do: {:ok, %{status: 401, body: %{}}}, else: {:ok, %{status: 200, body: @api_body}}
+      end
+
+      refresh_http = fn _url, _headers, _body ->
+        {:ok, %{status: 200, body: %{"access_token" => "new", "expires_in" => 3600}}}
+      end
+
+      assert {:ok, %Snapshot{}} = Usage.fetch(credentials_path: path, http: http, refresh_http: refresh_http)
+      assert Agent.get(calls, & &1) == 2
+    end
+
+    test "maps invalid_grant on refresh to :session_expired" do
+      path = write_creds(%{"accessToken" => "tok", "refreshToken" => "r", "expiresAt" => 1})
+      http = fn _url, _headers -> flunk("must not call usage when refresh fails") end
+      refresh_http = fn _url, _headers, _body -> {:ok, %{status: 400, body: %{"error" => "invalid_grant"}}} end
+
+      assert {:error, :session_expired} =
+               Usage.fetch(credentials_path: path, http: http, refresh_http: refresh_http)
+    end
+
+    test "errors when an expired token has no refresh token" do
+      path = write_creds(%{"accessToken" => "tok", "expiresAt" => 1})
+      http = fn _url, _headers -> flunk("must not call usage") end
+      refresh_http = fn _url, _headers, _body -> flunk("no refresh token to use") end
+
+      assert {:error, :no_refresh_token} =
+               Usage.fetch(credentials_path: path, http: http, refresh_http: refresh_http)
     end
   end
 

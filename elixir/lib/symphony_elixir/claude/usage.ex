@@ -6,15 +6,15 @@ defmodule SymphonyElixir.Claude.Usage do
   captured passively in `SymphonyElixir.Observability.Registry`), Claude exposes
   plan usage only via an authenticated HTTP endpoint. This module mirrors the
   approach the Jean desktop app uses: it reads the Claude CLI OAuth token from
-  `~/.claude/.credentials.json` and calls Anthropic's OAuth usage API, then
-  normalizes the response into a `SymphonyElixir.AgentUsage.Snapshot` and stores
-  it under `"claude"`.
+  `~/.claude/.credentials.json`, refreshing it against Anthropic's OAuth token
+  endpoint when expired, then calls the OAuth usage API and normalizes the
+  response into a `SymphonyElixir.AgentUsage.Snapshot` stored under `"claude"`.
 
-  The live endpoint is undocumented and OAuth-token-gated, so every step fails
-  soft: a missing/expired token or a non-2xx response yields `{:error, reason}`
-  and never crashes the caller. Token refresh is intentionally out of scope for
-  now — an expired token surfaces as `:token_expired` so the operator re-auths
-  via `claude`.
+  The live endpoints are undocumented and OAuth-token-gated, so every step fails
+  soft: a missing token, an unrefreshable session, or a non-2xx response yields
+  `{:error, reason}` and never crashes the caller. A successful refresh is
+  persisted back to the credentials file (rotated refresh tokens included) so the
+  `claude` CLI keeps working.
   """
 
   alias SymphonyElixir.AgentUsage
@@ -26,18 +26,23 @@ defmodule SymphonyElixir.Claude.Usage do
   @agent_kind "claude"
   @credentials_file ".claude/.credentials.json"
   @usage_url "https://api.anthropic.com/api/oauth/usage"
+  @refresh_url "https://platform.claude.com/v1/oauth/token"
+  @oauth_client_id "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+  @oauth_scopes "user:profile user:inference user:sessions:claude_code user:mcp_servers"
   @beta_header {"anthropic-beta", "oauth-2025-04-20"}
   @request_timeout_ms 5_000
+  @refresh_buffer_ms 300_000
   @backoff_ms 60_000
   @backoff_key {__MODULE__, :last_attempt_ms}
 
   @type credentials :: %{
           access_token: String.t(),
+          refresh_token: String.t() | nil,
           expires_at: integer() | nil,
-          subscription_type: String.t() | nil
+          subscription_type: String.t() | nil,
+          raw: map(),
+          path: String.t()
         }
-
-  @type http_fun :: (String.t(), [{String.t(), String.t()}] -> {:ok, map()} | {:error, term()})
 
   # ── Public API ──────────────────────────────────────────────────────────────
 
@@ -64,8 +69,8 @@ defmodule SymphonyElixir.Claude.Usage do
     now_ms = Keyword.get(opts, :now_ms, System.system_time(:millisecond))
 
     with {:ok, creds} <- read_credentials(credentials_path(opts)),
-         :ok <- ensure_token_live(creds, now_ms),
-         {:ok, body} <- request_usage(creds.access_token, opts) do
+         {:ok, creds} <- ensure_fresh_token(creds, now_ms, opts),
+         {:ok, body} <- request_usage_with_retry(creds, now_ms, opts) do
       {:ok, normalize(body, creds.subscription_type, System.system_time(:second))}
     end
   end
@@ -100,8 +105,11 @@ defmodule SymphonyElixir.Claude.Usage do
       {:ok,
        %{
          access_token: token,
+         refresh_token: blank_to_nil(Map.get(oauth, "refreshToken")),
          expires_at: to_integer(Map.get(oauth, "expiresAt")),
-         subscription_type: blank_to_nil(Map.get(oauth, "subscriptionType"))
+         subscription_type: blank_to_nil(Map.get(oauth, "subscriptionType")),
+         raw: json,
+         path: path
        }}
     end
   end
@@ -122,7 +130,7 @@ defmodule SymphonyElixir.Claude.Usage do
     :ok
   end
 
-  # ── Refresh helpers ─────────────────────────────────────────────────────────
+  # ── Refresh-into-store helpers ──────────────────────────────────────────────
 
   defp attempt_refresh(opts) do
     mark_attempt()
@@ -163,7 +171,117 @@ defmodule SymphonyElixir.Claude.Usage do
     :persistent_term.put(@backoff_key, System.monotonic_time(:millisecond))
   end
 
+  # ── Token freshness / refresh ───────────────────────────────────────────────
+
+  defp ensure_fresh_token(creds, now_ms, opts) do
+    if token_needs_refresh?(creds, now_ms), do: refresh(creds, now_ms, opts), else: {:ok, creds}
+  end
+
+  defp token_needs_refresh?(%{expires_at: nil}, _now_ms), do: true
+
+  defp token_needs_refresh?(%{expires_at: expires_at}, now_ms) when is_integer(expires_at) do
+    now_ms + @refresh_buffer_ms >= expires_at
+  end
+
+  defp refresh(%{refresh_token: nil}, _now_ms, _opts), do: {:error, :no_refresh_token}
+
+  defp refresh(%{refresh_token: refresh_token} = creds, now_ms, opts) when is_binary(refresh_token) do
+    body = %{
+      "grant_type" => "refresh_token",
+      "refresh_token" => refresh_token,
+      "client_id" => @oauth_client_id,
+      "scope" => @oauth_scopes
+    }
+
+    refresh_http = Keyword.get(opts, :refresh_http, &default_refresh_http/3)
+
+    case refresh_http.(@refresh_url, [{"content-type", "application/json"}], body) do
+      {:ok, %{status: status, body: resp}} when status in 200..299 ->
+        apply_refresh(creds, resp, now_ms)
+
+      {:ok, %{status: status, body: resp}} when status in [400, 401] ->
+        {:error, refresh_error(resp)}
+
+      # Any other non-success: keep the existing token and let the usage call decide.
+      {:ok, %{status: _status}} ->
+        {:ok, creds}
+
+      {:error, reason} ->
+        {:error, {:http_error, reason}}
+    end
+  end
+
+  defp apply_refresh(creds, resp, now_ms) do
+    with {:ok, parsed} <- decode_body(resp),
+         token when is_binary(token) <- Map.get(parsed, "access_token") do
+      updated = %{
+        creds
+        | access_token: token,
+          refresh_token: blank_to_nil(Map.get(parsed, "refresh_token")) || creds.refresh_token,
+          expires_at: next_expires_at(parsed, creds.expires_at, now_ms)
+      }
+
+      persist_credentials(updated)
+      {:ok, updated}
+    else
+      nil -> {:error, :invalid_refresh_response}
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :invalid_refresh_response}
+    end
+  end
+
+  defp next_expires_at(parsed, fallback, now_ms) do
+    case to_integer(Map.get(parsed, "expires_in")) do
+      seconds when is_integer(seconds) -> now_ms + seconds * 1000
+      _ -> fallback
+    end
+  end
+
+  defp refresh_error(resp) do
+    case decode_body(resp) do
+      {:ok, %{"error" => "invalid_grant"}} -> :session_expired
+      _ -> :token_expired
+    end
+  end
+
+  defp persist_credentials(%{path: path, raw: raw} = creds) when is_binary(path) and is_map(raw) do
+    oauth =
+      raw
+      |> Map.get("claudeAiOauth", %{})
+      |> Map.put("accessToken", creds.access_token)
+      |> Map.put("refreshToken", creds.refresh_token)
+      |> Map.put("expiresAt", creds.expires_at)
+
+    write_atomic(path, Jason.encode!(Map.put(raw, "claudeAiOauth", oauth)))
+  rescue
+    error ->
+      Logger.warning("Claude credentials persist failed: #{inspect(error)}")
+      :error
+  end
+
+  defp persist_credentials(_creds), do: :ok
+
+  defp write_atomic(path, data) do
+    tmp = path <> ".tmp.#{System.unique_integer([:positive])}"
+    File.write!(tmp, data)
+    File.rename!(tmp, path)
+    :ok
+  end
+
   # ── HTTP ────────────────────────────────────────────────────────────────────
+
+  defp request_usage_with_retry(creds, now_ms, opts) do
+    case request_usage(creds.access_token, opts) do
+      {:error, :token_expired} ->
+        case refresh(creds, now_ms, opts) do
+          {:ok, refreshed} -> request_usage(refreshed.access_token, opts)
+          {:error, _reason} = error -> error
+        end
+
+      other ->
+        other
+    end
+  end
 
   defp request_usage(access_token, opts) do
     headers = [
@@ -193,6 +311,13 @@ defmodule SymphonyElixir.Claude.Usage do
   defp default_http(url, headers) do
     case Req.get(url, headers: headers, receive_timeout: @request_timeout_ms, retry: false) do
       {:ok, %Req.Response{status: status, body: body}} -> {:ok, %{status: status, body: body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp default_refresh_http(url, headers, body) do
+    case Req.post(url, headers: headers, json: body, receive_timeout: @request_timeout_ms, retry: false) do
+      {:ok, %Req.Response{status: status, body: resp}} -> {:ok, %{status: status, body: resp}}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -248,12 +373,6 @@ defmodule SymphonyElixir.Claude.Usage do
   defp clamped_percent(_value), do: nil
 
   # ── Credentials parsing ─────────────────────────────────────────────────────
-
-  defp ensure_token_live(%{expires_at: nil}, _now_ms), do: :ok
-
-  defp ensure_token_live(%{expires_at: expires_at}, now_ms) when is_integer(expires_at) do
-    if expires_at > now_ms, do: :ok, else: {:error, :token_expired}
-  end
 
   defp read_file(path) do
     case File.read(path) do
