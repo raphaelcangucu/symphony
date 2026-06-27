@@ -1,4 +1,18 @@
-import { AudioLines, ChevronDown, FileText, Mic, Plus, Send, Square, X } from "lucide-react";
+import {
+  AudioLines,
+  ChevronDown,
+  Feather,
+  FileText,
+  Flame,
+  Gauge,
+  type LucideIcon,
+  Mic,
+  Plus,
+  Send,
+  Sparkles,
+  Square,
+  X,
+} from "lucide-react";
 import {
   type DragEvent,
   type FormEvent,
@@ -788,6 +802,15 @@ function AgentMenu({
   );
 }
 
+/** Maps a reasoning-effort id to a "thinking intensity" icon (Jean-style). */
+function effortIcon(effortId: string): LucideIcon {
+  const id = effortId.toLowerCase();
+  if (id === "low" || id === "minimal") return Feather;
+  if (id === "high") return Flame;
+  if (id === "xhigh" || id === "max" || id === "ultra" || id === "ultracode") return Sparkles;
+  return Gauge;
+}
+
 function EffortMenu({
   catalog,
   model,
@@ -804,11 +827,13 @@ function EffortMenu({
   onChange: (effort: AssistantEffort) => void;
 }) {
   const { t } = useTranslation();
+  const TriggerIcon = effortIcon(effort);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
+          <TriggerIcon className="h-3.5 w-3.5" data-testid="effort-trigger-icon" />
           {effortLabel(catalog, model, effort)}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
@@ -817,11 +842,15 @@ function EffortMenu({
         <DropdownMenuLabel>{t("assistant.composer.reasoningEffort")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={effort} onValueChange={onChange}>
-          {options.map((option) => (
-            <DropdownMenuRadioItem key={option.id} value={option.id}>
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
+          {options.map((option) => {
+            const OptionIcon = effortIcon(option.id);
+            return (
+              <DropdownMenuRadioItem key={option.id} value={option.id} className="gap-2">
+                <OptionIcon className="h-3.5 w-3.5 shrink-0" data-testid={`effort-icon-${option.id}`} />
+                {option.label}
+              </DropdownMenuRadioItem>
+            );
+          })}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -1,4 +1,4 @@
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search, Star } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -105,8 +105,15 @@ export function ModelMenu({
           >
             <DropdownMenuRadioGroup value={model} onValueChange={onChange}>
               {filtered.map((option) => (
-                <DropdownMenuRadioItem key={option.id} value={option.model}>
-                  {option.label}
+                <DropdownMenuRadioItem key={option.id} value={option.model} className="gap-2">
+                  <span className="flex-1 truncate">{option.label}</span>
+                  {option.isDefault ? (
+                    <Star
+                      className="h-3 w-3 shrink-0 fill-amber-400 text-amber-500"
+                      data-testid="model-default-star"
+                      aria-hidden="true"
+                    />
+                  ) : null}
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>

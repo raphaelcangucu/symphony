@@ -47,4 +47,13 @@ describe("ModelMenu", () => {
     expect(screen.getByRole("menuitemradio", { name: "Model 3" })).toBeTruthy();
     expect(screen.queryByRole("menuitemradio", { name: "Model 0" })).toBeNull();
   });
+
+  it("marks the catalog default model with a star", () => {
+    render(<ModelMenu catalog={buildCatalog(3)} model="model-0" onChange={vi.fn()} />);
+
+    openMenu();
+
+    const stars = screen.getAllByTestId("model-default-star");
+    expect(stars).toHaveLength(1);
+  });
 });

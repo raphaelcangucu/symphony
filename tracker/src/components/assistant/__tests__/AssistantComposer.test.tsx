@@ -78,6 +78,17 @@ describe("AssistantComposer", () => {
     );
   });
 
+  it("renders a thinking/effort icon for each reasoning-effort option", () => {
+    render(
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+    );
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: i18n.t("assistant.effort.low") }));
+
+    expect(screen.getByTestId("effort-icon-low")).toBeTruthy();
+    expect(screen.getByTestId("effort-icon-high")).toBeTruthy();
+  });
+
   it("sends with the send button", () => {
     const onSubmit = vi.fn();
 
