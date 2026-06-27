@@ -6,7 +6,7 @@ import { initTestI18n } from "@/i18n/testUtils";
 import type { AssistantToolCall } from "@/services/assistant";
 
 function toolCall(partial: Partial<AssistantToolCall>): AssistantToolCall {
-  return { name: "list_issues", status: "complete", result: {}, ...partial };
+  return { id: null, name: "list_issues", status: "complete", result: {}, ...partial };
 }
 
 describe("assistant tool call adapter", () => {

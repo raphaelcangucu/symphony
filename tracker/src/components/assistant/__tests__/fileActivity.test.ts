@@ -4,7 +4,7 @@ import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
 import type { AssistantToolCall } from "@/services/assistant";
 
 function call(partial: Partial<AssistantToolCall>): AssistantToolCall {
-  return { name: "read_workspace_file", status: "complete", result: {}, ...partial };
+  return { id: null, name: "read_workspace_file", status: "complete", result: {}, ...partial };
 }
 
 describe("fileActivityFromToolCall", () => {
