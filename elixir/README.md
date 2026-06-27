@@ -882,11 +882,23 @@ agent CLI's own usage view.
   each `Window{kind, used_percent, resets_at, window_minutes}` clamps `used_percent` to `0..100` and
   resolves relative `reset_in_seconds` into an absolute epoch (`primary → :session`,
   `secondary → :weekly`).
-- **Capture (passive)**: `SymphonyElixir.Observability.Registry` is the one process-global place
-  that sees both `agent_kind` and `rate_limits` per report, so on each report it best-effort writes
-  the normalized snapshot into `SymphonyElixir.AgentUsage` (a `:persistent_term`, TTL'd store, ~10
-  min, mirroring `AgentAvailability`). The store outlives a single run/idle so the panel still shows
-  "plan X% used" when nothing is running; entries past the TTL are returned but flagged `stale`.
+- **Capture (passive, Codex)**: `SymphonyElixir.Observability.Registry` is the one process-global
+  place that sees both `agent_kind` and `rate_limits` per report, so on each report it best-effort
+  writes the normalized snapshot into `SymphonyElixir.AgentUsage` (a `:persistent_term`, TTL'd store,
+  ~10 min, mirroring `AgentAvailability`). The store outlives a single run/idle so the panel still
+  shows "plan X% used" when nothing is running; entries past the TTL are returned but flagged `stale`.
+- **Probe (active, Claude)**: Claude has no usable rate-limit signal on the stream (the CLI emits a
+  `rate_limit` event, but the adapter does not surface it). So, mirroring the Jean desktop app,
+  `SymphonyElixir.Claude.Usage` reads the Claude CLI OAuth token from `~/.claude/.credentials.json`
+  and calls Anthropic's OAuth usage API (`GET https://api.anthropic.com/api/oauth/usage`, header
+  `anthropic-beta: oauth-2025-04-20`), mapping `five_hour → :session`, `seven_day → :weekly`,
+  `seven_day_sonnet → :sonnet_weekly` and `extra_usage` into credits. The usage endpoint triggers it
+  best-effort (self-throttled 60s backoff; skipped while a fresh snapshot exists), so it never blocks
+  or hammers. It is off under `:test` (`config :claude_usage_probe_enabled`) and fails soft on a
+  missing/expired token. Token refresh is a deliberate follow-up (an expired token surfaces as
+  `:token_expired` → re-auth via `claude`).
+- **Cursor**: no plan-usage source exists (the Jean reference has none either), so Cursor shows
+  "Usage unavailable" until one appears.
 - **Endpoint** (bearer auth): `GET /api/tracker/v1/settings/agents/usage` returns
   `{ codex, claude, cursor }`, each either `null` (no data / unavailable for that agent) or
   `{ plan, credits_remaining, credits_unlimited, fetched_at, stale, windows: [{ kind, used_percent,
