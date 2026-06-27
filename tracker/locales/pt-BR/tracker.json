@@ -29,6 +29,7 @@
       "window": {
         "session": "Sessão",
         "weekly": "Semanal",
+        "sonnet_weekly": "Semanal (Sonnet)",
         "reviews": "Revisões",
         "model": "Modelo: {{name}}"
       }

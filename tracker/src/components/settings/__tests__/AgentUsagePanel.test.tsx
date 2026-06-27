@@ -52,4 +52,27 @@ describe("AgentUsagePanel", () => {
     await userEvent.click(screen.getByRole("button", { name: /Refresh/i }));
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
   });
+
+  it("labels the Claude sonnet_weekly window", async () => {
+    vi.spyOn(service, "getAgentUsage").mockResolvedValue({
+      ...usageMap,
+      claude: {
+        agentKind: "claude",
+        plan: "max",
+        creditsRemaining: 38,
+        creditsUnlimited: false,
+        fetchedAt: 1_900_000_000,
+        stale: false,
+        windows: [
+          { kind: "session", usedPercent: 73, resetsAt: 1_900_500_000, windowMinutes: null },
+          { kind: "sonnet_weekly", usedPercent: 12, resetsAt: 1_901_000_000, windowMinutes: null },
+        ],
+        modelLimits: [],
+      },
+    });
+
+    renderWithI18n(<AgentUsagePanel />);
+
+    await waitFor(() => expect(screen.getByText("Weekly (Sonnet)")).toBeInTheDocument());
+  });
 });

@@ -30,7 +30,7 @@ function formatEpoch(seconds: number | null): string | null {
 
 function windowLabel(usageWindow: UsageWindow, t: TranslateFn): string {
   const { kind } = usageWindow;
-  if (kind === "session" || kind === "weekly" || kind === "reviews") {
+  if (kind === "session" || kind === "weekly" || kind === "sonnet_weekly" || kind === "reviews") {
     return t(`settings.usage.window.${kind}`);
   }
   if (typeof kind === "string" && kind.startsWith("model:")) {

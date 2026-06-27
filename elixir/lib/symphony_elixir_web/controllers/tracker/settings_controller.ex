@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
   alias Plug.Conn
   alias SymphonyElixir.AgentAvailability
   alias SymphonyElixir.AgentUsage
+  alias SymphonyElixir.Claude.Usage, as: ClaudeUsage
   alias SymphonyElixir.Settings
   alias SymphonyElixir.Tracker.Identity
   alias SymphonyElixirWeb.TrackerErrors
@@ -45,6 +46,9 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
 
   @spec usage(Conn.t(), map()) :: Conn.t()
   def usage(conn, _params) do
+    # Codex usage is captured passively from the agent stream; Claude has no
+    # stream signal, so refresh it on demand (best-effort, self-throttled).
+    _ = ClaudeUsage.refresh_into_store()
     json(conn, %{data: present_usage(AgentUsage.snapshot())})
   end
 
