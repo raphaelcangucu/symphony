@@ -350,6 +350,47 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     end
   end
 
+  describe "execution mode sandbox" do
+    test "plan mode starts the thread in a read-only sandbox" do
+      with_fake_goal_server(fn workspace, issue, trace_file ->
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, execution_mode: "plan")
+
+        thread_start = message_with_method(outbound_messages(trace_file), "thread/start")
+        assert thread_start["params"]["sandbox"] == "read-only"
+      end)
+    end
+
+    test "yolo mode starts the thread in danger-full-access" do
+      with_fake_goal_server(fn workspace, issue, trace_file ->
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, execution_mode: "yolo")
+
+        thread_start = message_with_method(outbound_messages(trace_file), "thread/start")
+        assert thread_start["params"]["sandbox"] == "danger-full-access"
+      end)
+    end
+
+    test "build mode keeps the configured workspace-write sandbox" do
+      with_fake_goal_server(fn workspace, issue, trace_file ->
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, execution_mode: "build")
+
+        thread_start = message_with_method(outbound_messages(trace_file), "thread/start")
+        assert thread_start["params"]["sandbox"] == "workspace-write"
+      end)
+    end
+
+    test "no execution mode leaves the configured sandbox untouched" do
+      with_fake_goal_server(fn workspace, issue, trace_file ->
+        assert {:ok, _result} = AppServer.run(workspace, "Build the feature", issue)
+
+        thread_start = message_with_method(outbound_messages(trace_file), "thread/start")
+        assert thread_start["params"]["sandbox"] == "workspace-write"
+      end)
+    end
+  end
+
   defp with_fake_goal_server(response_mode \\ :goal_ok, fun) when is_function(fun, 3) do
     test_root =
       Path.join(

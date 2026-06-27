@@ -12,8 +12,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
   alias SymphonyElixir.Claude.AppServer.{CliRunner, ToolGateway}
   alias SymphonyElixir.Config
-
-  @permission_mode "bypassPermissions"
+  alias SymphonyElixir.ExecutionMode
 
   @type session :: %{
           session_uuid: String.t(),
@@ -22,6 +21,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
           cli_session_id: String.t() | nil,
           model: String.t() | nil,
           effort: String.t() | nil,
+          permission_mode: String.t(),
           gateway_token: String.t() | nil,
           mcp_config_path: Path.t() | nil,
           metadata: map()
@@ -39,6 +39,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
          cli_session_id: nil,
          model: Keyword.get(opts, :model),
          effort: Keyword.get(opts, :effort),
+         permission_mode: ExecutionMode.claude_permission_mode(Keyword.get(opts, :execution_mode)),
          gateway_token: Map.get(gateway, :token),
          mcp_config_path: Map.get(gateway, :path),
          metadata: %{}
@@ -126,9 +127,18 @@ defmodule SymphonyElixir.Claude.CodingAgent do
       model: Keyword.get(opts, :model, session.model),
       effort: Keyword.get(opts, :effort, session.effort),
       mcp_config_path: session.mcp_config_path,
-      permission_mode: @permission_mode,
+      permission_mode: turn_permission_mode(session, opts),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
+  end
+
+  # A per-turn execution mode (carried in the run opts) overrides the session's
+  # mode; otherwise the mode resolved at session start applies.
+  defp turn_permission_mode(session, opts) do
+    case Keyword.get(opts, :execution_mode) do
+      mode when is_binary(mode) -> ExecutionMode.claude_permission_mode(mode)
+      _ -> session.permission_mode
+    end
   end
 
   defp maybe_register_tools(workspace, opts) do

@@ -138,6 +138,10 @@ defmodule SymphonyElixir.Codex.Config do
     %{"type" => "dangerFullAccess"}
   end
 
+  defp default_turn_sandbox_policy(_workspace, "read-only") do
+    %{"type" => "readOnly"}
+  end
+
   defp default_turn_sandbox_policy(workspace, _thread_sandbox) do
     writable_root =
       if is_binary(workspace) and String.trim(workspace) != "" do
