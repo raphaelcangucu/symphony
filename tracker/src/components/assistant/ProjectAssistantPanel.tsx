@@ -28,16 +28,13 @@ import {
   replaceStreamingMessage,
   updateStreamingToolCall,
 } from "@/components/assistant/assistantStream";
-import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
-import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
-import { FileActivityCard } from "@/components/assistant/FileActivityCard";
+import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
-import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
@@ -1294,15 +1291,8 @@ function AssistantBubble({
           <AssistantMarkdown content={message.content} onOpenDocumentPath={onOpenDocumentPath} />
         )}
         {message.toolCalls.length ? (
-          <div className={cn("mt-3 space-y-2 border-t pt-2", isUser && "border-white/20")}>
-            {message.toolCalls.map((toolCall, index) => {
-              const activity = fileActivityFromToolCall(toolCall);
-              return activity ? (
-                <FileActivityCard view={activity} key={`fa-${toolCall.name}-${index}`} />
-              ) : (
-                <ToolCallBlock view={assistantToolCallToView(toolCall)} key={`${toolCall.name}-${index}`} />
-              );
-            })}
+          <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
+            <ToolActivityTimeline toolCalls={message.toolCalls} />
           </div>
         ) : null}
       </article>
