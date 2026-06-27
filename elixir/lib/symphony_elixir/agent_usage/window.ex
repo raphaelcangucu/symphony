@@ -18,7 +18,7 @@ defmodule SymphonyElixir.AgentUsage.Window do
   @enforce_keys [:kind, :used_percent]
   defstruct [:kind, :used_percent, :resets_at, :window_minutes]
 
-  @type kind :: :session | :weekly | :reviews | {:model, String.t()}
+  @type kind :: :session | :weekly | :sonnet_weekly | :reviews | {:model, String.t()}
 
   @type t :: %__MODULE__{
           kind: kind(),
