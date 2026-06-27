@@ -107,6 +107,8 @@ interface AssistantComposerProps {
   onComposerSnapshot?: (snapshot: ComposerSnapshot) => void;
   /** Reports the currently selected agent (on mount and on every change). */
   onAgentChange?: (agent: AgentKind) => void;
+  /** Reports the selected agent's model/effort settings (on mount and change). */
+  onSettingsChange?: (agent: AgentKind, settings: AssistantComposerSettings) => void;
   /**
    * Optional element that acts as the file drop zone. When provided, dropping
    * files anywhere inside it (e.g. the whole assistant panel) attaches them,
@@ -139,6 +141,7 @@ export function AssistantComposer({
   onSubmit,
   onComposerSnapshot,
   onAgentChange,
+  onSettingsChange,
   dropTargetRef,
 }: AssistantComposerProps) {
   const { t } = useTranslation();
@@ -178,6 +181,15 @@ export function AssistantComposer({
   useEffect(() => {
     onAgentChange?.(composerState.agent);
   }, [composerState.agent, onAgentChange]);
+
+  // Surface model/effort so the dispatch panel can forward them to the orchestrator.
+  // Depend on the primitive fields (not the derived `settings` object) to avoid
+  // firing on every render via a fresh object identity.
+  const settingsModel = settings.model;
+  const settingsEffort = settings.effort;
+  useEffect(() => {
+    onSettingsChange?.(composerState.agent, { model: settingsModel, effort: settingsEffort });
+  }, [composerState.agent, settingsModel, settingsEffort, onSettingsChange]);
 
   // When bundle changes, re-validate current model against the catalog for active agent
   useEffect(() => {

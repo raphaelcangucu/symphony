@@ -155,6 +155,41 @@ describe("ExecutionControlComposer", () => {
     expect(onIssueUpdated).toHaveBeenCalledWith(issue);
   });
 
+  it("forwards the selected model and effort on resume", async () => {
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resuming agent work on CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    // Let the remote catalog load so the composer resolves codex → gpt-5/high.
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({
+          action: "resume",
+          model: "gpt-5",
+          effort: "high",
+        }),
+      ),
+    );
+  });
+
   it("enables resume when the run was interrupted but reported as idle", () => {
     render(
       <ExecutionControlComposer

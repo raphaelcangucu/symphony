@@ -13,6 +13,8 @@ export interface IssueDispatchInput {
   goal?: string | null;
   instructions?: string | null;
   targetStatus?: string | null;
+  model?: string | null;
+  effort?: string | null;
 }
 
 export interface IssueDispatchResult {
@@ -40,6 +42,8 @@ export async function dispatchIssueAgent(
   if (input.goal?.trim()) payload.goal = input.goal.trim();
   if (input.instructions?.trim()) payload.instructions = input.instructions.trim();
   if (input.targetStatus?.trim()) payload.target_status = input.targetStatus.trim();
+  if (input.model?.trim()) payload.model = input.model.trim();
+  if (input.effort?.trim()) payload.effort = input.effort.trim();
 
   const response = await http.post(
     trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/dispatch`),

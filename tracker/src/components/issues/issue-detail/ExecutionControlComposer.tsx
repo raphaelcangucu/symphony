@@ -73,6 +73,10 @@ export function ExecutionControlComposer({
   const [goalDismissed, setGoalDismissed] = useState(false);
   const [composerResetToken, setComposerResetToken] = useState(0);
   const composerSnapshotRef = useRef<ComposerSnapshot>({ input: "", attachments: [] });
+  const composerSettingsRef = useRef<{ model: string | null; effort: string | null }>({
+    model: null,
+    effort: null,
+  });
 
   // Codex goals are sourced solely from the live execution snapshot (the native
   // Codex thread), never from the cached issue.agentGoal column.
@@ -173,6 +177,8 @@ export function ExecutionControlComposer({
         agent,
         goal: dispatchGoal,
         instructions: guidance || null,
+        model: composerSettingsRef.current.model,
+        effort: composerSettingsRef.current.effort,
       });
       onIssueUpdated?.(result.issue);
       setDispatchStatus(result.message);
@@ -437,6 +443,9 @@ export function ExecutionControlComposer({
           onEmptySubmit={handleEmptySubmit}
           onSubmit={handleComposerSubmit}
           onAgentChange={setAgent}
+          onSettingsChange={(_agent, next) => {
+            composerSettingsRef.current = { model: next.model, effort: next.effort };
+          }}
           toolbarAfterAttach={
             <>
               <Button
