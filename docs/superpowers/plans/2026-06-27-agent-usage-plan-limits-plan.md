@@ -2,6 +2,13 @@
 
 > **For agentic workers:** Implement task-by-task using checkbox (`- [ ]`) steps. One focused subagent per task with review between tasks. Replace example commands with this repo's real tools (Elixir `mix`, tracker `npm`/`vitest`).
 
+> **AS-BUILT (2026-06-27, branch `feat/agent-usage-panel`):** Implemented, but **adjusted to the real codebase** after a static spike showed this plan's premise was stale. Corrections vs the original plan:
+> - **Schema:** the real rate-limit payload is the **Codex `token_count`** shape (`%{limit_name, primary, secondary, credits}` with bucket fields `usedPercent`/`windowDurationMins`/`reset_*`), **not** Claude `five_hour`/`weekly`/`used_percent`. `Window.normalize/3` maps `primary → :session`, `secondary → :weekly`.
+> - **Capture sink (Tasks 4/5):** the data is **not dropped** — `codex/coding_agent.ex` already normalizes `rate_limits` and it flows to the observability snapshot. The single place with both `agent_kind` + `rate_limits` is **`Observability.Registry`**, so capture hooks there (not the no-longer-existing `claude/app_server/cli_runner.ex:344`). One passive path covers all agents; a separate Codex query was unnecessary.
+> - **Store:** new `:persistent_term` TTL store `SymphonyElixir.AgentUsage` (`Snapshot`/`Window` structs in `agent_usage/`).
+> - **Endpoint:** added to the existing `SettingsController` + `router.ex` (`get "/settings/agents/usage"`), returning `%{data: {codex,claude,cursor}}`.
+> - **Tracker:** TanStack Query is **not** a dependency, so `useAgentUsage` uses the codebase's `useEffect`+interval convention; no shadcn `Progress` exists, so `UsageWindowBar` renders a dependency-free bar. `AGENT_KINDS = [codex, claude, cursor]` (no opencode yet). Task 9 (compact pill) deferred. Commits are per task on the worktree branch.
+
 **Goal:** Show the operator how much of each agent's **plan quota** is consumed and when it resets — the rolling **session window** (e.g. Claude Max's ~5h best-model window), the **weekly** window, and any per-model limits — exactly like Jean's `UsagePane` (each window = a progress bar `usedPercent` + a `Resets: <time>` line, plus plan type / credits). This is **plan rate-limit / consumption**, NOT per-run elapsed time (that already exists in `AgentTab`/`GoalPill`/`ObservabilityPage`).
 
 **Why (verified state):**

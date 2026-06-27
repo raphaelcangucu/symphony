@@ -866,6 +866,36 @@ live, cross-process view of running sessions.
 - **The page**: open `/tracker` and choose **Observability** in the sidebar (route
   `/observability`) for live per-runtime cards and a global running-sessions table.
 
+### Agent plan usage (rate-limit windows)
+
+Settings → **Plan usage** shows how much of each agent's plan quota is consumed and when each
+window resets (the rolling session window, the weekly window, and any credits) — mirroring the
+agent CLI's own usage view.
+
+- **Source**: the agent rate-limit payloads already flowing through Symphony. The Codex
+  app-server stream carries a `token_count` `rate_limits` map (`%{limit_name, primary, secondary,
+  credits}`, each bucket with `usedPercent`, `windowDurationMins`, and a reset field). Those buckets
+  reach the observability snapshot per run (`presenter.ex` / `status_dashboard.ex` already format
+  them).
+- **Normalization**: `SymphonyElixir.AgentUsage.Window.normalize/3` is the single place that maps a
+  raw payload into a normalized `Snapshot{agent_kind, plan, credits_remaining, windows[], ...}` where
+  each `Window{kind, used_percent, resets_at, window_minutes}` clamps `used_percent` to `0..100` and
+  resolves relative `reset_in_seconds` into an absolute epoch (`primary → :session`,
+  `secondary → :weekly`).
+- **Capture (passive)**: `SymphonyElixir.Observability.Registry` is the one process-global place
+  that sees both `agent_kind` and `rate_limits` per report, so on each report it best-effort writes
+  the normalized snapshot into `SymphonyElixir.AgentUsage` (a `:persistent_term`, TTL'd store, ~10
+  min, mirroring `AgentAvailability`). The store outlives a single run/idle so the panel still shows
+  "plan X% used" when nothing is running; entries past the TTL are returned but flagged `stale`.
+- **Endpoint** (bearer auth): `GET /api/tracker/v1/settings/agents/usage` returns
+  `{ codex, claude, cursor }`, each either `null` (no data / unavailable for that agent) or
+  `{ plan, credits_remaining, credits_unlimited, fetched_at, stale, windows: [{ kind, used_percent,
+  resets_at, window_minutes }], model_limits }`.
+- **UI**: the tracker `AgentUsagePanel` (`useAgentUsage` hook, 5-minute refresh + manual refresh)
+  renders a `UsageWindowBar` per window with the reset time; agents without a signal show
+  "Usage unavailable for this agent". Usage is intentionally ephemeral (no DB) for v1; a durable
+  `agent_usage_snapshots` table for trends is a deliberate follow-up.
+
 ### Recents & assistant chats
 
 The sidebar shows a **Recents** group listing the most recent sessions across all projects,
