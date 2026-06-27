@@ -8,6 +8,10 @@ defmodule SymphonyElixir.Observability.Registry do
 
   use GenServer
 
+  require Logger
+
+  alias SymphonyElixir.AgentUsage
+
   @default_pubsub SymphonyElixir.PubSub
   @topic "observability:global"
   @default_stale_after_ms 15_000
@@ -69,6 +73,7 @@ defmodule SymphonyElixir.Observability.Registry do
   def handle_call({:put_report, runtime_id, report}, _from, state) do
     entry = build_entry(runtime_id, report)
     :ets.insert(state.table, {runtime_id, entry})
+    capture_usage(entry)
     broadcast(state, "runtime_updated", serialize(entry))
     {:reply, :ok, state}
   end
@@ -119,6 +124,26 @@ defmodule SymphonyElixir.Observability.Registry do
       agent_totals: snapshot_get(snapshot, "agent_totals") || %{},
       rate_limits: snapshot_get(snapshot, "rate_limits")
     }
+  end
+
+  # Passively mirror the latest rate-limit payload (which carries agent
+  # attribution here) into the longer-lived AgentUsage store. Best-effort: a
+  # malformed payload must never break observability reporting.
+  defp capture_usage(%{agent_kind: agent_kind, rate_limits: rate_limits})
+       when is_binary(agent_kind) and is_map(rate_limits) do
+    snapshot = AgentUsage.Window.normalize(agent_kind, rate_limits)
+    if usage_present?(snapshot), do: AgentUsage.put(agent_kind, snapshot), else: :ok
+  rescue
+    error -> Logger.warning("agent usage capture failed: #{inspect(error)}")
+  catch
+    kind, reason -> Logger.warning("agent usage capture crashed: #{inspect({kind, reason})}")
+  end
+
+  defp capture_usage(_entry), do: :ok
+
+  defp usage_present?(%AgentUsage.Snapshot{} = snapshot) do
+    snapshot.windows != [] or snapshot.plan != nil or
+      snapshot.credits_remaining != nil or snapshot.credits_unlimited
   end
 
   defp apply_status(entry, now, stale_after_ms) do
