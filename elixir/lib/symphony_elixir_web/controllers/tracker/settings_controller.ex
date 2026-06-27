@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
 
   alias Plug.Conn
   alias SymphonyElixir.AgentAvailability
+  alias SymphonyElixir.AgentUsage
   alias SymphonyElixir.Settings
   alias SymphonyElixir.Tracker.Identity
   alias SymphonyElixirWeb.TrackerErrors
@@ -41,6 +42,42 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
   def availability(conn, _params) do
     json(conn, %{data: AgentAvailability.probe()})
   end
+
+  @spec usage(Conn.t(), map()) :: Conn.t()
+  def usage(conn, _params) do
+    json(conn, %{data: present_usage(AgentUsage.snapshot())})
+  end
+
+  defp present_usage(snapshot) do
+    Map.new(snapshot, fn {agent, entry} -> {agent, present_entry(entry)} end)
+  end
+
+  defp present_entry(%{snapshot: nil}), do: nil
+
+  defp present_entry(%{snapshot: %AgentUsage.Snapshot{} = snapshot, stale: stale}) do
+    %{
+      agent_kind: snapshot.agent_kind,
+      plan: snapshot.plan,
+      credits_remaining: snapshot.credits_remaining,
+      credits_unlimited: snapshot.credits_unlimited,
+      fetched_at: snapshot.fetched_at,
+      stale: stale,
+      windows: Enum.map(snapshot.windows, &present_window/1),
+      model_limits: Enum.map(snapshot.model_limits, &present_window/1)
+    }
+  end
+
+  defp present_window(%AgentUsage.Window{} = window) do
+    %{
+      kind: present_kind(window.kind),
+      used_percent: window.used_percent,
+      resets_at: window.resets_at,
+      window_minutes: window.window_minutes
+    }
+  end
+
+  defp present_kind({:model, name}), do: "model:#{name}"
+  defp present_kind(kind) when is_atom(kind), do: Atom.to_string(kind)
 
   # Keys are applied independently (each an immediate upsert); on failure the
   # loop halts and earlier keys REMAIN persisted (no rollback). Deliberate
