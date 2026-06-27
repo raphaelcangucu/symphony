@@ -153,6 +153,12 @@
       "dispatchHardReset": "Hard resetting session…",
       "dispatchStop": "Pausing agent…",
       "dispatchFailed": "Dispatch failed",
+      "executionMode": {
+        "title": "Execution mode",
+        "plan": { "label": "Plan", "desc": "Read-only — analyze and plan, no edits" },
+        "build": { "label": "Build", "desc": "Edit the workspace (default)" },
+        "yolo": { "label": "Yolo", "desc": "Full access, approvals bypassed" }
+      },
       "hardResetDialogTitle": "Hard reset session?",
       "hardResetDialogDescription": "This stops any active run, discards the current agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and its git state are preserved.",
       "cancel": "Cancel",

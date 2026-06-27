@@ -91,6 +91,9 @@ export interface Issue {
 export const AGENT_KINDS = ["codex", "claude", "cursor"] as const;
 export type AgentKind = (typeof AGENT_KINDS)[number];
 
+export const EXECUTION_MODE_IDS = ["plan", "build", "yolo"] as const;
+export type ExecutionMode = (typeof EXECUTION_MODE_IDS)[number];
+
 export interface IssueLabelOption {
   id: string | null;
   name: string;

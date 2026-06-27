@@ -1,5 +1,5 @@
 import { Eraser, Pause, Play, RotateCcw, Send, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -10,6 +10,7 @@ import {
 } from "@/components/assistant/AssistantComposer";
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
+import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,9 +28,10 @@ import { catalogFor, fallbackCatalogBundle } from "@/lib/assistantSettings";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { controlIssueGoal } from "@/services/goalControl";
+import { availableModesFor, cycleMode, DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
 import type { AgentSteerPayload } from "@/hooks/useSessionLogChannel";
 import type { AgentExecution } from "@/types/agent-execution";
-import type { AgentKind, Issue } from "@/types/issue";
+import type { AgentKind, ExecutionMode, Issue } from "@/types/issue";
 
 interface QueuedGuidanceItem {
   text: string;
@@ -66,6 +68,10 @@ export function ExecutionControlComposer({
   const [queued, setQueued] = useState<QueuedGuidanceItem[]>([]);
   const [bundle, setBundle] = useState(fallbackCatalogBundle());
   const [agent, setAgent] = useState<AgentKind>(issue.agentKind ?? bundle.defaultAgent);
+  const [mode, setMode] = useState<ExecutionMode>(DEFAULT_EXECUTION_MODE);
+  // Memoized submit handlers may close over a stale render; read mode from a ref
+  // so dispatch always forwards the operator's current selection.
+  const modeRef = useRef<ExecutionMode>(DEFAULT_EXECUTION_MODE);
   const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | "hard_reset" | "stop" | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
@@ -126,6 +132,16 @@ export function ExecutionControlComposer({
     if (issue.agentKind) setAgent(issue.agentKind);
   }, [issue.agentKind]);
 
+  // Keep the selected mode valid for the active agent (cursor has no plan mode).
+  useEffect(() => {
+    const available = availableModesFor(agent);
+    setMode((current) => (available.includes(current) ? current : available[0]));
+  }, [agent]);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
   const dispatchProgressLabel: Record<"resume" | "restart" | "hard_reset" | "stop", string> = {
     resume: t("issue.agent.dispatchResume"),
     restart: t("issue.agent.dispatchRestart"),
@@ -179,6 +195,7 @@ export function ExecutionControlComposer({
         instructions: guidance || null,
         model: composerSettingsRef.current.model,
         effort: composerSettingsRef.current.effort,
+        mode: modeRef.current,
       });
       onIssueUpdated?.(result.issue);
       setDispatchStatus(result.message);
@@ -355,6 +372,17 @@ export function ExecutionControlComposer({
         ? t("issue.agent.placeholderResume")
         : t("issue.agent.placeholderStart");
 
+  function handleModeShortcut(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== "Tab" || !event.shiftKey) return;
+    // Only cycle when typing in the composer textarea; never hijack global
+    // Shift+Tab focus traversal from buttons/menus.
+    const target = event.target as HTMLElement | null;
+    if (!target || target.tagName !== "TEXTAREA") return;
+    if (controlsDisabled || agentRunActive) return;
+    event.preventDefault();
+    setMode((current) => cycleMode(current, availableModesFor(agent)));
+  }
+
   const goalPill = showGoalPill ? (
     <GoalPill
       phase={goalPhase}
@@ -369,7 +397,7 @@ export function ExecutionControlComposer({
   ) : null;
 
   return (
-    <section className="rounded-xl border border-border/70 bg-card/40 p-4">
+    <section className="rounded-xl border border-border/70 bg-card/40 p-4" onKeyDown={handleModeShortcut}>
       <div className="min-w-0">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t("issue.agent.controlTitle")}
@@ -448,6 +476,12 @@ export function ExecutionControlComposer({
           }}
           toolbarAfterAttach={
             <>
+              <ExecutionModeMenu
+                agent={agent}
+                mode={mode}
+                disabled={controlsDisabled || agentRunActive}
+                onChange={setMode}
+              />
               <Button
                 type="button"
                 variant="ghost"

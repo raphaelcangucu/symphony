@@ -153,6 +153,12 @@
       "dispatchHardReset": "Resetando sessão…",
       "dispatchStop": "Pausando agente…",
       "dispatchFailed": "Falha no dispatch",
+      "executionMode": {
+        "title": "Modo de execução",
+        "plan": { "label": "Plan", "desc": "Somente leitura — analisa e planeja, sem editar" },
+        "build": { "label": "Build", "desc": "Edita o workspace (padrão)" },
+        "yolo": { "label": "Yolo", "desc": "Acesso total, aprovações ignoradas" }
+      },
       "hardResetDialogTitle": "Reset completo da sessão?",
       "hardResetDialogDescription": "Isso para qualquer execução ativa, descarta a sessão atual do agente e limpa contadores de turnos e tokens, depois inicia uma sessão nova. O workspace e o estado git são preservados.",
       "cancel": "Cancelar",

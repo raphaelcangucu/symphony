@@ -190,6 +190,74 @@ describe("ExecutionControlComposer", () => {
     );
   });
 
+  it("forwards the execution mode on resume (defaults to build)", async () => {
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resuming agent work on CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({ action: "resume", mode: "build" }),
+      ),
+    );
+  });
+
+  it("cycles the execution mode with Shift+Tab and forwards it", async () => {
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resuming agent work on CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+
+    // codex order is plan → build → yolo, so one Shift+Tab moves build → yolo.
+    fireEvent.keyDown(screen.getByPlaceholderText(/optional guidance/i), {
+      key: "Tab",
+      shiftKey: true,
+    });
+
+    expect(screen.getByRole("button", { name: /yolo/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({ action: "resume", mode: "yolo" }),
+      ),
+    );
+  });
+
   it("enables resume when the run was interrupted but reported as idle", () => {
     render(
       <ExecutionControlComposer
