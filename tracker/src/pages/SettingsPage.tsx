@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { AgentUsagePanel } from "@/components/settings/AgentUsagePanel";
 import { ConnectedIdentitiesCard } from "@/components/settings/ConnectedIdentitiesCard";
 import { LanguageCard } from "@/components/settings/LanguageCard";
 import { OrchestrationRulesCard } from "@/components/settings/OrchestrationRulesCard";
@@ -128,6 +129,8 @@ export function SettingsPage() {
             ) : null}
           </CardContent>
         </Card>
+
+        <AgentUsagePanel />
 
         <OrchestrationRulesCard initial={orchestrator} loadError={loadError} />
 

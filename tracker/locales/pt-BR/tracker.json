@@ -12,6 +12,27 @@
     }
   },
   "settings": {
+    "usage": {
+      "title": "Uso do plano",
+      "description": "Quanto da cota de cada agente foi consumido e quando cada janela reinicia.",
+      "unavailable": "Uso indisponível para este agente.",
+      "loadFailed": "Não foi possível carregar o uso do plano.",
+      "plan": "Plano: {{plan}}",
+      "credits": "Créditos: {{amount}}",
+      "creditsUnlimited": "Créditos: Ilimitados",
+      "resets": "Reinicia {{time}}",
+      "updated": "Atualizado {{time}}",
+      "refresh": "Atualizar",
+      "refreshing": "Atualizando…",
+      "upToDate": "Atualizado",
+      "stale": "Desatualizado",
+      "window": {
+        "session": "Sessão",
+        "weekly": "Semanal",
+        "reviews": "Revisões",
+        "model": "Modelo: {{name}}"
+      }
+    },
     "title": "Configurações",
     "subtitle": "Padrões da instância Symphony para o operador.",
     "navLabel": "Seções de configurações",
