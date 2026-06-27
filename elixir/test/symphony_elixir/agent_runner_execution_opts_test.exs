@@ -40,11 +40,16 @@ defmodule SymphonyElixir.AgentRunnerExecutionOptsTest do
     refute Keyword.has_key?(opts, :execution_mode)
   end
 
-  test "put_execution_mode sets the normalized mode on the session opts" do
+  test "put_execution_mode sets the normalized mode when the operator selected one" do
     assert Keyword.get(AgentRunner.put_execution_mode([], execution_mode: "plan"), :execution_mode) == "plan"
     assert Keyword.get(AgentRunner.put_execution_mode([], execution_mode: "yolo"), :execution_mode) == "yolo"
+    # An invalid but present mode still coerces to the default.
     assert Keyword.get(AgentRunner.put_execution_mode([], execution_mode: "turbo"), :execution_mode) == "build"
-    assert Keyword.get(AgentRunner.put_execution_mode([], []), :execution_mode) == "build"
+  end
+
+  test "put_execution_mode leaves session opts untouched when no mode was selected" do
+    refute Keyword.has_key?(AgentRunner.put_execution_mode([], []), :execution_mode)
+    refute Keyword.has_key?(AgentRunner.put_execution_mode([], execution_mode: nil), :execution_mode)
   end
 
   defp migrate_repo do

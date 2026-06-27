@@ -1048,8 +1048,16 @@ defmodule SymphonyElixir.AgentRunner do
   @doc false
   @spec put_execution_mode(keyword(), keyword()) :: keyword()
   def put_execution_mode(session_opts, opts) do
-    mode = ExecutionMode.normalize(Keyword.get(opts, :execution_mode))
-    Keyword.put(session_opts, :execution_mode, mode)
+    # Execution mode is an operator override. When none was selected, leave the
+    # session opts untouched so the project/workflow config governs sandbox and
+    # approval exactly as before (no implicit "build" override on every run).
+    case Keyword.get(opts, :execution_mode) do
+      mode when is_binary(mode) ->
+        Keyword.put(session_opts, :execution_mode, ExecutionMode.normalize(mode))
+
+      _absent ->
+        session_opts
+    end
   end
 
   defp issue_session_thread_id(%Issue{agent_session_id: id}) when is_binary(id) and id != "", do: id
