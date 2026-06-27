@@ -7,6 +7,7 @@ import { AgentLongRunningBadge, AgentStatusDot, agentStatusLabel } from "@/compo
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { PriorityIndicator } from "@/components/issues/PriorityIndicator";
 import { executionNeedsAttention, resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
+import { issueDisplayIdentifier } from "@/lib/issueIdentifiers";
 import { cn } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -79,7 +80,7 @@ export function IssueCard({
       {dropEdge && !mergeActive ? <ReorderDropLine edge={dropEdge} /> : null}
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {issue.identifier}
+          {issueDisplayIdentifier(issue)}
         </span>
         <div className="flex items-center gap-1.5">
           {issue.url ? (

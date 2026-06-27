@@ -358,6 +358,48 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
 
       assert json_response(conn, 422)["error"]["message"] =~ "Invalid"
     end
+
+    test "consolidates sub-issue PRs under the parent's children", %{project: project} do
+      {:ok, parent} = Context.create_issue("remote", %{title: "Parent epic"})
+      {:ok, child} = Context.create_issue("remote", %{title: "Child task"})
+      {:ok, _} = Context.set_issue_parent("remote", child.identifier, parent.identifier)
+
+      {:ok, _} =
+        SymphonyElixir.Tracker.Sync.LocalStore.link_manual_pull_request(project.id, child.identifier, %{
+          url: "https://github.com/clouapp/back/pull/289",
+          repo: "clouapp/back",
+          number: 289
+        })
+
+      conn =
+        get(
+          authorized_conn(),
+          "/api/tracker/v1/projects/remote/issues/#{URI.encode_www_form(parent.identifier)}/pull_requests"
+        )
+
+      body = json_response(conn, 200)
+
+      assert [child_group] = body["children"]
+      assert child_group["identifier"] == child.identifier
+      assert child_group["title"] == "Child task"
+      assert [child_pr] = child_group["pull_requests"]
+      assert child_pr["url"] == "https://github.com/clouapp/back/pull/289"
+      assert child_pr["repo"] == "clouapp/back"
+    end
+
+    test "omits sub-issues that have no pull requests from children" do
+      {:ok, parent} = Context.create_issue("remote", %{title: "Lonely parent"})
+      {:ok, child} = Context.create_issue("remote", %{title: "Childless work"})
+      {:ok, _} = Context.set_issue_parent("remote", child.identifier, parent.identifier)
+
+      conn =
+        get(
+          authorized_conn(),
+          "/api/tracker/v1/projects/remote/issues/#{URI.encode_www_form(parent.identifier)}/pull_requests"
+        )
+
+      assert json_response(conn, 200)["children"] == []
+    end
   end
 
   defp authorized_conn do

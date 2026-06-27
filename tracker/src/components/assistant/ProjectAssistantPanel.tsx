@@ -908,6 +908,8 @@ export function ProjectAssistantPanel({
   );
 
   const visibleMessages = useMemo(() => displayMessages(messages, t), [messages, t]);
+  const composerBundle = useMemo(() => bundle ?? fallbackCatalogBundle(), [bundle]);
+  const catalogLoading = !bundle && !catalogError;
 
   useEffect(() => {
     if (!isFullPageProjectAssistant) return;
@@ -1061,22 +1063,23 @@ export function ProjectAssistantPanel({
       />
     ) : null;
 
-  const composerNode =
-    bundle || catalogError ? (
-      <AssistantComposer
-        projectSlug={projectSlug ?? ""}
-        bundle={bundle ?? fallbackCatalogBundle()}
-        agentMenuDisabled={isRunning}
-        floating={isPageMode}
-        hasQueued={queued.length > 0}
-        seedMessage={composerSeedMessage}
-        header={authoringGoalPill}
-        onForceQueued={forceSendOldestQueued}
-        onSubmit={sendMessage}
-        onAgentChange={handleComposerAgentChange}
-        dropTargetRef={panelRef}
-      />
-    ) : null;
+  const composerNode = (
+    <AssistantComposer
+      projectSlug={projectSlug ?? ""}
+      bundle={composerBundle}
+      agentMenuDisabled={isRunning || catalogLoading}
+      composerDisabled={catalogLoading}
+      floating={isPageMode}
+      hasQueued={queued.length > 0}
+      seedMessage={composerSeedMessage}
+      header={authoringGoalPill}
+      hint={catalogLoading ? t("assistant.panel.loadingModels") : undefined}
+      onForceQueued={forceSendOldestQueued}
+      onSubmit={sendMessage}
+      onAgentChange={handleComposerAgentChange}
+      dropTargetRef={panelRef}
+    />
+  );
 
   if (isPanelMode) {
     return (

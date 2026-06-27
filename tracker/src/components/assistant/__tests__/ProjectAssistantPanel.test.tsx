@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
+import { fetchAssistantCatalogBundle } from "@/services/assistant";
 
 const channelHandlers: Record<string, (payload: unknown) => void> = {};
 type ReceiveCallbacks = Record<string, (response: unknown) => void>;
@@ -126,6 +127,26 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("Oi")).toBeTruthy();
     expect(await screen.findByText("Olá, posso ajudar.")).toBeTruthy();
     expect(screen.getByText("List issues")).toBeTruthy();
+  });
+
+  it("keeps the composer controls in place while assistant config is loading", () => {
+    vi.mocked(fetchAssistantCatalogBundle).mockImplementationOnce(() => new Promise(() => {}));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "oi" } });
+
+    expect(textarea).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Codex" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /gpt-5/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /low|medium/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Attach file" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Record audio" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    expect(push).not.toHaveBeenCalledWith("send_message", expect.anything());
   });
 
   it("queues a message submitted while running and auto-sends it on completion", async () => {

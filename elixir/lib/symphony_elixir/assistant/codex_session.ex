@@ -940,7 +940,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp relay_codex_event(message, collector, opts) when is_map(message) do
-    payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
+    payload = event_payload(message)
     method = Map.get(payload, "method") || Map.get(payload, :method)
     file_activity = FileActivityPresenter.from_event(message)
 
@@ -1060,8 +1060,17 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   defp relay_codex_event(_message, _collector, _opts), do: :ok
 
+  defp event_payload(message) when is_map(message) do
+    case Map.get(message, :payload) || Map.get(message, "payload") do
+      payload when is_map(payload) -> payload
+      _ -> %{}
+    end
+  end
+
+  defp event_payload(_message), do: %{}
+
   defp goal_from_codex_event(message) when is_map(message) do
-    payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
+    payload = event_payload(message)
     method = Map.get(payload, "method") || Map.get(payload, :method)
 
     goal =

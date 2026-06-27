@@ -138,6 +138,28 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert update["inputSchema"]["required"] == ["comment_id", "body"]
   end
 
+  test "coding_agent_tool_specs advertises update_acceptance_criteria, kept off the assistant surface" do
+    coding = Enum.map(DynamicTool.coding_agent_tool_specs(), & &1["name"])
+    assistant = Enum.map(DynamicTool.tool_specs(), & &1["name"])
+
+    assert "update_acceptance_criteria" in coding
+    refute "update_acceptance_criteria" in assistant
+
+    spec =
+      Enum.find(DynamicTool.coding_agent_tool_specs(), &(&1["name"] == "update_acceptance_criteria"))
+
+    assert spec["description"] =~ "Acceptance criteria"
+    assert get_in(spec, ["inputSchema", "properties", "criteria", "type"]) == "array"
+  end
+
+  test "update_acceptance_criteria fails when no issue is bound to the session" do
+    response = DynamicTool.execute("update_acceptance_criteria", %{"criteria" => []})
+
+    assert response["success"] == false
+    text = hd(response["contentItems"])["text"]
+    assert Jason.decode!(text)["error"]["message"] =~ "no issue is bound"
+  end
+
   test "comment tools stay off the assistant-facing tool_specs surface" do
     names = Enum.map(DynamicTool.tool_specs(), & &1["name"])
     refute "add_comment" in names
@@ -250,6 +272,53 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
       text = hd(response["contentItems"])["text"]
       assert Jason.decode!(text)["error"]["message"] =~ "invalid_pr_url"
     end
+
+    test "update_acceptance_criteria reads then ticks only the acceptance checkboxes" do
+      {:ok, created} =
+        Context.create_issue("macro-markets", %{
+          "title" => "AC issue",
+          "status" => "Todo",
+          "description" => "Intro.\n\n## Acceptance criteria\n- [ ] First criterion\n- [ ] Second criterion\n\n## Plan\n- [ ] keep me\n"
+        })
+
+      bound = %Issue{project_slug: "macro-markets", identifier: created.identifier}
+
+      read = DynamicTool.execute("update_acceptance_criteria", %{}, issue: bound)
+      assert read["success"] == true
+      read_payload = read["contentItems"] |> hd() |> Map.fetch!("text") |> Jason.decode!()
+      assert read_payload["applied"] == 0
+      assert length(read_payload["criteria"]) == 2
+
+      ticked =
+        DynamicTool.execute(
+          "update_acceptance_criteria",
+          %{"criteria" => [%{"index" => 1, "checked" => true}, %{"text" => "second criterion"}]},
+          issue: bound
+        )
+
+      assert ticked["success"] == true
+      payload = ticked["contentItems"] |> hd() |> Map.fetch!("text") |> Jason.decode!()
+      assert payload["tool"] == "update_acceptance_criteria"
+      assert payload["applied"] == 2
+      assert payload["unmatched"] == []
+
+      assert {:ok, stored} = Context.get_issue("macro-markets", created.identifier)
+      assert stored.description =~ "## Acceptance criteria\n- [x] First criterion\n- [x] Second criterion"
+      assert stored.description =~ "## Plan\n- [ ] keep me"
+    end
+
+    test "update_acceptance_criteria errors when the body has no acceptance section", %{issue: issue} do
+      response =
+        DynamicTool.execute(
+          "update_acceptance_criteria",
+          %{"criteria" => [%{"index" => 1}]},
+          issue: issue
+        )
+
+      assert response["success"] == false
+      text = hd(response["contentItems"])["text"]
+      assert Jason.decode!(text)["error"]["message"] =~ "Acceptance criteria"
+    end
   end
 
   test "unsupported tools return a failure payload with the supported tool list" do
@@ -274,11 +343,13 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
                  "add_comment",
                  "list_comments",
                  "update_comment",
+                 "update_acceptance_criteria",
                  "check_handoff_gate",
                  "get_evidence_status",
                  "manage_preview",
                  "manage_dev_env",
-                 "link_pull_request"
+                 "link_pull_request",
+                 "manage_codex_goal"
                ]
              }
            }

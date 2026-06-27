@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { issueDisplayIdentifier } from "@/lib/issueIdentifiers";
 import { formatDateTime } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
 
@@ -20,7 +21,7 @@ export function IssueRow({ issue, onSelect }: IssueRowProps) {
       className="grid w-full grid-cols-[7rem_1fr_8rem_8rem] items-center gap-4 border-b px-4 py-3 text-left text-sm hover:bg-muted/40"
       onClick={() => onSelect(issue)}
     >
-      <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
+      <span className="font-mono text-xs text-muted-foreground">{issueDisplayIdentifier(issue)}</span>
       <span className="min-w-0">
         <span className="block truncate font-medium">{issue.title}</span>
         <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">

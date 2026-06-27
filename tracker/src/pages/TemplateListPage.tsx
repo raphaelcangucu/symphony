@@ -75,11 +75,11 @@ export function TemplateListPage() {
   };
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">{t("project.templates.list.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("project.templates.list.subtitle")}</p>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("project.templates.list.title")}</h1>
+          <p className="text-sm text-muted-foreground sm:text-base">{t("project.templates.list.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -96,13 +96,11 @@ export function TemplateListPage() {
         </div>
       </div>
 
-      <main className="min-w-0">
-        {loading ? (
-          <Skeleton className="h-40" />
-        ) : (
-          <TemplateList templates={templates} onDelete={(slug) => void handleDelete(slug)} />
-        )}
-      </main>
+      {loading ? (
+        <Skeleton className="h-40" />
+      ) : (
+        <TemplateList templates={templates} onDelete={(slug) => void handleDelete(slug)} />
+      )}
     </div>
   );
 }

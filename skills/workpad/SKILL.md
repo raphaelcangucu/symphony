@@ -46,6 +46,11 @@ final_publish_allowed: false
 (one of: `in-progress`, `done — PR <url>`, or `no-op — <justification>`)
 ```
 
+In the workpad comment, keep acceptance criteria as **plain bullets**. The
+authoritative *checked* state lives in the **issue body** checklist, which you
+update with `update_acceptance_criteria` during validation — see "Issue-body
+acceptance criteria" below.
+
 For runs that execute a written implementation plan, `### Plan` is both the
 human checklist and the machine-readable runtime contract the orchestrator uses
 to avoid treating a partial slice as final completion.
@@ -105,7 +110,27 @@ regardless of which tracker backs the project. Do NOT reach for
 updates the issue **description** via `update_issue` only when plan/AC are stable
 or a discovery changes approach — not during open-ended exploration. This skill
 applies to the **coding agent** after dispatch: use the workpad comment for plan,
-acceptance criteria, validation, and outcome — not the issue body.
+acceptance criteria, validation, and outcome — not the issue body. The one
+exception is ticking the issue-body acceptance checklist (next section).
+
+## Issue-body acceptance criteria
+
+When the issue **body** has an `## Acceptance criteria` section written as a
+checklist (`- [ ]` items), keep it in sync as you prove each criterion. Use the
+dedicated `update_acceptance_criteria` tool — it is the ONLY sanctioned way for
+the coding agent to edit the issue body, and it flips just those `- [ ]` ⇄
+`- [x]` boxes (never prose, never Plan/Tasks checkboxes).
+
+- During VALIDATE, after evidence covers a criterion, tick it. Call
+  `update_acceptance_criteria` with no arguments first to read the current list
+  (each item has a 1-based `index`, `text`, and `checked`), then call again with
+  the items to check (`{"index": 1, "checked": true}` or `{"text": "..."}`).
+- Only tick a criterion your validation actually demonstrates — unchecked boxes
+  are an honest signal that work remains, the same as Plan `[ ]` items.
+- Criteria recorded as plain bullets (no `- [ ]`) cannot be ticked; leave those
+  to the author and do NOT rewrite the body to add checkboxes.
+- Do not use `update_issue` (or `gh issue edit`) to toggle these boxes — that
+  risks clobbering the description; `update_acceptance_criteria` is surgical.
 
 - **Create** the workpad with `add_comment` (body must start with
   `## Codex Workpad`). Keep the returned comment `id`.

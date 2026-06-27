@@ -72,70 +72,72 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-2xl space-y-6 p-6">
-        <div>
-          <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("settings.subtitle")}</p>
-        </div>
+    <div className="space-y-6">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("settings.sections.general.label")}</h1>
+        <p className="text-sm text-muted-foreground sm:text-base">{t("settings.subtitle")}</p>
+      </div>
 
+      <div className="grid gap-6 xl:grid-cols-2">
         <LanguageCard initial={uiLocale} loadError={loadError} onLocaleChange={setUiLocale} />
 
         <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.codingAgent.title")}</CardTitle>
-          <CardDescription>{t("settings.codingAgent.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {loadError ? (
-            <p className="text-xs text-muted-foreground">{t("settings.loadFailed")}</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {defaultAgent === null && (
-                <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
-              )}
-              {AGENT_KINDS.map((kind) => {
-                const Icon = AGENT_ICONS[kind];
-                return (
-                  <AgentChip
-                    key={kind}
-                    label={agentKindLabel(kind, t)}
-                    icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
-                    active={defaultAgent === kind}
-                    disabled={saving || defaultAgent === null}
-                    onClick={() => void selectAgent(kind)}
-                  />
-                );
-              })}
-            </div>
-          )}
+          <CardHeader>
+            <CardTitle>{t("settings.codingAgent.title")}</CardTitle>
+            <CardDescription>{t("settings.codingAgent.description")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loadError ? (
+              <p className="text-xs text-muted-foreground">{t("settings.loadFailed")}</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {defaultAgent === null && (
+                  <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
+                )}
+                {AGENT_KINDS.map((kind) => {
+                  const Icon = AGENT_ICONS[kind];
+                  return (
+                    <AgentChip
+                      key={kind}
+                      label={agentKindLabel(kind, t)}
+                      icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
+                      active={defaultAgent === kind}
+                      disabled={saving || defaultAgent === null}
+                      onClick={() => void selectAgent(kind)}
+                    />
+                  );
+                })}
+              </div>
+            )}
 
-          {availabilityError ? (
-            <p className="text-xs text-muted-foreground">{t("settings.codingAgent.availabilityFailed")}</p>
-          ) : availability ? (
-            <ul className="space-y-1 text-xs text-muted-foreground">
-              {AGENT_KINDS.map((kind) => {
-                const entry = availability[kind];
-                return (
-                  <li key={kind}>
-                    {entry.available
-                      ? `✓ ${entry.version ?? entry.command}`
-                      : `✗ ${t("settings.codingAgent.notFound", { command: entry.command })}`}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-        </CardContent>
-      </Card>
+            {availabilityError ? (
+              <p className="text-xs text-muted-foreground">{t("settings.codingAgent.availabilityFailed")}</p>
+            ) : availability ? (
+              <ul className="space-y-1 text-xs text-muted-foreground">
+                {AGENT_KINDS.map((kind) => {
+                  const entry = availability[kind];
+                  return (
+                    <li key={kind}>
+                      {entry.available
+                        ? `✓ ${entry.version ?? entry.command}`
+                        : `✗ ${t("settings.codingAgent.notFound", { command: entry.command })}`}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </CardContent>
+        </Card>
 
-      <OrchestrationRulesCard initial={orchestrator} loadError={loadError} />
+        <OrchestrationRulesCard initial={orchestrator} loadError={loadError} />
 
-      <PushNotificationsCard />
+        <PushNotificationsCard />
 
-      <ConnectedIdentitiesCard />
+        <ConnectedIdentitiesCard />
 
-      <ProviderCredentialsCard />
+        <div className="xl:col-span-2">
+          <ProviderCredentialsCard />
+        </div>
       </div>
     </div>
   );

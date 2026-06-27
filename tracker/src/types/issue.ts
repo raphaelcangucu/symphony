@@ -64,6 +64,7 @@ export interface IssueAttachment {
 export interface Issue {
   id: string;
   identifier: string;
+  displayIdentifier?: string | null;
   projectSlug: string;
   status: WorkflowStatusName;
   title: string;

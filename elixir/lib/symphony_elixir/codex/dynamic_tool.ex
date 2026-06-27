@@ -3,6 +3,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   Executes client-side tool calls requested by Codex app-server turns.
   """
 
+  alias SymphonyElixir.AcceptanceCriteria
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.Issue
   alias SymphonyElixir.Assistant.{EvidenceTools, GoalTools, HandoffTools, DevEnvTools, PreviewTools, PullRequestTools}
@@ -19,6 +20,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @add_comment_tool "add_comment"
   @list_comments_tool "list_comments"
   @update_comment_tool "update_comment"
+  @update_acceptance_criteria_tool "update_acceptance_criteria"
   @check_handoff_gate_tool "check_handoff_gate"
   @get_evidence_status_tool "get_evidence_status"
   @manage_preview_tool "manage_preview"
@@ -123,6 +125,43 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   The edit is written locally immediately and synced to the project's tracker in the background. Use this to keep a single `## Codex Workpad` comment updated in place instead of posting duplicates.
   """
 
+  @update_acceptance_criteria_input_schema %{
+    "type" => "object",
+    "additionalProperties" => false,
+    "properties" => %{
+      "criteria" => %{
+        "type" => "array",
+        "description" => "Acceptance criteria to mark. Omit (or send an empty array) to READ the current list with 1-based indexes.",
+        "items" => %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "properties" => %{
+            "index" => %{
+              "type" => ["integer", "null"],
+              "description" => "1-based position of the criterion in the Acceptance criteria list, as returned by a prior read."
+            },
+            "text" => %{
+              "type" => ["string", "null"],
+              "description" => "Criterion text to match (case- and accent-insensitive). Use when you do not have the index."
+            },
+            "checked" => %{
+              "type" => "boolean",
+              "description" => "Target checkbox state. Defaults to true (tick the criterion)."
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @update_acceptance_criteria_description """
+  Mark acceptance-criteria checkboxes in the BODY of the issue you are currently working on.
+
+  This is a constrained, safe edit: it only flips `- [ ]` ⇄ `- [x]` items that live under an "Acceptance criteria" heading in the issue description. It never rewrites prose and never touches checkboxes in other sections (Plan, Tasks, etc.). Use it during VALIDATE to tick each criterion your evidence actually covers — do NOT hand-edit the issue body with another tool.
+
+  Call with no `criteria` to READ the current list (each item has a 1-based `index`, `text`, and `checked`), then call again with the items to check. Match a criterion by `index` or by `text`; `checked` defaults to true. The edit is written to Symphony's local-first board immediately and synced to GitHub/Linear in the background. Criteria recorded as plain bullets (no `- [ ]`) cannot be marked — leave those to the author.
+  """
+
   @spec execute(String.t() | nil, term(), keyword()) :: map()
   def execute(tool, arguments, opts \\ []) do
     case tool do
@@ -143,6 +182,9 @@ defmodule SymphonyElixir.Codex.DynamicTool do
 
       @update_comment_tool ->
         execute_update_comment(arguments, opts)
+
+      @update_acceptance_criteria_tool ->
+        execute_update_acceptance_criteria(arguments, opts)
 
       @check_handoff_gate_tool ->
         execute_bound_assistant_tool(HandoffTools, arguments, opts)
@@ -216,6 +258,11 @@ defmodule SymphonyElixir.Codex.DynamicTool do
           "name" => @update_comment_tool,
           "description" => @update_comment_description,
           "inputSchema" => @update_comment_input_schema
+        },
+        %{
+          "name" => @update_acceptance_criteria_tool,
+          "description" => @update_acceptance_criteria_description,
+          "inputSchema" => @update_acceptance_criteria_input_schema
         },
         HandoffTools.issue_bound_tool_spec(),
         EvidenceTools.issue_bound_tool_spec(),
@@ -365,6 +412,108 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     else
       {:error, reason} -> failure_response(comment_tool_error_payload(reason))
     end
+  end
+
+  defp execute_update_acceptance_criteria(arguments, opts) do
+    with {:ok, issue} <- fetch_bound_issue(opts),
+         {:ok, marks} <- normalize_criteria_marks(arguments),
+         {:ok, project} <- Context.get_project(issue.project_slug),
+         {:ok, dto} <- IssueAdapter.dispatch(project, :get_issue, [issue.identifier]),
+         body <- dto_description(dto),
+         {:ok, result} <- AcceptanceCriteria.apply_marks(body, marks),
+         {:ok, _persisted} <- maybe_persist_criteria(project, issue.identifier, body, result) do
+      acceptance_criteria_success(issue.identifier, result)
+    else
+      {:error, reason} -> failure_response(acceptance_criteria_error_payload(reason))
+    end
+  end
+
+  defp normalize_criteria_marks(arguments) when is_map(arguments) do
+    case Map.get(arguments, "criteria") || Map.get(arguments, :criteria) do
+      nil -> {:ok, []}
+      list when is_list(list) -> {:ok, list}
+      _ -> {:error, :invalid_criteria}
+    end
+  end
+
+  defp normalize_criteria_marks(_arguments), do: {:ok, []}
+
+  defp dto_description(dto) when is_map(dto) do
+    Map.get(dto, :description) || Map.get(dto, "description") || ""
+  end
+
+  defp dto_description(_dto), do: ""
+
+  # Only persist when criteria actually changed; a read (or an all-unmatched
+  # write) leaves the issue body untouched and never queues a remote sync.
+  defp maybe_persist_criteria(project, identifier, original, %{body: new_body, applied: applied})
+       when applied > 0 and new_body != original do
+    IssueAdapter.dispatch(project, :update_issue, [identifier, %{"description" => new_body}])
+  end
+
+  defp maybe_persist_criteria(_project, _identifier, _original, _result), do: {:ok, :unchanged}
+
+  defp acceptance_criteria_success(identifier, result) do
+    %{
+      "success" => true,
+      "contentItems" => [
+        %{
+          "type" => "inputText",
+          "text" =>
+            encode_payload(%{
+              "status" => "ok",
+              "tool" => @update_acceptance_criteria_tool,
+              "identifier" => identifier,
+              "applied" => result.applied,
+              "unmatched" => result.unmatched,
+              "criteria" => result.criteria
+            })
+        }
+      ]
+    }
+  end
+
+  defp acceptance_criteria_error_payload(:no_section) do
+    %{
+      "error" => %{
+        "message" =>
+          "No \"Acceptance criteria\" section with checkboxes was found in the issue body. " <>
+            "Only `- [ ]` items under an Acceptance criteria heading can be marked — leave plain-bullet criteria to the author."
+      }
+    }
+  end
+
+  defp acceptance_criteria_error_payload(:invalid_criteria) do
+    %{
+      "error" => %{
+        "message" => "`update_acceptance_criteria` expects `criteria` to be an array of {index|text, checked} objects (or omit it to read the current list)."
+      }
+    }
+  end
+
+  defp acceptance_criteria_error_payload(:no_bound_issue) do
+    %{
+      "error" => %{
+        "message" => "`update_acceptance_criteria` can only edit the issue you are currently working on, but no issue is bound to this session."
+      }
+    }
+  end
+
+  defp acceptance_criteria_error_payload(:project_not_found) do
+    %{
+      "error" => %{
+        "message" => "The project for the current issue could not be found in the local tracker."
+      }
+    }
+  end
+
+  defp acceptance_criteria_error_payload(reason) do
+    %{
+      "error" => %{
+        "message" => "Failed to update acceptance criteria.",
+        "reason" => inspect(reason)
+      }
+    }
   end
 
   defp fetch_bound_issue(opts) do

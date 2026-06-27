@@ -14,6 +14,18 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Operator-level defaults for this Symphony instance.",
+    "navLabel": "Settings sections",
+    "sections": {
+      "general": {
+        "label": "General"
+      },
+      "templates": {
+        "label": "Templates"
+      },
+      "backups": {
+        "label": "Backups"
+      }
+    },
     "loadFailed": "Failed to load settings — refresh to retry.",
     "codingAgent": {
       "title": "Coding agent",
@@ -900,6 +912,10 @@
       "limitedAccessBody": "Linked pull requests are shown, but CI details and merge actions need GITHUB_TOKEN configured.",
       "relatedCount_one": "{{count}} related pull request",
       "relatedCount_other": "{{count}} related pull requests",
+      "childrenTitle": "Sub-issue pull requests",
+      "childrenSubtitle": "Pull requests opened by sub-issues of this task.",
+      "childGroupCount_one": "{{count}} PR",
+      "childGroupCount_other": "{{count}} PRs",
       "rerunning": "Re-running…",
       "rerunFailedJobs": "Re-run failed jobs",
       "sending": "Sending…",
@@ -1505,6 +1521,9 @@
       "count": "{{count}} child runs",
       "show": "Show child runs",
       "hide": "Hide child runs"
+    },
+    "tokens": {
+      "breakdown": "Coordinator: {{coordinator}} · Children: {{children}} · Total: {{total}}"
     },
     "openBoard": "Open board",
     "pursuingGoal": "Pursuing goal: {{objective}}",

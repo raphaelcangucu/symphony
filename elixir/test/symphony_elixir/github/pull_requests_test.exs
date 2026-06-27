@@ -127,6 +127,27 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
     )
   end
 
+  defp issue_timeline_body(timeline_nodes) do
+    %{
+      "data" => %{
+        "repository" => %{
+          "issue" => %{
+            "linkedBranches" => %{"nodes" => []},
+            "closedByPullRequestsReferences" => %{"nodes" => []},
+            "timelineItems" => %{"nodes" => timeline_nodes}
+          }
+        }
+      }
+    }
+  end
+
+  defp cross_ref_node(cross_repo?, source_overrides) do
+    %{
+      "isCrossRepository" => cross_repo?,
+      "source" => Map.merge(Map.put(pr_node(%{}), "__typename", "PullRequest"), source_overrides)
+    }
+  end
+
   describe "parse_pr_node/1" do
     test "maps PR metadata, pipelines, statuses, and conversation" do
       result = PullRequests.parse_pr_node(pr_node(%{}))
@@ -365,46 +386,23 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
                )
     end
 
-    test "includes cross-repository cross-references and dedups by url" do
+    test "keeps same-repo cross-references but drops cross-repo ones without a marker" do
       request_fun = fn payload, _headers ->
-        cond do
-          payload["query"] =~ "SymphonyTrackerIssuePullRequests" ->
-            {:ok,
-             %{
-               status: 200,
-               body: %{
-                 "data" => %{
-                   "repository" => %{
-                     "issue" => %{
-                       "linkedBranches" => %{"nodes" => []},
-                       "closedByPullRequestsReferences" => %{"nodes" => []},
-                       "timelineItems" => %{
-                         "nodes" => [
-                           %{
-                             "isCrossRepository" => true,
-                             "source" =>
-                               Map.merge(pr_node(%{}), %{
-                                 "__typename" => "PullRequest",
-                                 "number" => 999,
-                                 "url" => "https://github.com/other/repo/pull/999",
-                                 "repository" => %{"nameWithOwner" => "other/repo"}
-                               })
-                           },
-                           %{
-                             "isCrossRepository" => false,
-                             "source" => Map.put(pr_node(%{}), "__typename", "PullRequest")
-                           },
-                           %{
-                             "isCrossRepository" => false,
-                             "source" => Map.put(pr_node(%{}), "__typename", "PullRequest")
-                           }
-                         ]
-                       }
-                     }
-                   }
-                 }
-               }
-             }}
+        if payload["query"] =~ "SymphonyTrackerIssuePullRequests" do
+          {:ok,
+           %{
+             status: 200,
+             body:
+               issue_timeline_body([
+                 cross_ref_node(true, %{
+                   "number" => 999,
+                   "url" => "https://github.com/other/repo/pull/999",
+                   "repository" => %{"nameWithOwner" => "other/repo"}
+                 }),
+                 cross_ref_node(false, %{}),
+                 cross_ref_node(false, %{})
+               ])
+           }}
         end
       end
 
@@ -415,8 +413,74 @@ defmodule SymphonyElixir.GitHub.PullRequestsTest do
                )
 
       numbers = prs |> Enum.map(& &1.number) |> Enum.sort()
+      assert numbers == [503]
+      refute Enum.any?(prs, &(&1.number == 999))
+    end
+
+    test "includes a cross-repo cross-reference confirmed by the Symphony-Issue marker" do
+      request_fun = fn payload, _headers ->
+        if payload["query"] =~ "SymphonyTrackerIssuePullRequests" do
+          {:ok,
+           %{
+             status: 200,
+             body:
+               issue_timeline_body([
+                 cross_ref_node(true, %{
+                   "number" => 999,
+                   "url" => "https://github.com/other/repo/pull/999",
+                   "repository" => %{"nameWithOwner" => "other/repo"},
+                   "body" => "Implements feature\n\nSymphony-Issue: back#287\n"
+                 }),
+                 cross_ref_node(false, %{})
+               ])
+           }}
+        end
+      end
+
+      assert {:ok, prs} =
+               PullRequests.for_issue("acme/app", "508",
+                 client_module: TestClient,
+                 request_fun: request_fun,
+                 marker_identifier: "back#287",
+                 marker_key: "Symphony-Issue"
+               )
+
+      numbers = prs |> Enum.map(& &1.number) |> Enum.sort()
       assert numbers == [503, 999]
       assert Enum.find(prs, &(&1.number == 999)).repo == "other/repo"
+    end
+
+    test "drops a cross-repo cross-reference whose marker targets a different issue" do
+      request_fun = fn payload, _headers ->
+        if payload["query"] =~ "SymphonyTrackerIssuePullRequests" do
+          {:ok,
+           %{
+             status: 200,
+             body:
+               issue_timeline_body([
+                 cross_ref_node(true, %{
+                   "number" => 544,
+                   "url" => "https://github.com/clouapp/front/pull/544",
+                   "repository" => %{"nameWithOwner" => "clouapp/front"},
+                   "body" => "MAC-3 static route work\n\nSymphony-Issue: MAC-3\n"
+                 }),
+                 cross_ref_node(false, %{})
+               ])
+           }}
+        end
+      end
+
+      assert {:ok, prs} =
+               PullRequests.for_issue("acme/app", "508",
+                 client_module: TestClient,
+                 request_fun: request_fun,
+                 marker_identifier: "back#287",
+                 marker_key: "Symphony-Issue"
+               )
+
+      numbers = prs |> Enum.map(& &1.number) |> Enum.sort()
+      assert numbers == [503]
+      refute Enum.any?(prs, &(&1.number == 544))
     end
 
     test "returns empty list when issue is missing" do
