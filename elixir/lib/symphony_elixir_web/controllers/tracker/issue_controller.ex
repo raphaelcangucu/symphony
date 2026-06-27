@@ -367,7 +367,10 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       agent: Map.get(params, "agent"),
       goal: Map.get(params, "goal"),
       instructions: Map.get(params, "instructions"),
-      target_status: Map.get(params, "target_status")
+      target_status: Map.get(params, "target_status"),
+      model: Map.get(params, "model"),
+      effort: Map.get(params, "effort"),
+      mode: Map.get(params, "mode")
     }
   end
 

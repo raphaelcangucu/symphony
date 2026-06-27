@@ -158,6 +158,36 @@ defmodule SymphonyElixir.IssueDispatchTest do
     refute updated.status.is_terminal
   end
 
+  test "resume persists the operator's model/effort/mode overrides", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{
+               agent: "codex",
+               model: "gpt-5.4",
+               effort: "high",
+               mode: "plan"
+             })
+
+    assert {:ok, settings} = Context.get_agent_settings("pref", issue.identifier)
+    assert settings.agent_kind == "codex"
+    assert settings.model == "gpt-5.4"
+    assert settings.effort == "high"
+    assert settings.mode == "plan"
+  end
+
+  test "resume coerces an invalid mode to the default", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{agent: "codex", mode: "turbo"})
+
+    assert {:ok, settings} = Context.get_agent_settings("pref", issue.identifier)
+    assert settings.mode == "build"
+  end
+
   test "continue_work moves wait-state issues to in-progress and nudges dispatch", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "Human Review"})
     {:ok, project} = Context.get_project("pref")
@@ -189,6 +219,7 @@ defmodule SymphonyElixir.IssueDispatchTest do
 
   defp clean_repo do
     for table <- [
+          "local_tracker_issue_agent_settings",
           "local_tracker_activity_events",
           "local_tracker_issue_relations",
           "local_tracker_comments",
