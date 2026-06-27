@@ -5,7 +5,6 @@ import {
   FileText,
   Flame,
   Gauge,
-  type LucideIcon,
   Mic,
   Plus,
   Send,
@@ -802,13 +801,20 @@ function AgentMenu({
   );
 }
 
-/** Maps a reasoning-effort id to a "thinking intensity" icon (Jean-style). */
-function effortIcon(effortId: string): LucideIcon {
+/**
+ * Renders a "thinking intensity" icon (Jean-style) for a reasoning-effort id.
+ * Returns an element (not a component type) so it can be used inline during
+ * render without tripping react-hooks/static-components.
+ */
+function effortIconElement(effortId: string, testId: string): ReactNode {
   const id = effortId.toLowerCase();
-  if (id === "low" || id === "minimal") return Feather;
-  if (id === "high") return Flame;
-  if (id === "xhigh" || id === "max" || id === "ultra" || id === "ultracode") return Sparkles;
-  return Gauge;
+  const className = "h-3.5 w-3.5 shrink-0";
+  if (id === "low" || id === "minimal") return <Feather className={className} data-testid={testId} />;
+  if (id === "high") return <Flame className={className} data-testid={testId} />;
+  if (id === "xhigh" || id === "max" || id === "ultra" || id === "ultracode") {
+    return <Sparkles className={className} data-testid={testId} />;
+  }
+  return <Gauge className={className} data-testid={testId} />;
 }
 
 function EffortMenu({
@@ -827,13 +833,12 @@ function EffortMenu({
   onChange: (effort: AssistantEffort) => void;
 }) {
   const { t } = useTranslation();
-  const TriggerIcon = effortIcon(effort);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          <TriggerIcon className="h-3.5 w-3.5" data-testid="effort-trigger-icon" />
+          {effortIconElement(effort, "effort-trigger-icon")}
           {effortLabel(catalog, model, effort)}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
@@ -842,15 +847,12 @@ function EffortMenu({
         <DropdownMenuLabel>{t("assistant.composer.reasoningEffort")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={effort} onValueChange={onChange}>
-          {options.map((option) => {
-            const OptionIcon = effortIcon(option.id);
-            return (
-              <DropdownMenuRadioItem key={option.id} value={option.id} className="gap-2">
-                <OptionIcon className="h-3.5 w-3.5 shrink-0" data-testid={`effort-icon-${option.id}`} />
-                {option.label}
-              </DropdownMenuRadioItem>
-            );
-          })}
+          {options.map((option) => (
+            <DropdownMenuRadioItem key={option.id} value={option.id} className="gap-2">
+              {effortIconElement(option.id, `effort-icon-${option.id}`)}
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
