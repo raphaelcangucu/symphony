@@ -335,14 +335,21 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   defp parent_identifier(%{"number" => number}) when is_integer(number), do: to_string(number)
   defp parent_identifier(_), do: nil
 
-  defp repo_scoped_identifier(repository_full_name, number) when is_binary(repository_full_name) and is_integer(number) do
+  @doc """
+  Builds the tracker identifier GitHub project items use for an issue number,
+  e.g. `"back#288"` for `clouapp/back` issue 288.
+  """
+  @spec repo_scoped_identifier(String.t(), integer()) :: String.t()
+  def repo_scoped_identifier(repository_full_name, number)
+      when is_binary(repository_full_name) and is_integer(number) do
     case short_repo_name(repository_full_name) do
       nil -> to_string(number)
       repo -> "#{repo}##{number}"
     end
   end
 
-  defp repo_scoped_identifier(_repository_full_name, number), do: to_string(number)
+  def repo_scoped_identifier(_repository_full_name, number) when is_integer(number),
+    do: to_string(number)
 
   defp short_repo_name(repository_full_name) do
     repository_full_name

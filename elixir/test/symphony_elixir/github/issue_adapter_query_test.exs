@@ -65,6 +65,11 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.QueryTest do
     assert dto.sub_issue_summary == %{total: 4, completed: 4, percent_completed: 100}
   end
 
+  test "repo_scoped_identifier builds repo-prefixed ids" do
+    assert Query.repo_scoped_identifier("clouapp/back", 288) == "back#288"
+    assert Query.repo_scoped_identifier("o/r", 42) == "r#42"
+  end
+
   test "normalize_item maps a parent issue number into parent_identifier" do
     item = %{
       "content" => %{

@@ -64,9 +64,12 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   @impl true
   def get_issue(%Project{} = project, identifier) do
     with {:ok, issues} <- list_issues(project, []) do
-      case Enum.find(issues, &(&1.identifier == identifier)) do
-        nil -> {:error, :issue_not_found}
-        dto -> {:ok, dto}
+      case find_issue_dto(issues, identifier) do
+        {:ok, dto} ->
+          {:ok, dto}
+
+        :not_found ->
+          find_issue_dto_by_local_mirror(project, issues, identifier)
       end
     end
   end
@@ -224,8 +227,9 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   @impl true
   def list_comments(%Project{} = project, identifier) do
-    with {:ok, repo} <- resolve_issue_repo(project, identifier) do
-      case IssueComments.for_issue(repo, identifier) do
+    with {:ok, repo} <- resolve_issue_repo(project, identifier),
+         {:ok, number} <- resolve_issue_number(project, identifier) do
+      case IssueComments.for_issue(repo, Integer.to_string(number)) do
         {:ok, comments} -> {:ok, comments}
         {:error, {:invalid_issue_identifier, _}} -> {:ok, []}
         error -> {:error, map_error(error)}
@@ -879,6 +883,47 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   end
 
   defp parse_issue_number(_identifier), do: {:error, :invalid_issue_identifier}
+
+  defp find_issue_dto(issues, identifier) do
+    case Enum.find(issues, &(&1.identifier == identifier)) do
+      nil -> :not_found
+      dto -> {:ok, dto}
+    end
+  end
+
+  defp find_issue_dto_by_local_mirror(%Project{} = project, issues, identifier) do
+    with {:ok, number} <- resolve_issue_number(project, identifier),
+         {:ok, repo} <- mirror_repo(project, identifier) do
+      remote_identifier = Query.repo_scoped_identifier(repo, number)
+
+      case Enum.find(issues, &issue_dto_matches_remote?(&1, repo, number, remote_identifier)) do
+        %IssueDTO{} = dto -> {:ok, dto}
+        _ -> {:error, :issue_not_found}
+      end
+    else
+      _ -> {:error, :issue_not_found}
+    end
+  end
+
+  defp mirror_repo(%Project{slug: slug} = project, identifier) when is_binary(slug) do
+    case Context.get_issue(slug, identifier) do
+      {:ok, %{remote_url: url}} when is_binary(url) and url != "" ->
+        case IssueRepo.repo_from_issue_url(url) do
+          {:ok, repo} -> {:ok, repo}
+          :error -> IssueRepo.resolve(project, identifier)
+        end
+
+      _ ->
+        IssueRepo.resolve(project, identifier)
+    end
+  end
+
+  defp issue_dto_matches_remote?(dto, repo, number, remote_identifier) do
+    dto.identifier == remote_identifier or
+      dto.identifier == to_string(number) or
+      (is_binary(dto.url) and String.ends_with?(dto.url, "/issues/#{number}") and
+         (dto.repository_full_name == repo or is_nil(dto.repository_full_name)))
+  end
 
   defp resolve_issue_number(%Project{} = project, identifier) do
     case parse_issue_number(identifier) do

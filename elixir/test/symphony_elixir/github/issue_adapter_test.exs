@@ -2,8 +2,51 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.GitHub.IssueAdapter
-  alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project}
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueDTO
+
+  defmodule LocalAliasBoardClientStub do
+    def graphql(_query, _vars, _opts) do
+      {:ok,
+       %{
+         "data" => %{
+           "node" => %{
+             "items" => %{
+               "nodes" => [
+                 %{
+                   "id" => "PVTI_288",
+                   "content" => %{
+                     "__typename" => "Issue",
+                     "id" => "I_back_288",
+                     "number" => 288,
+                     "title" => "DAR withdrawal cap",
+                     "body" => "remote body",
+                     "url" => "https://github.com/clouapp/back/issues/288",
+                     "repository" => %{"nameWithOwner" => "clouapp/back"},
+                     "assignees" => %{"nodes" => []},
+                     "labels" => %{"nodes" => []},
+                     "createdAt" => "2026-06-25T00:00:00Z",
+                     "updatedAt" => "2026-06-26T00:00:00Z"
+                   },
+                   "fieldValues" => %{
+                     "nodes" => [
+                       %{
+                         "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                         "name" => "In Progress",
+                         "field" => %{"name" => "Symphony State"}
+                       }
+                     ]
+                   }
+                 }
+               ],
+               "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+             }
+           }
+         }
+       }}
+    end
+  end
 
   defmodule ListClientStub do
     def graphql(_query, _vars, _opts) do
@@ -121,6 +164,63 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
   test "list_issues returns DTOs from the board" do
     assert {:ok, [%IssueDTO{identifier: "7", title: "Remote", status: %{name: "Todo"}}]} =
              IssueAdapter.list_issues(project(), [])
+  end
+
+  test "get_issue resolves local Symphony aliases via remote_number" do
+    migrate_repo()
+    clean_repo()
+
+    {:ok, project_record} =
+      Context.ensure_project(%{
+        name: "Macro Markets",
+        slug: "macro-markets",
+        tracker_kind: "github",
+        tracker_config: %{
+          "repo" => "clouapp/front",
+          "project_id" => "PVT_1",
+          "status_field" => "Symphony State"
+        }
+      })
+
+    {:ok, _repos} =
+      Context.replace_repositories("macro-markets", [
+        %{"github_full_name" => "clouapp/front", "workspace_path" => "front", "role" => "primary"},
+        %{"github_full_name" => "clouapp/back", "workspace_path" => "back", "role" => "backend"}
+      ])
+
+    {:ok, issue} = Context.create_issue("macro-markets", %{title: "Draft", status: "Todo"})
+
+    issue
+    |> IssueRecord.changeset(%{
+      remote_number: 288,
+      remote_id: "I_back_288",
+      remote_url: "https://github.com/clouapp/back/issues/288",
+      url: "https://github.com/clouapp/back/issues/288"
+    })
+    |> Repo.update!()
+
+    Application.put_env(:symphony_elixir, :github_client_module, LocalAliasBoardClientStub)
+
+    assert {:ok, %IssueDTO{identifier: "back#288", title: "DAR withdrawal cap", status: %{name: "In Progress"}}} =
+             IssueAdapter.get_issue(project_record, issue.identifier)
+  end
+
+  test "get_issue returns not_found when alias has no remote_number" do
+    migrate_repo()
+    clean_repo()
+
+    {:ok, project_record} =
+      Context.ensure_project(%{
+        name: "Macro Markets",
+        slug: "macro-markets-local",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "o/r", "project_id" => "PVT_1", "status_field" => "Symphony State"}
+      })
+
+    {:ok, issue} = Context.create_issue("macro-markets-local", %{title: "Draft", status: "Todo"})
+    Application.put_env(:symphony_elixir, :github_client_module, LocalAliasBoardClientStub)
+
+    assert {:error, :issue_not_found} = IssueAdapter.get_issue(project_record, issue.identifier)
   end
 
   test "list_issues follows pageInfo cursors across pages" do
