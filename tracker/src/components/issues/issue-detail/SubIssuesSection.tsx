@@ -2,8 +2,11 @@ import { ChevronDown, ChevronRight, GitFork, ListTree, Plus } from "lucide-react
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AgentStatusDot } from "@/components/issues/AgentStatusBadge";
 import { getStatusMeta, isCompletedStatus } from "@/components/board/status-meta";
+import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { cn } from "@/lib/utils";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 interface SubIssueSummary {
@@ -15,6 +18,8 @@ interface SubIssueSummary {
 interface SubIssuesSectionProps {
   subtasks: Issue[];
   summary?: SubIssueSummary | null;
+  /** Live agent executions keyed by issue identifier, used to flag which children are running. */
+  executions?: ReadonlyMap<string, AgentExecution>;
   onOpenIssue?: (identifier: string) => void;
   onCreateSubtask?: (title: string) => Promise<boolean>;
 }
@@ -29,6 +34,7 @@ interface SubIssuesSectionProps {
 export function SubIssuesSection({
   subtasks,
   summary = null,
+  executions,
   onOpenIssue,
   onCreateSubtask,
 }: SubIssuesSectionProps) {
@@ -88,6 +94,8 @@ export function SubIssuesSection({
                   const meta = getStatusMeta(subtask.status);
                   const StatusIcon = meta.Icon;
                   const repoLabel = subtask.repositoryFullName?.split("/").pop() ?? null;
+                  const execution = executions?.get(subtask.identifier);
+                  const agentStatus = execution ? resolveDisplayStatus(execution) : null;
 
                   return (
                     <li key={subtask.identifier}>
@@ -104,6 +112,7 @@ export function SubIssuesSection({
                           <StatusIcon className={cn("h-4 w-4", meta.iconClass)} />
                         </span>
                         <span className="min-w-0 flex-1 truncate text-foreground">{subtask.title}</span>
+                        {agentStatus ? <AgentStatusDot status={agentStatus} className="shrink-0" /> : null}
                         {repoLabel ? (
                           <span className="inline-flex shrink-0 items-center gap-0.5 font-mono text-[10px] text-muted-foreground">
                             <GitFork className="h-3 w-3" />

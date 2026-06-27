@@ -244,6 +244,7 @@ export function IssueDetailRoute() {
       issue={issue}
       execution={issue ? agentExecutions.get(issue.identifier) : undefined}
       subtasks={subtasks}
+      subtaskExecutions={agentExecutions}
       parentCandidates={parentCandidates}
       groupLeadCandidates={groupLeadCandidates}
       workflowMarkdown={project?.setup?.workflowMarkdown ?? null}

@@ -2,6 +2,16 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { KbEditor } from "@/components/kb/KbEditor";
 
+// Mermaid is heavy and needs real layout to render; mock the helper so the node
+// view's wiring (toggle + preview injection) can be asserted deterministically.
+vi.mock("@/lib/mermaid", () => ({
+  detectMermaidTheme: () => "light",
+  renderMermaid: vi.fn().mockResolvedValue({
+    status: "ok",
+    svg: '<svg data-testid="mermaid-svg"></svg>',
+  }),
+}));
+
 describe("KbEditor", () => {
   it("renders the page title and saves markdown", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
@@ -24,5 +34,22 @@ describe("KbEditor", () => {
     expect(prevented).toBe(true);
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(typeof onSave.mock.calls[0]?.[0]).toBe("string");
+  });
+
+  it("renders a mermaid code block as a live diagram with a source toggle", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const markdown = ["# Architecture", "", "```mermaid", "flowchart TD", "  A --> B", "```"].join("\n");
+    render(<KbEditor title="Architecture" markdown={markdown} onSave={onSave} saving={false} />);
+
+    // The mermaid node view replaces the raw code block with a Preview/Code toggle.
+    expect(await screen.findByRole("button", { name: "Preview" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Code" })).toBeInTheDocument();
+
+    // The diagram SVG is injected into the preview surface.
+    await waitFor(() => expect(document.querySelector(".kb-mermaid-diagram svg")).toBeTruthy());
+
+    // Switching to Code reveals the editable source block.
+    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    expect(document.querySelector("pre.kb-mermaid-source")).toBeTruthy();
   });
 });

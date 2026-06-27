@@ -1904,6 +1904,8 @@
       "board": "Board",
       "list": "List",
       "knowledgeBase": "Knowledge Base",
+      "switchProject": "Switch project",
+      "loadingProjects": "Loading projects…",
       "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
     },
     "recents": {
@@ -2069,6 +2071,15 @@
         "italic": "Italic",
         "strike": "Strikethrough",
         "code": "Inline code"
+      },
+      "mermaid": {
+        "label": "Mermaid",
+        "preview": "Preview",
+        "code": "Code",
+        "rendering": "Rendering diagram…",
+        "empty": "Empty diagram — click to add Mermaid code.",
+        "error": "Could not render this diagram",
+        "editSource": "Edit source"
       },
       "block": {
         "add": "Add block below",

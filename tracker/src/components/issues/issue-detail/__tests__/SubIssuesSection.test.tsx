@@ -3,7 +3,30 @@ import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
 
 import { SubIssuesSection } from "@/components/issues/issue-detail/SubIssuesSection";
+import type { AgentExecution, AgentExecutionStatus } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
+
+function execution(identifier: string, status: AgentExecutionStatus): AgentExecution {
+  return {
+    issueIdentifier: identifier,
+    status,
+    agentKind: "codex",
+    sessionId: null,
+    lastEvent: null,
+    lastMessage: null,
+    lastEventAt: null,
+    turnCount: 0,
+    runtimeSeconds: null,
+    startedAt: null,
+    retryAttempt: 0,
+    error: null,
+    goal: null,
+    longRunning: false,
+    longRunningKind: null,
+    longRunningLabel: null,
+    tokens: null,
+  };
+}
 
 function issue(overrides: Partial<Issue>): Issue {
   return {
@@ -94,6 +117,19 @@ describe("SubIssuesSection", () => {
   it("renders a create button when creation is allowed even without sub-issues", () => {
     render(<SubIssuesSection subtasks={[]} summary={null} onCreateSubtask={vi.fn()} />);
     expect(screen.getByRole("button", { name: /create sub-issue/i })).toBeInTheDocument();
+  });
+
+  it("flags only the sub-issues with a live agent execution", () => {
+    const subtasks = [
+      issue({ identifier: "back#287", title: "CAPI Meta Ads", status: "In Progress" }),
+      issue({ identifier: "front#541", title: "Meta Pixel", status: "Todo" }),
+    ];
+    const executions = new Map([["back#287", execution("back#287", "live")]]);
+
+    render(<SubIssuesSection subtasks={subtasks} summary={null} executions={executions} />);
+
+    expect(screen.getByTitle("Agent: Live")).toBeInTheDocument();
+    expect(screen.queryAllByTitle(/^Agent:/)).toHaveLength(1);
   });
 
   it("creates a sub-issue from the inline form", async () => {

@@ -7,6 +7,9 @@ import {
   isHiddenIssueTab,
   isIssueTab,
   isBoardPath,
+  isProjectSection,
+  projectSectionFromPathname,
+  projectSectionPath,
   resolveIssueTab,
   isWorkspaceView,
   issueAgentTabPath,
@@ -99,6 +102,30 @@ describe("workspaceRoutes", () => {
     expect(viewFromPathname("/projects/acme/board/issues/ABC-1")).toBe("board");
     expect(viewFromPathname("/projects/acme/list/filters")).toBe("list");
     expect(viewFromPathname("/projects/acme")).toBe("board");
+  });
+
+  it("validates project sections", () => {
+    expect(isProjectSection("board")).toBe(true);
+    expect(isProjectSection("kb")).toBe(true);
+    expect(isProjectSection("assistant")).toBe(true);
+    expect(isProjectSection("settings")).toBe(true);
+    expect(isProjectSection("new-issue")).toBe(false);
+    expect(isProjectSection(undefined)).toBe(false);
+  });
+
+  it("derives the workspace section from a pathname", () => {
+    expect(projectSectionFromPathname("/projects/acme/board/issues/ABC-1")).toBe("board");
+    expect(projectSectionFromPathname("/projects/acme/list/filters")).toBe("list");
+    expect(projectSectionFromPathname("/projects/acme/kb/repo/page")).toBe("kb");
+    expect(projectSectionFromPathname("/projects/acme/assistant/explore")).toBe("assistant");
+    expect(projectSectionFromPathname("/projects/acme/settings/workflow")).toBe("settings");
+    expect(projectSectionFromPathname("/projects/acme")).toBe("board");
+    expect(projectSectionFromPathname("/kb/page")).toBe("board");
+  });
+
+  it("builds a section path for a project", () => {
+    expect(projectSectionPath("acme", "kb")).toBe("/projects/acme/kb");
+    expect(projectSectionPath("a/b c", "board")).toBe("/projects/a%2Fb%20c/board");
   });
 
   it("detects board paths only", () => {

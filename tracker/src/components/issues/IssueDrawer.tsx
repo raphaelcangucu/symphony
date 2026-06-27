@@ -77,6 +77,7 @@ interface IssueDrawerProps {
   view: WorkspaceView;
   execution?: AgentExecution;
   subtasks?: Issue[];
+  subtaskExecutions?: ReadonlyMap<string, AgentExecution>;
   parentCandidates?: Issue[];
   groupLeadCandidates?: Issue[];
   workflowMarkdown?: string | null;
@@ -105,6 +106,7 @@ export function IssueDrawer({
   view,
   execution,
   subtasks = [],
+  subtaskExecutions,
   parentCandidates = [],
   groupLeadCandidates = [],
   workflowMarkdown = null,
@@ -417,6 +419,7 @@ export function IssueDrawer({
                     pullRequests={pr.pullRequests}
                     workpad={commentsState.workpad}
                     subtasks={subtasks}
+                    subtaskExecutions={subtaskExecutions}
                     parentCandidates={parentCandidates}
                     groupLeadCandidates={groupLeadCandidates}
                     saving={issueUpdater.saving}

@@ -28,6 +28,7 @@ import { type KbAssetContext, editorizeKbMarkdown, persistKbMarkdown } from "@/l
 import type { KbGalleryAsset } from "@/lib/kbGallery";
 import { cn } from "@/lib/utils";
 import { KbAssetNameDialog } from "./KbAssetNameDialog";
+import { KbCodeBlock } from "./KbCodeBlock";
 import { KbImage } from "./KbImageExtension";
 import { KbImagePickerDialog } from "./KbImagePickerDialog";
 import { KbSpacerParagraph } from "./KbSpacerParagraph";
@@ -161,7 +162,10 @@ export function KbEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ paragraph: false }),
+      // `codeBlock` is replaced by KbCodeBlock so ```mermaid fences render as
+      // live diagrams; the node keeps the same name/attributes for round-trip.
+      StarterKit.configure({ paragraph: false, codeBlock: false }),
+      KbCodeBlock,
       KbSpacerParagraph,
       KbImage.configure({
         inline: false,

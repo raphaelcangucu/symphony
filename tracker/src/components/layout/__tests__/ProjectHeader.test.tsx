@@ -12,6 +12,10 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+vi.mock("@/services/projects", () => ({
+  listProjects: vi.fn().mockResolvedValue([]),
+}));
+
 const createdIssue: Issue = {
   id: "issue-1",
   identifier: "MAC-1",
@@ -70,17 +74,16 @@ describe("ProjectHeader polling indicator", () => {
     vi.clearAllMocks();
   });
 
-  it("links the project identity to the project board", () => {
+  it("renders the project identity as a project switcher trigger", () => {
     render(
       <MemoryRouter>
         <ProjectHeader projectSlug="distributionmachine" title="Distribution Machine" trackerKind="local" />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: /Distribution Machine distributionmachine/i })).toHaveAttribute(
-      "href",
-      "/projects/distributionmachine/board",
-    );
+    const trigger = screen.getByRole("button", { name: "Switch project" });
+    expect(trigger).toHaveTextContent("Distribution Machine");
+    expect(trigger).toHaveTextContent("distributionmachine");
   });
 
   it("labels the indicator active when polling is active", () => {

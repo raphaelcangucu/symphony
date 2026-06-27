@@ -118,6 +118,32 @@ export function issuePath(
 
 export const PROJECTS_PATH = "/projects";
 
+/** Top-level workspace sections reachable from the project header. */
+export const PROJECT_SECTIONS = ["board", "list", "assistant", "settings", "kb"] as const;
+
+export type ProjectSection = (typeof PROJECT_SECTIONS)[number];
+
+export const DEFAULT_PROJECT_SECTION: ProjectSection = "board";
+
+export function isProjectSection(value: string | undefined | null): value is ProjectSection {
+  return typeof value === "string" && (PROJECT_SECTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * Resolves the active workspace section from a pathname so switching projects
+ * can keep the user on the same view. Deep sub-paths (issue drawers, KB pages,
+ * settings tabs) are intentionally dropped because they are project-specific.
+ */
+export function projectSectionFromPathname(pathname: string): ProjectSection {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+  if (segments[0] !== "projects") return DEFAULT_PROJECT_SECTION;
+  return isProjectSection(segments[2]) ? segments[2] : DEFAULT_PROJECT_SECTION;
+}
+
+export function projectSectionPath(projectSlug: string, section: ProjectSection): string {
+  return `/projects/${requireSlug(projectSlug)}/${section}`;
+}
+
 export function projectsNewPath(): string {
   return `${PROJECTS_PATH}/new`;
 }

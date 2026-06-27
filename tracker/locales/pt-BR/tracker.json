@@ -1904,6 +1904,8 @@
       "board": "Board",
       "list": "Lista",
       "knowledgeBase": "Base de Conhecimento",
+      "switchProject": "Trocar de projeto",
+      "loadingProjects": "Carregando projetos…",
       "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
     },
     "recents": {
@@ -2069,6 +2071,15 @@
         "italic": "Itálico",
         "strike": "Tachado",
         "code": "Código inline"
+      },
+      "mermaid": {
+        "label": "Mermaid",
+        "preview": "Visualizar",
+        "code": "Código",
+        "rendering": "Renderizando diagrama…",
+        "empty": "Diagrama vazio — clique para adicionar o código Mermaid.",
+        "error": "Não foi possível renderizar este diagrama",
+        "editSource": "Editar código"
       },
       "block": {
         "add": "Adicionar bloco abaixo",

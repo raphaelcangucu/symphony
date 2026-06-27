@@ -347,6 +347,119 @@ textarea {
   font-size: inherit;
 }
 
+/* Mermaid diagram block (live preview + editable source) */
+.kb-editor .ProseMirror .kb-mermaid {
+  margin: 0.75rem 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background-color: hsl(var(--muted) / 0.35);
+}
+
+.kb-mermaid-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid hsl(var(--border));
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+.kb-mermaid-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.kb-mermaid-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.kb-mermaid-preview {
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+}
+
+.kb-mermaid-diagram {
+  display: flex;
+  justify-content: center;
+}
+
+.kb-mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.kb-mermaid-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.85rem;
+}
+
+.kb-mermaid-empty {
+  cursor: text;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 0.4rem;
+  padding: 0.6rem 0.8rem;
+  width: 100%;
+  background: none;
+  text-align: left;
+  transition: border-color 0.15s ease;
+}
+
+.kb-mermaid-empty:hover {
+  border-color: hsl(var(--muted-foreground) / 0.6);
+}
+
+.kb-mermaid-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  color: hsl(var(--destructive));
+  font-size: 0.85rem;
+}
+
+.kb-mermaid-error-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.kb-mermaid-error-title {
+  font-weight: 600;
+}
+
+.kb-mermaid-error-message {
+  color: hsl(var(--muted-foreground));
+  word-break: break-word;
+}
+
+.kb-mermaid-error-action {
+  align-self: flex-start;
+  margin-top: 0.2rem;
+  font-weight: 500;
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* The source area sits flush inside the container, so reset the default code
+   block chrome it would otherwise inherit. */
+.kb-editor .ProseMirror pre.kb-mermaid-source {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+}
+
 .kb-editor .ProseMirror hr {
   border: 0;
   border-top: 1px solid hsl(var(--border));

@@ -20,6 +20,7 @@ import { useIssueDevServers } from "@/hooks/useIssueDevServers";
 import { userVisibleLabels } from "@/lib/symphonyLabels";
 import { cn, formatDateTime } from "@/lib/utils";
 import { getIssueFormOptions } from "@/services/issues";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { Comment } from "@/types/comment";
 import type {
   AgentKind,
@@ -45,6 +46,7 @@ interface SummaryTabProps {
   pullRequests?: PullRequest[];
   workpad?: Comment | null;
   subtasks?: Issue[];
+  subtaskExecutions?: ReadonlyMap<string, AgentExecution>;
   parentCandidates?: Issue[];
   groupLeadCandidates?: Issue[];
   saving?: boolean;
@@ -77,6 +79,7 @@ export function SummaryTab({
   pullRequests = [],
   workpad = null,
   subtasks = [],
+  subtaskExecutions,
   parentCandidates = [],
   groupLeadCandidates = [],
   saving = false,
@@ -215,6 +218,7 @@ export function SummaryTab({
         <SubIssuesSection
           subtasks={subtasks}
           summary={issue.subIssueSummary}
+          executions={subtaskExecutions}
           onOpenIssue={onOpenIssue}
           onCreateSubtask={onCreateSubtask}
         />
