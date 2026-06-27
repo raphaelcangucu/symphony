@@ -1807,6 +1807,17 @@
       "thinking": "Pensando…",
       "footer": "Esc para fechar · não salvo na conversa"
     },
+    "toolGroup": {
+      "read": "Leu {{n}} arquivos",
+      "edit": "Editou {{n}} arquivos",
+      "editStats": "Editou {{n}} arquivos (+{{additions}} −{{deletions}})",
+      "command": "Executou {{n}} comandos",
+      "query": "Consultou {{n}} itens",
+      "action": "{{n}} ações",
+      "other": "{{n}} chamadas de ferramenta",
+      "running": "em execução",
+      "failed": "falhou"
+    },
     "working": {
       "runningTool": "Executando {{tool}}",
       "verbs": {
