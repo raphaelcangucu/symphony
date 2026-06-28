@@ -5,6 +5,7 @@ import type {
   PullRequestFixResult,
   MergePullRequestInput,
   MergePullRequestResult,
+  PullRequestGroup,
   PullRequestMonitorInfo,
   PullRequestPipeline,
   PullRequestResult,
@@ -96,10 +97,18 @@ interface BackendPullRequestDto {
   monitor?: BackendMonitorDto | null;
 }
 
+interface BackendPullRequestGroupDto {
+  identifier?: string | null;
+  title?: string | null;
+  pull_requests?: BackendPullRequestDto[] | null;
+  pullRequests?: BackendPullRequestDto[] | null;
+}
+
 interface BackendPullRequestEnvelope {
   data?: BackendPullRequestDto[] | null;
   supported?: boolean | null;
   available?: boolean | null;
+  children?: BackendPullRequestGroupDto[] | null;
 }
 
 const VALID_STATES: readonly PullRequestState[] = ["open", "closed", "merged", "draft", "unknown"];
@@ -160,6 +169,14 @@ function normalizeMonitor(dto: BackendMonitorDto | null | undefined): PullReques
   };
 }
 
+function normalizePullRequestGroup(dto: BackendPullRequestGroupDto): PullRequestGroup {
+  return {
+    identifier: dto.identifier ?? "",
+    title: dto.title ?? null,
+    pullRequests: (dto.pull_requests ?? dto.pullRequests ?? []).map(normalizePullRequest),
+  };
+}
+
 export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
   return {
     number: dto.number,
@@ -213,6 +230,9 @@ export async function listPullRequests(
     data: (body.data ?? []).map(normalizePullRequest),
     supported: body.supported ?? false,
     available: body.available ?? false,
+    children: (body.children ?? [])
+      .map(normalizePullRequestGroup)
+      .filter((group) => group.identifier !== "" && group.pullRequests.length > 0),
   };
 }
 

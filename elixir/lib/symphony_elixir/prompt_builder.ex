@@ -287,6 +287,8 @@ defmodule SymphonyElixir.PromptBuilder do
         When a UI repo's paths change, run its **configured** e2e command above with screenshot + video — never bare `npx playwright test` on ad-hoc ports. Call `manage_preview` (`status`/`start`) first. Preview is best-effort and non-blocking: if it won't reach `ready`, still write the e2e tests, run the unit suite, record the blocker in your workpad, and proceed (CI can run UI e2e) — do not stall on a stuck preview.
 
         Manifest: one passing `unit` run per changed repo; for a changed UI repo, a passing `e2e` run with at least 1 screenshot and 1 video. Record only commands you ran this session, then end the turn — do not move the card.
+
+        As you prove each acceptance criterion, tick it in the issue body with `update_acceptance_criteria` (read with no args, then mark by `index` or `text`). It edits only the `## Acceptance criteria` checkboxes — never use `update_issue`/`gh issue edit` for this. Leave a box unchecked if the criterion is not yet demonstrated.
         """
     end
   end

@@ -161,7 +161,12 @@ serve: ensure-deps migrate
 # Recompile + restart selected subtree(s) against the running daemon.
 # Default: web only (so web edits never kill in-flight orchestrator turns).
 # Examples: make update ARGS="--orchestrator" | "--code-server" | "--all"
-update: ensure-deps
+#
+# `migrate` runs first (before the code reload) so a pulled-in migration is
+# applied to the live DB; otherwise newly reloaded code can reference a table the
+# running database is missing (e.g. tracker_dismissed_pull_requests), 500-ing the
+# affected endpoints until the next `make serve`.
+update: ensure-deps migrate
 	@$(MIX) symphony.ctl update $(ARGS)
 
 # Default: full daemon shutdown. `make stop ARGS="--web"` stops one subtree only.

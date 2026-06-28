@@ -44,6 +44,11 @@ config :symphony_elixir, :viewer_persist_enabled, Mix.env() != :test
 # local-first read suites stay hermetic (no remote calls).
 config :symphony_elixir, :tracker_seed_on_empty, Mix.env() != :test
 
+# Active probe for Claude plan usage (reads ~/.claude/.credentials.json and calls
+# Anthropic's OAuth usage API). Off in :test so suites never hit the network even
+# on a developer machine that happens to be logged into Claude.
+config :symphony_elixir, :claude_usage_probe_enabled, Mix.env() != :test
+
 # Repo-root `skills/` directory for vendored, agent-agnostic skill definitions
 # loaded by `SymphonyElixir.Skills`. `__DIR__` here is `.../symphony/elixir/config`,
 # so `../../skills` resolves to the repo-root `skills/` dir.

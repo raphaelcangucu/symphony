@@ -131,6 +131,16 @@ export function BoardView({
     return map;
   }, [workflowStatuses]);
 
+  const allIssues = useMemo(
+    () => statusNames.flatMap((status) => board[status] ?? []),
+    [board, statusNames],
+  );
+
+  const resolveStatusCategory = useMemo(
+    () => (status: WorkflowStatusName) => categoryByName.get(status) ?? null,
+    [categoryByName],
+  );
+
   const activeIssue = useMemo(() => {
     if (!activeIdentifier) return null;
     return statusNames
@@ -279,6 +289,8 @@ export function BoardView({
             onDisband={handleDisband}
             mergeTargetId={mergeTargetId}
             dropIndicator={dropIndicator}
+            allIssues={allIssues}
+            statusCategory={resolveStatusCategory}
           />
         ))}
       </div>

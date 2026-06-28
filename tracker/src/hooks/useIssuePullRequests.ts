@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { i18n } from "@/i18n";
 import { listPullRequests } from "@/services/pullRequests";
-import type { PullRequest } from "@/types/pull-request";
+import type { PullRequest, PullRequestGroup } from "@/types/pull-request";
 
 // Skip the open-time fetch when the last successful load is newer than this.
 const FRESH_WINDOW_MS = 60_000;
@@ -15,6 +15,7 @@ interface UseIssuePullRequestsArgs {
 
 export interface UseIssuePullRequestsResult {
   pullRequests: PullRequest[];
+  children: PullRequestGroup[];
   supported: boolean;
   available: boolean;
   loading: boolean;
@@ -35,6 +36,7 @@ export function useIssuePullRequests({
   enabled = true,
 }: UseIssuePullRequestsArgs): UseIssuePullRequestsResult {
   const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
+  const [children, setChildren] = useState<PullRequestGroup[]>([]);
   const [supported, setSupported] = useState(false);
   const [available, setAvailable] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,6 +55,7 @@ export function useIssuePullRequests({
     try {
       const result = await listPullRequests(projectSlug, identifier, { refresh: true });
       setPullRequests(result.data);
+      setChildren(result.children);
       setSupported(result.supported);
       setAvailable(result.available);
       setError(null);
@@ -71,6 +74,7 @@ export function useIssuePullRequests({
     hasLoadedRef.current = false;
     lastFetchedAtRef.current = 0;
     setPullRequests([]);
+    setChildren([]);
     setSupported(false);
     setAvailable(false);
     setError(null);
@@ -86,5 +90,5 @@ export function useIssuePullRequests({
     void refetch();
   }, [active, refetch]);
 
-  return { pullRequests, supported, available, loading, error, refetch };
+  return { pullRequests, children, supported, available, loading, error, refetch };
 }

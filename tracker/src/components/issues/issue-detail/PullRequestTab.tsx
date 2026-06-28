@@ -10,12 +10,18 @@ import { Button } from "@/components/ui/button";
 import { linkPullRequest, requestPullRequestFix, rerunFailedJobs, unlinkPullRequest } from "@/services/pullRequests";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
-import type { PullRequest, PullRequestMonitorInfo, RerunResult } from "@/types/pull-request";
+import type {
+  PullRequest,
+  PullRequestGroup,
+  PullRequestMonitorInfo,
+  RerunResult,
+} from "@/types/pull-request";
 
 interface PullRequestTabProps {
   issue: Issue;
   projectSlug: string;
   pullRequests: PullRequest[];
+  pullRequestChildren?: PullRequestGroup[];
   supported: boolean;
   available: boolean;
   loading: boolean;
@@ -27,6 +33,7 @@ export function PullRequestTab({
   issue,
   projectSlug,
   pullRequests,
+  pullRequestChildren = [],
   supported,
   available,
   loading,
@@ -143,25 +150,65 @@ export function PullRequestTab({
     </div>
   );
 
-  if (loading && pullRequests.length === 0) {
+  const childGroups = pullRequestChildren.filter((group) => group.pullRequests.length > 0);
+
+  const childrenSection =
+    childGroups.length === 0 ? null : (
+      <div className="space-y-3 rounded-lg border border-dashed p-3">
+        <div>
+          <p className="text-xs font-medium text-foreground">{t("issue.pullRequest.childrenTitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("issue.pullRequest.childrenSubtitle")}</p>
+        </div>
+        {childGroups.map((group) => (
+          <div key={group.identifier} className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-xs text-muted-foreground">
+                {group.identifier}
+                {group.title ? <span className="font-sans"> — {group.title}</span> : null}
+              </span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {t("issue.pullRequest.childGroupCount", { count: group.pullRequests.length })}
+              </span>
+            </div>
+            {group.pullRequests.map((pr) => (
+              <PullRequestPanel
+                key={pr.url ?? `${pr.repo}#${pr.number}`}
+                pullRequest={pr}
+                projectSlug={projectSlug}
+                issueIdentifier={group.identifier}
+                onRefresh={onRefresh}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+
+  if (loading && pullRequests.length === 0 && childGroups.length === 0) {
     return <EmptyState>{t("issue.pullRequest.loading")}</EmptyState>;
   }
 
   if (error && pullRequests.length === 0) {
     return (
-      <EmptyState>
-        {error}{" "}
-        <button type="button" onClick={onRefresh} className="underline">
-          {t("issue.pullRequest.retry")}
-        </button>
-      </EmptyState>
+      <div className="space-y-4">
+        <EmptyState>
+          {error}{" "}
+          <button type="button" onClick={onRefresh} className="underline">
+            {t("issue.pullRequest.retry")}
+          </button>
+        </EmptyState>
+        {childrenSection}
+      </div>
     );
   }
 
   if (pullRequests.length === 0) {
     if (!supported) {
       return (
-        <EmptyState>{t("issue.pullRequest.unsupported", { identifier: issue.identifier })}</EmptyState>
+        <div className="space-y-4">
+          <EmptyState>{t("issue.pullRequest.unsupported", { identifier: issue.identifier })}</EmptyState>
+          {childrenSection}
+        </div>
       );
     }
 
@@ -171,6 +218,7 @@ export function PullRequestTab({
           <div className="flex items-center justify-end">{refreshButton}</div>
           <EmptyState>{t("issue.pullRequest.tokenRequired")}</EmptyState>
           {linkRow}
+          {childrenSection}
         </div>
       );
     }
@@ -180,6 +228,7 @@ export function PullRequestTab({
         <div className="flex items-center justify-end">{refreshButton}</div>
         <EmptyState>{t("issue.pullRequest.empty", { identifier: issue.identifier })}</EmptyState>
         {linkRow}
+        {childrenSection}
       </div>
     );
   }
@@ -250,6 +299,7 @@ export function PullRequestTab({
           }
         />
       ))}
+      {childrenSection}
     </div>
   );
 }

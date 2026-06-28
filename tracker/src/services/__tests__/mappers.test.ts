@@ -109,6 +109,30 @@ describe("tracker DTO mappers", () => {
     expect(issue.identifier).toBe("508");
   });
 
+  it("maps the backend-derived display_identifier while keeping the canonical identifier", () => {
+    const issue = normalizeIssue({
+      id: 547,
+      identifier: "MAC-5",
+      display_identifier: "front#547",
+      project_slug: "macro-markets",
+      title: "Reconciled local-first issue",
+    });
+
+    expect(issue.identifier).toBe("MAC-5");
+    expect(issue.displayIdentifier).toBe("front#547");
+  });
+
+  it("defaults displayIdentifier to the canonical identifier when the backend omits it", () => {
+    const issue = normalizeIssue({
+      id: 1,
+      identifier: "MAC-1",
+      project_slug: "macro-markets",
+      title: "Unreconciled local draft",
+    });
+
+    expect(issue.displayIdentifier).toBe("MAC-1");
+  });
+
   it("normalizes backend project DTOs into frontend projects", () => {
     const project = normalizeProject({
       id: 42,

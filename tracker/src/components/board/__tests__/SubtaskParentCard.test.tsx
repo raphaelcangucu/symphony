@@ -66,5 +66,30 @@ describe("SubtaskParentCard", () => {
     fireEvent.click(screen.getByTitle("Show subtasks"));
     expect(screen.getByText("NFC")).toBeInTheDocument();
     expect(screen.getByText("BLE")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+  });
+
+  it("shows the status icon for each subtask", () => {
+    const inProgressSubtask = issue({
+      identifier: "back#287",
+      title: "CAPI Meta Ads",
+      status: "In Progress",
+    });
+
+    renderInBoard(
+      <SubtaskParentCard
+        id="parent:2"
+        issue={parent}
+        subtasks={[inProgressSubtask]}
+        onSelectIssue={() => {}}
+      />,
+      "parent:2",
+    );
+
+    fireEvent.click(screen.getByTitle("Show subtasks"));
+    expect(screen.getByTitle("In Progress")).toBeInTheDocument();
+    expect(screen.getByText("CAPI Meta Ads")).toBeInTheDocument();
+    expect(screen.getByText("back#287")).toBeInTheDocument();
   });
 });

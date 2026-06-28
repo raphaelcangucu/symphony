@@ -163,6 +163,8 @@ export interface BackendProjectSyncStateDto {
 export interface BackendIssueDto {
   id: BackendId;
   identifier: string;
+  display_identifier?: string | null;
+  displayIdentifier?: string | null;
   project_slug?: string | null;
   projectSlug?: string | null;
   status?: BackendWorkflowStatusDto | string | null;
@@ -273,6 +275,9 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
   return {
     id: String(dto.id),
     identifier: normalizeIssueIdentifier(dto.identifier),
+    displayIdentifier: normalizeIssueIdentifier(
+      dto.displayIdentifier ?? dto.display_identifier ?? dto.identifier,
+    ),
     projectSlug: dto.projectSlug ?? dto.project_slug ?? "",
     status: normalizeStatusName(dto.status),
     title: dto.title,

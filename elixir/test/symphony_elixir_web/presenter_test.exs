@@ -81,6 +81,27 @@ defmodule SymphonyElixirWeb.PresenterTest do
     assert [%{project_slug: "beta"}] = payload.retrying
   end
 
+  test "state_payload/2 exposes bundle fields so the observability tree can group parent → child" do
+    parent = running_entry("issue-parent", "MT-100", "alpha")
+
+    child =
+      running_entry("issue-child", "MT-101", "alpha")
+      |> Map.merge(%{bundle_role: :child, parent_identifier: "MT-100", unit_id: "MT-101"})
+
+    running = %{"issue-parent" => parent, "issue-child" => child}
+
+    orchestrator = start_orchestrator_with(running, %{})
+
+    payload = Presenter.state_payload(orchestrator, 1_000)
+    by_id = Map.new(payload.running, &{&1.issue_id, &1})
+
+    assert %{bundle_role: nil, parent_identifier: nil, unit_id: nil, child_identifiers: []} =
+             by_id["issue-parent"]
+
+    assert %{bundle_role: "child", parent_identifier: "MT-100", unit_id: "MT-101"} =
+             by_id["issue-child"]
+  end
+
   test "state_payload/3 scopes running/retrying to the given project_slug" do
     running = %{
       "issue-a1" => running_entry("issue-a1", "MT-10", "alpha"),

@@ -2,7 +2,9 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useIssueDevServers, type UseIssueDevServersResult } from "@/hooks/useIssueDevServers";
+import { normalizePullRequest } from "@/services/pullRequests";
 import type { Issue, IssueDevServer, IssueDevServersResponse } from "@/types/issue";
+import type { PullRequestGroup } from "@/types/pull-request";
 
 import { SummaryTab } from "../SummaryTab";
 
@@ -57,9 +59,48 @@ describe("SummaryTab", () => {
 
     expect(screen.queryByRole("link", { name: /^preview$/i })).not.toBeInTheDocument();
   });
+
+  it("renders consolidated sub-issue pull request chips", () => {
+    renderSummary(response([]), {}, [
+      {
+        identifier: "front#549",
+        title: "Child task",
+        pullRequests: [
+          normalizePullRequest({ number: 549, repo: "owner/front", url: "https://x/549" } as never),
+        ],
+      },
+    ]);
+
+    expect(screen.getByText("#549")).toBeInTheDocument();
+  });
+
+  it("deduplicates child PRs already linked to the parent", () => {
+    const shared = normalizePullRequest({ number: 549, url: "https://x/549" } as never);
+    vi.mocked(useIssueDevServers).mockReturnValue({
+      data: response([]),
+      error: null,
+      loading: false,
+      ...hookActions,
+    });
+
+    render(
+      <SummaryTab
+        issue={issue()}
+        projectSlug="macro-markets"
+        pullRequests={[shared]}
+        pullRequestChildren={[{ identifier: "front#549", title: null, pullRequests: [shared] }]}
+      />,
+    );
+
+    expect(screen.getAllByText("#549")).toHaveLength(1);
+  });
 });
 
-function renderSummary(data: IssueDevServersResponse, overrides: Partial<UseIssueDevServersResult> = {}) {
+function renderSummary(
+  data: IssueDevServersResponse,
+  overrides: Partial<UseIssueDevServersResult> = {},
+  pullRequestChildren: PullRequestGroup[] = [],
+) {
   vi.mocked(useIssueDevServers).mockReturnValue({
     data,
     error: null,
@@ -68,7 +109,9 @@ function renderSummary(data: IssueDevServersResponse, overrides: Partial<UseIssu
     ...overrides,
   });
 
-  render(<SummaryTab issue={issue()} projectSlug="macro-markets" />);
+  render(
+    <SummaryTab issue={issue()} projectSlug="macro-markets" pullRequestChildren={pullRequestChildren} />,
+  );
 }
 
 function issue(): Issue {

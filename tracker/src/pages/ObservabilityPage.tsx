@@ -309,11 +309,22 @@ function SessionRowCells({
   row,
   executions,
   nowMs,
+  t,
+  childrenTokenTotal,
 }: {
   row: ProjectRunningRow;
   executions: ReadonlyMap<string, AgentExecution>;
   nowMs: number;
+  t: TFunction;
+  // When set (parent rows of a bundle), the token cell shows the coordinator's
+  // own session tokens with the consolidated total (coordinator + live children)
+  // revealed on hover. Live-only: children that already finished drop out.
+  childrenTokenTotal?: number;
 }) {
+  const coordinatorTokens = row.tokens.totalTokens;
+  const hasChildTokens = typeof childrenTokenTotal === "number" && childrenTokenTotal > 0;
+  const consolidatedTokens = coordinatorTokens + (childrenTokenTotal ?? 0);
+
   return (
     <>
       <td className="p-2">
@@ -325,7 +336,25 @@ function SessionRowCells({
         {row.turnCount > 0 ? ` / ${row.turnCount}` : ""}
       </td>
       <td className="p-2">{row.lastMessage ?? row.lastEvent ?? "--"}</td>
-      <td className="p-2 tabular-nums">{row.tokens.totalTokens.toLocaleString()}</td>
+      <td className="p-2 tabular-nums">
+        {hasChildTokens ? (
+          <span
+            className="inline-flex cursor-help items-center gap-1 underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
+            title={t("observability.tokens.breakdown", {
+              coordinator: coordinatorTokens.toLocaleString(),
+              children: (childrenTokenTotal ?? 0).toLocaleString(),
+              total: consolidatedTokens.toLocaleString(),
+            })}
+          >
+            {coordinatorTokens.toLocaleString()}
+            <span className="text-[10px] text-muted-foreground" aria-hidden>
+              Σ
+            </span>
+          </span>
+        ) : (
+          coordinatorTokens.toLocaleString()
+        )}
+      </td>
       <td className="p-2">
         <SessionRowActions projectSlug={row.resolvedProjectSlug} identifier={row.issueIdentifier} />
       </td>
@@ -347,6 +376,7 @@ function SessionGroupRows({
   const { parent, children } = group;
   const [expanded, setExpanded] = useState(true);
   const hasChildren = children.length > 0;
+  const childrenTokenTotal = children.reduce((sum, child) => sum + child.tokens.totalTokens, 0);
 
   return (
     <>
@@ -374,7 +404,13 @@ function SessionGroupRows({
             ) : null}
           </div>
         </td>
-        <SessionRowCells row={parent} executions={executions} nowMs={nowMs} />
+        <SessionRowCells
+          row={parent}
+          executions={executions}
+          nowMs={nowMs}
+          t={t}
+          childrenTokenTotal={hasChildren ? childrenTokenTotal : undefined}
+        />
       </tr>
       {hasChildren && expanded
         ? children.map((child) => (
@@ -391,7 +427,7 @@ function SessionGroupRows({
                   ) : null}
                 </div>
               </td>
-              <SessionRowCells row={child} executions={executions} nowMs={nowMs} />
+              <SessionRowCells row={child} executions={executions} nowMs={nowMs} t={t} />
             </tr>
           ))
         : null}

@@ -56,6 +56,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/viewer", ViewerController, :show)
     get("/settings", SettingsController, :index)
     get("/settings/agents/availability", SettingsController, :availability)
+    get("/settings/agents/usage", SettingsController, :usage)
     get("/settings/identities", SettingsController, :identities)
     get("/settings/credentials", CredentialsController, :index)
     put("/settings/credentials", CredentialsController, :update)

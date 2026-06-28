@@ -37,6 +37,7 @@ import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
 import { useIssueEvidence } from "@/hooks/useIssueEvidence";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
+import { issueDisplayIdentifier } from "@/lib/issueIdentifiers";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
 import { evidenceNeedsAttention } from "@/lib/evidenceStatus";
 import { isWaitState, parseWorkflowTrackerConfig } from "@/lib/workflowTracker";
@@ -114,7 +115,6 @@ export function IssueDrawer({
   onOpenChange,
   tab = DEFAULT_ISSUE_TAB,
   onTabChange,
-  onOpenAgentExecution,
   onArchive,
   onDelete,
   onForceSync,
@@ -236,7 +236,7 @@ export function IssueDrawer({
               <div className="flex items-start gap-3 pr-9">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs">
                   <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {issue.identifier}
+                    {issueDisplayIdentifier(issue)}
                   </span>
                   {issue.blockedBy.length > 0 ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-300">
@@ -417,6 +417,7 @@ export function IssueDrawer({
                     issue={issue}
                     projectSlug={projectSlug}
                     pullRequests={pr.pullRequests}
+                    pullRequestChildren={pr.children}
                     workpad={commentsState.workpad}
                     subtasks={subtasks}
                     subtaskExecutions={subtaskExecutions}
@@ -463,6 +464,7 @@ export function IssueDrawer({
                     issue={issue}
                     projectSlug={projectSlug}
                     pullRequests={pr.pullRequests}
+                    pullRequestChildren={pr.children}
                     supported={pr.supported}
                     available={pr.available}
                     loading={pr.loading}

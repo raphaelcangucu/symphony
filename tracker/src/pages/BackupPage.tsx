@@ -187,7 +187,7 @@ export function BackupPage() {
   const latestIso = stats?.latest?.created_at ?? null;
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
+    <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("backup.title")}</h1>

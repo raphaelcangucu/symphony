@@ -19,7 +19,12 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenter do
 
   @spec from_event(term()) :: {:started, tool_call()} | {:completed, tool_call()} | :ignore
   def from_event(message) when is_map(message) do
-    payload = Map.get(message, :payload) || Map.get(message, "payload") || %{}
+    payload =
+      case Map.get(message, :payload) || Map.get(message, "payload") do
+        payload when is_map(payload) -> payload
+        _ -> %{}
+      end
+
     method = Map.get(payload, "method") || Map.get(payload, :method)
     params = Map.get(payload, "params") || Map.get(payload, :params) || %{}
 

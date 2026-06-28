@@ -92,10 +92,19 @@ export interface PullRequest {
   monitor: PullRequestMonitorInfo | null;
 }
 
+// A parent issue's sub-issue and the pull requests linked to that child, so the
+// parent view can consolidate the whole subtask tree's PRs.
+export interface PullRequestGroup {
+  identifier: string;
+  title: string | null;
+  pullRequests: PullRequest[];
+}
+
 export interface PullRequestResult {
   data: PullRequest[];
   supported: boolean;
   available: boolean;
+  children: PullRequestGroup[];
 }
 
 export interface PullRequestFixJob {

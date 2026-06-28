@@ -1,5 +1,6 @@
 import { arrayMove } from "@dnd-kit/sortable";
 
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { requireNonBlank } from "@/lib/serviceValidation";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
@@ -257,7 +258,21 @@ export type BoardUnit =
   | { kind: "group"; id: string; lead: Issue; members: Issue[] }
   | { kind: "parent"; id: string; issue: Issue; subtasks: Issue[] };
 
-export function groupIssuesIntoUnits(issues: readonly Issue[]): BoardUnit[] {
+/** Children whose parentIdentifier points at this issue, ordered like the board. */
+export function collectSubtasksForParent(parentIdentifier: string, issues: readonly Issue[]): Issue[] {
+  const parentKey = normalizeIssueIdentifier(parentIdentifier);
+  if (!parentKey) return [];
+
+  return issues
+    .filter(
+      (candidate) =>
+        candidate.parentIdentifier != null &&
+        normalizeIssueIdentifier(candidate.parentIdentifier) === parentKey,
+    )
+    .sort((left, right) => left.position - right.position);
+}
+
+export function groupIssuesIntoUnits(issues: readonly Issue[], allIssues?: readonly Issue[]): BoardUnit[] {
   const byIdentifier = new Map(issues.map((issue) => [issue.identifier, issue]));
   const absorbed = new Set<string>();
   for (const issue of issues) {
@@ -266,13 +281,14 @@ export function groupIssuesIntoUnits(issues: readonly Issue[]): BoardUnit[] {
     }
   }
 
+  const subtaskSource = allIssues ?? issues;
   const subtasksByParent = new Map<string, Issue[]>();
-  for (const issue of issues) {
-    if (issue.parentIdentifier) {
-      const list = subtasksByParent.get(issue.parentIdentifier) ?? [];
-      list.push(issue);
-      subtasksByParent.set(issue.parentIdentifier, list);
-    }
+  for (const issue of subtaskSource) {
+    if (!issue.parentIdentifier) continue;
+    const parentKey = normalizeIssueIdentifier(issue.parentIdentifier);
+    const list = subtasksByParent.get(parentKey) ?? [];
+    list.push(issue);
+    subtasksByParent.set(parentKey, list);
   }
 
   const units: BoardUnit[] = [];
@@ -287,7 +303,7 @@ export function groupIssuesIntoUnits(issues: readonly Issue[]): BoardUnit[] {
       continue;
     }
 
-    const subtasks = subtasksByParent.get(issue.identifier) ?? [];
+    const subtasks = subtasksByParent.get(normalizeIssueIdentifier(issue.identifier)) ?? [];
     const hasSubtasks = subtasks.length > 0 || (issue.subIssueSummary?.total ?? 0) > 0;
 
     if (hasSubtasks) {

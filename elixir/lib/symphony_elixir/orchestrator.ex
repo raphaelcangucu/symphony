@@ -2011,7 +2011,11 @@ defmodule SymphonyElixir.Orchestrator do
           last_codex_timestamp: metadata.last_codex_timestamp,
           last_codex_message: metadata.last_codex_message,
           last_codex_event: metadata.last_codex_event,
-          runtime_seconds: running_seconds(metadata.started_at, now)
+          runtime_seconds: running_seconds(metadata.started_at, now),
+          bundle_role: Map.get(metadata, :bundle_role),
+          parent_identifier: Map.get(metadata, :parent_identifier),
+          unit_id: Map.get(metadata, :unit_id),
+          child_identifiers: Map.get(metadata, :child_identifiers) || []
         }
       end)
 
