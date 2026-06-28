@@ -17,9 +17,11 @@ import {
   issuePath,
   newIssueAssistantPath,
   projectExploreAssistantPath,
+  projectSettingsPath,
   newIssuePath,
   projectsFiltersPath,
   projectsNewPath,
+  resolveProjectSettingsTab,
   viewFromPathname,
   withAgentSection,
   workspaceBasePath,
@@ -96,6 +98,11 @@ describe("workspaceRoutes", () => {
     expect(isWorkspaceView("board")).toBe(true);
     expect(isWorkspaceView("list")).toBe(true);
     expect(isWorkspaceView("grid")).toBe(false);
+  });
+
+  it("builds and resolves project settings integration tab paths", () => {
+    expect(projectSettingsPath("demo", "integrations")).toBe("/projects/demo/settings/integrations");
+    expect(resolveProjectSettingsTab("integrations")).toBe("integrations");
   });
 
   it("derives the view from a pathname", () => {

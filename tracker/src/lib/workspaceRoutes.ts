@@ -74,7 +74,7 @@ export function projectEditPath(projectSlug: string): string {
   return `${PROJECTS_PATH}/${requireSlug(projectSlug)}/edit`;
 }
 
-export const PROJECT_SETTINGS_TABS = ["general", "tracker", "workflow", "dev"] as const;
+export const PROJECT_SETTINGS_TABS = ["general", "tracker", "workflow", "dev", "integrations"] as const;
 
 export type ProjectSettingsTab = (typeof PROJECT_SETTINGS_TABS)[number];
 

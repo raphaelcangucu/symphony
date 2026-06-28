@@ -26,6 +26,7 @@ import { SettingsLayout } from "@/components/settings/SettingsLayout";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { GatewaysSettingsPage } from "@/pages/GatewaysSettingsPage";
 import { TemplateListPage } from "@/pages/TemplateListPage";
 import { TemplateEditPage } from "@/pages/TemplateEditPage";
 import { TokenGatePage } from "@/pages/TokenGatePage";
@@ -100,6 +101,7 @@ export function App() {
                 <Route path="templates" element={<TemplateListPage />} />
                 <Route path="templates/:slug" element={<TemplateEditPage />} />
                 <Route path="backups" element={<BackupPage />} />
+                <Route path="gateways" element={<GatewaysSettingsPage />} />
               </Route>
               <Route path="assistant" element={<AssistantPage />} />
               <Route path="assistant/:threadId" element={<AssistantPage />} />

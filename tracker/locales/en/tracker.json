@@ -24,6 +24,9 @@
       },
       "backups": {
         "label": "Backups"
+      },
+      "gateways": {
+        "label": "Gateways"
       }
     },
     "loadFailed": "Failed to load settings — refresh to retry.",
@@ -117,6 +120,30 @@
         "saveFailed": "Failed to save {{label}}",
         "cleared": "{{label}} cleared",
         "clearFailed": "Failed to clear {{label}}"
+      }
+    },
+    "gateways": {
+      "subtitle": "Configure chat gateways that can talk to Symphony.",
+      "telegram": {
+        "description": "Connect a Telegram bot for project topics and direct freeform chats.",
+        "enabled": "Enable Telegram gateway",
+        "pollingEnabled": "Enable long polling",
+        "botToken": "Telegram Bot API token",
+        "groupChatId": "Group chat ID",
+        "allowedUserIds": "Allowed group user IDs",
+        "dmAllowedUserIds": "Allowed direct-message user IDs",
+        "requireMention": "Require bot mention in group topics",
+        "tokenConfigured": "Bot token configured",
+        "tokenMissing": "Bot token missing",
+        "tokenReplacePlaceholder": "Token already saved — enter a new token to replace it",
+        "saveToken": "Save Bot API token",
+        "tokenSaved": "Bot API token saved",
+        "tokenSaveFailed": "Failed to save Bot API token",
+        "save": "Save Telegram settings",
+        "generatePairing": "Generate group pairing code",
+        "saved": "Telegram settings saved",
+        "saveFailed": "Failed to save Telegram settings",
+        "loadFailed": "Failed to load Telegram gateway settings"
       }
     }
   },
@@ -1255,6 +1282,11 @@
           "label": "Dev environment",
           "title": "Dev environment",
           "description": "Setup and serve steps grouped by repository. Serve steps power each issue's Preview tab."
+        },
+        "integrations": {
+          "label": "Integrations",
+          "title": "Integrations",
+          "description": "External chat and service integrations for this project."
         }
       },
       "name": "Name",
@@ -1319,6 +1351,19 @@
       },
       "stateSelect": {
         "empty": "No statuses defined for this project yet."
+      },
+      "integrations": {
+        "telegram": {
+          "description": "Pair this project to one Telegram forum topic.",
+          "globalReady": "Telegram is configured globally.",
+          "globalMissing": "Configure Telegram in Settings > Gateways before pairing a topic.",
+          "notPaired": "This project is not paired to a Telegram topic.",
+          "bindingSummary": "Agent: {{agent}} · Mode: {{mode}}",
+          "generatePairing": "Generate project pairing code",
+          "resetSession": "Reset topic session",
+          "unpair": "Unpair topic",
+          "loadFailed": "Failed to load project Telegram integration"
+        }
       },
       "scalar": {
         "maxTurns": "Max turns",

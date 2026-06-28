@@ -12,3 +12,7 @@ export function settingsTemplatesPath(slug?: string): string {
 export function settingsBackupsPath(): string {
   return `${SETTINGS_PATH}/backups`;
 }
+
+export function settingsGatewaysPath(): string {
+  return `${SETTINGS_PATH}/gateways`;
+}

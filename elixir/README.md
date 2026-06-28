@@ -35,6 +35,43 @@ Symphony does **not** use a global `WORKFLOW.md`. Process settings live in `elix
 (`SYMPHONY_*` variables); each project's workflow (YAML front matter + agent prompt) is stored as
 `workflow_markdown` in the SQLite database and edited from the tracker UI.
 
+## Telegram gateway
+
+Symphony can expose the maestro through a Telegram bot. The first gateway implementation is
+Telegram-only, while the backend uses a provider-neutral gateway adapter so future chat gateways can
+reuse the same binding, command, and session flow.
+
+Configure Telegram from the tracker UI:
+
+1. Open **Settings → Gateways**.
+2. Store the Telegram bot token from BotFather. Tokens are stored as encrypted credentials.
+3. Enable the Telegram gateway and long polling.
+4. Generate a group pairing code and send `/symphony_setup <code>` in the target Telegram group.
+5. Add Telegram user IDs to the group allowlist and direct-message allowlist.
+
+Project topics are configured per project:
+
+1. Open **Project settings → Integrations**.
+2. Generate a project pairing code.
+3. Send `/symphony_pair <code>` inside the desired Telegram forum topic.
+4. Messages in that topic use the project's maestro session, scoped by Telegram topic id.
+
+Direct 1:1 chats with the bot are freeform assistant chats. They are scoped to the Telegram direct
+chat/sender and require the sender's Telegram user ID in the direct-message allowlist.
+
+Supported Telegram commands:
+
+- `/help`, `/ajuda`
+- `/status`, `/estado`
+- `/agent`, `/agente`
+- `/mode`, `/modo`
+- `/new`, `/novo`, `/reset`
+- `/stop`, `/parar`
+- `/setup`, `/configurar`
+
+Project-specific modes (`explore`, `project`, `issue`, `kb`) require a paired project topic. Direct
+1:1 chats use `freeform` mode in this release.
+
 ### 1. Prerequisites
 
 **Core setup** (`make env-setup` + `make serve`) needs only the tools marked **required** below.

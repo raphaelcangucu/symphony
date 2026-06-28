@@ -29,6 +29,9 @@ defmodule SymphonyElixir.Settings.Credentials do
     ],
     "linear" => [
       %{key: "api_key", label: "API key", secret: true}
+    ],
+    "telegram" => [
+      %{key: "bot_token", label: "Bot token", secret: true}
     ]
   }
 

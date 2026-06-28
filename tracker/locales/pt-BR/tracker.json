@@ -24,6 +24,9 @@
       },
       "backups": {
         "label": "Backups"
+      },
+      "gateways": {
+        "label": "Gateways"
       }
     },
     "loadFailed": "Falha ao carregar configurações — atualize para tentar novamente.",
@@ -117,6 +120,30 @@
         "saveFailed": "Falha ao salvar {{label}}",
         "cleared": "{{label}} removido",
         "clearFailed": "Falha ao remover {{label}}"
+      }
+    },
+    "gateways": {
+      "subtitle": "Configure gateways de chat que podem falar com o Symphony.",
+      "telegram": {
+        "description": "Conecte um bot do Telegram para tópicos de projeto e chats diretos freeform.",
+        "enabled": "Ativar gateway Telegram",
+        "pollingEnabled": "Ativar long polling",
+        "botToken": "Token da Bot API do Telegram",
+        "groupChatId": "ID do grupo",
+        "allowedUserIds": "IDs de usuários permitidos no grupo",
+        "dmAllowedUserIds": "IDs de usuários permitidos em DM",
+        "requireMention": "Exigir menção ao bot em tópicos de grupo",
+        "tokenConfigured": "Token do bot configurado",
+        "tokenMissing": "Token do bot ausente",
+        "tokenReplacePlaceholder": "Token já salvo — digite um novo token para substituir",
+        "saveToken": "Salvar token da Bot API",
+        "tokenSaved": "Token da Bot API salvo",
+        "tokenSaveFailed": "Falha ao salvar token da Bot API",
+        "save": "Salvar configurações do Telegram",
+        "generatePairing": "Gerar código de pareamento do grupo",
+        "saved": "Configurações do Telegram salvas",
+        "saveFailed": "Falha ao salvar configurações do Telegram",
+        "loadFailed": "Falha ao carregar configurações do gateway Telegram"
       }
     }
   },
@@ -1255,6 +1282,11 @@
           "label": "Dev environment",
           "title": "Dev environment",
           "description": "Passos de setup e serve agrupados por repositório. Passos serve alimentam a aba Preview de cada issue."
+        },
+        "integrations": {
+          "label": "Integrações",
+          "title": "Integrações",
+          "description": "Integrações externas de chat e serviços para este projeto."
         }
       },
       "name": "Nome",
@@ -1319,6 +1351,19 @@
       },
       "stateSelect": {
         "empty": "Nenhum status definido para este projeto ainda."
+      },
+      "integrations": {
+        "telegram": {
+          "description": "Pareie este projeto com um tópico de fórum no Telegram.",
+          "globalReady": "Telegram está configurado globalmente.",
+          "globalMissing": "Configure o Telegram em Configurações > Gateways antes de parear um tópico.",
+          "notPaired": "Este projeto não está pareado com um tópico do Telegram.",
+          "bindingSummary": "Agente: {{agent}} · Modo: {{mode}}",
+          "generatePairing": "Gerar código de pareamento do projeto",
+          "resetSession": "Resetar sessão do tópico",
+          "unpair": "Desparear tópico",
+          "loadFailed": "Falha ao carregar integração Telegram do projeto"
+        }
       },
       "scalar": {
         "maxTurns": "Máximo de turnos",
