@@ -168,6 +168,18 @@
           "pull_requests": "Pull requests"
         }
       },
+      "shortcuts": {
+        "title": "Execution actions",
+        "open": "Command palette",
+        "placeholder": "Search actions…",
+        "empty": "No actions",
+        "resume": "Resume",
+        "restart": "Restart",
+        "stop": "Stop",
+        "hardReset": "Hard reset",
+        "cycleMode": "Cycle execution mode",
+        "focusComposer": "Focus composer"
+      },
       "hardResetDialogTitle": "Hard reset session?",
       "hardResetDialogDescription": "This stops any active run, discards the current agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and its git state are preserved.",
       "cancel": "Cancel",

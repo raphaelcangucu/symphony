@@ -168,6 +168,18 @@
           "pull_requests": "Pull requests"
         }
       },
+      "shortcuts": {
+        "title": "Ações de execução",
+        "open": "Paleta de comandos",
+        "placeholder": "Buscar ações…",
+        "empty": "Nenhuma ação",
+        "resume": "Retomar",
+        "restart": "Reiniciar",
+        "stop": "Parar",
+        "hardReset": "Reset completo",
+        "cycleMode": "Alternar modo de execução",
+        "focusComposer": "Focar no compositor"
+      },
       "hardResetDialogTitle": "Reset completo da sessão?",
       "hardResetDialogDescription": "Isso para qualquer execução ativa, descarta a sessão atual do agente e limpa contadores de turnos e tokens, depois inicia uma sessão nova. O workspace e o estado git são preservados.",
       "cancel": "Cancelar",
