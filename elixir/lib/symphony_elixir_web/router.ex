@@ -185,6 +185,7 @@ defmodule SymphonyElixirWeb.Router do
     post("/tunnel/start", TunnelController, :start)
     get("/projects/:project_slug/editor", EditorController, :show)
     get("/projects/:project_slug/issues/:identifier/editor", EditorController, :show)
+    get("/projects/:project_slug/issues/:identifier/files", WorkspaceFileController, :index)
     get("/projects/:project_slug/dev_env/steps", DevEnvController, :index)
     put("/projects/:project_slug/dev_env/steps", DevEnvController, :save)
     post("/projects/:project_slug/dev_env/propose", DevEnvController, :propose)
