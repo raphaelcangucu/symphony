@@ -33,6 +33,12 @@ import {
   serializeAttachments,
   validateAttachmentFile,
 } from "@/components/assistant/assistantAttachments";
+import {
+  ContextMentionPopover,
+  orderMentionOptions,
+} from "@/components/assistant/ContextMentionPopover";
+import type { MentionRef, ResolvedMention } from "@/components/assistant/contextMentions";
+import { useContextMentions } from "@/components/assistant/useContextMentions";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
 import { matchingSlashCommands, parseSlashCommand, type SlashCommandContext } from "@/components/assistant/slashCommands";
 import { agentKindLabel } from "@/components/shared/AgentChip";
@@ -105,6 +111,16 @@ interface AssistantComposerProps {
   /** Allow submit (and the default send affordance) with an empty input. */
   allowEmptySubmit?: boolean;
   /**
+   * Enables `@`-mentions (issues / files / PRs) in the textarea. When on, the
+   * parent supplies `mentionOptions` for the current query (reported via
+   * `onMentionQueryChange`) and records selections via `onMentionSelect` so it
+   * can expand the inserted tokens into the dispatched prompt.
+   */
+  mentionsEnabled?: boolean;
+  mentionOptions?: ResolvedMention[];
+  onMentionQueryChange?: (query: string | null) => void;
+  onMentionSelect?: (entity: ResolvedMention) => void;
+  /**
    * Optional element rendered flush inside the composer card, above the input
    * (e.g. the authoring-goal pill). Sharing the card makes it read as one piece
    * with the message box instead of a detached banner.
@@ -145,6 +161,10 @@ export function AssistantComposer({
   agentMenuDisabled = false,
   canSubmit,
   allowEmptySubmit = false,
+  mentionsEnabled = false,
+  mentionOptions,
+  onMentionQueryChange,
+  onMentionSelect,
   header,
   toolbarAfterAttach,
   submitActions,
@@ -250,6 +270,8 @@ export function AssistantComposer({
     if (resetToken === undefined) return;
     setInput("");
     setAttachments([]);
+    mentions.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetToken]);
 
   useEffect(() => {
@@ -272,6 +294,33 @@ export function AssistantComposer({
 
   const paletteCommands = matchingSlashCommands(input, t, slashContext);
   const showPalette = paletteCommands.length > 0 && input.trim().split(" ").length === 1;
+
+  const mentions = useContextMentions(input);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+  const orderedMentions = mentionsEnabled ? orderMentionOptions(mentionOptions ?? []) : [];
+  const showMentions = mentionsEnabled && mentions.open && orderedMentions.length > 0;
+
+  // Report the active query (or null when closed) so the parent can fetch options.
+  useEffect(() => {
+    if (!mentionsEnabled) return;
+    onMentionQueryChange?.(mentions.open ? mentions.query : null);
+  }, [mentionsEnabled, mentions.open, mentions.query, onMentionQueryChange]);
+
+  // Reset the highlighted row whenever the candidate set changes.
+  useEffect(() => {
+    setMentionActiveIndex(0);
+  }, [mentions.query, orderedMentions.length]);
+
+  function selectActiveMention(ref: MentionRef) {
+    const resolved = (mentionOptions ?? []).find(
+      (option) => option.type === ref.type && option.id === ref.id,
+    );
+    const next = mentions.selectMention(ref);
+    if (next !== null) setInput(next);
+    if (resolved) onMentionSelect?.(resolved);
+    setMentionActiveIndex(0);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }
 
   function updateAgent(agent: AgentKind) {
     setComposerState((current) => {
@@ -471,6 +520,7 @@ export function AssistantComposer({
     revokeAttachmentPreviews(attachments);
     setInput("");
     setAttachments([]);
+    mentions.close();
     recordingRef.current = false;
     stopSpeechRecognition();
   }
@@ -482,6 +532,30 @@ export function AssistantComposer({
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.nativeEvent.isComposing) return;
+
+    if (showMentions) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setMentionActiveIndex((index) => (index + 1) % orderedMentions.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setMentionActiveIndex((index) => (index - 1 + orderedMentions.length) % orderedMentions.length);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        const option = orderedMentions[mentionActiveIndex];
+        if (option) selectActiveMention({ type: option.type, id: option.id });
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        mentions.close();
+        return;
+      }
+    }
 
     if (event.key === "Tab" && !event.shiftKey && showPalette && paletteCommands.length > 0) {
       event.preventDefault();
@@ -644,15 +718,32 @@ export function AssistantComposer({
           </div>
         ) : null}
 
-        <Textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder={placeholder ?? t("assistant.composer.placeholder")}
-          className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
-        />
+        <div className="relative">
+          {showMentions ? (
+            <ContextMentionPopover
+              open
+              options={mentionOptions ?? []}
+              activeIndex={mentionActiveIndex}
+              onSelect={selectActiveMention}
+              className="bottom-full mb-1"
+            />
+          ) : null}
+          <Textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(event) => {
+              const value = event.target.value;
+              setInput(value);
+              if (mentionsEnabled) {
+                mentions.handleChange(value, event.target.selectionStart ?? value.length);
+              }
+            }}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder={placeholder ?? t("assistant.composer.placeholder")}
+            className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
+          />
+        </div>
 
         <div className="flex items-center justify-between gap-2 px-3 pb-3">
           <div className="flex items-center gap-1">

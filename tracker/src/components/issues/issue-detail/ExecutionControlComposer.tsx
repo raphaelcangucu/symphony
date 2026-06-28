@@ -9,6 +9,12 @@ import {
   type ComposerSnapshot,
 } from "@/components/assistant/AssistantComposer";
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
+import {
+  expandComposerMentions,
+  parseMentionTokens,
+  type ResolvedMention,
+} from "@/components/assistant/contextMentions";
+import { useContextMentionData } from "@/components/assistant/useContextMentionData";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
@@ -83,6 +89,24 @@ export function ExecutionControlComposer({
     model: null,
     effort: null,
   });
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const mentionOptions = useContextMentionData(projectSlug, issue.identifier, mentionQuery);
+  // Cache resolved entities by token so dispatched instructions can expand the
+  // inline `@type:id` tokens into a `## Context` block, even across re-renders.
+  const resolvedMentionsRef = useRef<Map<string, ResolvedMention>>(new Map());
+
+  const rememberMention = useCallback((entity: ResolvedMention) => {
+    resolvedMentionsRef.current.set(`${entity.type}:${entity.id}`, entity);
+  }, []);
+
+  const expandMentions = useCallback((text: string): string => {
+    const tokens = parseMentionTokens(text);
+    if (tokens.length === 0) return text;
+    const resolved = tokens.map(
+      (token) => resolvedMentionsRef.current.get(`${token.type}:${token.id}`) ?? token,
+    );
+    return expandComposerMentions(text, resolved);
+  }, []);
 
   // Codex goals are sourced solely from the live execution snapshot (the native
   // Codex thread), never from the cached issue.agentGoal column.
@@ -157,7 +181,7 @@ export function ExecutionControlComposer({
     const parsed = parseSlashCommand(snapshot.input, t, "execution");
     const typed =
       parsed.kind === "infer" || parsed.kind === "goal" ? parsed.argument.trim() : snapshot.input.trim();
-    return enrichGuidanceWithAttachments(typed, snapshot.attachments, projectSlug, {});
+    return enrichGuidanceWithAttachments(expandMentions(typed), snapshot.attachments, projectSlug, {});
   }
 
   function combinedGuidance(): string {
@@ -278,11 +302,12 @@ export function ExecutionControlComposer({
       if (submit.kind === "btw") return;
 
       const text = submit.message.trim();
+      const expanded = expandMentions(text);
       const hasAttachments = submit.attachments.length > 0;
 
       if (canSteer) {
         if (!text && !hasAttachments) return;
-        onSteer({ message: text, attachments: submit.attachments });
+        onSteer({ message: expanded, attachments: submit.attachments });
         return;
       }
 
@@ -291,7 +316,7 @@ export function ExecutionControlComposer({
         setQueued((current) => [
           ...current,
           {
-            text,
+            text: expanded,
             attachments: submit.attachments,
             fileTexts: {},
           },
@@ -300,11 +325,11 @@ export function ExecutionControlComposer({
       }
 
       if (!dispatchPending) {
-        const instructions = enrichGuidanceWithAttachments(text, submit.attachments, projectSlug, {});
+        const instructions = enrichGuidanceWithAttachments(expanded, submit.attachments, projectSlug, {});
         void runDispatch("resume", { instructions });
       }
     },
-    [canSteer, control.isActive, dispatchPending, onSteer, projectSlug, submitExecutionGoal],
+    [canSteer, control.isActive, dispatchPending, expandMentions, onSteer, projectSlug, submitExecutionGoal],
   );
 
   const handleEmptySubmit = useCallback(() => {
@@ -464,6 +489,10 @@ export function ExecutionControlComposer({
           agentMenuDisabled={controlsDisabled || agentRunActive}
           allowEmptySubmit={!canSteer && !agentRunActive && canResume}
           canSubmit={sendDisabled ? false : undefined}
+          mentionsEnabled
+          mentionOptions={mentionOptions}
+          onMentionQueryChange={setMentionQuery}
+          onMentionSelect={rememberMention}
           header={goalPill}
           onComposerSnapshot={(snapshot) => {
             composerSnapshotRef.current = snapshot;

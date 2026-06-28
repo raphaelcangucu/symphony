@@ -25,6 +25,24 @@ vi.mock("@/services/assistant", () => ({
   uploadAssistantAttachment: (...args: unknown[]) => uploadAssistantAttachmentMock(...args),
 }));
 
+const listIssuesMock = vi.hoisted(() => vi.fn());
+const searchWorkspaceFilesMock = vi.hoisted(() => vi.fn());
+const listPullRequestsMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/issues", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/issues")>()),
+  listIssues: (...args: unknown[]) => listIssuesMock(...args),
+}));
+
+vi.mock("@/services/workspaceFiles", () => ({
+  searchWorkspaceFiles: (...args: unknown[]) => searchWorkspaceFilesMock(...args),
+}));
+
+vi.mock("@/services/pullRequests", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/pullRequests")>()),
+  listPullRequests: (...args: unknown[]) => listPullRequestsMock(...args),
+}));
+
 const issue = {
   id: "1",
   identifier: "CDE-1132",
@@ -75,6 +93,12 @@ describe("ExecutionControlComposer", () => {
     dispatchIssueAgentMock.mockReset();
     controlIssueGoalMock.mockReset();
     uploadAssistantAttachmentMock.mockReset();
+    listIssuesMock.mockReset();
+    listIssuesMock.mockResolvedValue([]);
+    searchWorkspaceFilesMock.mockReset();
+    searchWorkspaceFilesMock.mockResolvedValue([]);
+    listPullRequestsMock.mockReset();
+    listPullRequestsMock.mockResolvedValue({ data: [], supported: false, available: false });
     fetchAssistantCatalogBundleMock.mockResolvedValue({
       agents: [
         {
@@ -531,6 +555,55 @@ describe("ExecutionControlComposer", () => {
         }),
       );
     });
+  });
+
+  it("@-mentions an issue and expands it into the dispatched instructions", async () => {
+    listIssuesMock.mockResolvedValue([
+      { id: "12", identifier: "DEMO-12", title: "Login bug", status: "Open" },
+    ]);
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resuming agent work on CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+
+    const textarea = screen.getByPlaceholderText(/optional guidance/i);
+    await user.click(textarea);
+    await user.type(textarea, "@DEMO");
+
+    const option = await screen.findByText("DEMO-12");
+    await user.click(option);
+
+    expect((textarea as HTMLTextAreaElement).value).toContain("@issue:DEMO-12");
+
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({
+          action: "resume",
+          instructions: expect.stringContaining("## Context"),
+        }),
+      ),
+    );
+
+    const lastCall = dispatchIssueAgentMock.mock.calls.at(-1);
+    expect(lastCall?.[2].instructions).toContain("DEMO-12");
+    expect(lastCall?.[2].instructions).toContain("Login bug");
   });
 
   it("renders the goal pill from execution.goal only, not issue.agentGoal", () => {
