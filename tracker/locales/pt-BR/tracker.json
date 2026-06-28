@@ -1725,7 +1725,18 @@
       "goal": "Rode um goal de authoring direto neste chat (sem despachar o orquestrador)",
       "goalExecution": "Defina um goal de execução e despache via o orquestrador",
       "infer": "Direcione o agente em execução sem esperar",
-      "btw": "Faça uma pergunta rápida (somente leitura, não salva)"
+      "btw": "Faça uma pergunta rápida (somente leitura, não salva)",
+      "skillDirective": "Use a skill {{skill}}: ",
+      "skills": {
+        "plan": "Esboce um plano de implementação antes de codar",
+        "push": "Faça push da branch e abra/atualize o PR",
+        "pull": "Sincronize a branch com origin/main e resolva conflitos",
+        "land": "Faça o land do PR: resolve conflitos, espera checks, faz merge",
+        "evidence": "Rode os testes e escreva o manifesto de evidências",
+        "workpad": "Atualize o Codex Workpad da issue (plano, critérios, resultados)",
+        "commit": "Crie um commit bem formado a partir das mudanças atuais",
+        "debug": "Investigue uma run travada ou falha usando os logs"
+      }
     },
     "effort": {
       "low": "Baixo",

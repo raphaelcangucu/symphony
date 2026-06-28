@@ -1700,7 +1700,18 @@
       "goal": "Run an authoring goal directly in this chat (no orchestrator dispatch)",
       "goalExecution": "Set an execution goal and dispatch via the orchestrator",
       "infer": "Steer the running agent without waiting",
-      "btw": "Ask a quick side question (read-only, not saved)"
+      "btw": "Ask a quick side question (read-only, not saved)",
+      "skillDirective": "Use the {{skill}} skill: ",
+      "skills": {
+        "plan": "Draft an implementation plan before coding",
+        "push": "Push the branch and open/update the PR",
+        "pull": "Sync the branch with origin/main and resolve conflicts",
+        "land": "Land the PR: resolve conflicts, wait for checks, merge",
+        "evidence": "Run tests and write the evidence manifest",
+        "workpad": "Update the issue's Codex Workpad (plan, criteria, results)",
+        "commit": "Create a well-formed git commit from current changes",
+        "debug": "Investigate a stuck run or failure with the logs"
+      }
     },
     "effort": {
       "low": "Low",

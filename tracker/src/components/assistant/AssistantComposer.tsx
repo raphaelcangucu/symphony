@@ -40,7 +40,12 @@ import {
 import type { MentionRef, ResolvedMention } from "@/components/assistant/contextMentions";
 import { useContextMentions } from "@/components/assistant/useContextMentions";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
-import { matchingSlashCommands, parseSlashCommand, type SlashCommandContext } from "@/components/assistant/slashCommands";
+import {
+  matchingSlashCommands,
+  parseSlashCommand,
+  type SlashCommandContext,
+  type SlashCommandDef,
+} from "@/components/assistant/slashCommands";
 import { agentKindLabel } from "@/components/shared/AgentChip";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { isVideoMediaType } from "@/services/attachments";
@@ -311,6 +316,11 @@ export function AssistantComposer({
     setMentionActiveIndex(0);
   }, [mentions.query, orderedMentions.length]);
 
+  function applySlashCommand(command: SlashCommandDef) {
+    setInput(command.insertText ?? `${command.name} `);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
   function selectActiveMention(ref: MentionRef) {
     const resolved = (mentionOptions ?? []).find(
       (option) => option.type === ref.type && option.id === ref.id,
@@ -559,7 +569,7 @@ export function AssistantComposer({
 
     if (event.key === "Tab" && !event.shiftKey && showPalette && paletteCommands.length > 0) {
       event.preventDefault();
-      setInput(`${paletteCommands[0].name} `);
+      applySlashCommand(paletteCommands[0]);
       return;
     }
 
@@ -708,7 +718,7 @@ export function AssistantComposer({
                 key={command.name}
                 type="button"
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/60"
-                onClick={() => setInput(`${command.name} `)}
+                onClick={() => applySlashCommand(command)}
               >
                 <span className="font-mono text-xs font-semibold">{command.name}</span>
                 <span className="truncate text-xs text-muted-foreground">{command.description}</span>
