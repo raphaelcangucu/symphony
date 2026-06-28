@@ -159,6 +159,15 @@
         "build": { "label": "Build", "desc": "Edita o workspace (padrão)" },
         "yolo": { "label": "Yolo", "desc": "Acesso total, aprovações ignoradas" }
       },
+      "mentions": {
+        "listLabel": "Menções de contexto",
+        "empty": "Nenhum resultado",
+        "groups": {
+          "issues": "Issues",
+          "files": "Arquivos",
+          "pull_requests": "Pull requests"
+        }
+      },
       "hardResetDialogTitle": "Reset completo da sessão?",
       "hardResetDialogDescription": "Isso para qualquer execução ativa, descarta a sessão atual do agente e limpa contadores de turnos e tokens, depois inicia uma sessão nova. O workspace e o estado git são preservados.",
       "cancel": "Cancelar",

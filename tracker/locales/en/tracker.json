@@ -159,6 +159,15 @@
         "build": { "label": "Build", "desc": "Edit the workspace (default)" },
         "yolo": { "label": "Yolo", "desc": "Full access, approvals bypassed" }
       },
+      "mentions": {
+        "listLabel": "Context mentions",
+        "empty": "No matches",
+        "groups": {
+          "issues": "Issues",
+          "files": "Files",
+          "pull_requests": "Pull requests"
+        }
+      },
       "hardResetDialogTitle": "Hard reset session?",
       "hardResetDialogDescription": "This stops any active run, discards the current agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and its git state are preserved.",
       "cancel": "Cancel",
