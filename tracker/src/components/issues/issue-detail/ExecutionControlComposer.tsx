@@ -16,8 +16,10 @@ import {
 } from "@/components/assistant/contextMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
+import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
+import { useExecutionShortcuts } from "@/hooks/useExecutionShortcuts";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -84,6 +86,7 @@ export function ExecutionControlComposer({
   const [hardResetOpen, setHardResetOpen] = useState(false);
   const [goalDismissed, setGoalDismissed] = useState(false);
   const [composerResetToken, setComposerResetToken] = useState(0);
+  const sectionRef = useRef<HTMLElement>(null);
   const composerSnapshotRef = useRef<ComposerSnapshot>({ input: "", attachments: [] });
   const composerSettingsRef = useRef<{ model: string | null; effort: string | null }>({
     model: null,
@@ -408,6 +411,33 @@ export function ExecutionControlComposer({
     setMode((current) => cycleMode(current, availableModesFor(agent)));
   }
 
+  function focusComposer() {
+    sectionRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+  }
+
+  function cycleExecutionMode() {
+    if (controlsDisabled || agentRunActive) return;
+    setMode((current) => cycleMode(current, availableModesFor(agent)));
+  }
+
+  useExecutionShortcuts({
+    onResume: () => {
+      if (!controlsDisabled && !agentRunActive) void runDispatch("resume");
+    },
+    onRestart: () => {
+      if (!controlsDisabled && canRestart) void runDispatch("restart");
+    },
+    onStop: () => {
+      if (!controlsDisabled && agentRunActive) void runDispatch("stop");
+    },
+    onHardReset: () => {
+      if (!controlsDisabled) setHardResetOpen(true);
+    },
+    onCycleMode: cycleExecutionMode,
+    onFocusComposer: focusComposer,
+    enabled: !controlsDisabled,
+  });
+
   const goalPill = showGoalPill ? (
     <GoalPill
       phase={goalPhase}
@@ -422,7 +452,26 @@ export function ExecutionControlComposer({
   ) : null;
 
   return (
-    <section className="rounded-xl border border-border/70 bg-card/40 p-4" onKeyDown={handleModeShortcut}>
+    <section
+      ref={sectionRef}
+      className="rounded-xl border border-border/70 bg-card/40 p-4"
+      onKeyDown={handleModeShortcut}
+    >
+      <ExecutionCommandPalette
+        disabled={controlsDisabled}
+        onResume={() => {
+          if (!agentRunActive) void runDispatch("resume");
+        }}
+        onRestart={() => {
+          if (canRestart) void runDispatch("restart");
+        }}
+        onStop={() => {
+          if (agentRunActive) void runDispatch("stop");
+        }}
+        onHardReset={() => setHardResetOpen(true)}
+        onCycleMode={cycleExecutionMode}
+        onFocusComposer={focusComposer}
+      />
       <div className="min-w-0">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t("issue.agent.controlTitle")}
