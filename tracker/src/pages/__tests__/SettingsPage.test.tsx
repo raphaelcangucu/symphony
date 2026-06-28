@@ -19,6 +19,10 @@ vi.mock("@/services/settings", () => ({
   clearCredential: vi.fn(),
 }));
 
+vi.mock("@/services/agentUsage", () => ({
+  getAgentUsage: vi.fn().mockResolvedValue({ codex: null, claude: null, cursor: null }),
+}));
+
 describe("SettingsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();

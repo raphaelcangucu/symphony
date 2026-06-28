@@ -59,6 +59,7 @@ defmodule SymphonyElixirWeb.Router do
     put("/settings/gateways/telegram", GatewayController, :update_telegram)
     post("/settings/gateways/telegram/pairing_code", GatewayController, :telegram_pairing_code)
     get("/settings/agents/availability", SettingsController, :availability)
+    get("/settings/agents/usage", SettingsController, :usage)
     get("/settings/identities", SettingsController, :identities)
     get("/settings/credentials", CredentialsController, :index)
     put("/settings/credentials", CredentialsController, :update)

@@ -12,6 +12,28 @@
     }
   },
   "settings": {
+    "usage": {
+      "title": "Plan usage",
+      "description": "How much of each agent's plan quota is consumed, and when each window resets.",
+      "unavailable": "Usage unavailable for this agent.",
+      "loadFailed": "Could not load plan usage.",
+      "plan": "Plan: {{plan}}",
+      "credits": "Credits: {{amount}}",
+      "creditsUnlimited": "Credits: Unlimited",
+      "resets": "Resets {{time}}",
+      "updated": "Updated {{time}}",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing…",
+      "upToDate": "Up to date",
+      "stale": "Stale",
+      "window": {
+        "session": "Session",
+        "weekly": "Weekly",
+        "sonnet_weekly": "Weekly (Sonnet)",
+        "reviews": "Reviews",
+        "model": "Model: {{name}}"
+      }
+    },
     "title": "Settings",
     "subtitle": "Operator-level defaults for this Symphony instance.",
     "navLabel": "Settings sections",
