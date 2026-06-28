@@ -60,6 +60,10 @@ export function TelegramGatewaySettingsCard() {
   async function save() {
     setSaving(true);
     try {
+      if (botToken.trim() !== "") {
+        await saveBotToken({ keepSaving: true });
+      }
+
       const updated = await updateTelegramGatewaySettings({
         enabled: settings.enabled,
         pollingEnabled: settings.pollingEnabled,
@@ -77,11 +81,11 @@ export function TelegramGatewaySettingsCard() {
     }
   }
 
-  async function saveBotToken() {
+  async function saveBotToken(options: { keepSaving?: boolean } = {}) {
     const trimmed = botToken.trim();
     if (!trimmed) return;
 
-    setSaving(true);
+    if (!options.keepSaving) setSaving(true);
     try {
       await updateCredential("telegram", "bot_token", trimmed);
       setBotToken("");
@@ -90,7 +94,7 @@ export function TelegramGatewaySettingsCard() {
     } catch {
       toast.error(t("settings.gateways.telegram.tokenSaveFailed"));
     } finally {
-      setSaving(false);
+      if (!options.keepSaving) setSaving(false);
     }
   }
 

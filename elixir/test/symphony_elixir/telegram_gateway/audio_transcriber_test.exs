@@ -38,4 +38,28 @@ defmodule SymphonyElixir.TelegramGateway.AudioTranscriberTest do
     assert "/usr/local/bin/whisper-cli" in commands
     assert "/usr/bin/ffmpeg" in commands
   end
+
+  test "uses an extended timeout when downloading Telegram audio files" do
+    parent = self()
+
+    req = %{
+      get: fn url, opts ->
+        send(parent, {:download, url, opts})
+        {:ok, %{status: 200, body: "audio-bytes"}}
+      end
+    }
+
+    assert {:ok, "ok"} =
+             AudioTranscriber.transcribe_message(
+               %{"voice" => %{"file_id" => "voice-1", "mime_type" => "audio/ogg"}},
+               get_file: fn "voice-1" -> {:ok, %{"result" => %{"file_path" => "voice/file.oga"}}} end,
+               token: "test-token",
+               req: req,
+               transcribe: fn "audio-bytes", "voice/file.oga" -> {:ok, "ok"} end
+             )
+
+    assert_receive {:download, url, opts}
+    assert url =~ "/file/bot"
+    assert opts[:receive_timeout] >= 120_000
+  end
 end

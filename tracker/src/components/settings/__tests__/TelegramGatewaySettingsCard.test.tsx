@@ -81,4 +81,33 @@ describe("TelegramGatewaySettingsCard", () => {
 
     await waitFor(() => expect(updateCredential).toHaveBeenCalledWith("telegram", "bot_token", "123:abc"));
   });
+
+  it("also saves a filled token when saving Telegram settings", async () => {
+    vi.mocked(updateCredential).mockResolvedValue({
+      provider: "telegram",
+      label: "Telegram",
+      fields: [{ key: "bot_token", label: "Bot token", secret: true, configured: true, source: "db" }],
+    });
+    vi.mocked(updateTelegramGatewaySettings).mockResolvedValue({
+      telegram: {
+        enabled: false,
+        botUsername: "sym_bot",
+        botTokenConfigured: true,
+        groupChatId: "-100123",
+        allowedUserIds: ["777"],
+        dmPolicy: "allowlist",
+        dmAllowedUserIds: ["777"],
+        requireMention: true,
+        pollingEnabled: false,
+      },
+    });
+
+    render(<TelegramGatewaySettingsCard />);
+
+    fireEvent.change(await screen.findByLabelText("Telegram Bot API token"), { target: { value: "123:abc" } });
+    fireEvent.click(screen.getByText("Save Telegram settings"));
+
+    await waitFor(() => expect(updateCredential).toHaveBeenCalledWith("telegram", "bot_token", "123:abc"));
+    expect(updateTelegramGatewaySettings).toHaveBeenCalled();
+  });
 });

@@ -38,20 +38,33 @@ defmodule SymphonyElixir.TelegramGateway.AudioTranscriber do
   end
 
   defp download_telegram_file(file_path, opts) do
-    download_file = Keyword.get(opts, :download_file, &default_download_file/1)
-    download_file.(file_path)
+    download_file = Keyword.get(opts, :download_file)
+
+    cond do
+      is_function(download_file, 1) -> download_file.(file_path)
+      true -> default_download_file(file_path, opts)
+    end
   end
 
-  defp default_download_file(file_path) do
-    with {:ok, token} <- telegram_token(),
+  defp default_download_file(file_path, opts) do
+    req = Keyword.get(opts, :req, Req)
+
+    with {:ok, token} <- telegram_token(opts),
          {:ok, %{status: status, body: body}} when status in 200..299 <-
-           Req.get("https://api.telegram.org/file/bot#{token}/#{file_path}") do
+           req_get(req, "https://api.telegram.org/file/bot#{token}/#{file_path}",
+             receive_timeout: 120_000,
+             connect_options: [timeout: 30_000]
+           ) do
       {:ok, body}
     else
       {:ok, response} -> {:error, {:telegram_file_download_failed, response.status}}
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp req_get(req, url, opts) when is_atom(req), do: req.get(url, opts)
+
+  defp req_get(%{get: get}, url, opts) when is_function(get, 2), do: get.(url, opts)
 
   defp transcribe_bytes(bytes, file_path, opts) do
     transcribe = Keyword.get(opts, :transcribe)
@@ -146,8 +159,8 @@ defmodule SymphonyElixir.TelegramGateway.AudioTranscriber do
     end
   end
 
-  defp telegram_token do
-    case Credentials.get("telegram", "bot_token") do
+  defp telegram_token(opts) do
+    case Keyword.get(opts, :token) || Credentials.get("telegram", "bot_token") do
       token when is_binary(token) and token != "" -> {:ok, token}
       _ -> {:error, :telegram_bot_token_missing}
     end
