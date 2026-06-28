@@ -2,22 +2,25 @@ defmodule SymphonyElixir.TelegramGateway.Normalizer do
   @moduledoc "Normalizes Telegram Bot API updates into provider-neutral gateway messages."
 
   alias SymphonyElixir.Gateways.InboundMessage
+  alias SymphonyElixir.TelegramGateway.AudioTranscriber
 
   @default_account_id "default"
 
   @spec normalize_update(map()) :: {:ok, InboundMessage.t()} | {:ignore, atom()} | {:error, atom()}
-  def normalize_update(%{"message" => message}), do: normalize_message(message)
-  def normalize_update(%{"edited_message" => message}), do: normalize_message(message)
-  def normalize_update(_update), do: {:ignore, :unsupported_update}
+  def normalize_update(update, opts \\ [])
+  def normalize_update(%{"message" => message}, opts), do: normalize_message(message, opts)
+  def normalize_update(%{"edited_message" => message}, opts), do: normalize_message(message, opts)
+  def normalize_update(_update, _opts), do: {:ignore, :unsupported_update}
 
-  defp normalize_message(%{} = message) do
-    with {:ok, raw_text} <- message_text(message),
+  defp normalize_message(%{} = message, opts) do
+    with {:ok, text_result} <- message_text(message, opts),
          %{} = chat <- Map.get(message, "chat"),
          {:ok, chat_id} <- required_id(chat, "id"),
          {:ok, sender_id} <- sender_id(message) do
       chat_type = to_string(Map.get(chat, "type", ""))
       thread_id = optional_string(message["message_thread_id"])
       conversation_kind = conversation_kind(chat_type, thread_id)
+      {raw_text, audio_metadata} = text_result
 
       {:ok,
        %InboundMessage{
@@ -32,7 +35,7 @@ defmodule SymphonyElixir.TelegramGateway.Normalizer do
          message_id: optional_string(message["message_id"]),
          reply_to_message_id: optional_string(get_in(message, ["reply_to_message", "message_id"])),
          raw_text: raw_text,
-         metadata: metadata(chat, message)
+         metadata: Map.merge(metadata(chat, message), audio_metadata)
        }}
     else
       {:error, :missing_text} -> {:ignore, :unsupported_update}
@@ -41,19 +44,37 @@ defmodule SymphonyElixir.TelegramGateway.Normalizer do
     end
   end
 
-  defp normalize_message(_message), do: {:ignore, :unsupported_update}
+  defp normalize_message(_message, _opts), do: {:ignore, :unsupported_update}
 
-  defp message_text(message) do
+  defp message_text(message, opts) do
     text = Map.get(message, "text") || Map.get(message, "caption")
 
     case text do
       value when is_binary(value) ->
         case String.trim(value) do
           "" -> {:error, :missing_text}
-          trimmed -> {:ok, trimmed}
+          trimmed -> {:ok, {trimmed, %{}}}
         end
 
       _other ->
+        audio_text(message, opts)
+    end
+  end
+
+  defp audio_text(message, opts) do
+    case AudioTranscriber.audio_payload(message) do
+      {:ok, audio} ->
+        transcriber = Keyword.get(opts, :audio_transcriber, &AudioTranscriber.transcribe_message/1)
+
+        case transcriber.(message) do
+          {:ok, transcript} when is_binary(transcript) and transcript != "" ->
+            {:ok, {String.trim(transcript), audio_metadata(audio, true)}}
+
+          {:error, reason} ->
+            {:ok, {"The user sent an audio message, but Symphony could not transcribe it: #{inspect(reason)}.", audio_metadata(audio, false)}}
+        end
+
+      {:error, :audio_not_found} ->
         {:error, :missing_text}
     end
   end
@@ -100,6 +121,17 @@ defmodule SymphonyElixir.TelegramGateway.Normalizer do
       "telegram_chat_type" => Map.get(chat, "type"),
       "telegram_raw_chat_id" => optional_string(Map.get(chat, "id")),
       "telegram_message_thread_id" => optional_string(Map.get(message, "message_thread_id"))
+    }
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+    |> Map.new()
+  end
+
+  defp audio_metadata(audio, transcribed?) do
+    %{
+      "telegram_audio_kind" => audio.kind,
+      "telegram_audio_file_id" => audio.file_id,
+      "telegram_audio_mime_type" => audio.mime_type,
+      "telegram_audio_transcribed" => transcribed?
     }
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
     |> Map.new()

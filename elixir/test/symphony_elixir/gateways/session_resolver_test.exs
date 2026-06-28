@@ -56,4 +56,25 @@ defmodule SymphonyElixir.Gateways.SessionResolverTest do
     assert thread.project_slug == "macro-markets"
     assert updated_binding.active_thread_id == thread.id
   end
+
+  test "project topic bindings reuse an existing active project explore thread" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, existing_thread} = SymphonyElixir.Assistant.History.ensure_project_explore_thread("macro-markets")
+
+    {:ok, binding} =
+      Gateways.upsert_project_topic_binding(%{
+        provider: "telegram",
+        account_id: "default",
+        project_slug: "macro-markets",
+        conversation_id: "-100123:topic:42",
+        parent_conversation_id: "-100123",
+        thread_id: "42",
+        default_agent_kind: "codex",
+        default_mode: "explore"
+      })
+
+    assert {:ok, thread, updated_binding} = SessionResolver.ensure_thread(binding)
+    assert thread.id == existing_thread.id
+    assert updated_binding.active_thread_id == existing_thread.id
+  end
 end

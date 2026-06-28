@@ -45,12 +45,20 @@ defmodule SymphonyElixir.TelegramGateway.Poller do
   @spec poll_once(non_neg_integer(), keyword()) :: {:ok, non_neg_integer()} | {:error, term()}
   def poll_once(offset, opts \\ []) when is_integer(offset) and offset >= 0 and is_list(opts) do
     fetch_updates = Keyword.get(opts, :fetch_updates, &fetch_updates/1)
-    route_update = Keyword.get(opts, :route_update, &route_update/1)
+    route_update = Keyword.get(opts, :route_update, &route_update_async/1)
 
     with {:ok, updates} when is_list(updates) <- fetch_updates.(offset) do
       Enum.each(updates, route_update)
       {:ok, next_offset(offset, updates)}
     end
+  end
+
+  @spec route_update_async(map(), keyword()) :: {:ok, pid()} | {:error, term()}
+  def route_update_async(update, opts \\ []) when is_map(update) and is_list(opts) do
+    route_update = Keyword.get(opts, :route_update, &route_update/1)
+    task_starter = Keyword.get(opts, :task_starter, &start_route_task/1)
+
+    task_starter.(fn -> route_update.(update) end)
   end
 
   defp fetch_updates(offset) do
@@ -65,6 +73,10 @@ defmodule SymphonyElixir.TelegramGateway.Poller do
     with {:ok, message} <- Gateways.TelegramAdapter.normalize_update(update) do
       Gateways.Router.handle_message(message)
     end
+  end
+
+  defp start_route_task(fun) when is_function(fun, 0) do
+    Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fun)
   end
 
   defp next_offset(offset, []), do: offset

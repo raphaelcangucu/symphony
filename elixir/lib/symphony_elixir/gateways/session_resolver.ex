@@ -40,16 +40,19 @@ defmodule SymphonyElixir.Gateways.SessionResolver do
   end
 
   defp create_thread(%Binding{binding_kind: "project_topic", active_mode: "explore"} = binding) do
-    History.create_gateway_project_explore_thread(binding.project_slug, %{
-      title: "Telegram topic #{binding.thread_id}",
-      agent_kind: binding.default_agent_kind,
-      metadata: %{
-        "gateway_binding_id" => binding.id,
-        "gateway_provider" => binding.provider,
-        "gateway_conversation_id" => binding.conversation_id,
-        "gateway_thread_id" => binding.thread_id
-      }
-    })
+    with {:ok, thread} <-
+           History.ensure_project_explore_thread(binding.project_slug, %{
+             title: "Telegram topic #{binding.thread_id}",
+             agent_kind: binding.default_agent_kind,
+             metadata: %{
+               "gateway_binding_id" => binding.id,
+               "gateway_provider" => binding.provider,
+               "gateway_conversation_id" => binding.conversation_id,
+               "gateway_thread_id" => binding.thread_id
+             }
+           }) do
+      maybe_set_thread_agent(thread, binding.default_agent_kind)
+    end
   end
 
   defp create_thread(%Binding{binding_kind: "project_topic", active_mode: "project"} = binding) do
@@ -81,4 +84,10 @@ defmodule SymphonyElixir.Gateways.SessionResolver do
   end
 
   defp create_thread(%Binding{active_mode: mode}), do: {:error, {:unsupported_gateway_mode, mode}}
+
+  defp maybe_set_thread_agent(thread, kind) when kind in ["codex", "claude", "cursor"] do
+    History.set_thread_agent(thread, kind)
+  end
+
+  defp maybe_set_thread_agent(thread, _kind), do: {:ok, thread}
 end

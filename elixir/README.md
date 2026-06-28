@@ -95,6 +95,7 @@ tools report … when absent).
 | Feature | Enable | Install |
 |---------|--------|---------|
 | Browser VS Code | `SYMPHONY_EDITOR_ENABLED=true` in `.env` | `make install-code-server` (optional: `make configure-code-server`) |
+| Local Telegram voice transcription | `SYMPHONY_WHISPER_CPP_BIN` + `SYMPHONY_WHISPER_MODEL` in `.env` | Install `ffmpeg`, build `whisper.cpp`, download a `ggml-*` model |
 | Public preview tunnel | `public_tunnel.enabled: true` in project `workflow_markdown` + Cloudflare `.env` keys | [Install `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), then `cloudflared tunnel create …` |
 
 **Cursor Desktop** ("Open in Cursor" in the issue drawer) uses the local `cursor://` handler — no
@@ -1190,6 +1191,47 @@ install Codex + Claude Code extensions.
   the Terminal tab first).
 - **Security**: `auth: none` is only safe on localhost (the default bind is `127.0.0.1`).
   To expose it remotely, use `auth: password` with a `password` and set `base_url`.
+
+## Local Telegram voice transcription (whisper.cpp)
+
+Telegram voice/audio messages can be transcribed locally before they are sent to the assistant. This
+avoids depending on the OpenAI audio API for Telegram DMs and project topics.
+
+Install the native tools:
+
+```bash
+# Ubuntu/WSL
+sudo apt update
+sudo apt install -y ffmpeg build-essential cmake git
+
+# Build whisper.cpp somewhere outside this repo.
+mkdir -p ~/code
+git clone https://github.com/ggerganov/whisper.cpp ~/code/whisper.cpp
+cd ~/code/whisper.cpp
+cmake -B build
+cmake --build build -j
+
+# Download a model. `small` is a good first choice for Portuguese quality.
+bash ./models/download-ggml-model.sh small
+```
+
+Then configure `elixir/.env`:
+
+```bash
+SYMPHONY_FFMPEG_BIN=ffmpeg
+SYMPHONY_WHISPER_CPP_BIN=/home/<user>/code/whisper.cpp/build/bin/whisper-cli
+SYMPHONY_WHISPER_MODEL=/home/<user>/code/whisper.cpp/models/ggml-small.bin
+```
+
+Reload the backend after changing `.env`:
+
+```bash
+make update ARGS="--orchestrator"
+```
+
+If the local Whisper variables are absent, Symphony falls back to OpenAI transcription when
+`OPENAI_API_KEY` is present. If neither local Whisper nor OpenAI is configured, Telegram audio
+messages produce a clear transcription error instead of being silently ignored.
 
 ## Project Layout
 
