@@ -2219,6 +2219,16 @@
         "working": "The maestro is working…"
       }
     },
+    "assistantDocuments": {
+      "ariaLabel": "Knowledge base documents",
+      "title": "Knowledge base",
+      "subtitle": "{{count}} cited in chat",
+      "cited": "Cited docs",
+      "all": "All docs",
+      "empty": "No knowledge base documents found.",
+      "noCitedMatches": "No cited knowledge base documents matched this project.",
+      "selectPage": "Select a knowledge base page."
+    },
     "create": {
       "newPage": "New page",
       "placeholder": "Page title…",

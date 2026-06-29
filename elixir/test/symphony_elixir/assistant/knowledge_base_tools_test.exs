@@ -2,6 +2,7 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseToolsTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.Assistant.KnowledgeBaseTools
+  alias SymphonyElixir.KnowledgeBase.Indexer
   alias SymphonyElixir.KnowledgeBaseTestFixtures, as: Fixtures
 
   setup do
@@ -57,6 +58,28 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseToolsTest do
 
     assert {:ok, result} = KnowledgeBaseTools.execute("acme", "kb_search_pages", %{"query" => "narwhal"}, [])
     assert Enum.any?(result.data.results, &(&1.path == "z.md"))
+  end
+
+  test "kb_search_pages prunes pages absent from the docs worktree before searching" do
+    stale_path = "brainstorming/polymarket-omnibus-execution-flow.md"
+
+    assert {:ok, _record} =
+             Indexer.index_page(
+               "acme",
+               "web",
+               stale_path,
+               "# Polymarket Omnibus\n\npolymarket omnibus execution flow"
+             )
+
+    assert {:ok, result} =
+             KnowledgeBaseTools.execute(
+               "acme",
+               "kb_search_pages",
+               %{"query" => "polymarket omnibus", "repository" => "acme/web"},
+               []
+             )
+
+    refute Enum.any?(result.data.results, &(&1.path == stale_path))
   end
 
   test "kb_link_task appends an issue reference to the page" do

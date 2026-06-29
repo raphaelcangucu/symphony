@@ -7,7 +7,9 @@ import { fetchAssistantCatalogBundle } from "@/services/assistant";
 const channelHandlers: Record<string, (payload: unknown) => void> = {};
 type ReceiveCallbacks = Record<string, (response: unknown) => void>;
 const pushReceives: ReceiveCallbacks[] = [];
-const push = vi.fn((_event: string, _payload?: unknown) => {
+const push = vi.fn((event: string, payload?: unknown) => {
+  void event;
+  void payload;
   const callbacks: ReceiveCallbacks = {};
   const result = {
     receive: (status: string, callback: (response: unknown) => void) => {
@@ -127,6 +129,36 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("Oi")).toBeTruthy();
     expect(await screen.findByText("Olá, posso ajudar.")).toBeTruthy();
     expect(screen.getByText("List issues")).toBeTruthy();
+  });
+
+  it("reports KB document references found in assistant messages", async () => {
+    const onKbDocumentReferencesChanged = vi.fn();
+
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+        onKbDocumentReferencesChanged={onKbDocumentReferencesChanged}
+      />,
+    );
+
+    channelHandlers["history_loaded"]({
+      messages: [
+        {
+          id: 1,
+          role: "assistant",
+          content: "Veja [spec](docs/market/polymarket-omnibus-spec.md).",
+          tool_calls: [],
+        },
+      ],
+    });
+
+    await waitFor(() =>
+      expect(onKbDocumentReferencesChanged).toHaveBeenLastCalledWith([
+        "market/polymarket-omnibus-spec.md",
+      ]),
+    );
   });
 
   it("keeps the composer controls in place while assistant config is loading", () => {

@@ -2219,6 +2219,16 @@
         "working": "O maestro está trabalhando…"
       }
     },
+    "assistantDocuments": {
+      "ariaLabel": "Documentos da base de conhecimento",
+      "title": "Base de Conhecimento",
+      "subtitle": "{{count}} citados no chat",
+      "cited": "Docs citadas",
+      "all": "Todas as docs",
+      "empty": "Nenhum documento da base de conhecimento encontrado.",
+      "noCitedMatches": "Nenhuma doc citada da base de conhecimento corresponde a este projeto.",
+      "selectPage": "Selecione uma página da base de conhecimento."
+    },
     "create": {
       "newPage": "Nova página",
       "placeholder": "Título da página…",

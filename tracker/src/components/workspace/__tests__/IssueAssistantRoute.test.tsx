@@ -6,7 +6,6 @@ import { IssueAssistantRoute } from "@/components/workspace/IssueAssistantRoute"
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
-import type { IssueDocument } from "@/types/issueDocument";
 
 const projectAssistantPanel = vi.fn(
   ({
@@ -17,6 +16,8 @@ const projectAssistantPanel = vi.fn(
     onDraftIssueCreated,
     onIssueCreated,
     onDocumentChanged,
+    onKbDocumentReferencesChanged,
+    onOpenDocumentPath,
   }: {
     projectSlug?: string;
     issueIdentifier?: string;
@@ -25,6 +26,8 @@ const projectAssistantPanel = vi.fn(
     onDraftIssueCreated?: (issue: { identifier: string }) => void;
     onIssueCreated?: (issue: { identifier: string; threadId?: number | null }) => void;
     onDocumentChanged?: (payload: { identifier: string }) => void;
+    onKbDocumentReferencesChanged?: (paths: string[]) => void;
+    onOpenDocumentPath?: (path: string) => void;
   }) => (
     <section aria-label="mock project assistant">
       <div>assistant:{projectSlug}</div>
@@ -46,59 +49,32 @@ const projectAssistantPanel = vi.fn(
       <button type="button" onClick={() => onIssueCreated?.({ identifier: "MAC-8", threadId: 88 })}>
         emit issue created
       </button>
+      <button type="button" onClick={() => onKbDocumentReferencesChanged?.(["market/polymarket-omnibus-spec.md"])}>
+        emit kb reference
+      </button>
+      <button type="button" onClick={() => onOpenDocumentPath?.("docs/market/polymarket-omnibus-spec.md")}>
+        open kb reference
+      </button>
     </section>
   ),
 );
 
-const documentViewer = vi.fn(
+const assistantKbDocumentsPanel = vi.fn(
   ({
     projectSlug,
-    identifier,
-    documents,
-    available,
-    reason,
+    citedPaths,
+    requestedPath,
   }: {
     projectSlug: string;
-    identifier: string;
-    documents: IssueDocument[];
-    available: boolean;
-    reason: string | null;
+    citedPaths: string[];
+    requestedPath?: string | null;
   }) => (
-    <section aria-label="mock documents">
-      <div>documents:{projectSlug}:{identifier}</div>
-      <div>available:{String(available)}</div>
-      <div>reason:{reason ?? "none"}</div>
-      <div>count:{documents.length}</div>
+    <section aria-label="mock kb documents">
+      <div>kb-documents:{projectSlug}</div>
+      <div>cited:{citedPaths.join(",") || "none"}</div>
+      <div>requested:{requestedPath ?? "none"}</div>
     </section>
   ),
-);
-
-const useIssueDocuments = vi.fn(
-  ({
-    projectSlug,
-    identifier,
-    enabled,
-    refreshKey,
-  }: {
-    projectSlug: string;
-    identifier: string | null;
-    enabled?: boolean;
-    refreshKey?: number;
-  }) => ({
-    documents: [
-      {
-        id: `doc-${refreshKey ?? 0}`,
-        kind: "spec" as const,
-        path: "docs/superpowers/specs/MAC-1.md",
-        title: `Spec ${refreshKey ?? 0}`,
-        updatedAt: null,
-      },
-    ],
-    available: Boolean(projectSlug && identifier && enabled),
-    reason: null,
-    loading: false,
-    refetch: vi.fn(),
-  }),
 );
 
 const execution: AgentExecution = {
@@ -164,12 +140,9 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: (props: Parameters<typeof projectAssistantPanel>[0]) => projectAssistantPanel(props),
 }));
 
-vi.mock("@/components/assistant/DocumentViewer", () => ({
-  DocumentViewer: (props: Parameters<typeof documentViewer>[0]) => documentViewer(props),
-}));
-
-vi.mock("@/hooks/useIssueDocuments", () => ({
-  useIssueDocuments: (args: Parameters<typeof useIssueDocuments>[0]) => useIssueDocuments(args),
+vi.mock("@/components/assistant/AssistantKbDocumentsPanel", () => ({
+  AssistantKbDocumentsPanel: (props: Parameters<typeof assistantKbDocumentsPanel>[0]) =>
+    assistantKbDocumentsPanel(props),
 }));
 
 vi.mock("@/components/layout/WorkspaceContext", () => ({
@@ -197,11 +170,10 @@ describe("IssueAssistantRoute", () => {
   beforeEach(() => {
     workspaceValue = { agentExecutions: new Map(), issues: [], projectSlug: "macro", view: "board" };
     projectAssistantPanel.mockClear();
-    documentViewer.mockClear();
-    useIssueDocuments.mockClear();
+    assistantKbDocumentsPanel.mockClear();
   });
 
-  it("renders issue authoring with documents for an issue identifier", () => {
+  it("renders issue authoring with the KB documents panel for an issue identifier", () => {
     renderAt("/projects/macro/assistant/issue/MAC-1");
 
     expect(screen.getByRole("region", { name: "mock project assistant" })).toBeTruthy();
@@ -209,13 +181,11 @@ describe("IssueAssistantRoute", () => {
     expect(screen.getByText("issue:MAC-1")).toBeTruthy();
     expect(screen.getByText("view:board")).toBeTruthy();
     expect(screen.getByText("mode:page")).toBeTruthy();
-    expect(screen.getByRole("region", { name: "mock documents" })).toBeTruthy();
-    expect(screen.getByText("documents:macro:MAC-1")).toBeTruthy();
-    expect(useIssueDocuments).toHaveBeenLastCalledWith({
+    expect(screen.getByRole("region", { name: "mock kb documents" })).toBeTruthy();
+    expect(assistantKbDocumentsPanel).toHaveBeenLastCalledWith({
       projectSlug: "macro",
-      identifier: "MAC-1",
-      enabled: true,
-      refreshKey: 0,
+      citedPaths: [],
+      requestedPath: null,
     });
   });
 
@@ -250,13 +220,12 @@ describe("IssueAssistantRoute", () => {
 
     expect(screen.getByRole("region", { name: "mock project assistant" })).toBeTruthy();
     expect(screen.getByText("issue:none")).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "mock documents" })).toBeNull();
-    expect(screen.getByText(/Draft documents appear here after the assistant creates or links an issue/i)).toBeTruthy();
-    expect(useIssueDocuments).toHaveBeenLastCalledWith({
+    expect(screen.getByRole("region", { name: "mock kb documents" })).toBeTruthy();
+    expect(screen.getByText(/Start by asking the assistant to draft an issue/i)).toBeTruthy();
+    expect(assistantKbDocumentsPanel).toHaveBeenLastCalledWith({
       projectSlug: "macro",
-      identifier: null,
-      enabled: false,
-      refreshKey: 0,
+      citedPaths: [],
+      requestedPath: null,
     });
   });
 
@@ -282,43 +251,31 @@ describe("IssueAssistantRoute", () => {
     expect(screen.getByText("issue:none")).toBeTruthy();
   });
 
-  it("refreshes documents only when the changed identifier matches the open issue", () => {
+  it("passes cited KB references from the chat into the KB panel", () => {
     renderAt("/projects/macro/assistant/issue/MAC-1");
 
-    expect(useIssueDocuments).toHaveBeenLastCalledWith(
-      expect.objectContaining({ identifier: "MAC-1", refreshKey: 0 }),
-    );
-
     act(() => {
-      screen.getByRole("button", { name: "emit other change" }).click();
+      screen.getByRole("button", { name: "emit kb reference" }).click();
     });
 
-    expect(useIssueDocuments).toHaveBeenLastCalledWith(
-      expect.objectContaining({ identifier: "MAC-1", refreshKey: 0 }),
-    );
-
-    act(() => {
-      screen.getByRole("button", { name: "emit matching change" }).click();
+    expect(assistantKbDocumentsPanel).toHaveBeenLastCalledWith({
+      projectSlug: "macro",
+      citedPaths: ["market/polymarket-omnibus-spec.md"],
+      requestedPath: null,
     });
-
-    expect(useIssueDocuments).toHaveBeenLastCalledWith(
-      expect.objectContaining({ identifier: "MAC-1", refreshKey: 1 }),
-    );
   });
 
-  it("normalizes issue identifiers when matching document change events", () => {
-    renderAt("/projects/macro/assistant/issue/508");
-
-    expect(useIssueDocuments).toHaveBeenLastCalledWith(
-      expect.objectContaining({ identifier: "508", refreshKey: 0 }),
-    );
+  it("passes opened KB document paths into the KB panel", () => {
+    renderAt("/projects/macro/assistant/issue/MAC-1");
 
     act(() => {
-      screen.getByRole("button", { name: "emit normalized change" }).click();
+      screen.getByRole("button", { name: "open kb reference" }).click();
     });
 
-    expect(useIssueDocuments).toHaveBeenLastCalledWith(
-      expect.objectContaining({ identifier: "508", refreshKey: 1 }),
-    );
+    expect(assistantKbDocumentsPanel).toHaveBeenLastCalledWith({
+      projectSlug: "macro",
+      citedPaths: [],
+      requestedPath: "docs/market/polymarket-omnibus-spec.md",
+    });
   });
 });
