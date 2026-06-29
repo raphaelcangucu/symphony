@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { extractKbDocumentReferencesFromMarkdown } from "@/lib/assistantKbReferences";
 import {
   catalogFor,
   defaultComposerSettings,
@@ -153,6 +154,7 @@ interface ProjectAssistantPanelProps {
   onEffectiveAgentResolved?: (agent: AgentKind) => void;
   onComposerAgentResolved?: (agent: AgentKind) => void;
   onOpenDocumentPath?: (path: string) => void;
+  onKbDocumentReferencesChanged?: (paths: string[]) => void;
   composerSeedMessage?: string | null;
 }
 
@@ -268,6 +270,7 @@ export function ProjectAssistantPanel({
   onEffectiveAgentResolved,
   onComposerAgentResolved,
   onOpenDocumentPath,
+  onKbDocumentReferencesChanged,
   composerSeedMessage = null,
 }: ProjectAssistantPanelProps) {
   const { t } = useTranslation();
@@ -912,8 +915,23 @@ export function ProjectAssistantPanel({
   );
 
   const visibleMessages = useMemo(() => displayMessages(messages, t), [messages, t]);
+  const kbDocumentReferences = useMemo(
+    () =>
+      visibleMessages.reduce<string[]>((references, message) => {
+        for (const reference of extractKbDocumentReferencesFromMarkdown(message.content)) {
+          if (!references.includes(reference)) references.push(reference);
+        }
+        return references;
+      }, []),
+    [visibleMessages],
+  );
+  const kbDocumentReferencesKey = kbDocumentReferences.join("\0");
   const composerBundle = useMemo(() => bundle ?? fallbackCatalogBundle(), [bundle]);
   const catalogLoading = !bundle && !catalogError;
+
+  useEffect(() => {
+    onKbDocumentReferencesChanged?.(kbDocumentReferences);
+  }, [kbDocumentReferences, kbDocumentReferencesKey, onKbDocumentReferencesChanged]);
 
   useEffect(() => {
     if (!isFullPageProjectAssistant) return;

@@ -35,6 +35,43 @@ Symphony does **not** use a global `WORKFLOW.md`. Process settings live in `elix
 (`SYMPHONY_*` variables); each project's workflow (YAML front matter + agent prompt) is stored as
 `workflow_markdown` in the SQLite database and edited from the tracker UI.
 
+## Telegram gateway
+
+Symphony can expose the maestro through a Telegram bot. The first gateway implementation is
+Telegram-only, while the backend uses a provider-neutral gateway adapter so future chat gateways can
+reuse the same binding, command, and session flow.
+
+Configure Telegram from the tracker UI:
+
+1. Open **Settings → Gateways**.
+2. Store the Telegram bot token from BotFather. Tokens are stored as encrypted credentials.
+3. Enable the Telegram gateway and long polling.
+4. Generate a group pairing code and send `/symphony_setup <code>` in the target Telegram group.
+5. Add Telegram user IDs to the group allowlist and direct-message allowlist.
+
+Project topics are configured per project:
+
+1. Open **Project settings → Integrations**.
+2. Generate a project pairing code.
+3. Send `/symphony_pair <code>` inside the desired Telegram forum topic.
+4. Messages in that topic use the project's maestro session, scoped by Telegram topic id.
+
+Direct 1:1 chats with the bot are freeform assistant chats. They are scoped to the Telegram direct
+chat/sender and require the sender's Telegram user ID in the direct-message allowlist.
+
+Supported Telegram commands:
+
+- `/help`, `/ajuda`
+- `/status`, `/estado`
+- `/agent`, `/agente`
+- `/mode`, `/modo`
+- `/new`, `/novo`, `/reset`
+- `/stop`, `/parar`
+- `/setup`, `/configurar`
+
+Project-specific modes (`explore`, `project`, `issue`, `kb`) require a paired project topic. Direct
+1:1 chats use `freeform` mode in this release.
+
 ### 1. Prerequisites
 
 **Core setup** (`make env-setup` + `make serve`) needs only the tools marked **required** below.
@@ -58,6 +95,7 @@ tools report … when absent).
 | Feature | Enable | Install |
 |---------|--------|---------|
 | Browser VS Code | `SYMPHONY_EDITOR_ENABLED=true` in `.env` | `make install-code-server` (optional: `make configure-code-server`) |
+| Local Telegram voice transcription | `SYMPHONY_WHISPER_CPP_BIN` + `SYMPHONY_WHISPER_MODEL` in `.env` | Install `ffmpeg`, build `whisper.cpp`, download a `ggml-*` model |
 | Public preview tunnel | `public_tunnel.enabled: true` in project `workflow_markdown` + Cloudflare `.env` keys | [Install `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), then `cloudflared tunnel create …` |
 
 **Cursor Desktop** ("Open in Cursor" in the issue drawer) uses the local `cursor://` handler — no
@@ -1235,6 +1273,47 @@ install Codex + Claude Code extensions.
   the Terminal tab first).
 - **Security**: `auth: none` is only safe on localhost (the default bind is `127.0.0.1`).
   To expose it remotely, use `auth: password` with a `password` and set `base_url`.
+
+## Local Telegram voice transcription (whisper.cpp)
+
+Telegram voice/audio messages can be transcribed locally before they are sent to the assistant. This
+avoids depending on the OpenAI audio API for Telegram DMs and project topics.
+
+Install the native tools:
+
+```bash
+# Ubuntu/WSL
+sudo apt update
+sudo apt install -y ffmpeg build-essential cmake git
+
+# Build whisper.cpp somewhere outside this repo.
+mkdir -p ~/code
+git clone https://github.com/ggerganov/whisper.cpp ~/code/whisper.cpp
+cd ~/code/whisper.cpp
+cmake -B build
+cmake --build build -j
+
+# Download a model. `small` is a good first choice for Portuguese quality.
+bash ./models/download-ggml-model.sh small
+```
+
+Then configure `elixir/.env`:
+
+```bash
+SYMPHONY_FFMPEG_BIN=ffmpeg
+SYMPHONY_WHISPER_CPP_BIN=/home/<user>/code/whisper.cpp/build/bin/whisper-cli
+SYMPHONY_WHISPER_MODEL=/home/<user>/code/whisper.cpp/models/ggml-small.bin
+```
+
+Reload the backend after changing `.env`:
+
+```bash
+make update ARGS="--orchestrator"
+```
+
+If the local Whisper variables are absent, Symphony falls back to OpenAI transcription when
+`OPENAI_API_KEY` is present. If neither local Whisper nor OpenAI is configured, Telegram audio
+messages produce a clear transcription error instead of being silently ignored.
 
 ## Project Layout
 

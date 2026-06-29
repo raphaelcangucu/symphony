@@ -40,6 +40,14 @@ defmodule SymphonyElixir.Settings.CredentialsTest do
     refute Credentials.field?("jira", "unknown")
   end
 
+  test "telegram bot token is a known encrypted credential" do
+    assert Credentials.field?("telegram", "bot_token")
+    assert Credentials.secret_field?("telegram", "bot_token")
+
+    assert {:ok, :stored} = Credentials.put("telegram", "bot_token", "123:abc")
+    assert Credentials.get("telegram", "bot_token") == "123:abc"
+  end
+
   test "provider Config reads prefer the stored credential over the env var" do
     previous = System.get_env("GITHUB_TOKEN")
     System.put_env("GITHUB_TOKEN", "env-token")

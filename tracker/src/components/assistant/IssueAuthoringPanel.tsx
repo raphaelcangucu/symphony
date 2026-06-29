@@ -3,12 +3,11 @@ import { memo, useCallback, useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
-import { DocumentViewer } from "@/components/assistant/DocumentViewer";
+import { AssistantKbDocumentsPanel } from "@/components/assistant/AssistantKbDocumentsPanel";
 import {
   ProjectAssistantPanel,
   type DraftIssueCreated,
 } from "@/components/assistant/ProjectAssistantPanel";
-import { useIssueDocuments } from "@/hooks/useIssueDocuments";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
@@ -46,14 +45,9 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
   const normalizedIdentifier = useMemo(() => normalizeIssueIdentifier(identifier) || null, [identifier]);
   const issueTitle = issue?.title.trim() || null;
   const issueDetailPath = normalizedIdentifier ? issuePath(projectSlug, view, normalizedIdentifier) : null;
-  const [refreshKey, setRefreshKey] = useState(0);
   const [composerSeedMessage, setComposerSeedMessage] = useState<string | null>(null);
-  const issueDocuments = useIssueDocuments({
-    projectSlug,
-    identifier: normalizedIdentifier,
-    enabled: normalizedIdentifier !== null && !compact,
-    refreshKey,
-  });
+  const [kbDocumentReferences, setKbDocumentReferences] = useState<string[]>([]);
+  const [requestedKbPath, setRequestedKbPath] = useState<string | null>(null);
 
   useEffect(() => {
     if (!normalizedIdentifier) return;
@@ -69,7 +63,6 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
       if (!normalizedIdentifier) return;
       if (normalizeIssueIdentifier(payload.identifier) !== normalizedIdentifier) return;
 
-      setRefreshKey((current) => current + 1);
       onDocumentsChanged?.();
     },
     [normalizedIdentifier, onDocumentsChanged],
@@ -88,6 +81,8 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
         view={view}
         mode={compact ? "embedded" : "page"}
         onDocumentChanged={handleDocumentChanged}
+        onKbDocumentReferencesChanged={setKbDocumentReferences}
+        onOpenDocumentPath={setRequestedKbPath}
         onDraftIssueCreated={onDraftIssueCreated}
         onIssueCreated={onIssueCreated}
         composerSeedMessage={composerSeedMessage}
@@ -118,14 +113,11 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
       </div>
     ) : null;
 
-  const documentsContent = normalizedIdentifier ? (
-    <DocumentViewer
+  const documentsContent = projectSlug ? (
+    <AssistantKbDocumentsPanel
       projectSlug={projectSlug}
-      identifier={normalizedIdentifier}
-      documents={issueDocuments.documents}
-      available={issueDocuments.available}
-      reason={issueDocuments.reason}
-      layout="split"
+      citedPaths={kbDocumentReferences}
+      requestedPath={requestedKbPath}
     />
   ) : (
     <div className="rounded-2xl border border-dashed border-border/70 bg-card/60 px-6 py-10 text-center text-sm text-muted-foreground shadow-sm backdrop-blur-sm">

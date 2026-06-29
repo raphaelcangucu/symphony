@@ -1,5 +1,6 @@
 import { http, trackerPath, unwrapData } from "@/services/http";
 import type { AgentKind } from "@/types/issue";
+import type { GatewaySettings } from "@/types/gateways";
 
 export type LocalePreference = "auto" | "en" | "pt-BR";
 
@@ -18,6 +19,7 @@ export interface UiSettings {
 
 export interface AllSettings {
   agents: AgentSettings;
+  gateways?: GatewaySettings;
   orchestrator: OrchestratorSettings;
   ui: UiSettings;
 }
@@ -62,6 +64,7 @@ export async function updateUiSettings(input: Partial<UiSettings>): Promise<UiSe
 }
 
 export type TrackerProvider = "github" | "jira" | "linear";
+export type CredentialProviderKey = TrackerProvider | "telegram";
 
 export interface ProviderIdentity {
   provider: TrackerProvider;
@@ -98,7 +101,7 @@ export interface CredentialField {
 }
 
 export interface CredentialProvider {
-  provider: TrackerProvider;
+  provider: CredentialProviderKey;
   label: string;
   fields: CredentialField[];
 }

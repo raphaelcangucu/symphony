@@ -53,6 +53,7 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.KnowledgeBase.SyncSupervisor,
       SymphonyElixir.GitHub.ReadCache,
       SymphonyElixir.GitHub.RequestGateway,
+      SymphonyElixir.TelegramGateway.Poller,
       SymphonyElixir.Tracker.Sync.Engine,
       SymphonyElixir.PublicRouting
     ] ++ public_tunnel_children()

@@ -1,4 +1,4 @@
-import { FileText, GitBranch, ScrollText, TerminalSquare, type LucideIcon } from "lucide-react";
+import { FileText, GitBranch, MessagesSquare, ScrollText, TerminalSquare, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { DevEnvPanel } from "@/components/devenv/DevEnvPanel";
 import { LoadDefaultMenu } from "@/components/projects/LoadDefaultMenu";
 import { ProjectAgentSelect } from "@/components/projects/ProjectAgentSelect";
+import { ProjectTelegramIntegrationCard } from "@/components/projects/ProjectTelegramIntegrationCard";
 import { RepositoriesSection } from "@/components/projects/config/RepositoriesSection";
 import { TrackerSourceFields } from "@/components/projects/TrackerSourceFields";
 import { WorkflowMarkdownEditor } from "@/components/projects/WorkflowMarkdownEditor";
@@ -38,6 +39,7 @@ const SECTION_DEFS: readonly SectionDef[] = [
   { id: "tracker", icon: GitBranch },
   { id: "workflow", icon: ScrollText },
   { id: "dev", icon: TerminalSquare },
+  { id: "integrations", icon: MessagesSquare },
 ] as const;
 
 function SectionHeading({ id }: { id: ProjectSettingsTab }) {
@@ -274,6 +276,11 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
                 />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="integrations" className="mt-0 space-y-6">
+            <SectionHeading id="integrations" />
+            <ProjectTelegramIntegrationCard projectSlug={project.slug} />
           </TabsContent>
         </div>
       </Tabs>

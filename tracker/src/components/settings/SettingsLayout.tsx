@@ -1,8 +1,8 @@
-import { HardDrive, LayoutTemplate, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { HardDrive, LayoutTemplate, MessagesSquare, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Outlet } from "react-router-dom";
 
-import { settingsBackupsPath, settingsPath, settingsTemplatesPath } from "@/lib/settingsRoutes";
+import { settingsBackupsPath, settingsGatewaysPath, settingsPath, settingsTemplatesPath } from "@/lib/settingsRoutes";
 import { cn } from "@/lib/utils";
 
 type SettingsNavItem = {
@@ -16,6 +16,7 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { to: settingsPath(), labelKey: "settings.sections.general.label", icon: SlidersHorizontal, end: true },
   { to: settingsTemplatesPath(), labelKey: "settings.sections.templates.label", icon: LayoutTemplate },
   { to: settingsBackupsPath(), labelKey: "settings.sections.backups.label", icon: HardDrive },
+  { to: settingsGatewaysPath(), labelKey: "settings.sections.gateways.label", icon: MessagesSquare },
 ];
 
 export function SettingsLayout() {

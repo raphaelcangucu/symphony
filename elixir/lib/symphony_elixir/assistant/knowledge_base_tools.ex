@@ -107,8 +107,10 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
   end
 
   def execute(project_slug, "kb_search_pages", args, _opts) do
-    with {:ok, query} <- required(args, "query") do
-      case KnowledgeBase.search_project(project_slug, query, repo_filter(project_slug, args)) do
+    with {:ok, query} <- required(args, "query"),
+         {:ok, repo_filter} <- search_repo_filter(project_slug, args),
+         :ok <- reindex_search_repository(project_slug, repo_filter) do
+      case KnowledgeBase.search_project(project_slug, query, repo_filter) do
         {:ok, results} ->
           {:ok, ok("kb_search_pages", "Found #{length(results)} matching pages.", %{results: results})}
 
@@ -224,8 +226,7 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
     {:ok,
      %{
        tool: "kb_repository_choice",
-       message:
-         "Multiple repositories are linked. ASK the user which repository to use, then call the tool again with the repository argument.",
+       message: "Multiple repositories are linked. ASK the user which repository to use, then call the tool again with the repository argument.",
        data: %{repositories: Enum.map(repos, &repo_view/1), remediation: "needs_repository"}
      }}
   end
@@ -276,18 +277,27 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
     end
   end
 
-  defp repo_filter(project_slug, args) do
+  defp search_repo_filter(project_slug, args) do
     case Map.get(args, "repository") do
       value when is_binary(value) and value != "" ->
         case match_repo(list_repos(project_slug), value) do
-          nil -> []
-          repo -> [repo_slug: repo_slug(repo)]
+          nil -> {:error, :kb_repository_not_found}
+          repo -> {:ok, [repo_slug: repo_slug(repo)]}
         end
 
       _ ->
-        []
+        {:ok, []}
     end
   end
+
+  defp reindex_search_repository(project_slug, repo_slug: slug) do
+    case KnowledgeBase.reindex_repo(project_slug, slug) do
+      {:ok, _count} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp reindex_search_repository(_project_slug, _repo_filter), do: :ok
 
   # --- helpers ---------------------------------------------------------------
 
@@ -335,8 +345,7 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
   defp repository_schema do
     %{
       "type" => ["string", "null"],
-      "description" =>
-        "Repository (owner/name, workspace path, or slug). Omit to use the only repo; required when several are linked."
+      "description" => "Repository (owner/name, workspace path, or slug). Omit to use the only repo; required when several are linked."
     }
   end
 

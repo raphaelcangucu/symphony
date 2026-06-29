@@ -98,7 +98,16 @@ Important boundary:
    - Presents human-readable runtime status (for example terminal output, dashboard, or other
      operator-facing view).
 
-8. `Logging`
+8. `External Gateway Adapter` (optional)
+   - Normalizes provider messages from chat systems into Symphony gateway events.
+   - Routes paired project-topic conversations to project-scoped maestro sessions.
+   - Routes allowed direct 1:1 conversations to freeform assistant sessions.
+   - Handles native gateway commands such as status, agent selection, mode selection, reset, stop,
+     and setup/pairing before messages reach an agent.
+   - The first implementation is Telegram: one configured group, one forum topic per project, and
+     direct-message freeform chats for explicitly allowed Telegram users.
+
+9. `Logging`
    - Emits structured runtime logs to one or more configured sinks.
 
 ### 3.2 Abstraction Levels
