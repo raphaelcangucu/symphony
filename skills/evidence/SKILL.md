@@ -14,6 +14,10 @@ description:
 - Prove the change works: unit tests green for every repo you changed.
 - When the change touches UI paths, prove it visually: e2e run with at least
   1 screenshot AND 1 video (plus trace) of the affected flow.
+- Tick the issue's acceptance criteria as you prove them: when the issue body
+  has an `## Acceptance criteria` checklist, mark each covered `- [ ]` with the
+  `update_acceptance_criteria` tool (see "Symphony tracker tools" below). Leave
+  a box unchecked when the criterion is not yet demonstrated.
 
 ## Slice Evidence vs Final Evidence
 
@@ -425,6 +429,7 @@ not execute — the gate will reject it.
 When working inside Symphony (MCP / dynamic tools), prefer structured probes over guessing gate state:
 
 - **`get_evidence_status`** — after writing `.symphony/evidence/manifest.json`, confirm gate state and missing artifacts.
+- **`update_acceptance_criteria`** — when the issue body has an `## Acceptance criteria` checklist (`- [ ]`), tick each criterion your evidence covers. Read with no args (returns 1-based `index`, `text`, `checked`), then mark by `index` or `text`. It edits ONLY those acceptance checkboxes — never prose or Plan/Tasks boxes — so prefer it over `update_issue`/`gh issue edit`. Leave a box unchecked when the criterion is not yet proven.
 - **`check_handoff_gate`** — before calling `set_issue_status` to a handoff/wait status (e.g. Human Review), verify validate + publish gates.
 - **`link_pull_request`** — after opening the PR, attach its URL to the issue so the publish gate and board see the association (origin `manual`).
 - **`manage_dev_env`** + **`manage_preview`** — before UI e2e, run configured serve steps (`category_filter: serve`) then start/check preview URLs.

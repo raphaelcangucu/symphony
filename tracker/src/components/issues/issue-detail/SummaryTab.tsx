@@ -32,7 +32,7 @@ import type {
   IssueLabelOption,
   IssuePriority,
 } from "@/types/issue";
-import type { PullRequest } from "@/types/pull-request";
+import type { PullRequest, PullRequestGroup } from "@/types/pull-request";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
 import { BlockedBanner } from "./BlockedBanner";
@@ -44,6 +44,7 @@ interface SummaryTabProps {
   issue: Issue;
   projectSlug: string;
   pullRequests?: PullRequest[];
+  pullRequestChildren?: PullRequestGroup[];
   workpad?: Comment | null;
   subtasks?: Issue[];
   subtaskExecutions?: ReadonlyMap<string, AgentExecution>;
@@ -77,6 +78,7 @@ export function SummaryTab({
   issue,
   projectSlug,
   pullRequests = [],
+  pullRequestChildren = [],
   workpad = null,
   subtasks = [],
   subtaskExecutions,
@@ -113,7 +115,16 @@ export function SummaryTab({
   const previewUrl = readyPreviewUrl(primaryPreviewServer);
   const previewStatus = previewUrl ? null : previewStatusLabel(previewData, primaryPreviewServer, t);
   const hasPreviewSummary = Boolean(previewUrl || previewStatus);
-  const hasLinks = Boolean(issue.url) || issue.branchName !== null || pullRequests.length > 0 || hasPreviewSummary;
+  const ownPrUrls = new Set(pullRequests.map((pr) => pr.url).filter((url): url is string => Boolean(url)));
+  const childPullRequests = pullRequestChildren
+    .flatMap((group) => group.pullRequests)
+    .filter((pr) => !pr.url || !ownPrUrls.has(pr.url));
+  const hasLinks =
+    Boolean(issue.url) ||
+    issue.branchName !== null ||
+    pullRequests.length > 0 ||
+    childPullRequests.length > 0 ||
+    hasPreviewSummary;
   const editable = Boolean(
     onSaveDescription || onSaveLabels || onSaveStatus || onSavePriority || onSaveAssignee || onSaveAgent,
   );
@@ -174,7 +185,18 @@ export function SummaryTab({
               </span>
             ) : null}
             {pullRequests.map((pr) => (
-              <PullRequestLink key={pr.number} pullRequest={pr} onOpen={onOpenPullRequest} />
+              <PullRequestLink
+                key={pr.url ?? `${pr.repo}#${pr.number}`}
+                pullRequest={pr}
+                onOpen={onOpenPullRequest}
+              />
+            ))}
+            {childPullRequests.map((pr) => (
+              <PullRequestLink
+                key={`child-${pr.url ?? `${pr.repo}#${pr.number}`}`}
+                pullRequest={pr}
+                onOpen={onOpenPullRequest}
+              />
             ))}
             {previewUrl ? (
               <a

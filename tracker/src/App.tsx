@@ -22,12 +22,14 @@ import { KbGeneralPage } from "@/pages/KbGeneralPage";
 import { KbProjectPage } from "@/pages/KbProjectPage";
 import { BackupPage } from "@/pages/BackupPage";
 import { ObservabilityPage } from "@/pages/ObservabilityPage";
-import { SettingsPage } from "@/pages/SettingsPage";
+import { SettingsLayout } from "@/components/settings/SettingsLayout";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
-import { TemplateEditPage } from "@/pages/TemplateEditPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { TemplateListPage } from "@/pages/TemplateListPage";
+import { TemplateEditPage } from "@/pages/TemplateEditPage";
 import { TokenGatePage } from "@/pages/TokenGatePage";
+import { settingsTemplatesPath } from "@/lib/settingsRoutes";
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
 
@@ -38,6 +40,11 @@ function RequireToken({ children }: { children: ReactNode }) {
 function EditToSettingsRedirect() {
   const { projectSlug = "" } = useParams();
   return <Navigate to={`/projects/${projectSlug}/settings`} replace />;
+}
+
+function LegacyTemplateRedirect() {
+  const { slug = "" } = useParams();
+  return <Navigate to={settingsTemplatesPath(slug || undefined)} replace />;
 }
 
 export function App() {
@@ -84,11 +91,16 @@ export function App() {
                 <Route path="settings/:tab" element={<ProjectSettingsPage />} />
                 <Route path="kb/*" element={<KbProjectPage />} />
               </Route>
-              <Route path="templates" element={<TemplateListPage />} />
-              <Route path="templates/:slug" element={<TemplateEditPage />} />
+              <Route path="templates" element={<Navigate to="/settings/templates" replace />} />
+              <Route path="templates/:slug" element={<LegacyTemplateRedirect />} />
               <Route path="observability" element={<ObservabilityPage />} />
-              <Route path="backups" element={<BackupPage />} />
-              <Route path="settings" element={<SettingsPage />} />
+              <Route path="backups" element={<Navigate to="/settings/backups" replace />} />
+              <Route path="settings" element={<SettingsLayout />}>
+                <Route index element={<SettingsPage />} />
+                <Route path="templates" element={<TemplateListPage />} />
+                <Route path="templates/:slug" element={<TemplateEditPage />} />
+                <Route path="backups" element={<BackupPage />} />
+              </Route>
               <Route path="assistant" element={<AssistantPage />} />
               <Route path="assistant/:threadId" element={<AssistantPage />} />
               <Route path="kb/*" element={<KbGeneralPage />} />

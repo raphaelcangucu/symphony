@@ -54,6 +54,8 @@ interface BoardColumnProps {
   onDisband: (leadIdentifier: string) => void;
   mergeTargetId?: string | null;
   dropIndicator?: DropIndicator | null;
+  allIssues?: readonly Issue[];
+  statusCategory?: (status: WorkflowStatusName) => WorkflowStatusCategory | null;
 }
 
 export function BoardColumn({
@@ -74,12 +76,14 @@ export function BoardColumn({
   onDisband,
   mergeTargetId = null,
   dropIndicator = null,
+  allIssues,
+  statusCategory,
 }: BoardColumnProps) {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const meta = getStatusMeta(status, category);
   const Icon = meta.Icon;
-  const units = groupIssuesIntoUnits(issues);
+  const units = groupIssuesIntoUnits(issues, allIssues);
 
   const [limitOpen, setLimitOpen] = useState(false);
   const [limitDraft, setLimitDraft] = useState("");
@@ -238,6 +242,7 @@ export function BoardColumn({
                   agent={agentExecutions?.get(unit.issue.identifier)}
                   mergeActive={mergeTargetId === unit.id}
                   dropEdge={dropIndicator?.unitId === unit.id ? dropIndicator.edge : null}
+                  statusCategory={statusCategory}
                 />
               ) : (
                 <IssueCard

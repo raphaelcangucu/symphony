@@ -7,6 +7,8 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
   alias SymphonyElixir.Workspace
   alias SymphonyElixir.Workflow
 
+  @fake_codex_app_server Path.expand("../../support/fixtures/fake_codex_app_server.py", __DIR__)
+
   setup do
     migrate_repo()
     clean_repo()
@@ -164,6 +166,30 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
     assert_receive {:freeform_opts, opts}
     assert Keyword.get(opts, :codex_config)["approval_policy"] == "never"
+  end
+
+  test "send_message_to_thread/4 ignores malformed Codex stream payloads without crashing", %{workspace_root: workspace_root} do
+    {:ok, thread} =
+      SymphonyElixir.Assistant.History.create_freeform_thread(%{
+        title: "F",
+        workspace_path: Path.join(workspace_root, "raw-stream")
+      })
+
+    assert {:ok, result} =
+             SymphonyElixir.Assistant.CodexSession.send_message_to_thread(
+               thread,
+               "hi",
+               %{"agent" => "codex"},
+               codex_config: %{
+                 "command" => "python3 #{@fake_codex_app_server}",
+                 "approval_policy" => "never",
+                 "thread_sandbox" => "danger-full-access"
+               },
+               dynamic_tools: [],
+               workspace_root: workspace_root
+             )
+
+    assert result.assistant_message == "ok"
   end
 
   describe "send_message_to_issue_thread/4" do

@@ -4,6 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
+  alias SymphonyElixir.AgentUsage
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Setting
 
@@ -12,6 +13,7 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
 
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
+    AgentUsage.reset()
     Repo.delete_all(Setting)
     previous = System.get_env(@token_env)
     System.put_env(@token_env, "test-token")
@@ -95,5 +97,34 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
     assert %{"data" => %{"codex" => codex, "claude" => claude, "cursor" => cursor}} = json_response(conn, 200)
     assert is_boolean(codex["available"]) and is_boolean(claude["available"]) and is_boolean(cursor["available"])
     assert Map.has_key?(codex, "version") and Map.has_key?(codex, "command")
+  end
+
+  test "GET /api/tracker/v1/settings/agents/usage returns per-agent usage snapshots" do
+    snap =
+      AgentUsage.Window.normalize("claude", %{
+        "limit_name" => "max",
+        "primary" => %{"usedPercent" => 60, "windowDurationMins" => 300, "resets_at" => 1_900_000_000},
+        "secondary" => %{"usedPercent" => 12, "windowDurationMins" => 10_080, "resets_at" => 1_900_500_000},
+        "credits" => %{"has_credits" => true, "balance" => 5.0}
+      })
+
+    :ok = AgentUsage.put("claude", snap)
+
+    conn = get(authed_conn(), "/api/tracker/v1/settings/agents/usage")
+    assert %{"data" => data} = json_response(conn, 200)
+
+    claude = data["claude"]
+    assert claude["plan"] == "max"
+    assert claude["stale"] == false
+    assert claude["credits_remaining"] == 5.0
+    assert is_integer(claude["fetched_at"])
+
+    session = Enum.find(claude["windows"], &(&1["kind"] == "session"))
+    assert session["used_percent"] == 60.0
+    assert session["resets_at"] == 1_900_000_000
+    assert session["window_minutes"] == 300
+
+    assert data["codex"] == nil
+    assert data["cursor"] == nil
   end
 end

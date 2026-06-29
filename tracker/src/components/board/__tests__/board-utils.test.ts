@@ -266,6 +266,28 @@ describe("groupIssuesIntoUnits parent/subtask", () => {
     expect(units).toHaveLength(1);
     expect(units[0].kind).toBe("issue");
   });
+
+  it("lists subtasks on the parent even when they live in another column", () => {
+    const parent = issue({
+      identifier: "front#540",
+      status: "Human Review",
+      subIssueSummary: { total: 1, completed: 0, percentCompleted: 0 },
+    });
+    const child = issue({
+      identifier: "back#287",
+      parentIdentifier: "front#540",
+      status: "In Progress",
+      title: "CAPI Meta Ads",
+    });
+
+    const units = groupIssuesIntoUnits([parent], [parent, child]);
+
+    const parentUnit = units.find((unit) => unit.kind === "parent");
+    expect(parentUnit).toBeTruthy();
+    if (parentUnit?.kind === "parent") {
+      expect(parentUnit.subtasks.map((subtask) => subtask.identifier)).toEqual(["back#287"]);
+    }
+  });
 });
 
 describe("mergeIntent", () => {

@@ -76,8 +76,10 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   def unlink(conn, _params), do: TrackerErrors.render(conn, :pr_url_required)
 
   defp respond(conn, project, identifier, refresh?) do
+    children = child_pull_request_groups(project, identifier)
+
     if PullRequests.supported?(project) do
-      respond_github(conn, project, identifier, refresh?)
+      respond_github(conn, project, identifier, refresh?, children)
     else
       dismissed = LocalStore.dismissed_urls(project.id, identifier)
 
@@ -86,24 +88,63 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
         |> reject_dismissed(dismissed)
         |> MonitorState.attach(project.slug, identifier)
 
-      json(conn, %{data: data, supported: false, available: false})
+      json(conn, %{data: data, supported: false, available: false, children: children})
     end
   end
 
-  defp respond_github(conn, project, identifier, refresh?) do
+  defp respond_github(conn, project, identifier, refresh?, children) do
     dismissed = LocalStore.dismissed_urls(project.id, identifier)
 
     if PullRequests.available?() do
       live = discover_live(project, identifier, refresh?, dismissed)
       data = merge(live, persisted(project.slug, identifier), dismissed) |> MonitorState.attach(project.slug, identifier)
-      json(conn, %{data: data, supported: true, available: true})
+      json(conn, %{data: data, supported: true, available: true, children: children})
     else
       data =
         persisted(project.slug, identifier)
         |> reject_dismissed(dismissed)
         |> MonitorState.attach(project.slug, identifier)
 
-      json(conn, %{data: data, supported: true, available: false})
+      json(conn, %{data: data, supported: true, available: false, children: children})
+    end
+  end
+
+  # A parent issue consolidates its sub-issues' pull requests for display. We use
+  # persisted PRs only (fast, no extra GitHub round-trip per child) so the parent
+  # view surfaces the whole subtask tree's PRs grouped by child. Children without
+  # any PR are omitted to avoid clutter.
+  defp child_pull_request_groups(project, identifier) do
+    case Context.list_subtask_children(project.slug, identifier) do
+      {:ok, child_identifiers} ->
+        child_identifiers
+        |> Enum.map(&child_pull_request_group(project, &1))
+        |> Enum.reject(fn group -> group.pull_requests == [] end)
+
+      _ ->
+        []
+    end
+  end
+
+  defp child_pull_request_group(project, child_identifier) do
+    dismissed = LocalStore.dismissed_urls(project.id, child_identifier)
+
+    pull_requests =
+      project.slug
+      |> persisted(child_identifier)
+      |> reject_dismissed(dismissed)
+      |> MonitorState.attach(project.slug, child_identifier)
+
+    %{
+      identifier: child_identifier,
+      title: child_issue_title(project.slug, child_identifier),
+      pull_requests: pull_requests
+    }
+  end
+
+  defp child_issue_title(project_slug, identifier) do
+    case Context.get_issue(project_slug, identifier) do
+      {:ok, %{title: title}} -> title
+      _ -> nil
     end
   end
 

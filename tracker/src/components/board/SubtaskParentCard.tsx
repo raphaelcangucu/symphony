@@ -4,10 +4,13 @@ import { ChevronDown, ChevronRight, GitFork, Layers } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { issueDisplayIdentifier } from "@/lib/issueIdentifiers";
 import { cn } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
+import type { WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflow-status";
 
+import { getStatusMeta } from "./status-meta";
 import { GroupDropOverlay, ReorderDropLine } from "./GroupDropOverlay";
 import { IssueCard } from "./IssueCard";
 
@@ -19,6 +22,7 @@ interface SubtaskParentCardProps {
   agent?: AgentExecution;
   mergeActive?: boolean;
   dropEdge?: "top" | "bottom" | null;
+  statusCategory?: (status: WorkflowStatusName) => WorkflowStatusCategory | null;
 }
 
 /**
@@ -35,6 +39,7 @@ export function SubtaskParentCard({
   agent,
   mergeActive = false,
   dropEdge = null,
+  statusCategory,
 }: SubtaskParentCardProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -91,23 +96,32 @@ export function SubtaskParentCard({
           {subtasks.length === 0 ? (
             <p className="px-2 py-1 text-[10px] text-muted-foreground">{t("board.subtasks.empty")}</p>
           ) : (
-            subtasks.map((subtask) => (
-              <button
-                key={subtask.identifier}
-                type="button"
-                className="flex w-full items-center gap-1.5 rounded-md bg-card px-2 py-1 text-left text-xs"
-                onClick={() => onSelectIssue(subtask)}
-              >
-                <span className="font-mono text-[10px] text-muted-foreground">{subtask.identifier}</span>
-                <span className="min-w-0 flex-1 truncate">{subtask.title}</span>
-                {subtask.repositoryFullName ? (
-                  <span className="inline-flex items-center gap-0.5 font-mono text-[9px] text-muted-foreground">
-                    <GitFork className="h-2.5 w-2.5" />
-                    {subtask.repositoryFullName.split("/").pop()}
+            subtasks.map((subtask) => {
+              const meta = getStatusMeta(subtask.status, statusCategory?.(subtask.status) ?? null);
+              const StatusIcon = meta.Icon;
+              const repoLabel = subtask.repositoryFullName?.split("/").pop() ?? null;
+
+              return (
+                <button
+                  key={subtask.identifier}
+                  type="button"
+                  className="flex w-full items-center gap-1.5 rounded-md bg-card px-2 py-1 text-left text-xs"
+                  onClick={() => onSelectIssue(subtask)}
+                >
+                  <span className="shrink-0" title={subtask.status}>
+                    <StatusIcon className={cn("h-3 w-3", meta.iconClass)} />
                   </span>
-                ) : null}
-              </button>
-            ))
+                  <span className="min-w-0 flex-1 truncate text-foreground">{subtask.title}</span>
+                  {repoLabel ? (
+                    <span className="inline-flex shrink-0 items-center gap-0.5 font-mono text-[9px] text-muted-foreground">
+                      <GitFork className="h-2.5 w-2.5" />
+                      {repoLabel}
+                    </span>
+                  ) : null}
+                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{issueDisplayIdentifier(subtask)}</span>
+                </button>
+              );
+            })
           )}
         </div>
       ) : null}

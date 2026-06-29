@@ -1,6 +1,7 @@
 defmodule SymphonyElixirWeb.TrackerPresenterTest do
   use ExUnit.Case, async: true
 
+  alias SymphonyElixir.LocalTracker.IssueRecord
   alias SymphonyElixir.Tracker.IssueDTO
   alias SymphonyElixirWeb.TrackerPresenter
 
@@ -45,6 +46,45 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
     assert payload.repository_full_name == "xipcash/ios"
     assert payload.parent_identifier == "1"
     assert payload.sub_issue_summary == %{total: 4, completed: 4, percent_completed: 100}
+  end
+
+  test "issue/1 derives display_identifier from a GitHub URL while keeping the canonical identifier" do
+    dto =
+      IssueDTO.build(%{
+        identifier: "537",
+        title: "Plain-number GitHub issue",
+        url: "https://github.com/clouapp/front/issues/537"
+      })
+
+    payload = TrackerPresenter.issue(dto)
+
+    assert payload.identifier == "537"
+    assert payload.display_identifier == "front#537"
+  end
+
+  test "issue/1 falls back display_identifier to the canonical id for an unreconciled local issue" do
+    dto = IssueDTO.build(%{identifier: "MAC-1", title: "Local draft, no remote yet"})
+
+    payload = TrackerPresenter.issue(dto)
+
+    assert payload.identifier == "MAC-1"
+    assert payload.display_identifier == "MAC-1"
+  end
+
+  test "issue/1 for an IssueRecord shows the external key once reconciled, keeping MAC-N internal" do
+    record = %IssueRecord{
+      id: 42,
+      identifier: "MAC-5",
+      title: "Local-first issue pushed to GitHub",
+      position: 0,
+      url: "https://github.com/clouapp/front/issues/547",
+      remote_url: "https://github.com/clouapp/front/issues/547"
+    }
+
+    payload = TrackerPresenter.issue(record)
+
+    assert payload.identifier == "MAC-5"
+    assert payload.display_identifier == "front#547"
   end
 
   test "project/1 includes tracker_kind and tracker_config" do

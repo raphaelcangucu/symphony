@@ -19,33 +19,32 @@ defmodule SymphonyElixir.GitHub.PullRequestsForProjectIssueTest do
                "repository" => %{
                  "issue" => %{
                    "linkedBranches" => %{"nodes" => []},
-                   "closedByPullRequestsReferences" => %{"nodes" => []},
-                   "timelineItems" => %{
+                   # A closing reference is an authoritative GitHub signal, so a
+                   # cross-repo closing PR is trusted without a marker (unlike a
+                   # bare timeline cross-reference).
+                   "closedByPullRequestsReferences" => %{
                      "nodes" => [
                        %{
-                         "isCrossRepository" => true,
-                         "source" => %{
-                           "__typename" => "PullRequest",
-                           "number" => 3992,
-                           "title" => "docs(cloudflare): add operations guide",
-                           "url" => "https://github.com/GambaLabs/backend/pull/3992",
-                           "state" => "MERGED",
-                           "repository" => %{"nameWithOwner" => "GambaLabs/backend"},
-                           "isDraft" => false,
-                           "merged" => true,
-                           "mergedAt" => "2026-06-10T21:34:12Z",
-                           "createdAt" => "2026-06-10T20:00:00Z",
-                           "updatedAt" => "2026-06-10T21:34:12Z",
-                           "headRefName" => "codex/gam-5-cloudflare-docs",
-                           "baseRefName" => "dev",
-                           "author" => %{"login" => "codex-bot"},
-                           "commits" => %{"nodes" => []},
-                           "comments" => %{"nodes" => []},
-                           "reviews" => %{"nodes" => []}
-                         }
+                         "number" => 3992,
+                         "title" => "docs(cloudflare): add operations guide",
+                         "url" => "https://github.com/GambaLabs/backend/pull/3992",
+                         "state" => "MERGED",
+                         "repository" => %{"nameWithOwner" => "GambaLabs/backend"},
+                         "isDraft" => false,
+                         "merged" => true,
+                         "mergedAt" => "2026-06-10T21:34:12Z",
+                         "createdAt" => "2026-06-10T20:00:00Z",
+                         "updatedAt" => "2026-06-10T21:34:12Z",
+                         "headRefName" => "codex/gam-5-cloudflare-docs",
+                         "baseRefName" => "dev",
+                         "author" => %{"login" => "codex-bot"},
+                         "commits" => %{"nodes" => []},
+                         "comments" => %{"nodes" => []},
+                         "reviews" => %{"nodes" => []}
                        }
                      ]
-                   }
+                   },
+                   "timelineItems" => %{"nodes" => []}
                  }
                }
              }

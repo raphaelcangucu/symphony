@@ -12,8 +12,42 @@
     }
   },
   "settings": {
+    "usage": {
+      "title": "Uso do plano",
+      "description": "Quanto da cota de cada agente foi consumido e quando cada janela reinicia.",
+      "unavailable": "Uso indisponível para este agente.",
+      "loadFailed": "Não foi possível carregar o uso do plano.",
+      "plan": "Plano: {{plan}}",
+      "credits": "Créditos: {{amount}}",
+      "creditsUnlimited": "Créditos: Ilimitados",
+      "resets": "Reinicia {{time}}",
+      "updated": "Atualizado {{time}}",
+      "refresh": "Atualizar",
+      "refreshing": "Atualizando…",
+      "upToDate": "Atualizado",
+      "stale": "Desatualizado",
+      "window": {
+        "session": "Sessão",
+        "weekly": "Semanal",
+        "sonnet_weekly": "Semanal (Sonnet)",
+        "reviews": "Revisões",
+        "model": "Modelo: {{name}}"
+      }
+    },
     "title": "Configurações",
     "subtitle": "Padrões da instância Symphony para o operador.",
+    "navLabel": "Seções de configurações",
+    "sections": {
+      "general": {
+        "label": "Geral"
+      },
+      "templates": {
+        "label": "Templates"
+      },
+      "backups": {
+        "label": "Backups"
+      }
+    },
     "loadFailed": "Falha ao carregar configurações — atualize para tentar novamente.",
     "codingAgent": {
       "title": "Agente de código",
@@ -927,6 +961,10 @@
       "limitedAccessBody": "Pull requests vinculados são exibidos, mas detalhes de CI e ações de merge precisam de GITHUB_TOKEN configurado.",
       "relatedCount_one": "{{count}} pull request relacionado",
       "relatedCount_other": "{{count}} pull requests relacionados",
+      "childrenTitle": "Pull requests das subtarefas",
+      "childrenSubtitle": "Pull requests abertos pelas subtarefas desta tarefa.",
+      "childGroupCount_one": "{{count}} PR",
+      "childGroupCount_other": "{{count}} PRs",
       "rerunning": "Reexecutando…",
       "rerunFailedJobs": "Reexecutar jobs com falha",
       "sending": "Enviando…",
@@ -1532,6 +1570,9 @@
       "count": "{{count}} execuções filhas",
       "show": "Mostrar execuções filhas",
       "hide": "Ocultar execuções filhas"
+    },
+    "tokens": {
+      "breakdown": "Coordenador: {{coordinator}} · Filhos: {{children}} · Total: {{total}}"
     },
     "openBoard": "Abrir board",
     "pursuingGoal": "Perseguindo a goal: {{objective}}",

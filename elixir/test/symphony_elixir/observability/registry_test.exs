@@ -1,9 +1,11 @@
 defmodule SymphonyElixir.Observability.RegistryTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.AgentUsage
   alias SymphonyElixir.Observability.Registry
 
   setup do
+    AgentUsage.reset()
     start_supervised!({Phoenix.PubSub, name: :registry_test_pubsub})
 
     name = :"registry_#{System.unique_integer([:positive])}"
@@ -57,6 +59,35 @@ defmodule SymphonyElixir.Observability.RegistryTest do
   test "rejects a report without runtime_id", %{name: name} do
     assert {:error, :missing_runtime_id} = Registry.put_report(name, report(nil) |> Map.delete("runtime_id"))
     assert Registry.list(name) == []
+  end
+
+  test "captures rate_limits + agent_kind into AgentUsage", %{name: name} do
+    rate_limits = %{
+      "limit_name" => "max",
+      "primary" => %{"usedPercent" => 55, "resets_at" => 1_900_000_000}
+    }
+
+    snapshot = %{
+      "generated_at" => "2026-05-30T00:00:00Z",
+      "counts" => %{"running" => 0, "retrying" => 0},
+      "running" => [],
+      "retrying" => [],
+      "agent_totals" => %{},
+      "rate_limits" => rate_limits
+    }
+
+    assert :ok =
+             Registry.put_report(name, report("r1", %{"agent_kind" => "claude", "snapshot" => snapshot}))
+
+    usage = AgentUsage.get("claude")
+    assert usage.agent_kind == "claude"
+    assert usage.plan == "max"
+    assert Enum.find(usage.windows, &(&1.kind == :session)).used_percent == 55.0
+  end
+
+  test "does not capture usage when rate_limits is nil", %{name: name} do
+    assert :ok = Registry.put_report(name, report("r2", %{"agent_kind" => "codex"}))
+    assert AgentUsage.get("codex") == nil
   end
 
   test "marks stale then drops after TTL", %{name: name} do

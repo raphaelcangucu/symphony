@@ -14,6 +14,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
 
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.AgentRouting
+  alias SymphonyElixir.Tracker.DisplayIdentifier
   alias SymphonyElixir.Tracker.ExternalUrl
   alias SymphonyElixir.Tracker.IssueDTO
   alias SymphonyElixir.Tracker.Sync.StateRecord
@@ -107,6 +108,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     %{
       id: dto.id,
       identifier: dto.identifier,
+      display_identifier: DisplayIdentifier.resolve(dto.identifier, dto.url, dto.repository_full_name),
       title: dto.title,
       description: dto.description,
       priority: dto.priority,
@@ -141,6 +143,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     %{
       id: issue.id,
       identifier: issue.identifier,
+      display_identifier: DisplayIdentifier.resolve(issue.identifier, issue.url),
       title: issue.title,
       description: issue.description,
       priority: issue.priority,

@@ -147,9 +147,20 @@ defmodule SymphonyElixirWeb.Presenter do
         input_tokens: entry.agent_input_tokens,
         output_tokens: entry.agent_output_tokens,
         total_tokens: entry.agent_total_tokens
-      }
+      },
+      bundle_role: bundle_role_payload(Map.get(entry, :bundle_role)),
+      parent_identifier: Map.get(entry, :parent_identifier),
+      unit_id: Map.get(entry, :unit_id),
+      child_identifiers: Map.get(entry, :child_identifiers) || []
     }
   end
+
+  # The orchestrator tags each running entry with its bundle role as an atom
+  # (`:child` / `:standalone`); normalize to the string the tracker frontend
+  # consumes so the observability table can render the parent → child tree.
+  defp bundle_role_payload(role) when is_atom(role) and not is_nil(role), do: Atom.to_string(role)
+  defp bundle_role_payload(role) when is_binary(role), do: role
+  defp bundle_role_payload(_role), do: nil
 
   defp retry_entry_payload(entry) do
     %{

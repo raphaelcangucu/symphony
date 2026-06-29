@@ -303,6 +303,46 @@ describe("ObservabilityPage", () => {
     expect(screen.getByRole("link", { name: "601" })).toBeInTheDocument();
   });
 
+  it("shows the parent coordinator tokens with a consolidated total on hover", async () => {
+    const parent = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "601",
+      sessionId: "p",
+      bundleRole: "parent" as const,
+      childIdentifiers: ["602", "603"],
+      tokens: { inputTokens: 0, outputTokens: 0, totalTokens: 100 },
+    };
+    const childA = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "602",
+      sessionId: "ca",
+      bundleRole: "child" as const,
+      parentIdentifier: "601",
+      tokens: { inputTokens: 0, outputTokens: 0, totalTokens: 30 },
+    };
+    const childB = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "603",
+      sessionId: "cb",
+      bundleRole: "child" as const,
+      parentIdentifier: "601",
+      tokens: { inputTokens: 0, outputTokens: 0, totalTokens: 70 },
+    };
+    runtimes = [{ ...macroRuntime, counts: { running: 3, retrying: 0 }, running: [parent, childA, childB] }];
+
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("link", { name: "601" });
+
+    const tokenCell = screen.getByTitle("Coordinator: 100 · Children: 100 · Total: 200");
+    expect(tokenCell).toBeInTheDocument();
+    expect(tokenCell).toHaveTextContent("100");
+  });
+
   it("links each runtime summary card to the project board", async () => {
     render(
       <MemoryRouter>

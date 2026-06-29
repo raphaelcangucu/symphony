@@ -8,6 +8,7 @@ import { TemplateForm } from "@/components/templates/TemplateForm";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getTemplate } from "@/services/templates";
+import { settingsTemplatesPath } from "@/lib/settingsRoutes";
 import type { WorkspaceTemplate } from "@/types/template";
 
 export function TemplateEditPage() {
@@ -39,10 +40,10 @@ export function TemplateEditPage() {
   }, [slug, t]);
 
   return (
-    <div className="min-h-screen p-6">
+    <div>
       <div className="mb-6 flex items-center gap-3">
         <Button asChild type="button" variant="ghost" size="sm">
-          <Link to="/templates">
+          <Link to={settingsTemplatesPath()}>
             <ArrowLeft className="h-4 w-4" />
             {t("project.templates.back")}
           </Link>

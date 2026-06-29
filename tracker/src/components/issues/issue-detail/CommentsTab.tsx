@@ -44,6 +44,7 @@ export function CommentsTab({
   const [assignees, setAssignees] = useState<IssueAssigneeOption[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mentionContainerRef = useRef<HTMLDivElement>(null);
   const { handlePaste, uploading } = useMarkdownImagePaste({ projectSlug, setValue: setBody });
   const mentions = useCommentMentions(body, assignees);
 
@@ -203,7 +204,7 @@ export function CommentsTab({
 
   return (
     <div className="space-y-4">
-      <form className="overflow-hidden rounded-lg border" onSubmit={handleSubmit}>
+      <form className="rounded-lg border" onSubmit={handleSubmit}>
         <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-1.5 py-1.5">
           <div className="flex items-center gap-1">
             <ComposerTab active={mode === "write"} onClick={() => setMode("write")}>
@@ -232,7 +233,7 @@ export function CommentsTab({
         </div>
         <div className="p-3">
           {mode === "write" ? (
-            <div className="relative">
+            <div ref={mentionContainerRef} className="relative overflow-visible">
               <Textarea
                 ref={textareaRef}
                 value={body}
@@ -250,7 +251,9 @@ export function CommentsTab({
                 options={mentions.filteredAssignees}
                 activeIndex={mentionIndex}
                 onSelect={applyMention}
-                className="bottom-full mb-1"
+                anchorRef={textareaRef}
+                containerRef={mentionContainerRef}
+                caretIndex={mentions.mentionStart + 1 + mentions.query.length}
               />
             </div>
           ) : body.trim() ? (
@@ -355,7 +358,7 @@ function CommentItem({ comment, projectSlug, onUpdateComment, onDeleteComment }:
   if (editing) {
     return (
       <form
-        className="overflow-hidden rounded-lg border"
+        className="rounded-lg border"
         onSubmit={(event) => {
           event.preventDefault();
           void saveEdit();

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { settingsTemplatesPath } from "@/lib/settingsRoutes";
 import type { WorkspaceTemplate } from "@/types/template";
 
 interface TemplateListProps {
@@ -20,7 +21,7 @@ export function TemplateList({ templates, onDelete }: TemplateListProps) {
     <div className="grid gap-2">
       {templates.map((template) => (
         <div key={template.id} className="flex items-center justify-between rounded-md border p-3">
-          <Link to={`/templates/${encodeURIComponent(template.slug)}`} className="min-w-0">
+          <Link to={settingsTemplatesPath(template.slug)} className="min-w-0">
             <span className="block text-sm font-medium">{template.name}</span>
             <span className="block text-xs text-muted-foreground">
               {t("project.templates.list.repoCount", { count: template.repositories.length })}

@@ -11,9 +11,12 @@ defmodule SymphonyElixir.GitHub.PullRequests do
      keywords). GitHub only registers these when the PR targets the repo's
      default branch.
   2. PRs matching the issue's linked branch name.
-  3. Same-repository cross-referenced PRs from the issue timeline (the relation
-     the GitHub Projects board surfaces), which also covers PRs whose closing
-     keyword does not register because they target a non-default base branch.
+  3. Cross-referenced PRs from the issue timeline (the relation the GitHub
+     Projects board surfaces), which also covers PRs whose closing keyword does
+     not register because they target a non-default base branch. Same-repo
+     cross-references are trusted; cross-repo ones are only kept when the PR body
+     carries the `Symphony-Issue` marker for this issue, so an unrelated repo's
+     mention does not auto-link.
   """
 
   alias SymphonyElixir.GitHub.{BranchStatus, Client, Config, IssueMarker, IssueRepo, RepoSpec}
@@ -195,10 +198,16 @@ defmodule SymphonyElixir.GitHub.PullRequests do
   end
 
   defp native_issue_pull_requests(%Project{} = project, identifier, opts) do
+    marker_opts = [marker_identifier: identifier, marker_key: marker_key(project)]
+
     with {:ok, issue_repo} <- IssueRepo.resolve(project, identifier, opts),
          {:ok, number} <- resolve_issue_number(project, identifier),
          {:ok, issue_prs} <-
-           for_issue(issue_repo, issue_number_identifier(number), Keyword.put(opts, :annotate, false)) do
+           for_issue(
+             issue_repo,
+             issue_number_identifier(number),
+             opts |> Keyword.put(:annotate, false) |> Keyword.merge(marker_opts)
+           ) do
       issue_prs
     else
       _ -> []
@@ -288,7 +297,7 @@ defmodule SymphonyElixir.GitHub.PullRequests do
 
   defp resolve_from_issue(issue, owner, name, opts) do
     closing = extract_closing_prs(issue)
-    cross_referenced = extract_cross_referenced_prs(issue)
+    cross_referenced = extract_cross_referenced_prs(issue, opts)
 
     branch_prs =
       case fetch_by_branch(extract_branch(issue), owner, name, opts) do
@@ -317,18 +326,39 @@ defmodule SymphonyElixir.GitHub.PullRequests do
     |> dedupe_by_url()
   end
 
-  defp extract_cross_referenced_prs(issue) do
+  defp extract_cross_referenced_prs(issue, opts) do
+    identifier = Keyword.get(opts, :marker_identifier)
+    key = Keyword.get(opts, :marker_key)
+
     issue
     |> get_in_safe(["timelineItems", "nodes"])
     |> List.wrap()
-    |> Enum.map(&cross_referenced_pr_node/1)
-    |> Enum.map(&parse_pr_node/1)
+    |> Enum.map(&cross_referenced_pr_entry/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.filter(fn {cross_repo?, node} -> keep_cross_referenced_pr?(cross_repo?, node, identifier, key) end)
+    |> Enum.map(fn {_cross_repo?, node} -> parse_pr_node(node) end)
     |> Enum.reject(&is_nil/1)
     |> dedupe_by_url()
   end
 
-  defp cross_referenced_pr_node(%{"source" => %{"__typename" => "PullRequest"} = pr}), do: pr
-  defp cross_referenced_pr_node(_event), do: nil
+  defp cross_referenced_pr_entry(%{"source" => %{"__typename" => "PullRequest"} = pr} = event),
+    do: {event["isCrossRepository"] == true, pr}
+
+  defp cross_referenced_pr_entry(_event), do: nil
+
+  # Same-repo cross-references are trusted (the issue's own repo — the relation the
+  # GitHub Projects board surfaces). A cross-repo cross-reference is only trusted
+  # when the PR body carries the `Symphony-Issue` marker for this issue; a bare
+  # GitHub mention from an unrelated repo's PR must not auto-link (that is what
+  # attached MAC-3's clouapp/front#544 to clouapp/back#287).
+  defp keep_cross_referenced_pr?(false, _node, _identifier, _key), do: true
+
+  defp keep_cross_referenced_pr?(true, node, identifier, key)
+       when is_binary(identifier) and is_binary(key) do
+    marker_confirmed?(%{body: node["body"]}, identifier, key)
+  end
+
+  defp keep_cross_referenced_pr?(true, _node, _identifier, _key), do: false
 
   defp workpad_pull_requests(%Project{slug: slug}, identifier, opts) do
     case Context.latest_workpad(slug, identifier) do
