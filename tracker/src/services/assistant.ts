@@ -41,6 +41,7 @@ export interface SendAssistantMessageInput {
 export type AssistantToolStatus = "running" | "complete" | "error";
 
 export interface AssistantToolCall {
+  id: string | null;
   name: string;
   status: AssistantToolStatus;
   arguments?: Record<string, unknown> | null;
@@ -133,6 +134,11 @@ export function normalizeUserQuestionsRequest(payload: {
 }
 
 interface BackendAssistantToolCallDto {
+  id?: string | number | null;
+  call_id?: string | number | null;
+  callId?: string | number | null;
+  tool_use_id?: string | number | null;
+  toolUseId?: string | number | null;
   name?: string | null;
   status?: string | null;
   arguments?: Record<string, unknown> | null;
@@ -441,6 +447,7 @@ export function normalizeToolCall(dto: BackendAssistantToolCallDto): AssistantTo
   const result = dto.result ?? {};
 
   return {
+    id: normalizeToolCallId(dto),
     name: dto.name ?? "unknown",
     status: normalizeToolStatus(dto.status),
     arguments: dto.arguments ?? null,
@@ -453,6 +460,13 @@ export function normalizeToolCall(dto: BackendAssistantToolCallDto): AssistantTo
       agentExecutions: result.agentExecutions ?? result.agent_executions ?? undefined,
     },
   };
+}
+
+function normalizeToolCallId(dto: BackendAssistantToolCallDto): string | null {
+  const raw = dto.id ?? dto.call_id ?? dto.callId ?? dto.tool_use_id ?? dto.toolUseId;
+  if (typeof raw === "string" && raw.trim() !== "") return raw;
+  if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
+  return null;
 }
 
 function normalizeToolStatus(status: string | null | undefined): AssistantToolStatus {

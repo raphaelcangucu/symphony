@@ -1886,6 +1886,17 @@
       "thinking": "Thinking…",
       "footer": "Esc to dismiss · not saved to the conversation"
     },
+    "toolGroup": {
+      "read": "Read {{n}} files",
+      "edit": "Edited {{n}} files",
+      "editStats": "Edited {{n}} files (+{{additions}} −{{deletions}})",
+      "command": "Ran {{n}} commands",
+      "query": "Looked up {{n}} items",
+      "action": "{{n}} actions",
+      "other": "{{n}} tool calls",
+      "running": "running",
+      "failed": "failed"
+    },
     "working": {
       "runningTool": "Running {{tool}}",
       "verbs": {

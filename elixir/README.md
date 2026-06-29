@@ -958,6 +958,14 @@ Assistant tool calls record IN/OUT arguments and output for debugging in the cha
   file reads come from the existing MCP read-tool calls, while Codex's native
   edits and shell commands are surfaced by relaying its item events through the
   tool-call pipeline.
+- Tool calls are keyed by their stable id (Claude `tool_use_id` / Codex id), so
+  repeated same-name calls no longer overwrite each other and arrival order is
+  preserved during streaming (`tracker` `assistantStream.ts`).
+- Consecutive **same-kind** tool calls collapse into a single expandable group
+  ("Read N files", "Ran N commands", etc.) via `lib/toolCallGroups.ts` and the
+  `ToolActivityTimeline` / `ToolActivityGroup` components. A lone call still
+  renders as a single row; a group shows a live spinner while any child runs and
+  a red badge if any child failed. Groups update in real time as calls stream in.
 
 Issue authoring uses the same assistant surface as the primary **New issue** path. The assistant
 creates a draft issue in `assistant.draft_status`, redirects to

@@ -20,16 +20,21 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useTranslation } from "react-i18next";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
-import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
+import {
+  STREAMING_ASSISTANT_ID,
+  appendAssistantDelta,
+  appendMessage,
+  assistantMessage,
+  replaceStreamingMessage,
+  updateStreamingToolCall,
+} from "@/components/assistant/assistantStream";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
-import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
-import { FileActivityCard } from "@/components/assistant/FileActivityCard";
+import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
-import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
@@ -151,7 +156,6 @@ interface ProjectAssistantPanelProps {
   composerSeedMessage?: string | null;
 }
 
-const STREAMING_ASSISTANT_ID = "assistant-streaming";
 const STICK_TO_BOTTOM_THRESHOLD_PX = 48;
 
 function attachChatScrollStickiness(
@@ -1290,15 +1294,8 @@ function AssistantBubble({
           <AssistantMarkdown content={message.content} onOpenDocumentPath={onOpenDocumentPath} />
         )}
         {message.toolCalls.length ? (
-          <div className={cn("mt-3 space-y-2 border-t pt-2", isUser && "border-white/20")}>
-            {message.toolCalls.map((toolCall, index) => {
-              const activity = fileActivityFromToolCall(toolCall);
-              return activity ? (
-                <FileActivityCard view={activity} key={`fa-${toolCall.name}-${index}`} />
-              ) : (
-                <ToolCallBlock view={assistantToolCallToView(toolCall)} key={`${toolCall.name}-${index}`} />
-              );
-            })}
+          <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
+            <ToolActivityTimeline toolCalls={message.toolCalls} />
           </div>
         ) : null}
       </article>
@@ -1483,42 +1480,6 @@ function fallbackAttachmentMessage(
     return t("assistant.panel.attachmentFallback.image");
   }
   return t("assistant.panel.attachmentFallback.files");
-}
-
-function assistantMessage(id: string, content: string): AssistantChatMessage {
-  return { id, role: "assistant", content, toolCalls: [], metadata: {} };
-}
-
-function appendMessage(messages: AssistantChatMessage[], message: AssistantChatMessage): AssistantChatMessage[] {
-  if (messages.some((current) => current.id === message.id)) return messages;
-  return [...messages, message];
-}
-
-function appendAssistantDelta(messages: AssistantChatMessage[], delta: string): AssistantChatMessage[] {
-  const existing = messages.find((message) => message.id === STREAMING_ASSISTANT_ID);
-  if (!existing) return [...messages, assistantMessage(STREAMING_ASSISTANT_ID, delta)];
-
-  return messages.map((message) =>
-    message.id === STREAMING_ASSISTANT_ID ? { ...message, content: `${message.content}${delta}` } : message,
-  );
-}
-
-function updateStreamingToolCall(messages: AssistantChatMessage[], toolCall: AssistantToolCall): AssistantChatMessage[] {
-  const existing = messages.find((message) => message.id === STREAMING_ASSISTANT_ID);
-  const target = existing ?? assistantMessage(STREAMING_ASSISTANT_ID, "");
-  const nextToolCalls = [...target.toolCalls.filter((current) => current.name !== toolCall.name), toolCall];
-  const nextTarget = { ...target, toolCalls: nextToolCalls };
-
-  if (!existing) return [...messages, nextTarget];
-  return messages.map((message) => (message.id === STREAMING_ASSISTANT_ID ? nextTarget : message));
-}
-
-function replaceStreamingMessage(messages: AssistantChatMessage[], message: AssistantChatMessage): AssistantChatMessage[] {
-  if (messages.some((current) => current.id === STREAMING_ASSISTANT_ID)) {
-    return messages.map((current) => (current.id === STREAMING_ASSISTANT_ID ? message : current));
-  }
-
-  return appendMessage(messages, message);
 }
 
 function draftIssueCreatedFromMessage(message: AssistantChatMessage): DraftIssueCreated | null {
