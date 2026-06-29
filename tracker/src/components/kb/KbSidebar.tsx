@@ -44,6 +44,8 @@ interface Props {
   inlineEdit: KbInlineEdit;
   /** Builds the route for a page/asset so the tree works in both KB scopes. */
   pageHref: (repoSlug: string, pagePath: string) => string;
+  /** Optional in-place selection for embedded KB surfaces that should not route away. */
+  onSelectPath?: (repoSlug: string, pagePath: string) => void;
   /** Hides the per-repository header chrome when the scope has one implicit repo. */
   singleRepo?: boolean;
 }
@@ -59,6 +61,7 @@ export function KbSidebar({
   treeHandlers,
   inlineEdit,
   pageHref,
+  onSelectPath,
   singleRepo = false,
 }: Props) {
   const { t } = useTranslation();
@@ -157,6 +160,7 @@ export function KbSidebar({
                       handlers={treeHandlers}
                       inlineEdit={inlineEdit}
                       pageHref={pageHref}
+                      onSelectPath={onSelectPath}
                     />
                   ) : null}
                   {nodes.length === 0 && !repo.docsPresent && !repoDraftActive ? (

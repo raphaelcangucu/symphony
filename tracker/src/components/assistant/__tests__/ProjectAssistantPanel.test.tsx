@@ -149,7 +149,13 @@ describe("ProjectAssistantPanel", () => {
           id: 1,
           role: "assistant",
           content: "Veja [spec](docs/market/polymarket-omnibus-spec.md).",
-          tool_calls: [],
+          tool_calls: [
+            {
+              name: "kb_create_page",
+              status: "complete",
+              result: { path: "docs/market/polymarket-omnibus-plan.md" },
+            },
+          ],
         },
       ],
     });
@@ -157,6 +163,7 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() =>
       expect(onKbDocumentReferencesChanged).toHaveBeenLastCalledWith([
         "market/polymarket-omnibus-spec.md",
+        "market/polymarket-omnibus-plan.md",
       ]),
     );
   });

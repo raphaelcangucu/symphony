@@ -4,16 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 
-vi.mock("@/hooks/useIssueDocuments", () => ({
-  useIssueDocuments: () => ({
-    available: true,
-    documents: [],
-    loading: false,
-    reason: null,
-    refetch: vi.fn(),
-  }),
-}));
-
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: ({
     issueIdentifier,
@@ -32,10 +22,10 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ),
 }));
 
-vi.mock("@/components/assistant/DocumentViewer", () => ({
-  DocumentViewer: ({ identifier, projectSlug }: { identifier: string; projectSlug: string }) => (
-    <section aria-label="Issue documents">
-      Documents {projectSlug}:{identifier}
+vi.mock("@/components/assistant/AssistantKbDocumentsPanel", () => ({
+  AssistantKbDocumentsPanel: ({ projectSlug, citedPaths }: { projectSlug: string; citedPaths: string[] }) => (
+    <section aria-label="Knowledge base documents">
+      KB {projectSlug}:{citedPaths.join(",") || "none"}
     </section>
   ),
 }));
@@ -72,7 +62,9 @@ describe("IssueAuthoringPanel", () => {
     expect(screen.getByTestId("project-assistant-panel")).toHaveTextContent(
       "Assistant macro-markets:MAC-1:board:page",
     );
-    expect(screen.getByRole("region", { name: /issue documents/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /knowledge base documents/i })).toHaveTextContent(
+      "KB macro-markets:none",
+    );
   });
 
   it("omits the visual mode, goal, and dispatch controls inside an existing issue", () => {
@@ -113,7 +105,8 @@ describe("IssueAuthoringPanel", () => {
 
     expect(screen.getByText("New issue authoring")).toBeTruthy();
     expect(screen.getByText(/Start by asking the assistant to draft an issue/i)).toBeTruthy();
-    expect(screen.getByText(/Draft documents appear here/i)).toBeTruthy();
-    expect(screen.queryByRole("region", { name: /issue documents/i })).toBeNull();
+    expect(screen.getByRole("region", { name: /knowledge base documents/i })).toHaveTextContent(
+      "KB macro-markets:none",
+    );
   });
 });

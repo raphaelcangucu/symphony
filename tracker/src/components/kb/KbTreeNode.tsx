@@ -26,9 +26,21 @@ interface Props {
   inlineEdit: KbInlineEdit;
   /** Builds the route for a page/asset so the tree works in both KB scopes. */
   pageHref: (repoSlug: string, pagePath: string) => string;
+  /** Optional in-place selection for embedded KB surfaces that should not route away. */
+  onSelectPath?: (repoSlug: string, pagePath: string) => void;
 }
 
-export function KbTreeNode({ projectSlug, repoSlug, node, depth, activePath, handlers, inlineEdit, pageHref }: Props) {
+export function KbTreeNode({
+  projectSlug,
+  repoSlug,
+  node,
+  depth,
+  activePath,
+  handlers,
+  inlineEdit,
+  pageHref,
+  onSelectPath,
+}: Props) {
   const [open, setOpen] = useState(true);
   const indent = depth * 12 + 4;
   const folderHasDraft = draftMatchesList(inlineEdit.draft, repoSlug, node.path);
@@ -80,6 +92,7 @@ export function KbTreeNode({ projectSlug, repoSlug, node, depth, activePath, han
               handlers={handlers}
               inlineEdit={inlineEdit}
               pageHref={pageHref}
+              onSelectPath={onSelectPath}
             />
           ) : (
             <p
@@ -104,6 +117,7 @@ export function KbTreeNode({ projectSlug, repoSlug, node, depth, activePath, han
         handlers={handlers}
         inlineEdit={inlineEdit}
         pageHref={pageHref}
+        onSelectPath={onSelectPath}
       />
     );
   }
@@ -117,6 +131,7 @@ export function KbTreeNode({ projectSlug, repoSlug, node, depth, activePath, han
       handlers={handlers}
       inlineEdit={inlineEdit}
       pageHref={pageHref}
+      onSelectPath={onSelectPath}
     />
   );
 }
@@ -129,7 +144,8 @@ function KbTreeAssetRow({
   handlers,
   inlineEdit,
   pageHref,
-}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref">) {
+  onSelectPath,
+}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref" | "onSelectPath">) {
   const indent = depth * 12 + 4;
   const startRename = () => handlers.onRename(repoSlug, node.path, assetBaseName(node.path));
 
@@ -164,6 +180,11 @@ function KbTreeAssetRow({
           )
         }
         title={node.path}
+        onClick={(event) => {
+          if (!onSelectPath) return;
+          event.preventDefault();
+          onSelectPath(repoSlug, node.path);
+        }}
         onDoubleClick={(event) => {
           event.preventDefault();
           startRename();
@@ -190,7 +211,8 @@ function KbTreePageRow({
   handlers,
   inlineEdit,
   pageHref,
-}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref">) {
+  onSelectPath,
+}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref" | "onSelectPath">) {
   const indent = depth * 12 + 4;
   const parentPath = parentPathOf(node.path);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -243,6 +265,11 @@ function KbTreePageRow({
         onDoubleClick={(event) => {
           event.preventDefault();
           handlers.onRename(repoSlug, node.path, node.title || node.name);
+        }}
+        onClick={(event) => {
+          if (!onSelectPath) return;
+          event.preventDefault();
+          onSelectPath(repoSlug, node.path);
         }}
       >
         {node.favorite ? (

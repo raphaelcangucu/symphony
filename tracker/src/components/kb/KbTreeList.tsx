@@ -43,6 +43,8 @@ interface Props {
   inlineEdit: KbInlineEdit;
   /** Builds the route for a page/asset so the tree works in both KB scopes. */
   pageHref: (repoSlug: string, pagePath: string) => string;
+  /** Optional in-place selection for embedded KB surfaces that should not route away. */
+  onSelectPath?: (repoSlug: string, pagePath: string) => void;
 }
 
 export function KbTreeList({
@@ -55,6 +57,7 @@ export function KbTreeList({
   handlers,
   inlineEdit,
   pageHref,
+  onSelectPath,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -92,6 +95,7 @@ export function KbTreeList({
               handlers={handlers}
               inlineEdit={inlineEdit}
               pageHref={pageHref}
+              onSelectPath={onSelectPath}
             />
             {listDraft?.insertAfterPath === node.path ? (
               <KbInlineNameInput

@@ -27,12 +27,10 @@ const AgentAuthoringPanel = memo(function AgentAuthoringPanel({
   projectSlug,
   identifier,
   view,
-  onDocumentsChanged,
 }: {
   projectSlug: string;
   identifier: string;
   view: WorkspaceView;
-  onDocumentsChanged: () => void;
 }) {
   return (
     <IssueAuthoringPanel
@@ -40,7 +38,6 @@ const AgentAuthoringPanel = memo(function AgentAuthoringPanel({
       identifier={identifier}
       view={view}
       compact
-      onDocumentsChanged={onDocumentsChanged}
     />
   );
 });
@@ -72,11 +69,6 @@ export function AgentTabs({
   const section = agentSectionFromSearchParams(new URLSearchParams(location.search));
   const [steerSeedMessage, setSteerSeedMessage] = useState<string | null>(null);
   const [returnToAgentTemplate, setReturnToAgentTemplate] = useState<ReturnToAgentTemplate | null>(null);
-  const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0);
-
-  const handleDocumentsChanged = useCallback(() => {
-    setDocumentsRefreshKey((current) => current + 1);
-  }, []);
 
   const setSection = useCallback(
     (nextSection: AgentSection) => {
@@ -113,11 +105,7 @@ export function AgentTabs({
           {section === "authoring" ? t("issue.agentTabs.authoringHint") : t("issue.agentTabs.executionHint")}
         </p>
         <div className="flex shrink-0 items-center gap-2">
-          <IssueDocumentsDrawer
-            projectSlug={projectSlug}
-            identifier={issue.identifier}
-            refreshKey={documentsRefreshKey}
-          />
+          <IssueDocumentsDrawer projectSlug={projectSlug} identifier={issue.identifier} />
           <TabsList
             aria-label={t("issue.agentTabs.sectionsAria")}
             className="h-8 shrink-0 gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
@@ -145,7 +133,6 @@ export function AgentTabs({
           projectSlug={projectSlug}
           identifier={issue.identifier}
           view={view}
-          onDocumentsChanged={handleDocumentsChanged}
         />
       </TabsContent>
       <TabsContent
