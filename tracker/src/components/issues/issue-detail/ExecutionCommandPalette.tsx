@@ -1,16 +1,16 @@
+import { Eraser, Pause, PenLine, Play, Repeat, RotateCcw, type LucideIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+
 import {
-  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
-} from "cmdk";
-import { Eraser, Pause, PenLine, Play, Repeat, RotateCcw, type LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-
+} from "@/components/ui/command";
+import { acquireOverlayPalette } from "@/lib/commandPaletteScope";
 import { EXECUTION_SHORTCUTS, type ExecutionShortcutId } from "@/lib/executionShortcuts";
 
 interface ExecutionCommandPaletteProps {
@@ -59,6 +59,10 @@ export function ExecutionCommandPalette({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
+  // Claim ⌘K while mounted so the board-level palette yields instead of both
+  // opening at once when the execution view sits on top of the board.
+  useEffect(() => acquireOverlayPalette(), []);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -87,28 +91,26 @@ export function ExecutionCommandPalette({
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
-      <Command>
-        <CommandInput placeholder={t("issue.agent.shortcuts.placeholder")} />
-        <CommandList>
-          <CommandEmpty>{t("issue.agent.shortcuts.empty")}</CommandEmpty>
-          <CommandGroup heading={t("issue.agent.shortcuts.title")}>
-            {EXECUTION_SHORTCUTS.map((shortcut) => {
-              if (!handlers[shortcut.id]) return null;
-              const Icon = ICONS[shortcut.id];
-              const label = t(shortcut.labelKey);
+    <CommandDialog open={open} onOpenChange={setOpen} label={t("issue.agent.shortcuts.title")}>
+      <CommandInput placeholder={t("issue.agent.shortcuts.placeholder")} />
+      <CommandList>
+        <CommandEmpty>{t("issue.agent.shortcuts.empty")}</CommandEmpty>
+        <CommandGroup heading={t("issue.agent.shortcuts.title")}>
+          {EXECUTION_SHORTCUTS.map((shortcut) => {
+            if (!handlers[shortcut.id]) return null;
+            const Icon = ICONS[shortcut.id];
+            const label = t(shortcut.labelKey);
 
-              return (
-                <CommandItem key={shortcut.id} value={label} onSelect={() => runAction(shortcut.id)}>
-                  <Icon className="mr-2 h-4 w-4" aria-hidden="true" />
-                  <span>{label}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{formatKeys(shortcut.keys)}</span>
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
-        </CommandList>
-      </Command>
+            return (
+              <CommandItem key={shortcut.id} value={label} onSelect={() => runAction(shortcut.id)}>
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                <span>{label}</span>
+                <span className="ml-auto text-xs text-muted-foreground">{formatKeys(shortcut.keys)}</span>
+              </CommandItem>
+            );
+          })}
+        </CommandGroup>
+      </CommandList>
     </CommandDialog>
   );
 }

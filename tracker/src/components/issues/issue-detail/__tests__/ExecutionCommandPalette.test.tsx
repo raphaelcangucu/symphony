@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
+import { isOverlayPaletteActive } from "@/lib/commandPaletteScope";
 
 function renderPalette(overrides: Record<string, unknown> = {}) {
   const handlers = {
@@ -52,5 +53,15 @@ describe("ExecutionCommandPalette", () => {
     await userEvent.click(await screen.findByText("Resume"));
 
     expect(handlers.onResume).not.toHaveBeenCalled();
+  });
+
+  it("registers as an overlay palette so the board palette yields ⌘K while mounted", () => {
+    expect(isOverlayPaletteActive()).toBe(false);
+
+    const { unmount } = render(<ExecutionCommandPalette onResume={vi.fn()} />);
+    expect(isOverlayPaletteActive()).toBe(true);
+
+    unmount();
+    expect(isOverlayPaletteActive()).toBe(false);
   });
 });

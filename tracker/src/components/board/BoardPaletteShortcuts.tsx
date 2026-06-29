@@ -1,9 +1,17 @@
-import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "cmdk";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useViewer } from "@/components/auth/ViewerProvider";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { isOverlayPaletteActive } from "@/lib/commandPaletteScope";
 import { filtersPath, viewFromPathname } from "@/lib/workspaceRoutes";
 
 type PaletteAction = "assignee_me" | "creator_me" | "clear" | "open_drawer" | "focus_search";
@@ -30,6 +38,10 @@ export function BoardPaletteShortcuts() {
 
   useEffect(() => {
     function handler(event: KeyboardEvent) {
+      // Yield ⌘K and "/" while an overlay palette (e.g. the issue execution view) is
+      // mounted so the two palettes never open simultaneously.
+      if (isOverlayPaletteActive()) return;
+
       const target = event.target as HTMLElement | null;
       const tagName = target?.tagName?.toLowerCase();
       const insideInput = tagName === "input" || tagName === "textarea" || target?.isContentEditable;
@@ -85,20 +97,18 @@ export function BoardPaletteShortcuts() {
   if (!viewer) return null;
 
   return (
-    <CommandDialog open={paletteOpen} onOpenChange={setPaletteOpen}>
-      <Command>
-        <CommandInput placeholder={t("board.palette.placeholder")} />
-        <CommandList>
-          <CommandEmpty>{t("board.palette.empty")}</CommandEmpty>
-          <CommandGroup heading={t("board.palette.filtersHeading")}>
-            <CommandItem onSelect={() => applyFilter("open_drawer")}>{t("board.palette.openFilters")}</CommandItem>
-            <CommandItem onSelect={() => applyFilter("focus_search")}>{t("board.palette.searchIssues")}</CommandItem>
-            <CommandItem onSelect={() => applyFilter("assignee_me")}>{t("board.palette.assignedToMe")}</CommandItem>
-            <CommandItem onSelect={() => applyFilter("creator_me")}>{t("board.palette.createdByMe")}</CommandItem>
-            <CommandItem onSelect={() => applyFilter("clear")}>{t("board.palette.clearFilters")}</CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </Command>
+    <CommandDialog open={paletteOpen} onOpenChange={setPaletteOpen} label={t("board.palette.placeholder")}>
+      <CommandInput placeholder={t("board.palette.placeholder")} />
+      <CommandList>
+        <CommandEmpty>{t("board.palette.empty")}</CommandEmpty>
+        <CommandGroup heading={t("board.palette.filtersHeading")}>
+          <CommandItem onSelect={() => applyFilter("open_drawer")}>{t("board.palette.openFilters")}</CommandItem>
+          <CommandItem onSelect={() => applyFilter("focus_search")}>{t("board.palette.searchIssues")}</CommandItem>
+          <CommandItem onSelect={() => applyFilter("assignee_me")}>{t("board.palette.assignedToMe")}</CommandItem>
+          <CommandItem onSelect={() => applyFilter("creator_me")}>{t("board.palette.createdByMe")}</CommandItem>
+          <CommandItem onSelect={() => applyFilter("clear")}>{t("board.palette.clearFilters")}</CommandItem>
+        </CommandGroup>
+      </CommandList>
     </CommandDialog>
   );
 }
