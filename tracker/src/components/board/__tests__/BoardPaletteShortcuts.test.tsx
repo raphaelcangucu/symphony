@@ -6,6 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
 import { ViewerProvider } from "@/components/auth/ViewerProvider";
+import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
 import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRoute";
 import * as viewerService from "@/services/viewer";
 
@@ -98,5 +99,37 @@ describe("BoardPaletteShortcuts", () => {
     await userEvent.click(await screen.findByText(/Clear filters/i));
 
     expect(screen.getByTestId("params").textContent).toBe("");
+  });
+
+  it("yields ⌘K to a mounted execution palette instead of opening both", async () => {
+    vi.spyOn(viewerService, "fetchViewer").mockResolvedValueOnce({
+      githubLogin: "octocat",
+      name: null,
+      avatarUrl: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/projects/x/board"]}>
+        <ViewerProvider>
+          <Routes>
+            <Route
+              path="/projects/:projectSlug/board"
+              element={
+                <>
+                  <BoardPaletteShortcuts />
+                  <ExecutionCommandPalette onResume={vi.fn()} onStop={vi.fn()} />
+                </>
+              }
+            />
+          </Routes>
+        </ViewerProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(document.body).toBeInTheDocument());
+
+    await userEvent.keyboard("{Meta>}k{/Meta}");
+
+    expect(await screen.findByText("Resume")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/type a command/i)).not.toBeInTheDocument();
   });
 });
