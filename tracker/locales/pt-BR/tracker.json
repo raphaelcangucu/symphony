@@ -2223,6 +2223,7 @@
       "ariaLabel": "Documentos da base de conhecimento",
       "title": "Base de Conhecimento",
       "subtitle": "{{count}} citados no chat",
+      "changedSubtitle": "{{count}} docs alteradas nesta task",
       "cited": "Docs citadas",
       "all": "Todas as docs",
       "empty": "Nenhum documento da base de conhecimento encontrado.",

@@ -218,6 +218,9 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/kb/repos/:repo", KnowledgeBaseController, :repo_tree)
     get("/projects/:project_slug/kb/repos/:repo/pages/*path", KnowledgeBaseController, :show_page)
     put("/projects/:project_slug/kb/repos/:repo/pages/*path", KnowledgeBaseController, :save_page)
+    get("/projects/:project_slug/issues/:identifier/kb/repos/:repo", KnowledgeBaseController, :issue_repo_tree)
+    get("/projects/:project_slug/issues/:identifier/kb/repos/:repo/pages/*path", KnowledgeBaseController, :issue_show_page)
+    put("/projects/:project_slug/issues/:identifier/kb/repos/:repo/pages/*path", KnowledgeBaseController, :issue_save_page)
 
     delete(
       "/projects/:project_slug/kb/repos/:repo/pages/*path",

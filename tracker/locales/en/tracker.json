@@ -2223,6 +2223,7 @@
       "ariaLabel": "Knowledge base documents",
       "title": "Knowledge base",
       "subtitle": "{{count}} cited in chat",
+      "changedSubtitle": "{{count}} changed docs in this task",
       "cited": "Cited docs",
       "all": "All docs",
       "empty": "No knowledge base documents found.",

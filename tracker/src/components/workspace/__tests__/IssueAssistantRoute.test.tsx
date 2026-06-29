@@ -184,6 +184,7 @@ describe("IssueAssistantRoute", () => {
     expect(screen.getByRole("region", { name: "mock kb documents" })).toBeTruthy();
     expect(assistantKbDocumentsPanel).toHaveBeenLastCalledWith({
       projectSlug: "macro",
+      issueIdentifier: "MAC-1",
       citedPaths: [],
       requestedPath: null,
     });
@@ -260,6 +261,7 @@ describe("IssueAssistantRoute", () => {
 
     expect(assistantKbDocumentsPanel).toHaveBeenLastCalledWith({
       projectSlug: "macro",
+      issueIdentifier: "MAC-1",
       citedPaths: ["market/polymarket-omnibus-spec.md"],
       requestedPath: null,
     });
@@ -274,6 +276,7 @@ describe("IssueAssistantRoute", () => {
 
     expect(assistantKbDocumentsPanel).toHaveBeenLastCalledWith({
       projectSlug: "macro",
+      issueIdentifier: "MAC-1",
       citedPaths: [],
       requestedPath: "docs/market/polymarket-omnibus-spec.md",
     });

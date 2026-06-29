@@ -116,6 +116,7 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
   const documentsContent = projectSlug ? (
     <AssistantKbDocumentsPanel
       projectSlug={projectSlug}
+      issueIdentifier={normalizedIdentifier ?? undefined}
       citedPaths={kbDocumentReferences}
       requestedPath={requestedKbPath}
     />

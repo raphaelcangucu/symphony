@@ -23,12 +23,23 @@ import {
   togglePageFavorite,
 } from "@/lib/kbTreeActions";
 import { cn } from "@/lib/utils";
-import { deleteAsset, deleteFolder, renameAsset, savePage } from "@/services/knowledgeBase";
+import {
+  deleteAsset,
+  deleteFolder,
+  getPage,
+  getIssuePage,
+  getIssueRepoTree,
+  getRepoTree,
+  renameAsset,
+  saveIssuePage,
+  savePage,
+} from "@/services/knowledgeBase";
 import type { KbSearchResult, KbTreeNode } from "@/types/knowledgeBase";
 import type { KbInlineEdit, KbPageDraft, KbRenameTarget } from "@/types/kbPageDraft";
 
 interface AssistantKbDocumentsPanelProps {
   projectSlug: string;
+  issueIdentifier?: string;
   citedPaths: string[];
   requestedPath?: string | null;
   className?: string;
@@ -53,16 +64,28 @@ interface KbDeleteConfig {
 
 export function AssistantKbDocumentsPanel({
   projectSlug,
+  issueIdentifier,
   citedPaths,
   requestedPath = null,
   className,
 }: AssistantKbDocumentsPanelProps) {
   const { t } = useTranslation();
+  const issueMode = Boolean(issueIdentifier);
   const { overview, loading: overviewLoading } = useKbProjectOverview(projectSlug);
   const repoSlugs = useMemo(() => overview?.repositories.map((repo) => repo.repoSlug) ?? [], [overview]);
-  const { treesByRepo, loading: treesLoading, reloadRepo } = useKbAllRepoTrees(projectSlug, repoSlugs);
+  const loadRepoTree = useCallback(
+    (scopeProjectSlug: string, repoSlug: string) =>
+      issueIdentifier ? getIssueRepoTree(scopeProjectSlug, issueIdentifier, repoSlug) : getRepoTree(scopeProjectSlug, repoSlug),
+    [issueIdentifier],
+  );
+  const loadPage = useCallback(
+    (scopeProjectSlug: string, repoSlug: string, path: string) =>
+      issueIdentifier ? getIssuePage(scopeProjectSlug, issueIdentifier, repoSlug, path) : getPage(scopeProjectSlug, repoSlug, path),
+    [issueIdentifier],
+  );
+  const { treesByRepo, loading: treesLoading, reloadRepo } = useKbAllRepoTrees(projectSlug, repoSlugs, loadRepoTree);
   const citedPathSet = useMemo(() => normalizeReferenceSet(citedPaths), [citedPaths]);
-  const [filter, setFilter] = useState<KbDocumentFilter>(() => (citedPathSet.size > 0 ? "cited" : "all"));
+  const [filter, setFilter] = useState<KbDocumentFilter>(() => (!issueMode && citedPathSet.size > 0 ? "cited" : "all"));
   const [filterTouched, setFilterTouched] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{ repoSlug: string; path: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -85,7 +108,7 @@ export function AssistantKbDocumentsPanel({
     return buildCitedTreesByRepo(overview.repositories.map((repo) => repo.repoSlug), treesByRepo, citedPathSet);
   }, [overview, treesByRepo, citedPathSet]);
 
-  const displayedTreesByRepo = filter === "cited" && citedPathSet.size > 0 ? citedTreesByRepo : treesByRepo;
+  const displayedTreesByRepo = !issueMode && filter === "cited" && citedPathSet.size > 0 ? citedTreesByRepo : treesByRepo;
 
   const visiblePages = useMemo(() => {
     if (!overview) return [];
@@ -105,6 +128,7 @@ export function AssistantKbDocumentsPanel({
     projectSlug,
     selectedPage?.repoSlug ?? null,
     isAssetPath ? null : selectedPage?.path ?? null,
+    loadPage,
   );
   const { state: syncState, loading: syncLoading, triggerSync } = useKbSync(projectSlug, selectedPage?.repoSlug ?? null);
   const loading = overviewLoading || treesLoading;
@@ -122,9 +146,10 @@ export function AssistantKbDocumentsPanel({
   );
 
   useEffect(() => {
+    if (issueMode && filter === "cited") setFilter("all");
     if (citedPathSet.size === 0 && filter === "cited") setFilter("all");
-    if (!filterTouched && citedPathSet.size > 0) setFilter("cited");
-  }, [citedPathSet, filter, filterTouched]);
+    if (!issueMode && !filterTouched && citedPathSet.size > 0) setFilter("cited");
+  }, [citedPathSet, filter, filterTouched, issueMode]);
 
   useEffect(() => {
     const normalizedRequestedPath = normalizeKbDocumentReference(requestedPath);
@@ -164,10 +189,17 @@ export function AssistantKbDocumentsPanel({
       if (!selectedPage || !page || isAssetPath) return;
       setSaving(true);
       try {
-        await savePage(projectSlug, selectedPage.repoSlug, selectedPage.path, {
-          frontmatter: page.frontmatter ?? {},
-          body: markdown,
-        });
+        if (issueIdentifier) {
+          await saveIssuePage(projectSlug, issueIdentifier, selectedPage.repoSlug, selectedPage.path, {
+            frontmatter: page.frontmatter ?? {},
+            body: markdown,
+          });
+        } else {
+          await savePage(projectSlug, selectedPage.repoSlug, selectedPage.path, {
+            frontmatter: page.frontmatter ?? {},
+            body: markdown,
+          });
+        }
         await reloadPage();
         await refreshRepo(selectedPage.repoSlug);
       } catch {
@@ -176,7 +208,7 @@ export function AssistantKbDocumentsPanel({
         setSaving(false);
       }
     },
-    [isAssetPath, page, projectSlug, refreshRepo, reloadPage, selectedPage, t],
+    [isAssetPath, issueIdentifier, page, projectSlug, refreshRepo, reloadPage, selectedPage, t],
   );
 
   const handleSearchSelect = useCallback((result: KbSearchResult) => {
@@ -350,16 +382,20 @@ export function AssistantKbDocumentsPanel({
         <div className="shrink-0 border-b border-border/60 px-4 py-3">
           <h2 className="text-sm font-semibold tracking-tight">{t("kb.assistantDocuments.title")}</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {t("kb.assistantDocuments.subtitle", { count: citedPathSet.size })}
+            {issueMode
+              ? t("kb.assistantDocuments.changedSubtitle", { count: visiblePages.length })
+              : t("kb.assistantDocuments.subtitle", { count: citedPathSet.size })}
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-background/70 p-1">
-            <FilterButton active={filter === "cited"} disabled={citedPathSet.size === 0} onClick={() => selectFilter("cited")}>
-              {t("kb.assistantDocuments.cited")}
-            </FilterButton>
-            <FilterButton active={filter === "all"} onClick={() => selectFilter("all")}>
-              {t("kb.assistantDocuments.all")}
-            </FilterButton>
-          </div>
+          {issueMode ? null : (
+            <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-background/70 p-1">
+              <FilterButton active={filter === "cited"} disabled={citedPathSet.size === 0} onClick={() => selectFilter("cited")}>
+                {t("kb.assistantDocuments.cited")}
+              </FilterButton>
+              <FilterButton active={filter === "all"} onClick={() => selectFilter("all")}>
+                {t("kb.assistantDocuments.all")}
+              </FilterButton>
+            </div>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden">

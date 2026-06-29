@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
 
 const assistantKbDocumentsPanel = vi.fn(
-  ({ projectSlug, citedPaths }: { projectSlug: string; citedPaths: string[] }) => (
+  ({ projectSlug, issueIdentifier, citedPaths }: { projectSlug: string; issueIdentifier?: string; citedPaths: string[] }) => (
     <section aria-label="mock KB panel">
-      KB {projectSlug} cited:{citedPaths.join(",") || "none"}
+      KB {projectSlug}:{issueIdentifier ?? "none"} cited:{citedPaths.join(",") || "none"}
     </section>
   ),
 );
@@ -23,10 +23,11 @@ describe("IssueDocumentsDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: /documents/i }));
 
     expect(screen.getByRole("region", { name: "mock KB panel" })).toHaveTextContent(
-      "KB macro-markets cited:none",
+      "KB macro-markets:MAC-1 cited:none",
     );
     expect(assistantKbDocumentsPanel).toHaveBeenCalledWith({
       projectSlug: "macro-markets",
+      issueIdentifier: "MAC-1",
       citedPaths: [],
       className: "rounded-none border-0 shadow-none",
     });

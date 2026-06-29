@@ -1,12 +1,14 @@
 defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
   @moduledoc """
   Repository-aware knowledge base tools for the assistant: list repos, search,
-  read, create, update pages, link tasks into docs, and trigger sync. Every
+  read, create, update pages, and link tasks into docs. Every
   operation is scoped by `(project, repository)`; when the repository is
-  ambiguous the tool asks the user instead of guessing.
+  ambiguous the tool asks the user instead of guessing. In issue-bound chats,
+  page reads/writes target the issue worktree instead of the project base checkout.
   """
 
   alias SymphonyElixir.KnowledgeBase
+  alias SymphonyElixir.KnowledgeBase.IssueWorkspace
   alias SymphonyElixir.KnowledgeBase.Paths
   alias SymphonyElixir.LocalTracker.Context
 
@@ -88,7 +90,7 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
       ),
       spec(
         "kb_sync",
-        "Trigger a knowledge base sync (merge default branch, open/update PR, auto-merge when green).",
+        "No-op compatibility hook. Project KB writes now save directly to the configured checkout/working tree.",
         %{"type" => "object", "additionalProperties" => false, "properties" => %{"repository" => repository_schema()}}
       )
     ]
@@ -120,11 +122,11 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
     end
   end
 
-  def execute(project_slug, "kb_read_page", args, _opts) do
+  def execute(project_slug, "kb_read_page", args, opts) do
     with {:ok, path} <- required(args, "path"),
          {:ok, repo} <- resolve_repo(project_slug, args) do
       maybe_remediation(repo, fn slug ->
-        case KnowledgeBase.read_page(project_slug, slug, String.split(path, "/")) do
+        case read_page(scope(project_slug, opts), slug, path) do
           {:ok, page} -> {:ok, ok("kb_read_page", "Read #{path}.", page)}
           {:error, reason} -> {:error, reason}
         end
@@ -132,12 +134,12 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
     end
   end
 
-  def execute(project_slug, "kb_create_page", args, _opts) do
-    write_page(project_slug, args, "kb_create_page", :must_not_exist)
+  def execute(project_slug, "kb_create_page", args, opts) do
+    write_page(project_slug, args, "kb_create_page", :must_not_exist, opts)
   end
 
-  def execute(project_slug, "kb_update_page", args, _opts) do
-    write_page(project_slug, args, "kb_update_page", :must_exist)
+  def execute(project_slug, "kb_update_page", args, opts) do
+    write_page(project_slug, args, "kb_update_page", :must_exist, opts)
   end
 
   def execute(project_slug, "kb_delete_page", args, _opts) do
@@ -180,11 +182,11 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
     end
   end
 
-  def execute(project_slug, "kb_link_task", args, _opts) do
+  def execute(project_slug, "kb_link_task", args, opts) do
     with {:ok, path} <- required(args, "path"),
          {:ok, identifier} <- required(args, "identifier"),
          {:ok, repo} <- resolve_repo(project_slug, args) do
-      maybe_remediation(repo, fn slug -> do_link_task(project_slug, slug, path, identifier) end)
+      maybe_remediation(repo, fn slug -> do_link_task(scope(project_slug, opts), slug, path, identifier) end)
     end
   end
 
@@ -192,7 +194,7 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
     with {:ok, repo} <- resolve_repo(project_slug, args) do
       maybe_remediation(repo, fn slug ->
         _ = KnowledgeBase.request_sync(project_slug, slug)
-        {:ok, ok("kb_sync", "Sync requested for #{slug}.", %{repo_slug: slug})}
+        {:ok, ok("kb_sync", "No sync needed for #{slug}; KB writes save directly to the working tree.", %{repo_slug: slug})}
       end)
     end
   end
@@ -231,30 +233,32 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
      }}
   end
 
-  defp write_page(project_slug, args, tool, existence) do
+  defp write_page(project_slug, args, tool, existence, opts) do
     with {:ok, path} <- required(args, "path"),
          {:ok, body} <- required(args, "body"),
          {:ok, repo} <- resolve_repo(project_slug, args) do
       maybe_remediation(repo, fn slug ->
-        with :ok <- check_existence(project_slug, slug, path, existence),
+        scope = scope(project_slug, opts)
+
+        with :ok <- check_existence(scope, slug, path, existence),
              {:ok, result} <-
-               KnowledgeBase.write_page(project_slug, slug, String.split(path, "/"), build_page(args, body)) do
+               write_page_in_scope(scope, slug, path, build_page(args, body)) do
           {:ok, ok(tool, "Saved #{path} in #{slug}.", result)}
         end
       end)
     end
   end
 
-  defp check_existence(project_slug, slug, path, :must_not_exist) do
-    case KnowledgeBase.read_page(project_slug, slug, String.split(path, "/")) do
+  defp check_existence(scope, slug, path, :must_not_exist) do
+    case read_page(scope, slug, path) do
       {:ok, _} -> {:error, :kb_page_exists}
       {:error, :kb_page_not_found} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp check_existence(project_slug, slug, path, :must_exist) do
-    case KnowledgeBase.read_page(project_slug, slug, String.split(path, "/")) do
+  defp check_existence(scope, slug, path, :must_exist) do
+    case read_page(scope, slug, path) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -265,17 +269,39 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseTools do
     %{frontmatter: frontmatter, body: body}
   end
 
-  defp do_link_task(project_slug, slug, path, identifier) do
-    with {:ok, page} <- KnowledgeBase.read_page(project_slug, slug, String.split(path, "/")) do
-      ref = "\n\n> Related issue: [#{identifier}](#{issue_url(project_slug, identifier)})\n"
+  defp read_page({:project, project_slug}, slug, path),
+    do: KnowledgeBase.read_page(project_slug, slug, String.split(path, "/"))
+
+  defp read_page({:issue, project_slug, issue_identifier}, slug, path),
+    do: IssueWorkspace.read_page(project_slug, issue_identifier, slug, path)
+
+  defp write_page_in_scope({:project, project_slug}, slug, path, page),
+    do: KnowledgeBase.write_page(project_slug, slug, String.split(path, "/"), page)
+
+  defp write_page_in_scope({:issue, project_slug, issue_identifier}, slug, path, page),
+    do: IssueWorkspace.write_page(project_slug, issue_identifier, slug, path, page)
+
+  defp scope(project_slug, opts) do
+    case Keyword.get(opts, :bound_issue_identifier) do
+      identifier when is_binary(identifier) and identifier != "" -> {:issue, project_slug, identifier}
+      _ -> {:project, project_slug}
+    end
+  end
+
+  defp do_link_task(scope, slug, path, identifier) do
+    with {:ok, page} <- read_page(scope, slug, path) do
+      ref = "\n\n> Related issue: [#{identifier}](#{issue_url(scope_project_slug(scope), identifier)})\n"
       updated = %{frontmatter: page.frontmatter, body: page.body <> ref}
 
-      case KnowledgeBase.write_page(project_slug, slug, String.split(path, "/"), updated) do
+      case write_page_in_scope(scope, slug, path, updated) do
         {:ok, result} -> {:ok, ok("kb_link_task", "Linked #{identifier} into #{path}.", result)}
         {:error, reason} -> {:error, reason}
       end
     end
   end
+
+  defp scope_project_slug({:project, project_slug}), do: project_slug
+  defp scope_project_slug({:issue, project_slug, _identifier}), do: project_slug
 
   defp search_repo_filter(project_slug, args) do
     case Map.get(args, "repository") do

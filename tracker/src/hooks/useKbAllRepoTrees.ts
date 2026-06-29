@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getRepoTree } from "@/services/knowledgeBase";
-import type { KbTreeNode } from "@/types/knowledgeBase";
+import type { KbRepoTree, KbTreeNode } from "@/types/knowledgeBase";
+
+type KbRepoTreeLoader = (projectSlug: string, repoSlug: string) => Promise<KbRepoTree>;
 
 export interface UseKbAllRepoTreesResult {
   treesByRepo: Record<string, KbTreeNode[]>;
@@ -10,7 +12,11 @@ export interface UseKbAllRepoTreesResult {
   reloadAll: () => Promise<void>;
 }
 
-export function useKbAllRepoTrees(projectSlug: string, repoSlugs: string[]): UseKbAllRepoTreesResult {
+export function useKbAllRepoTrees(
+  projectSlug: string,
+  repoSlugs: string[],
+  loadRepoTree: KbRepoTreeLoader = getRepoTree,
+): UseKbAllRepoTreesResult {
   const [treesByRepo, setTreesByRepo] = useState<Record<string, KbTreeNode[]>>({});
   const [loading, setLoading] = useState(false);
   const requestIdRef = useRef(0);
@@ -20,17 +26,18 @@ export function useKbAllRepoTrees(projectSlug: string, repoSlugs: string[]): Use
     async (repoSlug: string) => {
       if (!projectSlug || !repoSlug) return;
       try {
-        const result = await getRepoTree(projectSlug, repoSlug);
+        const result = await loadRepoTree(projectSlug, repoSlug);
         setTreesByRepo((prev) => ({ ...prev, [repoSlug]: result.tree }));
       } catch {
         setTreesByRepo((prev) => ({ ...prev, [repoSlug]: prev[repoSlug] ?? [] }));
       }
     },
-    [projectSlug],
+    [loadRepoTree, projectSlug],
   );
 
   const reloadAll = useCallback(async () => {
-    if (!projectSlug || repoSlugs.length === 0) {
+    const activeRepoSlugs = repoSlugsKey ? repoSlugsKey.split("\0") : [];
+    if (!projectSlug || activeRepoSlugs.length === 0) {
       setTreesByRepo({});
       return;
     }
@@ -38,9 +45,9 @@ export function useKbAllRepoTrees(projectSlug: string, repoSlugs: string[]): Use
     setLoading(true);
     try {
       const entries = await Promise.all(
-        repoSlugs.map(async (repoSlug) => {
+        activeRepoSlugs.map(async (repoSlug) => {
           try {
-            const result = await getRepoTree(projectSlug, repoSlug);
+            const result = await loadRepoTree(projectSlug, repoSlug);
             return [repoSlug, result.tree] as const;
           } catch {
             return [repoSlug, []] as const;
@@ -52,7 +59,7 @@ export function useKbAllRepoTrees(projectSlug: string, repoSlugs: string[]): Use
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [projectSlug, repoSlugsKey, repoSlugs]);
+  }, [loadRepoTree, projectSlug, repoSlugsKey]);
 
   useEffect(() => {
     void reloadAll();

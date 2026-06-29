@@ -23,9 +23,17 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
 }));
 
 vi.mock("@/components/assistant/AssistantKbDocumentsPanel", () => ({
-  AssistantKbDocumentsPanel: ({ projectSlug, citedPaths }: { projectSlug: string; citedPaths: string[] }) => (
+  AssistantKbDocumentsPanel: ({
+    projectSlug,
+    issueIdentifier,
+    citedPaths,
+  }: {
+    projectSlug: string;
+    issueIdentifier?: string;
+    citedPaths: string[];
+  }) => (
     <section aria-label="Knowledge base documents">
-      KB {projectSlug}:{citedPaths.join(",") || "none"}
+      KB {projectSlug}:{issueIdentifier ?? "none"}:{citedPaths.join(",") || "none"}
     </section>
   ),
 }));
@@ -63,7 +71,7 @@ describe("IssueAuthoringPanel", () => {
       "Assistant macro-markets:MAC-1:board:page",
     );
     expect(screen.getByRole("region", { name: /knowledge base documents/i })).toHaveTextContent(
-      "KB macro-markets:none",
+      "KB macro-markets:MAC-1:none",
     );
   });
 
@@ -106,7 +114,7 @@ describe("IssueAuthoringPanel", () => {
     expect(screen.getByText("New issue authoring")).toBeTruthy();
     expect(screen.getByText(/Start by asking the assistant to draft an issue/i)).toBeTruthy();
     expect(screen.getByRole("region", { name: /knowledge base documents/i })).toHaveTextContent(
-      "KB macro-markets:none",
+      "KB macro-markets:none:none",
     );
   });
 });
