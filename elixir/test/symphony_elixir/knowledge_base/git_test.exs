@@ -105,6 +105,38 @@ defmodule SymphonyElixir.KnowledgeBase.GitTest do
     assert output =~ "symphony-docs"
   end
 
+  test "push integrates remote docs branch updates before retrying", %{checkout: checkout, base: base} do
+    origin = Path.join(base, "origin.git")
+    sh(File.cwd!(), ["init", "--bare", "-q", "-b", "main", origin])
+    sh(checkout, ["remote", "add", "origin", origin])
+    sh(checkout, ["push", "-q", "-u", "origin", "main"])
+
+    {:ok, wt} = Git.ensure_worktree(checkout, "symphony-docs")
+    File.write!(Path.join(wt, "first.txt"), "first")
+    :ok = Git.add(wt, ["first.txt"])
+    {:ok, _} = Git.commit(wt, "first docs", name: "B", email: "b@s")
+    assert :ok = Git.push(wt, "symphony-docs")
+
+    other = Path.join(base, "other")
+    {_o, 0} = System.cmd("git", ["clone", "-q", origin, other], stderr_to_stdout: true)
+    sh(other, ["checkout", "-q", "symphony-docs"])
+    File.write!(Path.join(other, "remote.txt"), "remote")
+    sh(other, ["-c", "user.email=t@t", "-c", "user.name=t", "add", "-A"])
+    sh(other, ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "remote docs"])
+    sh(other, ["push", "-q", "origin", "symphony-docs"])
+
+    File.write!(Path.join(wt, "local.txt"), "local")
+    :ok = Git.add(wt, ["local.txt"])
+    {:ok, _} = Git.commit(wt, "local docs", name: "B", email: "b@s")
+
+    assert :ok = Git.push(wt, "symphony-docs")
+
+    verify = Path.join(base, "verify")
+    {_o, 0} = System.cmd("git", ["clone", "-q", "--branch", "symphony-docs", origin, verify], stderr_to_stdout: true)
+    assert File.read!(Path.join(verify, "remote.txt")) == "remote"
+    assert File.read!(Path.join(verify, "local.txt")) == "local"
+  end
+
   test "merge brings in origin changes and reports merged", %{checkout: checkout, base: base} do
     origin = Path.join(base, "origin.git")
     {_o, 0} = System.cmd("git", ["init", "--bare", "-q", "-b", "main", origin], stderr_to_stdout: true)

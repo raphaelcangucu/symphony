@@ -119,11 +119,33 @@ defmodule SymphonyElixir.KnowledgeBase.Git do
 
   @spec push(Path.t(), String.t(), keyword()) :: :ok | {:error, term()}
   def push(dir, branch, opts \\ []) do
-    case run(dir, ["push", "-u", "origin", branch], opts) do
+    case push_once(dir, branch, opts) do
       {:ok, _} -> :ok
-      error -> error
+      {:error, reason} -> recover_push(dir, branch, reason, opts)
     end
   end
+
+  defp push_once(dir, branch, opts), do: run(dir, ["push", "-u", "origin", branch], opts)
+
+  defp recover_push(dir, branch, reason, opts) do
+    if non_fast_forward_push?(reason) do
+      with :ok <- fetch(dir, opts),
+           {:ok, _merge_result} <- merge(dir, "origin/#{branch}", opts),
+           {:ok, _} <- push_once(dir, branch, opts) do
+        :ok
+      else
+        {:error, merge_or_push_reason} -> {:error, merge_or_push_reason}
+      end
+    else
+      {:error, reason}
+    end
+  end
+
+  defp non_fast_forward_push?({_status, output}) when is_binary(output) do
+    output =~ "fetch first" or output =~ "non-fast-forward" or output =~ "Updates were rejected"
+  end
+
+  defp non_fast_forward_push?(_reason), do: false
 
   @spec fetch(Path.t(), keyword()) :: :ok | {:error, term()}
   def fetch(dir, opts \\ []) do

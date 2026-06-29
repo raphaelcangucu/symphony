@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { AssistantKbDocumentsPanel } from "@/components/assistant/AssistantKbDocumentsPanel";
@@ -7,6 +8,19 @@ import { i18n, initI18n } from "@/i18n";
 import type { KbProjectOverview, KbTreeNode } from "@/types/knowledgeBase";
 
 await initI18n("en");
+
+const savePage = vi.hoisted(() => vi.fn());
+const kbEditor = vi.hoisted(() =>
+  vi.fn(({ title, markdown, onSave }: { title: string; markdown: string; onSave: (markdown: string) => void }) => (
+    <section aria-label="mock kb editor">
+      <h2>{title}</h2>
+      <p>{markdown}</p>
+      <button type="button" onClick={() => onSave("# Updated")}>
+        Save mocked KB page
+      </button>
+    </section>
+  )),
+);
 
 const overview: KbProjectOverview = {
   project: { slug: "macro-markets", name: "Macro Markets" },
@@ -73,24 +87,58 @@ vi.mock("@/hooks/useKbPage", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useKbSync", () => ({
+  useKbSync: () => ({ state: null, loading: false, triggerSync: vi.fn() }),
+}));
+
+vi.mock("@/components/kb/KbEditor", () => ({
+  KbEditor: (props: Parameters<typeof kbEditor>[0]) => kbEditor(props),
+}));
+
+vi.mock("@/services/knowledgeBase", async () => {
+  const actual = await vi.importActual<typeof import("@/services/knowledgeBase")>("@/services/knowledgeBase");
+  return {
+    ...actual,
+    savePage,
+  };
+});
+
 describe("AssistantKbDocumentsPanel", () => {
-  it("starts with cited KB docs and can switch to all docs", () => {
+  it("uses the KB tree and editor for cited docs, then can switch to all docs", async () => {
+    savePage.mockResolvedValue({ path: "market/polymarket-omnibus-spec.md", commit: "abc", pushed: false });
+
     render(
       <I18nextProvider i18n={i18n}>
-        <AssistantKbDocumentsPanel
-          projectSlug="macro-markets"
-          citedPaths={["market/polymarket-omnibus-spec.md"]}
-        />
+        <MemoryRouter>
+          <AssistantKbDocumentsPanel
+            projectSlug="macro-markets"
+            citedPaths={["market/polymarket-omnibus-spec.md"]}
+          />
+        </MemoryRouter>
       </I18nextProvider>,
     );
 
-    expect(screen.getByRole("button", { name: "Polymarket omnibus spec" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Polymarket omnibus plan" })).not.toBeInTheDocument();
-    expect(screen.getByText("Product spec")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Market" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Polymarket omnibus spec" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Polymarket omnibus plan" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "mock kb editor" })).toHaveTextContent("# Product spec");
+
+    fireEvent.click(screen.getByRole("button", { name: "Market" }));
+    expect(screen.queryByRole("link", { name: "Polymarket omnibus spec" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "All docs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Market" }));
 
-    expect(screen.getByRole("button", { name: "Polymarket omnibus spec" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Polymarket omnibus plan" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Polymarket omnibus spec" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Polymarket omnibus plan" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save mocked KB page" }));
+
+    await waitFor(() =>
+      expect(savePage).toHaveBeenCalledWith("macro-markets", "back", "market/polymarket-omnibus-spec.md", {
+        frontmatter: {},
+        body: "# Updated",
+      }),
+    );
   });
 });

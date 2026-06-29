@@ -35,4 +35,20 @@ describe("assistantKbReferences", () => {
       "market/polymarket-omnibus-plan.md",
     ]);
   });
+
+  it("extracts KB references from colon-described chat summaries", () => {
+    const markdown = [
+      "Criei e sincronizei a documentação no KB do clouapp/back:",
+      "",
+      "docs/market/polymarket-omnibus-spec.md: spec do fluxo Polymarket omnibus/pass-through.",
+      "docs/market/polymarket-omnibus-plan.md: plano de implementação por fases.",
+      "docs/market/README.md: índice atualizado com os dois novos documentos.",
+    ].join("\n");
+
+    expect(extractKbDocumentReferencesFromMarkdown(markdown)).toEqual([
+      "market/polymarket-omnibus-spec.md",
+      "market/polymarket-omnibus-plan.md",
+      "market/README.md",
+    ]);
+  });
 });

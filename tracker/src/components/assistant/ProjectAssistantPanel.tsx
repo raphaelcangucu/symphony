@@ -914,7 +914,7 @@ export function ProjectAssistantPanel({
   const kbDocumentReferences = useMemo(
     () =>
       visibleMessages.reduce<string[]>((references, message) => {
-        for (const reference of extractKbDocumentReferencesFromMarkdown(message.content)) {
+        for (const reference of extractKbDocumentReferencesFromMessage(message)) {
           if (!references.includes(reference)) references.push(reference);
         }
         return references;
@@ -1488,6 +1488,33 @@ function displayMessages(messages: AssistantChatMessage[], t: TFunction): Assist
   if (messages.length > 0) return messages;
 
   return [assistantMessage("assistant-welcome", t("assistant.panel.welcome"))];
+}
+
+function extractKbDocumentReferencesFromMessage(message: AssistantChatMessage): string[] {
+  const references = new Set(extractKbDocumentReferencesFromMarkdown(message.content));
+
+  for (const toolCall of message.toolCalls) {
+    for (const reference of extractKbDocumentReferencesFromMarkdown(serializedToolCallReferenceText(toolCall))) {
+      references.add(reference);
+    }
+  }
+
+  return [...references];
+}
+
+function serializedToolCallReferenceText(toolCall: AssistantToolCall): string {
+  return [toolCall.output, safeJsonStringify(toolCall.arguments), safeJsonStringify(toolCall.result)]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join("\n");
+}
+
+function safeJsonStringify(value: unknown): string | null {
+  if (value == null) return null;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
 }
 
 function fallbackAttachmentMessage(
