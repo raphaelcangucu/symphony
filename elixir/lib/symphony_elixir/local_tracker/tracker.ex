@@ -208,7 +208,7 @@ defmodule SymphonyElixir.LocalTracker.Tracker do
       comments: from(comment in Comment, order_by: [desc: comment.inserted_at, desc: comment.id]),
       source_relations:
         from(relation in IssueRelation,
-          where: relation.type == "blocked_by",
+          where: relation.type in ["blocked_by", "sub_issue_of"],
           preload: [target_issue: :status]
         )
     ]

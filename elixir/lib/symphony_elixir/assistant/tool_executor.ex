@@ -31,10 +31,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   alias SymphonyElixir.Config
   alias SymphonyElixir.Codex.DynamicTool
+  alias SymphonyElixir.IssueDispatchPrep
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
+  alias SymphonyElixir.Tracker.Sync.ParentLink
   alias SymphonyElixir.Tracker.Workpad
   alias SymphonyElixir.Workpad.ExecutionBundle
   alias SymphonyElixir.Workpad.ExecutionBundle.{Classifier, Store, Validator}
@@ -924,6 +926,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          :ok <- ensure_in_dispatch_queue(project, current),
          :ok <- ensure_status_available(project, @in_progress_state),
          {:ok, agent} <- resolve_dispatch_agent(project, identifier, Map.get(arguments, "agent")),
+         :ok <- IssueDispatchPrep.prepare_for_dispatch(project, identifier, agent),
          {:ok, _comment} <- IssueAdapter.dispatch(project, :add_comment, [identifier, codex_comment(instructions), %{"author" => "assistant"}]),
          {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, dispatch_agent_attrs(agent, arguments)]) do
       presented = TrackerPresenter.issue(issue)
@@ -1170,11 +1173,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
     if old_parent do
       Context.delete_blocker(slug, identifier, old_parent, subtask_type)
+      ParentLink.enqueue_unlink(project, identifier, old_parent)
       remove_bundle_unit(project, old_parent, identifier)
     end
 
     if new_parent do
       Context.add_blocker(slug, identifier, new_parent, subtask_type)
+      ParentLink.enqueue_link(project, identifier, new_parent)
       {:ok, parent} = IssueAdapter.dispatch(project, :get_issue, [new_parent])
 
       type =
@@ -1239,8 +1244,12 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
            parent.identifier,
            SymphonyElixir.LocalTracker.IssueRelation.subtask_type()
          ) do
-      {:ok, _relation} -> :ok
-      {:error, reason} -> {:error, reason}
+      {:ok, _relation} ->
+        ParentLink.enqueue_link(project, child.identifier, parent.identifier)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

@@ -93,6 +93,24 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   }
   """
 
+  @add_sub_issue """
+  mutation SymphonyAddSubIssue($input: AddSubIssueInput!) {
+    addSubIssue(input: $input) {
+      issue { id }
+      subIssue { id }
+    }
+  }
+  """
+
+  @remove_sub_issue """
+  mutation SymphonyRemoveSubIssue($input: RemoveSubIssueInput!) {
+    removeSubIssue(input: $input) {
+      issue { id }
+      subIssue { id }
+    }
+  }
+  """
+
   @add_project_item """
   mutation SymphonyUiAddProjectItem($projectId: ID!, $contentId: ID!) {
     addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
@@ -214,6 +232,12 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   @spec create_issue_mutation() :: String.t()
   def create_issue_mutation, do: @create_issue
 
+  @spec add_sub_issue_mutation() :: String.t()
+  def add_sub_issue_mutation, do: @add_sub_issue
+
+  @spec remove_sub_issue_mutation() :: String.t()
+  def remove_sub_issue_mutation, do: @remove_sub_issue
+
   @spec add_project_item_mutation() :: String.t()
   def add_project_item_mutation, do: @add_project_item
 
@@ -274,6 +298,20 @@ defmodule SymphonyElixir.GitHub.IssueAdapter.Query do
   end
 
   def created_issue(_), do: {:error, :create_failed}
+
+  @spec linked_sub_issue_id(map()) :: {:ok, String.t()} | {:error, :link_sub_issue_failed}
+  def linked_sub_issue_id(%{"data" => %{"addSubIssue" => %{"subIssue" => %{"id" => id}}}})
+      when is_binary(id),
+      do: {:ok, id}
+
+  def linked_sub_issue_id(_), do: {:error, :link_sub_issue_failed}
+
+  @spec unlinked_sub_issue_id(map()) :: {:ok, String.t()} | {:error, :unlink_sub_issue_failed}
+  def unlinked_sub_issue_id(%{"data" => %{"removeSubIssue" => %{"subIssue" => %{"id" => id}}}})
+      when is_binary(id),
+      do: {:ok, id}
+
+  def unlinked_sub_issue_id(_), do: {:error, :unlink_sub_issue_failed}
 
   @spec project_item_id(map()) :: {:ok, String.t()} | {:error, :add_item_failed}
   def project_item_id(%{"data" => %{"addProjectV2ItemById" => %{"item" => %{"id" => id}}}})

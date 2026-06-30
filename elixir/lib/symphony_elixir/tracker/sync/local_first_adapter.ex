@@ -12,7 +12,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
 
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter, IssueRecord, Project}
   alias SymphonyElixir.Repo
-  alias SymphonyElixir.Tracker.Sync.{Engine, GroupStatus, LocalStore, Outbox, SubtaskRollup}
+  alias SymphonyElixir.Tracker.Sync.{Engine, GroupStatus, LocalStore, Outbox, ParentLink, SubtaskRollup}
 
   @impl true
   def kind, do: :github
@@ -263,6 +263,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
     project
     |> local_only_issue_identifiers()
     |> then(&Outbox.requeue_failed_issue_creates(project_id, &1))
+
+    ParentLink.requeue_unsynced_relations(project)
 
     project
     |> dirty_outbox_dedup_keys()

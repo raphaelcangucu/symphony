@@ -80,6 +80,19 @@ defmodule SymphonyElixir.LocalTracker.TrackerTest do
     assert state_issue.state == "Todo"
   end
 
+  test "fetched candidate issues carry parent_identifier from sub_issue_of relations" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+
+    {:ok, issues} = Tracker.fetch_issues_by_states(["Todo"])
+    child = Enum.find(issues, &(&1.identifier == "MAC-2"))
+
+    assert child, "expected child issue MAC-2 to be returned"
+    assert child.parent_identifier == "MAC-1"
+  end
+
   test "create_comment and update_issue_state write to configured project only" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _other_project} = Context.ensure_project(%{name: "Macro Ops", slug: "macro-ops"})

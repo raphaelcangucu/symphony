@@ -4,7 +4,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
   import Ecto.Query
 
   alias SymphonyElixir.Assistant.{ProjectExploreWorkspace, ToolExecutor}
-  alias SymphonyElixir.LocalTracker.{Context, Templates, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{Context, Templates, Viewer, WorkflowStatus}
   alias SymphonyElixir.Repo
 
   @token_env "SYMPHONY_TRACKER_TOKEN"
@@ -93,6 +93,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
   test "dispatches Codex work by adding a comment and moving the issue into progress" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Fix tests", "status" => "Todo"})
+    seed_viewer("raphaelcangucu")
 
     assert {:ok, result} =
              ToolExecutor.execute("macro-markets", "dispatch_codex", %{
@@ -104,6 +105,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert result.message == "Requested Codex work on MAC-1"
     assert result.data.identifier == "MAC-1"
     assert result.data.status.name == "In Progress"
+
+    assert {:ok, reloaded} = Context.get_issue("macro-markets", "MAC-1")
+    assert reloaded.assignee_id == "raphaelcangucu"
+    assert "symphony:codex" in Enum.map(reloaded.labels, & &1.name)
 
     assert {:ok, comments} = Context.list_comments("macro-markets", "MAC-1")
     assert [%{body: body, author: "assistant"}] = comments
@@ -755,4 +760,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
 
   defp restore_env(key, nil), do: System.delete_env(key)
   defp restore_env(key, value), do: System.put_env(key, value)
+
+  defp seed_viewer(login) do
+    unless Process.whereis(Viewer.Server) do
+      {:ok, _pid} = start_supervised(Viewer.Server)
+    end
+
+    Viewer.invalidate_cache()
+    Viewer.put_cached(%{login: login, name: nil, avatar_url: nil})
+  end
 end

@@ -270,6 +270,25 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTrackerTest do
     assert refreshed.identifier == "510"
   end
 
+  test "fetch_issues_by_states populates parent_identifier from sub_issue_of relations", %{project: project} do
+    stub_assignee({:ok, :any})
+    {:ok, _child} = Context.set_issue_parent(project.slug, "2", "1")
+
+    {:ok, issues} = LocalFirstTracker.fetch_issues_by_states(["Todo"])
+    child = Enum.find(issues, &(&1.identifier == "2"))
+
+    assert child, "expected child issue 2 to be returned"
+    assert child.parent_identifier == "1"
+  end
+
+  test "fetch_issue_states_by_ids populates parent_identifier from sub_issue_of relations", %{project: project} do
+    stub_assignee({:ok, :any})
+    {:ok, child} = Context.set_issue_parent(project.slug, "2", "1")
+
+    assert {:ok, [refreshed]} = LocalFirstTracker.fetch_issue_states_by_ids([child.id])
+    assert refreshed.parent_identifier == "1"
+  end
+
   test "create_comment writes locally and enqueues", %{project: project} do
     stub_assignee({:ok, "alice"})
     assert :ok = LocalFirstTracker.create_comment("1", "hello")

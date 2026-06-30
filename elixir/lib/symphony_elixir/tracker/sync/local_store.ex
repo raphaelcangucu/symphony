@@ -640,6 +640,29 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     |> Repo.one()
   end
 
+  @doc """
+  Marks a locally-authored `sub_issue_of` relation as synced after GitHub
+  `addSubIssue` succeeds.
+  """
+  @spec mark_sub_issue_relation_synced!(String.t(), map()) :: :ok
+  def mark_sub_issue_relation_synced!(project_slug, %{"child_identifier" => child, "parent_identifier" => parent})
+      when is_binary(project_slug) and is_binary(child) and is_binary(parent) do
+    subtask_type = IssueRelation.subtask_type()
+
+    with {:ok, _project} <- Context.get_project(project_slug),
+         {:ok, child_issue} <- Context.get_issue(project_slug, child),
+         {:ok, parent_issue} <- Context.get_issue(project_slug, parent),
+         %IssueRelation{} = relation <- existing_relation(child_issue.id, parent_issue.id, subtask_type) do
+      relation
+      |> IssueRelation.changeset(%{remote_origin: true})
+      |> Repo.update!()
+    end
+
+    :ok
+  end
+
+  def mark_sub_issue_relation_synced!(_project_slug, _payload), do: :ok
+
   defp resolve_status_id(project_id, state_name) when is_binary(state_name) and state_name != "" do
     case Repo.get_by(WorkflowStatus, project_id: project_id, name: state_name) do
       %WorkflowStatus{id: id} -> id
