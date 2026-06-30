@@ -500,8 +500,39 @@ git commit -m "docs(subtask): document subagent_unit execution shape"
 
 ---
 
+## Task 6: Dispatch-compat bridge — added during execution
+
+**Why (regression found during execution):** Task 2 makes the classifier emit
+`:subagent_unit` for same-repo contract-coupled units, but the orchestrator
+dispatch/gate/coordinator path keyed entirely off `ExecutionBundle.child_units/1`
+(strictly `:child_run`). A freshly-authored bundle of same-repo dependent units
+would therefore be all `:subagent_unit`, `BundleCoordinator.coordinator?/1` would
+return `false`, and those units would be **silently dropped** (never dispatched,
+gated, or counted complete) until the Phase 2 runner exists. That is a runtime
+regression, so Phase 1 must bridge it.
+
+**Change:** add `ExecutionBundle.dispatchable_units/1` (`:child_run` +
+`:subagent_unit`) and route the orchestrator-layer call sites through it, leaving
+the strict `child_units/1` accessor untouched for authoring/model semantics:
+
+- `BundleCoordinator.coordinator?/1`, `children_complete?/2`, `children_all_done?/2`
+- `BundleDispatch.dispatchable_children/3`
+- `BundleGate.find_child_unit/2`
+- `Orchestrator.resolve_done_units/1`
+- `IssueDispatchPrep.bundle_child_identifiers/2`
+
+Effect: a `:subagent_unit` dispatches exactly like a `:child_run` (own
+worktree/branch/PR) — i.e. today's behavior — with **zero regression**. Phase 2
+replaces this bridge with the real in-parent subagent runner.
+
+Tests: `dispatchable_units/1` in the model suite + a coordinator test proving a
+`subagent_unit`-only bundle is a coordinator and dispatches/gates/completes.
+Commit: `feat(bundle): dispatch subagent_unit as child_run until Phase 2 runner`.
+
+---
+
 ## Next phases (separate plans, written after this one lands)
 
-- **Phase 2 — Execution:** shared per-repo working tree + single-writer lock, `spawn_subagent(unit_id)` tool, `AgentRunner` subagent mode, subagent registry + `:waiting`/live states, `subagent_unit_section` prompt, dependency-gated spawning.
+- **Phase 2 — Execution:** shared per-repo working tree + single-writer lock, `spawn_subagent(unit_id)` tool, `AgentRunner` subagent mode, subagent registry + `:waiting`/live states, `subagent_unit_section` prompt, dependency-gated spawning. **Replaces the Task 6 dispatch-compat bridge** with the real in-parent runner.
 - **Phase 3 — Quality cycle:** per-subagent TDD + slice evidence (`task_id`=unit), contract-ready gate (TDD ∧ evidence ∧ code-review), parent final evidence over the single PR.
 - **Phase 4 — Observability/drill-in:** `:subagent` snapshot entries, clickable nested rows, `SessionLog.resolve_by_session/2`, token rollup.
