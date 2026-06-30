@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { Feather, Flame, Gauge, Loader2, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
@@ -167,7 +168,7 @@ function groupCommandsByCategory(commands: PromptTemplate[], uncategorizedLabel:
   return [...grouped.values()];
 }
 
-function commandMetadata(command: PromptTemplate, t: (key: string) => string): CommandMetadata {
+function commandMetadata(command: PromptTemplate, t: TFunction): CommandMetadata {
   const agent = agentLabel(command.agentKind, t);
   const model = normalizeNonBlank(command.model);
   const effort = effortLabel(command.effort, t);
@@ -200,13 +201,13 @@ function effortIcon(value: string | null): ReactNode {
   return <Gauge className="h-3 w-3 shrink-0" />;
 }
 
-function agentLabel(value: string | null, t: (key: string) => string): string | null {
+function agentLabel(value: string | null, t: TFunction): string | null {
   const kind = toAgentKind(value);
   if (!kind) return normalizeNonBlank(value);
   return agentKindLabel(kind, t);
 }
 
-function effortLabel(value: string | null, t: (key: string) => string): string | null {
+function effortLabel(value: string | null, t: TFunction): string | null {
   const normalized = normalizeNonBlank(value);
   if (!normalized) return null;
   const translationKey = `assistant.effort.${normalized}`;
@@ -214,7 +215,7 @@ function effortLabel(value: string | null, t: (key: string) => string): string |
   return translated === translationKey ? normalized : translated;
 }
 
-function modeLabel(value: string | null, t: (key: string) => string): { label: string; icon: ReactNode } | null {
+function modeLabel(value: string | null, t: TFunction): { label: string; icon: ReactNode } | null {
   const mode = toExecutionMode(value);
   if (!mode) {
     const fallback = normalizeNonBlank(value);
