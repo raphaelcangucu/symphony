@@ -1,6 +1,6 @@
 ---
 name: subtask-orchestration
-description: Break a parent task into subtasks using Symphony's execution-bundle model. Use when an issue is large enough to split, spans multiple repositories, or has independently shippable parts. Covers the two execution shapes (workpad_task vs child_run), deterministic classification, shared contracts for cross-unit coordination, and the authoring tool sequence.
+description: Break a parent task into subtasks using Symphony's execution-bundle model. Use when an issue is large enough to split, spans multiple repositories, or has independently shippable parts. Covers the three execution shapes (workpad_task, subagent_unit, child_run), deterministic classification, shared contracts for cross-unit coordination, and the authoring tool sequence.
 ---
 
 # Subtask orchestration
@@ -9,12 +9,13 @@ Symphony executes a parent task as an **execution bundle**: an ordered set of un
 contracts and dependency edges, stored as a YAML block in the parent's `## Codex Workpad` comment.
 The authoring assistant builds the bundle; the runner consumes it and never re-derives structure.
 
-## The two execution shapes
+## The three execution shapes
 
 | Shape | Where it runs | Use when |
 | --- | --- | --- |
 | `workpad_task` | Inline, in the parent's run and workspace. Ships with the parent (no separate PR). | Tightly coupled, same-repo work. |
-| `child_run` | Its own run: own issue, isolated git worktree, branch, validation, and PR. | Independent or cross-repo deliverables, or anything that produces/consumes a shared contract. |
+| `subagent_unit` | A Symphony-managed subagent inside the **parent's** working tree; ships in the **parent's PR** (no own clone/branch/PR). The parent spawns it once its consumed contracts are `ready`, supervises its TDD + evidence slice, and only then accepts the produced contract. | Same-repo work that depends on, or shares a contract with, sibling units. |
+| `child_run` | Its own run: own issue, isolated git worktree, branch, validation, and PR. | Independent or cross-repo deliverables. |
 
 ## Deterministic classification (do not re-decide at run time)
 
@@ -22,9 +23,10 @@ Apply these rules in order; the first match wins:
 
 1. **`:different_repo`** — the unit targets a different repo than the parent → `child_run`.
 2. **`:independent_deliverable`** — the unit is independently shippable (`deliverable: "pr"`) → `child_run`.
-3. **`:shared_contract`** — the unit `produces`/`consumes` a shared contract or `depends_on` another unit → `child_run`.
-4. **`:same_repo_inline`** — same repo, no isolation needed → `workpad_task`.
-5. **`:unknown_repo`** — repo is unknown → **ambiguous**: keep the subtask a draft and ask the user.
+3. **`:same_repo_subagent`** — same repo as the parent **and** it `produces`/`consumes` a shared contract or `depends_on` another unit → `subagent_unit` (+ `shared_contract`). Use this, not `child_run`, for same-repo dependent work.
+4. **`:shared_contract`** — contract-coupled but the parent's repo is unknown → `child_run` (conservative fallback).
+5. **`:same_repo_inline`** — same repo, no isolation needed → `workpad_task`.
+6. **`:unknown_repo`** — repo is unknown → **ambiguous**: keep the subtask a draft and ask the user.
 
 Use `classify_execution_unit` to preview a classification without writing anything.
 
