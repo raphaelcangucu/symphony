@@ -9,6 +9,7 @@ defmodule SymphonyElixir.SharedSupervisor do
   use Supervisor
 
   alias SymphonyElixir.LocalTracker.Templates
+  alias SymphonyElixir.PromptTemplates
 
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do
@@ -39,6 +40,21 @@ defmodule SymphonyElixir.SharedSupervisor do
              fn ->
                try do
                  Templates.import_builtins()
+               rescue
+                 _ -> :ok
+               end
+             end
+           ]},
+        restart: :temporary
+      },
+      %{
+        id: :seed_builtin_prompt_templates,
+        start:
+          {Task, :start_link,
+           [
+             fn ->
+               try do
+                 PromptTemplates.ensure_builtins()
                rescue
                  _ -> :ok
                end
