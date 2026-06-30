@@ -10,6 +10,9 @@
 > Cursor/Codex subagents). Dependent subagents stay in a **`:waiting`** state
 > until their contract is `ready`. Each subagent runs the **full TDD + evidence
 > quality cycle**; a contract only flips `ready` after that cycle passes.
+> This Symphony orchestration applies **only to a parent that has board child
+> issues**; a **leaf** run (a childless task or a board subtask) instead uses the
+> tool's **native subagents** (Codex/Claude/Cursor) — see §6.0.
 
 Status: **proposal / pending user review.** Recommended defaults are marked (R).
 
@@ -63,6 +66,11 @@ weakening** the testing/quality/evidence cycle that guarantees good software.
 6. **Quality cycle preserved per subagent**: every subagent runs the full
    **TDD + evidence** cycle (`test-driven-development` + `evidence` skills); the
    contract-`ready` gate requires that cycle to pass.
+7. **Clear eligibility boundary** (§6.0): Symphony-orchestrated subagents apply
+   **only** to a parent that has board child issues. A **leaf** run (a childless
+   task or a board subtask, including a `subagent_unit` run) is free to use the
+   tool's **native subagents** (Codex/Claude/Cursor); Symphony does not gate or
+   disable them.
 
 ## 3. Non-goals
 
@@ -104,6 +112,27 @@ rules": it introduces `subagent_unit`. Cross-repo classification is unchanged.
 | TDD + evidence cycle | `.claude/skills/test-driven-development`, `.claude/skills/evidence`, `.claude/skills/workpad` | Slice evidence (`task_id`/`task_title`), three per-task gates (`validation`/`evidence`/`commit`), validate gate. Reused per subagent. |
 
 ## 6. Proposed design
+
+### 6.0 Eligibility: Symphony subagents vs native tool subagents
+
+Symphony-orchestrated subagents (this design) are the mechanism a **parent issue
+that has board child issues** (an execution bundle) uses to run those children.
+They apply **only** when the executing issue has board children. For a **leaf**
+run — an issue with **no** board children, whether a standalone task or itself a
+board subtask — Symphony does **not** orchestrate subagents; instead the run is
+**allowed to use the underlying tool's native subagents** (Codex/Claude/Cursor
+fan-out) to decompose its own internal work.
+
+| Executing issue | Decomposition mechanism |
+| --- | --- |
+| Parent with board children (execution bundle) | **Symphony-orchestrated subagents** (this spec): `subagent_unit` for same-repo dependent children, `child_run` for cross-repo/independent, `workpad_task` inline |
+| Leaf — childless task, or a board subtask | **Native tool subagents** (Codex/Claude/Cursor); Symphony neither gates nor disables them |
+
+Consequently: the parent coordinator drives its board children via Symphony's
+`spawn_subagent`; native fan-out is **not** disabled inside leaf/subagent runs —
+those runs may fan out natively as the tool sees fit. (This is the user decision
+that resolves Open Question 4 in §11.) A `subagent_unit` run is itself a leaf, so
+it too keeps native subagents enabled.
 
 ### 6.1 Third execution shape and classifier delta
 
@@ -153,8 +182,9 @@ Handler (server-side) responsibilities:
    `busy: <unit currently writing>` so the parent waits (no concurrent writers).
 4. **Register** a subagent execution record (`:waiting` → `:live`).
 5. **Launch** `AgentRunner` in **subagent mode** (§6.5): `cwd` = the shared tree,
-   slim subtask prompt, native Codex fan-out disabled (`agents.max_depth=0`),
-   token/timeout caps. Capture the returned Codex `session_id`.
+   slim subtask prompt, token/timeout caps. The subagent run is a **leaf**, so the
+   tool's **native subagents stay enabled** (§6.0) — Symphony does **not** set
+   `agents.max_depth=0`. Capture the returned Codex `session_id`.
 6. **Stream** Codex events into the record (last_event, tokens, turn) — same
    integration path as a normal run.
 7. **On completion**: capture a structured summary (diffstat, produced contract,
@@ -197,6 +227,8 @@ working tree**, not a standalone issue:
   and the contracts it may **read** (already `ready`).
 - Definition of done for the unit = **TDD-green + slice evidence** (§6.7), recorded
   with `task_id = unit_id`.
+- The unit run is a **leaf**: it **may use the tool's native subagents** (§6.0)
+  for its own internal decomposition — Symphony does not disable fan-out here.
 - For cross-repo units this section is **not** used — those remain `child_run`
   and get the standalone framing. Each repo has its own tree; never write another
   repo's tree from a subagent.
@@ -384,8 +416,11 @@ careful tests around gating, locks, retries, and parent restart.
    or serialize all subagents of a parent globally for v1 simplicity?
 3. **Re-spawn budget**: default `max_subagent_attempts` per unit (R: 2) before the
    parent escalates to a human via the workpad.
-4. **`agents.max_depth=0`**: confirm disabling native Codex fan-out per subagent
-   session is the right lever (vs allowing controlled native subagents).
+4. **Native tool subagents — RESOLVED**: leaf runs (childless tasks and board
+   subtasks, including `subagent_unit` runs) keep native Codex/Claude/Cursor
+   fan-out **enabled** (§6.0). Symphony orchestration governs only the
+   parent↔board-children layer; it does not disable native subagents inside a
+   leaf run.
 
 ## 12. Risks
 
