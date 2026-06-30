@@ -28,7 +28,7 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinator do
   """
   @spec coordinator?(ExecutionBundle.t() | term()) :: boolean()
   def coordinator?(%ExecutionBundle{mode: "bundle", units: units}) when is_list(units) do
-    Enum.any?(units, &(&1.type == :child_run))
+    Enum.any?(units, &(&1.type in [:child_run, :subagent_unit]))
   end
 
   def coordinator?(_bundle), do: false
@@ -76,7 +76,7 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinator do
   @spec children_complete?(ExecutionBundle.t(), BundleDispatch.child_states()) :: boolean()
   def children_complete?(%ExecutionBundle{} = bundle, child_states) do
     bundle
-    |> ExecutionBundle.child_units()
+    |> ExecutionBundle.dispatchable_units()
     |> Enum.all?(&(Map.get(child_states, &1.id) == :done))
   end
 
@@ -88,7 +88,7 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinator do
   @spec children_all_done?(ExecutionBundle.t(), MapSet.t()) :: boolean()
   def children_all_done?(%ExecutionBundle{} = bundle, %MapSet{} = done_units) do
     bundle
-    |> ExecutionBundle.child_units()
+    |> ExecutionBundle.dispatchable_units()
     |> Enum.all?(&MapSet.member?(done_units, &1.id))
   end
 end

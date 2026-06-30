@@ -78,7 +78,7 @@ defmodule SymphonyElixir.IssueDispatchPrep do
          body when is_binary(body) <- workpad_body_from_comments(comments),
          {:ok, bundle} <- ExecutionBundle.parse(body) do
       bundle
-      |> ExecutionBundle.child_units()
+      |> ExecutionBundle.dispatchable_units()
       |> Enum.map(& &1.issue)
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
     else

@@ -622,7 +622,7 @@ defmodule SymphonyElixir.Orchestrator do
   # local bundles it applies to.
   defp resolve_done_units(%ExecutionBundle{} = bundle) do
     bundle
-    |> ExecutionBundle.child_units()
+    |> ExecutionBundle.dispatchable_units()
     |> Enum.reduce(MapSet.new(), fn unit, acc ->
       if unit_done?(unit), do: MapSet.put(acc, unit.id), else: acc
     end)

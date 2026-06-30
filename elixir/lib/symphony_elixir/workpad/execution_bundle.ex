@@ -60,6 +60,14 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle do
   def subagent_units(%__MODULE__{units: units}),
     do: Enum.filter(units, &(&1.type == :subagent_unit))
 
+  # Phase 1 bridge: a `:subagent_unit` is dispatched exactly like a `:child_run`
+  # (own worktree/branch/PR) until the in-parent subagent runner lands (Phase 2).
+  # Orchestrator dispatch, gating, completion, and child-discovery use this set so
+  # newly classified same-repo dependent units are never silently dropped.
+  @spec dispatchable_units(t()) :: [unit()]
+  def dispatchable_units(%__MODULE__{units: units}),
+    do: Enum.filter(units, &(&1.type in [:child_run, :subagent_unit]))
+
   defp build(map) do
     %__MODULE__{
       version: map["version"],

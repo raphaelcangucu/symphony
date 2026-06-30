@@ -106,4 +106,13 @@ defmodule SymphonyElixir.Workpad.ExecutionBundleTest do
     assert ExecutionBundle.child_units(bundle) == []
     assert ExecutionBundle.workpad_units(bundle) == []
   end
+
+  test "dispatchable_units/1 includes child_run and subagent_unit (Phase 1 bridge)" do
+    {:ok, child_bundle} = ExecutionBundle.parse(@workpad)
+    assert child_bundle |> ExecutionBundle.dispatchable_units() |> length() == 2
+
+    {:ok, subagent_bundle} = ExecutionBundle.parse(@subagent_workpad)
+    ids = subagent_bundle |> ExecutionBundle.dispatchable_units() |> Enum.map(& &1.id)
+    assert ids == ["positions-backend", "positions-ui"]
+  end
 end
