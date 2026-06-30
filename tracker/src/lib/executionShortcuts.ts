@@ -4,7 +4,8 @@ export type ExecutionShortcutId =
   | "stop"
   | "hardReset"
   | "cycleMode"
-  | "focusComposer";
+  | "focusComposer"
+  | "magicOpen";
 
 export interface ExecutionShortcut {
   id: ExecutionShortcutId;
@@ -20,6 +21,7 @@ export const EXECUTION_SHORTCUTS: readonly ExecutionShortcut[] = [
   { id: "hardReset", keys: "mod+shift+backspace", labelKey: "issue.agent.shortcuts.hardReset" },
   { id: "cycleMode", keys: "mod+shift+m", labelKey: "issue.agent.shortcuts.cycleMode" },
   { id: "focusComposer", keys: "mod+i", labelKey: "issue.agent.shortcuts.focusComposer" },
+  { id: "magicOpen", keys: "mod+p", labelKey: "commands.magic.open" },
 ] as const;
 
 export interface KeyEventLike {

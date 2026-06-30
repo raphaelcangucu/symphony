@@ -1,4 +1,4 @@
-import { Eraser, Pause, PenLine, Play, Repeat, RotateCcw, type LucideIcon } from "lucide-react";
+import { Eraser, Pause, PenLine, Play, Repeat, RotateCcw, Sparkles, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -20,6 +20,7 @@ interface ExecutionCommandPaletteProps {
   onHardReset?: () => void;
   onCycleMode?: () => void;
   onFocusComposer?: () => void;
+  onMagicOpen?: () => void;
   /** When true, the palette still opens but actions are inert (dispatch in flight). */
   disabled?: boolean;
 }
@@ -31,6 +32,7 @@ const ICONS: Record<ExecutionShortcutId, LucideIcon> = {
   hardReset: Eraser,
   cycleMode: Repeat,
   focusComposer: PenLine,
+  magicOpen: Sparkles,
 };
 
 const KEY_GLYPHS: Record<string, string> = {
@@ -54,6 +56,7 @@ export function ExecutionCommandPalette({
   onHardReset,
   onCycleMode,
   onFocusComposer,
+  onMagicOpen,
   disabled = false,
 }: ExecutionCommandPaletteProps) {
   const { t } = useTranslation();
@@ -82,6 +85,7 @@ export function ExecutionCommandPalette({
     hardReset: onHardReset,
     cycleMode: onCycleMode,
     focusComposer: onFocusComposer,
+    magicOpen: onMagicOpen,
   };
 
   function runAction(id: ExecutionShortcutId) {

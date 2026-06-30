@@ -12,6 +12,7 @@ export interface ExecutionShortcutHandlers {
   onHardReset?: () => void;
   onCycleMode?: () => void;
   onFocusComposer?: () => void;
+  onMagicOpen?: () => void;
   /** Disable all shortcuts (e.g. while a dispatch is in flight). Defaults to enabled. */
   enabled?: boolean;
 }
@@ -23,6 +24,7 @@ const HANDLER_BY_ID: Record<ExecutionShortcutId, keyof ExecutionShortcutHandlers
   hardReset: "onHardReset",
   cycleMode: "onCycleMode",
   focusComposer: "onFocusComposer",
+  magicOpen: "onMagicOpen",
 };
 
 // Non-destructive shortcuts allowed to fire while the operator is typing in the

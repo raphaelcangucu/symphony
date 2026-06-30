@@ -9,6 +9,7 @@ import type { Issue } from "@/types/issue";
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
 const fetchAssistantCatalogBundleMock = vi.hoisted(() => vi.fn());
 const controlIssueGoalMock = vi.hoisted(() => vi.fn());
+const useMagicCommandsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issueDispatch", () => ({
   dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
@@ -16,6 +17,10 @@ vi.mock("@/services/issueDispatch", () => ({
 
 vi.mock("@/services/goalControl", () => ({
   controlIssueGoal: (...args: unknown[]) => controlIssueGoalMock(...args),
+}));
+
+vi.mock("@/components/commands/useMagicCommands", () => ({
+  useMagicCommands: (...args: unknown[]) => useMagicCommandsMock(...args),
 }));
 
 const uploadAssistantAttachmentMock = vi.hoisted(() => vi.fn());
@@ -116,6 +121,13 @@ describe("ExecutionControlComposer", () => {
           ],
         },
       ],
+    });
+    useMagicCommandsMock.mockReturnValue({
+      commands: [],
+      isLoading: false,
+      error: null,
+      isRunning: false,
+      run: vi.fn(),
     });
   });
 
@@ -335,6 +347,27 @@ describe("ExecutionControlComposer", () => {
 
     expect(screen.queryByRole("button", { name: /^pause$/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^start$/i })).toBeInTheDocument();
+  });
+
+  it("opens the magic palette from the toolbar button", async () => {
+    const user = userEvent.setup();
+    render(<ExecutionControlComposer projectSlug="advising" issue={issue} onSteer={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /^magic$/i }));
+
+    expect(await screen.findByPlaceholderText(/search magic commands/i)).toBeInTheDocument();
+  });
+
+  it("toggles the magic palette with mod+p", async () => {
+    render(<ExecutionControlComposer projectSlug="advising" issue={issue} onSteer={vi.fn()} />);
+
+    fireEvent.keyDown(document.body, { key: "p", ctrlKey: true });
+    expect(await screen.findByPlaceholderText(/search magic commands/i)).toBeInTheDocument();
+
+    fireEvent.keyDown(document.body, { key: "p", ctrlKey: true });
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText(/search magic commands/i)).not.toBeInTheDocument();
+    });
   });
 
   it("queues guidance for a busy, non-steerable run", async () => {

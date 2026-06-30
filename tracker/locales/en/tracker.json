@@ -172,6 +172,8 @@
   "commands": {
     "magic": {
       "title": "Magic commands",
+      "button": "Magic",
+      "open": "Open magic commands",
       "searchPlaceholder": "Search magic commands…",
       "searchRunning": "Running magic command…",
       "loading": "Loading magic commands…",

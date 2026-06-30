@@ -27,6 +27,11 @@ describe("matchShortcut", () => {
     expect(matchShortcut({ key: ".", ctrlKey: true })).toBe("stop");
   });
 
+  it("maps mod+p to open magic commands", () => {
+    expect(matchShortcut({ key: "p", metaKey: true })).toBe("magicOpen");
+    expect(matchShortcut({ key: "P", ctrlKey: true })).toBe("magicOpen");
+  });
+
   it("requires the mod key", () => {
     expect(matchShortcut({ key: "Enter" })).toBeNull();
     expect(matchShortcut({ key: "r", shiftKey: true })).toBeNull();

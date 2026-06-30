@@ -1,4 +1,4 @@
-import { Eraser, Pause, Play, RotateCcw, Send, X } from "lucide-react";
+import { Eraser, Pause, Play, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import {
 } from "@/components/assistant/contextMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
 import { parseSlashCommand } from "@/components/assistant/slashCommands";
+import { MagicCommandPalette } from "@/components/commands/MagicCommandPalette";
 import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
@@ -35,6 +36,7 @@ import { enrichGuidanceWithAttachments } from "@/lib/enrichComposerGuidance";
 import { catalogFor, fallbackCatalogBundle } from "@/lib/assistantSettings";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
+import type { RunPromptTemplateResult } from "@/services/magicCommands";
 import { controlIssueGoal } from "@/services/goalControl";
 import { availableModesFor, cycleMode, DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
 import type { AgentSteerPayload } from "@/hooks/useSessionLogChannel";
@@ -84,6 +86,7 @@ export function ExecutionControlComposer({
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [hardResetOpen, setHardResetOpen] = useState(false);
+  const [magicOpen, setMagicOpen] = useState(false);
   const [goalDismissed, setGoalDismissed] = useState(false);
   const [composerResetToken, setComposerResetToken] = useState(0);
   const sectionRef = useRef<HTMLElement>(null);
@@ -420,6 +423,17 @@ export function ExecutionControlComposer({
     setMode((current) => cycleMode(current, availableModesFor(agent)));
   }
 
+  function toggleMagicPalette() {
+    if (controlsDisabled) return;
+    setMagicOpen((current) => !current);
+  }
+
+  function handleMagicRan(result: RunPromptTemplateResult) {
+    onIssueUpdated?.(result.issue);
+    setDispatchError(null);
+    setDispatchStatus(result.message);
+  }
+
   useExecutionShortcuts({
     onResume: () => {
       if (!controlsDisabled && !agentRunActive) void runDispatch("resume");
@@ -435,6 +449,7 @@ export function ExecutionControlComposer({
     },
     onCycleMode: cycleExecutionMode,
     onFocusComposer: focusComposer,
+    onMagicOpen: toggleMagicPalette,
     enabled: !controlsDisabled,
   });
 
@@ -471,6 +486,14 @@ export function ExecutionControlComposer({
         onHardReset={() => setHardResetOpen(true)}
         onCycleMode={cycleExecutionMode}
         onFocusComposer={focusComposer}
+        onMagicOpen={toggleMagicPalette}
+      />
+      <MagicCommandPalette
+        open={magicOpen}
+        onOpenChange={setMagicOpen}
+        projectSlug={projectSlug}
+        identifier={issue.identifier}
+        onRan={handleMagicRan}
       />
       <div className="min-w-0">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -560,6 +583,18 @@ export function ExecutionControlComposer({
                 disabled={controlsDisabled || agentRunActive}
                 onChange={setMode}
               />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 px-2 text-xs"
+                disabled={controlsDisabled}
+                title={t("commands.magic.open")}
+                onClick={toggleMagicPalette}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("commands.magic.button")}</span>
+              </Button>
               <Button
                 type="button"
                 variant="ghost"
