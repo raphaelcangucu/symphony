@@ -789,6 +789,18 @@
         "tunnelFailed": "Não foi possível iniciar o túnel Cloudflare."
       }
     },
+    "tasks": {
+      "title": "Tarefas",
+      "progress": "{{done}}/{{total}} concluídas",
+      "collapse": "Recolher tarefas",
+      "expand": "Expandir tarefas",
+      "status": {
+        "pending": "Pendente",
+        "in_progress": "Em progresso",
+        "completed": "Concluída"
+      },
+      "inline": "{{label}} · {{done}}/{{total}} concluídas"
+    },
     "sessionLog": {
       "title": "Log da sessão",
       "streaming": "Transmitindo",

@@ -789,6 +789,18 @@
         "tunnelFailed": "Could not start the Cloudflare tunnel."
       }
     },
+    "tasks": {
+      "title": "Tasks",
+      "progress": "{{done}}/{{total}} done",
+      "collapse": "Collapse tasks",
+      "expand": "Expand tasks",
+      "status": {
+        "pending": "Pending",
+        "in_progress": "In progress",
+        "completed": "Completed"
+      },
+      "inline": "{{label}} · {{done}}/{{total}} done"
+    },
     "sessionLog": {
       "title": "Session log",
       "streaming": "Streaming",
