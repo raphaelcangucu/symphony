@@ -31,8 +31,13 @@ async function fileOptions(
   identifier: string,
   query: string,
 ): Promise<ResolvedMention[]> {
-  const paths = await searchWorkspaceFiles(projectSlug, identifier, query);
-  return paths.slice(0, PER_GROUP_LIMIT).map((path) => ({ type: "file" as const, id: path }));
+  if (!identifier) return [];
+  try {
+    const paths = await searchWorkspaceFiles(projectSlug, identifier, query);
+    return paths.slice(0, PER_GROUP_LIMIT).map((path) => ({ type: "file" as const, id: path }));
+  } catch {
+    return [];
+  }
 }
 
 async function prOptions(
@@ -40,6 +45,7 @@ async function prOptions(
   identifier: string,
   query: string,
 ): Promise<ResolvedMention[]> {
+  if (!identifier) return [];
   try {
     const result = await listPullRequests(projectSlug, identifier);
     return result.data
@@ -56,10 +62,12 @@ async function prOptions(
 }
 
 /**
- * Fans out a single mention `query` to issues, workspace files, and PRs for the
- * current issue. Debounced and self-cancelling; every source fails soft to `[]`
- * so one slow/missing source never blocks the others. `query === null` (menu
- * closed) clears results without fetching.
+ * Fans out a single mention `query` to issues, workspace files, and PRs.
+ * Issues only need a `projectSlug`, so mentions work on any project-scoped
+ * assistant; file/PR sources self-disable when `identifier` is empty (no bound
+ * issue). Debounced and self-cancelling; every source fails soft to `[]` so one
+ * slow/missing source never blocks the others. `query === null` (menu closed)
+ * clears results without fetching.
  */
 export function useContextMentionData(
   projectSlug: string,

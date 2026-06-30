@@ -21,6 +21,12 @@ import { useTranslation } from "react-i18next";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
 import {
+  expandComposerMentions,
+  parseMentionTokens,
+  type ResolvedMention,
+} from "@/components/assistant/contextMentions";
+import { useContextMentionData } from "@/components/assistant/useContextMentionData";
+import {
   STREAMING_ASSISTANT_ID,
   appendAssistantDelta,
   appendMessage,
@@ -35,19 +41,17 @@ import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
+import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { extractKbDocumentReferencesFromMarkdown } from "@/lib/assistantKbReferences";
 import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
-import {
-  catalogFor,
-  defaultComposerSettings,
-  fallbackCatalogBundle,
-  type AssistantCatalogBundle,
-} from "@/lib/assistantSettings";
+import { extractKbDocumentReferencesFromMarkdown } from "@/lib/assistantKbReferences";
+import type { AgentTaskSnapshot } from "@/types/agentTasks";
+import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
+import { DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
 import {
   fetchAssistantCatalogBundle,
   type AssistantChatMessage,
@@ -55,7 +59,6 @@ import {
   type UserQuestion,
   type UserQuestionsRequest,
 } from "@/services/assistant";
-import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
   assistantExploreTopic,
@@ -84,7 +87,7 @@ import {
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import { isVideoAttachmentSource, isVideoMediaType, projectAttachmentUrl } from "@/services/attachments";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import type { AgentKind } from "@/types/issue";
+import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 
@@ -320,10 +323,41 @@ export function ProjectAssistantPanel({
   // The composer owns agent selection; mirror it here so dispatch + the parent
   // panel can follow the live choice. A ref keeps the dispatch effect stable.
   const composerAgentRef = useRef<AgentKind | null>(null);
+  const [composerAgent, setComposerAgent] = useState<AgentKind>("codex");
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>(DEFAULT_EXECUTION_MODE);
+  const executionModeRef = useRef<ExecutionMode>(DEFAULT_EXECUTION_MODE);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const resolvedMentionsRef = useRef<Map<string, ResolvedMention>>(new Map());
+  // Mentions work anywhere with a project context: issues are always searchable,
+  // while file/PR sources self-disable when there is no bound issue identifier.
+  const mentionsEnabled = Boolean(projectSlug);
+  const mentionOptions = useContextMentionData(
+    projectSlug ?? "",
+    issueIdentifier ?? "",
+    mentionsEnabled ? mentionQuery : null,
+  );
   // Keep the live extra-context getter in a ref so `dispatchSend` reads the
   // latest open-document snapshot at send time without re-subscribing the channel.
   const getExtraContextRef = useRef<typeof getExtraContext>(getExtraContext);
   getExtraContextRef.current = getExtraContext;
+
+  useEffect(() => {
+    executionModeRef.current = executionMode;
+  }, [executionMode]);
+
+  const rememberMention = useCallback((entity: ResolvedMention) => {
+    resolvedMentionsRef.current.set(`${entity.type}:${entity.id}`, entity);
+  }, []);
+
+  const expandMentions = useCallback((text: string): string => {
+    const tokens = parseMentionTokens(text);
+    if (tokens.length === 0) return text;
+    const resolved = tokens.map(
+      (token) => resolvedMentionsRef.current.get(`${token.type}:${token.id}`) ?? token,
+    );
+    return expandComposerMentions(text, resolved);
+  }, []);
+
   const [composerHeight, setComposerHeight] = useState(0);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
@@ -681,13 +715,15 @@ export function ProjectAssistantPanel({
       }
 
       const extraContext = getExtraContextRef.current?.() ?? {};
+      const expandedMessage = expandMentions(trimmed || fallbackAttachmentMessage(submit.attachments, t));
       const payload = {
-        message: trimmed || fallbackAttachmentMessage(submit.attachments, t),
+        message: expandedMessage,
         context: {
           view,
           agent: submit.agent,
           model: submit.settings.model,
           effort: submit.settings.effort,
+          ...(issueIdentifier ? { execution_mode: executionModeRef.current } : {}),
           ...extraContext,
         },
         attachments: submit.attachments,
@@ -702,15 +738,18 @@ export function ProjectAssistantPanel({
         setIsRunning(false);
       });
     },
-    [view, t],
+    [view, t, expandMentions, issueIdentifier],
   );
 
-  const steerTurn = useCallback((submit: AssistantComposerSubmit) => {
-    const channel = channelRef.current;
-    const text = submit.message.trim();
-    if (!channel || !text) return;
-    channel.push("steer_turn", { message: text });
-  }, []);
+  const steerTurn = useCallback(
+    (submit: AssistantComposerSubmit) => {
+      const channel = channelRef.current;
+      const text = expandMentions(submit.message.trim());
+      if (!channel || !text) return;
+      channel.push("steer_turn", { message: text });
+    },
+    [expandMentions],
+  );
 
   const enableGoalCommand = useCallback(
     (submit: AssistantComposerSubmit) => {
@@ -893,6 +932,7 @@ export function ProjectAssistantPanel({
   const handleComposerAgentChange = useCallback(
     (agent: AgentKind) => {
       composerAgentRef.current = agent;
+      setComposerAgent(agent);
       onComposerAgentResolved?.(agent);
     },
     [onComposerAgentResolved],
@@ -1105,6 +1145,20 @@ export function ProjectAssistantPanel({
       seedMessage={composerSeedMessage}
       header={authoringGoalPill}
       hint={catalogLoading ? t("assistant.panel.loadingModels") : undefined}
+      mentionsEnabled={mentionsEnabled}
+      mentionOptions={mentionOptions}
+      onMentionQueryChange={setMentionQuery}
+      onMentionSelect={rememberMention}
+      toolbarAfterAttach={
+        issueIdentifier ? (
+          <ExecutionModeMenu
+            agent={composerAgent}
+            mode={executionMode}
+            disabled={isRunning || catalogLoading}
+            onChange={setExecutionMode}
+          />
+        ) : undefined
+      }
       onForceQueued={forceSendOldestQueued}
       onSubmit={sendMessage}
       onAgentChange={handleComposerAgentChange}

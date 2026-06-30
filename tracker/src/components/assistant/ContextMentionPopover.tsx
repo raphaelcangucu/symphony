@@ -58,7 +58,7 @@ export function ContextMentionPopover({
     <div
       ref={listRef}
       className={cn(
-        "absolute z-20 max-h-64 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md",
+        "z-20 max-h-64 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md",
         className,
       )}
       role="listbox"

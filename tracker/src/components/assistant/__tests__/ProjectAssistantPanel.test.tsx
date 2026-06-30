@@ -75,9 +75,30 @@ vi.mock("@/services/phoenix/socket", () => ({
   }),
 }));
 
+const listIssuesMock = vi.hoisted(() => vi.fn());
+const searchWorkspaceFilesMock = vi.hoisted(() => vi.fn());
+const listPullRequestsMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/issues", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/issues")>()),
+  listIssues: (...args: unknown[]) => listIssuesMock(...args),
+}));
+
+vi.mock("@/services/workspaceFiles", () => ({
+  searchWorkspaceFiles: (...args: unknown[]) => searchWorkspaceFilesMock(...args),
+}));
+
+vi.mock("@/services/pullRequests", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/pullRequests")>()),
+  listPullRequests: (...args: unknown[]) => listPullRequestsMock(...args),
+}));
+
 describe("ProjectAssistantPanel", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    listIssuesMock.mockResolvedValue([]);
+    searchWorkspaceFilesMock.mockResolvedValue([]);
+    listPullRequestsMock.mockResolvedValue({ data: [] });
     for (const key of Object.keys(channelHandlers)) delete channelHandlers[key];
     pushReceives.length = 0;
   });
@@ -859,5 +880,74 @@ describe("ProjectAssistantPanel", () => {
     expect(screen.getByText("reconciled reply")).toBeInTheDocument();
     expect(scrollTo).not.toHaveBeenCalled();
     expect(scroller.scrollTop).toBe(0);
+  });
+
+  it("shows execution mode and @-mentions on issue assistant routes", async () => {
+    listIssuesMock.mockResolvedValue([
+      {
+        id: "2",
+        identifier: "MAC-9",
+        title: "Related task",
+        status: "Todo",
+        priority: 0,
+        assignee: null,
+        projectSlug: "macro-markets",
+        blockedBy: [],
+        labels: [],
+      },
+    ]);
+
+    render(
+      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-2" view="board" mode="page" />,
+    );
+
+    expect(await screen.findByRole("button", { name: /build/i })).toBeInTheDocument();
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "@mac" } });
+
+    expect(await screen.findByRole("listbox")).toBeInTheDocument();
+    expect(await screen.findByText("Related task")).toBeInTheDocument();
+
+    fireEvent.change(textarea, { target: { value: "ship it" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          message: "ship it",
+          context: expect.objectContaining({
+            execution_mode: "build",
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("enables issue @-mentions on the project assistant but hides execution mode without an issue", async () => {
+    listIssuesMock.mockResolvedValue([
+      {
+        id: "2",
+        identifier: "MAC-9",
+        title: "Related task",
+        status: "Todo",
+        priority: 0,
+        assignee: null,
+        projectSlug: "macro-markets",
+        blockedBy: [],
+        labels: [],
+      },
+    ]);
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    expect(screen.queryByRole("button", { name: /build|plan|yolo/i })).not.toBeInTheDocument();
+
+    fireEvent.change(textarea, { target: { value: "@mac" } });
+
+    expect(await screen.findByRole("listbox")).toBeInTheDocument();
+    expect(await screen.findByText("Related task")).toBeInTheDocument();
   });
 });

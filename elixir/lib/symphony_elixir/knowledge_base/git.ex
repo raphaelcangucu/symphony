@@ -129,7 +129,7 @@ defmodule SymphonyElixir.KnowledgeBase.Git do
 
   defp recover_push(dir, branch, reason, opts) do
     if non_fast_forward_push?(reason) do
-      with :ok <- fetch(dir, opts),
+      with :ok <- fetch_remote_branch(dir, branch, opts),
            {:ok, _merge_result} <- merge(dir, "origin/#{branch}", opts),
            {:ok, _} <- push_once(dir, branch, opts) do
         :ok
@@ -146,6 +146,13 @@ defmodule SymphonyElixir.KnowledgeBase.Git do
   end
 
   defp non_fast_forward_push?(_reason), do: false
+
+  defp fetch_remote_branch(dir, branch, opts) do
+    case run(dir, ["fetch", "origin", "+refs/heads/#{branch}:refs/remotes/origin/#{branch}"], opts) do
+      {:ok, _} -> :ok
+      error -> error
+    end
+  end
 
   @spec fetch(Path.t(), keyword()) :: :ok | {:error, term()}
   def fetch(dir, opts \\ []) do

@@ -19,6 +19,8 @@ endif
 NPM ?= npm
 TRACKER_DIR ?= ../tracker
 TRACKER_PORT ?= 4000
+TRACKER_PREVIEW_PORT ?= 4001
+TRACKER_VITE_PORT ?= 5174
 
 help:
 	@echo "Quality:  setup, deps, build, fmt, fmt-check, lint, test, coverage, dialyzer, ci, all"
@@ -26,7 +28,7 @@ help:
 	@echo "Backup:   backup (create SQLite snapshot), backup-list, backup-stats, backup-cleanup"
 	@echo "Run:      serve (boot daemon), update (restart web by default; ARGS=--orchestrator/--code-server/--all), stop, check-tools, env-setup"
 	@echo "Editor:   install-code-server, configure-code-server (browser VS Code for task workspaces)"
-	@echo "Tracker:  tracker-setup, tracker-deps, tracker-build, tracker-lint, tracker-test, tracker-ci, tracker-dev, repo-ci"
+	@echo "Tracker:  tracker-setup, tracker-deps, tracker-build, tracker-lint, tracker-test, tracker-ci, tracker-dev, preview-serve, preview-tracker-dev, repo-ci"
 	@echo "Project:  project-export SLUG=name [FILE=out.yaml], project-import FILE=path.yaml [INTO=slug]"
 	@echo "Packaged: tracker-api (alias of serve), tracker-api-escript (raw escript; no SQLite NIF)"
 
@@ -210,6 +212,20 @@ tracker-api-escript: build migrate
 
 tracker-dev:
 	$(NPM) --prefix $(TRACKER_DIR) run dev
+
+# Isolated preview stack for this worktree: own SQLite DB, HTTP :4001, Vite :5174.
+# Does not touch the main repo daemon on :4000 (requires SYMPHONY_SERVE_LOCK_PATH in .env).
+preview-serve: ensure-deps migrate
+	@set -e; \
+	if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
+	SYMPHONY_TRACKER_PORT="$(TRACKER_PREVIEW_PORT)" \
+		$(MIX) symphony.ctl serve $(ARGS)
+
+preview-tracker-dev:
+	TRACKER_PORT=$(TRACKER_VITE_PORT) \
+	TRACKER_API_PROXY_TARGET=http://127.0.0.1:$(TRACKER_PREVIEW_PORT) \
+	TRACKER_SOCKET_PROXY_TARGET=ws://127.0.0.1:$(TRACKER_PREVIEW_PORT) \
+	$(NPM) --prefix $(TRACKER_DIR) run dev -- --port $(TRACKER_VITE_PORT) --host 127.0.0.1
 
 # --- Project import/export (CLI) -------------------------------------------
 

@@ -448,4 +448,26 @@ describe("AssistantComposer", () => {
     expect(container.querySelector(".motion-safe\\:animate-pulse")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Record audio" })).toBeNull();
   });
+
+  it("renders mention options in document flow so they are not clipped by overflow-hidden cards", () => {
+    const mentionOptions = [{ type: "issue" as const, id: "SYM-1", label: "Test issue" }];
+
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        mentionsEnabled
+        mentionOptions={mentionOptions}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "@sym" } });
+
+    const listbox = screen.getByRole("listbox");
+    expect(listbox).toBeInTheDocument();
+    expect(listbox.className).not.toContain("absolute");
+    expect(screen.getByText("SYM-1")).toBeInTheDocument();
+  });
 });

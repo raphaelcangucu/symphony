@@ -110,6 +110,7 @@ defmodule SymphonyElixir.KnowledgeBase.GitTest do
     sh(File.cwd!(), ["init", "--bare", "-q", "-b", "main", origin])
     sh(checkout, ["remote", "add", "origin", origin])
     sh(checkout, ["push", "-q", "-u", "origin", "main"])
+    sh(checkout, ["config", "--replace-all", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main"])
 
     {:ok, wt} = Git.ensure_worktree(checkout, "symphony-docs")
     File.write!(Path.join(wt, "first.txt"), "first")

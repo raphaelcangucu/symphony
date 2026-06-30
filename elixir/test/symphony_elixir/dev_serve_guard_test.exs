@@ -89,6 +89,16 @@ defmodule SymphonyElixir.DevServeGuardTest do
     assert {:ok, %{"node_name" => "symphony@127.0.0.1"}} = DevServeGuard.read(lock_path)
   end
 
+  test "default_lock_path honors SYMPHONY_SERVE_LOCK_PATH", %{lock_path: lock_path} do
+    System.put_env("SYMPHONY_SERVE_LOCK_PATH", lock_path)
+
+    on_exit(fn ->
+      System.delete_env("SYMPHONY_SERVE_LOCK_PATH")
+    end)
+
+    assert DevServeGuard.default_lock_path() == lock_path
+  end
+
   defp write_lock(path, map), do: File.write!(path, Jason.encode!(map))
   defp read_lock(path), do: path |> File.read!() |> Jason.decode()
 end

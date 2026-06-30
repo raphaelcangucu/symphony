@@ -728,32 +728,32 @@ export function AssistantComposer({
           </div>
         ) : null}
 
-        <div className="relative">
-          {showMentions ? (
+        {showMentions ? (
+          <div className="border-b px-1 py-1">
             <ContextMentionPopover
               open
               options={mentionOptions ?? []}
               activeIndex={mentionActiveIndex}
               onSelect={selectActiveMention}
-              className="bottom-full mb-1"
             />
-          ) : null}
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(event) => {
-              const value = event.target.value;
-              setInput(value);
-              if (mentionsEnabled) {
-                mentions.handleChange(value, event.target.selectionStart ?? value.length);
-              }
-            }}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={placeholder ?? t("assistant.composer.placeholder")}
-            className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
-          />
-        </div>
+          </div>
+        ) : null}
+
+        <Textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(event) => {
+            const value = event.target.value;
+            setInput(value);
+            if (mentionsEnabled) {
+              mentions.handleChange(value, event.target.selectionStart ?? value.length);
+            }
+          }}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          placeholder={placeholder ?? t("assistant.composer.placeholder")}
+          className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
+        />
 
         <div className="flex items-center justify-between gap-2 px-3 pb-3">
           <div className="flex items-center gap-1">
