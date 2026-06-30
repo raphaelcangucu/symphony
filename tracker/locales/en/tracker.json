@@ -169,6 +169,24 @@
       }
     }
   },
+  "commands": {
+    "magic": {
+      "title": "Magic commands",
+      "searchPlaceholder": "Search magic commands…",
+      "searchRunning": "Running magic command…",
+      "loading": "Loading magic commands…",
+      "empty": "No magic commands found.",
+      "uncategorized": "Uncategorized",
+      "running": "Running…",
+      "runFailed": "Failed to run magic command",
+      "badges": {
+        "agent": "Agent",
+        "model": "Model",
+        "effort": "Effort",
+        "mode": "Mode"
+      }
+    }
+  },
   "issue": {
     "bundle": {
       "title": "Execution bundle",

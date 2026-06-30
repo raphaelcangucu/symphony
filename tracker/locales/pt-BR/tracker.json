@@ -169,6 +169,24 @@
       }
     }
   },
+  "commands": {
+    "magic": {
+      "title": "Comandos mágicos",
+      "searchPlaceholder": "Buscar comandos mágicos…",
+      "searchRunning": "Executando comando mágico…",
+      "loading": "Carregando comandos mágicos…",
+      "empty": "Nenhum comando mágico encontrado.",
+      "uncategorized": "Sem categoria",
+      "running": "Executando…",
+      "runFailed": "Falha ao executar comando mágico",
+      "badges": {
+        "agent": "Agente",
+        "model": "Modelo",
+        "effort": "Esforço",
+        "mode": "Modo"
+      }
+    }
+  },
   "issue": {
     "bundle": {
       "title": "Pacote de execução",
