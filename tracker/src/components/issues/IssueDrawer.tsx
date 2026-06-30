@@ -47,6 +47,7 @@ import type { Issue } from "@/types/issue";
 
 import { ActivityTab } from "./issue-detail/ActivityTab";
 import { AgentLongRunningBadge, AgentStatusBadge } from "./AgentStatusBadge";
+import { AgentResumeIconButton } from "./AgentResumeIconButton";
 import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { AgentTabs } from "./issue-detail/AgentTabs";
 import { IssueGroupBanner } from "./issue-detail/IssueGroupBanner";
@@ -244,7 +245,17 @@ export function IssueDrawer({
                       {t("issue.drawer.blocked")}
                     </span>
                   ) : null}
-                  {execution ? <AgentStatusBadge status={resolveDisplayStatus(execution)} /> : null}
+                  {execution ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      <AgentStatusBadge status={resolveDisplayStatus(execution)} />
+                      <AgentResumeIconButton
+                        projectSlug={projectSlug}
+                        issueIdentifier={issue.identifier}
+                        execution={execution}
+                        onIssueUpdated={onIssueUpdated}
+                      />
+                    </span>
+                  ) : null}
                   {execution ? <AgentLongRunningBadge execution={execution} /> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">

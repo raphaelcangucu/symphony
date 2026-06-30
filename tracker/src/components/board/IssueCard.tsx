@@ -4,6 +4,7 @@ import { AlertTriangle, ExternalLink, GitBranch, GitFork, Layers, MessageSquare 
 import { useTranslation } from "react-i18next";
 
 import { AgentLongRunningBadge, AgentStatusDot, agentStatusLabel } from "@/components/issues/AgentStatusBadge";
+import { AgentResumeIconButton } from "@/components/issues/AgentResumeIconButton";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { PriorityIndicator } from "@/components/issues/PriorityIndicator";
 import { executionNeedsAttention, resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
@@ -173,13 +174,18 @@ export function IssueCard({
           {agent ? (
             <span
               className={cn(
-                "inline-flex items-center gap-1 font-medium",
+                "inline-flex items-center gap-0.5 font-medium",
                 agentNeedsAttention && "text-rose-600 dark:text-rose-300",
               )}
               title={agentStatusTitle}
             >
               <AgentStatusDot status={displayStatus!} />
               {agentStatusLabel(displayStatus!, t)}
+              <AgentResumeIconButton
+                projectSlug={issue.projectSlug}
+                issueIdentifier={issue.identifier}
+                execution={agent}
+              />
             </span>
           ) : null}
           {isBlocked ? (

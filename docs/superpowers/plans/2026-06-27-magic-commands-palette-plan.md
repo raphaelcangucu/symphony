@@ -13,7 +13,7 @@
 
 **Architecture:** A reusable `<MagicCommandPalette>` (cmdk) lists enabled prompt templates (built-in + user) from the Magic Prompts service, grouped by category and fuzzy-searchable. On select, it calls a thin backend endpoint `POST /issues/:id/run-prompt-template` that (a) loads the template, (b) `PromptTemplates.render/2` with the issue + git/discussion context, (c) dispatches via the existing `IssueDispatch` path using the template's `agent_kind/model/effort/mode` (falling back to the issue's current execution settings). The palette opens from the Execution Control toolbar button and a keybinding (`⌘P` / registered in Plan 2b's registry).
 
-**Tech Stack:** React 19 + cmdk + TanStack Query + vitest; Phoenix controller + ExUnit.
+**Tech Stack:** React 19 + cmdk + vitest; Phoenix controller + ExUnit. Frontend data flows through the repo's established `useState`/`useEffect` + service hook pattern (e.g. `useAgentExecutions`) — **this repo has no TanStack Query; do not introduce it.**
 
 ---
 
@@ -21,7 +21,7 @@
 
 **Create (tracker):**
 - `tracker/src/components/commands/MagicCommandPalette.tsx`
-- `tracker/src/components/commands/useMagicCommands.ts` (data hook: enabled templates + run mutation)
+- `tracker/src/components/commands/useMagicCommands.ts` (`useState`/`useEffect` data hook: load enabled templates + an async `run` action; no query cache)
 - `tracker/src/services/magicCommands.ts` (`runPromptTemplate(issueId, slug, overrides?)`)
 - tests for palette + hook + service.
 
@@ -84,7 +84,7 @@ test "disabled template -> 422" do ... end
 
 - [ ] **Step 1: Write failing service test** — `runPromptTemplate(issueId, slug, overrides)` POSTs to the route with the body; returns parsed result.
 
-- [ ] **Step 2: Write failing hook test** — `useMagicCommands(issueId)` returns `{ commands }` from enabled prompt templates (via Magic Prompts `listPromptTemplates(projectSlug)`, filtered `enabled !== false`, sorted by `position`/category) and a `run(slug, overrides?)` mutation that invalidates the issue's run/execution queries on success.
+- [ ] **Step 2: Write failing hook test** — `useMagicCommands({ issueId, projectSlug, onRan? })` returns `{ commands, isLoading, error, run, isRunning }`. `commands` are the enabled prompt templates loaded via Magic Prompts `listPromptTemplates(projectSlug)` with `useState`/`useEffect` (filtered `enabled !== false`, sorted by `position`/category). `run(slug, overrides?)` is an async action that calls `runPromptTemplate`, sets `isRunning`, and invokes the provided `onRan` callback on success — the caller refreshes execution state via its existing `useAgentExecutions` `refetch` (no query cache to invalidate).
 
 - [ ] **Step 3: Run (expect fail)** — `cd tracker && npx vitest run src/components/commands/__tests__/useMagicCommands.test.ts`
 
