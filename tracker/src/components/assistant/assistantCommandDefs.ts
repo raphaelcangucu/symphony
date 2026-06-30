@@ -6,28 +6,29 @@ import type { AssistantCommand } from "@/types/assistant-command";
 type BuiltinSubmitKind = Exclude<AssistantCommand["submitKind"], null>;
 
 export function assistantCommandsToSlashDefs(commands: AssistantCommand[], t: TFunction): SlashCommandDef[] {
-  return commands
-    .map((command) => {
-      const normalizedName = normalizeSlashName(command.slug);
-      if (!normalizedName) return null;
+  const slashDefs: SlashCommandDef[] = [];
+  for (const command of commands) {
+    const normalizedName = normalizeSlashName(command.slug);
+    if (!normalizedName) continue;
 
-      if (command.kind === "skill") {
-        const skill = normalizedName.slice(1);
-        return {
-          name: normalizedName,
-          kind: "message",
-          description: command.description,
-          insertText: t("assistant.slash.skillDirective", { skill }),
-        } satisfies SlashCommandDef;
-      }
-
-      return {
+    if (command.kind === "skill") {
+      const skill = normalizedName.slice(1);
+      slashDefs.push({
         name: normalizedName,
-        kind: normalizeBuiltinKind(command.submitKind),
+        kind: "message",
         description: command.description,
-      } satisfies SlashCommandDef;
-    })
-    .filter((entry): entry is SlashCommandDef => entry !== null);
+        insertText: t("assistant.slash.skillDirective", { skill }),
+      });
+      continue;
+    }
+
+    slashDefs.push({
+      name: normalizedName,
+      kind: normalizeBuiltinKind(command.submitKind),
+      description: command.description,
+    });
+  }
+  return slashDefs;
 }
 
 function normalizeBuiltinKind(submitKind: AssistantCommand["submitKind"]): BuiltinSubmitKind {

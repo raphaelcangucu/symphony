@@ -41,6 +41,7 @@ import type { MentionRef, ResolvedMention } from "@/components/assistant/context
 import { useContextMentions } from "@/components/assistant/useContextMentions";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
 import {
+  defaultSkillCommands,
   matchingSlashCommands,
   parseSlashCommand,
   type SlashCommandContext,
@@ -106,6 +107,7 @@ interface AssistantComposerProps {
   hasQueued?: boolean;
   seedMessage?: string | null;
   slashContext?: SlashCommandContext;
+  slashCommandExtras?: SlashCommandDef[];
   placeholder?: string;
   /** When `null`, the footer hint is hidden. */
   hint?: string | null;
@@ -159,6 +161,7 @@ export function AssistantComposer({
   hasQueued = false,
   seedMessage = null,
   slashContext = "authoring",
+  slashCommandExtras,
   placeholder,
   hint,
   resetToken,
@@ -297,7 +300,12 @@ export function AssistantComposer({
     !composerDisabled &&
     !disabled;
 
-  const paletteCommands = matchingSlashCommands(input, t, slashContext);
+  const paletteCommands = matchingSlashCommands(
+    input,
+    t,
+    slashContext,
+    slashCommandExtras ?? defaultSkillCommands(t, slashContext),
+  );
   const showPalette = paletteCommands.length > 0 && input.trim().split(" ").length === 1;
 
   const mentions = useContextMentions(input);

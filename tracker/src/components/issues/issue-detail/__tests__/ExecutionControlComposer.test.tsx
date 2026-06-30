@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
+import type { AssistantCommand } from "@/types/assistant-command";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
@@ -10,6 +11,7 @@ const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
 const fetchAssistantCatalogBundleMock = vi.hoisted(() => vi.fn());
 const controlIssueGoalMock = vi.hoisted(() => vi.fn());
 const useMagicCommandsMock = vi.hoisted(() => vi.fn());
+const useAssistantCommandsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issueDispatch", () => ({
   dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
@@ -21,6 +23,10 @@ vi.mock("@/services/goalControl", () => ({
 
 vi.mock("@/components/commands/useMagicCommands", () => ({
   useMagicCommands: (...args: unknown[]) => useMagicCommandsMock(...args),
+}));
+
+vi.mock("@/hooks/useAssistantCommands", () => ({
+  useAssistantCommands: (...args: unknown[]) => useAssistantCommandsMock(...args),
 }));
 
 const uploadAssistantAttachmentMock = vi.hoisted(() => vi.fn());
@@ -129,6 +135,48 @@ describe("ExecutionControlComposer", () => {
       isRunning: false,
       run: vi.fn(),
     });
+    useAssistantCommandsMock.mockReturnValue({
+      commands: [],
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+  });
+
+  it("shows API-provided slash command suggestions in execution composer", async () => {
+    const commands: AssistantCommand[] = [
+      {
+        slug: "release",
+        name: "Release",
+        description: "Prepare and publish release",
+        kind: "skill",
+        category: "automation",
+        submitKind: null,
+        source: "skills-dir",
+      },
+    ];
+    useAssistantCommandsMock.mockReturnValue({
+      commands,
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText(/optional guidance/i);
+    await user.click(textarea);
+    await user.type(textarea, "/rel");
+
+    expect(await screen.findByText("/release")).toBeInTheDocument();
   });
 
   it("steers a live run with /infer", () => {

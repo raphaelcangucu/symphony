@@ -20,12 +20,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useTranslation } from "react-i18next";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
+import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import {
   expandComposerMentions,
   parseMentionTokens,
   type ResolvedMention,
 } from "@/components/assistant/contextMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
+import { defaultSkillCommands } from "@/components/assistant/slashCommands";
 import {
   STREAMING_ASSISTANT_ID,
   appendAssistantDelta,
@@ -90,6 +92,7 @@ import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
+import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 
 export type IssueAssistantMode = "triage" | "simple" | "complex";
 
@@ -336,6 +339,17 @@ export function ProjectAssistantPanel({
     issueIdentifier ?? "",
     mentionsEnabled ? mentionQuery : null,
   );
+  const {
+    commands: authoringCommands,
+    isLoading: authoringCommandsLoading,
+    error: authoringCommandsError,
+  } = useAssistantCommands({ projectSlug, context: "authoring" });
+  const authoringSlashCommandExtras = useMemo(() => {
+    if (authoringCommandsLoading || authoringCommandsError) {
+      return defaultSkillCommands(t, "authoring");
+    }
+    return assistantCommandsToSlashDefs(authoringCommands, t);
+  }, [authoringCommands, authoringCommandsError, authoringCommandsLoading, t]);
   // Keep the live extra-context getter in a ref so `dispatchSend` reads the
   // latest open-document snapshot at send time without re-subscribing the channel.
   const getExtraContextRef = useRef<typeof getExtraContext>(getExtraContext);
@@ -1143,6 +1157,8 @@ export function ProjectAssistantPanel({
       floating={isPageMode}
       hasQueued={queued.length > 0}
       seedMessage={composerSeedMessage}
+      slashContext="authoring"
+      slashCommandExtras={authoringSlashCommandExtras}
       header={authoringGoalPill}
       hint={catalogLoading ? t("assistant.panel.loadingModels") : undefined}
       mentionsEnabled={mentionsEnabled}

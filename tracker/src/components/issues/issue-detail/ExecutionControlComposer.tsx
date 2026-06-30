@@ -8,6 +8,7 @@ import {
   type AssistantComposerSubmit,
   type ComposerSnapshot,
 } from "@/components/assistant/AssistantComposer";
+import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
 import {
   expandComposerMentions,
@@ -15,12 +16,13 @@ import {
   type ResolvedMention,
 } from "@/components/assistant/contextMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
-import { parseSlashCommand } from "@/components/assistant/slashCommands";
+import { defaultSkillCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
 import { MagicCommandPalette } from "@/components/commands/MagicCommandPalette";
 import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { useExecutionShortcuts } from "@/hooks/useExecutionShortcuts";
+import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -97,6 +99,17 @@ export function ExecutionControlComposer({
   });
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const mentionOptions = useContextMentionData(projectSlug, issue.identifier, mentionQuery);
+  const {
+    commands: assistantCommands,
+    isLoading: assistantCommandsLoading,
+    error: assistantCommandsError,
+  } = useAssistantCommands({ projectSlug, context: "execution" });
+  const slashCommandExtras = useMemo(() => {
+    if (assistantCommandsLoading || assistantCommandsError) {
+      return defaultSkillCommands(t, "execution");
+    }
+    return assistantCommandsToSlashDefs(assistantCommands, t);
+  }, [assistantCommands, assistantCommandsError, assistantCommandsLoading, t]);
   // Cache resolved entities by token so dispatched instructions can expand the
   // inline `@type:id` tokens into a `## Context` block, even across re-renders.
   const resolvedMentionsRef = useRef<Map<string, ResolvedMention>>(new Map());
@@ -553,6 +566,7 @@ export function ExecutionControlComposer({
           bundle={bundle}
           floating
           slashContext="execution"
+          slashCommandExtras={slashCommandExtras}
           placeholder={composerPlaceholder}
           hint={null}
           seedMessage={seedMessage}

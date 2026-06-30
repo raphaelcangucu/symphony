@@ -61,6 +61,19 @@ describe("execution skill commands", () => {
     expect(names).toContain("/plan");
   });
 
+  it("uses provided extras instead of static execution skill fallback", () => {
+    const names = matchingSlashCommands("/rel", undefined, "execution", [
+      {
+        name: "/release",
+        kind: "message",
+        description: "Prepare a release",
+        insertText: "Use /release skill",
+      },
+    ]).map((c) => c.name);
+    expect(names).toEqual(["/release"]);
+    expect(names).not.toContain("/plan");
+  });
+
   it("still resolves built-ins in execution context", () => {
     const names = matchingSlashCommands("/inf", undefined, "execution").map((c) => c.name);
     expect(names).toContain("/infer");
