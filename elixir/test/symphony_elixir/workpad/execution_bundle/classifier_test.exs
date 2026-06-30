@@ -15,9 +15,32 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.ClassifierTest do
              Classifier.classify(%{repo: @parent_repo, deliverable: "pr"}, parent_repo: @parent_repo)
   end
 
-  test "produces/consumes contract => child_run (rule :shared_contract)" do
-    assert {:ok, :child_run, :shared_contract} =
+  test "same repo + consumes contract => subagent_unit (rule :same_repo_subagent)" do
+    assert {:ok, :subagent_unit, :same_repo_subagent} =
              Classifier.classify(%{repo: @parent_repo, consumes: ["api"]}, parent_repo: @parent_repo)
+  end
+
+  test "same repo + produces contract => subagent_unit (rule :same_repo_subagent)" do
+    assert {:ok, :subagent_unit, :same_repo_subagent} =
+             Classifier.classify(%{repo: @parent_repo, produces: ["api"]}, parent_repo: @parent_repo)
+  end
+
+  test "same repo + depends_on => subagent_unit (rule :same_repo_subagent)" do
+    assert {:ok, :subagent_unit, :same_repo_subagent} =
+             Classifier.classify(%{repo: @parent_repo, depends_on: ["x"]}, parent_repo: @parent_repo)
+  end
+
+  test "same repo + contract but deliverable pr => child_run (independent wins)" do
+    assert {:ok, :child_run, :independent_deliverable} =
+             Classifier.classify(
+               %{repo: @parent_repo, consumes: ["api"], deliverable: "pr"},
+               parent_repo: @parent_repo
+             )
+  end
+
+  test "contract-coupled but parent_repo unknown => child_run (rule :shared_contract)" do
+    assert {:ok, :child_run, :shared_contract} =
+             Classifier.classify(%{repo: "macro-markets/app", consumes: ["api"]}, parent_repo: nil)
   end
 
   test "same repo, no isolation => workpad_task (rule :same_repo_inline)" do
