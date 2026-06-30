@@ -1,4 +1,5 @@
 import type { AgentTask, AgentTaskSnapshot, AgentTaskSource, AgentTaskStatus } from "@/types/agentTasks";
+import type { AssistantChatMessage, AssistantToolCall } from "@/services/assistant";
 import type { SessionLogEntry } from "@/types/session-log";
 
 const TASK_TOOLS = new Set(["update_plan", "todowrite", "taskcreate", "taskupdate"]);
@@ -153,4 +154,81 @@ export function deriveAgentTasks(entries: SessionLogEntry[]): AgentTaskSnapshot 
     return { source: "task", tasks: Array.from(taskMap.values()) };
   }
   return null;
+}
+
+function mapAssistantToolStatus(status: AssistantToolCall["status"]): SessionLogEntry["status"] {
+  if (status === "running") return "running";
+  if (status === "error") return "failed";
+  return "completed";
+}
+
+function serializeAssistantToolArguments(args: AssistantToolCall["arguments"]): string | null {
+  if (!args || typeof args !== "object" || Object.keys(args).length === 0) return null;
+  try {
+    return JSON.stringify(args, null, 2);
+  } catch {
+    return null;
+  }
+}
+
+function resolveAssistantToolResultBody(call: AssistantToolCall): string | null {
+  if (typeof call.output === "string" && call.output.trim() !== "") return call.output;
+
+  const task = call.result?.task;
+  if (typeof task === "object" && task !== null) {
+    try {
+      return JSON.stringify({ task }, null, 2);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+export function assistantToolCallToSessionLogEntry(call: AssistantToolCall): SessionLogEntry {
+  return {
+    kind: "tool_call",
+    title: call.name,
+    body: serializeAssistantToolArguments(call.arguments),
+    language: "json",
+    status: mapAssistantToolStatus(call.status),
+    collapsed: false,
+    callId: call.id,
+  };
+}
+
+export function assistantToolResultToSessionLogEntry(call: AssistantToolCall): SessionLogEntry | null {
+  if (call.status === "running") return null;
+  const body = resolveAssistantToolResultBody(call);
+  if (!body) return null;
+
+  return {
+    kind: "tool_result",
+    title: "Tool output",
+    body,
+    language: "text",
+    status: call.status === "error" ? "failed" : "completed",
+    collapsed: false,
+    callId: call.id,
+  };
+}
+
+/** Converts assistant tool calls into the session-log shape used by `deriveAgentTasks`. */
+export function assistantToolCallsToSessionLogEntries(toolCalls: AssistantToolCall[]): SessionLogEntry[] {
+  const entries: SessionLogEntry[] = [];
+  for (const call of toolCalls) {
+    entries.push(assistantToolCallToSessionLogEntry(call));
+    const result = assistantToolResultToSessionLogEntry(call);
+    if (result) entries.push(result);
+  }
+  return entries;
+}
+
+export function deriveAgentTasksFromAssistantToolCalls(toolCalls: AssistantToolCall[]): AgentTaskSnapshot | null {
+  return deriveAgentTasks(assistantToolCallsToSessionLogEntries(toolCalls));
+}
+
+export function deriveAgentTasksFromAssistantMessages(messages: AssistantChatMessage[]): AgentTaskSnapshot | null {
+  return deriveAgentTasksFromAssistantToolCalls(messages.flatMap((message) => message.toolCalls));
 }

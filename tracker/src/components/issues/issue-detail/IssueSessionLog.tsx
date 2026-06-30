@@ -1,13 +1,12 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AgentTaskInlineCard } from "@/components/issues/issue-detail/AgentTaskInlineCard";
-import { AgentTaskList } from "@/components/issues/issue-detail/AgentTaskList";
-import { SessionLogEntryCard } from "@/components/issues/issue-detail/SessionLogEntryCard";
-import { pairSessionLogItems, sessionPairToView } from "@/components/issues/issue-detail/sessionToolCall";
+import {
+  AgentTaskPinnedPanel,
+  SessionLogTranscript,
+} from "@/components/agent-activity";
 import { agentKindLabel } from "@/components/shared/AgentChip";
-import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
-import { deriveAgentTasks, isAgentTaskTool } from "@/lib/agentTasks";
+import { deriveAgentTasks } from "@/lib/agentTasks";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { SessionLogEntry } from "@/types/session-log";
 
@@ -38,7 +37,6 @@ export function IssueSessionLog({
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
-  const items = pairSessionLogItems(entries);
   const taskSnapshot = deriveAgentTasks(entries);
 
   useEffect(() => {
@@ -83,7 +81,7 @@ export function IssueSessionLog({
           {t("issue.sessionLog.source", { agent: resolveAgentLabel(logAgentKind, t) })}
         </p>
       ) : null}
-      {taskSnapshot ? <AgentTaskList snapshot={taskSnapshot} /> : null}
+      <AgentTaskPinnedPanel snapshot={taskSnapshot} />
       {error ? (
         <p className="mt-3 text-sm text-destructive">{error}</p>
       ) : (
@@ -92,21 +90,8 @@ export function IssueSessionLog({
           aria-label={t("issue.sessionLog.ariaLabel", { identifier: issueIdentifier })}
           className={cn("mt-3 max-h-[520px] space-y-3 overflow-auto rounded-lg bg-muted/20 p-3", SCROLLBAR_THIN)}
         >
-          {items.length > 0 ? (
-            items.map((item, index) =>
-              item.type === "toolCall" ? (
-                isAgentTaskTool(item.call.title) && taskSnapshot ? (
-                  <AgentTaskInlineCard snapshot={taskSnapshot} key={`task-${item.call.callId}-${index}`} />
-                ) : (
-                  <ToolCallBlock
-                    view={sessionPairToView(item.call, item.result)}
-                    key={`tool-${item.call.callId}-${index}`}
-                  />
-                )
-              ) : (
-                <SessionLogEntryCard entry={item.entry} key={`${item.entry.kind}-${item.entry.title}-${index}`} />
-              ),
-            )
+          {entries.length > 0 ? (
+            <SessionLogTranscript entries={entries} taskSnapshot={taskSnapshot} />
           ) : (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">{t("issue.sessionLog.waiting")}</p>
           )}

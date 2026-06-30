@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { AgentTaskList } from "@/components/issues/issue-detail/AgentTaskList";
+import { AgentTaskList } from "@/components/agent-activity/AgentTaskList";
 import { renderWithI18n } from "@/i18n/testUtils";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 

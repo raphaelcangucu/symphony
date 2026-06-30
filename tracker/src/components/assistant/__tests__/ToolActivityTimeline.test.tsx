@@ -49,4 +49,31 @@ describe("ToolActivityTimeline", () => {
     expect(screen.getByText("Read 2 files")).toBeInTheDocument();
     expect(screen.getByText("Ran 2 commands")).toBeInTheDocument();
   });
+
+  it("renders a task inline marker instead of a raw tool block", () => {
+    renderWithI18n(
+      <ToolActivityTimeline
+        taskSnapshot={{
+          source: "plan",
+          tasks: [
+            { id: "plan-0", text: "Write tests", status: "completed", source: "plan" },
+            { id: "plan-1", text: "Ship", status: "pending", source: "plan" },
+          ],
+        }}
+        toolCalls={[
+          call({
+            id: "plan-1",
+            name: "update_plan",
+            arguments: {
+              plan: [
+                { step: "Write tests", status: "completed" },
+                { step: "Ship", status: "pending" },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("Plan · 1/2 done")).toBeInTheDocument();
+  });
 });

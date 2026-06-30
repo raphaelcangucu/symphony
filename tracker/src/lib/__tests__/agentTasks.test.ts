@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveAgentTasks, isAgentTaskTool } from "@/lib/agentTasks";
+import {
+  assistantToolCallsToSessionLogEntries,
+  deriveAgentTasks,
+  deriveAgentTasksFromAssistantMessages,
+  deriveAgentTasksFromAssistantToolCalls,
+  isAgentTaskTool,
+} from "@/lib/agentTasks";
+import type { AssistantChatMessage, AssistantToolCall } from "@/services/assistant";
 import type { SessionLogEntry } from "@/types/session-log";
 
 function toolCall(title: string, body: unknown, callId: string): SessionLogEntry {
@@ -152,5 +159,78 @@ describe("deriveAgentTasks", () => {
 
   it("returns null when the active snapshot ends up empty", () => {
     expect(deriveAgentTasks([toolCall("update_plan", { plan: [] }, "c1")])).toBeNull();
+  });
+});
+
+function assistantCall(overrides: Partial<AssistantToolCall>): AssistantToolCall {
+  return {
+    id: "c1",
+    name: "update_plan",
+    status: "complete",
+    arguments: {},
+    output: null,
+    result: {},
+    ...overrides,
+  };
+}
+
+describe("assistant task adapters", () => {
+  it("converts assistant tool calls into session-log entries", () => {
+    const entries = assistantToolCallsToSessionLogEntries([
+      assistantCall({
+        id: "c1",
+        arguments: { plan: [{ step: "Ship", status: "pending" }] },
+        output: JSON.stringify({ ok: true }),
+      }),
+    ]);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ kind: "tool_call", title: "update_plan", callId: "c1" });
+    expect(entries[1]).toMatchObject({ kind: "tool_result", callId: "c1" });
+  });
+
+  it("derives tasks from assistant tool calls", () => {
+    const snap = deriveAgentTasksFromAssistantToolCalls([
+      assistantCall({
+        arguments: {
+          plan: [
+            { step: "Write tests", status: "completed" },
+            { step: "Ship", status: "pending" },
+          ],
+        },
+      }),
+    ]);
+    expect(snap?.tasks.map((task) => task.text)).toEqual(["Write tests", "Ship"]);
+  });
+
+  it("derives tasks from assistant messages across turns", () => {
+    const messages: AssistantChatMessage[] = [
+      {
+        id: "m1",
+        role: "assistant",
+        content: "Planning",
+        metadata: {},
+        toolCalls: [
+          assistantCall({
+            id: "c1",
+            arguments: { plan: [{ step: "Old", status: "pending" }] },
+          }),
+        ],
+      },
+      {
+        id: "m2",
+        role: "assistant",
+        content: "Updated",
+        metadata: {},
+        toolCalls: [
+          assistantCall({
+            id: "c2",
+            arguments: { plan: [{ step: "New", status: "in_progress" }] },
+          }),
+        ],
+      },
+    ];
+    const snap = deriveAgentTasksFromAssistantMessages(messages);
+    expect(snap?.tasks).toHaveLength(1);
+    expect(snap?.tasks[0]).toMatchObject({ text: "New", status: "in_progress" });
   });
 });

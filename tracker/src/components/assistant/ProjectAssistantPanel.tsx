@@ -29,6 +29,7 @@ import {
   updateStreamingToolCall,
 } from "@/components/assistant/assistantStream";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
+import { AgentTaskPinnedPanel } from "@/components/agent-activity";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
@@ -40,6 +41,7 @@ import { Markdown } from "@/components/ui/markdown";
 import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { extractKbDocumentReferencesFromMarkdown } from "@/lib/assistantKbReferences";
+import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
 import {
   catalogFor,
   defaultComposerSettings,
@@ -53,6 +55,7 @@ import {
   type UserQuestion,
   type UserQuestionsRequest,
 } from "@/services/assistant";
+import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
   assistantExploreTopic,
@@ -915,6 +918,10 @@ export function ProjectAssistantPanel({
   );
 
   const visibleMessages = useMemo(() => displayMessages(messages, t), [messages, t]);
+  const taskSnapshot = useMemo(
+    () => deriveAgentTasksFromAssistantMessages(visibleMessages),
+    [visibleMessages],
+  );
   const kbDocumentReferences = useMemo(
     () =>
       visibleMessages.reduce<string[]>((references, message) => {
@@ -981,12 +988,14 @@ export function ProjectAssistantPanel({
 
   const messageItems = (
     <>
+      <AgentTaskPinnedPanel snapshot={taskSnapshot} />
       {visibleMessages.map((message) => (
         <AssistantBubble
           key={message.id}
           message={message}
           projectSlug={projectSlug}
           onOpenDocumentPath={onOpenDocumentPath}
+          taskSnapshot={taskSnapshot}
         />
       ))}
       {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
@@ -1272,10 +1281,12 @@ function AssistantBubble({
   message,
   projectSlug,
   onOpenDocumentPath,
+  taskSnapshot = null,
 }: {
   message: AssistantChatMessage;
   projectSlug?: string;
   onOpenDocumentPath?: (path: string) => void;
+  taskSnapshot?: AgentTaskSnapshot | null;
 }) {
   const isUser = message.role === "user";
   const attachments = Array.isArray(message.metadata.attachments) ? message.metadata.attachments : [];
@@ -1313,7 +1324,7 @@ function AssistantBubble({
         )}
         {message.toolCalls.length ? (
           <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
-            <ToolActivityTimeline toolCalls={message.toolCalls} />
+            <ToolActivityTimeline toolCalls={message.toolCalls} taskSnapshot={taskSnapshot} />
           </div>
         ) : null}
       </article>
