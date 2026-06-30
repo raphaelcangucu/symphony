@@ -1,10 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AgentTaskInlineCard } from "@/components/issues/issue-detail/AgentTaskInlineCard";
+import { AgentTaskList } from "@/components/issues/issue-detail/AgentTaskList";
 import { SessionLogEntryCard } from "@/components/issues/issue-detail/SessionLogEntryCard";
 import { pairSessionLogItems, sessionPairToView } from "@/components/issues/issue-detail/sessionToolCall";
 import { agentKindLabel } from "@/components/shared/AgentChip";
 import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
+import { deriveAgentTasks, isAgentTaskTool } from "@/lib/agentTasks";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { SessionLogEntry } from "@/types/session-log";
 
@@ -36,6 +39,7 @@ export function IssueSessionLog({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const items = pairSessionLogItems(entries);
+  const taskSnapshot = deriveAgentTasks(entries);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -79,6 +83,7 @@ export function IssueSessionLog({
           {t("issue.sessionLog.source", { agent: resolveAgentLabel(logAgentKind, t) })}
         </p>
       ) : null}
+      {taskSnapshot ? <AgentTaskList snapshot={taskSnapshot} /> : null}
       {error ? (
         <p className="mt-3 text-sm text-destructive">{error}</p>
       ) : (
@@ -90,7 +95,14 @@ export function IssueSessionLog({
           {items.length > 0 ? (
             items.map((item, index) =>
               item.type === "toolCall" ? (
-                <ToolCallBlock view={sessionPairToView(item.call, item.result)} key={`tool-${item.call.callId}-${index}`} />
+                isAgentTaskTool(item.call.title) && taskSnapshot ? (
+                  <AgentTaskInlineCard snapshot={taskSnapshot} key={`task-${item.call.callId}-${index}`} />
+                ) : (
+                  <ToolCallBlock
+                    view={sessionPairToView(item.call, item.result)}
+                    key={`tool-${item.call.callId}-${index}`}
+                  />
+                )
               ) : (
                 <SessionLogEntryCard entry={item.entry} key={`${item.entry.kind}-${item.entry.title}-${index}`} />
               ),
