@@ -35,6 +35,36 @@ defmodule SymphonyElixir.Workpad.ExecutionBundleTest do
   ```
   """
 
+  @subagent_workpad """
+  ## Codex Workpad
+
+  ### Execution bundle
+
+  ```yaml
+  version: 1
+  mode: bundle
+  parent: macro-markets#510
+  shared_contracts:
+    - id: positions-api
+      kind: graphql_query
+      owner_unit: positions-backend
+      consumers: [positions-ui]
+      status: draft
+  units:
+    - id: positions-backend
+      type: subagent_unit
+      issue: MAC-12
+      repo: macro-markets/app
+      produces: [positions-api]
+    - id: positions-ui
+      type: subagent_unit
+      issue: MAC-13
+      repo: macro-markets/app
+      consumes: [positions-api]
+      depends_on: [positions-backend]
+  ```
+  """
+
   test "parse/1 returns the bundle with units and contracts" do
     assert {:ok, bundle} = ExecutionBundle.parse(@workpad)
     assert bundle.mode == "bundle"
@@ -57,6 +87,23 @@ defmodule SymphonyElixir.Workpad.ExecutionBundleTest do
   test "child_units/workpad_units split units by type" do
     {:ok, bundle} = ExecutionBundle.parse(@workpad)
     assert ExecutionBundle.child_units(bundle) |> length() == 2
+    assert ExecutionBundle.workpad_units(bundle) == []
+  end
+
+  test "parse/1 reads subagent_unit type" do
+    assert {:ok, bundle} = ExecutionBundle.parse(@subagent_workpad)
+    backend = Enum.find(bundle.units, &(&1.id == "positions-backend"))
+    ui = Enum.find(bundle.units, &(&1.id == "positions-ui"))
+    assert backend.type == :subagent_unit
+    assert ui.type == :subagent_unit
+    assert ui.depends_on == ["positions-backend"]
+  end
+
+  test "subagent_units/1 returns only subagent units" do
+    {:ok, bundle} = ExecutionBundle.parse(@subagent_workpad)
+    ids = bundle |> ExecutionBundle.subagent_units() |> Enum.map(& &1.id)
+    assert ids == ["positions-backend", "positions-ui"]
+    assert ExecutionBundle.child_units(bundle) == []
     assert ExecutionBundle.workpad_units(bundle) == []
   end
 end

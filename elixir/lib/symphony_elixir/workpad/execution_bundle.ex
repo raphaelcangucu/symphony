@@ -9,7 +9,7 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle do
 
   @type unit :: %{
           id: String.t(),
-          type: :workpad_task | :child_run,
+          type: :workpad_task | :child_run | :subagent_unit,
           issue: String.t() | nil,
           repo: String.t() | nil,
           produces: [String.t()],
@@ -56,6 +56,10 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle do
   @spec workpad_units(t()) :: [unit()]
   def workpad_units(%__MODULE__{units: units}), do: Enum.filter(units, &(&1.type == :workpad_task))
 
+  @spec subagent_units(t()) :: [unit()]
+  def subagent_units(%__MODULE__{units: units}),
+    do: Enum.filter(units, &(&1.type == :subagent_unit))
+
   defp build(map) do
     %__MODULE__{
       version: map["version"],
@@ -90,6 +94,7 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle do
     }
   end
 
+  defp unit_type("subagent_unit"), do: :subagent_unit
   defp unit_type("child_run"), do: :child_run
   defp unit_type(_), do: :workpad_task
 
