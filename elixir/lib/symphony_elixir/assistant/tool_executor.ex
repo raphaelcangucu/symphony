@@ -298,7 +298,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       }),
       tool_spec(
         "classify_execution_unit",
-        "Deterministically classify a planned subtask as workpad_task (inline) or child_run (own run/worktree/PR). Preview only; no writes.",
+        "Deterministically classify a planned subtask as workpad_task (inline), subagent_unit (same-repo dependent, runs in the parent tree/PR), or child_run (own run/worktree/PR). Preview only; no writes.",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -314,7 +314,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       ),
       tool_spec(
         "create_subtask",
-        "Create a child issue under a parent and attach it to the parent's execution bundle. Omit unit_type to auto-classify (workpad_task inline vs child_run with its own PR/worktree). Use for breaking a task into subtasks.",
+        "Create a child issue under a parent and attach it to the parent's execution bundle. Omit unit_type to auto-classify (workpad_task inline, subagent_unit same-repo dependent in the parent PR, or child_run with its own PR/worktree). Use for breaking a task into subtasks.",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -324,7 +324,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
             "title" => string_schema("Subtask title."),
             "description" => string_schema("Optional subtask description."),
             "repo" => string_schema("Target repository full name; defaults to the parent's primary repo."),
-            "unit_type" => string_schema("Optional: 'workpad_task' or 'child_run'. Omit to auto-classify."),
+            "unit_type" => string_schema("Optional: 'workpad_task', 'subagent_unit', or 'child_run'. Omit to auto-classify."),
             "produces" => string_list_schema("Optional shared-contract ids this subtask produces."),
             "consumes" => string_list_schema("Optional shared-contract ids this subtask consumes."),
             "depends_on" => string_list_schema("Optional unit ids this subtask depends on."),
@@ -1217,8 +1217,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     |> maybe_put_attr("repository", repo)
   end
 
-  defp resolve_unit_type(%{"unit_type" => t}, _repo, _parent_repo) when t in ["workpad_task", "child_run"],
-    do: {:ok, String.to_existing_atom(t)}
+  defp resolve_unit_type(%{"unit_type" => t}, _repo, _parent_repo)
+       when t in ["workpad_task", "child_run", "subagent_unit"],
+       do: {:ok, String.to_existing_atom(t)}
 
   defp resolve_unit_type(arguments, repo, parent_repo) do
     unit = %{

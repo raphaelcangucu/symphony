@@ -40,6 +40,18 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
     assert "classify_execution_unit" in names
   end
 
+  test "classify_execution_unit reports subagent_unit for same-repo contract-coupled work" do
+    assert {:ok, result} =
+             ToolExecutor.execute("macro-markets", "classify_execution_unit", %{
+               "repo" => "macro-markets/app",
+               "parent_repo" => "macro-markets/app",
+               "consumes" => ["api"]
+             })
+
+    assert result.data.classification == "subagent_unit"
+    assert result.data.rule == "same_repo_subagent"
+  end
+
   describe "create_subtask" do
     setup do
       {:ok, parent} = Context.create_issue("macro-markets", %{"title" => "Lottery wheel", "status" => "Backlog"})
@@ -69,6 +81,18 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
                })
 
       assert result.data.unit_type == "workpad_task"
+    end
+
+    test "honors an explicit subagent_unit unit_type", %{parent: parent} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "create_subtask", %{
+                 "parent_identifier" => parent.identifier,
+                 "title" => "Positions backend",
+                 "repo" => "macro-markets/app",
+                 "unit_type" => "subagent_unit"
+               })
+
+      assert result.data.unit_type == "subagent_unit"
     end
 
     test "links the child under the parent and surfaces parent_identifier", %{parent: parent} do
