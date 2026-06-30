@@ -122,6 +122,11 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/:identifier/documents/*path", IssueDocumentController, :show)
     post("/projects/:project_slug/issues/:identifier/move", IssueController, :move)
     post("/projects/:project_slug/issues/:identifier/dispatch", IssueController, :dispatch_agent)
+    post(
+      "/projects/:project_slug/issues/:identifier/run-prompt-template",
+      RunPromptTemplateController,
+      :create
+    )
     post("/projects/:project_slug/issues/:identifier/goal", IssueController, :goal_control)
     post("/projects/:project_slug/issues/:identifier/sync", IssueController, :sync)
     post("/projects/:project_slug/issues/:identifier/archive", IssueController, :archive)
