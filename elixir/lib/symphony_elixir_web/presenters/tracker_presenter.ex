@@ -13,6 +13,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   }
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.PromptTemplates.Template
   alias SymphonyElixir.AgentRouting
   alias SymphonyElixir.Tracker.DisplayIdentifier
   alias SymphonyElixir.Tracker.ExternalUrl
@@ -294,6 +295,28 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       status_kind: to_string(item.status_kind),
       preview: item.preview,
       updated_at: iso8601(item.updated_at)
+    }
+  end
+
+  @spec prompt_template(Template.t()) :: map()
+  def prompt_template(%Template{} = template) do
+    %{
+      id: template.id,
+      slug: template.slug,
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      body: template.body,
+      agentKind: template.agent_kind,
+      model: template.model,
+      effort: template.effort,
+      mode: template.mode,
+      scope: template.scope,
+      builtIn: template.built_in,
+      enabled: template.enabled,
+      position: template.position,
+      insertedAt: iso8601(template.inserted_at),
+      updatedAt: iso8601(template.updated_at)
     }
   end
 
