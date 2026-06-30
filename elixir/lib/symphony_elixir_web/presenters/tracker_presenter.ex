@@ -320,6 +320,19 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     }
   end
 
+  @spec assistant_command(map()) :: map()
+  def assistant_command(command) when is_map(command) do
+    %{
+      slug: Map.get(command, :slug),
+      name: Map.get(command, :name),
+      description: Map.get(command, :description),
+      kind: Map.get(command, :kind),
+      category: Map.get(command, :category),
+      submitKind: Map.get(command, :submit_kind),
+      source: Map.get(command, :source)
+    }
+  end
+
   defp scope_string(nil), do: nil
   defp scope_string(scope), do: to_string(scope)
 
