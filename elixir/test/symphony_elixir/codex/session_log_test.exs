@@ -64,4 +64,32 @@ defmodule SymphonyElixir.Codex.SessionLogTest do
     assert new_offset > offset
     assert Enum.any?(appended, &(&1["kind"] == "reasoning"))
   end
+
+  test "update_plan tool call keeps the full plan JSON in the entry body" do
+    line =
+      Jason.encode!(%{
+        "type" => "response_item",
+        "payload" => %{
+          "type" => "function_call",
+          "name" => "update_plan",
+          "call_id" => "call_1",
+          "arguments" =>
+            Jason.encode!(%{
+              "explanation" => "Starting",
+              "plan" => [
+                %{"step" => "Write tests", "status" => "completed"},
+                %{"step" => "Implement", "status" => "in_progress"}
+              ]
+            })
+        }
+      })
+
+    entry = SessionLog.parse_line(line)
+
+    assert entry["kind"] == "tool_call"
+    assert entry["title"] == "update_plan"
+    assert entry["body"] =~ "\"plan\""
+    assert entry["body"] =~ "Write tests"
+    assert entry["body"] =~ "in_progress"
+  end
 end
