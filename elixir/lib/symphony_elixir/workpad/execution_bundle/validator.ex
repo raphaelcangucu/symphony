@@ -12,7 +12,8 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.Validator do
     warnings =
       cycle_warnings(bundle.units) ++
         producer_warnings(bundle.units) ++
-        cross_repo_warnings(bundle.units, parent_repo)
+        cross_repo_warnings(bundle.units, parent_repo) ++
+        cross_repo_subagent_warnings(bundle.units, parent_repo)
 
     if warnings == [], do: :ok, else: {:error, warnings}
   end
@@ -59,4 +60,18 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.Validator do
   end
 
   defp cross_repo_warnings(_units, _parent_repo), do: []
+
+  defp cross_repo_subagent_warnings(units, parent_repo) when is_binary(parent_repo) do
+    units
+    |> Enum.filter(&(&1.type == :subagent_unit and is_binary(&1.repo) and &1.repo != parent_repo))
+    |> Enum.map(fn u ->
+      %{
+        code: :cross_repo_subagent,
+        message:
+          "subagent_unit #{u.id} targets a different repo than the parent; use child_run for cross-repo work"
+      }
+    end)
+  end
+
+  defp cross_repo_subagent_warnings(_units, _parent_repo), do: []
 end
