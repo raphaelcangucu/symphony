@@ -1,5 +1,7 @@
 # "Fix with agent" — PR failure re-dispatch via Rework — Implementation Plan
 
+ 
+
 > **For agentic workers:** Implement task-by-task using checkbox (`- [ ]`) steps. Prefer **(A)** a fresh subagent or focused session per task with review between tasks, or **(B)** inline execution in one chat with checkpoints after each task. Replace example commands with this repo's real tools.
 
 **Goal:** Add a "Fix with agent" action on the issue PR tab that, when a linked PR has failing CI checks, posts an issue comment containing the failing-job log tails and moves the issue to `Rework` so the orchestrator re-dispatches the agent with that failure context.
@@ -23,6 +25,7 @@
 ## File map
 
 **Backend — create**
+
 - `elixir/lib/symphony_elixir/github/check_logs.ex`
 - `elixir/lib/symphony_elixir/pull_request_fix.ex`
 - `elixir/lib/symphony_elixir_web/controllers/tracker/pull_request_fix_controller.ex`
@@ -31,6 +34,7 @@
 - `elixir/test/symphony_elixir_web/controllers/tracker/pull_request_fix_controller_test.exs`
 
 **Backend — modify**
+
 - `elixir/lib/symphony_elixir/github/pull_requests.ex` (add `databaseId` → `job_id`)
 - `elixir/lib/symphony_elixir/github/client.ex` (add `rest_get/2`)
 - `elixir/lib/symphony_elixir_web/tracker_errors.ex` (add `:no_failing_checks`)
@@ -39,6 +43,7 @@
 - `elixir/test/symphony_elixir/github/client_test.exs` (assert `rest_get/2`) — create if absent
 
 **Frontend — modify**
+
 - `tracker/src/types/pull-request.ts` (add `PullRequestFixResult`)
 - `tracker/src/services/pullRequests.ts` (add `requestPullRequestFix`)
 - `tracker/src/components/issues/pull-request/pr-meta.ts` (add `hasFailingChecks`)
@@ -46,6 +51,7 @@
 - `tracker/src/components/issues/IssueDrawer.tsx` (pass `projectSlug`)
 
 **Frontend — create**
+
 - `tracker/src/components/issues/pull-request/__tests__/pr-meta.test.ts`
 - `tracker/src/services/__tests__/pullRequests.fix.test.ts`
 
@@ -54,10 +60,12 @@
 ## Task 1: Expose `job_id` on PR jobs
 
 **Files:**
+
 - Modify: `elixir/lib/symphony_elixir/github/pull_requests.ex`
+
 - Test: `elixir/test/symphony_elixir/github/pull_requests_test.exs`
 
-- [ ] **Step 1: Write the failing test**
+- \[ \] **Step 1: Write the failing test**
 
 Add inside `describe "parse_pr_node/1"` in `pull_requests_test.exs`:
 
@@ -96,12 +104,11 @@ test "exposes job_id from CheckRun databaseId" do
 end
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- \[ \] **Step 2: Run test to verify it fails**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/pull_requests_test.exs`
-Expected: FAIL — `key :job_id not found` (job map has no `job_id`).
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/pull_requests_test.exs`Expected: FAIL — `key :job_id not found` (job map has no `job_id`).
 
-- [ ] **Step 3: Write minimal implementation**
+- \[ \] **Step 3: Write minimal implementation**
 
 In `pull_requests.ex`, add `databaseId` to the `CheckRun` selection inside `@pr_fields` (after `name`):
 
@@ -146,12 +153,11 @@ Then in `check_run_to_job/1` add the `job_id` key:
   end
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- \[ \] **Step 4: Run test to verify it passes**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/pull_requests_test.exs`
-Expected: PASS (all tests, including the existing ones).
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/pull_requests_test.exs`Expected: PASS (all tests, including the existing ones).
 
-- [ ] **Step 5: Commit**
+- \[ \] **Step 5: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/github/pull_requests.ex elixir/test/symphony_elixir/github/pull_requests_test.exs
@@ -163,10 +169,12 @@ git commit -m "feat(pr): expose CheckRun job_id for log lookups"
 ## Task 2: `GitHub.Client.rest_get/2` REST helper
 
 **Files:**
+
 - Modify: `elixir/lib/symphony_elixir/github/client.ex`
+
 - Test: `elixir/test/symphony_elixir/github/client_test.exs` (create if missing)
 
-- [ ] **Step 1: Write the failing test**
+- \[ \] **Step 1: Write the failing test**
 
 Create or append to `elixir/test/symphony_elixir/github/client_test.exs`:
 
@@ -210,12 +218,11 @@ defmodule SymphonyElixir.GitHub.ClientRestTest do
 end
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- \[ \] **Step 2: Run test to verify it fails**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/client_test.exs`
-Expected: FAIL — `function Client.rest_get/2 is undefined`.
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/client_test.exs`Expected: FAIL — `function Client.rest_get/2 is undefined`.
 
-- [ ] **Step 3: Write minimal implementation**
+- \[ \] **Step 3: Write minimal implementation**
 
 In `client.ex`, add a base-url constant near `@graphql_endpoint`:
 
@@ -262,12 +269,11 @@ Add the private helpers near `graphql_headers/1` / `post_graphql_request/2`:
 
 (`Req` follows redirects by default and strips `Authorization` on cross-host redirects, so the Actions logs blob fetch works.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- \[ \] **Step 4: Run test to verify it passes**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/client_test.exs`
-Expected: PASS.
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/client_test.exs`Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- \[ \] **Step 5: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/github/client.ex elixir/test/symphony_elixir/github/client_test.exs
@@ -279,10 +285,12 @@ git commit -m "feat(github): add authenticated REST GET helper"
 ## Task 3: `GitHub.CheckLogs` — fetch + tail failing job logs
 
 **Files:**
+
 - Create: `elixir/lib/symphony_elixir/github/check_logs.ex`
+
 - Test: `elixir/test/symphony_elixir/github/check_logs_test.exs`
 
-- [ ] **Step 1: Write the failing test**
+- \[ \] **Step 1: Write the failing test**
 
 Create `elixir/test/symphony_elixir/github/check_logs_test.exs`:
 
@@ -342,12 +350,11 @@ defmodule SymphonyElixir.GitHub.CheckLogsTest do
 end
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- \[ \] **Step 2: Run test to verify it fails**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/check_logs_test.exs`
-Expected: FAIL — `module SymphonyElixir.GitHub.CheckLogs is not available`.
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/check_logs_test.exs`Expected: FAIL — `module SymphonyElixir.GitHub.CheckLogs is not available`.
 
-- [ ] **Step 3: Write minimal implementation**
+- \[ \] **Step 3: Write minimal implementation**
 
 Create `elixir/lib/symphony_elixir/github/check_logs.ex`:
 
@@ -409,12 +416,11 @@ defmodule SymphonyElixir.GitHub.CheckLogs do
 end
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- \[ \] **Step 4: Run test to verify it passes**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/check_logs_test.exs`
-Expected: PASS.
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/github/check_logs_test.exs`Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- \[ \] **Step 5: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/github/check_logs.ex elixir/test/symphony_elixir/github/check_logs_test.exs
@@ -426,10 +432,12 @@ git commit -m "feat(github): fetch and tail failing job logs"
 ## Task 4: `PullRequestFix` — comment + move to Rework
 
 **Files:**
+
 - Create: `elixir/lib/symphony_elixir/pull_request_fix.ex`
+
 - Test: `elixir/test/symphony_elixir/pull_request_fix_test.exs`
 
-- [ ] **Step 1: Write the failing test**
+- \[ \] **Step 1: Write the failing test**
 
 Create `elixir/test/symphony_elixir/pull_request_fix_test.exs`:
 
@@ -477,12 +485,11 @@ defmodule SymphonyElixir.PullRequestFixTest do
 end
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- \[ \] **Step 2: Run test to verify it fails**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/pull_request_fix_test.exs`
-Expected: FAIL — `module SymphonyElixir.PullRequestFix is not available`.
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/pull_request_fix_test.exs`Expected: FAIL — `module SymphonyElixir.PullRequestFix is not available`.
 
-- [ ] **Step 3: Write minimal implementation**
+- \[ \] **Step 3: Write minimal implementation**
 
 Create `elixir/lib/symphony_elixir/pull_request_fix.ex`:
 
@@ -601,12 +608,11 @@ defmodule SymphonyElixir.PullRequestFix do
 end
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- \[ \] **Step 4: Run test to verify it passes**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/pull_request_fix_test.exs`
-Expected: PASS.
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/pull_request_fix_test.exs`Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- \[ \] **Step 5: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/pull_request_fix.ex elixir/test/symphony_elixir/pull_request_fix_test.exs
@@ -618,16 +624,14 @@ git commit -m "feat(pr): build CI-failure comment and move issue to Rework"
 ## Task 5: `request_fix/2` orchestration test (stub adapter)
 
 **Files:**
+
 - Modify: `elixir/test/symphony_elixir/pull_request_fix_test.exs`
 
-This task verifies the full `request_fix/2` flow (adapter dispatch order + guard) using
-an injected adapter, without hitting GitHub.
+This task verifies the full `request_fix/2` flow (adapter dispatch order + guard) using an injected adapter, without hitting GitHub.
 
-- [ ] **Step 1: Write the failing test**
+- \[ \] **Step 1: Write the failing test**
 
-Append to `pull_request_fix_test.exs`. The adapter is selected by `IssueAdapter.for/1`
-from `Application.get_env(:symphony_elixir, :issue_adapters, %{})` keyed by `tracker_kind`,
-and `PullRequests.for_issue/3` uses `Application.get_env(:symphony_elixir, :github_client_module, ...)`.
+Append to `pull_request_fix_test.exs`. The adapter is selected by `IssueAdapter.for/1`from `Application.get_env(:symphony_elixir, :issue_adapters, %{})` keyed by `tracker_kind`, and `PullRequests.for_issue/3` uses `Application.get_env(:symphony_elixir, :github_client_module, ...)`.
 
 ```elixir
   defmodule StubAdapter do
@@ -761,12 +765,11 @@ and `PullRequests.for_issue/3` uses `Application.get_env(:symphony_elixir, :gith
   end
 ```
 
-- [ ] **Step 2: Run test to verify it fails (then passes)**
+- \[ \] **Step 2: Run test to verify it fails (then passes)**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/pull_request_fix_test.exs`
-Expected: With Task 4's implementation already in place, these should PASS. If a real `GITHUB_TOKEN` is set in the env, `for_issue/3` still uses the injected client, so no network call occurs. If `RepoSpec.split/1` or atom-key assumptions differ, fix the implementation (not the test) until PASS.
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir/pull_request_fix_test.exs`Expected: With Task 4's implementation already in place, these should PASS. If a real `GITHUB_TOKEN` is set in the env, `for_issue/3` still uses the injected client, so no network call occurs. If `RepoSpec.split/1` or atom-key assumptions differ, fix the implementation (not the test) until PASS.
 
-- [ ] **Step 3: Commit**
+- \[ \] **Step 3: Commit**
 
 ```bash
 git add elixir/test/symphony_elixir/pull_request_fix_test.exs
@@ -778,12 +781,16 @@ git commit -m "test(pr): cover request_fix dispatch order and guard"
 ## Task 6: Error mapping + controller + route
 
 **Files:**
+
 - Modify: `elixir/lib/symphony_elixir_web/tracker_errors.ex`
+
 - Create: `elixir/lib/symphony_elixir_web/controllers/tracker/pull_request_fix_controller.ex`
+
 - Modify: `elixir/lib/symphony_elixir_web/router.ex`
+
 - Test: `elixir/test/symphony_elixir_web/controllers/tracker/pull_request_fix_controller_test.exs`
 
-- [ ] **Step 1: Add the `:no_failing_checks` error clause**
+- \[ \] **Step 1: Add the** `:no_failing_checks` **error clause**
 
 In `tracker_errors.ex`, add before the binary/catch-all clauses (after the `{:remote_validation, ...}` clause):
 
@@ -792,7 +799,7 @@ In `tracker_errors.ex`, add before the binary/catch-all clauses (after the `{:re
     do: error(conn, 422, "no_failing_checks", "No failing checks found on the linked pull request(s).")
 ```
 
-- [ ] **Step 2: Write the controller test (failing)**
+- \[ \] **Step 2: Write the controller test (failing)**
 
 Look at an existing tracker controller test (e.g. `test/symphony_elixir_web/controllers/tracker/comment_controller_test.exs`) for the `ConnCase`/setup pattern and the `:issue_adapters` / project-fixture helpers; mirror it.
 
@@ -890,15 +897,13 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestFixControllerTest do
 end
 ```
 
-(Use the real auth/project helpers from the sibling test file; `create_github_project/0`,
-`put_tracker_auth/1` are placeholders for those helpers.)
+(Use the real auth/project helpers from the sibling test file; `create_github_project/0`, `put_tracker_auth/1` are placeholders for those helpers.)
 
-- [ ] **Step 3: Run test to verify it fails**
+- \[ \] **Step 3: Run test to verify it fails**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir_web/controllers/tracker/pull_request_fix_controller_test.exs`
-Expected: FAIL — no matching route / controller undefined.
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir_web/controllers/tracker/pull_request_fix_controller_test.exs`Expected: FAIL — no matching route / controller undefined.
 
-- [ ] **Step 4: Write the controller**
+- \[ \] **Step 4: Write the controller**
 
 Create `elixir/lib/symphony_elixir_web/controllers/tracker/pull_request_fix_controller.ex`:
 
@@ -930,21 +935,19 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestFixController do
 end
 ```
 
-- [ ] **Step 5: Add the route**
+- \[ \] **Step 5: Add the route**
 
-In `router.ex`, inside `scope "/api/tracker/v1"`, add immediately after the existing
-`get(".../pull_requests", PullRequestController, :index)` line:
+In `router.ex`, inside `scope "/api/tracker/v1"`, add immediately after the existing `get(".../pull_requests", PullRequestController, :index)` line:
 
 ```elixir
     post("/projects/:project_slug/issues/:identifier/pull_requests/fix", PullRequestFixController, :create)
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- \[ \] **Step 6: Run test to verify it passes**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir_web/controllers/tracker/pull_request_fix_controller_test.exs`
-Expected: PASS.
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix test test/symphony_elixir_web/controllers/tracker/pull_request_fix_controller_test.exs`Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- \[ \] **Step 7: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir_web/tracker_errors.ex \
@@ -959,10 +962,12 @@ git commit -m "feat(web): add POST pull_requests/fix endpoint"
 ## Task 7: Frontend — `hasFailingChecks` helper
 
 **Files:**
+
 - Modify: `tracker/src/components/issues/pull-request/pr-meta.ts`
+
 - Create: `tracker/src/components/issues/pull-request/__tests__/pr-meta.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- \[ \] **Step 1: Write the failing test**
 
 Create `tracker/src/components/issues/pull-request/__tests__/pr-meta.test.ts`:
 
@@ -999,12 +1004,11 @@ describe("hasFailingChecks", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- \[ \] **Step 2: Run test to verify it fails**
 
-Run: `cd tracker && npx vitest run src/components/issues/pull-request/__tests__/pr-meta.test.ts`
-Expected: FAIL — `hasFailingChecks` is not exported.
+Run: `cd tracker && npx vitest run src/components/issues/pull-request/__tests__/pr-meta.test.ts`Expected: FAIL — `hasFailingChecks` is not exported.
 
-- [ ] **Step 3: Write minimal implementation**
+- \[ \] **Step 3: Write minimal implementation**
 
 Append to `tracker/src/components/issues/pull-request/pr-meta.ts`:
 
@@ -1022,12 +1026,11 @@ export function hasFailingChecks(pr: PullRequest): boolean {
 
 (If `pr-meta.ts` already imports `PullRequest`, reuse the existing import rather than adding a duplicate.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- \[ \] **Step 4: Run test to verify it passes**
 
-Run: `cd tracker && npx vitest run src/components/issues/pull-request/__tests__/pr-meta.test.ts`
-Expected: PASS.
+Run: `cd tracker && npx vitest run src/components/issues/pull-request/__tests__/pr-meta.test.ts`Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- \[ \] **Step 5: Commit**
 
 ```bash
 git add tracker/src/components/issues/pull-request/pr-meta.ts \
@@ -1040,11 +1043,14 @@ git commit -m "feat(tracker): add hasFailingChecks helper"
 ## Task 8: Frontend — `requestPullRequestFix` service
 
 **Files:**
+
 - Modify: `tracker/src/types/pull-request.ts`
+
 - Modify: `tracker/src/services/pullRequests.ts`
+
 - Create: `tracker/src/services/__tests__/pullRequests.fix.test.ts`
 
-- [ ] **Step 1: Add the result type**
+- \[ \] **Step 1: Add the result type**
 
 Append to `tracker/src/types/pull-request.ts`:
 
@@ -1062,7 +1068,7 @@ export interface PullRequestFixResult {
 }
 ```
 
-- [ ] **Step 2: Write the failing test**
+- \[ \] **Step 2: Write the failing test**
 
 Create `tracker/src/services/__tests__/pullRequests.fix.test.ts`:
 
@@ -1097,12 +1103,11 @@ describe("requestPullRequestFix", () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- \[ \] **Step 3: Run test to verify it fails**
 
-Run: `cd tracker && npx vitest run src/services/__tests__/pullRequests.fix.test.ts`
-Expected: FAIL — `requestPullRequestFix` is not exported.
+Run: `cd tracker && npx vitest run src/services/__tests__/pullRequests.fix.test.ts`Expected: FAIL — `requestPullRequestFix` is not exported.
 
-- [ ] **Step 4: Write minimal implementation**
+- \[ \] **Step 4: Write minimal implementation**
 
 In `tracker/src/services/pullRequests.ts`, extend the type import and add the function at the end:
 
@@ -1144,12 +1149,11 @@ export async function requestPullRequestFix(
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- \[ \] **Step 5: Run test to verify it passes**
 
-Run: `cd tracker && npx vitest run src/services/__tests__/pullRequests.fix.test.ts`
-Expected: PASS.
+Run: `cd tracker && npx vitest run src/services/__tests__/pullRequests.fix.test.ts`Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- \[ \] **Step 6: Commit**
 
 ```bash
 git add tracker/src/types/pull-request.ts \
@@ -1163,10 +1167,12 @@ git commit -m "feat(tracker): add requestPullRequestFix service"
 ## Task 9: Frontend — "Fix with agent" button
 
 **Files:**
+
 - Modify: `tracker/src/components/issues/issue-detail/PullRequestTab.tsx`
+
 - Modify: `tracker/src/components/issues/IssueDrawer.tsx`
 
-- [ ] **Step 1: Add `projectSlug` prop + button + handler**
+- \[ \] **Step 1: Add** `projectSlug` **prop + button + handler**
 
 In `PullRequestTab.tsx`:
 
@@ -1232,7 +1238,7 @@ import { requestPullRequestFix } from "@/services/pullRequests";
 
 (Replace the previous standalone Refresh `<button>` with this wrapped pair.)
 
-- [ ] **Step 2: Pass `projectSlug` from IssueDrawer**
+- \[ \] **Step 2: Pass** `projectSlug` **from IssueDrawer**
 
 In `IssueDrawer.tsx`, update the `<PullRequestTab ... />` usage to add:
 
@@ -1240,17 +1246,15 @@ In `IssueDrawer.tsx`, update the `<PullRequestTab ... />` usage to add:
                     projectSlug={projectSlug}
 ```
 
-- [ ] **Step 3: Type-check + lint + build**
+- \[ \] **Step 3: Type-check + lint + build**
 
-Run: `cd tracker && npx tsc -b && npm run lint`
-Expected: no type errors, no lint errors.
+Run: `cd tracker && npx tsc -b && npm run lint`Expected: no type errors, no lint errors.
 
-- [ ] **Step 4: Verify full frontend test suite passes**
+- \[ \] **Step 4: Verify full frontend test suite passes**
 
-Run: `cd tracker && npm run test`
-Expected: PASS (no regressions).
+Run: `cd tracker && npm run test`Expected: PASS (no regressions).
 
-- [ ] **Step 5: Commit**
+- \[ \] **Step 5: Commit**
 
 ```bash
 git add tracker/src/components/issues/issue-detail/PullRequestTab.tsx \
@@ -1264,21 +1268,21 @@ git commit -m "feat(tracker): add Fix with agent button to PR tab"
 
 **Files:** none (validation only)
 
-- [ ] **Step 1: Backend gate**
+- \[ \] **Step 1: Backend gate**
 
-Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix format && mise exec -- mix specs.check && mise exec -- mix test`
-Expected:
+Run: `cd elixir && eval "$(mise activate bash)" && mise exec -- mix format && mise exec -- mix specs.check && mise exec -- mix test`Expected:
+
 - `mix format` rewrites/leaves files clean.
-- `mix specs.check` reports only the 3 pre-existing failures documented earlier
-  (`issue_comments.ex` x2 and the `for_issue/3` multi-clause quirk) — **no new** missing specs from the files added here. Add `@spec` to any new public `def` that the tool flags from new modules.
+
+- `mix specs.check` reports only the 3 pre-existing failures documented earlier (`issue_comments.ex` x2 and the `for_issue/3` multi-clause quirk) — **no new** missing specs from the files added here. Add `@spec` to any new public `def` that the tool flags from new modules.
+
 - `mix test` green.
 
-- [ ] **Step 2: Frontend gate**
+- \[ \] **Step 2: Frontend gate**
 
-Run: `cd tracker && npm run lint && npx tsc -b && npm run test`
-Expected: all green.
+Run: `cd tracker && npm run lint && npx tsc -b && npm run test`Expected: all green.
 
-- [ ] **Step 3: Commit any formatting fixups**
+- \[ \] **Step 3: Commit any formatting fixups**
 
 ```bash
 git add -A
@@ -1294,7 +1298,7 @@ git commit -m "chore: formatting and spec fixups for PR fix feature"
 **Spec coverage**
 
 | Spec requirement | Task |
-|---|---|
+| --- | --- |
 | Button visible only on failing checks + GitHub project | Task 7 (`hasFailingChecks`), Task 9 (gating; `supported/available` already gate the tab) |
 | `POST .../pull_requests/fix` endpoint | Task 6 |
 | Resolve failing jobs via `PullRequests.for_issue` | Task 4 (`collect_failing`) |
