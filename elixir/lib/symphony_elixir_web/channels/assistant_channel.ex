@@ -20,7 +20,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixirWeb.TrackerAuth
   alias SymphonyElixir.{AgentPreference, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
 
-  @issue_modes ~w(triage simple complex)
   @issue_authoring_tools ~w(create_draft_issue create_issue)
 
   @impl true
@@ -40,7 +39,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
-        mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
         goal_objective: History.thread_goal_objective(thread),
         goal_running: GoalRun.running?(thread.id),
@@ -72,7 +70,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
-        mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
         goal_objective: History.thread_goal_objective(thread),
         last_turn: History.turn_payload(thread),
@@ -124,7 +121,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
-        mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
         goal_objective: History.thread_goal_objective(thread),
         last_turn: History.turn_payload(thread),
@@ -184,18 +180,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     push_history_sync(socket)
     {:reply, :ok, socket}
   end
-
-  def handle_in("set_mode", %{"mode" => mode}, socket) when is_binary(mode) do
-    with {:ok, normalized_mode} <- normalize_issue_mode(mode),
-         {:ok, thread} <- issue_thread(socket),
-         {:ok, updated_thread} <- History.set_mode(thread, normalized_mode) do
-      {:reply, {:ok, %{mode: normalized_mode}}, assign(socket, :thread, updated_thread)}
-    else
-      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-    end
-  end
-
-  def handle_in("set_mode", _payload, socket), do: {:reply, {:error, %{reason: "mode is required"}}, socket}
 
   def handle_in("set_goal_mode", %{"goal_mode" => false}, socket) do
     with {:ok, thread} <- issue_thread(socket),
@@ -1144,16 +1128,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     ArgumentError -> Map.get(map, key)
   end
 
-  defp normalize_issue_mode(mode) do
-    normalized = mode |> String.trim() |> String.downcase()
-
-    if normalized in @issue_modes do
-      {:ok, normalized}
-    else
-      {:error, {:unsupported_mode, mode}}
-    end
-  end
-
   defp issue_thread(%Socket{assigns: %{thread: %{scope: "issue"} = thread}}), do: {:ok, thread}
   defp issue_thread(_socket), do: {:error, :issue_thread_required}
 
@@ -1480,10 +1454,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp error_reason(reason) when is_binary(reason), do: reason
   defp error_reason({:missing_required_field, field}), do: "#{field} is required"
   defp error_reason(:project_not_found), do: "project not found"
-  defp error_reason({:unsupported_mode, mode}), do: "unsupported mode: #{mode}. Expected one of: #{Enum.join(@issue_modes, ", ")}"
   defp error_reason(:issue_thread_required), do: "this action is only supported for issue assistant threads"
   defp error_reason(:message_required), do: "message is required"
   defp error_reason({:turn_crashed, reason}), do: "assistant turn crashed: #{inspect(reason)}"
-  defp error_reason(%Ecto.Changeset{}), do: "failed to persist mode"
+  defp error_reason(%Ecto.Changeset{}), do: "failed to persist thread metadata"
   defp error_reason(reason), do: inspect(reason)
 end

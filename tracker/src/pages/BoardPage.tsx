@@ -22,8 +22,7 @@ export function BoardPage() {
     collapsed,
     toggleCollapse,
     moveIssueOptimistically,
-    groupIssueOptimistically,
-    ungroupIssueOptimistically,
+    setIssueParentOptimistically,
     setIssues,
     reloadProject,
     trackerKind,
@@ -70,8 +69,7 @@ export function BoardPage() {
           collapsedStatuses={collapsed}
           onToggleCollapse={toggleCollapse}
           agentExecutions={agentExecutions}
-          onGroupIssue={groupIssueOptimistically}
-          onUngroupIssue={ungroupIssueOptimistically}
+          onSetParent={setIssueParentOptimistically}
         />
       ) : null}
       <Outlet />

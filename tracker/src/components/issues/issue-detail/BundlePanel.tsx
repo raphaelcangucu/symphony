@@ -26,7 +26,7 @@ export function BundlePanel({ issue, bundle = null, executions = [] }: BundlePan
 
   const childExecutions = executions.filter(
     (execution) =>
-      execution.bundleRole === "child" &&
+      (execution.bundleRole === "child" || execution.bundleRole === "subagent") &&
       execution.parentIdentifier != null &&
       normalizeIssueIdentifier(execution.parentIdentifier) === parentKey,
   );

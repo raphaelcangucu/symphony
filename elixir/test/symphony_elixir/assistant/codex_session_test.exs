@@ -447,8 +447,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert prompt =~ "live investigation log"
     end
 
-    test "complex mode injects superpowers methodology into the prompt", %{thread: thread} do
-      {:ok, thread} = History.set_mode(thread, "complex")
+    test "issue prompt includes superpowers methodology for all turns", %{thread: thread} do
       test_pid = self()
 
       runner = fn _workspace, prompt, _issue, _opts ->
@@ -462,35 +461,17 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert_receive {:prompt, prompt}
       assert prompt =~ "brainstorming"
       assert prompt =~ "docs/superpowers/specs"
-      assert prompt =~ "Design-first authoring is desired"
       assert prompt =~ "Codex is a coding agent"
       assert prompt =~ "may proceed directly to code"
+      assert prompt =~ "choose depth from the conversation"
+      refute prompt =~ "MODE: COMPLEX"
+      refute prompt =~ "MODE: SIMPLE"
+      refute prompt =~ "MODE: TRIAGE"
       refute prompt =~ "<HARD-GATE>"
       refute prompt =~ "Do not start writing feature code"
     end
 
-    test "explicit complex request upgrades the thread and loads the methodology skills", %{thread: thread} do
-      assert History.thread_mode(thread) == "triage"
-      test_pid = self()
-
-      runner = fn _workspace, prompt, _issue, _opts ->
-        send(test_pid, {:prompt, prompt})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
-      end
-
-      assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "quero que utilize o complex", %{}, runner: runner)
-
-      assert_receive {:prompt, prompt}
-      assert prompt =~ "MODE: COMPLEX"
-      assert prompt =~ "docs/superpowers/specs"
-
-      persisted = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
-      assert History.thread_mode(persisted) == "complex"
-    end
-
-    test "brainstorm intent upgrades the thread to complex and loads the methodology skills", %{thread: thread} do
-      assert History.thread_mode(thread) == "triage"
+    test "brainstorm messages load methodology without persisting a mode", %{thread: thread} do
       test_pid = self()
 
       runner = fn _workspace, prompt, _issue, _opts ->
@@ -502,15 +483,12 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
                CodexSession.send_message_to_issue_thread(thread, "vamos fazer um brainstorming", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
-      assert prompt =~ "MODE: COMPLEX"
       assert prompt =~ "brainstorming"
       assert prompt =~ "docs/superpowers/specs"
-
-      persisted = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
-      assert History.thread_mode(persisted) == "complex"
+      refute prompt =~ "MODE: COMPLEX"
     end
 
-    test "plain chat without brainstorm/spec intent stays in triage", %{thread: thread} do
+    test "plain chat includes unified authoring guidance", %{thread: thread} do
       test_pid = self()
 
       runner = fn _workspace, prompt, _issue, _opts ->
@@ -522,10 +500,8 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
                CodexSession.send_message_to_issue_thread(thread, "what does this issue cover?", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
-      assert prompt =~ "MODE: TRIAGE"
-
-      persisted = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
-      assert History.thread_mode(persisted) == "triage"
+      assert prompt =~ "choose depth from the conversation"
+      refute prompt =~ "MODE: TRIAGE"
     end
 
     test "issue prompt instructs dispatching through chat via dispatch_codex", %{thread: thread} do
@@ -545,8 +521,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert prompt =~ "Never dispatch on your own"
     end
 
-    test "complex prompt instructs writing handoff.md", %{thread: thread} do
-      {:ok, thread} = History.set_mode(thread, "complex")
+    test "issue prompt instructs writing handoff.md when appropriate", %{thread: thread} do
       test_pid = self()
 
       runner = fn _workspace, prompt, _issue, _opts ->
@@ -563,7 +538,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert prompt =~ "docs/superpowers/handoff.md"
       assert prompt =~ "update_issue"
       assert prompt_text =~ "executive summary"
-      assert prompt_text =~ "links to the spec/plan files"
+      assert prompt_text =~ "links to spec/plan files"
       assert prompt_text =~ "spec/plan"
       assert prompt_text =~ "key decisions"
       assert prompt_text =~ "current state"

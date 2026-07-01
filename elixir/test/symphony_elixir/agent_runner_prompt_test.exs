@@ -34,6 +34,34 @@ defmodule SymphonyElixir.AgentRunnerPromptTest do
     assert text =~ "validation/evidence/commit"
   end
 
+  test "continuation_prompt for a bundle child opens one PR and never babysits CI" do
+    text =
+      AgentRunner.continuation_prompt(2, 20, states_with_work(),
+        parent_identifier: "MAC-PARENT",
+        unit_id: "MAC-12"
+      )
+
+    # The generic "must end with an open pull request" publish line is replaced
+    # by the child variant that forbids CI babysitting.
+    refute text =~ "an open pull request"
+    assert text =~ "bundle child unit"
+    assert text =~ "MAC-PARENT"
+    assert text =~ "Do NOT wait on, poll, rerun, or cancel CI"
+    assert text =~ "one focused PR"
+    assert text =~ "symphony/MAC-PARENT/"
+    assert text =~ "report_unit_status"
+  end
+
+  test "resume_section for a bundle child opens its PR but defers CI to the parent" do
+    text = AgentRunner.resume_section(states_with_work(), parent_identifier: "MAC-PARENT")
+
+    assert text =~ "bundle child unit"
+    assert text =~ "MAC-PARENT"
+    assert text =~ "Do not wait on, poll, rerun, or cancel CI"
+    assert text =~ "symphony/MAC-PARENT/"
+    assert text =~ "report_unit_status"
+  end
+
   test "continuation_prompt names the next incomplete plan task when a contract is present" do
     text = AgentRunner.continuation_prompt(2, 20, states_with_work(), execution_contract: incomplete_contract())
 

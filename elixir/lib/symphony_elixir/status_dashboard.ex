@@ -8,7 +8,7 @@ defmodule SymphonyElixir.StatusDashboard do
 
   alias Gettext, as: GettextCore
 
-  alias SymphonyElixir.{Config, HttpServer, Settings, Tracker}
+  alias SymphonyElixir.{Config, HttpServer, Settings, SubagentRegistry, Tracker}
   alias SymphonyElixir.EventHumanizer.Text, as: EventText
   alias SymphonyElixir.GitHub.ProjectMetadata
   alias SymphonyElixir.Orchestrator
@@ -316,6 +316,7 @@ defmodule SymphonyElixir.StatusDashboard do
            %{
              running: running,
              retrying: retrying,
+             waiting: compute_waiting_subagents(snapshot),
              agent_totals: agent_totals,
              rate_limits: Map.get(snapshot, :rate_limits),
              polling: Map.get(snapshot, :polling)
@@ -346,6 +347,7 @@ defmodule SymphonyElixir.StatusDashboard do
         running_event_width = running_event_width(terminal_columns_override)
         running_rows = format_running_rows(running, running_event_width)
         running_to_backoff_spacer = if(running == [], do: [], else: ["│"])
+        waiting_section = format_waiting_section(Map.get(snapshot, :waiting, []))
         backoff_rows = format_retry_rows(retrying)
 
         ([
@@ -378,6 +380,7 @@ defmodule SymphonyElixir.StatusDashboard do
          ] ++
            running_rows ++
            running_to_backoff_spacer ++
+           waiting_section ++
            [colorize("├─ Backoff queue", @ansi_bold), "│"] ++
            backoff_rows ++
            [closing_border()])
@@ -563,6 +566,18 @@ defmodule SymphonyElixir.StatusDashboard do
   def dashboard_url_for_test(host, configured_port, bound_port),
     do: dashboard_url(host, configured_port, bound_port)
 
+  # Reuses the already-fetched snapshot (no extra orchestrator round-trip) and
+  # never lets a tracker read fault take down the dashboard render loop.
+  defp compute_waiting_subagents(snapshot) do
+    SubagentRegistry.waiting_subagents(snapshot)
+  rescue
+    error in [ArgumentError, RuntimeError] ->
+      Logger.warning("Failed projecting waiting subagents for dashboard: #{Exception.message(error)}")
+      []
+  catch
+    _kind, _reason -> []
+  end
+
   defp snapshot_payload do
     if Process.whereis(Orchestrator) do
       case Orchestrator.snapshot() do
@@ -652,6 +667,52 @@ defmodule SymphonyElixir.StatusDashboard do
   @spec format_running_summary_for_test(map(), integer() | nil) :: String.t()
   def format_running_summary_for_test(running_entry, terminal_columns \\ nil),
     do: format_running_summary(running_entry, running_event_width(terminal_columns))
+
+  # Dependency-gated subagents of an in-flight coordinator parent. They run no
+  # agent and burn no tokens, but render here so the operator sees the whole
+  # parent/child bundle live (e.g. MAC-12 executing while MAC-13/14/15 wait).
+  # An empty list renders nothing, keeping idle/standalone dashboards unchanged.
+  defp format_waiting_section([]), do: []
+
+  defp format_waiting_section(waiting) when is_list(waiting) do
+    [colorize("├─ Waiting (gated subagents)", @ansi_bold), "│"] ++
+      Enum.map(waiting, &format_waiting_row/1) ++
+      ["│"]
+  end
+
+  defp format_waiting_section(_waiting), do: []
+
+  defp format_waiting_row(waiting_entry) do
+    id = format_cell(Map.get(waiting_entry, :issue_identifier) || "unknown", @running_id_width)
+    parent = to_string(Map.get(waiting_entry, :parent_identifier) || "?")
+    parent_cell = format_cell("↳ " <> parent, @running_stage_width)
+    reason = waiting_reason(waiting_entry)
+
+    [
+      "│ ",
+      status_dot(@ansi_gray),
+      " ",
+      colorize(id, @ansi_cyan),
+      " ",
+      colorize(parent_cell, @ansi_blue),
+      " ",
+      colorize(truncate(reason, 88), @ansi_dim)
+    ]
+    |> Enum.join("")
+  end
+
+  defp waiting_reason(waiting_entry) do
+    case Map.get(waiting_entry, :last_message) do
+      message when is_binary(message) and message != "" ->
+        message
+
+      _ ->
+        case Map.get(waiting_entry, :blocked_by) do
+          [_ | _] = deps -> "Waiting on " <> Enum.join(deps, ", ")
+          _ -> "Waiting on dependencies"
+        end
+    end
+  end
 
   @doc false
   @spec format_tps_for_test(number()) :: String.t()

@@ -45,11 +45,11 @@ interface SummaryTabProps {
   projectSlug: string;
   pullRequests?: PullRequest[];
   pullRequestChildren?: PullRequestGroup[];
+  labBundleChildOrchestration?: boolean;
   workpad?: Comment | null;
   subtasks?: Issue[];
   subtaskExecutions?: ReadonlyMap<string, AgentExecution>;
   parentCandidates?: Issue[];
-  groupLeadCandidates?: Issue[];
   saving?: boolean;
   onOpenIssue?: (identifier: string) => void;
   onOpenPullRequest?: () => void;
@@ -64,8 +64,6 @@ interface SummaryTabProps {
   onCreateSubtask?: (title: string) => Promise<boolean>;
   onSetParent?: (parentIdentifier: string) => Promise<boolean>;
   onClearParent?: () => Promise<boolean>;
-  onSetGroupLead?: (leadIdentifier: string) => Promise<boolean>;
-  onClearGroupLead?: () => Promise<boolean>;
 }
 
 function issueLinkLabel(url: string, t: TFunction): string {
@@ -79,11 +77,11 @@ export function SummaryTab({
   projectSlug,
   pullRequests = [],
   pullRequestChildren = [],
+  labBundleChildOrchestration = false,
   workpad = null,
   subtasks = [],
   subtaskExecutions,
   parentCandidates = [],
-  groupLeadCandidates = [],
   saving = false,
   onOpenIssue,
   onOpenPullRequest,
@@ -98,8 +96,6 @@ export function SummaryTab({
   onCreateSubtask,
   onSetParent,
   onClearParent,
-  onSetGroupLead,
-  onClearGroupLead,
 }: SummaryTabProps) {
   const { t } = useTranslation();
   const [labelOptions, setLabelOptions] = useState<IssueLabelOption[]>([]);
@@ -116,9 +112,11 @@ export function SummaryTab({
   const previewStatus = previewUrl ? null : previewStatusLabel(previewData, primaryPreviewServer, t);
   const hasPreviewSummary = Boolean(previewUrl || previewStatus);
   const ownPrUrls = new Set(pullRequests.map((pr) => pr.url).filter((url): url is string => Boolean(url)));
-  const childPullRequests = pullRequestChildren
-    .flatMap((group) => group.pullRequests)
-    .filter((pr) => !pr.url || !ownPrUrls.has(pr.url));
+  const childPullRequests = labBundleChildOrchestration
+    ? pullRequestChildren
+        .flatMap((group) => group.pullRequests)
+        .filter((pr) => !pr.url || !ownPrUrls.has(pr.url))
+    : [];
   const hasLinks =
     Boolean(issue.url) ||
     issue.branchName !== null ||
@@ -352,22 +350,6 @@ export function SummaryTab({
                 saving={saving}
                 onSelect={onSetParent}
                 onClear={onClearParent}
-              />
-            </Field>
-          ) : null}
-          {onSetGroupLead ? (
-            <Field label={t("issue.summary.relations.groupLead")}>
-              <InlineIssuePicker
-                value={issue.groupLeadIdentifier ?? null}
-                candidates={groupLeadCandidates}
-                title={t("issue.summary.relations.groupLeadTitle")}
-                placeholder={t("issue.summary.relations.noGroupLead")}
-                searchPlaceholder={t("issue.summary.relations.searchPlaceholder")}
-                emptyLabel={t("issue.summary.relations.empty")}
-                clearLabel={t("issue.summary.relations.clearGroupLead")}
-                saving={saving}
-                onSelect={onSetGroupLead}
-                onClear={onClearGroupLead}
               />
             </Field>
           ) : null}

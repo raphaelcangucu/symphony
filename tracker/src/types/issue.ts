@@ -82,8 +82,6 @@ export interface Issue {
   agentKind?: AgentKind | null;
   agentGoal?: string | null;
   attachments: IssueAttachment[];
-  groupLeadIdentifier: string | null;
-  groupMemberIdentifiers: string[];
   repositoryFullName?: string | null;
   parentIdentifier?: string | null;
   subIssueSummary?: { total: number; completed: number; percentCompleted: number } | null;

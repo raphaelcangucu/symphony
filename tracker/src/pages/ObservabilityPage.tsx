@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Eraser, GitFork, Layers, Loader2, Pause, RotateCcw, Target } from "lucide-react";
+import { ChevronDown, ChevronRight, Clock, Eraser, GitFork, Layers, Loader2, Pause, RotateCcw, Target } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +25,7 @@ import { dispatchIssueAgent, type IssueDispatchAction } from "@/services/issueDi
 import { listProjects } from "@/services/projects";
 import type { AgentExecution } from "@/types/agent-execution";
 import type {
+  BundleRole,
   GlobalRunningRow,
   PrMonitorEvaluation,
   PrMonitorHeartbeat,
@@ -89,15 +90,21 @@ interface RunningRowGroup {
   children: ProjectRunningRow[];
 }
 
-// Groups child_run sessions under their coordinating parent so the table renders
-// a hierarchy instead of flat siblings. A child whose parent is not in the
-// visible set falls back to rendering as its own top-level row.
+// Roles that render nested under a coordinating parent: live child runs and
+// dependency-gated `waiting` subagents alike.
+function isNestableRole(role: BundleRole | undefined): boolean {
+  return role === "child" || role === "subagent";
+}
+
+// Groups child/subagent sessions under their coordinating parent so the table
+// renders a hierarchy instead of flat siblings. A child whose parent is not in
+// the visible set falls back to rendering as its own top-level row.
 function groupRunningRows(rows: ProjectRunningRow[]): RunningRowGroup[] {
   const byIdentifier = new Map(rows.map((row) => [normalizeIssueIdentifier(row.issueIdentifier), row]));
   const childrenByParent = new Map<string, ProjectRunningRow[]>();
 
   for (const row of rows) {
-    if ((row.bundleRole ?? "standalone") !== "child" || !row.parentIdentifier) continue;
+    if (!isNestableRole(row.bundleRole) || !row.parentIdentifier) continue;
     const parentKey = normalizeIssueIdentifier(row.parentIdentifier);
     if (!byIdentifier.has(parentKey)) continue;
     const list = childrenByParent.get(parentKey) ?? [];
@@ -291,6 +298,20 @@ export function ObservabilityPage() {
   );
 }
 
+// A parked, dependency-gated subagent: no live agent, no tokens. Surfaced so the
+// operator can see the whole bundle without it consuming resources.
+function WaitingBadge({ t }: { t: TFunction }) {
+  return (
+    <span
+      title={t("observability.subagent.waitingHint")}
+      className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+    >
+      <Clock className="h-3 w-3" />
+      {t("observability.subagent.waiting")}
+    </span>
+  );
+}
+
 function SessionIssueLink({ row }: { row: ProjectRunningRow }) {
   if (row.resolvedProjectSlug && row.issueIdentifier.trim()) {
     return (
@@ -396,6 +417,7 @@ function SessionGroupRows({
               </button>
             ) : null}
             <SessionIssueLink row={parent} />
+            {parent.status === "waiting" ? <WaitingBadge t={t} /> : null}
             {hasChildren ? (
               <span className="inline-flex items-center gap-1 rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                 <Layers className="h-3 w-3" />
@@ -419,6 +441,7 @@ function SessionGroupRows({
               <td className="p-2 font-medium">
                 <div className="flex items-center gap-1.5 pl-5">
                   <SessionIssueLink row={child} />
+                  {child.status === "waiting" ? <WaitingBadge t={t} /> : null}
                   {child.repo ? (
                     <span className="inline-flex items-center gap-0.5 font-mono text-[10px] text-muted-foreground">
                       <GitFork className="h-3 w-3" />

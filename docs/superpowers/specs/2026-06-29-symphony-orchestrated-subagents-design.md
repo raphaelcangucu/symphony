@@ -1,5 +1,103 @@
 # Symphony-Orchestrated Subagents — Design
 
+> **Scope:** The bundle child orchestration model below applies when
+> `lab.bundle_child_orchestration` is **true** (Settings → Lab). **Default instances**
+> use unified parent mode — one parent run, native subagents, one PR per repo — see
+> `docs/superpowers/specs/2026-07-01-lab-bundle-orchestration-flag-design.md`.
+
+> ## ⚠️ Implemented model (supersedes the proposal below) — "Parent/Child Execution Rework", 2026-06-30
+>
+> The shipped design **collapses to TWO execution shapes** — `workpad_task` and
+> `child_run` — and **drops the proposed `subagent_unit` third shape**. The
+> intent behind `subagent_unit` (same-repo dependent units that the parent
+> sequences, with per-unit TDD + evidence and drill-in) is preserved, but it is
+> delivered through `child_run` + a **per-repo parent integration branch** rather
+> than a shared working tree + single-writer lock. Where this header and the
+> proposal below disagree, **this header wins**.
+>
+> ### Two shapes (unified contract)
+>
+> | Shape | Where it runs | PR target |
+> | --- | --- | --- |
+> | `workpad_task` | Inline in the parent's run/workspace; ships with the parent. | none (parent's PR) |
+> | `child_run` | Own run: own issue, **own isolated worktree + branch** (even when same-repo). | `--base symphony/{parent}/{repo}` |
+>
+> Both shapes carry the **same unified contract** (`execution` block + `pr_base`)
+> and are held to the **same quality bar**: TDD + **per-subtask evidence**
+> (tests + artifacts). **Native tool subagents (Codex/Claude/Cursor) are allowed
+> inside BOTH shapes** via the `subagent-driven-development` skill, for a unit's
+> internal decomposition.
+>
+> ### Per-repo integration branch + parent ownership
+>
+> - For each repo a bundle touches, the parent owns one integration branch
+>   `symphony/{parent}/{repo}`, created lazily before the first child for that repo.
+> - Each `child_run` opens its PR with `--base symphony/{parent}/{repo}` (the
+>   finalizer sets the base; the child never targets the repo default).
+> - **Worktree fork point**: an independent child forks its worktree off the
+>   integration branch. A **dependent** child (one that `depends_on` a **same-repo**
+>   sibling) instead forks off its **predecessor's branch** (`feat/{predecessor}`),
+>   so the predecessor's committed work is present as its starting reference — its
+>   PR still targets `symphony/{parent}/{repo}`, never the predecessor branch. In a
+>   linear chain `A → B → C`, `C` forks off `B` (which already contains `A`).
+>   Cross-repo predecessors are ignored for forking (their branch lives in another
+>   checkout); such children fork off the integration branch. This matters because a
+>   dependent releases at **human review (PR open)** — before its predecessor is
+>   merged into the integration branch — so forking off the predecessor branch is
+>   how it inherits the dependency's schema/API without waiting for the merge.
+> - The **parent coordinator** merges green child PRs into the integration branch
+>   and, once a repo's units are merged, opens exactly **one** final PR per repo
+>   (`symphony/{parent}/{repo}` → repo default).
+>
+> ### Worktrees by repo + same-repo setup/preview reuse
+>
+> - Different repos get **separate worktrees** (one per repo). Same-repo children
+>   each still get their own worktree+branch, but **skip setup/preview** and
+>   **reuse the parent's checkout, installed dependencies, and preview** (symlink
+>   deps; no re-clone / re-install / re-provision). Per-subtask tests + evidence
+>   still run.
+>
+> ### Parent↔child communication tools (coding-agent surface)
+>
+> Coordination is push/pull through tools instead of polling. Added on
+> `Codex.DynamicTool` (`bundle_coordination_tool_specs/0`) and implemented in
+> `Assistant.ToolExecutor`:
+>
+> - **`report_unit_status({phase, summary, blockers?, contracts_ready?, pr_url?})`**
+>   — a child writes a durable, structured `### Unit status: <unit>` block to the
+>   **parent's** workpad at each phase transition (started, contract_ready, pr_open,
+>   blocked, done) and broadcasts a `LocalTracker.Broadcaster` event. A child's
+>   `parent_identifier` defaults from `issue.parent_identifier`; writes/queries are
+>   authorized only within the bundle tree (a `parent_identifier` outside the tree
+>   is rejected).
+> - **`query_bundle_status(parent_identifier?)`** — returns per-unit
+>   `{unit_id, issue, type, status, blocked_by, pending_contracts, pr_url, tokens,
+>   turns, last_summary}` (wrapping `SubagentRegistry.unit_statuses/2` over the
+>   bundle + orchestrator snapshot + `AgentExecution`), so the coordinator sequences
+>   siblings without polling them.
+> - **`update_shared_contract(...)`** — the existing contract tool re-exposed to
+>   coding agents, so a producer can flip its contract `ready`/`changing`.
+>
+> ### Grouping removed (pure parent/child)
+>
+> Issue **grouping** is fully removed (backend `Grouping`/`GroupStatus`/
+> `GroupController`/`/group` routes/`group_lead_id`/`group_members_section`, and the
+> frontend group UI). The board **drag-drop merge gesture now sets the parent/child
+> (sub-issue) relationship** (`setIssueParent` → `POST .../parent`). `sub_issue_of`,
+> `SubtaskRollup`, and subtask co-move are kept. See the deprecated
+> `2026-06-18-task-grouping-board-design.md`.
+>
+> ### Observability
+>
+> `/observability` nests running **and** waiting children under their parent in a
+> tree with per-node `live`/`waiting`/`aborted`/`idle`; the issue detail overlays
+> each subtask's `AgentExecution` status as a badge in `SubIssuesSection`.
+>
+> ---
+>
+> _The original proposal (three shapes / shared working tree) is retained below for
+> history; it is **not** the implemented design._
+
 > Introduces a **third execution shape** for bundle units: `subagent_unit`.
 > Same-repo, dependent units (today wrongly classified as `child_run`, e.g.
 > MAC-12..15 under parent 510) stop being dispatched as isolated runs with their

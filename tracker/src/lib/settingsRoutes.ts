@@ -16,3 +16,7 @@ export function settingsBackupsPath(): string {
 export function settingsGatewaysPath(): string {
   return `${SETTINGS_PATH}/gateways`;
 }
+
+export function settingsLabPath(): string {
+  return `${SETTINGS_PATH}/lab`;
+}

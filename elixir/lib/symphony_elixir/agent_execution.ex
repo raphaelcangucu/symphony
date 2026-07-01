@@ -16,6 +16,7 @@ defmodule SymphonyElixir.AgentExecution do
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
   alias SymphonyElixir.SessionLog
+  alias SymphonyElixir.SubagentRegistry
   alias SymphonyElixir.Workspace
 
   @typedoc """
@@ -46,7 +47,7 @@ defmodule SymphonyElixir.AgentExecution do
           long_running_kind: String.t() | nil,
           long_running_label: String.t() | nil,
           parent_identifier: String.t() | nil,
-          bundle_role: :parent | :child | :standalone,
+          bundle_role: :parent | :child | :subagent | :standalone,
           unit_id: String.t() | nil,
           repo: String.t() | nil,
           child_identifiers: [String.t()],
@@ -89,8 +90,51 @@ defmodule SymphonyElixir.AgentExecution do
     live = from_snapshot(snapshot)
     interrupted = interrupted_executions(snapshot)
     covered = MapSet.new(live ++ interrupted, & &1.issue_identifier)
+    waiting = subagent_executions(snapshot, [])
 
-    live ++ interrupted ++ saved_goal_executions(snapshot, covered)
+    live ++ interrupted ++ saved_goal_executions(snapshot, covered) ++ waiting
+  end
+
+  @doc """
+  Projects the dependency-gated subagent units of in-flight coordinator parents
+  as `:waiting` executions, so the board shows the per-issue waiting badge that
+  mirrors the waiting rows in the observability sessions table. These hold no
+  agent and burn no tokens. Tracker reads are injectable for tests via `opts`
+  (forwarded to `SubagentRegistry.waiting_subagents/2`).
+  """
+  @spec subagent_executions(map(), keyword()) :: [t()]
+  def subagent_executions(snapshot, opts) when is_list(opts) do
+    snapshot
+    |> SubagentRegistry.waiting_subagents(opts)
+    |> Enum.map(&subagent_execution/1)
+  end
+
+  defp subagent_execution(record) do
+    %{
+      issue_id: record.issue_id,
+      issue_identifier: record.issue_identifier,
+      status: :waiting,
+      session_id: nil,
+      last_event: nil,
+      last_message: record.last_message,
+      last_event_at: nil,
+      turn_count: 0,
+      runtime_seconds: nil,
+      started_at: nil,
+      retry_attempt: 0,
+      error: nil,
+      agent_kind: nil,
+      goal: nil,
+      long_running: false,
+      long_running_kind: nil,
+      long_running_label: nil,
+      parent_identifier: record.parent_identifier,
+      bundle_role: :subagent,
+      unit_id: record.unit_id,
+      repo: record.repo,
+      child_identifiers: [],
+      tokens: nil
+    }
   end
 
   defp dedupe_executions(executions) when is_list(executions) do

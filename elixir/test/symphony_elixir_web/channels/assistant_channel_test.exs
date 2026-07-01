@@ -496,34 +496,9 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert thread.issue_identifier == "#508"
   end
 
-  test "set_mode persists an allowed mode for issue threads", %{socket: socket} do
-    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
-
-    ref = push(socket, "set_mode", %{"mode" => "complex"})
-    assert_reply(ref, :ok, %{mode: "complex"})
-
-    assert {:ok, thread} = History.get_thread(thread_id)
-    assert thread.metadata["mode"] == "complex"
-  end
-
-  test "issue join returns the persisted mode so the UI can rehydrate it", %{socket: socket} do
-    {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
-
-    ref = push(socket, "set_mode", %{"mode" => "complex"})
-    assert_reply(ref, :ok, %{mode: "complex"})
-
-    {:ok, payload, _rejoined} =
-      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
-      |> subscribe_and_join("assistant:issue:macro-markets:MAC-1", %{})
-
-    assert payload.thread_id == thread_id
-    assert payload.mode == "complex"
-  end
-
-  test "issue join defaults to triage mode when none is persisted", %{socket: socket} do
+  test "issue join returns goal_mode defaults when none is persisted", %{socket: socket} do
     {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
-    assert payload.mode == "triage"
     assert payload.goal_mode == false
     assert payload.goal_objective == nil
   end
@@ -802,20 +777,6 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:macro-markets", %{})
 
     ref = push(socket, "dispatch_codex", %{})
-    assert_reply(ref, :error, %{reason: "this action is only supported for issue assistant threads"})
-  end
-
-  test "set_mode rejects unsupported modes for issue threads", %{socket: socket} do
-    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
-
-    ref = push(socket, "set_mode", %{"mode" => "expert"})
-    assert_reply(ref, :error, %{reason: "unsupported mode: expert. Expected one of: triage, simple, complex"})
-  end
-
-  test "set_mode rejects project assistant threads", %{socket: socket} do
-    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:macro-markets", %{})
-
-    ref = push(socket, "set_mode", %{"mode" => "simple"})
     assert_reply(ref, :error, %{reason: "this action is only supported for issue assistant threads"})
   end
 

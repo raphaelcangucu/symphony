@@ -5,6 +5,8 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
   alias SymphonyElixir.Orchestrator
   alias SymphonyElixir.Workpad.ExecutionBundle
 
+  @lab_opts [lab_bundle_child_orchestration: true]
+
   defp bundle do
     %ExecutionBundle{
       version: 1,
@@ -27,8 +29,13 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
 
     held =
       Orchestrator.held_child_issue_ids_for_test(candidates,
-        bundle_loader: fn "MAC-1" -> {:ok, bundle()} end,
-        done_units: fn _bundle -> MapSet.new() end
+        Keyword.merge(
+          [
+            bundle_loader: fn "MAC-1" -> {:ok, bundle()} end,
+            done_units: fn _bundle -> MapSet.new() end
+          ],
+          @lab_opts
+        )
       )
 
     assert MapSet.member?(held, "id-3")
@@ -42,8 +49,30 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
 
     held =
       Orchestrator.held_child_issue_ids_for_test(candidates,
-        bundle_loader: fn "MAC-1" -> {:ok, ready_bundle} end,
-        done_units: fn _bundle -> MapSet.new(["api"]) end
+        Keyword.merge(
+          [
+            bundle_loader: fn "MAC-1" -> {:ok, ready_bundle} end,
+            done_units: fn _bundle -> MapSet.new(["api"]) end
+          ],
+          @lab_opts
+        )
+      )
+
+    assert MapSet.size(held) == 0
+  end
+
+  test "a released predecessor's produced contract counts as ready even if the bundle still records it draft/changing" do
+    candidates = [child("id-3", "MAC-3")]
+
+    held =
+      Orchestrator.held_child_issue_ids_for_test(candidates,
+        Keyword.merge(
+          [
+            bundle_loader: fn "MAC-1" -> {:ok, bundle()} end,
+            done_units: fn _bundle -> MapSet.new(["api"]) end
+          ],
+          @lab_opts
+        )
       )
 
     assert MapSet.size(held) == 0
@@ -54,8 +83,13 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
 
     held =
       Orchestrator.held_child_issue_ids_for_test(candidates,
-        bundle_loader: fn _ -> {:ok, bundle()} end,
-        done_units: fn _ -> MapSet.new() end
+        Keyword.merge(
+          [
+            bundle_loader: fn _ -> {:ok, bundle()} end,
+            done_units: fn _ -> MapSet.new() end
+          ],
+          @lab_opts
+        )
       )
 
     assert MapSet.size(held) == 0
@@ -66,10 +100,42 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
 
     held =
       Orchestrator.held_child_issue_ids_for_test(candidates,
-        bundle_loader: fn _ -> :error end,
-        done_units: fn _ -> MapSet.new() end
+        Keyword.merge(
+          [
+            bundle_loader: fn _ -> :error end,
+            done_units: fn _ -> MapSet.new() end
+          ],
+          @lab_opts
+        )
       )
 
     assert MapSet.size(held) == 0
+  end
+
+  describe "released_record_state?/2 (dispatch-gate release cadence)" do
+    @wait_states ["Human Review"]
+
+    test "a predecessor whose status NAME is a wait_state releases its dependents (even when the board category is 'started')" do
+      assert Orchestrator.released_record_state?(
+               %{status: %{is_terminal: false, category: "started", name: "Human Review"}},
+               @wait_states
+             )
+    end
+
+    test "a terminal predecessor releases its dependents regardless of wait_states" do
+      assert Orchestrator.released_record_state?(%{status: %{is_terminal: true, name: "Done"}}, @wait_states)
+    end
+
+    test "a predecessor still in an active (non-wait, non-terminal) state does NOT release its dependents" do
+      refute Orchestrator.released_record_state?(
+               %{status: %{is_terminal: false, category: "started", name: "In Progress"}},
+               @wait_states
+             )
+    end
+
+    test "an unresolvable record does not release" do
+      refute Orchestrator.released_record_state?(%{}, @wait_states)
+      refute Orchestrator.released_record_state?(nil, @wait_states)
+    end
   end
 end

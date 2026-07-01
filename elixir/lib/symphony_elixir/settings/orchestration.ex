@@ -9,9 +9,14 @@ defmodule SymphonyElixir.Settings.Orchestration do
   - `require_assignee_match`: only auto-dispatch issues assigned to the
     connected provider identity (GitHub viewer login / Jira accountId / Linear
     user id). When off, assignee is ignored during candidate selection.
+  - `agent_token_budget_enabled`: when true, force-stop runs whose cumulative
+    agent tokens exceed `agent_token_budget`. Defaults to `false`.
+  - `agent_token_budget`: token ceiling used when the guard is enabled. Defaults
+    to 4_000_000.
 
-  Both default to `true` so a fresh instance is conservative: the orchestrator
-  never picks up unlabeled or unassigned work without an explicit opt-out.
+  Both gating flags default to `true` so a fresh instance is conservative: the
+  orchestrator never picks up unlabeled or unassigned work without an explicit
+  opt-out.
   """
 
   @behaviour SymphonyElixir.Settings.Group
@@ -21,6 +26,9 @@ defmodule SymphonyElixir.Settings.Orchestration do
   @group "orchestrator"
   @require_symphony_label "require_symphony_label"
   @require_assignee_match "require_assignee_match"
+  @agent_token_budget_enabled "agent_token_budget_enabled"
+  @agent_token_budget "agent_token_budget"
+  @default_agent_token_budget 4_000_000
 
   @impl true
   def group, do: @group
@@ -29,16 +37,25 @@ defmodule SymphonyElixir.Settings.Orchestration do
   def defaults do
     %{
       @require_symphony_label => true,
-      @require_assignee_match => true
+      @require_assignee_match => true,
+      @agent_token_budget_enabled => false,
+      @agent_token_budget => @default_agent_token_budget
     }
   end
 
   @impl true
   def cast(name, value)
-      when name in [@require_symphony_label, @require_assignee_match] do
+      when name in [@require_symphony_label, @require_assignee_match, @agent_token_budget_enabled] do
     case normalize_boolean(value) do
       {:ok, boolean} -> {:ok, boolean}
       :error -> :error
+    end
+  end
+
+  def cast(@agent_token_budget, value) do
+    case normalize_positive_integer(value) do
+      {:ok, budget} when budget >= 1 -> {:ok, budget}
+      _ -> :error
     end
   end
 
@@ -52,9 +69,32 @@ defmodule SymphonyElixir.Settings.Orchestration do
   @spec require_assignee_match?() :: boolean()
   def require_assignee_match?, do: boolean_setting(@require_assignee_match)
 
+  @doc "Whether the per-run cumulative token budget guard is active."
+  @spec agent_token_budget_enabled?() :: boolean()
+  def agent_token_budget_enabled?, do: boolean_setting(@agent_token_budget_enabled)
+
+  @doc """
+  Effective token budget for a single run. Returns `0` when the guard is disabled.
+  """
+  @spec agent_token_budget() :: non_neg_integer()
+  def agent_token_budget do
+    if agent_token_budget_enabled?(), do: configured_agent_token_budget(), else: 0
+  end
+
+  @doc "Configured ceiling when the guard is enabled."
+  @spec configured_agent_token_budget() :: pos_integer()
+  def configured_agent_token_budget, do: integer_setting(@agent_token_budget)
+
   defp boolean_setting(name) do
     case Settings.get(@group, name) do
       value when is_boolean(value) -> value
+      _ -> Map.fetch!(defaults(), name)
+    end
+  end
+
+  defp integer_setting(name) do
+    case Settings.get(@group, name) do
+      value when is_integer(value) and value >= 1 -> value
       _ -> Map.fetch!(defaults(), name)
     end
   end
@@ -63,4 +103,15 @@ defmodule SymphonyElixir.Settings.Orchestration do
   defp normalize_boolean("true"), do: {:ok, true}
   defp normalize_boolean("false"), do: {:ok, false}
   defp normalize_boolean(_value), do: :error
+
+  defp normalize_positive_integer(value) when is_integer(value) and value >= 1, do: {:ok, value}
+
+  defp normalize_positive_integer(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {parsed, ""} when parsed >= 1 -> {:ok, parsed}
+      _ -> :error
+    end
+  end
+
+  defp normalize_positive_integer(_value), do: :error
 end

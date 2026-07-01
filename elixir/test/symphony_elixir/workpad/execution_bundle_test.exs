@@ -35,7 +35,7 @@ defmodule SymphonyElixir.Workpad.ExecutionBundleTest do
   ```
   """
 
-  @subagent_workpad """
+  @legacy_subagent_workpad """
   ## Codex Workpad
 
   ### Execution bundle
@@ -65,6 +65,25 @@ defmodule SymphonyElixir.Workpad.ExecutionBundleTest do
   ```
   """
 
+  @pr_base_workpad """
+  ## Codex Workpad
+
+  ### Execution bundle
+
+  ```yaml
+  version: 2
+  mode: bundle
+  parent: macro-markets#510
+  units:
+    - id: backend
+      type: child_run
+      issue: MAC-12
+      repo: clouapp/back
+      pr_base: symphony/510/clouapp-back
+      deliverable: pr
+  ```
+  """
+
   test "parse/1 returns the bundle with units and contracts" do
     assert {:ok, bundle} = ExecutionBundle.parse(@workpad)
     assert bundle.mode == "bundle"
@@ -90,29 +109,35 @@ defmodule SymphonyElixir.Workpad.ExecutionBundleTest do
     assert ExecutionBundle.workpad_units(bundle) == []
   end
 
-  test "parse/1 reads subagent_unit type" do
-    assert {:ok, bundle} = ExecutionBundle.parse(@subagent_workpad)
+  test "parse/1 maps legacy subagent_unit type to child_run" do
+    assert {:ok, bundle} = ExecutionBundle.parse(@legacy_subagent_workpad)
     backend = Enum.find(bundle.units, &(&1.id == "positions-backend"))
     ui = Enum.find(bundle.units, &(&1.id == "positions-ui"))
-    assert backend.type == :subagent_unit
-    assert ui.type == :subagent_unit
+    assert backend.type == :child_run
+    assert ui.type == :child_run
     assert ui.depends_on == ["positions-backend"]
   end
 
-  test "subagent_units/1 returns only subagent units" do
-    {:ok, bundle} = ExecutionBundle.parse(@subagent_workpad)
-    ids = bundle |> ExecutionBundle.subagent_units() |> Enum.map(& &1.id)
+  test "legacy subagent units count as child_run units" do
+    {:ok, bundle} = ExecutionBundle.parse(@legacy_subagent_workpad)
+    ids = bundle |> ExecutionBundle.child_units() |> Enum.map(& &1.id)
     assert ids == ["positions-backend", "positions-ui"]
-    assert ExecutionBundle.child_units(bundle) == []
     assert ExecutionBundle.workpad_units(bundle) == []
   end
 
-  test "dispatchable_units/1 includes child_run and subagent_unit (Phase 1 bridge)" do
+  test "dispatchable_units/1 returns child_run units (incl. legacy subagent_unit)" do
     {:ok, child_bundle} = ExecutionBundle.parse(@workpad)
     assert child_bundle |> ExecutionBundle.dispatchable_units() |> length() == 2
 
-    {:ok, subagent_bundle} = ExecutionBundle.parse(@subagent_workpad)
-    ids = subagent_bundle |> ExecutionBundle.dispatchable_units() |> Enum.map(& &1.id)
+    {:ok, legacy_bundle} = ExecutionBundle.parse(@legacy_subagent_workpad)
+    ids = legacy_bundle |> ExecutionBundle.dispatchable_units() |> Enum.map(& &1.id)
     assert ids == ["positions-backend", "positions-ui"]
+  end
+
+  test "parse/1 reads the per-repo parent integration branch (pr_base)" do
+    assert {:ok, bundle} = ExecutionBundle.parse(@pr_base_workpad)
+    backend = Enum.find(bundle.units, &(&1.id == "backend"))
+    assert backend.type == :child_run
+    assert backend.pr_base == "symphony/510/clouapp-back"
   end
 end

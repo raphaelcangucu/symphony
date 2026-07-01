@@ -17,6 +17,8 @@ defmodule SymphonyElixir.InstanceConfig do
   @default_tracker_pr_sync_ttl_ms 300_000
   @default_max_concurrent_agents 10
   @default_max_turns 30
+  @default_agent_token_budget 4_000_000
+  @default_agent_budget_max_retries 2
   @default_max_retry_backoff_ms 300_000
   @default_turn_timeout_ms 3_600_000
   @default_read_timeout_ms 5_000
@@ -95,6 +97,22 @@ defmodule SymphonyElixir.InstanceConfig do
 
   @spec default_max_turns() :: pos_integer()
   def default_max_turns, do: get(:default_max_turns, @default_max_turns)
+
+  @doc """
+  Legacy env/config hook for a per-run token ceiling. Runtime orchestrator
+  enforcement reads `Settings.Orchestration.agent_token_budget/0` instead.
+  `0` disables the guard. Defaults to #{@default_agent_token_budget}.
+  """
+  @spec agent_token_budget() :: non_neg_integer()
+  def agent_token_budget, do: max(0, get(:agent_token_budget, 0))
+
+  @doc """
+  How many times a run that overruns its token budget may be re-dispatched before
+  it is parked for human attention instead of retried. Bounds budget-overrun
+  loops. Defaults to #{@default_agent_budget_max_retries}.
+  """
+  @spec agent_budget_max_retries() :: non_neg_integer()
+  def agent_budget_max_retries, do: max(0, get(:agent_budget_max_retries, @default_agent_budget_max_retries))
 
   @spec max_retry_backoff_ms() :: pos_integer()
   def max_retry_backoff_ms, do: get(:max_retry_backoff_ms, @default_max_retry_backoff_ms)

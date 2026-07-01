@@ -23,8 +23,6 @@ const baseIssue: Issue = {
   createdAt: "",
   updatedAt: "",
   attachments: [],
-  groupLeadIdentifier: null,
-  groupMemberIdentifiers: [],
   repositoryFullName: "xipcash/ios",
   parentIdentifier: null,
   subIssueSummary: { total: 4, completed: 4, percentCompleted: 100 },

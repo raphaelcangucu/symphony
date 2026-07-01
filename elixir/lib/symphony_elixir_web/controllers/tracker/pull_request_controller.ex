@@ -20,6 +20,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
   alias SymphonyElixir.GitHub.{Api, PullRequests, PullRequestUrl, ReadCache}
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.PullRequestMonitor.MonitorState
+  alias SymphonyElixir.Settings.Lab, as: LabSettings
   alias SymphonyElixir.Tracker
   alias SymphonyElixir.Tracker.Sync.LocalStore
   alias SymphonyElixir.Tracker.Sync.PullRequests, as: SyncPullRequests
@@ -109,11 +110,17 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
     end
   end
 
-  # A parent issue consolidates its sub-issues' pull requests for display. We use
-  # persisted PRs only (fast, no extra GitHub round-trip per child) so the parent
-  # view surfaces the whole subtask tree's PRs grouped by child. Children without
-  # any PR are omitted to avoid clutter.
+  # Lab bundle mode only: parent view consolidates sub-issue PRs grouped by child.
+  # Unified mode (flag off) returns an empty list — one PR per repo on the parent.
   defp child_pull_request_groups(project, identifier) do
+    if LabSettings.bundle_child_orchestration?() do
+      child_pull_request_groups_when_enabled(project, identifier)
+    else
+      []
+    end
+  end
+
+  defp child_pull_request_groups_when_enabled(project, identifier) do
     case Context.list_subtask_children(project.slug, identifier) do
       {:ok, child_identifiers} ->
         child_identifiers
@@ -132,6 +139,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestController do
       project.slug
       |> persisted(child_identifier)
       |> reject_dismissed(dismissed)
+      |> Enum.map(&enrich_with_live_checks/1)
       |> MonitorState.attach(project.slug, child_identifier)
 
     %{

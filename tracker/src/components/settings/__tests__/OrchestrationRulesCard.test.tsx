@@ -17,11 +17,18 @@ describe("OrchestrationRulesCard", () => {
     vi.mocked(settingsService.updateOrchestratorSettings).mockResolvedValue({
       require_symphony_label: false,
       require_assignee_match: true,
+      agent_token_budget_enabled: false,
+      agent_token_budget: 4_000_000,
     });
 
     render(
       <OrchestrationRulesCard
-        initial={{ require_symphony_label: true, require_assignee_match: true }}
+        initial={{
+          require_symphony_label: true,
+          require_assignee_match: true,
+          agent_token_budget_enabled: false,
+          agent_token_budget: 4_000_000,
+        }}
         loadError={false}
       />,
     );
@@ -48,7 +55,12 @@ describe("OrchestrationRulesCard", () => {
 
     render(
       <OrchestrationRulesCard
-        initial={{ require_symphony_label: true, require_assignee_match: true }}
+        initial={{
+          require_symphony_label: true,
+          require_assignee_match: true,
+          agent_token_budget_enabled: false,
+          agent_token_budget: 4_000_000,
+        }}
         loadError={false}
       />,
     );

@@ -14,6 +14,7 @@ function renderSettingsLayout(initialPath: string) {
           <Route path="templates/:slug" element={<div>Template edit content</div>} />
           <Route path="backups" element={<div>Backups content</div>} />
           <Route path="gateways" element={<div>Gateways content</div>} />
+          <Route path="lab" element={<div>Lab content</div>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -49,5 +50,12 @@ describe("SettingsLayout", () => {
 
     expect(await screen.findByText("Gateways content")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Gateways" }).className).toContain("bg-accent");
+  });
+
+  it("highlights lab on /settings/lab", async () => {
+    renderSettingsLayout("/settings/lab");
+
+    expect(await screen.findByText("Lab content")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Lab" }).className).toContain("bg-accent");
   });
 });

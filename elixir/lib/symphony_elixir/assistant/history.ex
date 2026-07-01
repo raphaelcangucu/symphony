@@ -196,30 +196,6 @@ defmodule SymphonyElixir.Assistant.History do
     :ok
   end
 
-  @spec set_mode(Thread.t(), String.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
-  def set_mode(%Thread{metadata: metadata} = thread, mode) when is_binary(mode) do
-    next = Map.put(metadata || %{}, "mode", mode)
-    update_thread(thread, %{metadata: next})
-  end
-
-  @default_mode "triage"
-
-  @doc """
-  Returns the authoring mode persisted on a thread's metadata.
-
-  The issue authoring toggle (`triage` | `simple` | `complex`) lives in the thread metadata
-  map (set via `set_mode/2`). Joining clients need this so the UI can rehydrate the selected
-  mode instead of always defaulting to `triage` after a reload. Falls back to `triage` when no
-  mode is recorded.
-  """
-  @spec thread_mode(Thread.t()) :: String.t()
-  def thread_mode(%Thread{metadata: metadata}) do
-    case metadata do
-      %{"mode" => mode} when is_binary(mode) and mode != "" -> mode
-      _ -> @default_mode
-    end
-  end
-
   @doc """
   Persists whether the Authoring (chat) goal is enabled for an issue authoring thread.
 

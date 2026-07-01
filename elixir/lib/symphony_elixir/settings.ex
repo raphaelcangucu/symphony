@@ -14,6 +14,7 @@ defmodule SymphonyElixir.Settings do
   @groups %{
     "agents" => SymphonyElixir.Settings.Agents,
     "gateways" => SymphonyElixir.Settings.Gateways,
+    "lab" => SymphonyElixir.Settings.Lab,
     "orchestrator" => SymphonyElixir.Settings.Orchestration,
     "ui" => SymphonyElixir.Settings.Ui
   }

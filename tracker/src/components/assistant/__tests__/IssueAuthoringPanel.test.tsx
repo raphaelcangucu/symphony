@@ -38,6 +38,14 @@ vi.mock("@/components/assistant/AssistantKbDocumentsPanel", () => ({
   ),
 }));
 
+vi.mock("@/components/issues/IssueEditorMenu", () => ({
+  IssueEditorMenu: ({ projectSlug, identifier }: { projectSlug: string; identifier: string }) => (
+    <button type="button" aria-label="Open in code">
+      Editor {projectSlug}:{identifier}
+    </button>
+  ),
+}));
+
 describe("IssueAuthoringPanel", () => {
   it("uses embedded drawer layout when compact", () => {
     render(
@@ -102,6 +110,19 @@ describe("IssueAuthoringPanel", () => {
     expect(screen.queryByText("Live")).toBeNull();
     expect(screen.queryByRole("status", { name: "Active goal" })).toBeNull();
     expect(screen.getByTestId("project-assistant-panel")).toBeInTheDocument();
+  });
+
+  it("shows the issue editor menu next to the issue detail link", () => {
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: /open in code/i })).toHaveTextContent(
+      "Editor macro-markets:MAC-1",
+    );
+    expect(screen.getByRole("link", { name: /open issue details/i })).toBeInTheDocument();
   });
 
   it("shows the new-issue intro and empty documents state until an identifier exists", () => {

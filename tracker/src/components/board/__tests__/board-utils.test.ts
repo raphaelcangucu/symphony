@@ -4,13 +4,12 @@ import type { Issue } from "@/types/issue";
 import {
   DEFAULT_WORKFLOW_STATUSES,
   buildBoardState,
-  groupIssuesIntoUnits,
+  buildBoardUnits,
   mergeIntent,
-  moveGroupLocally,
   moveIssueLocally,
+  moveUnitLocally,
   parseDragIssueId,
   resolveBoardMove,
-  resolveGroupMoveLead,
   resolveMoveUnit,
   upsertIssue,
 } from "../board-utils";
@@ -34,8 +33,6 @@ function issue(overrides: Partial<Issue>): Issue {
     createdAt: overrides.createdAt ?? "2026-05-27T00:00:00Z",
     updatedAt: overrides.updatedAt ?? "2026-05-27T00:00:00Z",
     attachments: overrides.attachments ?? [],
-    groupLeadIdentifier: overrides.groupLeadIdentifier ?? null,
-    groupMemberIdentifiers: overrides.groupMemberIdentifiers ?? [],
     repositoryFullName: overrides.repositoryFullName ?? null,
     parentIdentifier: overrides.parentIdentifier ?? null,
     subIssueSummary: overrides.subIssueSummary ?? null,
@@ -120,38 +117,21 @@ describe("board-utils", () => {
     expect(moveIssueLocally(board, "MAC-404", "Done", 0)).toBe(board);
   });
 
-  it("moves a group's members along with the lead so they stay together", () => {
+  it("moves a parent's sub-issues along with it so they stay together", () => {
     const board = buildBoardState([
-      issue({ identifier: "MAC-1", status: "Todo", position: 0, groupMemberIdentifiers: ["MAC-2", "MAC-3"] }),
-      issue({ identifier: "MAC-2", status: "Todo", position: 1, groupLeadIdentifier: "MAC-1" }),
-      issue({ identifier: "MAC-3", status: "Todo", position: 2, groupLeadIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-1", status: "Todo", position: 0 }),
+      issue({ identifier: "MAC-2", status: "Todo", position: 1, parentIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-3", status: "Todo", position: 2, parentIdentifier: "MAC-1" }),
       issue({ identifier: "MAC-9", status: "In Progress", position: 0 }),
     ]);
 
-    const next = moveGroupLocally(board, "MAC-1", ["MAC-2", "MAC-3"], "In Progress", 0);
+    const next = moveUnitLocally(board, "MAC-1", ["MAC-2", "MAC-3"], "In Progress", 0);
 
     expect(next.Todo).toHaveLength(0);
     expect(next["In Progress"].map((item) => item.identifier).sort()).toEqual(["MAC-1", "MAC-2", "MAC-3", "MAC-9"]);
-    // Lead lands at the requested slot with its members tucked right behind it.
+    // Anchor lands at the requested slot with its followers tucked right behind it.
     expect(next["In Progress"].slice(0, 3).map((item) => item.identifier)).toEqual(["MAC-1", "MAC-3", "MAC-2"]);
     expect(next["In Progress"].every((item) => item.status === "In Progress")).toBe(true);
-  });
-
-  it("resolveGroupMoveLead maps a member drag to its lead and siblings", () => {
-    const issues = [
-      issue({ identifier: "MAC-1", groupMemberIdentifiers: ["MAC-2", "MAC-3"] }),
-      issue({ identifier: "MAC-2", groupLeadIdentifier: "MAC-1" }),
-      issue({ identifier: "MAC-3", groupLeadIdentifier: "MAC-1" }),
-    ];
-
-    expect(resolveGroupMoveLead(issues, "MAC-2")).toEqual({
-      leadIdentifier: "MAC-1",
-      memberIdentifiers: ["MAC-2", "MAC-3"],
-    });
-    expect(resolveGroupMoveLead(issues, "MAC-1")).toEqual({
-      leadIdentifier: "MAC-1",
-      memberIdentifiers: ["MAC-2", "MAC-3"],
-    });
   });
 
   it("resolveMoveUnit drags a parent's sub-issues along with it", () => {
@@ -181,10 +161,10 @@ describe("board-utils", () => {
     });
   });
 
-  it("resolveMoveUnit merges group members and sub-issues without duplicates", () => {
+  it("resolveMoveUnit returns each sub-issue once without duplicates", () => {
     const issues = [
-      issue({ identifier: "MAC-1", groupMemberIdentifiers: ["MAC-2"] }),
-      issue({ identifier: "MAC-2", groupLeadIdentifier: "MAC-1", parentIdentifier: "MAC-1" }),
+      issue({ identifier: "MAC-1" }),
+      issue({ identifier: "MAC-2", parentIdentifier: "MAC-1" }),
       issue({ identifier: "MAC-3", parentIdentifier: "MAC-1" }),
     ];
 
@@ -194,13 +174,13 @@ describe("board-utils", () => {
     });
   });
 
-  it("leaves a lead with no members as a plain single-issue move", () => {
+  it("leaves a unit with no followers as a plain single-issue move", () => {
     const board = buildBoardState([
       issue({ identifier: "MAC-1", status: "Todo", position: 0 }),
       issue({ identifier: "MAC-2", status: "Done", position: 0 }),
     ]);
 
-    const next = moveGroupLocally(board, "MAC-1", [], "Done", 0);
+    const next = moveUnitLocally(board, "MAC-1", [], "Done", 0);
 
     expect(next.Todo).toHaveLength(0);
     expect(next.Done.map((item) => item.identifier)).toEqual(["MAC-1", "MAC-2"]);
@@ -208,7 +188,6 @@ describe("board-utils", () => {
 
   it("parses sortable card ids defensively", () => {
     expect(parseDragIssueId("issue:MAC-1")).toBe("MAC-1");
-    expect(parseDragIssueId("group:MAC-1")).toBe("MAC-1");
     expect(parseDragIssueId("parent:MAC-1")).toBe("MAC-1");
     expect(parseDragIssueId("MAC-1")).toBe("MAC-1");
     expect(parseDragIssueId(null)).toBeNull();
@@ -226,27 +205,26 @@ describe("board-utils", () => {
   });
 });
 
-describe("groupIssuesIntoUnits", () => {
-  it("absorbs members under their lead and keeps standalone issues", () => {
-    const lead = issue({ identifier: "MAC-1", groupMemberIdentifiers: ["MAC-2"] });
-    const member = issue({ identifier: "MAC-2", groupLeadIdentifier: "MAC-1" });
-    const solo = issue({ identifier: "MAC-3" });
+describe("buildBoardUnits", () => {
+  it("keeps standalone issues as plain issue units", () => {
+    const a = issue({ identifier: "MAC-1" });
+    const b = issue({ identifier: "MAC-3" });
 
-    const units = groupIssuesIntoUnits([lead, member, solo]);
+    const units = buildBoardUnits([a, b]);
     expect(units).toEqual([
-      { kind: "group", id: "group:MAC-1", lead, members: [member] },
-      { kind: "issue", id: "issue:MAC-3", issue: solo },
+      { kind: "issue", id: "issue:MAC-1", issue: a },
+      { kind: "issue", id: "issue:MAC-3", issue: b },
     ]);
   });
 });
 
-describe("groupIssuesIntoUnits parent/subtask", () => {
+describe("buildBoardUnits parent/subtask", () => {
   it("emits a parent unit and keeps subtasks as their own issue units", () => {
     const parent = issue({ identifier: "2", subIssueSummary: { total: 2, completed: 1, percentCompleted: 50 } });
     const childA = issue({ identifier: "3", parentIdentifier: "2" });
     const childB = issue({ identifier: "4", parentIdentifier: "2" });
 
-    const units = groupIssuesIntoUnits([parent, childA, childB]);
+    const units = buildBoardUnits([parent, childA, childB]);
 
     const parentUnit = units.find((unit) => unit.kind === "parent");
     expect(parentUnit).toBeTruthy();
@@ -262,7 +240,7 @@ describe("groupIssuesIntoUnits parent/subtask", () => {
   });
 
   it("emits a plain issue unit when there are no subtasks", () => {
-    const units = groupIssuesIntoUnits([issue({ identifier: "9" })]);
+    const units = buildBoardUnits([issue({ identifier: "9" })]);
     expect(units).toHaveLength(1);
     expect(units[0].kind).toBe("issue");
   });
@@ -280,7 +258,7 @@ describe("groupIssuesIntoUnits parent/subtask", () => {
       title: "CAPI Meta Ads",
     });
 
-    const units = groupIssuesIntoUnits([parent], [parent, child]);
+    const units = buildBoardUnits([parent], [parent, child]);
 
     const parentUnit = units.find((unit) => unit.kind === "parent");
     expect(parentUnit).toBeTruthy();

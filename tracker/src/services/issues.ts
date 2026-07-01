@@ -117,29 +117,6 @@ export async function moveIssue(projectSlug: string, identifier: string, input: 
   return normalizeIssue(unwrapData<BackendIssueDto>(response));
 }
 
-export async function groupIssue(
-  projectSlug: string,
-  memberIdentifier: string,
-  leadIdentifier: string,
-): Promise<Issue> {
-  const slug = requireProjectSlug(projectSlug);
-  const member = requireNonBlank(memberIdentifier, "identifier");
-  const lead = requireNonBlank(leadIdentifier, "leadIdentifier");
-  const response = await http.post(
-    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(member)}/group`),
-    { lead_identifier: lead },
-  );
-  return normalizeIssue(unwrapData<BackendIssueDto>(response));
-}
-
-export async function ungroupIssue(projectSlug: string, identifier: string): Promise<void> {
-  const slug = requireProjectSlug(projectSlug);
-  const issueId = requireNonBlank(identifier, "identifier");
-  await http.delete(
-    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/group`),
-  );
-}
-
 export async function setIssueParent(
   projectSlug: string,
   identifier: string,

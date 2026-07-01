@@ -30,17 +30,15 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapterTest do
              IssueAdapter.create_issue(project, %{"title" => "Made", "status" => "Todo"})
   end
 
-  test "list_issues exposes grouped subtasks from group_lead_id", %{project: project} do
+  test "list_issues exposes subtasks via parent_identifier", %{project: project} do
     {:ok, parent} = Context.create_issue("demo", %{title: "Parent", status: "Todo"})
     {:ok, child} = Context.create_issue("demo", %{title: "Child", status: "Todo"})
-    {:ok, _child} = Context.set_issue_group("demo", child.identifier, parent.identifier)
+    {:ok, _child} = Context.set_issue_parent("demo", child.identifier, parent.identifier)
 
     assert {:ok, issues} = IssueAdapter.list_issues(project, [])
-    parent_dto = Enum.find(issues, &(&1.identifier == parent.identifier))
     child_dto = Enum.find(issues, &(&1.identifier == child.identifier))
 
-    assert parent_dto.group_member_identifiers == [child.identifier]
-    assert child_dto.group_lead_identifier == parent.identifier
+    assert child_dto.parent_identifier == parent.identifier
   end
 
   test "get_issue maps not_found", %{project: project} do

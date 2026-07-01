@@ -5,8 +5,10 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
 
   alias Phoenix.Socket
   alias SymphonyElixir.AgentRunner
+  alias SymphonyElixir.Issue
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.IssueMapper
+  alias SymphonyElixir.Orchestrator
   alias SymphonyElixir.SessionLog
   alias SymphonyElixir.Workspace
   alias SymphonyElixirWeb.TrackerAuth
@@ -19,7 +21,7 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     with :ok <- authorize(socket),
          {:ok, issue_identifier} <- parse_topic(topic_rest, project_slug),
          preferred_agent_kind <- preferred_agent_kind(params, project_slug, issue_identifier),
-         workspace <- Workspace.path_for_issue(issue_identifier),
+         workspace <- run_log_workspace(project_slug, issue_identifier),
          {:ok, log_agent_kind, path} <- SessionLog.resolve_log_source(preferred_agent_kind, workspace) do
       {:ok, lines, offset} = SessionLog.tail(log_agent_kind, path, SessionLog.join_tail_opts())
 
@@ -149,6 +151,50 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
 
   defp authorize(socket) do
     if authorized?(socket), do: :ok, else: {:error, "unauthorized"}
+  end
+
+  # A bundle `child_run` executes in an isolated git worktree
+  # (`<repo>/.worktrees/<slug>`), where the coding agent writes its session
+  # sidecar + rollout log. The standard per-issue workspace holds no log for such
+  # a run, so the execution transcript would never stream. Resolve the child's
+  # worktree — reusing the exact run context the orchestrator dispatches with —
+  # and tail its log there; standalone runs keep the standard per-issue workspace.
+  defp run_log_workspace(project_slug, issue_identifier) do
+    fallback = Workspace.path_for_issue(issue_identifier)
+    worktree_log_workspace(run_opts_for(project_slug, issue_identifier), fallback)
+  end
+
+  defp run_opts_for(project_slug, issue_identifier) do
+    with {:ok, record} <- Context.get_issue(project_slug, issue_identifier),
+         %Issue{} = issue <- IssueMapper.to_issue(record) do
+      Orchestrator.bundle_run_context(issue).run_opts
+    else
+      _ -> []
+    end
+  rescue
+    _ -> []
+  end
+
+  @doc false
+  @spec worktree_log_workspace(keyword(), String.t()) :: String.t()
+  def worktree_log_workspace(run_opts, fallback) when is_list(run_opts) and is_binary(fallback) do
+    with true <- Keyword.get(run_opts, :worktree) == true,
+         repo when is_binary(repo) and repo != "" <- Keyword.get(run_opts, :worktree_repo),
+         slug when is_binary(slug) and slug != "" <- worktree_log_slug(run_opts),
+         path <- Path.join([repo, ".worktrees", slug]),
+         true <- File.dir?(path) do
+      path
+    else
+      _ -> fallback
+    end
+  end
+
+  def worktree_log_workspace(_run_opts, fallback) when is_binary(fallback), do: fallback
+
+  defp worktree_log_slug(run_opts) do
+    (Keyword.get(run_opts, :unit_id) || "")
+    |> to_string()
+    |> String.replace(~r/[^A-Za-z0-9_.-]+/, "-")
   end
 
   defp parse_topic(topic_rest, project_slug) do

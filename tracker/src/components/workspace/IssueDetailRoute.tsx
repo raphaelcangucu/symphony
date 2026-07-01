@@ -4,7 +4,6 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { IssueDrawer } from "@/components/issues/IssueDrawer";
-import { resolveIssueGroup } from "@/components/issues/issue-detail/issueGroup";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import {
@@ -22,9 +21,7 @@ import {
   deleteIssue,
   forceSyncIssue,
   getIssue,
-  groupIssue,
   setIssueParent,
-  ungroupIssue,
 } from "@/services/issues";
 import { deleteJiraAttachment } from "@/services/attachments";
 import type { Issue } from "@/types/issue";
@@ -50,10 +47,8 @@ export function IssueDetailRoute() {
   // list entry for an instant first paint while the full fetch is in flight.
   const issue = matchedFetched ?? issueFromList;
 
-  const group = issue ? resolveIssueGroup(issue, issues) : null;
   const subtasks = issue ? collectSubtasks(issue.identifier, issues) : [];
   const parentCandidates = issue ? collectParentCandidates(issue, issues) : [];
-  const groupLeadCandidates = issue ? collectGroupLeadCandidates(issue, issues) : [];
 
   const basePath = workspaceBasePath(projectSlug, view);
 
@@ -169,33 +164,6 @@ export function IssueDetailRoute() {
     }
   }
 
-  async function handleSetGroupLead(leadIdentifier: string): Promise<boolean> {
-    if (!issue) return false;
-    try {
-      const updated = await groupIssue(projectSlug, issue.identifier, leadIdentifier);
-      handleIssueUpdated(updated);
-      toast.success(t("issue.route.groupLeadSet", { identifier: leadIdentifier }));
-      return true;
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.route.groupLeadSetFailed"));
-      return false;
-    }
-  }
-
-  async function handleClearGroupLead(): Promise<boolean> {
-    if (!issue) return false;
-    try {
-      await ungroupIssue(projectSlug, issue.identifier);
-      const refreshed = await getIssue(projectSlug, issue.identifier);
-      handleIssueUpdated(refreshed);
-      toast.success(t("issue.route.groupLeadCleared"));
-      return true;
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.route.groupLeadClearFailed"));
-      return false;
-    }
-  }
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -246,7 +214,6 @@ export function IssueDetailRoute() {
       subtasks={subtasks}
       subtaskExecutions={agentExecutions}
       parentCandidates={parentCandidates}
-      groupLeadCandidates={groupLeadCandidates}
       workflowMarkdown={project?.setup?.workflowMarkdown ?? null}
       open
       onOpenChange={(open) => {
@@ -270,15 +237,12 @@ export function IssueDetailRoute() {
       onForceSync={trackerKind === "local" ? undefined : handleForceSync}
       onRemoveAttachment={trackerKind === "jira" ? handleRemoveAttachment : undefined}
       onIssueUpdated={handleIssueUpdated}
-      group={group}
       onOpenIssue={(targetIdentifier) => {
         navigate({ pathname: issuePath(projectSlug, view, targetIdentifier), search: location.search });
       }}
       onCreateSubtask={handleCreateSubtask}
       onSetParent={handleSetParent}
       onClearParent={issue?.parentIdentifier ? handleClearParent : undefined}
-      onSetGroupLead={handleSetGroupLead}
-      onClearGroupLead={issue?.groupLeadIdentifier ? handleClearGroupLead : undefined}
     />
   );
 }
@@ -306,12 +270,6 @@ function collectParentCandidates(issue: Issue, issues: readonly Issue[]): Issue[
   const blocked = collectDescendantKeys(issue.identifier, issues);
   blocked.add(normalizeIssueIdentifier(issue.identifier));
   return issues.filter((candidate) => !blocked.has(normalizeIssueIdentifier(candidate.identifier)));
-}
-
-/** Valid group leads: every other issue (backend rejects nested/lead-member). */
-function collectGroupLeadCandidates(issue: Issue, issues: readonly Issue[]): Issue[] {
-  const selfKey = normalizeIssueIdentifier(issue.identifier);
-  return issues.filter((candidate) => normalizeIssueIdentifier(candidate.identifier) !== selfKey);
 }
 
 function collectDescendantKeys(identifier: string, issues: readonly Issue[]): Set<string> {

@@ -125,8 +125,6 @@ const issue: Issue = {
   createdAt: "2026-06-20T00:00:00Z",
   updatedAt: "2026-06-20T00:00:00Z",
   attachments: [],
-  groupLeadIdentifier: null,
-  groupMemberIdentifiers: [],
 };
 
 let workspaceValue: {

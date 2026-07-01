@@ -1,6 +1,6 @@
 ---
 name: subtask-orchestration
-description: Break a parent task into subtasks using Symphony's execution-bundle model. Use when an issue is large enough to split, spans multiple repositories, or has independently shippable parts. Covers the three execution shapes (workpad_task, subagent_unit, child_run), deterministic classification, shared contracts for cross-unit coordination, and the authoring tool sequence.
+description: Break a parent task into subtasks using Symphony's execution-bundle model. Use when an issue is large enough to split, spans multiple repositories, or has independently shippable parts. Covers the two execution shapes (workpad_task, child_run), deterministic classification, the per-repo parent integration branch children PR into, shared contracts and the runtime comms tools for cross-unit coordination, and the authoring tool sequence.
 ---
 
 # Subtask orchestration
@@ -9,36 +9,86 @@ Symphony executes a parent task as an **execution bundle**: an ordered set of un
 contracts and dependency edges, stored as a YAML block in the parent's `## Codex Workpad` comment.
 The authoring assistant builds the bundle; the runner consumes it and never re-derives structure.
 
-## The three execution shapes
+## Lab flag: two orchestration modes
+
+Instance setting **`lab.bundle_child_orchestration`** (Settings → Lab, default **off**):
+
+| Flag | `child_run` meaning | Orchestrator |
+| --- | --- | --- |
+| **off** (default) | Subagent scope inside the **parent run** — one PR per repo, no integration branch | Dispatches **only the parent**; parent uses `subagent-driven-development` |
+| **on** (lab) | Separate orchestrator run per unit — worktrees, integration branch, child PRs | Parent coordinator + orchestrator child dispatches (below) |
+
+The bundle YAML (units, deps, contracts) is required in **both** modes. Only execution topology changes.
+
+## The two execution shapes (lab mode on)
 
 | Shape | Where it runs | Use when |
 | --- | --- | --- |
 | `workpad_task` | Inline, in the parent's run and workspace. Ships with the parent (no separate PR). | Tightly coupled, same-repo work. |
-| `subagent_unit` | A Symphony-managed subagent inside the **parent's** working tree; ships in the **parent's PR** (no own clone/branch/PR). The parent spawns it once its consumed contracts are `ready`, supervises its TDD + evidence slice, and only then accepts the produced contract. | Same-repo work that depends on, or shares a contract with, sibling units. |
-| `child_run` | Its own run: own issue, isolated git worktree, branch, validation, and PR. | Independent or cross-repo deliverables. |
+| `child_run` | Its own run: own issue, isolated git worktree and branch. Opens a PR **against the parent's per-repo integration branch** (not the repo default); the parent merges it and owns the final per-repo PR. | Independent or cross-repo deliverables, or same-repo work that depends on / shares a contract with sibling units. |
+
+Both shapes are held to the **same quality bar**: TDD plus per-subtask **evidence** (tests +
+artifacts). Native subagents (Codex/Claude/Cursor) are allowed inside **both** shapes for independent
+slices of a unit — keep all of a unit's work inside that unit's single worktree/branch/PR.
+
+## Per-repo integration branch (how children land)
+
+For each repo touched by the bundle, the parent owns one integration branch
+`symphony/{parent}/{repo}`:
+
+1. The parent ensures the integration branch exists before the first child for that repo.
+2. Each `child_run` opens its PR with `--base symphony/{parent}/{repo}` (Symphony sets the base
+   automatically when it publishes). Its worktree forks off the integration branch **unless it
+   `depends_on` a same-repo sibling** — then it forks off that **predecessor's branch** so the
+   dependency's committed work is present as its starting reference. Its PR still targets
+   `symphony/{parent}/{repo}` (never the predecessor branch).
+3. The **parent coordinator** merges green child PRs into the integration branch and, once a repo's
+   units are all merged, opens exactly **one** final PR per repo
+   (`symphony/{parent}/{repo}` → that repo's default branch).
+
+**Dependency chains**: a dependent releases when its predecessor reaches human review (PR open) —
+before that predecessor is merged into the integration branch. Forking the dependent's worktree off
+the predecessor's branch is what hands it the predecessor's schema/API without waiting for the merge.
+In a linear chain (A → B → C), C forks off B (which already contains A). Cross-repo predecessors are
+ignored for forking (their branch lives in another checkout); such children fork off the integration branch.
+
+Even same-repo children get their own worktree + branch + PR into the integration branch. A same-repo
+child **reuses the parent's checkout, installed dependencies, and preview** (no re-clone / re-install /
+re-provision) but still runs its own tests and captures its own evidence.
 
 ## Deterministic classification (do not re-decide at run time)
 
 Apply these rules in order; the first match wins:
 
-1. **`:different_repo`** — the unit targets a different repo than the parent → `child_run`.
+1. **`:different_repo`** — the unit targets a different repo than the parent → `child_run` (its own worktree for that repo).
 2. **`:independent_deliverable`** — the unit is independently shippable (`deliverable: "pr"`) → `child_run`.
-3. **`:same_repo_subagent`** — same repo as the parent **and** it `produces`/`consumes` a shared contract or `depends_on` another unit → `subagent_unit` (+ `shared_contract`). Use this, not `child_run`, for same-repo dependent work.
-4. **`:shared_contract`** — contract-coupled but the parent's repo is unknown → `child_run` (conservative fallback).
-5. **`:same_repo_inline`** — same repo, no isolation needed → `workpad_task`.
-6. **`:unknown_repo`** — repo is unknown → **ambiguous**: keep the subtask a draft and ask the user.
+3. **`:contract_coupled`** — it `produces`/`consumes` a shared contract or `depends_on` another unit → `child_run`.
+4. **`:same_repo_inline`** — same repo, no isolation needed → `workpad_task`.
+5. **`:unknown_repo`** — repo is unknown → **ambiguous**: keep the subtask a draft and ask the user.
 
 Use `classify_execution_unit` to preview a classification without writing anything.
 
 ## Shared contracts
 
-When a `child_run` depends on an artifact another unit must produce first (e.g. a backend API a frontend
+When a unit depends on an artifact another unit must produce first (e.g. a backend API a frontend
 consumes — often across repos), define a **shared contract**:
 
 - `owner_unit` = the unit that **produces** the contract.
 - `consumers` = units that depend on it. Consumers gate on the contract being `ready`.
 - Status flows `draft -> ready -> changing`. Editing the body of a `ready` contract flips it to
   `changing` so consumers re-sync.
+
+## Runtime coordination tools (coding-agent surface)
+
+While the bundle runs, the parent and children coordinate through tools instead of polling each other:
+
+- `report_unit_status({phase, summary, blockers?, contracts_ready?, pr_url?})` — a child pushes a
+  durable, structured status block to the parent's workpad at each phase transition (started,
+  contract_ready, pr_open, blocked, done).
+- `query_bundle_status(parent_identifier?)` — read every unit's `{type, status, blocked_by,
+  pending_contracts, pr_url, tokens, turns, last_summary}` to sequence work and see what is waiting.
+- `update_shared_contract(...)` — the owner marks a contract `ready` (or `changing`) so consumers
+  unblock or re-sync.
 
 ## Authoring tool sequence
 

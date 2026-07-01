@@ -561,28 +561,13 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
         |> Repo.preload(:project)
 
       PushDispatcher.issue_assigned(updated, previous_assignee)
-      sync_group_member_statuses!(updated)
       updated
     end
   end
 
-  # Group members follow the lead's local column; remote Jira statuses are
-  # independent and must not overwrite a member's mirrored status on pull.
-  defp maybe_put_status_id(attrs, _dirty_fields, _status_id, %IssueRecord{group_lead_id: lead_id})
-       when not is_nil(lead_id),
-       do: attrs
-
   defp maybe_put_status_id(attrs, dirty_fields, status_id, _current) do
     if Map.has_key?(dirty_fields, "state"), do: attrs, else: Map.put(attrs, :status_id, status_id)
   end
-
-  defp sync_group_member_statuses!(%IssueRecord{group_lead_id: nil, id: lead_id, status_id: status_id}) do
-    IssueRecord
-    |> where([i], i.group_lead_id == ^lead_id and i.status_id != ^status_id)
-    |> Repo.update_all(set: [status_id: status_id, updated_at: DateTime.utc_now()])
-  end
-
-  defp sync_group_member_statuses!(_issue), do: :ok
 
   defp issue_unchanged?(%IssueRecord{} = current, desired) do
     Enum.all?(desired, fn {field, value} -> field_equal?(Map.get(current, field), value) end)

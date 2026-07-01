@@ -15,18 +15,18 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.ClassifierTest do
              Classifier.classify(%{repo: @parent_repo, deliverable: "pr"}, parent_repo: @parent_repo)
   end
 
-  test "same repo + consumes contract => subagent_unit (rule :same_repo_subagent)" do
-    assert {:ok, :subagent_unit, :same_repo_subagent} =
+  test "same repo + consumes contract => child_run (rule :shared_contract)" do
+    assert {:ok, :child_run, :shared_contract} =
              Classifier.classify(%{repo: @parent_repo, consumes: ["api"]}, parent_repo: @parent_repo)
   end
 
-  test "same repo + produces contract => subagent_unit (rule :same_repo_subagent)" do
-    assert {:ok, :subagent_unit, :same_repo_subagent} =
+  test "same repo + produces contract => child_run (rule :shared_contract)" do
+    assert {:ok, :child_run, :shared_contract} =
              Classifier.classify(%{repo: @parent_repo, produces: ["api"]}, parent_repo: @parent_repo)
   end
 
-  test "same repo + depends_on => subagent_unit (rule :same_repo_subagent)" do
-    assert {:ok, :subagent_unit, :same_repo_subagent} =
+  test "same repo + depends_on => child_run (rule :shared_contract)" do
+    assert {:ok, :child_run, :shared_contract} =
              Classifier.classify(%{repo: @parent_repo, depends_on: ["x"]}, parent_repo: @parent_repo)
   end
 

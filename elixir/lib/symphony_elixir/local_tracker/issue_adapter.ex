@@ -168,8 +168,6 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
       project_slug: project_slug(issue),
       created_at: iso8601(issue.inserted_at),
       updated_at: iso8601(issue.updated_at),
-      group_lead_identifier: group_lead_identifier(issue.group_lead),
-      group_member_identifiers: group_member_identifiers(issue.group_members),
       parent_identifier: subtask_parent_identifier(issue.source_relations)
     })
   end
@@ -213,18 +211,6 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
 
   defp project_slug(%IssueRecord{project: %Project{slug: slug}}), do: slug
   defp project_slug(_), do: nil
-
-  defp group_lead_identifier(%IssueRecord{identifier: identifier}) when is_binary(identifier), do: identifier
-  defp group_lead_identifier(_), do: nil
-
-  defp group_member_identifiers(members) when is_list(members) do
-    Enum.flat_map(members, fn
-      %IssueRecord{identifier: identifier} when is_binary(identifier) -> [identifier]
-      _ -> []
-    end)
-  end
-
-  defp group_member_identifiers(_), do: []
 
   defp iso8601(%DateTime{} = dt), do: dt |> DateTime.truncate(:second) |> DateTime.to_iso8601()
   defp iso8601(_), do: nil

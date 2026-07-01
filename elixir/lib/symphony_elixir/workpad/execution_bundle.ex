@@ -9,13 +9,14 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle do
 
   @type unit :: %{
           id: String.t(),
-          type: :workpad_task | :child_run | :subagent_unit,
+          type: :workpad_task | :child_run,
           issue: String.t() | nil,
           repo: String.t() | nil,
           produces: [String.t()],
           consumes: [String.t()],
           depends_on: [String.t()],
-          deliverable: String.t() | nil
+          deliverable: String.t() | nil,
+          pr_base: String.t() | nil
         }
 
   @type contract :: %{
@@ -56,17 +57,13 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle do
   @spec workpad_units(t()) :: [unit()]
   def workpad_units(%__MODULE__{units: units}), do: Enum.filter(units, &(&1.type == :workpad_task))
 
-  @spec subagent_units(t()) :: [unit()]
-  def subagent_units(%__MODULE__{units: units}),
-    do: Enum.filter(units, &(&1.type == :subagent_unit))
-
-  # Phase 1 bridge: a `:subagent_unit` is dispatched exactly like a `:child_run`
-  # (own worktree/branch/PR) until the in-parent subagent runner lands (Phase 2).
-  # Orchestrator dispatch, gating, completion, and child-discovery use this set so
-  # newly classified same-repo dependent units are never silently dropped.
+  # Units that are dispatched as their own gated run (own worktree/branch/PR into
+  # the parent's per-repo integration branch). Only `:child_run` qualifies;
+  # `:workpad_task` units run inline in the parent's own run. Legacy
+  # `subagent_unit` bundles parse as `:child_run` for backward compatibility.
   @spec dispatchable_units(t()) :: [unit()]
   def dispatchable_units(%__MODULE__{units: units}),
-    do: Enum.filter(units, &(&1.type in [:child_run, :subagent_unit]))
+    do: Enum.filter(units, &(&1.type == :child_run))
 
   defp build(map) do
     %__MODULE__{
@@ -87,7 +84,8 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle do
       produces: list(u["produces"]),
       consumes: list(u["consumes"]),
       depends_on: list(u["depends_on"]),
-      deliverable: u["deliverable"]
+      deliverable: u["deliverable"],
+      pr_base: u["pr_base"]
     }
   end
 
@@ -102,7 +100,9 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle do
     }
   end
 
-  defp unit_type("subagent_unit"), do: :subagent_unit
+  # Legacy `subagent_unit` bundles collapse into `:child_run` (they now ship via
+  # their own PR into the parent's per-repo integration branch).
+  defp unit_type("subagent_unit"), do: :child_run
   defp unit_type("child_run"), do: :child_run
   defp unit_type(_), do: :workpad_task
 

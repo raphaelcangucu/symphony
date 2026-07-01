@@ -5,6 +5,7 @@ defmodule SymphonyElixir.Config do
 
   alias NimbleOptions
   alias SymphonyElixir.InstanceConfig
+  alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
   alias SymphonyElixir.Workflow
 
   @default_active_states ["Todo", "In Progress"]
@@ -744,6 +745,12 @@ defmodule SymphonyElixir.Config do
 
   @spec agent_max_turns() :: pos_integer()
   def agent_max_turns, do: InstanceConfig.default_max_turns()
+
+  @spec agent_token_budget() :: non_neg_integer()
+  def agent_token_budget, do: OrchestrationSettings.agent_token_budget()
+
+  @spec agent_budget_max_retries() :: non_neg_integer()
+  def agent_budget_max_retries, do: InstanceConfig.agent_budget_max_retries()
 
   @doc """
   Process-level fallback completion transitions. Per-project transitions are

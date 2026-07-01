@@ -28,7 +28,7 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinator do
   """
   @spec coordinator?(ExecutionBundle.t() | term()) :: boolean()
   def coordinator?(%ExecutionBundle{mode: "bundle", units: units}) when is_list(units) do
-    Enum.any?(units, &(&1.type in [:child_run, :subagent_unit]))
+    Enum.any?(units, &(&1.type == :child_run))
   end
 
   def coordinator?(_bundle), do: false

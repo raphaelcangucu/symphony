@@ -6,7 +6,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   alias SymphonyElixir.AcceptanceCriteria
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.Issue
-  alias SymphonyElixir.Assistant.{EvidenceTools, GoalTools, HandoffTools, DevEnvTools, PreviewTools, PullRequestTools}
+  alias SymphonyElixir.Assistant.{EvidenceTools, GoalTools, HandoffTools, DevEnvTools, PreviewTools, PullRequestTools, ToolExecutor}
   alias SymphonyElixir.Linear.Client, as: LinearClient
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.AgentHandoffGate
@@ -27,6 +27,19 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @manage_dev_env_tool "manage_dev_env"
   @link_pull_request_tool "link_pull_request"
   @manage_codex_goal_tool "manage_codex_goal"
+  @query_bundle_status_tool "query_bundle_status"
+  @report_unit_status_tool "report_unit_status"
+  @update_shared_contract_tool "update_shared_contract"
+
+  # Bundle coordination tools shared with the project chat assistant. Their specs
+  # and execution live in `ToolExecutor`; here we expose them to the autonomous
+  # coding agent and default `parent_identifier` to the bound issue's bundle root
+  # (its parent when it is a child) so a child never has to know the coordinator.
+  @bundle_coordination_tools [
+    @query_bundle_status_tool,
+    @report_unit_status_tool,
+    @update_shared_contract_tool
+  ]
 
   @graphql_input_schema %{
     "type" => "object",
@@ -204,6 +217,9 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       @link_pull_request_tool ->
         execute_bound_assistant_tool(PullRequestTools, arguments, opts)
 
+      tool when tool in @bundle_coordination_tools ->
+        execute_bundle_coordination_tool(tool, arguments, opts)
+
       other ->
         failure_response(%{
           "error" => %{
@@ -270,8 +286,68 @@ defmodule SymphonyElixir.Codex.DynamicTool do
         DevEnvTools.issue_bound_tool_spec(),
         PullRequestTools.issue_bound_tool_spec(),
         GoalTools.issue_bound_tool_spec()
-      ]
+      ] ++ bundle_coordination_tool_specs()
   end
+
+  # Reuse the single source of truth in `ToolExecutor` for the bundle tools'
+  # schemas/descriptions instead of duplicating them here.
+  defp bundle_coordination_tool_specs do
+    ToolExecutor.tool_specs()
+    |> Enum.filter(&(&1["name"] in @bundle_coordination_tools))
+  end
+
+  defp execute_bundle_coordination_tool(tool, arguments, opts) do
+    with {:ok, issue} <- fetch_bound_issue(opts),
+         arguments <- normalize_tool_arguments(arguments),
+         {:ok, arguments} <- ensure_bundle_parent_identifier(issue, arguments),
+         executor_opts <- Keyword.put(opts, :bound_issue_identifier, issue.identifier),
+         {:ok, result} <- ToolExecutor.execute(issue.project_slug, tool, arguments, executor_opts) do
+      bound_assistant_tool_success(result)
+    else
+      {:error, reason} -> failure_response(bound_assistant_tool_error_payload(reason))
+    end
+  end
+
+  # Defaults/validates `parent_identifier` to the bound issue's bundle root: its
+  # parent when it is a child, otherwise itself. A child may omit it; an explicit
+  # value that disagrees with the resolved root is rejected to prevent a child
+  # from writing into an unrelated bundle.
+  defp ensure_bundle_parent_identifier(issue, arguments) do
+    default = bundle_root(issue)
+
+    case normalize_optional_string(Map.get(arguments, "parent_identifier")) do
+      nil -> {:ok, Map.put(arguments, "parent_identifier", default)}
+      ^default -> {:ok, Map.put(arguments, "parent_identifier", default)}
+      actual -> {:error, {:parent_identifier_mismatch, default, actual}}
+    end
+  end
+
+  defp bundle_root(%Issue{project_slug: slug, identifier: identifier}) do
+    with {:ok, project} <- Context.get_project(slug),
+         {:ok, dto} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
+         parent when is_binary(parent) and parent != "" <- dto_parent_identifier(dto) do
+      parent
+    else
+      _ -> identifier
+    end
+  rescue
+    _ -> identifier
+  end
+
+  defp dto_parent_identifier(dto) when is_map(dto) do
+    Map.get(dto, :parent_identifier) || Map.get(dto, "parent_identifier")
+  end
+
+  defp dto_parent_identifier(_dto), do: nil
+
+  defp normalize_optional_string(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_optional_string(_value), do: nil
 
   defp execute_bound_assistant_tool(module, arguments, opts, extra \\ []) do
     with {:ok, issue} <- fetch_bound_issue(opts),

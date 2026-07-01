@@ -12,7 +12,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
 
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter, IssueRecord, Project}
   alias SymphonyElixir.Repo
-  alias SymphonyElixir.Tracker.Sync.{Engine, GroupStatus, LocalStore, Outbox, ParentLink, SubtaskRollup}
+  alias SymphonyElixir.Tracker.Sync.{Engine, LocalStore, Outbox, ParentLink, SubtaskRollup}
 
   @impl true
   def kind, do: :github
@@ -194,10 +194,10 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
     end
   end
 
-  # Identifiers whose remote status must follow the moved issue: the group lead
-  # plus its members, AND a parent's direct sub-issues. The local move already
-  # dragged the sub-issues (see `Context.persist_group_move`); pushing them too
-  # keeps the remote in sync so the next pull does not revert them.
+  # Identifiers whose remote status must follow the moved issue: the issue itself
+  # plus a parent's direct sub-issues. The local move already dragged the
+  # sub-issues (see `Context.persist_move`); pushing them too keeps the remote in
+  # sync so the next pull does not revert them.
   defp push_identifiers_with_subtasks(%Project{} = project, dto) do
     subtasks =
       case Context.list_subtask_children(project.slug, dto.identifier) do
@@ -205,7 +205,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
         _ -> []
       end
 
-    (GroupStatus.push_identifiers(dto) ++ subtasks) |> Enum.uniq()
+    ([dto.identifier] ++ subtasks) |> Enum.uniq()
   end
 
   defp enqueue_status_move(project, identifier, status_name) do

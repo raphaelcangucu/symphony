@@ -7,6 +7,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   alias SymphonyElixir.AgentRouting
   alias SymphonyElixir.Config
+  alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Tracker.ExternalUrl
 
   alias SymphonyElixir.LocalTracker.{
@@ -31,8 +32,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   alias SymphonyElixir.Tracker.LabelResolver
   alias SymphonyElixir.Tracker.Sync.UserRecord
   alias SymphonyElixir.Tracker.Workpad
-
-  @issue_preloads [:project, :status, :labels, :group_lead, :group_members, source_relations: :target_issue]
+  @issue_preloads [:project, :status, :labels, source_relations: :target_issue]
   @default_issue_status "Todo"
 
   @type missing_error ::
@@ -490,15 +490,15 @@ defmodule SymphonyElixir.LocalTracker.Context do
       when is_binary(project_slug) and is_binary(identifier) and is_map(attrs) do
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, issue} <- fetch_project_issue(project.id, identifier),
-         issue = resolve_group_move_issue(issue),
          {:ok, status} <- fetch_move_status(project.id, attrs, issue.status_id) do
       position_only = issue.status_id == status.id
 
-      # Persist the lead plus every group member and record their activity events
-      # in a SINGLE transaction. This keeps a grouped move atomic (it can no longer
-      # partially apply if a member update fails mid-way) and acquires the SQLite
-      # write lock exactly once instead of once per member, which is what surfaced
-      # as "database is locked"/"Database busy" under concurrent board moves.
+      # Persist the issue plus every direct sub-issue it drags along, recording
+      # each activity event in a SINGLE transaction. This keeps a parent move
+      # atomic (it can no longer partially apply if a child update fails mid-way)
+      # and acquires the SQLite write lock exactly once instead of once per child,
+      # which is what surfaced as "database is locked"/"Database busy" under
+      # concurrent board moves.
       #
       # Side-effects (PubSub broadcast + push notifications) are deferred to
       # `emit_move_events/1` AFTER commit, because `PushDispatcher` performs
@@ -509,11 +509,11 @@ defmodule SymphonyElixir.LocalTracker.Context do
       # `busy_timeout` and raise `Exqlite.Error: database is locked`. Because the
       # whole move is now atomic, nothing was applied on failure, so retrying the
       # transaction is safe — see `with_write_retry/1`.
-      case with_write_retry(fn -> persist_group_move(project.id, issue, status, attrs, position_only) end) do
-        {:ok, {moved_lead, events}} ->
+      case with_write_retry(fn -> persist_move(project.id, issue, status, attrs, position_only) end) do
+        {:ok, {moved_issue, events}} ->
           emit_move_events(events)
-          roll_up_parent_status(moved_lead)
-          {:ok, moved_lead}
+          roll_up_parent_status(moved_issue)
+          {:ok, moved_issue}
 
         {:error, reason} ->
           {:error, reason}
@@ -551,7 +551,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
       when is_binary(project_slug) and is_binary(identifier) and is_binary(state_name) do
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, issue} <- fetch_project_issue(project.id, identifier),
-         issue = resolve_group_move_issue(issue),
          {:ok, status} <- fetch_status(issue.project_id, state_name) do
       changes =
         %{status_id: status.id}
@@ -563,7 +562,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
       |> Repo.update()
       |> preload_issue_result()
       |> tap_issue_event("issue_updated", %{status: status.name})
-      |> move_group_members(status)
       |> tap_roll_up_parent()
     end
   end
@@ -879,22 +877,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
-  @spec set_issue_group(String.t(), String.t(), String.t()) ::
-          {:ok, IssueRecord.t()} | {:error, atom() | Ecto.Changeset.t()}
-  def set_issue_group(project_slug, member_identifier, lead_identifier)
-      when is_binary(project_slug) and is_binary(member_identifier) and is_binary(lead_identifier) do
-    with {:ok, project} <- fetch_project(project_slug),
-         {:ok, member} <- fetch_project_issue(project.id, member_identifier),
-         {:ok, lead} <- fetch_project_issue(project.id, lead_identifier),
-         :ok <- validate_group_pair(member, lead) do
-      member
-      |> IssueRecord.changeset(%{group_lead_id: lead.id, status_id: lead.status_id})
-      |> Repo.update()
-      |> preload_issue_result()
-      |> tap_issue_event("issue_updated", %{previous_assignee: assignee_snapshot(member)})
-    end
-  end
-
   @doc """
   Sets (or re-parents) the hierarchical parent of an issue as a local
   `sub_issue_of` relation. Removes any existing parent first so an issue has at
@@ -986,31 +968,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
         |> Repo.all()
 
       child_ids ++ Enum.flat_map(child_ids, &descendant_issue_ids(&1, seen))
-    end
-  end
-
-  @spec list_group_members(String.t(), String.t()) :: {:ok, [IssueRecord.t()]} | {:error, missing_error()}
-  def list_group_members(project_slug, lead_identifier)
-      when is_binary(project_slug) and is_binary(lead_identifier) do
-    with {:ok, project} <- fetch_project(project_slug),
-         {:ok, lead} <- fetch_project_issue(project.id, lead_identifier) do
-      {:ok, lead.id |> group_member_records() |> Enum.map(&Repo.preload(&1, @issue_preloads))}
-    end
-  end
-
-  @spec remove_from_group(String.t(), String.t()) ::
-          {:ok, IssueRecord.t()} | {:error, atom() | Ecto.Changeset.t()}
-  def remove_from_group(project_slug, identifier)
-      when is_binary(project_slug) and is_binary(identifier) do
-    with {:ok, project} <- fetch_project(project_slug),
-         {:ok, issue} <- fetch_project_issue(project.id, identifier) do
-      members = group_member_records(issue.id)
-
-      cond do
-        not is_nil(issue.group_lead_id) -> detach_group_member(issue)
-        members != [] -> disband_group(issue, members)
-        true -> {:error, :not_in_group}
-      end
     end
   end
 
@@ -1439,8 +1396,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp set_issue_archived_at(project_slug, identifier, archived_at) do
     with {:ok, project} <- fetch_project(project_slug),
          {:ok, issue} <- fetch_project_issue(project.id, identifier) do
-      if not is_nil(archived_at), do: reassign_group_on_removal(issue)
-
       issue
       |> IssueRecord.changeset(%{archived_at: archived_at})
       |> Repo.update()
@@ -1450,7 +1405,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   defp delete_issue_with_children(%IssueRecord{id: issue_id} = issue) do
     Repo.transaction(fn ->
-      reassign_group_on_removal(issue)
       Repo.delete_all(from(event in ActivityEvent, where: event.issue_id == ^issue_id))
       Repo.delete_all(from(relation in IssueRelation, where: relation.source_issue_id == ^issue_id))
       Repo.delete_all(from(relation in IssueRelation, where: relation.target_issue_id == ^issue_id))
@@ -1480,30 +1434,9 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
-  defp validate_group_pair(%IssueRecord{id: id}, %IssueRecord{id: id}), do: {:error, :cannot_group_with_self}
-
-  defp validate_group_pair(%IssueRecord{} = member, %IssueRecord{} = lead) do
-    cond do
-      not is_nil(lead.group_lead_id) -> {:error, :lead_is_member}
-      group_member_count(member.id) > 0 -> {:error, :member_is_lead}
-      true -> :ok
-    end
-  end
-
-  defp group_member_count(lead_id) do
-    IssueRecord |> where([issue], issue.group_lead_id == ^lead_id) |> Repo.aggregate(:count, :id)
-  end
-
-  defp group_member_records(lead_id) do
-    IssueRecord
-    |> where([issue], issue.group_lead_id == ^lead_id)
-    |> order_by([issue], asc: issue.inserted_at, asc: issue.id)
-    |> Repo.all()
-  end
-
   # Direct sub-issues (`sub_issue_of` children) of a parent, as full issue
   # records. A parent card drags its sub-issues along on a board move (see
-  # `persist_subtask_child_moves/2`), mirroring how a group lead drags members.
+  # `persist_subtask_child_moves/2`).
   defp subtask_child_records(parent_id) do
     subtask_type = IssueRelation.subtask_type()
 
@@ -1561,9 +1494,9 @@ defmodule SymphonyElixir.LocalTracker.Context do
   # Rolls a child's status change up to its parent: the parent takes the
   # least-advanced status among its direct children, so it reflects its
   # most-behind child and only reaches a terminal status once every child does.
-  # Best-effort, idempotent, and broadcast-only (no push notification) like a
-  # group member move. Returns `{:ok, {parent_identifier, status_name}}` when the
-  # parent changed, otherwise `{:ok, :noop}`.
+  # Best-effort, idempotent, and broadcast-only (no push notification).
+  # Returns `{:ok, {parent_identifier, status_name}}` when the parent changed,
+  # otherwise `{:ok, :noop}`.
   defp roll_up_parent_status(%IssueRecord{} = child) do
     case parent_issue_record(child.id) do
       %IssueRecord{} = parent -> recompute_parent_status(parent)
@@ -1596,60 +1529,6 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   defp tap_roll_up_parent(result), do: result
-
-  defp detach_group_member(%IssueRecord{} = member) do
-    member
-    |> IssueRecord.changeset(%{group_lead_id: nil})
-    |> Repo.update()
-    |> preload_issue_result()
-    |> tap_issue_event("issue_updated", %{previous_assignee: assignee_snapshot(member)})
-  end
-
-  defp disband_group(%IssueRecord{} = lead, members) do
-    Enum.each(members, &detach_group_member/1)
-    {:ok, Repo.preload(lead, @issue_preloads, force: true)}
-  end
-
-  defp resolve_group_move_issue(%IssueRecord{group_lead_id: nil} = issue), do: issue
-
-  defp resolve_group_move_issue(%IssueRecord{group_lead_id: lead_id} = member) when not is_nil(lead_id) do
-    case Repo.get(IssueRecord, lead_id) do
-      %IssueRecord{} = lead -> Repo.preload(lead, @issue_preloads)
-      nil -> member
-    end
-  end
-
-  defp move_group_members({:ok, %IssueRecord{} = lead} = result, %WorkflowStatus{} = status) do
-    lead.id
-    |> group_member_records()
-    |> Enum.each(fn member ->
-      member
-      |> IssueRecord.changeset(%{status_id: status.id})
-      |> Repo.update()
-      |> preload_issue_result()
-      |> tap_issue_event("issue_moved", %{status: status.name, position_only: false})
-    end)
-
-    result
-  end
-
-  defp move_group_members(result, _status), do: result
-
-  defp reassign_group_on_removal(%IssueRecord{} = issue) do
-    case group_member_records(issue.id) do
-      [] ->
-        :ok
-
-      [new_lead | rest] ->
-        {:ok, _} = new_lead |> IssueRecord.changeset(%{group_lead_id: nil}) |> Repo.update()
-
-        Enum.each(rest, fn member ->
-          {:ok, _} = member |> IssueRecord.changeset(%{group_lead_id: new_lead.id}) |> Repo.update()
-        end)
-
-        :ok
-    end
-  end
 
   defp insert_issue(attrs) do
     %IssueRecord{}
@@ -1695,26 +1574,25 @@ defmodule SymphonyElixir.LocalTracker.Context do
     :rand.uniform(ceiling + 1) - 1
   end
 
-  # Atomic unit move: reorder + update the lead, drag every group member AND every
-  # direct sub-issue into the same status, and record each issue's "issue_moved"
-  # activity event inside one transaction. Returns `{:ok, {moved_lead, events}}`
-  # where `events` are the post-commit side-effects to emit. DB writes only — no
-  # broadcasts or push notifications run while the write lock is held.
-  defp persist_group_move(project_id, %IssueRecord{} = lead, %WorkflowStatus{} = status, attrs, position_only) do
+  # Atomic unit move: reorder + update the issue and drag every direct sub-issue
+  # into the same status, recording each issue's "issue_moved" activity event
+  # inside one transaction. Returns `{:ok, {moved_issue, events}}` where `events`
+  # are the post-commit side-effects to emit. DB writes only — no broadcasts or
+  # push notifications run while the write lock is held.
+  defp persist_move(project_id, %IssueRecord{} = issue, %WorkflowStatus{} = status, attrs, position_only) do
     Repo.transaction(fn ->
-      lead_metadata = %{status: status.name, position_only: position_only}
+      metadata = %{status: status.name, position_only: position_only}
 
-      with {:ok, moved_lead} <- persist_moved_issue_changes(project_id, lead, status, attrs),
-           {:ok, _event} <- insert_event(moved_lead.id, "issue_moved", lead_metadata),
-           {:ok, moved_members} <- persist_group_member_moves(moved_lead.id, status),
-           {:ok, moved_children} <- persist_subtask_child_moves(moved_lead.id, status, position_only) do
+      with {:ok, moved_issue} <- persist_moved_issue_changes(project_id, issue, status, attrs),
+           {:ok, _event} <- insert_event(moved_issue.id, "issue_moved", metadata),
+           {:ok, moved_children} <- persist_subtask_child_moves(moved_issue.id, project_id, status, position_only) do
         follower_events =
           Enum.map(
-            moved_members ++ moved_children,
+            moved_children,
             &{&1, "issue_moved", %{status: status.name, position_only: false}}
           )
 
-        {moved_lead, [{moved_lead, "issue_moved", lead_metadata} | follower_events]}
+        {moved_issue, [{moved_issue, "issue_moved", metadata} | follower_events]}
       else
         {:error, reason} -> Repo.rollback(reason)
       end
@@ -1729,40 +1607,25 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
-  # Updates each group member's status and inserts its activity event, halting on
-  # the first failure so the surrounding transaction rolls the whole move back.
-  defp persist_group_member_moves(lead_id, %WorkflowStatus{} = status) do
-    lead_id
-    |> group_member_records()
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
-      with {:ok, updated} <- member |> IssueRecord.changeset(%{status_id: status.id}) |> Repo.update(),
-           updated = Repo.preload(updated, @issue_preloads),
-           {:ok, _event} <- insert_event(updated.id, "issue_moved", %{status: status.name, position_only: false}) do
-        {:cont, {:ok, [updated | acc]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-    |> case do
-      {:ok, members} -> {:ok, Enum.reverse(members)}
-      error -> error
-    end
-  end
-
   # A reorder within the same column (position-only) must not yank a parent's
   # sub-issues across columns — only a real status change drags them along.
-  defp persist_subtask_child_moves(_parent_id, %WorkflowStatus{}, true = _position_only), do: {:ok, []}
+  defp persist_subtask_child_moves(_parent_id, _project_id, %WorkflowStatus{}, true = _position_only),
+    do: {:ok, []}
 
   # Drags a parent's direct sub-issues into the parent's target status so a
-  # parent card and its subtasks travel together on a board move (mirrors
-  # `persist_group_member_moves/2`). Children already in the target status are
-  # skipped so we don't emit misleading "moved" events for them — and because a
-  # subtask that is also a group member was already moved in the same
-  # transaction, it is filtered out here (its status now matches the target).
-  defp persist_subtask_child_moves(parent_id, %WorkflowStatus{} = status, false = _position_only) do
+  # parent card and its still-active subtasks travel together on a board move.
+  # Children already in the target status are skipped.
+  #
+  # Children in a wait state (e.g. Human Review), a terminal state, or any
+  # workflow column ahead of the parent's target are left untouched so a
+  # coordinator dispatch does not yank a finished/handoff child back into active
+  # work. Dependency gating still lives in the orchestrator (`SubagentPlan`).
+  defp persist_subtask_child_moves(parent_id, project_id, %WorkflowStatus{} = status, false = _position_only) do
+    wait_states = wait_states_for_project(project_id)
+
     parent_id
     |> subtask_child_records()
-    |> Enum.reject(fn child -> child.status_id == status.id end)
+    |> Enum.filter(&cascade_drag_subtask?(&1, status, wait_states))
     |> Enum.reduce_while({:ok, []}, fn child, {:ok, acc} ->
       with {:ok, updated} <- child |> IssueRecord.changeset(%{status_id: status.id}) |> Repo.update(),
            updated = Repo.preload(updated, @issue_preloads),
@@ -1779,14 +1642,52 @@ defmodule SymphonyElixir.LocalTracker.Context do
     end
   end
 
-  # Post-commit side-effects for a (possibly grouped) move. Mirrors the broadcast +
-  # push behavior of `tap_issue_event/3`; the activity-event rows are already
-  # persisted inside `persist_group_move/5`.
-  defp emit_move_events([{%IssueRecord{} = lead, event_type, metadata} | member_events]) do
-    Broadcaster.issue_changed(event_type, lead)
-    maybe_push_on_issue_event(event_type, lead, metadata)
+  @doc false
+  @spec cascade_drag_subtask?(IssueRecord.t(), WorkflowStatus.t(), [String.t()]) :: boolean()
+  def cascade_drag_subtask?(%IssueRecord{} = child, %WorkflowStatus{} = target_status, wait_states)
+      when is_list(wait_states) do
+    case child_status_for_cascade(child) do
+      %WorkflowStatus{} = child_status ->
+        cond do
+          child.status_id == target_status.id -> false
+          child_status.is_terminal -> false
+          child_status.name in wait_states -> false
+          child_status.position > target_status.position -> false
+          true -> true
+        end
 
-    Enum.each(member_events, fn {%IssueRecord{} = issue, event_type, _metadata} ->
+      _ ->
+        false
+    end
+  end
+
+  defp child_status_for_cascade(%IssueRecord{status: %WorkflowStatus{} = status}), do: status
+
+  defp child_status_for_cascade(%IssueRecord{} = child) do
+    case Repo.preload(child, :status).status do
+      %WorkflowStatus{} = status -> status
+      _ -> nil
+    end
+  end
+
+  defp wait_states_for_project(project_id) do
+    case Repo.get(Project, project_id) |> Repo.preload(:setup) do
+      %Project{} = project ->
+        project |> ProjectConfig.resolve() |> Map.get(:wait_states, [])
+
+      _ ->
+        Config.wait_states()
+    end
+  end
+
+  # Post-commit side-effects for an issue move and the sub-issues it dragged.
+  # Mirrors the broadcast + push behavior of `tap_issue_event/3`; the
+  # activity-event rows are already persisted inside `persist_move/5`.
+  defp emit_move_events([{%IssueRecord{} = moved, event_type, metadata} | follower_events]) do
+    Broadcaster.issue_changed(event_type, moved)
+    maybe_push_on_issue_event(event_type, moved, metadata)
+
+    Enum.each(follower_events, fn {%IssueRecord{} = issue, event_type, _metadata} ->
       Broadcaster.issue_changed(event_type, issue)
     end)
   end

@@ -18,10 +18,9 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.Classifier do
   @type rule ::
           :different_repo
           | :independent_deliverable
-          | :same_repo_subagent
           | :shared_contract
           | :same_repo_inline
-  @type result :: {:ok, :workpad_task | :child_run | :subagent_unit, rule()} | {:ambiguous, atom()}
+  @type result :: {:ok, :workpad_task | :child_run, rule()} | {:ambiguous, atom()}
 
   @spec classify(unit(), keyword()) :: result()
   def classify(unit, opts) when is_map(unit) do
@@ -32,7 +31,6 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.Classifier do
       is_nil(repo) -> {:ambiguous, :unknown_repo}
       not is_nil(parent_repo) and repo != parent_repo -> {:ok, :child_run, :different_repo}
       independent?(unit) -> {:ok, :child_run, :independent_deliverable}
-      contract_coupled?(unit) and not is_nil(parent_repo) -> {:ok, :subagent_unit, :same_repo_subagent}
       contract_coupled?(unit) -> {:ok, :child_run, :shared_contract}
       true -> {:ok, :workpad_task, :same_repo_inline}
     end

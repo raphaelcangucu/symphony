@@ -14,7 +14,7 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { issueDragId } from "./board-utils";
-import { GroupDropOverlay, ReorderDropLine } from "./GroupDropOverlay";
+import { MergeDropOverlay, ReorderDropLine } from "./MergeDropOverlay";
 import { labelDotClass } from "./label-colors";
 
 interface IssueCardProps {
@@ -77,7 +77,7 @@ export function IssueCard({
       {...(interactive ? listeners : {})}
       onClick={() => onSelect(issue)}
     >
-      {mergeActive ? <GroupDropOverlay /> : null}
+      {mergeActive ? <MergeDropOverlay /> : null}
       {dropEdge && !mergeActive ? <ReorderDropLine edge={dropEdge} /> : null}
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

@@ -28,7 +28,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
   alias SymphonyElixir.Tracker.Identity
-  alias SymphonyElixir.Tracker.Sync.{GroupStatus, LocalStore, Outbox, SubtaskRollup}
+  alias SymphonyElixir.Tracker.Sync.{LocalStore, Outbox, SubtaskRollup}
 
   @impl true
   def project_identity, do: remote_adapter().project_identity()
@@ -164,9 +164,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
          {:ok, identifier} <- resolve_identifier(project, issue_id),
          parent_before = SubtaskRollup.parent_snapshot(project, identifier),
          {:ok, issue} <- Context.update_issue_state(project.slug, identifier, state_name) do
-      issue
-      |> GroupStatus.push_identifiers()
-      |> Enum.each(fn id -> enqueue_state_move(project, id, state_name) end)
+      enqueue_state_move(project, issue.identifier, state_name)
 
       maybe_enqueue_parent_rollup(project, identifier, parent_before)
 
@@ -254,8 +252,6 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     [
       :project,
       :status,
-      :group_lead,
-      :group_members,
       :labels,
       comments: from(comment in Comment, order_by: [desc: comment.inserted_at, desc: comment.id]),
       source_relations:

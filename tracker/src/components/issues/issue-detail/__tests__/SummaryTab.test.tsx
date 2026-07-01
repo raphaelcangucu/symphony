@@ -60,18 +60,42 @@ describe("SummaryTab", () => {
     expect(screen.queryByRole("link", { name: /^preview$/i })).not.toBeInTheDocument();
   });
 
-  it("renders consolidated sub-issue pull request chips", () => {
-    renderSummary(response([]), {}, [
-      {
-        identifier: "front#549",
-        title: "Child task",
-        pullRequests: [
-          normalizePullRequest({ number: 549, repo: "owner/front", url: "https://x/549" } as never),
-        ],
-      },
-    ]);
+  it("renders consolidated sub-issue pull request chips when lab bundle orchestration is on", () => {
+    renderSummary(
+      response([]),
+      {},
+      [
+        {
+          identifier: "front#549",
+          title: "Child task",
+          pullRequests: [
+            normalizePullRequest({ number: 549, repo: "owner/front", url: "https://x/549" } as never),
+          ],
+        },
+      ],
+      true,
+    );
 
     expect(screen.getByText("#549")).toBeInTheDocument();
+  });
+
+  it("hides sub-issue pull request chips when lab bundle orchestration is off", () => {
+    renderSummary(
+      response([]),
+      {},
+      [
+        {
+          identifier: "front#549",
+          title: "Child task",
+          pullRequests: [
+            normalizePullRequest({ number: 549, repo: "owner/front", url: "https://x/549" } as never),
+          ],
+        },
+      ],
+      false,
+    );
+
+    expect(screen.queryByText("#549")).not.toBeInTheDocument();
   });
 
   it("deduplicates child PRs already linked to the parent", () => {
@@ -89,6 +113,7 @@ describe("SummaryTab", () => {
         projectSlug="macro-markets"
         pullRequests={[shared]}
         pullRequestChildren={[{ identifier: "front#549", title: null, pullRequests: [shared] }]}
+        labBundleChildOrchestration
       />,
     );
 
@@ -100,6 +125,7 @@ function renderSummary(
   data: IssueDevServersResponse,
   overrides: Partial<UseIssueDevServersResult> = {},
   pullRequestChildren: PullRequestGroup[] = [],
+  labBundleChildOrchestration = false,
 ) {
   vi.mocked(useIssueDevServers).mockReturnValue({
     data,
@@ -110,7 +136,12 @@ function renderSummary(
   });
 
   render(
-    <SummaryTab issue={issue()} projectSlug="macro-markets" pullRequestChildren={pullRequestChildren} />,
+    <SummaryTab
+      issue={issue()}
+      projectSlug="macro-markets"
+      pullRequestChildren={pullRequestChildren}
+      labBundleChildOrchestration={labBundleChildOrchestration}
+    />,
   );
 }
 
@@ -133,8 +164,6 @@ function issue(): Issue {
     updatedAt: "2026-05-30T13:00:00Z",
     url: "https://linear.app/acme/issue/MAC-1/add-preview-chip",
     attachments: [],
-    groupLeadIdentifier: null,
-    groupMemberIdentifiers: [],
   };
 }
 

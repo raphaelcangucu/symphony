@@ -61,25 +61,25 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinatorTest do
     assert BundleCoordinator.children_all_done?(workpad_only, MapSet.new())
   end
 
-  defp subagent_bundle do
+  defp same_repo_child_bundle do
     %ExecutionBundle{
       mode: "bundle",
       parent: "macro/app#1",
       units: [
-        %{id: "be", type: :subagent_unit, issue: "macro/app#2", repo: "macro/app", produces: ["api"], consumes: [], depends_on: [], deliverable: nil},
-        %{id: "fe", type: :subagent_unit, issue: "macro/app#3", repo: "macro/app", produces: [], consumes: ["api"], depends_on: ["be"], deliverable: nil}
+        %{id: "be", type: :child_run, issue: "macro/app#2", repo: "macro/app", produces: ["api"], consumes: [], depends_on: [], deliverable: "pr"},
+        %{id: "fe", type: :child_run, issue: "macro/app#3", repo: "macro/app", produces: [], consumes: ["api"], depends_on: ["be"], deliverable: "pr"}
       ],
       shared_contracts: [%{id: "api", owner_unit: "be", consumers: ["fe"], kind: "graphql", artifact: nil, status: :draft}]
     }
   end
 
-  test "subagent_unit bundles are coordinators and dispatch as children (Phase 1 bridge)" do
-    assert BundleCoordinator.coordinator?(subagent_bundle())
+  test "same-repo child_run bundles are coordinators and dispatch as children" do
+    assert BundleCoordinator.coordinator?(same_repo_child_bundle())
 
-    specs = BundleCoordinator.child_dispatch_specs(subagent_bundle(), %{}, parent_identifier: "MAC-1")
+    specs = BundleCoordinator.child_dispatch_specs(same_repo_child_bundle(), %{}, parent_identifier: "MAC-1")
     assert Enum.map(specs, & &1.unit_id) == ["be"]
 
-    refute BundleCoordinator.children_all_done?(subagent_bundle(), MapSet.new(["be"]))
-    assert BundleCoordinator.children_all_done?(subagent_bundle(), MapSet.new(["be", "fe"]))
+    refute BundleCoordinator.children_all_done?(same_repo_child_bundle(), MapSet.new(["be"]))
+    assert BundleCoordinator.children_all_done?(same_repo_child_bundle(), MapSet.new(["be", "fe"]))
   end
 end

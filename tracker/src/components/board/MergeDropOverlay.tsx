@@ -1,16 +1,16 @@
-import { Layers } from "lucide-react";
+import { GitFork } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
-/** Shown over a card while dragging when releasing now would group onto it. */
-export function GroupDropOverlay() {
+/** Shown over a card while dragging when releasing now would make it a sub-issue. */
+export function MergeDropOverlay() {
   const { t } = useTranslation();
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-primary/15 backdrop-blur-[1px]">
       <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-lg ring-2 ring-background">
-        <Layers className="h-3.5 w-3.5" />
-        {t("board.group.dropToGroup")}
+        <GitFork className="h-3.5 w-3.5" />
+        {t("board.parent.makeSubIssue")}
       </span>
     </div>
   );

@@ -78,49 +78,52 @@ export function PullRequestPanel({
   const conflictMeta = mergeConflictMeta(t);
   const ConflictIcon = conflictMeta.Icon;
 
+  const showActions = canMerge || canUpdate || Boolean(pr.url) || Boolean(onRemove);
+
   return (
     <article className="rounded-xl border bg-card">
-      <header className="flex items-start justify-between gap-3 border-b p-4">
-        <div className="min-w-0 space-y-2">
-          <div className="flex items-center gap-2">
+      <header className="space-y-3 border-b p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border border-border/60 px-2 py-0.5 text-xs font-semibold",
+              state.className,
+            )}
+          >
+            <StateIcon className="h-3.5 w-3.5" />
+            {state.label}
+          </span>
+          <span className="font-mono text-xs text-muted-foreground">#{pr.number}</span>
+          {pr.repo ? (
+            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              {pr.repo}
+            </span>
+          ) : null}
+          {pr.origin === "manual" ? (
+            <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {t("issue.pullRequest.panel.originLinked")}
+            </span>
+          ) : null}
+          {pr.origin === "auto" ? (
+            <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {t("issue.pullRequest.panel.originAgent")}
+            </span>
+          ) : null}
+          {conflicting ? (
             <span
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border border-border/60 px-2 py-0.5 text-xs font-semibold",
-                state.className,
+                "inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold",
+                conflictMeta.className,
               )}
+              title={t("issue.pullRequest.panel.conflictTitle")}
             >
-              <StateIcon className="h-3.5 w-3.5" />
-              {state.label}
+              <ConflictIcon className="h-3 w-3 shrink-0" />
+              {conflictMeta.label}
             </span>
-            <span className="font-mono text-xs text-muted-foreground">#{pr.number}</span>
-            {pr.repo ? (
-              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                {pr.repo}
-              </span>
-            ) : null}
-            {pr.origin === "manual" ? (
-              <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {t("issue.pullRequest.panel.originLinked")}
-              </span>
-            ) : null}
-            {pr.origin === "auto" ? (
-              <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {t("issue.pullRequest.panel.originAgent")}
-              </span>
-            ) : null}
-            {conflicting ? (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold",
-                  conflictMeta.className,
-                )}
-                title={t("issue.pullRequest.panel.conflictTitle")}
-              >
-                <ConflictIcon className="h-3 w-3" />
-                {conflictMeta.label}
-              </span>
-            ) : null}
-          </div>
+          ) : null}
+        </div>
+
+        <div className="min-w-0 space-y-2">
           <h3 className="text-sm font-semibold leading-snug">
             {pr.title ?? t("issue.pullRequest.panel.titleFallback", { number: pr.number })}
           </h3>
@@ -132,12 +135,12 @@ export function PullRequestPanel({
               </span>
             ) : null}
             {pr.headRef ? (
-              <span className="inline-flex items-center gap-1 font-mono">
-                <GitBranch className="h-3 w-3" />
+              <span className="inline-flex max-w-full items-center gap-1 break-all font-mono">
+                <GitBranch className="h-3 w-3 shrink-0" />
                 {pr.baseRef ? (
                   <>
                     {pr.baseRef}
-                    <ArrowRight className="h-3 w-3" />
+                    <ArrowRight className="h-3 w-3 shrink-0" />
                   </>
                 ) : null}
                 {pr.headRef}
@@ -148,87 +151,102 @@ export function PullRequestPanel({
             ) : null}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {canMerge ? (
-            <>
-              <label className="sr-only" htmlFor={`merge-method-${pr.number}`}>
-                {t("issue.pullRequest.panel.mergeMethodLabel")}
-              </label>
-              <select
-                id={`merge-method-${pr.number}`}
-                value={mergeMethod}
-                onChange={(event) => setMergeMethod(event.target.value as PullRequestMergeMethod)}
-                disabled={merging !== null}
-                className="h-8 rounded-md border border-input bg-background px-3 text-xs font-medium disabled:opacity-50"
-              >
-                <option value="merge">{t("issue.pullRequest.panel.mergeMethodMerge")}</option>
-                <option value="squash">{t("issue.pullRequest.panel.mergeMethodSquash")}</option>
-                <option value="rebase">{t("issue.pullRequest.panel.mergeMethodRebase")}</option>
-              </select>
+
+        {conflicting ? (
+          <div
+            className="flex items-start gap-2 rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-800 dark:text-rose-200"
+            role="status"
+          >
+            <ConflictIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{t("issue.pullRequest.panel.conflictTitle")}</span>
+          </div>
+        ) : null}
+
+        {showActions ? (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/50 pt-3">
+            {canMerge ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="sr-only" htmlFor={`merge-method-${pr.number}`}>
+                  {t("issue.pullRequest.panel.mergeMethodLabel")}
+                </label>
+                <select
+                  id={`merge-method-${pr.number}`}
+                  value={mergeMethod}
+                  onChange={(event) => setMergeMethod(event.target.value as PullRequestMergeMethod)}
+                  disabled={merging !== null}
+                  className="h-8 max-w-full rounded-md border border-input bg-background px-3 text-xs font-medium disabled:opacity-50"
+                >
+                  <option value="merge">{t("issue.pullRequest.panel.mergeMethodMerge")}</option>
+                  <option value="squash">{t("issue.pullRequest.panel.mergeMethodSquash")}</option>
+                  <option value="rebase">{t("issue.pullRequest.panel.mergeMethodRebase")}</option>
+                </select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleMerge(false)}
+                  disabled={merging !== null}
+                  className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300"
+                >
+                  <GitMerge className={cn("h-4 w-4", merging === "normal" && "animate-pulse")} />
+                  {merging === "normal" ? t("issue.pullRequest.panel.merging") : t("issue.pullRequest.panel.merge")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleMerge(true)}
+                  disabled={merging !== null}
+                  className="border-red-500/40 bg-red-500/10 text-red-700 hover:bg-red-500/20 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
+                  title={t("issue.pullRequest.panel.forceMergeTitle")}
+                >
+                  <ShieldCheck className={cn("h-4 w-4", merging === "force" && "animate-pulse")} />
+                  {merging === "force"
+                    ? t("issue.pullRequest.panel.forceMerging")
+                    : t("issue.pullRequest.panel.forceMerge")}
+                </Button>
+              </div>
+            ) : null}
+            {canUpdate ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => void handleMerge(false)}
-                disabled={merging !== null}
-                className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300"
+                onClick={() => void handleUpdateBranch()}
+                disabled={updating}
+                className="max-w-full border-blue-500/40 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-300"
               >
-                <GitMerge className={cn("h-4 w-4", merging === "normal" && "animate-pulse")} />
-                {merging === "normal" ? t("issue.pullRequest.panel.merging") : t("issue.pullRequest.panel.merge")}
+                <ArrowDownToLine className={cn("h-4 w-4 shrink-0", updating && "animate-pulse")} />
+                <span className="truncate">
+                  {updating
+                    ? t("issue.pullRequest.panel.updating")
+                    : t("issue.pullRequest.panel.updateBranch", { count: behind })}
+                </span>
               </Button>
+            ) : null}
+            {pr.url ? (
+              <Button asChild variant="outline" size="sm">
+                <a href={pr.url} target="_blank" rel="noreferrer noopener">
+                  <ExternalLink className="h-4 w-4" />
+                  {t("issue.pullRequest.panel.open")}
+                </a>
+              </Button>
+            ) : null}
+            {onRemove ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => void handleMerge(true)}
-                disabled={merging !== null}
-                className="border-red-500/40 bg-red-500/10 text-red-700 hover:bg-red-500/20 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
-                title={t("issue.pullRequest.panel.forceMergeTitle")}
+                onClick={onRemove}
+                title={t("issue.pullRequest.panel.unlinkTitle")}
+                aria-label={t("issue.pullRequest.panel.unlinkAria")}
+                className="w-8 shrink-0 px-0 text-muted-foreground"
               >
-                <ShieldCheck className={cn("h-4 w-4", merging === "force" && "animate-pulse")} />
-                {merging === "force"
-                  ? t("issue.pullRequest.panel.forceMerging")
-                  : t("issue.pullRequest.panel.forceMerge")}
+                <X className="h-4 w-4" />
               </Button>
-            </>
-          ) : null}
-          {canUpdate ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleUpdateBranch()}
-              disabled={updating}
-              className="border-blue-500/40 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-300"
-            >
-              <ArrowDownToLine className={cn("h-4 w-4", updating && "animate-pulse")} />
-              {updating
-                ? t("issue.pullRequest.panel.updating")
-                : t("issue.pullRequest.panel.updateBranch", { count: behind })}
-            </Button>
-          ) : null}
-          {pr.url ? (
-            <Button asChild variant="outline" size="sm">
-              <a href={pr.url} target="_blank" rel="noreferrer noopener">
-                <ExternalLink className="h-4 w-4" />
-                {t("issue.pullRequest.panel.open")}
-              </a>
-            </Button>
-          ) : null}
-          {onRemove ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onRemove}
-              title={t("issue.pullRequest.panel.unlinkTitle")}
-              aria-label={t("issue.pullRequest.panel.unlinkAria")}
-              className="w-8 px-0 text-muted-foreground"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       <div className="space-y-4 p-4">

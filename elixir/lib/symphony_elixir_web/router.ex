@@ -176,8 +176,6 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :index)
     post("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :create)
     delete("/projects/:project_slug/issues/:identifier/blockers/:blocker_identifier", BlockerController, :delete)
-    post("/projects/:project_slug/issues/:identifier/group", GroupController, :create)
-    delete("/projects/:project_slug/issues/:identifier/group", GroupController, :delete)
     post("/projects/:project_slug/issues/:identifier/subtasks", IssueController, :create_subtask)
     post("/projects/:project_slug/issues/:identifier/parent", IssueController, :set_parent)
     delete("/projects/:project_slug/issues/:identifier/parent", IssueController, :clear_parent)

@@ -36,13 +36,11 @@ defmodule SymphonyElixir.RunContract.FinalizerTest do
     assert body =~ "Symphony-Issue: GAM-9"
   end
 
-  test "pull_request_body includes a marker for the lead and each member" do
-    issue = %Issue{identifier: "MAC-1", title: "Lead", description: nil, group_member_identifiers: ["MAC-2", "MAC-3"]}
+  test "pull_request_body includes a marker for the issue" do
+    issue = %Issue{identifier: "MAC-1", title: "Solo", description: nil}
     body = Finalizer.pull_request_body(issue)
 
     assert body =~ "Symphony-Issue: MAC-1"
-    assert body =~ "Symphony-Issue: MAC-2"
-    assert body =~ "Symphony-Issue: MAC-3"
   end
 
   test "pushes unpublished branch and creates PR (GAM-3 case)", %{tmp_dir: tmp_dir} do
@@ -61,6 +59,29 @@ defmodule SymphonyElixir.RunContract.FinalizerTest do
     # Branch is now published
     [state] = RunContract.repo_states(ws)
     assert state.upstream?
+  end
+
+  test "child PR targets the parent integration branch and publishes it to origin", %{tmp_dir: tmp_dir} do
+    ws = Path.join(tmp_dir, "MAC-12")
+    File.mkdir_p!(ws)
+    repo = make_repo!(tmp_dir, ws, "back")
+    base = "symphony/510/clouapp-back"
+
+    # The worktree provisioner creates the parent integration branch locally; the
+    # finalizer must publish it and open the child PR against it (not `main`).
+    sh!(repo, "git branch #{base}")
+    sh!(repo, "git checkout -b feat/MAC-12 && echo x > f.md && git add -A && git commit -m work")
+
+    assert {:ok, [pr]} =
+             Finalizer.finalize(ws, issue(), runner: gh_stub_runner(self(), "https://github.com/o/b/pull/12"), pr_base: base)
+
+    assert pr.repo == "back"
+    assert_received {:gh, ["pr", "create" | create_args]}
+    assert "--base" in create_args
+    assert base in create_args
+    refute "main" in create_args
+
+    assert sh!(repo, "git ls-remote --heads origin #{base}") =~ base
   end
 
   test "commits dirty tree before pushing", %{tmp_dir: tmp_dir} do

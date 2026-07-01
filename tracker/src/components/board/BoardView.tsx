@@ -24,7 +24,6 @@ import {
   parseDragIssueId,
   resolveBoardMove,
   workflowStatusNames,
-  GROUP_DRAG_PREFIX,
   ISSUE_DRAG_PREFIX,
   PARENT_DRAG_PREFIX,
   type BoardState,
@@ -68,8 +67,7 @@ interface BoardViewProps {
   agentExecutions?: ReadonlyMap<string, AgentExecution>;
   columnLimits?: Readonly<Record<string, number>>;
   onChangeLimit?: (status: WorkflowStatusName, limit: number | null) => void;
-  onGroupIssue: (memberIdentifier: string, leadIdentifier: string) => Promise<void> | void;
-  onUngroupIssue: (identifier: string) => Promise<void> | void;
+  onSetParent: (childIdentifier: string, parentIdentifier: string) => Promise<void> | void;
 }
 
 export function BoardView({
@@ -85,8 +83,7 @@ export function BoardView({
   agentExecutions,
   columnLimits,
   onChangeLimit,
-  onGroupIssue,
-  onUngroupIssue,
+  onSetParent,
 }: BoardViewProps) {
   const [activeIdentifier, setActiveIdentifier] = useState<string | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string | null>(null);
@@ -168,9 +165,7 @@ export function BoardView({
 
     const overId = String(event.over.id);
     const overIsUnit =
-      overId.startsWith(ISSUE_DRAG_PREFIX) ||
-      overId.startsWith(GROUP_DRAG_PREFIX) ||
-      overId.startsWith(PARENT_DRAG_PREFIX);
+      overId.startsWith(ISSUE_DRAG_PREFIX) || overId.startsWith(PARENT_DRAG_PREFIX);
     const overIsOtherUnit = overIsUnit && overId !== String(event.active.id);
     const pointerY = dragPointerY(event);
 
@@ -203,11 +198,12 @@ export function BoardView({
     if (!identifier || !event.over) return;
 
     if (wasMergeTarget) {
-      const leadIdentifier = wasMergeTarget.startsWith(GROUP_DRAG_PREFIX)
-        ? wasMergeTarget.slice(GROUP_DRAG_PREFIX.length)
-        : parseDragIssueId(wasMergeTarget);
-      if (leadIdentifier && leadIdentifier !== identifier) {
-        void onGroupIssue(identifier, leadIdentifier);
+      // Merging a card onto another makes the dragged issue a sub-issue of the
+      // target. The merge target id starts with PARENT_ or ISSUE_; resolve it to
+      // the target issue identifier (the new parent).
+      const parentIdentifier = parseDragIssueId(wasMergeTarget);
+      if (parentIdentifier && parentIdentifier !== identifier) {
+        void onSetParent(identifier, parentIdentifier);
         return;
       }
     }
@@ -221,13 +217,6 @@ export function BoardView({
 
   function handleDragCancel(_event: DragCancelEvent) {
     resetDragState();
-  }
-
-  function handleDisband(leadIdentifier: string) {
-    const lead = statusNames
-      .flatMap((status) => board[status] ?? [])
-      .find((issue) => issue.identifier === leadIdentifier);
-    for (const memberIdentifier of lead?.groupMemberIdentifiers ?? []) void onUngroupIssue(memberIdentifier);
   }
 
   useEffect(() => {
@@ -285,8 +274,6 @@ export function BoardView({
             limit={columnLimits?.[status]}
             onChangeLimit={onChangeLimit}
             dragActive={activeIdentifier !== null}
-            onRemoveMember={onUngroupIssue}
-            onDisband={handleDisband}
             mergeTargetId={mergeTargetId}
             dropIndicator={dropIndicator}
             allIssues={allIssues}
@@ -296,8 +283,8 @@ export function BoardView({
       </div>
       <DragOverlay>
         {activeIssue ? (
-          // Dim the floating card while it is over a group target so the
-          // target's "drop to group" affordance underneath stays readable.
+          // Dim the floating card while it is over a sub-issue target so the
+          // target's "make sub-issue" affordance underneath stays readable.
           <div className={mergeTargetId ? "opacity-50 transition-opacity" : "transition-opacity"}>
             <IssueCard
               issue={activeIssue}

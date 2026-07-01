@@ -21,10 +21,9 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflow-status";
 
-import { GroupCard } from "./GroupCard";
 import { IssueCard } from "./IssueCard";
 import { SubtaskParentCard } from "./SubtaskParentCard";
-import { groupIssuesIntoUnits, type DropIndicator } from "./board-utils";
+import { buildBoardUnits, type DropIndicator } from "./board-utils";
 import { getStatusMeta } from "./status-meta";
 
 /**
@@ -50,8 +49,6 @@ interface BoardColumnProps {
   onChangeLimit?: (status: WorkflowStatusName, limit: number | null) => void;
   /** True while a card is being dragged anywhere on the board. */
   dragActive?: boolean;
-  onRemoveMember: (identifier: string) => void;
-  onDisband: (leadIdentifier: string) => void;
   mergeTargetId?: string | null;
   dropIndicator?: DropIndicator | null;
   allIssues?: readonly Issue[];
@@ -72,8 +69,6 @@ export function BoardColumn({
   limit,
   onChangeLimit,
   dragActive = false,
-  onRemoveMember,
-  onDisband,
   mergeTargetId = null,
   dropIndicator = null,
   allIssues,
@@ -83,7 +78,7 @@ export function BoardColumn({
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const meta = getStatusMeta(status, category);
   const Icon = meta.Icon;
-  const units = groupIssuesIntoUnits(issues, allIssues);
+  const units = buildBoardUnits(issues, allIssues);
 
   const [limitOpen, setLimitOpen] = useState(false);
   const [limitDraft, setLimitDraft] = useState("");
@@ -219,20 +214,7 @@ export function BoardColumn({
         <SortableContext items={units.map((unit) => unit.id)} strategy={noShiftStrategy}>
           <div className="space-y-2.5 pt-1">
             {units.map((unit) =>
-              unit.kind === "group" ? (
-                <GroupCard
-                  key={unit.id}
-                  id={unit.id}
-                  lead={unit.lead}
-                  members={unit.members}
-                  onSelectIssue={onSelectIssue}
-                  onRemoveMember={onRemoveMember}
-                  onDisband={onDisband}
-                  agentExecutions={agentExecutions}
-                  mergeActive={mergeTargetId === unit.id}
-                  dropEdge={dropIndicator?.unitId === unit.id ? dropIndicator.edge : null}
-                />
-              ) : unit.kind === "parent" ? (
+              unit.kind === "parent" ? (
                 <SubtaskParentCard
                   key={unit.id}
                   id={unit.id}

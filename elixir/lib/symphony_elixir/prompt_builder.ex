@@ -6,6 +6,7 @@ defmodule SymphonyElixir.PromptBuilder do
   alias SymphonyElixir.{ProjectConfig, Repo, Skills}
   alias SymphonyElixir.DevServer
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Workpad.UnifiedUnitPlan
 
   @render_opts [strict_filters: true]
   @artifact_max_bytes 512_000
@@ -36,13 +37,13 @@ defmodule SymphonyElixir.PromptBuilder do
       execution_methodology_section() <>
       workpad_bootstrap_section() <>
       workflow_guidance_section(issue, Keyword.get(opts, :agent_kind)) <>
-      group_members_section(Keyword.get(opts, :members, [])) <>
-      bundle_coordinator_section(Keyword.get(opts, :bundle)) <>
+      bundle_section(opts) <>
       child_unit_section(
         Keyword.get(opts, :bundle_unit),
         Keyword.get(opts, :parent_identifier),
         Keyword.get(opts, :shared_contracts, [])
       ) <>
+      child_constraints_section(Keyword.get(opts, :parent_identifier)) <>
       validate_section(config) <>
       preview_context_section(issue) <>
       discussion_section(issue) <>
@@ -91,14 +92,109 @@ defmodule SymphonyElixir.PromptBuilder do
     #{unit_lines}#{contract_lines}
 
     Rules:
-    - Execute every `workpad_task` unit yourself, inline, in this workspace.
-    - **Do not implement `child_run` units yourself.** Each `child_run` is dispatched as its own run in an isolated worktree, branch, and PR.
-    - A unit that `consumes` a shared contract must wait until that contract is `ready`. Produce the contract (as its owner) before consumers start.
-    - The parent only completes once every `workpad_task` is done AND every `child_run` has reached a terminal state (PR opened or closed).
+    - Execute every `workpad_task` unit yourself, inline, in this workspace. You MAY spawn native subagents for independent slices of a `workpad_task`.
+    - **Do not implement `child_run` units yourself.** Each `child_run` is dispatched as its own run in an isolated worktree + branch and opens a PR **against the per-repo parent integration branch** `symphony/<this-parent>/<repo>`.
+    - A unit that `consumes` a shared contract must wait until that contract is `ready`. As the owner, produce the contract first and call `update_shared_contract` to mark it `ready` so consumers unblock.
+    - **Dependency cadence**: a `child_run` releases only once the units it `depends_on` reach human review (their PR is open). When a dependent starts, its worktree is branched off its **predecessor's branch** (a same-repo dependency), so the predecessor's work is already present as its starting reference — the dependent still opens its own PR into `symphony/<this-parent>/<repo>`.
+    - Coordinate cadence with `query_bundle_status` (see which units are live/waiting/done and what blocks each). Children report progress to your workpad via `report_unit_status` — read it instead of polling them.
+    - **Integration is yours**: once a `child_run`'s PR is green, merge it into `symphony/<this-parent>/<repo>`. When every unit for a repo is merged, open exactly **one** final PR per repo (`symphony/<this-parent>/<repo>` → that repo's default branch).
+    - The parent only completes once every `workpad_task` is done AND every `child_run` has been integrated (its PR merged into the integration branch, and the final per-repo PR opened).
     """
   end
 
   def bundle_coordinator_section(_bundle), do: ""
+
+  defp bundle_section(opts) do
+    case Keyword.get(opts, :unit_plan) do
+      %UnifiedUnitPlan{} = plan ->
+        unified_parent_section(Keyword.get(opts, :bundle), plan, opts)
+
+      _ ->
+        bundle_coordinator_section(Keyword.get(opts, :bundle))
+    end
+  end
+
+  @doc """
+  Unified parent section when `lab.bundle_child_orchestration` is off. The parent
+  runs one session and sequences native subagents per unit — no orchestrator child
+  dispatches, no integration branches, one PR per repo.
+  """
+  @spec unified_parent_section(
+          SymphonyElixir.Workpad.ExecutionBundle.t() | nil,
+          UnifiedUnitPlan.t(),
+          keyword()
+        ) :: String.t()
+  def unified_parent_section(%SymphonyElixir.Workpad.ExecutionBundle{units: units} = bundle, %UnifiedUnitPlan{} = plan, opts)
+      when is_list(units) and units != [] do
+    feature_branch = Keyword.get(opts, :feature_branch, "feat/<parent>")
+
+    unit_lines =
+      plan.units
+      |> Enum.map_join("\n", fn unit ->
+        flags =
+          [
+            if(unit.ad_hoc, do: "ad-hoc", else: nil),
+            unless(unit.eligible, do: "skipped: #{unit.skip_reason}", else: nil),
+            if(is_binary(unit.board_status), do: "board: #{unit.board_status}", else: nil)
+          ]
+          |> Enum.reject(&is_nil/1)
+          |> Enum.join(" · ")
+
+        deps = if unit.depends_on == [], do: "", else: " — depends on: #{Enum.join(unit.depends_on, ", ")}"
+        consumes = if unit.consumes == [], do: "", else: " — consumes: #{Enum.join(unit.consumes, ", ")}"
+        produces = if unit.produces == [], do: "", else: " — produces: #{Enum.join(unit.produces, ", ")}"
+        repo = if is_binary(unit.repo), do: " [#{unit.repo}]", else: ""
+        suffix = if flags == "", do: "", else: " (#{flags})"
+        "- **#{unit.issue}**#{repo}#{produces}#{consumes}#{deps}#{suffix}"
+      end)
+
+    contract_lines =
+      case bundle.shared_contracts do
+        [] ->
+          ""
+
+        contracts ->
+          lines =
+            Enum.map_join(contracts, "\n", fn contract ->
+              consumers = if contract.consumers == [], do: "", else: " → #{Enum.join(contract.consumers, ", ")}"
+              "- **#{contract.id}** (#{contract.kind || "contract"}, status: #{contract.status}) owned by #{contract.owner_unit}#{consumers}"
+            end)
+
+          "\n\nShared contracts:\n#{lines}"
+      end
+
+    warnings =
+      case plan.warnings do
+        [] -> ""
+        list -> "\n\nPlan warnings:\n" <> Enum.map_join(list, "\n", &("- #{&1}"))
+      end
+
+    """
+
+    ## Unified parent execution (default mode)
+
+    You are the **single parent implementer** for this task. Run **native subagents**
+    (`subagent-driven-development`) — one subagent per eligible unit below. The
+    orchestrator does **not** dispatch separate runs for `child_run` units.
+
+    Unit plan (board + bundle):
+    #{unit_lines}#{contract_lines}#{warnings}
+
+    Rules:
+    - Read `subtask-orchestration` for bundle/contract semantics; execution is in-session only.
+    - Sequence units by dependency order. Before starting unit B, confirm predecessors
+      reached **Human Review** or a terminal state via `query_bundle_status` and board status.
+    - Each subagent scope: **one sub-issue**, move **that** issue on the board (In Progress → Human Review),
+      run scoped tests, write evidence with `task_id` = sub-issue identifier, call `report_unit_status`.
+    - **Git:** one feature branch per repo: `#{feature_branch}`. All units commit to the same branch — no
+      `feat/MAC-*` child branches, **no** integration branch (`symphony/<parent>/<repo>`).
+    - **PRs:** when all units are done, open exactly **one PR per touched repo** (`#{feature_branch}` → default).
+    - Producers call `update_shared_contract` when validation passes.
+    - Parent dispatch must **not** drag Human Review / terminal children on the board.
+    """
+  end
+
+  def unified_parent_section(_bundle, _plan, _opts), do: ""
 
   @doc """
   Child-scoped section for a single `child_run` unit. Scopes the agent to its
@@ -116,6 +212,15 @@ defmodule SymphonyElixir.PromptBuilder do
       if is_binary(parent_identifier),
         do: "\n- Parent task: **#{parent_identifier}** (this run is one unit of its execution bundle).",
         else: ""
+
+    depends_line =
+      case unit[:depends_on] || [] do
+        [] ->
+          ""
+
+        deps ->
+          "\n- You **depend on**: #{Enum.join(deps, ", ")}. Your worktree is already **branched** off your predecessor's branch, so its committed work is your starting point — build on top of it, do NOT re-implement it. Your PR still targets the parent integration branch (never the predecessor branch)."
+      end
 
     relevant =
       Enum.filter(shared_contracts, fn contract ->
@@ -140,42 +245,42 @@ defmodule SymphonyElixir.PromptBuilder do
 
     ## Child run scope (unit `#{unit[:id]}`)
 
-    This run delivers a **single unit**#{repo} of a larger parent task. Stay within this unit's scope; open one focused PR for it.#{parent_line}#{produces}#{consumes}#{contract_block}
+    This run delivers a **single unit**#{repo} of a larger parent task. Stay strictly within this unit's scope and open exactly **one focused PR** for it, targeting the parent integration branch, then hand off.#{parent_line}#{depends_line}#{produces}#{consumes}#{contract_block}
+
+    - Call `report_unit_status` at each phase transition (started, contract_ready, pr_open, blocked, done) so the coordinator can sequence siblings without polling you.
+    - If you produce a shared contract, call `update_shared_contract` to mark it `ready` the moment its shape is stable.
+    - You MAY use native subagents for independent slices of this unit, but keep everything within this one worktree/branch/PR.
     """
   end
 
   def child_unit_section(_unit, _parent_identifier, _shared_contracts), do: ""
 
-  @doc false
-  @spec group_members_section([SymphonyElixir.Issue.t()]) :: String.t()
-  def group_members_section([]), do: ""
-
-  def group_members_section(members) when is_list(members) do
-    items =
-      Enum.map_join(members, "\n", fn %SymphonyElixir.Issue{} = member ->
-        goal =
-          if is_binary(member.agent_goal) and String.trim(member.agent_goal) != "",
-            do: " — goal: #{String.trim(member.agent_goal)}",
-            else: ""
-
-        desc =
-          if is_binary(member.description) and String.trim(member.description) != "",
-            do: " — #{String.trim(member.description)}",
-            else: ""
-
-        "- **#{member.identifier}: #{member.title}**#{desc}#{goal}"
-      end)
-
+  @doc """
+  Hard execution constraints for a `child_run` unit. The child opens exactly one
+  focused PR for its unit and then STOPS — it must never babysit CI (the
+  sleep/poll/rerun loop that ballooned cached input tokens). CI and integration
+  belong to the parent. Returns "" for non-child runs (no parent identifier).
+  """
+  @spec child_constraints_section(String.t() | nil) :: String.t()
+  def child_constraints_section(parent_identifier) when is_binary(parent_identifier) do
     """
 
-    ## Grouped tasks (Symphony)
+    ## Child unit execution constraints (Symphony)
 
-    This run covers a **group** of issues. Complete ALL of them in this single workspace and branch, then open ONE pull request. In the PR body include a `Symphony-Issue: <identifier>` marker line for the lead AND for every member task below.
+    This run is a **bundle child unit** of parent task **#{parent_identifier}**. Stay strictly inside your unit's scope and hand off cleanly:
 
-    Member tasks:
-    #{items}
+    - Implement only your unit (TDD), commit to your unit branch, and open exactly **one focused pull request** for it.
+    - **Your PR targets the parent integration branch** `symphony/#{parent_identifier}/<repo>` (Symphony sets the base automatically when it publishes; if you open the PR by hand, pass `--base symphony/#{parent_identifier}/<repo>`). Never target the repo's default branch — the parent owns the final per-repo PR.
+    - **Same-repo as the parent?** Reuse the parent's already-installed dependencies and preview — do **not** re-clone, re-install, or re-provision a preview. Still write and run this unit's own tests and capture its own evidence.
+    - Capture per-subtask **evidence** (tests + artifacts) for your unit before handing off, exactly as a standalone task would.
+    - Report progress with `report_unit_status` (phase + summary + blockers/contracts_ready/pr_url) so the coordinator can sequence siblings. Use `query_bundle_status` to see whether your dependencies are ready instead of polling.
+    - **After opening (or finding) your unit's PR, STOP.** Do **not** babysit CI: do **not** run `gh run rerun`, `gh run cancel`, or `gh pr`/`gh run` status-watch loops, and do **not** `sleep` or otherwise wait on checks, builds, or deploys.
+    - CI results and integration are the **parent task's** responsibility — the parent merges your PR into the integration branch and opens the final per-repo PR. End your turn once your PR is open and `report_unit_status` records the handoff.
+    - If your unit is blocked by a dependency or shared contract, record it via `report_unit_status` and end the turn — do not spin.
     """
   end
+
+  def child_constraints_section(_parent_identifier), do: ""
 
   # Codex receives the long-running objective as a native goal (set on the
   # thread by the orchestrator), so it is not duplicated here. Claude and Cursor

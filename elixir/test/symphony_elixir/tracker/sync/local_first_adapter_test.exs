@@ -196,20 +196,6 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapterTest do
     assert Outbox.pending_count(project.id) == 0
   end
 
-  test "move_issue enqueues remote status moves for every grouped issue", %{project: project} do
-    {:ok, lead} = Context.create_issue(project.slug, %{title: "Lead", status: "Todo"})
-    {:ok, member} = Context.create_issue(project.slug, %{title: "Member", status: "Todo"})
-    {:ok, _} = Context.set_issue_group(project.slug, member.identifier, lead.identifier)
-
-    assert {:ok, _dto} = LocalFirstAdapter.move_issue(project, lead.identifier, %{"status" => "Done"})
-
-    assert Outbox.pending_count(project.id) == 2
-    entries = Outbox.claim_pending(project.id, 10)
-    identifiers = entries |> Enum.map(& &1.payload["identifier"]) |> Enum.sort()
-    assert identifiers == Enum.sort([lead.identifier, member.identifier])
-    assert Enum.all?(entries, &(&1.payload["state"] == "Done"))
-  end
-
   test "move_issue enqueues remote status moves for a parent's sub-issues", %{project: project} do
     {:ok, parent} = Context.create_issue(project.slug, %{title: "Parent", status: "Todo"})
     {:ok, child} = Context.create_issue(project.slug, %{title: "Child", status: "Backlog"})

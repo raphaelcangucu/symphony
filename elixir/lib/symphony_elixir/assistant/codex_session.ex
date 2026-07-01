@@ -22,11 +22,6 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   @history_limit 20
 
-  # Brainstorm / spec / plan intent upgrades an authoring thread to complex so the
-  # next prompt dynamically loads the superpowers methodology skills. Matching is
-  # intentionally narrow (word-anchored) to avoid false positives like "respect".
-  @complex_mode_trigger_regex ~r/(\bbrainstorm)|(\bcomplex\b)|(\bspecs?\b)|(\bdesign\s+docs?\b)|(\bimplementation\s+plans?\b)|(\bplano\s+de\s+implementa)|(\bespecifica)/iu
-
   @type turn_result :: %{
           required(:assistant_message) => String.t(),
           required(:tool_calls) => [map()],
@@ -201,9 +196,6 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     # Reload so that agent_thread_ids written by a prior turn are visible even
     # when the caller holds a frozen struct from an earlier socket assign.
     thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
-    # Conversation can drive the authoring depth: a brainstorm/spec/plan request
-    # upgrades the thread to complex so this turn loads the methodology skills.
-    thread = maybe_upgrade_issue_mode(thread, message)
     agent_kind = resolve_thread_agent(thread, context)
 
     opts =
@@ -741,7 +733,6 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp build_issue_prompt(%{metadata: metadata, issue_identifier: identifier, project_slug: project_slug}, message, context, history) do
-    mode = Map.get(metadata || %{}, "mode", "triage")
     goal_mode = Map.get(metadata || %{}, "goal_mode", false) == true
     goal_objective = Map.get(metadata || %{}, "goal_objective")
     github_create = github_create_issue_guidance(project_slug)
@@ -788,64 +779,27 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     #{message}
     """
 
-    mode_section =
-      case mode do
-        "complex" ->
-          """
+    methodology_section = """
 
-          MODE: COMPLEX. Follow this vendored methodology exactly:
-          #{Skills.load(["brainstorming", "writing-plans"])}
+    Authoring methodology — choose depth from the conversation (no fixed mode):
+    #{Skills.load(["brainstorming", "writing-plans"])}
 
-          Design-first authoring is desired by default: write spec files to `docs/superpowers/specs/`
-          and plan files to `docs/superpowers/plans/` in this working tree, with section-by-section
-          approval in chat. Codex is a coding agent; when the user explicitly asks to skip spec/plan
-          work or authorizes implementation, acknowledge that direction and you may proceed directly to code.
-          When the user signals the task is ready, write a concise `docs/superpowers/handoff.md`
-          (key decisions + current state) and enrich the issue description (executive summary +
-          links to the spec/plan files) via update_issue — not before.
-          Do not call update_issue while still exploring or before spec/plan sections are agreed in chat.
-          """
+    Decide the authoring depth from what the user asks for:
+    - Quick brief or enriched description only: search the repositories in this working tree for relevant
+      context (README, code, conventions) and call update_issue for `#{identifier}` once the description is
+      stable and agreed in chat — not while still exploring or confirming hypotheses. Do not create spec/plan files.
+    - Brainstorming, design, or implementation planning: write spec files to `docs/superpowers/specs/` and plan
+      files to `docs/superpowers/plans/` in this working tree, with section-by-section approval in chat. Codex is
+      a coding agent; when the user explicitly asks to skip spec/plan work or authorizes implementation,
+      acknowledge that direction and you may proceed directly to code.
+    - When the task is ready for handoff: write a concise `docs/superpowers/handoff.md` (key decisions + current state)
+      and enrich the issue description (executive summary + links to spec/plan files) via update_issue — not before.
+    Do not call update_issue while still exploring or before spec/plan sections are agreed in chat (when doing design work).
+    State which depth you are taking and proceed.
+    """
 
-        "simple" ->
-          """
-
-          MODE: SIMPLE. Search the repositories in this working tree for relevant context (README, code,
-          conventions) and produce a fuller, formal issue description. Call update_issue for `#{identifier}`
-          only once the description is stable and agreed in chat — not while still exploring or confirming
-          hypotheses. Do not create spec/plan files.
-          """
-
-        _ ->
-          """
-
-          MODE: TRIAGE. Collect the title and a short description, then settle the authoring depth with the user in conversation (no UI toggle needed):
-          - SIMPLE for a polished brief / enriched issue description — no spec or plan files.
-          - COMPLEX when the user wants to brainstorm or design, or needs a spec and implementation plan.
-          If the user asks to brainstorm, or mentions a spec, plan, or design, treat the task as complex.
-          State which path you are taking and proceed.
-          """
-      end
-
-    String.trim(base <> mode_section <> goal_mode_section(goal_mode, identifier, goal_objective))
+    String.trim(base <> methodology_section <> goal_mode_section(goal_mode, identifier, goal_objective))
   end
-
-  defp maybe_upgrade_issue_mode(%{} = thread, message) when is_binary(message) do
-    if History.thread_mode(thread) != "complex" and complex_intent?(message) do
-      case History.set_mode(thread, "complex") do
-        {:ok, updated} -> updated
-        _ -> thread
-      end
-    else
-      thread
-    end
-  end
-
-  defp maybe_upgrade_issue_mode(thread, _message), do: thread
-
-  defp complex_intent?(message) when is_binary(message),
-    do: Regex.match?(@complex_mode_trigger_regex, message)
-
-  defp complex_intent?(_message), do: false
 
   defp goal_mode_section(false, _identifier, _objective), do: ""
 

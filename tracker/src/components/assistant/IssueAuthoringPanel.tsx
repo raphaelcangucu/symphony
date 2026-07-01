@@ -8,6 +8,7 @@ import {
   ProjectAssistantPanel,
   type DraftIssueCreated,
 } from "@/components/assistant/ProjectAssistantPanel";
+import { IssueEditorMenu } from "@/components/issues/IssueEditorMenu";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
@@ -102,13 +103,16 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
               {issueTitle ?? t("assistant.authoring.titleLoading")}
             </h1>
           </div>
-          <Link
-            to={issueDetailPath}
-            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            {t("assistant.authoring.openIssueDetails")}
-            <ArrowUpRight className="h-4 w-4" />
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <IssueEditorMenu projectSlug={projectSlug} identifier={normalizedIdentifier} />
+            <Link
+              to={issueDetailPath}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              {t("assistant.authoring.openIssueDetails")}
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </div>
     ) : null;

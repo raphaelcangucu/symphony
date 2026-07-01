@@ -47,8 +47,6 @@ function issue(overrides: Partial<Issue>): Issue {
     createdAt: "",
     updatedAt: "",
     attachments: [],
-    groupLeadIdentifier: null,
-    groupMemberIdentifiers: [],
     repositoryFullName: null,
     parentIdentifier: "ios#2",
     subIssueSummary: null,

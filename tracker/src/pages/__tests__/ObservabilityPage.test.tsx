@@ -303,6 +303,56 @@ describe("ObservabilityPage", () => {
     expect(screen.getByRole("link", { name: "601" })).toBeInTheDocument();
   });
 
+  it("nests waiting subagents under their coordinator with a waiting badge", async () => {
+    const parent = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "701",
+      sessionId: "p",
+      status: "live" as const,
+      bundleRole: "standalone" as const,
+    };
+    const liveChild = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "702",
+      sessionId: "c-live",
+      status: "live" as const,
+      bundleRole: "child" as const,
+      parentIdentifier: "701",
+      repo: "macro/be",
+    };
+    const waitingChild = {
+      ...macroRuntime.running[0],
+      issueIdentifier: "703",
+      sessionId: null,
+      status: "waiting" as const,
+      bundleRole: "subagent" as const,
+      parentIdentifier: "701",
+      repo: "macro/fe",
+      startedAt: null,
+      tokens: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    };
+    runtimes = [
+      { ...macroRuntime, counts: { running: 2, retrying: 0 }, running: [parent, liveChild, waitingChild] },
+    ];
+
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("link", { name: "701" })).toBeInTheDocument();
+    // The gated subagent is drillable (clickable) and badged as waiting.
+    expect(screen.getByRole("link", { name: "703" })).toBeInTheDocument();
+    expect(screen.getByText("Waiting")).toBeInTheDocument();
+
+    // Collapsing the parent hides both the live and waiting subagents.
+    await userEvent.click(screen.getByRole("button", { name: /child runs/i }));
+    expect(screen.queryByRole("link", { name: "703" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "702" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "701" })).toBeInTheDocument();
+  });
+
   it("shows the parent coordinator tokens with a consolidated total on hover", async () => {
     const parent = {
       ...macroRuntime.running[0],
