@@ -633,9 +633,7 @@ defmodule SymphonyElixir.Orchestrator do
           Enum.reduce(children, acc, fn child, inner ->
             cond do
               not lab_bundle_child_orchestration?(opts) and BundleCoordinator.coordinator?(bundle) ->
-                Logger.info(
-                  "Holding child dispatch (unified parent): #{issue_context(child)} parent=#{parent_identifier}"
-                )
+                Logger.info("Holding child dispatch (unified parent): #{issue_context(child)} parent=#{parent_identifier}")
 
                 MapSet.put(inner, child.id)
 
@@ -1005,9 +1003,7 @@ defmodule SymphonyElixir.Orchestrator do
       {:ok, pid} ->
         ref = Process.monitor(pid)
 
-        Logger.info(
-          "Dispatching issue to agent: #{issue_context(issue)} pid=#{inspect(pid)} attempt=#{inspect(attempt)} role=#{bundle_ctx.role}"
-        )
+        Logger.info("Dispatching issue to agent: #{issue_context(issue)} pid=#{inspect(pid)} attempt=#{inspect(attempt)} role=#{bundle_ctx.role}")
 
         if bundle_ctx.role == :child do
           Logger.info(
@@ -1950,7 +1946,7 @@ defmodule SymphonyElixir.Orchestrator do
       {:ok, _manifest} ->
         manifest_map =
           workspace
-          |> Evidence.Manifest.dir()
+          |> Evidence.Manifest.resolve_dir()
           |> Path.join("manifest.json")
           |> File.read!()
           |> Jason.decode!()

@@ -63,6 +63,18 @@ defmodule SymphonyElixir.WorkspaceSkillsTest do
     exclude = File.read!(Path.join(front, ".git/info/exclude"))
     assert exclude =~ "/.codex/"
     assert exclude =~ "/.claude/"
+    assert exclude =~ "/.symphony/evidence/"
+  end
+
+  test "excludes the generated evidence dir without excluding the repo's own .symphony", %{workspace: workspace} do
+    back = Path.join(workspace, "back")
+    File.mkdir_p!(Path.join(back, ".git/info"))
+
+    assert :ok = WorkspaceSkills.prepare(workspace)
+
+    exclude = File.read!(Path.join(back, ".git/info/exclude"))
+    assert exclude =~ "/.symphony/evidence/"
+    refute exclude =~ ~r{^/\.symphony/$}m
   end
 
   test "omits authoring-only superpowers skills from execution workspaces", %{workspace: workspace, skills_root: skills_root} do

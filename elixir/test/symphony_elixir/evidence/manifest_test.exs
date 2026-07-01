@@ -70,6 +70,32 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     assert {:error, :manifest_missing} = Manifest.read(ws)
   end
 
+  test "reads a manifest an agent wrote inside a repo subdir", %{tmp_dir: ws} do
+    repo = Path.join(ws, "back")
+    write_manifest!(repo, valid_manifest())
+    touch_artifacts!(repo)
+
+    assert {:ok, manifest} = Manifest.read(ws)
+    assert manifest.issue == "GAM-9"
+  end
+
+  test "resolve_dir prefers the workspace root over a repo subdir", %{tmp_dir: ws} do
+    write_manifest!(ws, valid_manifest())
+    write_manifest!(Path.join(ws, "back"), valid_manifest())
+
+    assert Manifest.resolve_dir(ws) == Path.join(ws, ".symphony/evidence")
+  end
+
+  test "resolve_dir falls back to the canonical dir when nothing exists", %{tmp_dir: ws} do
+    assert Manifest.resolve_dir(ws) == Path.join(ws, ".symphony/evidence")
+  end
+
+  test "resolve_dir ignores dot-directories like .worktrees", %{tmp_dir: ws} do
+    write_manifest!(Path.join(ws, ".worktrees/combined"), valid_manifest())
+
+    assert Manifest.resolve_dir(ws) == Path.join(ws, ".symphony/evidence")
+  end
+
   test "invalid json", %{tmp_dir: ws} do
     dir = Path.join(ws, ".symphony/evidence")
     File.mkdir_p!(dir)

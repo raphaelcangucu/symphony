@@ -118,10 +118,10 @@ defmodule SymphonyElixir.Evidence.Judge do
   defp normalize_reasons(reason) when is_binary(reason), do: [reason]
   defp normalize_reasons(_other), do: []
 
-  defp verdict_path(workspace), do: Path.join(Manifest.dir(workspace), @verdict_file)
+  defp verdict_path(workspace), do: Path.join(Manifest.resolve_dir(workspace), @verdict_file)
 
   defp manifest_hash(workspace) do
-    case File.read(Path.join(Manifest.dir(workspace), "manifest.json")) do
+    case File.read(Path.join(Manifest.resolve_dir(workspace), "manifest.json")) do
       {:ok, raw} -> :crypto.hash(:sha256, raw) |> Base.encode16(case: :lower)
       _ -> "no-manifest"
     end
@@ -145,7 +145,7 @@ defmodule SymphonyElixir.Evidence.Judge do
       end
 
     payload = %{"manifest_hash" => hash, "verdict" => v, "reasons" => reasons, "raw" => raw_text}
-    File.mkdir_p!(Manifest.dir(workspace))
+    File.mkdir_p!(Manifest.resolve_dir(workspace))
     File.write!(verdict_path(workspace), Jason.encode!(payload))
   end
 
