@@ -15,8 +15,11 @@ defmodule SymphonyElixir.Orchestrator do
     ProjectConfig,
     Repo,
     RunContract,
+    SessionEvents,
+    SessionLog,
     StatusDashboard,
     Tracker,
+    WorkerFailure,
     Workspace
   }
 
@@ -145,6 +148,14 @@ defmodule SymphonyElixir.Orchestrator do
 
             _ ->
               Logger.warning("Agent task exited for issue_id=#{issue_id} session_id=#{session_id} reason=#{inspect(reason)}; scheduling retry")
+
+              unless WorkerFailure.crash_exception?(reason) do
+                record_session_abort(
+                  running_entry,
+                  "worker_exit",
+                  WorkerFailure.format_exit_reason(reason)
+                )
+              end
 
               next_attempt = next_retry_attempt_from_running(running_entry)
 
@@ -475,6 +486,12 @@ defmodule SymphonyElixir.Orchestrator do
 
       Logger.warning("Issue stalled: issue_id=#{issue_id} issue_identifier=#{identifier} session_id=#{session_id} elapsed_ms=#{elapsed_ms}; restarting with backoff")
 
+      record_session_abort(
+        running_entry,
+        "stall_timeout",
+        "No agent activity for #{elapsed_ms}ms (limit #{timeout_ms}ms)"
+      )
+
       next_attempt = next_retry_attempt_from_running(running_entry)
 
       state
@@ -518,6 +535,37 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp terminate_task(_pid), do: :ok
+
+  defp record_session_abort(%{} = running_entry, reason, detail)
+       when is_binary(reason) and is_binary(detail) do
+    case running_entry_workspace(running_entry) do
+      workspace when is_binary(workspace) ->
+        SessionEvents.append_abort(workspace, reason, detail: detail)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp record_session_abort(_running_entry, _reason, _detail), do: :ok
+
+  defp record_session_run_failure(%{} = running_entry, reason) do
+    case running_entry_workspace(running_entry) do
+      workspace when is_binary(workspace) ->
+        SessionEvents.append_run_failure(workspace, reason)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp record_session_run_failure(_running_entry, _reason), do: :ok
+
+  defp running_entry_workspace(%{issue: %{} = issue} = running_entry) do
+    SessionLog.run_log_workspace(issue, Map.get(running_entry, :run_opts, []))
+  end
+
+  defp running_entry_workspace(_running_entry), do: nil
 
   defp choose_issues(issues, state) do
     candidates = sort_issues_for_dispatch(issues)
@@ -1015,7 +1063,8 @@ defmodule SymphonyElixir.Orchestrator do
       parent_identifier: bundle_ctx.parent_identifier,
       unit_id: bundle_ctx.unit_id,
       repo: bundle_ctx.repo,
-      child_identifiers: bundle_ctx.child_identifiers
+      child_identifiers: bundle_ctx.child_identifiers,
+      run_opts: bundle_ctx.run_opts
     }
   end
 
@@ -1561,6 +1610,8 @@ defmodule SymphonyElixir.Orchestrator do
     case Map.get(running_entry, :agent_outcome) do
       {:error, reason} ->
         Logger.warning("Agent run failed for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier} reason=#{inspect(reason)}; scheduling retry")
+
+        record_session_run_failure(running_entry, reason)
 
         next_attempt = next_retry_attempt_from_running(running_entry)
 
@@ -2651,6 +2702,9 @@ defmodule SymphonyElixir.Orchestrator do
 
       issue_id ->
         Logger.info("Stopping agent run for issue_identifier=#{String.trim(identifier)} issue_id=#{issue_id} (hard reset)")
+
+        running_entry = Map.get(state.running, issue_id)
+        record_session_abort(running_entry, "user_stop", "Stopped manually via hard reset")
 
         state = terminate_running_issue(state, issue_id, false)
         notify_dashboard()

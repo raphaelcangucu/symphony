@@ -12,6 +12,7 @@ defmodule SymphonyElixir.SessionLog do
   alias SymphonyElixir.Claude.SessionLog, as: ClaudeLog
   alias SymphonyElixir.Codex.SessionLog, as: CodexLog
   alias SymphonyElixir.Cursor.SessionLog, as: CursorLog
+  alias SymphonyElixir.SessionEvents
 
   @agent_kinds ["claude", "cursor", "codex"]
   @join_tail_bytes 512_000
@@ -53,17 +54,91 @@ defmodule SymphonyElixir.SessionLog do
   def resolve_log_path("cursor", workspace, opts), do: CursorLog.resolve_log_path(workspace, opts)
   def resolve_log_path(_agent_kind, workspace, opts), do: CodexLog.resolve_rollout_path(workspace, opts)
 
+  @doc """
+  Resolves the workspace directory whose session log should be tailed for a run.
+
+  Child bundle runs execute in an isolated git worktree; their agent logs live
+  there rather than in the standard per-issue workspace.
+  """
+  @spec run_log_workspace(map() | String.t(), keyword()) :: String.t() | nil
+  def run_log_workspace(issue, run_opts \\ [])
+
+  def run_log_workspace(issue, run_opts) when is_map(issue) do
+    issue
+    |> SymphonyElixir.Workspace.path_for_issue()
+    |> worktree_log_workspace(run_opts)
+  end
+
+  def run_log_workspace(identifier, run_opts) when is_binary(identifier) do
+    identifier
+    |> SymphonyElixir.Workspace.path_for_issue()
+    |> worktree_log_workspace(run_opts)
+  end
+
+  @spec worktree_log_workspace(String.t(), keyword()) :: String.t()
+  def worktree_log_workspace(fallback, run_opts) when is_binary(fallback) and is_list(run_opts) do
+    with true <- Keyword.get(run_opts, :worktree) == true,
+         repo when is_binary(repo) and repo != "" <- Keyword.get(run_opts, :worktree_repo),
+         slug when is_binary(slug) and slug != "" <- worktree_log_slug(run_opts),
+         path <- Path.join([repo, ".worktrees", slug]),
+         true <- File.dir?(path) do
+      path
+    else
+      _ -> fallback
+    end
+  end
+
+  defp worktree_log_slug(run_opts) do
+    (Keyword.get(run_opts, :unit_id) || "")
+    |> to_string()
+    |> String.replace(~r/[^A-Za-z0-9_.-]+/, "-")
+  end
+
   @spec tail(String.t(), Path.t(), keyword()) :: {:ok, [map()], non_neg_integer()}
   def tail(agent_kind, path, opts \\ [])
 
-  def tail("claude", path, opts), do: ClaudeLog.tail(path, opts)
-  def tail("cursor", path, opts), do: CursorLog.tail(path, opts)
-  def tail(_agent_kind, path, opts), do: CodexLog.tail(path, opts)
+  def tail("claude", path, opts), do: tail_with_events(ClaudeLog.tail(path, opts), opts)
+  def tail("cursor", path, opts), do: tail_with_events(CursorLog.tail(path, opts), opts)
+  def tail(_agent_kind, path, opts), do: tail_with_events(CodexLog.tail(path, opts), opts)
 
-  @spec read_from(String.t(), Path.t(), non_neg_integer()) :: {:ok, [map()], non_neg_integer()} | {:error, term()}
-  def read_from(agent_kind, path, offset)
+  @spec read_from(String.t(), Path.t(), non_neg_integer(), keyword()) ::
+          {:ok, [map()], non_neg_integer()} | {:error, term()}
+  def read_from(agent_kind, path, offset, opts \\ [])
 
-  def read_from("claude", path, offset), do: ClaudeLog.read_from(path, offset)
-  def read_from("cursor", path, offset), do: CursorLog.read_from(path, offset)
-  def read_from(_agent_kind, path, offset), do: CodexLog.read_from(path, offset)
+  def read_from("claude", path, offset, opts),
+    do: read_from_with_events(ClaudeLog.read_from(path, offset), offset, opts)
+
+  def read_from("cursor", path, offset, opts),
+    do: read_from_with_events(CursorLog.read_from(path, offset), offset, opts)
+
+  def read_from(_agent_kind, path, offset, opts),
+    do: read_from_with_events(CodexLog.read_from(path, offset), offset, opts)
+
+  defp tail_with_events({:ok, entries, offset}, opts) do
+    {:ok, merge_workspace_events(entries, opts), offset}
+  end
+
+  defp tail_with_events(other, _opts), do: other
+
+  defp read_from_with_events({:ok, entries, offset}, _path_offset, opts) do
+    {:ok, merge_workspace_events(entries, opts), offset}
+  end
+
+  defp read_from_with_events(other, _path_offset, _opts), do: other
+
+  defp merge_workspace_events(entries, opts) do
+    case Keyword.get(opts, :workspace) do
+      workspace when is_binary(workspace) ->
+        case SessionEvents.tail(workspace, max_bytes: @join_tail_bytes) do
+          {:ok, symphony_entries, _} ->
+            SessionEvents.merge_entries(entries, symphony_entries)
+
+          _ ->
+            entries
+        end
+
+      _ ->
+        entries
+    end
+  end
 end

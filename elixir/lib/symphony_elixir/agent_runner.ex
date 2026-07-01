@@ -15,6 +15,8 @@ defmodule SymphonyElixir.AgentRunner do
     PromptBuilder,
     Repo,
     RunContract,
+    SessionEvents,
+    SessionLog,
     Tracker,
     Workspace
   }
@@ -57,9 +59,19 @@ defmodule SymphonyElixir.AgentRunner do
 
     Logger.info("Starting agent run for #{issue_context(issue)}")
 
-    outcome = do_run(issue, codex_update_recipient, opts)
-    report_outcome(codex_update_recipient, issue, outcome)
-    :ok
+    try do
+      outcome = do_run(issue, codex_update_recipient, opts)
+      report_outcome(codex_update_recipient, issue, outcome)
+      :ok
+    rescue
+      exception ->
+        record_worker_crash(issue, opts, exception, __STACKTRACE__)
+        reraise exception, __STACKTRACE__
+    catch
+      kind, reason ->
+        record_worker_crash(issue, opts, {kind, reason}, __STACKTRACE__)
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    end
   end
 
   @spec do_run(map(), pid() | nil, keyword()) :: run_outcome()
@@ -198,6 +210,21 @@ defmodule SymphonyElixir.AgentRunner do
     Logger.error("Agent run failed for #{issue_context(issue)}: #{inspect(reason)}")
     {:error, reason}
   end
+
+  defp record_worker_crash(issue, opts, reason, stacktrace) do
+    with workspace when is_binary(workspace) <- run_log_workspace(issue, opts),
+         true <- File.dir?(workspace) do
+      SessionEvents.append_worker_crash(workspace, reason, stacktrace)
+    else
+      _ -> :ok
+    end
+  rescue
+    _ -> :ok
+  end
+
+  @doc false
+  @spec run_log_workspace(map(), keyword()) :: String.t() | nil
+  def run_log_workspace(issue, opts \\ []), do: SessionLog.run_log_workspace(issue, opts)
 
   defp report_outcome(recipient, %Issue{id: id}, outcome)
        when is_pid(recipient) and is_binary(id) do

@@ -188,7 +188,7 @@ defmodule SymphonyElixir.AgentExecution do
       runtime_seconds: Map.get(entry, :runtime_seconds),
       started_at: Map.get(entry, :started_at),
       retry_attempt: 0,
-      error: if(interrupted?, do: interrupted_error_message(), else: nil),
+      error: if(interrupted?, do: interrupted_error_message(entry), else: nil),
       goal: goal,
       long_running: not is_nil(goal) and not interrupted?,
       long_running_kind: if(interrupted?, do: nil, else: long_running_kind(goal)),
@@ -209,13 +209,30 @@ defmodule SymphonyElixir.AgentExecution do
   defp running_last_event(_entry, true), do: "turn_aborted"
   defp running_last_event(entry, false), do: Map.get(entry, :last_codex_event)
 
-  defp running_last_message(_entry, true),
-    do: "Agent run interrupted — resume from the session log"
+  defp running_last_message(entry, true),
+    do: interrupted_session_message(entry)
 
   defp running_last_message(entry, false), do: Map.get(entry, :last_codex_message)
 
-  defp interrupted_error_message,
-    do: "Agent run interrupted — use Resume in the execution panel"
+  defp interrupted_error_message(entry) do
+    case session_log_abort_summary(entry) do
+      summary when is_binary(summary) and summary != "" ->
+        "Turn aborted — #{summary}. Use Resume in the execution panel."
+
+      _ ->
+        "Agent run interrupted — use Resume in the execution panel"
+    end
+  end
+
+  defp interrupted_session_message(entry) do
+    case session_log_abort_summary(entry) do
+      summary when is_binary(summary) and summary != "" ->
+        "Turn aborted — #{summary}"
+
+      _ ->
+        "Agent run interrupted — resume from the session log"
+    end
+  end
 
   defp running_entry_interrupted?(entry) do
     subject = Map.get(entry, :issue) || identifier(entry)
@@ -225,7 +242,7 @@ defmodule SymphonyElixir.AgentExecution do
          workspace when is_binary(workspace) <- Workspace.path_for_issue(subject),
          true <- File.dir?(workspace),
          {:ok, kind, path} <- SessionLog.resolve_log_source(agent_kind || "codex", workspace) do
-      session_log_interrupted?(kind, path)
+      session_log_interrupted?(kind, path, workspace)
     else
       _ -> false
     end
@@ -372,7 +389,7 @@ defmodule SymphonyElixir.AgentExecution do
          workspace when is_binary(workspace) <- Workspace.path_for_issue(issue),
          true <- File.dir?(workspace),
          {:ok, agent_kind, path} <- SessionLog.resolve_log_source(issue.agent_kind || "codex", workspace),
-         true <- session_log_interrupted?(agent_kind, path) do
+         true <- session_log_interrupted?(agent_kind, path, workspace) do
       true
     else
       _ -> false
@@ -399,9 +416,9 @@ defmodule SymphonyElixir.AgentExecution do
     |> MapSet.new()
   end
 
-  defp session_log_interrupted?(agent_kind, path) do
-    case SessionLog.tail(agent_kind, path, max_bytes: 48_000) do
-      {:ok, entries, _} when entries != [] ->
+  defp session_log_interrupted?(agent_kind, path, workspace) do
+    case session_log_entries(agent_kind, path, workspace) do
+      {:ok, entries} when entries != [] ->
         titles =
           entries
           |> Enum.take(-8)
@@ -416,8 +433,69 @@ defmodule SymphonyElixir.AgentExecution do
     end
   end
 
-  defp aborted_title?(title) when is_binary(title),
-    do: String.match?(String.downcase(title), ~r/aborted|turn aborted/)
+  defp session_log_entries(agent_kind, path, workspace) do
+    opts = [max_bytes: 48_000, workspace: workspace]
+
+    case SessionLog.tail(agent_kind, path, opts) do
+      {:ok, entries, _} -> {:ok, entries}
+      _ -> :error
+    end
+  end
+
+  defp session_log_abort_summary(entry) do
+    subject = Map.get(entry, :issue) || identifier(entry)
+    agent_kind = Map.get(entry, :agent_kind) || issue_agent_kind(subject)
+
+    with workspace when is_binary(workspace) <- workspace_for(subject),
+         true <- File.dir?(workspace),
+         {:ok, kind, path} <- SessionLog.resolve_log_source(agent_kind || "codex", workspace),
+         {:ok, entries} <- session_log_entries(kind, path, workspace) do
+      entries
+      |> Enum.reverse()
+      |> Enum.find_value(&abort_entry_summary/1)
+    else
+      _ -> nil
+    end
+  end
+
+  defp abort_entry_summary(%{"title" => title} = entry) when is_binary(title) do
+    if aborted_title?(title), do: abort_entry_body(entry)
+  end
+
+  defp abort_entry_summary(%{title: title} = entry) when is_binary(title) do
+    if aborted_title?(title), do: abort_entry_body(entry)
+  end
+
+  defp abort_entry_summary(_entry), do: nil
+
+  defp abort_entry_body(entry) do
+    body = Map.get(entry, "body") || Map.get(entry, :body)
+    reason = Map.get(entry, "abort_reason") || Map.get(entry, :abort_reason)
+    title = Map.get(entry, "title") || Map.get(entry, :title)
+
+    cond do
+      title == "Worker crashed" and is_binary(body) and body != "" ->
+        body |> String.split("\n", parts: 2) |> List.first() |> String.trim()
+
+      is_binary(body) and String.trim(body) != "" ->
+        body |> String.split("\n") |> List.first() |> String.trim()
+
+      is_binary(reason) and String.trim(reason) != "" ->
+        reason
+
+      true ->
+        nil
+    end
+  end
+
+  defp workspace_for(nil), do: nil
+  defp workspace_for(subject), do: Workspace.path_for_issue(subject)
+
+  defp aborted_title?(title) when is_binary(title) do
+    down = String.downcase(title)
+
+    String.match?(down, ~r/aborted|turn aborted|worker crashed|agent run failed/)
+  end
 
   defp aborted_title?(_title), do: false
 
@@ -439,19 +517,32 @@ defmodule SymphonyElixir.AgentExecution do
     {:ok, agent_kind, _path} = SessionLog.resolve_log_source(issue.agent_kind || "codex", workspace)
     goal = build_goal(agent_kind, "interrupted", record.agent_goal, workspace)
 
+    abort_summary = session_log_abort_summary(%{issue: issue, agent_kind: agent_kind, identifier: record.identifier})
+
     %{
       issue_id: to_string(record.id),
       issue_identifier: record.identifier,
       status: :aborted,
       session_id: record.agent_session_id,
       last_event: "turn_aborted",
-      last_message: "Agent run interrupted — resume from the session log",
+      last_message:
+        case abort_summary do
+          summary when is_binary(summary) and summary != "" -> "Turn aborted — #{summary}"
+          _ -> "Agent run interrupted — resume from the session log"
+        end,
       last_event_at: record.updated_at,
       turn_count: 0,
       runtime_seconds: nil,
       started_at: nil,
       retry_attempt: 0,
-      error: "Agent run interrupted — use Resume in the execution panel",
+      error:
+        case abort_summary do
+          summary when is_binary(summary) and summary != "" ->
+            "Turn aborted — #{summary}. Use Resume in the execution panel."
+
+          _ ->
+            "Agent run interrupted — use Resume in the execution panel"
+        end,
       agent_kind: agent_kind,
       goal: goal,
       long_running: not is_nil(goal),
@@ -553,9 +644,6 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp normalize_objective(_value), do: nil
-
-  defp workspace_for(nil), do: nil
-  defp workspace_for(subject), do: Workspace.path_for_issue(subject)
 
   defp goal_kind(%{agent_kind: kind}) when kind in ["claude", "cursor"], do: "workflow"
   defp goal_kind(_entry), do: "goal"

@@ -154,6 +154,13 @@ defmodule SymphonyElixir.Codex.SessionLog do
     entry("event", "Task started", body, collapsed: false)
   end
 
+  defp parse_event_msg(%{"type" => "turn_aborted"} = payload) do
+    entry("event", "Turn aborted", format_turn_abort_body(payload),
+      collapsed: false,
+      status: "failed"
+    )
+  end
+
   defp parse_event_msg(%{"type" => type, "message" => message}) when is_binary(message) and message != "" do
     entry("event", humanize_type(type), message, collapsed: String.length(message) > 280)
   end
@@ -325,6 +332,47 @@ defmodule SymphonyElixir.Codex.SessionLog do
     |> String.replace("_", " ")
     |> String.split()
     |> Enum.map_join(" ", &String.capitalize/1)
+  end
+
+  defp format_turn_abort_body(payload) when is_map(payload) do
+    reason = Map.get(payload, "reason") || Map.get(payload, "message")
+
+    lines =
+      [
+        if(is_binary(reason) and reason != "", do: "Reason: #{reason}", else: nil),
+        turn_abort_turn_id_line(payload),
+        turn_abort_duration_line(payload)
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    case lines do
+      [] -> nil
+      _ -> Enum.join(lines, "\n")
+    end
+  end
+
+  defp turn_abort_turn_id_line(%{"turn_id" => turn_id}) when is_binary(turn_id) and turn_id != "",
+    do: "Turn: #{turn_id}"
+
+  defp turn_abort_turn_id_line(_payload), do: nil
+
+  defp turn_abort_duration_line(%{"duration_ms" => duration_ms}) when is_integer(duration_ms) and duration_ms > 0 do
+    "Duration: #{format_duration_ms(duration_ms)}"
+  end
+
+  defp turn_abort_duration_line(_payload), do: nil
+
+  defp format_duration_ms(duration_ms) when is_integer(duration_ms) and duration_ms >= 0 do
+    total_seconds = div(duration_ms, 1000)
+    hours = div(total_seconds, 3600)
+    minutes = div(rem(total_seconds, 3600), 60)
+    seconds = rem(total_seconds, 60)
+
+    cond do
+      hours > 0 -> "#{hours}h #{minutes}m #{seconds}s"
+      minutes > 0 -> "#{minutes}m #{seconds}s"
+      true -> "#{seconds}s"
+    end
   end
 
   defp trim_display(text, max) when is_binary(text) and is_integer(max) do
