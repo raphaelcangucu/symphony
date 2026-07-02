@@ -1,7 +1,19 @@
 # Task Grouping on the Board (Grouped Orchestrator Execution) — Design
 
+> ## ⚠️ DEPRECATED (2026-06-30) — superseded by pure parent/child
+>
+> Issue **grouping is removed**. The "Parent/Child Execution Rework"
+> (`2026-06-29-symphony-orchestrated-subagents-design.md`) replaces grouping with a
+> strict **parent/child (sub-issue)** hierarchy. The board **drag-drop merge gesture
+> now sets the parent/child relationship** (`setIssueParent` → `POST .../parent`),
+> not a group. The grouping backend (`Orchestrator.Grouping`, `Tracker.Sync.GroupStatus`,
+> `GroupController`, the `/group` routes, `group_lead_id`, and `group_members_section`)
+> and the grouping frontend (group cards/banners/lead picker) have been deleted; a
+> migration drops `group_lead_id` after converting existing members to `sub_issue_of`.
+> This document is retained for history only.
+
 Date: 2026-06-18
-Status: Draft (pending user review)
+Status: **Deprecated** (removed in favor of parent/child; was: Draft pending user review)
 Topic: Allow grouping one or more board issues by drag-and-drop so the
 orchestrator executes the whole group as **a single unit of work** — one agent
 session, one workspace, one branch, one pull request that covers every issue in

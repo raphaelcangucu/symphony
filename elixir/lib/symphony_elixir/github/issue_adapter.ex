@@ -208,6 +208,58 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
     end
   end
 
+  @doc """
+  Links `child_identifier` as a GitHub sub-issue of `parent_identifier` via
+  `addSubIssue`. Supports cross-repository links within the same owner.
+  """
+  @spec link_sub_issue(Project.t(), String.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def link_sub_issue(%Project{} = project, parent_identifier, child_identifier) do
+    with {:ok, parent_node_id} <- issue_graphql_node_id(project, parent_identifier),
+         {:ok, child_node_id} <- issue_graphql_node_id(project, child_identifier),
+         {:ok, response} <-
+           client().graphql(
+             Query.add_sub_issue_mutation(),
+             %{
+               "input" => %{
+                 "issueId" => parent_node_id,
+                 "subIssueId" => child_node_id,
+                 "replaceParent" => true
+               }
+             },
+             []
+           ),
+         {:ok, sub_issue_id} <- Query.linked_sub_issue_id(response) do
+      {:ok, sub_issue_id}
+    else
+      {:error, reason} -> {:error, map_error(reason)}
+    end
+  end
+
+  @doc """
+  Removes the parent link for `child_identifier` on GitHub via `removeSubIssue`.
+  """
+  @spec unlink_sub_issue(Project.t(), String.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def unlink_sub_issue(%Project{} = project, parent_identifier, child_identifier) do
+    with {:ok, parent_node_id} <- issue_graphql_node_id(project, parent_identifier),
+         {:ok, child_node_id} <- issue_graphql_node_id(project, child_identifier),
+         {:ok, response} <-
+           client().graphql(
+             Query.remove_sub_issue_mutation(),
+             %{
+               "input" => %{
+                 "issueId" => parent_node_id,
+                 "subIssueId" => child_node_id
+               }
+             },
+             []
+           ),
+         {:ok, sub_issue_id} <- Query.unlinked_sub_issue_id(response) do
+      {:ok, sub_issue_id}
+    else
+      {:error, reason} -> {:error, map_error(reason)}
+    end
+  end
+
   defp archive_project_item(%Project{} = project, identifier, mutation) do
     %{project_id: project_id} = config(project)
 
@@ -593,6 +645,21 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   end
 
   defp local_issue_remote_id(_, _), do: nil
+
+  defp issue_graphql_node_id(%Project{} = project, identifier) do
+    case local_issue_remote_id(project, identifier) do
+      id when is_binary(id) and id != "" ->
+        {:ok, id}
+
+      _ ->
+        with {:ok, number} <- resolve_issue_number(project, identifier),
+             {:ok, repo} <- resolve_issue_repo(project, identifier),
+             {:ok, {owner, name}} <- RepoSpec.split(repo),
+             {:ok, node_id} <- fetch_issue_node_id(owner, name, number) do
+          {:ok, node_id}
+        end
+    end
+  end
 
   defp fetch_issue_node_id(owner, name, number) do
     case fetch_issue_details(owner, name, number) do
@@ -1016,6 +1083,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp map_error({:remote_validation, _details} = error), do: error
   defp map_error({:invalid_repository, message}), do: {:remote_validation, %{repository: [message]}}
   defp map_error(:issue_not_found), do: :issue_not_found
+  defp map_error(:pending_remote_id), do: :pending_remote_id
   defp map_error({:invalid_issue_identifier, _identifier}), do: :issue_not_found
   defp map_error(:status_not_found), do: :status_not_found
   defp map_error(:missing_github_token), do: :missing_credentials

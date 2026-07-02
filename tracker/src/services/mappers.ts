@@ -185,10 +185,6 @@ export interface BackendIssueDto {
   agentKind?: string | null;
   agent_goal?: string | null;
   agentGoal?: string | null;
-  group_lead_identifier?: string | null;
-  groupLeadIdentifier?: string | null;
-  group_member_identifiers?: string[] | null;
-  groupMemberIdentifiers?: string[] | null;
   repository_full_name?: string | null;
   repositoryFullName?: string | null;
   parent_identifier?: string | null;
@@ -293,8 +289,6 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     agentKind,
     agentGoal: normalizeAgentGoal(dto.agentGoal ?? dto.agent_goal),
     attachments: (dto.attachments ?? []).flatMap(normalizeIssueAttachment),
-    groupLeadIdentifier: dto.groupLeadIdentifier ?? dto.group_lead_identifier ?? null,
-    groupMemberIdentifiers: dto.groupMemberIdentifiers ?? dto.group_member_identifiers ?? [],
     repositoryFullName: dto.repositoryFullName ?? dto.repository_full_name ?? null,
     parentIdentifier: dto.parentIdentifier ?? dto.parent_identifier ?? null,
     subIssueSummary: normalizeSubIssueSummary(dto),

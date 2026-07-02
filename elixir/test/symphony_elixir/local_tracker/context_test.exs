@@ -3,6 +3,7 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
 
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, ProjectSetup}
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Tracker.Sync.LocalStore
 
   setup do
     migrate_repo()
@@ -618,7 +619,7 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     {:ok, _issue} = Context.create_issue("assignee-edit", %{title: "Assign me", status: "Todo"})
 
     :ok =
-      SymphonyElixir.Tracker.Sync.LocalStore.upsert_users(project, [
+      LocalStore.upsert_users(project, [
         %{id: "U1", login: "alice", name: "Alice"}
       ])
 
@@ -726,30 +727,6 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     refute "old-label" in label_names
   end
 
-  test "set_issue_group makes the target the lead and snaps the member to its status" do
-    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
-    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Backlog"})
-
-    assert {:ok, member} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
-    assert member.group_lead_id
-    assert member.status.name == "Todo"
-    assert {:ok, [m]} = Context.list_group_members("macro-markets", "MAC-1")
-    assert m.identifier == "MAC-2"
-  end
-
-  test "set_issue_group rejects self / nested / existing-lead" do
-    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _a} = Context.create_issue("macro-markets", %{title: "A", status: "Todo"})
-    {:ok, _b} = Context.create_issue("macro-markets", %{title: "B", status: "Todo"})
-    {:ok, _c} = Context.create_issue("macro-markets", %{title: "C", status: "Todo"})
-
-    assert {:error, :cannot_group_with_self} = Context.set_issue_group("macro-markets", "MAC-1", "MAC-1")
-    assert {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
-    assert {:error, :lead_is_member} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-2")
-    assert {:error, :member_is_lead} = Context.set_issue_group("macro-markets", "MAC-1", "MAC-3")
-  end
-
   test "set_issue_parent records a sub_issue_of relation surfaced as parent_identifier" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
@@ -797,66 +774,15 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert {:ok, _} = Context.clear_issue_parent("macro-markets", "MAC-2")
   end
 
-  test "remove_from_group detaches a member and disbands on the lead" do
+  test "move_issue records an issue_moved activity event for a parent and every sub-issue" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
-    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
-    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _c1} = Context.create_issue("macro-markets", %{title: "C1", status: "Todo"})
+    {:ok, _c2} = Context.create_issue("macro-markets", %{title: "C2", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
 
-    assert {:ok, m2} = Context.remove_from_group("macro-markets", "MAC-2")
-    assert m2.group_lead_id == nil
-    assert {:ok, [one]} = Context.list_group_members("macro-markets", "MAC-1")
-    assert one.identifier == "MAC-3"
-
-    assert {:ok, _lead} = Context.remove_from_group("macro-markets", "MAC-1")
-    assert {:ok, []} = Context.list_group_members("macro-markets", "MAC-1")
-  end
-
-  test "remove_from_group errors when not grouped" do
-    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _solo} = Context.create_issue("macro-markets", %{title: "Solo", status: "Todo"})
-    assert {:error, :not_in_group} = Context.remove_from_group("macro-markets", "MAC-1")
-  end
-
-  test "move_issue carries group members to the lead's new status" do
-    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
-    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Todo"})
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
-
-    assert {:ok, lead} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
-    assert lead.status.name == "In Progress"
-    assert {:ok, [member]} = Context.list_group_members("macro-markets", "MAC-1")
-    assert member.status.name == "In Progress"
-  end
-
-  test "move_issue on a member carries the lead and siblings to the new status" do
-    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
-    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
-    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
-
-    assert {:ok, lead} = Context.move_issue("macro-markets", "MAC-2", %{status: "In Progress"})
-    assert lead.identifier == "MAC-1"
-    assert lead.status.name == "In Progress"
-
-    assert {:ok, members} = Context.list_group_members("macro-markets", "MAC-1")
-    assert Enum.all?(members, &(&1.status.name == "In Progress"))
-  end
-
-  test "move_issue records an issue_moved activity event for the lead and every member" do
-    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
-    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
-    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
-
-    assert {:ok, _lead} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+    assert {:ok, _parent} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
 
     for identifier <- ["MAC-1", "MAC-2", "MAC-3"] do
       assert {:ok, events} = Context.list_activity_events("macro-markets", identifier)
@@ -881,6 +807,90 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert {:ok, c2} = Context.get_issue("macro-markets", "MAC-3")
     assert c1.status.name == "In Progress"
     assert c2.status.name == "In Progress"
+  end
+
+  test "move_issue drags a coordinator parent's bundle-unit children along (board precedence)" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Coordinator", status: "Todo"})
+    {:ok, _c1} = Context.create_issue("macro-markets", %{title: "C1", status: "Backlog"})
+    {:ok, _c2} = Context.create_issue("macro-markets", %{title: "C2", status: "Backlog"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
+
+    bundle_workpad = """
+    ## Codex Workpad
+
+    ### Execution bundle
+
+    ```yaml
+    version: 1
+    mode: bundle
+    parent: MAC-1
+    units:
+      - id: unit-c1
+        type: child_run
+        issue: MAC-2
+        repo: macro-markets/app
+        deliverable: pr
+      - id: unit-c2
+        type: child_run
+        issue: MAC-3
+        repo: macro-markets/app
+        depends_on: [unit-c1]
+        deliverable: pr
+    ```
+    """
+
+    {:ok, _workpad} = Context.add_comment("macro-markets", "MAC-1", bundle_workpad, %{kind: "workpad"})
+
+    assert {:ok, parent} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+    assert parent.status.name == "In Progress"
+
+    # Board precedence still applies for children behind the parent's target
+    # (Backlog → In Progress). Wait/terminal/ahead children are not dragged.
+    assert {:ok, c1} = Context.get_issue("macro-markets", "MAC-2")
+    assert {:ok, c2} = Context.get_issue("macro-markets", "MAC-3")
+    assert c1.status.name == "In Progress"
+    assert c2.status.name == "In Progress"
+  end
+
+  test "move_issue does not drag a Human Review sub-issue when the parent moves to In Progress" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _released} = Context.create_issue("macro-markets", %{title: "Released", status: "Todo"})
+    {:ok, _active} = Context.create_issue("macro-markets", %{title: "Active", status: "Backlog"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
+
+    {:ok, _} = Context.move_issue("macro-markets", "MAC-2", %{status: "Human Review"})
+
+    assert {:ok, _parent} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+
+    assert {:ok, released} = Context.get_issue("macro-markets", "MAC-2")
+    assert {:ok, active} = Context.get_issue("macro-markets", "MAC-3")
+    assert released.status.name == "Human Review"
+    assert active.status.name == "In Progress"
+
+    assert {:ok, released_events} = Context.list_activity_events("macro-markets", "MAC-2")
+    refute Enum.any?(released_events, &(&1.event_type == "issue_moved" and &1.metadata["status"] == "In Progress"))
+  end
+
+  test "move_issue does not drag a Done sub-issue when the parent moves to In Progress" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _done} = Context.create_issue("macro-markets", %{title: "Done child", status: "Todo"})
+    {:ok, _active} = Context.create_issue("macro-markets", %{title: "Active", status: "Backlog"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-3", "MAC-1")
+
+    {:ok, _} = Context.move_issue("macro-markets", "MAC-2", %{status: "Done"})
+
+    assert {:ok, _parent} = Context.move_issue("macro-markets", "MAC-1", %{status: "In Progress"})
+
+    assert {:ok, done_child} = Context.get_issue("macro-markets", "MAC-2")
+    assert {:ok, active} = Context.get_issue("macro-markets", "MAC-3")
+    assert done_child.status.name == "Done"
+    assert active.status.name == "In Progress"
   end
 
   test "move_issue on a sub-issue leaves its parent and siblings in place" do
@@ -1006,7 +1016,7 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert {:ok, nil} = Context.parent_issue("macro-markets", "MAC-1")
   end
 
-  test "move_issue sends a human review push only for the group lead" do
+  test "move_issue sends a single human review push for the moved issue" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
     {:ok, _setup} =
@@ -1024,48 +1034,18 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
         scan_summary: %{}
       })
 
-    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
-    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
-    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Solo", status: "Todo"})
 
     trace_push_dispatch_calls()
 
-    task = Task.async(fn -> Context.move_issue("macro-markets", "MAC-2", %{status: "Human Review"}) end)
+    task = Task.async(fn -> Context.move_issue("macro-markets", "MAC-1", %{status: "Human Review"}) end)
 
-    assert {:ok, lead} = Task.await(task)
-    assert lead.identifier == "MAC-1"
+    assert {:ok, moved} = Task.await(task)
+    assert moved.identifier == "MAC-1"
 
     assert_receive {:trace, _pid, :call, {SymphonyElixir.PushNotifications.Dispatcher, :notify, ["human_review", %{tag: "human_review:macro-markets:MAC-1"}]}}
 
     refute_receive {:trace, _pid, :call, {SymphonyElixir.PushNotifications.Dispatcher, :notify, ["human_review", _payload]}}
-  end
-
-  test "update_issue_state on a member carries the lead and siblings" do
-    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
-    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Todo"})
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
-
-    assert {:ok, lead} = Context.update_issue_state("macro-markets", "MAC-2", "In Progress")
-    assert lead.identifier == "MAC-1"
-    assert lead.status.name == "In Progress"
-    assert {:ok, [member]} = Context.list_group_members("macro-markets", "MAC-1")
-    assert member.status.name == "In Progress"
-  end
-
-  test "archiving a lead promotes the oldest member to lead" do
-    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
-    {:ok, _m1} = Context.create_issue("macro-markets", %{title: "M1", status: "Todo"})
-    {:ok, _m2} = Context.create_issue("macro-markets", %{title: "M2", status: "Todo"})
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-3", "MAC-1")
-
-    assert {:ok, _archived} = Context.archive_issue("macro-markets", "MAC-1")
-    assert {:ok, [member]} = Context.list_group_members("macro-markets", "MAC-2")
-    assert member.identifier == "MAC-3"
   end
 
   defp migrate_repo do

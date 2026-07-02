@@ -22,11 +22,6 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   @history_limit 20
 
-  # Brainstorm / spec / plan intent upgrades an authoring thread to complex so the
-  # next prompt dynamically loads the superpowers methodology skills. Matching is
-  # intentionally narrow (word-anchored) to avoid false positives like "respect".
-  @complex_mode_trigger_regex ~r/(\bbrainstorm)|(\bcomplex\b)|(\bspecs?\b)|(\bdesign\s+docs?\b)|(\bimplementation\s+plans?\b)|(\bplano\s+de\s+implementa)|(\bespecifica)/iu
-
   @type turn_result :: %{
           required(:assistant_message) => String.t(),
           required(:tool_calls) => [map()],
@@ -41,9 +36,17 @@ defmodule SymphonyElixir.Assistant.CodexSession do
          {:ok, workspace} <- ensure_workspace(project_slug, opts),
          {:ok, thread} <- History.ensure_thread(project_slug, %{workspace_path: workspace}),
          {:ok, history_before_turn} <- History.list_messages(project_slug),
-         {:ok, user_message} <- History.append_message(thread, %{role: "user", content: trimmed_message, metadata: stringify_map(context)}),
+         {:ok, user_message} <-
+           History.append_message(thread, %{
+             role: "user",
+             content: trimmed_message,
+             metadata: stringify_map(context)
+           }),
          agent_kind = resolve_thread_agent(thread, context),
-         opts = opts |> Keyword.put(:agent_kind, agent_kind) |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind)),
+         opts =
+           opts
+           |> Keyword.put(:agent_kind, agent_kind)
+           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind)),
          prompt <- build_prompt(project_slug, trimmed_message, context, history_before_turn),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
@@ -201,9 +204,6 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     # Reload so that agent_thread_ids written by a prior turn are visible even
     # when the caller holds a frozen struct from an earlier socket assign.
     thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
-    # Conversation can drive the authoring depth: a brainstorm/spec/plan request
-    # upgrades the thread to complex so this turn loads the methodology skills.
-    thread = maybe_upgrade_issue_mode(thread, message)
     agent_kind = resolve_thread_agent(thread, context)
 
     opts =
@@ -329,7 +329,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
     Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (start/stop/restart/status), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, manage_codex_goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
-    Knowledge base tools (docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Projects can span multiple repositories; KB pages are addressed by (repository, path-within-docs). When the project has more than one repository and the user does not name one, the tool returns a remediation asking which repository — ASK the user, then retry with the `repository` argument (owner/name, workspace path, or slug). Use kb_search_pages before creating pages to avoid duplicates, kb_create_page for new pages and kb_update_page for existing ones, kb_link_task to reference a tracker issue inside a page, and kb_sync to push docs and open/auto-merge the PR. The delete tools (kb_delete_page, kb_delete_asset, kb_delete_folder) are destructive — kb_delete_folder removes a directory and everything inside it — so confirm the exact target with the user before calling them.
+    Knowledge base tools (docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Projects can span multiple repositories; KB pages are addressed by (repository, path-within-docs). When the project has more than one repository and the user does not name one, the tool returns a remediation asking which repository — ASK the user, then retry with the `repository` argument (owner/name, workspace path, or slug). Use kb_search_pages before creating pages to avoid duplicates, kb_create_page for new pages and kb_update_page for existing ones, and kb_link_task to reference a tracker issue inside a page. KB writes save directly to the active working tree; kb_sync is a no-op compatibility hook. The delete tools (kb_delete_page, kb_delete_asset, kb_delete_folder) are destructive — kb_delete_folder removes a directory and everything inside it — so confirm the exact target with the user before calling them.
     Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview URLs, configure serve steps with manage_dev_env then manage_preview (start|status).
     To explain why an issue is or isn't auto-dispatched, call explain_dispatch_eligibility; for live running/retry/idle state call get_issue_orchestrator_state. To see every agent executing right now call list_running_agents, and steer_agent to inject a message into a running agent's turn. After opening a PR call link_pull_request. Manage dependencies with manage_blockers; pull external tracker edits with sync_issue.
     If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
@@ -556,7 +556,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     ----------------------------------------
 
     Knowledge base tools (docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Pages are addressed by (repository, path-within-docs).
-    To edit THIS page, call kb_update_page with repository "#{repo}" and path "#{path}" (it already exists — never kb_create_page it). Pass that repository explicitly so you never need to ask which repository. Use kb_search_pages/kb_read_page to consult other pages, kb_create_page only for brand-new pages, kb_link_task to reference a tracker issue inside a page, and kb_sync to push docs. Use kb_delete_page/kb_delete_asset/kb_delete_folder to remove content — they are destructive (kb_delete_folder deletes a whole directory and its contents), so confirm the exact target with the user first.
+    To edit THIS page, call kb_update_page with repository "#{repo}" and path "#{path}" (it already exists — never kb_create_page it). Pass that repository explicitly so you never need to ask which repository. Use kb_search_pages/kb_read_page to consult other pages, kb_create_page only for brand-new pages, and kb_link_task to reference a tracker issue inside a page. KB writes save directly to the working tree; kb_sync is a no-op compatibility hook. Use kb_delete_page/kb_delete_asset/kb_delete_folder to remove content — they are destructive (kb_delete_folder deletes a whole directory and its contents), so confirm the exact target with the user first.
     You also have the project board tools (list_issues, create_issue, update_issue, add_comment, ...) for tracker actions when the user asks. Do not dispatch coding agents unless explicitly asked. Your replies are shown directly in this chat — do not mirror them as issue comments.
     If a request is ambiguous, ask one concise clarifying question first.
 
@@ -717,7 +717,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     running agent's turn), manage_blockers (blocked_by relations), sync_issue (pull external tracker edits).
 
     Knowledge base (require project_slug; docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page,
-    kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Projects can
+    kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Project/freeform KB writes save to the project working tree; issue-bound KB reads/writes save to the issue working tree. kb_sync is a no-op compatibility hook. Projects can
     span multiple repositories; when more than one is linked and the user does not name one, the tool returns a remediation
     asking which repository — ASK, then retry with the `repository` argument. Search before creating to avoid duplicates.
     The delete tools are destructive (kb_delete_folder removes a directory and everything inside it) — confirm the target first.
@@ -741,7 +741,6 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp build_issue_prompt(%{metadata: metadata, issue_identifier: identifier, project_slug: project_slug}, message, context, history) do
-    mode = Map.get(metadata || %{}, "mode", "triage")
     goal_mode = Map.get(metadata || %{}, "goal_mode", false) == true
     goal_objective = Map.get(metadata || %{}, "goal_objective")
     github_create = github_create_issue_guidance(project_slug)
@@ -749,8 +748,10 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     base = """
     You are the Symphony issue authoring assistant for `#{project_slug}`, working on issue `#{identifier}`.
     You are running inside the issue's working tree (the project repositories are cloned here).
+    In this issue chat, knowledge-base page reads/writes (`kb_read_page`, `kb_create_page`, `kb_update_page`, `kb_link_task`) target the issue working tree so docs changed for this task are kept with the task branch.
     Answer in the user's language.
     Dispatching happens through this chat: only when the user explicitly asks to dispatch, start, or hand off the work, call the dispatch_codex tool for `#{identifier}` with concrete instructions. That moves the issue to In Progress so the orchestrator executes it (the orchestrator carries the issue's execution goal). Never dispatch on your own.
+    Dispatch automatically assigns the issue to the connected GitHub user and applies the resolved agent's `symphony:*` label when missing, including child_run subtasks listed in the execution bundle — you do not need to set assignee or symphony labels manually before dispatch.
     Use manage_codex_goal (context authoring) to set, adjust, pause, resume, or clear the chat goal; use context execution only when the user explicitly asks to change the orchestrator execution goal.
     Do not mirror normal chat replies as issue comments — your replies are shown to the user directly in this chat.
     Use add_comment only when the user explicitly asks to post a comment on the issue; use update_issue for title, description, status, and assignee changes.
@@ -786,64 +787,27 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     #{message}
     """
 
-    mode_section =
-      case mode do
-        "complex" ->
-          """
+    methodology_section = """
 
-          MODE: COMPLEX. Follow this vendored methodology exactly:
-          #{Skills.load(["brainstorming", "writing-plans"])}
+    Authoring methodology — choose depth from the conversation (no fixed mode):
+    #{Skills.load(["brainstorming", "writing-plans"])}
 
-          Design-first authoring is desired by default: write spec files to `docs/superpowers/specs/`
-          and plan files to `docs/superpowers/plans/` in this working tree, with section-by-section
-          approval in chat. Codex is a coding agent; when the user explicitly asks to skip spec/plan
-          work or authorizes implementation, acknowledge that direction and you may proceed directly to code.
-          When the user signals the task is ready, write a concise `docs/superpowers/handoff.md`
-          (key decisions + current state) and enrich the issue description (executive summary +
-          links to the spec/plan files) via update_issue — not before.
-          Do not call update_issue while still exploring or before spec/plan sections are agreed in chat.
-          """
+    Decide the authoring depth from what the user asks for:
+    - Quick brief or enriched description only: search the repositories in this working tree for relevant
+      context (README, code, conventions) and call update_issue for `#{identifier}` once the description is
+      stable and agreed in chat — not while still exploring or confirming hypotheses. Do not create spec/plan files.
+    - Brainstorming, design, or implementation planning: write spec files to `docs/superpowers/specs/` and plan
+      files to `docs/superpowers/plans/` in this working tree, with section-by-section approval in chat. Codex is
+      a coding agent; when the user explicitly asks to skip spec/plan work or authorizes implementation,
+      acknowledge that direction and you may proceed directly to code.
+    - When the task is ready for handoff: write a concise `docs/superpowers/handoff.md` (key decisions + current state)
+      and enrich the issue description (executive summary + links to spec/plan files) via update_issue — not before.
+    Do not call update_issue while still exploring or before spec/plan sections are agreed in chat (when doing design work).
+    State which depth you are taking and proceed.
+    """
 
-        "simple" ->
-          """
-
-          MODE: SIMPLE. Search the repositories in this working tree for relevant context (README, code,
-          conventions) and produce a fuller, formal issue description. Call update_issue for `#{identifier}`
-          only once the description is stable and agreed in chat — not while still exploring or confirming
-          hypotheses. Do not create spec/plan files.
-          """
-
-        _ ->
-          """
-
-          MODE: TRIAGE. Collect the title and a short description, then settle the authoring depth with the user in conversation (no UI toggle needed):
-          - SIMPLE for a polished brief / enriched issue description — no spec or plan files.
-          - COMPLEX when the user wants to brainstorm or design, or needs a spec and implementation plan.
-          If the user asks to brainstorm, or mentions a spec, plan, or design, treat the task as complex.
-          State which path you are taking and proceed.
-          """
-      end
-
-    String.trim(base <> mode_section <> goal_mode_section(goal_mode, identifier, goal_objective))
+    String.trim(base <> methodology_section <> goal_mode_section(goal_mode, identifier, goal_objective))
   end
-
-  defp maybe_upgrade_issue_mode(%{} = thread, message) when is_binary(message) do
-    if History.thread_mode(thread) != "complex" and complex_intent?(message) do
-      case History.set_mode(thread, "complex") do
-        {:ok, updated} -> updated
-        _ -> thread
-      end
-    else
-      thread
-    end
-  end
-
-  defp maybe_upgrade_issue_mode(thread, _message), do: thread
-
-  defp complex_intent?(message) when is_binary(message),
-    do: Regex.match?(@complex_mode_trigger_regex, message)
-
-  defp complex_intent?(_message), do: false
 
   defp goal_mode_section(false, _identifier, _objective), do: ""
 
@@ -939,6 +903,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity, Credo.Check.Refactor.Nesting
   defp relay_codex_event(message, collector, opts) when is_map(message) do
     payload = event_payload(message)
     method = Map.get(payload, "method") || Map.get(payload, :method)
@@ -1069,6 +1034,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
 
   defp event_payload(_message), do: %{}
 
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp goal_from_codex_event(message) when is_map(message) do
     payload = event_payload(message)
     method = Map.get(payload, "method") || Map.get(payload, :method)
@@ -1253,6 +1219,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   defp agent_label("cursor"), do: "Cursor"
   defp agent_label(_), do: "The agent"
 
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp normalize_runner_result({:ok, result}) when is_map(result) do
     assistant_message = Map.get(result, :assistant_message) || Map.get(result, "assistant_message")
 

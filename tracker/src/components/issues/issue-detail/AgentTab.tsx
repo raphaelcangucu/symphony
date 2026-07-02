@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
+import { AgentResumeIconButton } from "@/components/issues/AgentResumeIconButton";
 import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { IssueSessionLog } from "@/components/issues/issue-detail/IssueSessionLog";
@@ -102,7 +103,15 @@ export function AgentTab({
           </div>
           {execution ? (
             <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <AgentStatusBadge status={displayStatus!} />
+              <span className="inline-flex items-center gap-0.5">
+                <AgentStatusBadge status={displayStatus!} />
+                <AgentResumeIconButton
+                  projectSlug={projectSlug}
+                  issueIdentifier={issue.identifier}
+                  execution={execution}
+                  onIssueUpdated={onIssueUpdated}
+                />
+              </span>
               <AgentLongRunningBadge execution={execution} />
             </div>
           ) : (

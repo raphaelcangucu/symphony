@@ -10,10 +10,13 @@ defmodule SymphonyElixir.TelegramGateway.AudioTranscriberTest do
       Agent.update(calls, &[{command, args} | &1])
 
       if command == "/usr/local/bin/whisper-cli" do
-        out_base = args |> Enum.chunk_every(2, 1, :discard) |> Enum.find_value(fn
-          ["-of", value] -> value
-          _ -> nil
-        end)
+        out_base =
+          args
+          |> Enum.chunk_every(2, 1, :discard)
+          |> Enum.find_value(fn
+            ["-of", value] -> value
+            _ -> nil
+          end)
 
         File.write!(out_base <> ".txt", "transcrição local\n")
       end

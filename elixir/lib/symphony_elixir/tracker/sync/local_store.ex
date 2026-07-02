@@ -389,8 +389,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
     Repo.delete_all(
       from(d in DismissedPullRequestRecord,
-        where:
-          d.project_id == ^project_id and d.issue_identifier == ^identifier and d.url == ^url
+        where: d.project_id == ^project_id and d.issue_identifier == ^identifier and d.url == ^url
       )
     )
 
@@ -438,6 +437,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   """
   @spec mark_comment_sync_status(integer(), String.t()) ::
           {:ok, SymphonyElixir.LocalTracker.Comment.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   def mark_comment_sync_status(comment_id, status)
       when is_integer(comment_id) and status in ["synced", "pending", "conflict", "error", "archived"] do
     case Repo.get(SymphonyElixir.LocalTracker.Comment, comment_id) do
@@ -561,28 +561,13 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
         |> Repo.preload(:project)
 
       PushDispatcher.issue_assigned(updated, previous_assignee)
-      sync_group_member_statuses!(updated)
       updated
     end
   end
 
-  # Group members follow the lead's local column; remote Jira statuses are
-  # independent and must not overwrite a member's mirrored status on pull.
-  defp maybe_put_status_id(attrs, _dirty_fields, _status_id, %IssueRecord{group_lead_id: lead_id})
-       when not is_nil(lead_id),
-       do: attrs
-
   defp maybe_put_status_id(attrs, dirty_fields, status_id, _current) do
     if Map.has_key?(dirty_fields, "state"), do: attrs, else: Map.put(attrs, :status_id, status_id)
   end
-
-  defp sync_group_member_statuses!(%IssueRecord{group_lead_id: nil, id: lead_id, status_id: status_id}) do
-    IssueRecord
-    |> where([i], i.group_lead_id == ^lead_id and i.status_id != ^status_id)
-    |> Repo.update_all(set: [status_id: status_id, updated_at: DateTime.utc_now()])
-  end
-
-  defp sync_group_member_statuses!(_issue), do: :ok
 
   defp issue_unchanged?(%IssueRecord{} = current, desired) do
     Enum.all?(desired, fn {field, value} -> field_equal?(Map.get(current, field), value) end)
@@ -640,6 +625,29 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
     |> Repo.one()
   end
 
+  @doc """
+  Marks a locally-authored `sub_issue_of` relation as synced after GitHub
+  `addSubIssue` succeeds.
+  """
+  @spec mark_sub_issue_relation_synced!(String.t(), map()) :: :ok
+  def mark_sub_issue_relation_synced!(project_slug, %{"child_identifier" => child, "parent_identifier" => parent})
+      when is_binary(project_slug) and is_binary(child) and is_binary(parent) do
+    subtask_type = IssueRelation.subtask_type()
+
+    with {:ok, _project} <- Context.get_project(project_slug),
+         {:ok, child_issue} <- Context.get_issue(project_slug, child),
+         {:ok, parent_issue} <- Context.get_issue(project_slug, parent),
+         %IssueRelation{} = relation <- existing_relation(child_issue.id, parent_issue.id, subtask_type) do
+      relation
+      |> IssueRelation.changeset(%{remote_origin: true})
+      |> Repo.update!()
+    end
+
+    :ok
+  end
+
+  def mark_sub_issue_relation_synced!(_project_slug, _payload), do: :ok
+
   defp resolve_status_id(project_id, state_name) when is_binary(state_name) and state_name != "" do
     case Repo.get_by(WorkflowStatus, project_id: project_id, name: state_name) do
       %WorkflowStatus{id: id} -> id
@@ -690,6 +698,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   defp labels_dirty?(%IssueRecord{dirty_fields: %{} = dirty}), do: Map.has_key?(dirty, "labels")
   defp labels_dirty?(_issue), do: false
 
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp upsert_labels!(project, issue, labels) when is_list(labels) do
     desired_ids =
       labels

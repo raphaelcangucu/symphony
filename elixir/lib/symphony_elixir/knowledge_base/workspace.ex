@@ -2,26 +2,32 @@ defmodule SymphonyElixir.KnowledgeBase.Workspace do
   @moduledoc """
   Resolves the knowledge base working directory for a repository checkout.
 
-  KB edits live on a dedicated `symphony-docs` branch, materialized as a git
-  worktree at `<checkout>/.worktrees/symphony-docs`. Both reads and writes use
-  this directory so the UI always sees the same content it commits.
+  Project KB edits use the repository's configured/base checkout directly. This
+  keeps the project assistant, project KB, and the repository working tree aligned
+  instead of staging documentation through a separate `symphony-docs` branch.
   """
 
   alias SymphonyElixir.KnowledgeBase.{Git, Paths}
 
-  @docs_branch "symphony-docs"
-
   @type t :: %{worktree: Path.t(), docs_root: Path.t(), branch: String.t()}
 
   @spec docs_branch() :: String.t()
-  def docs_branch, do: @docs_branch
+  def docs_branch, do: "symphony-docs"
 
   @spec ensure(Path.t(), keyword()) :: {:ok, t()} | {:error, term()}
   def ensure(checkout, opts \\ []) when is_binary(checkout) do
-    with {:ok, worktree} <- Git.ensure_worktree(checkout, @docs_branch, opts) do
-      docs_root = Paths.docs_root_in(worktree)
+    with {:ok, branch} <- checkout_branch(checkout, opts) do
+      docs_root = Paths.docs_root_in(checkout)
       ensure_assets_dir!(docs_root)
-      {:ok, %{worktree: worktree, docs_root: docs_root, branch: @docs_branch}}
+      {:ok, %{worktree: checkout, docs_root: docs_root, branch: branch}}
+    end
+  end
+
+  defp checkout_branch(checkout, opts) do
+    case Git.current_branch(checkout, opts) do
+      {:ok, branch} when is_binary(branch) and branch != "" -> {:ok, branch}
+      {:ok, _} -> {:ok, Keyword.get(opts, :base_branch, "HEAD")}
+      error -> error
     end
   end
 

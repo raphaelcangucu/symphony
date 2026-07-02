@@ -5,7 +5,7 @@ defmodule SymphonyElixirWeb.Presenter do
 
   use Gettext, backend: SymphonyElixirWeb.Gettext
 
-  alias SymphonyElixir.{Config, Orchestrator, StatusDashboard}
+  alias SymphonyElixir.{Config, Orchestrator, StatusDashboard, SubagentRegistry}
 
   @empty_agent_totals %{
     input_tokens: 0,
@@ -44,14 +44,83 @@ defmodule SymphonyElixirWeb.Presenter do
   defp build_state_payload(snapshot, generated_at, project_slug) do
     running = scope_entries(snapshot.running, project_slug)
     retrying = scope_entries(snapshot.retrying, project_slug)
+    waiting = waiting_subagent_payloads(snapshot, project_slug)
+    unified = unified_subagent_payloads(snapshot, project_slug)
 
     %{
       generated_at: generated_at,
       counts: %{running: length(running), retrying: length(retrying)},
-      running: Enum.map(running, &running_entry_payload/1),
+      running: Enum.map(running, &running_entry_payload/1) ++ waiting ++ unified,
       retrying: Enum.map(retrying, &retry_entry_payload/1),
       agent_totals: scope_agent_totals(snapshot, project_slug),
       rate_limits: snapshot.rate_limits
+    }
+  end
+
+  # Dependency-gated subagent units of in-flight coordinator parents. They run no
+  # agent and burn no tokens, but surface in the sessions table as `waiting`
+  # rows nested under their parent so the operator can see the whole bundle. The
+  # snapshot is reused (no extra orchestrator round-trip) and rows are scoped to
+  # the requested project, mirroring `scope_entries/2`. `counts.running` is left
+  # to the real running agents — a parked subagent is not an active worker.
+  defp waiting_subagent_payloads(snapshot, project_slug) do
+    snapshot
+    |> SubagentRegistry.waiting_subagents()
+    |> Enum.filter(&waiting_in_scope?(&1, project_slug))
+    |> Enum.map(&waiting_subagent_payload/1)
+  end
+
+  defp unified_subagent_payloads(snapshot, project_slug) do
+    snapshot
+    |> SubagentRegistry.unified_subagent_rows([])
+    |> Enum.filter(&waiting_in_scope?(&1, project_slug))
+    |> Enum.map(&unified_subagent_payload/1)
+  end
+
+  defp unified_subagent_payload(record) do
+    %{
+      issue_id: record.issue_id,
+      issue_identifier: record.issue_identifier,
+      project_slug: record.project_slug,
+      state: record.state,
+      status: "live",
+      session_id: nil,
+      turn_count: 0,
+      last_event: nil,
+      last_message: record.last_message,
+      started_at: nil,
+      last_event_at: nil,
+      tokens: %{input_tokens: 0, output_tokens: 0, total_tokens: 0},
+      bundle_role: "subagent",
+      parent_identifier: record.parent_identifier,
+      unit_id: record.unit_id,
+      repo: record.repo,
+      child_identifiers: []
+    }
+  end
+
+  defp waiting_in_scope?(_record, nil), do: true
+  defp waiting_in_scope?(%{project_slug: slug}, project_slug), do: slug == project_slug
+
+  defp waiting_subagent_payload(record) do
+    %{
+      issue_id: record.issue_id,
+      issue_identifier: record.issue_identifier,
+      project_slug: record.project_slug,
+      state: record.state,
+      status: "waiting",
+      session_id: nil,
+      turn_count: 0,
+      last_event: nil,
+      last_message: record.last_message,
+      started_at: nil,
+      last_event_at: nil,
+      tokens: %{input_tokens: 0, output_tokens: 0, total_tokens: 0},
+      bundle_role: "subagent",
+      parent_identifier: record.parent_identifier,
+      unit_id: record.unit_id,
+      repo: record.repo,
+      child_identifiers: []
     }
   end
 
@@ -137,6 +206,7 @@ defmodule SymphonyElixirWeb.Presenter do
       issue_identifier: entry.identifier,
       project_slug: Map.get(entry, :project_slug),
       state: entry.state,
+      status: "live",
       session_id: entry.session_id,
       turn_count: Map.get(entry, :turn_count, 0),
       last_event: entry.last_codex_event,
@@ -151,6 +221,7 @@ defmodule SymphonyElixirWeb.Presenter do
       bundle_role: bundle_role_payload(Map.get(entry, :bundle_role)),
       parent_identifier: Map.get(entry, :parent_identifier),
       unit_id: Map.get(entry, :unit_id),
+      repo: Map.get(entry, :repo),
       child_identifiers: Map.get(entry, :child_identifiers) || []
     }
   end

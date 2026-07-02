@@ -5,8 +5,8 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
 
   alias Plug.Conn
   alias SymphonyElixir.Config
-  alias SymphonyElixir.LocalTracker.{Context, ProjectYamlSource, Projects}
   alias SymphonyElixir.GitHub.Gist
+  alias SymphonyElixir.LocalTracker.{Context, Projects, ProjectYamlSource}
   alias SymphonyElixir.Tracker.Sync.Engine, as: SyncEngine
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
@@ -240,7 +240,6 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
       repositories = Context.list_repositories(project.slug)
       setup = Context.get_project_setup(project.slug)
       json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup)})
-
     else
       {:error, :invalid_yaml} ->
         TrackerErrors.validation_msg(conn, "Invalid YAML")

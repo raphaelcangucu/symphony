@@ -185,8 +185,6 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :index)
     post("/projects/:project_slug/issues/:identifier/blockers", BlockerController, :create)
     delete("/projects/:project_slug/issues/:identifier/blockers/:blocker_identifier", BlockerController, :delete)
-    post("/projects/:project_slug/issues/:identifier/group", GroupController, :create)
-    delete("/projects/:project_slug/issues/:identifier/group", GroupController, :delete)
     post("/projects/:project_slug/issues/:identifier/subtasks", IssueController, :create_subtask)
     post("/projects/:project_slug/issues/:identifier/parent", IssueController, :set_parent)
     delete("/projects/:project_slug/issues/:identifier/parent", IssueController, :clear_parent)
@@ -228,6 +226,9 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/kb/repos/:repo", KnowledgeBaseController, :repo_tree)
     get("/projects/:project_slug/kb/repos/:repo/pages/*path", KnowledgeBaseController, :show_page)
     put("/projects/:project_slug/kb/repos/:repo/pages/*path", KnowledgeBaseController, :save_page)
+    get("/projects/:project_slug/issues/:identifier/kb/repos/:repo", KnowledgeBaseController, :issue_repo_tree)
+    get("/projects/:project_slug/issues/:identifier/kb/repos/:repo/pages/*path", KnowledgeBaseController, :issue_show_page)
+    put("/projects/:project_slug/issues/:identifier/kb/repos/:repo/pages/*path", KnowledgeBaseController, :issue_save_page)
 
     delete(
       "/projects/:project_slug/kb/repos/:repo/pages/*path",

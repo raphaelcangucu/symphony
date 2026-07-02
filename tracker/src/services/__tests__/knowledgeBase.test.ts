@@ -4,12 +4,15 @@ import {
   connectGeneral,
   getGeneralOverview,
   getPage,
+  getIssuePage,
+  getIssueRepoTree,
   getProjectOverview,
   getRepoTree,
   getSyncStatus,
   regenerateGeneralHome,
   requestSync,
   savePage,
+  saveIssuePage,
   searchProject,
 } from "@/services/knowledgeBase";
 
@@ -70,6 +73,45 @@ describe("knowledgeBaseService", () => {
     expect(http.get).toHaveBeenCalledWith("/api/tracker/v1/projects/acme/kb/repos/web");
     expect(result.docsPresent).toBe(true);
     expect(result.repository.docsPresent).toBe(true);
+  });
+
+  it("issue KB endpoints use the issue working tree scope", async () => {
+    (http.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        data: {
+          repository: {
+            repo_slug: "web",
+            workspace_path: "web",
+            github_full_name: "acme/web",
+            role: "frontend",
+          },
+          docs_present: true,
+          tree: [],
+        },
+      },
+    });
+    (http.put as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: { data: { path: "guide.md", commit: "workspace", pushed: false } },
+    });
+    (http.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        data: { path: "guide.md", title: "Guide", frontmatter: {}, body: "# Guide", content: "# Guide" },
+      },
+    });
+
+    await getIssueRepoTree("acme", "MAC-1", "web");
+    await saveIssuePage("acme", "MAC-1", "web", "guide.md", { frontmatter: {}, body: "# Guide" });
+    await getIssuePage("acme", "MAC-1", "web", "guide.md");
+
+    expect(http.get).toHaveBeenNthCalledWith(1, "/api/tracker/v1/projects/acme/issues/MAC-1/kb/repos/web");
+    expect(http.put).toHaveBeenCalledWith("/api/tracker/v1/projects/acme/issues/MAC-1/kb/repos/web/pages/guide.md", {
+      frontmatter: {},
+      body: "# Guide",
+    });
+    expect(http.get).toHaveBeenNthCalledWith(
+      2,
+      "/api/tracker/v1/projects/acme/issues/MAC-1/kb/repos/web/pages/guide.md",
+    );
   });
 
   it("getPage maps backend `content` to `markdown`", async () => {

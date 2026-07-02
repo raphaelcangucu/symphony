@@ -49,6 +49,9 @@
       },
       "gateways": {
         "label": "Gateways"
+      },
+      "lab": {
+        "label": "Lab"
       }
     },
     "loadFailed": "Failed to load settings — refresh to retry.",
@@ -84,6 +87,23 @@
           "title": "Require assignment to me",
           "description": "Only auto-start issues assigned to the connected provider identity (GitHub login, Jira account, or Linear user)."
         }
+      },
+      "tokenBudget": {
+        "title": "Per-run token budget",
+        "description": "Force-stop a run when cumulative agent tokens exceed the limit. Off by default; coordinator parents stay exempt when enabled.",
+        "amountLabel": "Token limit",
+        "invalid": "Enter a whole number of tokens (minimum 1)."
+      }
+    },
+    "lab": {
+      "title": "Experimental features",
+      "description": "Optional orchestration models under active development. Defaults favor the simpler unified parent path.",
+      "pageDescription": "Toggle experimental Symphony behavior for this instance.",
+      "loadFailed": "Failed to load lab settings — refresh to retry.",
+      "saveFailed": "Failed to save lab setting",
+      "bundleChildOrchestration": {
+        "title": "Bundle child orchestration",
+        "description": "When on, parent tasks dispatch separate orchestrator runs per child_run unit (worktrees, integration branches). When off (default), one parent run uses native subagents and one PR per repo."
       }
     },
     "push": {
@@ -370,12 +390,6 @@
       "issueTitleAria": "Issue title",
       "untitledIssue": "Untitled issue",
       "unassigned": "Unassigned",
-      "group": {
-        "title": "Group",
-        "lead": "Lead",
-        "current": "This issue",
-        "unavailable": "Not in current view"
-      },
       "code": "Code",
       "editor": {
         "checking": "Checking editor…",
@@ -763,10 +777,6 @@
         "parentTitle": "Set parent issue",
         "noParent": "No parent",
         "clearParent": "Remove parent",
-        "groupLead": "Group lead",
-        "groupLeadTitle": "Set group lead",
-        "noGroupLead": "No group lead",
-        "clearGroupLead": "Remove from group",
         "searchPlaceholder": "Search issues…",
         "empty": "No matching issues.",
         "unavailable": "Not in current view",
@@ -945,11 +955,7 @@
       "parentSet": "Parent set to {{identifier}}",
       "parentSetFailed": "Failed to set parent",
       "parentCleared": "Parent removed",
-      "parentClearFailed": "Failed to remove parent",
-      "groupLeadSet": "Grouped under {{identifier}}",
-      "groupLeadSetFailed": "Failed to set group lead",
-      "groupLeadCleared": "Removed from group",
-      "groupLeadClearFailed": "Failed to remove from group"
+      "parentClearFailed": "Failed to remove parent"
     },
     "attachments": {
       "imageUnavailable": "Image uploads are not available here.",
@@ -1648,6 +1654,10 @@
       "show": "Show child runs",
       "hide": "Hide child runs"
     },
+    "subagent": {
+      "waiting": "Waiting",
+      "waitingHint": "Parked subagent: waiting on its dependencies. No agent is running and no tokens are spent until it is released."
+    },
     "tokens": {
       "breakdown": "Coordinator: {{coordinator}} · Children: {{children}} · Total: {{total}}"
     },
@@ -2158,15 +2168,9 @@
       "searchPlaceholder": "Search {{label}}…",
       "noPeopleFound": "No people found."
     },
-    "group": {
-      "mergeHint": "Group with {{identifier}}",
-      "dropToGroup": "Drop to group",
-      "count": "{{count}} grouped",
-      "expand": "Show grouped tasks",
-      "collapse": "Hide grouped tasks",
-      "removeMember": "Remove {{identifier}} from group",
-      "disband": "Ungroup all",
-      "runningLocked": "Can't change the group while it's running"
+    "parent": {
+      "makeSubIssue": "Make sub-issue",
+      "mergeHint": "Make sub-issue of {{identifier}}"
     },
     "subtasks": {
       "count": "{{count}} subtasks",
@@ -2304,6 +2308,7 @@
       "ariaLabel": "Knowledge base documents",
       "title": "Knowledge base",
       "subtitle": "{{count}} cited in chat",
+      "changedSubtitle": "{{count}} changed docs in this task",
       "cited": "Cited docs",
       "all": "All docs",
       "empty": "No knowledge base documents found.",

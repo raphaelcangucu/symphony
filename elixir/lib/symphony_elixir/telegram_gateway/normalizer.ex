@@ -6,7 +6,7 @@ defmodule SymphonyElixir.TelegramGateway.Normalizer do
 
   @default_account_id "default"
 
-  @spec normalize_update(map()) :: {:ok, InboundMessage.t()} | {:ignore, atom()} | {:error, atom()}
+  @spec normalize_update(map(), keyword()) :: {:ok, InboundMessage.t()} | {:ignore, atom()} | {:error, atom()}
   def normalize_update(update, opts \\ [])
   def normalize_update(%{"message" => message}, opts), do: normalize_message(message, opts)
   def normalize_update(%{"edited_message" => message}, opts), do: normalize_message(message, opts)

@@ -5,8 +5,11 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
 
   alias Phoenix.Socket
   alias SymphonyElixir.AgentRunner
+  alias SymphonyElixir.Issue
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.IssueMapper
+  alias SymphonyElixir.Orchestrator
+  alias SymphonyElixir.SessionEvents
   alias SymphonyElixir.SessionLog
   alias SymphonyElixir.Workspace
   alias SymphonyElixirWeb.TrackerAuth
@@ -19,9 +22,11 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     with :ok <- authorize(socket),
          {:ok, issue_identifier} <- parse_topic(topic_rest, project_slug),
          preferred_agent_kind <- preferred_agent_kind(params, project_slug, issue_identifier),
-         workspace <- Workspace.path_for_issue(issue_identifier),
+         workspace <- run_log_workspace(project_slug, issue_identifier),
          {:ok, log_agent_kind, path} <- SessionLog.resolve_log_source(preferred_agent_kind, workspace) do
-      {:ok, lines, offset} = SessionLog.tail(log_agent_kind, path, SessionLog.join_tail_opts())
+      log_opts = SessionLog.join_tail_opts() |> Keyword.put(:workspace, workspace)
+      {:ok, lines, offset} = SessionLog.tail(log_agent_kind, path, log_opts)
+      {:ok, _, symphony_offset} = SessionEvents.tail(workspace)
 
       socket =
         socket
@@ -30,6 +35,7 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
         |> assign(:workspace, workspace)
         |> assign(:path, path)
         |> assign(:offset, offset)
+        |> assign(:symphony_offset, symphony_offset)
         |> assign(:agent_kind, log_agent_kind)
         |> assign(:preferred_agent_kind, preferred_agent_kind)
 
@@ -58,29 +64,27 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     attachments = Map.get(payload, "attachments", [])
     trimmed = if is_binary(message), do: String.trim(message), else: ""
 
-    cond do
-      trimmed == "" and attachments == [] ->
-        {:reply, {:error, %{reason: "message is required"}}, socket}
+    if trimmed == "" and attachments == [] do
+      {:reply, {:error, %{reason: "message is required"}}, socket}
+    else
+      case Orchestrator.steer(
+             socket.assigns.issue_identifier,
+             message,
+             self(),
+             attachments: attachments,
+             project_slug: socket.assigns.project_slug
+           ) do
+        :ok ->
+          {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
 
-      true ->
-        case SymphonyElixir.Orchestrator.steer(
-               socket.assigns.issue_identifier,
-               message,
-               self(),
-               attachments: attachments,
-               project_slug: socket.assigns.project_slug
-             ) do
-          :ok ->
-            {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
+        {:error, reason} ->
+          push(socket, "steer_failed", %{
+            reason: steer_error_reason(reason),
+            message: trimmed
+          })
 
-          {:error, reason} ->
-            push(socket, "steer_failed", %{
-              reason: steer_error_reason(reason),
-              message: trimmed
-            })
-
-            {:reply, {:error, %{reason: steer_error_reason(reason)}}, socket}
-        end
+          {:reply, {:error, %{reason: steer_error_reason(reason)}}, socket}
+      end
     end
   end
 
@@ -100,22 +104,42 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   end
 
   @impl true
-  def handle_info(:poll, %{assigns: %{path: path, offset: offset, agent_kind: agent_kind}} = socket) do
-    socket =
-      case SessionLog.read_from(agent_kind, path, offset) do
-        {:ok, lines, new_offset} when lines != [] ->
-          push(socket, "entries", %{entries: lines, offset: new_offset})
-          assign(socket, :offset, new_offset)
-
-        {:ok, _lines, new_offset} ->
-          assign(socket, :offset, new_offset)
-
-        {:error, _reason} ->
-          socket
-      end
+  def handle_info(:poll, %{assigns: assigns} = socket) do
+    socket = poll_agent_log(socket, assigns)
+    socket = poll_symphony_events(socket, assigns)
 
     Process.send_after(self(), :poll, @poll_ms)
     {:noreply, socket}
+  end
+
+  defp poll_agent_log(socket, %{path: path, offset: offset, agent_kind: agent_kind, workspace: workspace}) do
+    log_opts = [workspace: workspace]
+
+    case SessionLog.read_from(agent_kind, path, offset, log_opts) do
+      {:ok, lines, new_offset} when lines != [] ->
+        push(socket, "entries", %{entries: lines, offset: new_offset})
+        assign(socket, :offset, new_offset)
+
+      {:ok, _lines, new_offset} ->
+        assign(socket, :offset, new_offset)
+
+      {:error, _reason} ->
+        socket
+    end
+  end
+
+  defp poll_symphony_events(socket, %{workspace: workspace, symphony_offset: symphony_offset}) do
+    case SessionEvents.read_from(workspace, symphony_offset) do
+      {:ok, lines, new_offset} when lines != [] ->
+        push(socket, "entries", %{entries: lines, offset: new_offset, source: "symphony"})
+        assign(socket, :symphony_offset, new_offset)
+
+      {:ok, _lines, new_offset} ->
+        assign(socket, :symphony_offset, new_offset)
+
+      {:error, _reason} ->
+        socket
+    end
   end
 
   @known_agent_kinds ["codex", "claude", "cursor"]
@@ -150,6 +174,36 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   defp authorize(socket) do
     if authorized?(socket), do: :ok, else: {:error, "unauthorized"}
   end
+
+  # A bundle `child_run` executes in an isolated git worktree
+  # (`<repo>/.worktrees/<slug>`), where the coding agent writes its session
+  # sidecar + rollout log. The standard per-issue workspace holds no log for such
+  # a run, so the execution transcript would never stream. Resolve the child's
+  # worktree — reusing the exact run context the orchestrator dispatches with —
+  # and tail its log there; standalone runs keep the standard per-issue workspace.
+  defp run_log_workspace(project_slug, issue_identifier) do
+    fallback = Workspace.path_for_issue(issue_identifier)
+    worktree_log_workspace(run_opts_for(project_slug, issue_identifier), fallback)
+  end
+
+  defp run_opts_for(project_slug, issue_identifier) do
+    with {:ok, record} <- Context.get_issue(project_slug, issue_identifier),
+         %Issue{} = issue <- IssueMapper.to_issue(record) do
+      Orchestrator.bundle_run_context(issue).run_opts
+    else
+      _ -> []
+    end
+  rescue
+    _ -> []
+  end
+
+  @doc false
+  @spec worktree_log_workspace(keyword(), String.t()) :: String.t()
+  def worktree_log_workspace(run_opts, fallback) when is_list(run_opts) and is_binary(fallback) do
+    SessionLog.worktree_log_workspace(fallback, run_opts)
+  end
+
+  def worktree_log_workspace(_run_opts, fallback) when is_binary(fallback), do: fallback
 
   defp parse_topic(topic_rest, project_slug) do
     prefix = project_slug <> ":"

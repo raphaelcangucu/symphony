@@ -74,6 +74,7 @@ defmodule SymphonyElixir.KnowledgeBase.PathsTest do
       assert Paths.safe_asset_relative_path([".git", "config"]) == {:error, :kb_invalid_path}
       assert Paths.safe_asset_relative_path(["sub", ".git", "HEAD"]) == {:error, :kb_invalid_path}
       assert Paths.safe_asset_relative_path([".env"]) == {:error, :kb_invalid_path}
+
       assert Paths.safe_asset_relative_path(["config", ".env.production"]) ==
                {:error, :kb_invalid_path}
     end

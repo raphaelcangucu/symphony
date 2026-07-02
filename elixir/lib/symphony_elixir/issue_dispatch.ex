@@ -7,7 +7,15 @@ defmodule SymphonyElixir.IssueDispatch do
   pick the issue up again.
   """
 
-  alias SymphonyElixir.{AgentPreference, ExecutionMode, Orchestrator, ProjectConfig, Repo, Workspace}
+  alias SymphonyElixir.{
+    AgentPreference,
+    ExecutionMode,
+    IssueDispatchPrep,
+    Orchestrator,
+    ProjectConfig,
+    Repo,
+    Workspace
+  }
   alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.{Context, Project}
@@ -85,6 +93,7 @@ defmodule SymphonyElixir.IssueDispatch do
        when action in [:resume, :restart, :hard_reset, :continue_work] do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
          agent_kind = effective_agent_kind(project, issue, opts),
+         :ok <- IssueDispatchPrep.prepare_for_dispatch(project, identifier, agent_kind),
          {:ok, _comment} <- maybe_add_comment(project, identifier, action, opts),
          {:ok, _} <- maybe_update_agent(project, identifier, opts, agent_kind),
          :ok <- maybe_persist_agent_settings(project, identifier, opts, agent_kind),

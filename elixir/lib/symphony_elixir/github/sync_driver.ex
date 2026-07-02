@@ -96,6 +96,14 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
     adapter().delete_issue(project, payload["identifier"])
   end
 
+  def push(%Project{} = project, %OutboxEntry{entity_type: "relation", operation: "link_parent", payload: payload}) do
+    adapter().link_sub_issue(project, payload["parent_identifier"], payload["child_identifier"])
+  end
+
+  def push(%Project{} = project, %OutboxEntry{entity_type: "relation", operation: "unlink_parent", payload: payload}) do
+    adapter().unlink_sub_issue(project, payload["parent_identifier"], payload["child_identifier"])
+  end
+
   def push(%Project{}, %OutboxEntry{entity_type: type, operation: op}) do
     {:error, {:unsupported_push, type, op}}
   end

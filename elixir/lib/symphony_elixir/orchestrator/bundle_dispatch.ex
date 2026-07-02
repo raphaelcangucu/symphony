@@ -13,10 +13,11 @@ defmodule SymphonyElixir.Orchestrator.BundleDispatch do
     contract_status = Keyword.get(opts, :contract_status, %{})
 
     bundle
-    |> ExecutionBundle.child_units()
+    |> ExecutionBundle.dispatchable_units()
     |> Enum.reject(&(Map.get(child_states, &1.id) in [:running, :done]))
-    |> Enum.filter(&deps_satisfied?(&1, child_states))
-    |> Enum.filter(&contracts_ready?(&1, contract_status))
+    |> Enum.filter(fn unit ->
+      deps_satisfied?(unit, child_states) and contracts_ready?(unit, contract_status)
+    end)
   end
 
   defp deps_satisfied?(unit, child_states) do

@@ -6,11 +6,16 @@ export interface RuntimeTokens {
   totalTokens: number;
 }
 
-export type BundleRole = "parent" | "child" | "standalone";
+export type BundleRole = "parent" | "parent_unified" | "child" | "subagent" | "standalone";
+
+// Live runtime status of a session row. A `waiting` subagent is parked under its
+// coordinator parent with no agent and no tokens until its dependencies clear.
+export type RunningSessionStatus = "live" | "waiting";
 
 export interface RunningSession {
   issueIdentifier: string;
   state: string | null;
+  status?: RunningSessionStatus | null;
   sessionId: string | null;
   turnCount: number;
   lastEvent: string | null;

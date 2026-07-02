@@ -5,6 +5,7 @@ defmodule SymphonyElixir.Config do
 
   alias NimbleOptions
   alias SymphonyElixir.InstanceConfig
+  alias SymphonyElixir.Settings.Orchestration, as: OrchestrationSettings
   alias SymphonyElixir.Workflow
 
   @default_active_states ["Todo", "In Progress"]
@@ -745,6 +746,12 @@ defmodule SymphonyElixir.Config do
   @spec agent_max_turns() :: pos_integer()
   def agent_max_turns, do: InstanceConfig.default_max_turns()
 
+  @spec agent_token_budget() :: non_neg_integer()
+  def agent_token_budget, do: OrchestrationSettings.agent_token_budget()
+
+  @spec agent_budget_max_retries() :: non_neg_integer()
+  def agent_budget_max_retries, do: InstanceConfig.agent_budget_max_retries()
+
   @doc """
   Process-level fallback completion transitions. Per-project transitions are
   resolved from each project's `workflow_markdown` via `ProjectConfig`; this is
@@ -1207,6 +1214,7 @@ defmodule SymphonyElixir.Config do
   defp strict_section_issues(section, value, _fields) when not is_map(value),
     do: ["#{section} must be a mapping"]
 
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp strict_section_issues(section, section_map, fields) do
     Enum.flat_map(fields, fn {field, type} ->
       case Map.get(section_map, field) do

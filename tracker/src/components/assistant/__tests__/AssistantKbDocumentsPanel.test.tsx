@@ -104,6 +104,24 @@ vi.mock("@/services/knowledgeBase", async () => {
 });
 
 describe("AssistantKbDocumentsPanel", () => {
+  it("labels issue-scoped trees as changed docs instead of chat citations", () => {
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter>
+          <AssistantKbDocumentsPanel
+            projectSlug="macro-markets"
+            issueIdentifier="MAC-1"
+            citedPaths={Array.from({ length: 87 }, (_, index) => `old/cited-${index}.md`)}
+          />
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    expect(screen.getByText("2 changed docs in this task")).toBeInTheDocument();
+    expect(screen.queryByText(/cited in chat/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cited docs" })).not.toBeInTheDocument();
+  });
+
   it("uses the KB tree and editor for cited docs, then can switch to all docs", async () => {
     savePage.mockResolvedValue({ path: "market/polymarket-omnibus-spec.md", commit: "abc", pushed: false });
 

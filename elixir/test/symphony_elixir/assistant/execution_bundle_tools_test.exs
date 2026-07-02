@@ -1,9 +1,11 @@
 defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.Assistant.ToolExecutor
+  alias SymphonyElixir.Assistant.{ProjectBoardTools, ToolExecutor}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Tracker.Workpad
+  alias SymphonyElixir.Workpad.ExecutionBundle
 
   setup do
     migrate_repo()
@@ -36,8 +38,20 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
   end
 
   test "classify_execution_unit is exposed in the project board tool specs" do
-    names = Enum.map(SymphonyElixir.Assistant.ProjectBoardTools.tool_specs(), & &1["name"])
+    names = Enum.map(ProjectBoardTools.tool_specs(), & &1["name"])
     assert "classify_execution_unit" in names
+  end
+
+  test "classify_execution_unit reports child_run for same-repo contract-coupled work" do
+    assert {:ok, result} =
+             ToolExecutor.execute("macro-markets", "classify_execution_unit", %{
+               "repo" => "macro-markets/app",
+               "parent_repo" => "macro-markets/app",
+               "consumes" => ["api"]
+             })
+
+    assert result.data.classification == "child_run"
+    assert result.data.rule == "shared_contract"
   end
 
   describe "create_subtask" do
@@ -71,6 +85,18 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
       assert result.data.unit_type == "workpad_task"
     end
 
+    test "maps a legacy explicit subagent_unit unit_type to child_run", %{parent: parent} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "create_subtask", %{
+                 "parent_identifier" => parent.identifier,
+                 "title" => "Positions backend",
+                 "repo" => "macro-markets/app",
+                 "unit_type" => "subagent_unit"
+               })
+
+      assert result.data.unit_type == "child_run"
+    end
+
     test "links the child under the parent and surfaces parent_identifier", %{parent: parent} do
       {:ok, result} =
         ToolExecutor.execute("macro-markets", "create_subtask", %{
@@ -94,9 +120,9 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
         })
 
       {:ok, comments} = Context.list_comments("macro-markets", parent.identifier)
-      workpad = Enum.find(comments, &SymphonyElixir.Tracker.Workpad.workpad?(&1.body))
+      workpad = Enum.find(comments, &Workpad.workpad?(&1.body))
       assert workpad
-      {:ok, bundle} = SymphonyElixir.Workpad.ExecutionBundle.parse(workpad.body)
+      {:ok, bundle} = ExecutionBundle.parse(workpad.body)
       assert Enum.any?(bundle.units, &(&1.id == result.data.subtask))
     end
   end
@@ -227,6 +253,130 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
                })
 
       assert result.data.status == "changing"
+    end
+  end
+
+  describe "parent<->child comms tools" do
+    setup do
+      {:ok, parent} = Context.create_issue("macro-markets", %{"title" => "Coordinator", "status" => "Backlog"})
+
+      workpad = """
+      ## Codex Workpad
+
+      ### Execution bundle
+
+      ```yaml
+      version: 1
+      mode: bundle
+      parent: macro-markets#1
+      units:
+        - id: backend
+          type: child_run
+          repo: macro-markets/backend
+          produces: [lottery-api]
+        - id: frontend
+          type: child_run
+          repo: macro-markets/frontend
+          depends_on: [backend]
+          consumes: [lottery-api]
+      ```
+      """
+
+      {:ok, _comment} = Context.add_comment("macro-markets", parent.identifier, workpad, %{"author" => "assistant"})
+      %{parent: parent}
+    end
+
+    test "query_bundle_status returns a status row per dispatchable unit", %{parent: parent} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "query_bundle_status", %{
+                 "parent_identifier" => parent.identifier
+               })
+
+      assert result.tool == "query_bundle_status"
+      assert result.data.parent == parent.identifier
+
+      unit_ids = Enum.map(result.data.units, & &1.unit_id)
+      assert "backend" in unit_ids
+      assert "frontend" in unit_ids
+
+      frontend = Enum.find(result.data.units, &(&1.unit_id == "frontend"))
+      assert frontend.status == :waiting
+      assert "backend" in frontend.blocked_by
+    end
+
+    test "query_bundle_status requires a parent_identifier" do
+      assert {:error, {:missing_required_field, :parent_identifier}} =
+               ToolExecutor.execute("macro-markets", "query_bundle_status", %{})
+    end
+
+    test "report_unit_status writes a durable status block to the parent workpad", %{parent: parent} do
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "report_unit_status", %{
+                 "parent_identifier" => parent.identifier,
+                 "unit" => "backend",
+                 "phase" => "pr_open",
+                 "summary" => "API published",
+                 "contracts_ready" => true,
+                 "pr_url" => "https://github.com/clouapp/back/pull/1"
+               })
+
+      assert result.tool == "report_unit_status"
+      assert result.data.contracts_ready == true
+
+      {:ok, comments} = Context.list_comments("macro-markets", parent.identifier)
+      workpad = Enum.find(comments, &Workpad.workpad?(&1.body))
+      assert workpad.body =~ "### Unit status: backend"
+      assert workpad.body =~ "phase: pr_open"
+      assert workpad.body =~ "contracts_ready: true"
+      assert workpad.body =~ "https://github.com/clouapp/back/pull/1"
+    end
+
+    test "report_unit_status replaces a prior block for the same unit", %{parent: parent} do
+      ToolExecutor.execute("macro-markets", "report_unit_status", %{
+        "parent_identifier" => parent.identifier,
+        "unit" => "backend",
+        "phase" => "started"
+      })
+
+      ToolExecutor.execute("macro-markets", "report_unit_status", %{
+        "parent_identifier" => parent.identifier,
+        "unit" => "backend",
+        "phase" => "done"
+      })
+
+      {:ok, comments} = Context.list_comments("macro-markets", parent.identifier)
+      workpad = Enum.find(comments, &Workpad.workpad?(&1.body))
+
+      occurrences =
+        workpad.body
+        |> String.split("### Unit status: backend")
+        |> length()
+        |> Kernel.-(1)
+
+      assert occurrences == 1
+      assert workpad.body =~ "phase: done"
+      refute workpad.body =~ "phase: started"
+    end
+
+    test "report_unit_status requires unit and phase", %{parent: parent} do
+      assert {:error, {:missing_required_field, :unit}} =
+               ToolExecutor.execute("macro-markets", "report_unit_status", %{
+                 "parent_identifier" => parent.identifier,
+                 "phase" => "done"
+               })
+
+      assert {:error, {:missing_required_field, :phase}} =
+               ToolExecutor.execute("macro-markets", "report_unit_status", %{
+                 "parent_identifier" => parent.identifier,
+                 "unit" => "backend"
+               })
+    end
+
+    test "comms tools are advertised on the coding-agent surface" do
+      names = Enum.map(SymphonyElixir.Codex.DynamicTool.coding_agent_tool_specs(), & &1["name"])
+      assert "query_bundle_status" in names
+      assert "report_unit_status" in names
+      assert "update_shared_contract" in names
     end
   end
 

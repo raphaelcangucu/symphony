@@ -8,7 +8,7 @@
 
 **Architecture:** A `prompt_templates` Ecto table (built-in seeded + user rows, global or project-scoped) → `PromptTemplates` context (CRUD + `render/2` via Solid, mirroring `PromptBuilder`'s Solid usage) → REST CRUD controller → a tracker **Prompt Templates** settings panel with a body editor + per-template agent/model/effort/mode pickers (reusing `AssistantComposer`'s `AgentMenu`/`ModelMenu`/`EffortMenu`). The Magic Commands plan consumes `render/2` + the per-template model/effort/mode via `dispatchIssueAgent` (Plan 2a already threads those).
 
-**Tech Stack:** Elixir + Ecto migration + Solid, Phoenix controller, React 19 + TanStack Query + shadcn/ui, vitest, ExUnit.
+**Tech Stack:** Elixir + Ecto migration + Solid, Phoenix controller, React 19 + shadcn/ui, vitest, ExUnit. Frontend data flows through the repo's established `useState`/`useEffect` + service hook pattern (e.g. `useAgentExecutions`, `useIssueComments`, with `useTrackerPolling` for refresh) — **this repo has no TanStack Query; do not introduce it.**
 
 ---
 
@@ -29,9 +29,10 @@
 **Create (tracker):**
 - `tracker/src/types/prompt-template.ts`
 - `tracker/src/services/promptTemplates.ts`
+- `tracker/src/hooks/usePromptTemplates.ts` (`useState`/`useEffect` + service; returns `{ templates, isLoading, error, refetch }`, mirroring `useAgentExecutions`)
 - `tracker/src/components/settings/PromptTemplatesPanel.tsx`
 - `tracker/src/components/settings/PromptTemplateEditor.tsx`
-- tests for service + panel + editor.
+- tests for service + hook + panel + editor.
 
 **Modify (tracker):**
 - `tracker/src/pages/SettingsPage.tsx` (or `ProjectSettingsPage.tsx`) — mount the panel.
@@ -203,7 +204,8 @@ end
 
 - [ ] **Step 4: Implement**
 - `PromptTemplateEditor` — form + pickers + a textarea for the Solid body + a small preview (client-side token substitution against a sample issue, or call a backend `POST /prompt-templates/preview`).
-- `PromptTemplatesPanel` — `useQuery` list, grouped sections, create/edit/delete with confirm (reuse the `Dialog` pattern), invalidate on mutation.
+- `usePromptTemplates(projectSlug?)` — `useState`/`useEffect` load via the `promptTemplates` service (mirror `useAgentExecutions`: `{ templates, isLoading, error, refetch }`); no query cache.
+- `PromptTemplatesPanel` — consume `usePromptTemplates`, render grouped sections, create/edit/delete with confirm (reuse the `Dialog` pattern), and call `refetch()` after each successful create/update/delete.
 - Mount in `SettingsPage.tsx` (global) and optionally `ProjectSettingsPage.tsx` (project-scoped). i18n keys under `settings.prompts.*`.
 
 - [ ] **Step 5: Run (expect pass).**

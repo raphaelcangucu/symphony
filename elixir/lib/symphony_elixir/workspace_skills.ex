@@ -30,9 +30,8 @@ defmodule SymphonyElixir.WorkspaceSkills do
     with :ok <- ensure_existing_directory(workspace, {:workspace_missing, workspace}),
          {:ok, skill_sources} <- skill_sources(),
          :ok <- prepare_mirror(workspace, skill_sources),
-         :ok <- prepare_agent_roots(workspace),
-         :ok <- prune_authoring_skills(workspace) do
-      :ok
+         :ok <- prepare_agent_roots(workspace) do
+      prune_authoring_skills(workspace)
     end
   end
 
@@ -163,16 +162,24 @@ defmodule SymphonyElixir.WorkspaceSkills do
     end)
   end
 
+  # Agent scratch dirs (`/.codex/`, `/.claude/`) and Symphony's generated
+  # evidence tree (`/.symphony/evidence/`) must never be committed into a repo.
+  # We scope the evidence exclude to the `evidence/` subdir on purpose: some
+  # repos legitimately track their own `.symphony/` tooling (setup/serve/db
+  # scripts), so excluding all of `/.symphony/` would drop real project files.
+  @git_exclude_entries ["/.codex/", "/.claude/", "/.symphony/evidence/"]
+
   defp maybe_append_git_excludes(root) do
     info_dir = Path.join([root, ".git", "info"])
 
     if File.dir?(info_dir) do
       exclude_file = Path.join(info_dir, "exclude")
 
-      case ensure_exclude_entry(exclude_file, "/.codex/") do
-        :ok -> ensure_exclude_entry(exclude_file, "/.claude/")
-        {:error, reason} -> {:error, reason}
-      end
+      Enum.reduce_while(@git_exclude_entries, :ok, fn entry, :ok ->
+        exclude_file
+        |> ensure_exclude_entry(entry)
+        |> continue_or_halt()
+      end)
     else
       :ok
     end

@@ -2,6 +2,7 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseToolsTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.Assistant.KnowledgeBaseTools
+  alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.KnowledgeBase.Indexer
   alias SymphonyElixir.KnowledgeBaseTestFixtures, as: Fixtures
 
@@ -9,7 +10,7 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseToolsTest do
     Fixtures.reset!()
     {:ok, ctx} = Fixtures.seed_single_repo_project("acme", "acme/web")
     on_exit(ctx.cleanup)
-    :ok
+    {:ok, ctx: ctx}
   end
 
   test "tool_specs declares the kb tools with json schemas" do
@@ -46,6 +47,39 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseToolsTest do
   test "kb_update_page on a missing page returns page_not_found" do
     args = %{"repository" => "acme/web", "path" => "missing.md", "body" => "y"}
     assert {:error, :kb_page_not_found} = KnowledgeBaseTools.execute("acme", "kb_update_page", args, [])
+  end
+
+  test "issue-bound read and update target the issue worktree", %{ctx: ctx} do
+    issue_root = Path.join(ctx.root, "issue-worktree")
+    repo_root = Path.join(issue_root, ctx.workspace_path)
+    File.mkdir_p!(Path.join(repo_root, "docs/guides"))
+    git!(repo_root, ["init", "-q", "-b", "main"])
+    File.write!(Path.join(repo_root, "docs/guides/task.md"), "# Base Task\n")
+    git!(repo_root, ["add", "-A"])
+    git!(repo_root, ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base docs"])
+    git!(repo_root, ["checkout", "-q", "-b", "task/acme-1"])
+    File.write!(Path.join(repo_root, "docs/guides/task.md"), "# Issue Task\n")
+
+    {:ok, _thread} = History.ensure_issue_thread("acme", "ACME-1", %{workspace_path: issue_root})
+
+    args = %{"repository" => "acme/web", "path" => "guides/task.md"}
+
+    assert {:ok, result} =
+             KnowledgeBaseTools.execute("acme", "kb_read_page", args, bound_issue_identifier: "ACME-1")
+
+    assert result.data.body == "# Issue Task\n"
+
+    assert {:ok, result} =
+             KnowledgeBaseTools.execute(
+               "acme",
+               "kb_update_page",
+               Map.merge(args, %{"body" => "# Updated From Issue\n"}),
+               bound_issue_identifier: "ACME-1"
+             )
+
+    assert result.data.commit == :workspace
+    assert File.read!(Path.join(repo_root, "docs/guides/task.md")) =~ "Updated From Issue"
+    refute File.read!(Path.join(ctx.checkout, "docs/index.md")) =~ "Updated From Issue"
   end
 
   test "kb_search_pages finds a saved page by body text" do
@@ -163,4 +197,6 @@ defmodule SymphonyElixir.Assistant.KnowledgeBaseToolsTest do
     assert {:error, :kb_folder_not_found} =
              KnowledgeBaseTools.execute("acme", "kb_delete_folder", %{"repository" => "acme/web", "path" => "ghost"}, [])
   end
+
+  defp git!(dir, args), do: {_out, 0} = System.cmd("git", args, cd: dir, stderr_to_stdout: true)
 end

@@ -28,7 +28,13 @@ describe("SettingsPage", () => {
     vi.clearAllMocks();
     vi.mocked(settingsService.fetchSettings).mockResolvedValue({
       agents: { default_agent_kind: "codex" },
-      orchestrator: { require_symphony_label: true, require_assignee_match: true },
+      lab: { bundle_child_orchestration: false },
+      orchestrator: {
+        require_symphony_label: true,
+        require_assignee_match: true,
+        agent_token_budget_enabled: false,
+        agent_token_budget: 4_000_000,
+      },
       ui: { locale: "auto" },
     });
     vi.mocked(settingsService.fetchAgentAvailability).mockResolvedValue({

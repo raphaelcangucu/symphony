@@ -66,22 +66,62 @@ defmodule SymphonyElixir.Evidence.Manifest do
   @type t :: %__MODULE__{}
 
   @evidence_dir ".symphony/evidence"
+  @manifest_file "manifest.json"
   @required_run_fields ~w(kind repo command status)
 
   @spec dir(Path.t()) :: Path.t()
   def dir(workspace), do: Path.join(workspace, @evidence_dir)
 
+  @doc """
+  Resolves the evidence directory to read from for a workspace.
+
+  Prefers the canonical workspace-root `.symphony/evidence` (where the evidence
+  skill tells the agent to write). When that has no manifest, it falls back to
+  the first immediate repo subdirectory that holds one: agents naturally work
+  inside a repo (e.g. `back/`) and sometimes write the manifest there, which is
+  worse when the repo already tracks its own `.symphony/` tooling. When nothing
+  exists yet, it returns the canonical path so writers create it in the right
+  place.
+  """
+  @spec resolve_dir(Path.t()) :: Path.t()
+  def resolve_dir(workspace) do
+    canonical = dir(workspace)
+
+    if has_manifest?(canonical) do
+      canonical
+    else
+      repo_evidence_dir(workspace) || canonical
+    end
+  end
+
   @spec read(Path.t()) ::
           {:ok, t()}
           | {:error, :manifest_missing | {:manifest_invalid, term()} | {:artifacts_missing, [String.t()]}}
   def read(workspace) do
-    path = Path.join(dir(workspace), "manifest.json")
+    evidence_dir = resolve_dir(workspace)
+    path = Path.join(evidence_dir, @manifest_file)
 
     with {:ok, raw} <- read_file(path),
          {:ok, decoded} <- decode(raw),
          {:ok, manifest} <- build(decoded),
-         :ok <- verify_artifacts(workspace, manifest) do
+         :ok <- verify_artifacts(evidence_dir, manifest) do
       {:ok, manifest}
+    end
+  end
+
+  defp has_manifest?(evidence_dir), do: File.regular?(Path.join(evidence_dir, @manifest_file))
+
+  defp repo_evidence_dir(workspace) do
+    case File.ls(workspace) do
+      {:ok, entries} ->
+        entries
+        |> Enum.reject(&String.starts_with?(&1, "."))
+        |> Enum.sort()
+        |> Enum.map(&Path.join([workspace, &1, @evidence_dir]))
+        |> Enum.find(&has_manifest?/1)
+
+      {:error, _reason} ->
+        nil
     end
   end
 
@@ -237,14 +277,12 @@ defmodule SymphonyElixir.Evidence.Manifest do
 
   defp normalize_artifact_ref(_other), do: []
 
-  defp verify_artifacts(workspace, manifest) do
-    base = dir(workspace)
-
+  defp verify_artifacts(evidence_dir, manifest) do
     missing =
       manifest
       |> artifact_paths()
       |> Enum.reject(fn rel ->
-        full = Path.join(base, rel)
+        full = Path.join(evidence_dir, rel)
         File.exists?(full) or File.dir?(String.trim_trailing(full, "/"))
       end)
 

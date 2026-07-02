@@ -43,6 +43,9 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
 
     def update_issue(_project, identifier, attrs),
       do: {:ok, IssueDTO.build(%{id: "I_" <> identifier, identifier: identifier, title: Map.get(attrs, "title", "updated"), status: %{name: "Todo"}})}
+
+    def link_sub_issue(_project, parent_id, child_id), do: {:ok, "linked_#{parent_id}_#{child_id}"}
+    def unlink_sub_issue(_project, parent_id, child_id), do: {:ok, "unlinked_#{parent_id}_#{child_id}"}
   end
 
   setup do
@@ -108,6 +111,26 @@ defmodule SymphonyElixir.GitHub.SyncDriverTest do
   test "push of an issue delete calls delete_issue", %{project: project} do
     entry = %OutboxEntry{entity_type: "issue", operation: "delete", payload: %{"identifier" => "1"}}
     assert {:ok, "PVTI_deleted_1"} = SyncDriver.push(project, entry)
+  end
+
+  test "push of a relation link_parent calls link_sub_issue", %{project: project} do
+    entry = %OutboxEntry{
+      entity_type: "relation",
+      operation: "link_parent",
+      payload: %{"parent_identifier" => "510", "child_identifier" => "MAC-12"}
+    }
+
+    assert {:ok, "linked_510_MAC-12"} = SyncDriver.push(project, entry)
+  end
+
+  test "push of a relation unlink_parent calls unlink_sub_issue", %{project: project} do
+    entry = %OutboxEntry{
+      entity_type: "relation",
+      operation: "unlink_parent",
+      payload: %{"parent_identifier" => "510", "child_identifier" => "MAC-12"}
+    }
+
+    assert {:ok, "unlinked_510_MAC-12"} = SyncDriver.push(project, entry)
   end
 
   test "pull_pull_requests falls back to GitHub.Api when GraphQL PR lookup is rate-limited", %{

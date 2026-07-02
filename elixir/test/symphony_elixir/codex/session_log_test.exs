@@ -3,6 +3,21 @@ defmodule SymphonyElixir.Codex.SessionLogTest do
 
   alias SymphonyElixir.Codex.SessionLog
 
+  test "parse_line renders turn_aborted with reason and duration" do
+    payload =
+      ~s({"type":"event_msg","payload":{"type":"turn_aborted","turn_id":"turn-1","reason":"interrupted","duration_ms":5073697}})
+
+    assert SessionLog.parse_line(payload) == %{
+             "kind" => "event",
+             "title" => "Turn aborted",
+             "body" => "Reason: interrupted\nTurn: turn-1\nDuration: 1h 24m 33s",
+             "language" => "text",
+             "status" => "failed",
+             "collapsed" => false,
+             "call_id" => nil
+           }
+  end
+
   test "parse_line renders structured assistant and tool entries" do
     assert SessionLog.parse_line(~s({"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"**Done**"}]}})) == %{
              "kind" => "assistant",

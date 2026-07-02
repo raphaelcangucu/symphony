@@ -1,27 +1,23 @@
 import { useState } from "react";
-import { GitPullRequest, RefreshCw, RotateCcw, Wrench } from "lucide-react";
+import { GitPullRequest, RefreshCw } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { hasFailingChecks } from "@/components/issues/pull-request/pr-meta";
-import { PullRequestPanel } from "@/components/issues/pull-request/PullRequestPanel";
+import { PullRequestChildGroupsSection } from "@/components/issues/pull-request/PullRequestChildGroupsSection";
+import { PullRequestIssueCards } from "@/components/issues/pull-request/PullRequestIssueCards";
 import { Button } from "@/components/ui/button";
-import { linkPullRequest, requestPullRequestFix, rerunFailedJobs, unlinkPullRequest } from "@/services/pullRequests";
+import { linkPullRequest } from "@/services/pullRequests";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
-import type {
-  PullRequest,
-  PullRequestGroup,
-  PullRequestMonitorInfo,
-  RerunResult,
-} from "@/types/pull-request";
+import type { PullRequest, PullRequestGroup, PullRequestMonitorInfo } from "@/types/pull-request";
 
 interface PullRequestTabProps {
   issue: Issue;
   projectSlug: string;
   pullRequests: PullRequest[];
   pullRequestChildren?: PullRequestGroup[];
+  labBundleChildOrchestration?: boolean;
   supported: boolean;
   available: boolean;
   loading: boolean;
@@ -34,6 +30,7 @@ export function PullRequestTab({
   projectSlug,
   pullRequests,
   pullRequestChildren = [],
+  labBundleChildOrchestration = false,
   supported,
   available,
   loading,
@@ -41,52 +38,22 @@ export function PullRequestTab({
   onRefresh,
 }: PullRequestTabProps) {
   const { t } = useTranslation();
-  const [fixing, setFixing] = useState(false);
-  const [rerunning, setRerunning] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linking, setLinking] = useState(false);
-  const canFix = pullRequests.some(hasFailingChecks);
   const monitorEntries = pullRequests
     .filter((pr) => pr.monitor?.lastAction)
     .map((pr) => ({ pr, monitor: pr.monitor! }));
 
-  const canUseLiveActions = supported && available;
-
-  async function handleFix() {
-    if (fixing) return;
-    setFixing(true);
-    try {
-      const result = await requestPullRequestFix(projectSlug, issue.identifier);
-      toast.success(t("issue.pullRequest.toasts.fixSent", { status: result.movedTo }));
-      onRefresh();
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.toasts.fixFailed"));
-    } finally {
-      setFixing(false);
-    }
-  }
-
-  async function handleRerun() {
-    if (rerunning) return;
-    setRerunning(true);
-    try {
-      const failing = pullRequests.filter(hasFailingChecks);
-      const results: RerunResult[] = [];
-      for (const pr of failing) {
-        results.push(...(await rerunFailedJobs(projectSlug, issue.identifier, pr.number)));
-      }
-      if (results.some((result) => result.ok === false)) {
-        toast.error(t("issue.pullRequest.toasts.rerunPartialFailed"));
-      } else {
-        toast.success(t("issue.pullRequest.toasts.rerunSuccess"));
-      }
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.toasts.rerunFailed"));
-    } finally {
-      setRerunning(false);
-      onRefresh();
-    }
-  }
+  const childrenSection =
+    labBundleChildOrchestration ? (
+      <PullRequestChildGroupsSection
+        groups={pullRequestChildren}
+        projectSlug={projectSlug}
+        onRefresh={onRefresh}
+        supported={supported}
+        available={available}
+      />
+    ) : null;
 
   async function handleLink() {
     if (linking || !linkUrl.trim()) return;
@@ -100,17 +67,6 @@ export function PullRequestTab({
       toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.toasts.linkFailed"));
     } finally {
       setLinking(false);
-    }
-  }
-
-  async function handleRemove(url: string | null) {
-    if (!url) return;
-    try {
-      await unlinkPullRequest(projectSlug, issue.identifier, url);
-      toast.success(t("issue.pullRequest.toasts.unlinked"));
-      onRefresh();
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.pullRequest.toasts.unlinkFailed"));
     }
   }
 
@@ -150,41 +106,20 @@ export function PullRequestTab({
     </div>
   );
 
-  const childGroups = pullRequestChildren.filter((group) => group.pullRequests.length > 0);
+  const ownCards = (
+    <PullRequestIssueCards
+      pullRequests={pullRequests}
+      projectSlug={projectSlug}
+      issueIdentifier={issue.identifier}
+      onRefresh={onRefresh}
+      supported={supported}
+      available={available}
+    />
+  );
 
-  const childrenSection =
-    childGroups.length === 0 ? null : (
-      <div className="space-y-3 rounded-lg border border-dashed p-3">
-        <div>
-          <p className="text-xs font-medium text-foreground">{t("issue.pullRequest.childrenTitle")}</p>
-          <p className="text-xs text-muted-foreground">{t("issue.pullRequest.childrenSubtitle")}</p>
-        </div>
-        {childGroups.map((group) => (
-          <div key={group.identifier} className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-xs text-muted-foreground">
-                {group.identifier}
-                {group.title ? <span className="font-sans"> — {group.title}</span> : null}
-              </span>
-              <span className="shrink-0 text-[11px] text-muted-foreground">
-                {t("issue.pullRequest.childGroupCount", { count: group.pullRequests.length })}
-              </span>
-            </div>
-            {group.pullRequests.map((pr) => (
-              <PullRequestPanel
-                key={pr.url ?? `${pr.repo}#${pr.number}`}
-                pullRequest={pr}
-                projectSlug={projectSlug}
-                issueIdentifier={group.identifier}
-                onRefresh={onRefresh}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-    );
+  const childGroupCount = pullRequestChildren.filter((group) => group.pullRequests.length > 0).length;
 
-  if (loading && pullRequests.length === 0 && childGroups.length === 0) {
+  if (loading && pullRequests.length === 0 && childGroupCount === 0) {
     return <EmptyState>{t("issue.pullRequest.loading")}</EmptyState>;
   }
 
@@ -245,35 +180,7 @@ export function PullRequestTab({
         <span className="text-xs text-muted-foreground">
           {t("issue.pullRequest.relatedCount", { count: pullRequests.length })}
         </span>
-        <div className="flex items-center gap-2">
-          {canUseLiveActions && canFix ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleRerun()}
-                disabled={rerunning}
-                className="text-muted-foreground"
-              >
-                <RotateCcw aria-hidden="true" className={cn("h-4 w-4", rerunning && "animate-spin")} />
-                {rerunning ? t("issue.pullRequest.rerunning") : t("issue.pullRequest.rerunFailedJobs")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleFix()}
-                disabled={fixing}
-                className="border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
-              >
-                <Wrench className={cn("h-4 w-4", fixing && "animate-pulse")} />
-                {fixing ? t("issue.pullRequest.sending") : t("issue.pullRequest.fixWithAgent")}
-              </Button>
-            </>
-          ) : null}
-          {refreshButton}
-        </div>
+        {refreshButton}
       </div>
       {linkRow}
       {monitorEntries.map(({ pr, monitor }) => (
@@ -285,20 +192,7 @@ export function PullRequestTab({
           {monitor.summary ? <> — {monitor.summary}</> : null}
         </div>
       ))}
-      {pullRequests.map((pr) => (
-        <PullRequestPanel
-          key={pr.url ?? `${pr.repo}#${pr.number}`}
-          pullRequest={pr}
-          projectSlug={projectSlug}
-          issueIdentifier={issue.identifier}
-          onRefresh={onRefresh}
-          onRemove={
-            pr.origin === "manual" || pr.origin === "auto"
-              ? () => void handleRemove(pr.url)
-              : undefined
-          }
-        />
-      ))}
+      {ownCards}
       {childrenSection}
     </div>
   );

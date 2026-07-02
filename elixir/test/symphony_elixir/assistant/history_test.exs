@@ -327,12 +327,6 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
       assert a.id == b.id
     end
 
-    test "set_mode/2 persists the mode in metadata" do
-      {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ws"})
-      assert {:ok, updated} = History.set_mode(thread, "complex")
-      assert updated.metadata["mode"] == "complex"
-    end
-
     test "set_goal_mode/3 persists the authoring goal flag and objective" do
       {:ok, thread} = History.ensure_issue_thread("macro", "MAC-1", %{workspace_path: "/tmp/ws"})
 

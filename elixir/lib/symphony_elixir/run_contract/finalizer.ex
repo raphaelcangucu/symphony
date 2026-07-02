@@ -28,13 +28,14 @@ defmodule SymphonyElixir.RunContract.Finalizer do
     runner = Keyword.get(opts, :runner, &System.cmd/3)
 
     default_branches = Keyword.get(opts, :default_branches, %{})
+    pr_base = Keyword.get(opts, :pr_base)
 
     {prs, failures} =
       workspace
       |> RunContract.repo_states(default_branches: default_branches)
       |> Enum.filter(&(&1.dirty? or &1.ahead_count > 0))
       |> Enum.map(fn repo ->
-        case finalize_repo(repo, issue, runner) do
+        case finalize_repo(repo, issue, runner, pr_base) do
           {:ok, pr} -> {:ok, pr}
           {:error, reason} -> {:error, {repo.name, reason}}
         end
@@ -53,13 +54,13 @@ defmodule SymphonyElixir.RunContract.Finalizer do
     end
   end
 
-  defp finalize_repo(%RepoState{} = repo, issue, runner) do
-    Logger.warning("Finalizer publishing repo=#{repo.name} branch=#{repo.branch} issue_identifier=#{issue.identifier}")
+  defp finalize_repo(%RepoState{} = repo, issue, runner, pr_base) do
+    Logger.warning("Finalizer publishing repo=#{repo.name} branch=#{repo.branch} base=#{inspect(pr_base || repo.default_branch)} issue_identifier=#{issue.identifier}")
 
     with :ok <- maybe_commit_dirty(repo, issue, runner),
          :ok <- maybe_branch_off_default(repo, issue, runner),
          :ok <- push(repo, issue, runner),
-         {:ok, pr} <- ensure_pull_request(repo, issue, runner) do
+         {:ok, pr} <- ensure_pull_request(repo, issue, runner, pr_base) do
       {:ok, Map.put(pr, :repo, repo.name)}
     end
   end
@@ -104,6 +105,7 @@ defmodule SymphonyElixir.RunContract.Finalizer do
     String.contains?(output, ["rejected", "fetch first", "non-fast-forward"])
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp recover_push_after_rejection(%RepoState{} = repo, issue, runner) do
     path = repo.path
     branch = current_branch(repo, runner)
@@ -154,7 +156,7 @@ defmodule SymphonyElixir.RunContract.Finalizer do
     end
   end
 
-  defp ensure_pull_request(%RepoState{path: path} = repo, issue, runner) do
+  defp ensure_pull_request(%RepoState{path: path} = repo, issue, runner, pr_base) do
     checker = RunContract.gh_pr_checker(runner: runner)
 
     case checker.(current_branch_state(repo, runner)) do
@@ -162,23 +164,25 @@ defmodule SymphonyElixir.RunContract.Finalizer do
         {:ok, pr}
 
       :none ->
-        create_pull_request(path, repo, issue, runner)
+        create_pull_request(path, repo, issue, runner, pr_base)
 
       {:error, reason} ->
         {:error, {:pr_check_failed, reason}}
     end
   end
 
-  defp create_pull_request(path, repo, issue, runner) do
+  defp create_pull_request(path, repo, issue, runner, pr_base) do
     body_file = Path.join(System.tmp_dir!(), "symphony-pr-body-#{System.unique_integer([:positive])}.md")
     File.write!(body_file, pull_request_body(issue))
     branch = current_branch(repo, runner)
+    base = pr_base || repo.default_branch
 
     head_args = if is_binary(branch) and branch != "", do: ["--head", branch], else: []
-    base_args = if is_binary(repo.default_branch), do: ["--base", repo.default_branch], else: []
+    base_args = if is_binary(base) and base != "", do: ["--base", base], else: []
 
     try do
-      with :ok <-
+      with :ok <- maybe_publish_integration_base(path, repo, pr_base, runner),
+           :ok <-
              run(
                runner,
                "gh",
@@ -190,6 +194,26 @@ defmodule SymphonyElixir.RunContract.Finalizer do
     after
       File.rm(body_file)
     end
+  end
+
+  # A child PRs into the parent's per-repo integration branch (`pr_base`). That
+  # branch is created locally by the worktree provisioner; `gh pr create --base`
+  # needs it on origin, so we publish it here. Best-effort: a sibling or the
+  # parent may have already pushed (and advanced) it, so a rejected push is fine.
+  defp maybe_publish_integration_base(_path, _repo, nil, _runner), do: :ok
+
+  defp maybe_publish_integration_base(_path, %RepoState{default_branch: default}, pr_base, _runner)
+       when is_binary(default) and pr_base == default,
+       do: :ok
+
+  defp maybe_publish_integration_base(path, _repo, pr_base, runner) when is_binary(pr_base) do
+    _ =
+      runner.("git", ["push", "origin", "refs/heads/#{pr_base}:refs/heads/#{pr_base}"],
+        cd: path,
+        stderr_to_stdout: true
+      )
+
+    :ok
   end
 
   defp view_pull_request(path, runner) do
@@ -226,7 +250,7 @@ defmodule SymphonyElixir.RunContract.Finalizer do
       end
 
     marker =
-      [issue.identifier | Map.get(issue, :group_member_identifiers, [])]
+      [issue.identifier]
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
       |> Enum.uniq()
       |> Enum.map_join("\n", &IssueMarker.marker_line(&1, marker_key(issue)))

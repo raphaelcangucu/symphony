@@ -47,7 +47,7 @@ export interface AgentExecution {
   longRunningLabel: string | null;
   tokens: AgentExecutionTokens | null;
   parentIdentifier?: string | null;
-  bundleRole?: "parent" | "child" | "standalone";
+  bundleRole?: "parent" | "parent_unified" | "child" | "subagent" | "standalone";
   unitId?: string | null;
   repo?: string | null;
   childIdentifiers?: string[];

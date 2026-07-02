@@ -181,14 +181,4 @@ defmodule SymphonyElixir.LocalTracker.IssueMapperTest do
 
     assert IssueMapper.to_issue(record).parent_identifier == nil
   end
-
-  test "to_issue surfaces group lead and member identifiers" do
-    member_record = %IssueRecord{identifier: "MAC-2", group_lead: %IssueRecord{identifier: "MAC-1"}}
-    lead_record = %IssueRecord{identifier: "MAC-1", group_members: [%IssueRecord{identifier: "MAC-2"}]}
-
-    assert IssueMapper.to_issue(member_record).group_lead_identifier == "MAC-1"
-    assert IssueMapper.to_issue(member_record).group_member_identifiers == []
-    assert IssueMapper.to_issue(lead_record).group_lead_identifier == nil
-    assert IssueMapper.to_issue(lead_record).group_member_identifiers == ["MAC-2"]
-  end
 end

@@ -5,6 +5,10 @@ description: Use when executing implementation plans with independent tasks in t
 
 # Subagent-Driven Development
 
+**Symphony default parent mode:** When `lab.bundle_child_orchestration` is off, the orchestrator
+dispatches a **single parent run** and this skill is the primary pattern for executing each board
+sub-issue / bundle unit (native tool subagents inside the parent session, one PR per repo).
+
 Execute plan by dispatching fresh subagent per task, with two-stage review after each: spec compliance review first, then code quality review.
 
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.

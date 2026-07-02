@@ -94,8 +94,6 @@ import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 
-export type IssueAssistantMode = "triage" | "simple" | "complex";
-
 interface AuthoringGoalState {
   enabled: boolean;
   objective: string | null;
@@ -146,16 +144,12 @@ interface ProjectAssistantPanelProps {
   /** Notifies the parent whenever the assistant turn running state changes. */
   onRunningChange?: (running: boolean) => void;
   mode?: "sheet" | "page" | "embedded";
-  issueMode?: IssueAssistantMode;
-  issueModeRequestId?: number;
   issueGoalMode?: boolean;
   issueGoalModeRequestId?: number;
   dispatchRequestId?: number;
   onDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
   onDraftIssueCreated?: (issue: DraftIssueCreated) => void;
   onIssueCreated?: (issue: AssistantIssueCreatedPayload) => void;
-  onIssueModeChanged?: (mode: IssueAssistantMode) => void;
-  onIssueModeError?: (message: string) => void;
   onIssueGoalModeChanged?: (enabled: boolean) => void;
   onIssueGoalModeError?: (message: string) => void;
   onDispatchSucceeded?: (message: string) => void;
@@ -262,16 +256,12 @@ export function ProjectAssistantPanel({
   getExtraContext,
   onRunningChange,
   mode = "sheet",
-  issueMode,
-  issueModeRequestId = 0,
   issueGoalMode,
   issueGoalModeRequestId = 0,
   dispatchRequestId = 0,
   onDocumentChanged,
   onDraftIssueCreated,
   onIssueCreated,
-  onIssueModeChanged,
-  onIssueModeError,
   onIssueGoalModeChanged,
   onIssueGoalModeError,
   onDispatchSucceeded,
@@ -316,10 +306,7 @@ export function ProjectAssistantPanel({
   const onEffectiveAgentResolvedRef = useRef(onEffectiveAgentResolved);
   const onIssueCreatedRef = useRef(onIssueCreated);
   const onIssueGoalModeChangedRef = useRef(onIssueGoalModeChanged);
-  const onIssueModeChangedRef = useRef(onIssueModeChanged);
   const panelRef = useRef<HTMLElement | null>(null);
-  const lastConfirmedIssueModeRef = useRef<IssueAssistantMode | null>(null);
-  const pendingIssueModeRef = useRef<{ mode: IssueAssistantMode; requestId: number } | null>(null);
   const lastConfirmedGoalModeRef = useRef<boolean | null>(null);
   const pendingGoalModeRef = useRef<{ enabled: boolean; requestId: number } | null>(null);
   const lastDispatchRequestRef = useRef(0);
@@ -389,7 +376,6 @@ export function ProjectAssistantPanel({
   onEffectiveAgentResolvedRef.current = onEffectiveAgentResolved;
   onIssueCreatedRef.current = onIssueCreated;
   onIssueGoalModeChangedRef.current = onIssueGoalModeChanged;
-  onIssueModeChangedRef.current = onIssueModeChanged;
 
   const setScrollContainerRef = useCallback((node: HTMLDivElement | null) => {
     if (!node && scrollRef.current && !stickToBottomRef.current) {
@@ -471,8 +457,6 @@ export function ProjectAssistantPanel({
     }
 
     setChannelReady(false);
-    lastConfirmedIssueModeRef.current = null;
-    pendingIssueModeRef.current = null;
     lastConfirmedGoalModeRef.current = null;
     pendingGoalModeRef.current = null;
     setAuthoringGoal(emptyAuthoringGoal);
@@ -591,12 +575,6 @@ export function ProjectAssistantPanel({
       setLastTurn(joinedLastTurn);
       if (joinedLastTurn?.status === "running") setIsRunning(true);
 
-      const hydratedMode = modeFromResponse(response);
-      if (issueIdentifier && hydratedMode && hydratedMode !== "triage") {
-        lastConfirmedIssueModeRef.current = hydratedMode;
-        onIssueModeChangedRef.current?.(hydratedMode);
-      }
-
       if (issueIdentifier) {
         const hydratedGoalMode = goalModeFromResponse(response) ?? false;
         lastConfirmedGoalModeRef.current = hydratedGoalMode;
@@ -633,35 +611,6 @@ export function ProjectAssistantPanel({
       socket.disconnect();
     };
   }, [active, isExploreMode, isKbMode, kbRepoSlug, kbPagePath, issueIdentifier, projectSlug, threadId]);
-
-  useEffect(() => {
-    if (!active || !channelReady || !issueIdentifier || !isIssueAssistantMode(issueMode)) return;
-    if (issueMode === "triage" || lastConfirmedIssueModeRef.current === issueMode) return;
-
-    const requestId = issueModeRequestId;
-    const pending = pendingIssueModeRef.current;
-    if (pending?.mode === issueMode && pending.requestId === requestId) return;
-
-    const channel = channelRef.current;
-    if (!channel) return;
-
-    pendingIssueModeRef.current = { mode: issueMode, requestId };
-    const pushResult = channel.push("set_mode", { mode: issueMode });
-    pushResult.receive("ok", (response) => {
-      const mode = modeFromResponse(response) ?? issueMode;
-      lastConfirmedIssueModeRef.current = mode;
-      pendingIssueModeRef.current = null;
-      onIssueModeChanged?.(mode);
-    });
-    pushResult.receive("error", (reason) => {
-      pendingIssueModeRef.current = null;
-      onIssueModeError?.(errorMessage(reason));
-    });
-    pushResult.receive("timeout", () => {
-      pendingIssueModeRef.current = null;
-      onIssueModeError?.(t("assistant.panel.modeUpdateTimeout"));
-    });
-  }, [active, channelReady, issueIdentifier, issueMode, issueModeRequestId, onIssueModeChanged, onIssueModeError]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || typeof issueGoalMode !== "boolean") return;
@@ -1639,16 +1588,6 @@ function extractIssueIdentifier(value: unknown): string | null {
   if (normalized) return normalized;
 
   return extractIssueIdentifier(record.issue) ?? extractIssueIdentifier(record.data);
-}
-
-function isIssueAssistantMode(value: unknown): value is IssueAssistantMode {
-  return value === "triage" || value === "simple" || value === "complex";
-}
-
-function modeFromResponse(response: unknown): IssueAssistantMode | null {
-  if (!response || typeof response !== "object") return null;
-  const mode = stringFromRecord(response as Record<string, unknown>, "mode");
-  return isIssueAssistantMode(mode) ? mode : null;
 }
 
 function goalModeFromResponse(response: unknown): boolean | null {

@@ -14,9 +14,6 @@ defmodule SymphonyElixir.KnowledgeBase do
     Paths,
     RepoDocs,
     Search,
-    SyncState,
-    SyncSupervisor,
-    SyncWorker,
     Tree,
     Workspace,
     Writer
@@ -360,35 +357,13 @@ defmodule SymphonyElixir.KnowledgeBase do
   end
 
   @spec request_sync(String.t(), String.t()) :: :ok | {:error, term()}
-  # The personal KB pushes edits directly to its own branch, so there is no
-  # default-branch merge / PR sync worker to schedule.
-  def request_sync(@user_scope, _repo_slug), do: :ok
-
-  def request_sync(project_slug, repo_slug) do
-    case SyncSupervisor.ensure_worker(project_slug, repo_slug) do
-      {:ok, pid} -> SyncWorker.run_now(pid)
-      error -> error
-    end
-  end
+  # Project and personal KB edits write directly to their owning checkout/branch,
+  # so there is no `symphony-docs` promotion worker to schedule.
+  def request_sync(_project_slug, _repo_slug), do: :ok
 
   @spec sync_status(String.t(), String.t()) :: {:ok, map()} | {:error, error()}
-  def sync_status(@user_scope, _repo_slug) do
-    {:ok, %{status: :idle, pr_number: nil, pr_url: nil, last_error: nil, last_synced_at: nil}}
-  end
-
-  def sync_status(project_slug, repo_slug) do
-    with {:ok, _project} <- Context.get_project(project_slug) do
-      state = SyncState.get(project_slug, repo_slug)
-
-      {:ok,
-       %{
-         status: state.status,
-         pr_number: state.pr_number,
-         pr_url: state.pr_url,
-         last_error: state.last_error,
-         last_synced_at: state.last_synced_at
-       }}
-    end
+  def sync_status(_project_slug, _repo_slug) do
+    {:ok, %{status: "idle", pr_number: nil, pr_url: nil, last_error: nil, last_synced_at: nil}}
   end
 
   # Best-effort: full reindex of a repository's docs straight from the worktree.

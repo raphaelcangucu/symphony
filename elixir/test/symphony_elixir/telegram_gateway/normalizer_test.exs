@@ -10,7 +10,7 @@ defmodule SymphonyElixir.TelegramGateway.NormalizerTest do
         "message_id" => 10,
         "message_thread_id" => 42,
         "text" => "hello",
-        "chat" => %{"id" => -100123, "type" => "supergroup", "is_forum" => true},
+        "chat" => %{"id" => -100_123, "type" => "supergroup", "is_forum" => true},
         "from" => %{"id" => 777, "first_name" => "Raphael"}
       }
     }

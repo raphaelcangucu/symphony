@@ -12,6 +12,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.Viewer
   alias SymphonyElixir.Tracker.{IssueAdapter, LabelResolver}
+  alias SymphonyElixir.Tracker.Sync.ParentLink
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
 
@@ -80,6 +81,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
            |> maybe_inject_creator(),
          {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]),
          {:ok, _child} <- Context.set_issue_parent(project_slug, issue.identifier, parent_identifier) do
+      ParentLink.enqueue_link(project, issue.identifier, parent_identifier)
       maybe_establish_codex_goal(project, issue, params)
 
       conn
@@ -101,6 +103,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, _child} <- Context.set_issue_parent(project_slug, identifier, parent_identifier),
          {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      ParentLink.enqueue_link(project, identifier, parent_identifier)
       json(conn, %{data: present_issue(project, issue)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -112,8 +115,13 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   @spec clear_parent(Conn.t(), map()) :: Conn.t()
   def clear_parent(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
     with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, parent} <- Context.parent_issue(project_slug, identifier),
          {:ok, _child} <- Context.clear_issue_parent(project_slug, identifier),
          {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+      if match?(%{identifier: parent_id} when is_binary(parent_id), parent) do
+        ParentLink.enqueue_unlink(project, identifier, parent.identifier)
+      end
+
       json(conn, %{data: present_issue(project, issue)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)

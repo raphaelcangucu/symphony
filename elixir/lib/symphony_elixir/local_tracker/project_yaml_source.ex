@@ -125,7 +125,7 @@ defmodule SymphonyElixir.LocalTracker.ProjectYamlSource do
   end
 
   @doc false
-  @spec do_http_get(String.t()) :: {:ok, binary()} | {:error, term()}
+  @spec do_http_get(String.t()) :: {:ok, String.t()} | {:error, term()}
   def do_http_get(url) do
     case Req.get(url,
            headers: [{"user-agent", @user_agent}],

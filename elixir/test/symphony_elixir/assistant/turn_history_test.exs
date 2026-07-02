@@ -82,12 +82,10 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert History.turn_elapsed_seconds(done) == nil
   end
 
-  test "metadata writes preserve sibling keys (mode/goal_mode)", %{thread: thread} do
-    {:ok, thread} = History.set_mode(thread, "complex")
+  test "metadata writes preserve sibling keys (goal_mode)", %{thread: thread} do
     {:ok, thread} = History.set_goal_mode(thread, true)
     {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "x"})
 
-    assert History.thread_mode(thread) == "complex"
     assert History.thread_goal_mode(thread) == true
     assert History.turn_running?(thread)
   end

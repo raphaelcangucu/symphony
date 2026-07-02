@@ -11,6 +11,12 @@ export interface AgentSettings {
 export interface OrchestratorSettings {
   require_symphony_label: boolean;
   require_assignee_match: boolean;
+  agent_token_budget_enabled: boolean;
+  agent_token_budget: number;
+}
+
+export interface LabSettings {
+  bundle_child_orchestration: boolean;
 }
 
 export interface UiSettings {
@@ -20,6 +26,7 @@ export interface UiSettings {
 export interface AllSettings {
   agents: AgentSettings;
   gateways?: GatewaySettings;
+  lab: LabSettings;
   orchestrator: OrchestratorSettings;
   ui: UiSettings;
 }
@@ -56,6 +63,11 @@ export async function updateOrchestratorSettings(
 ): Promise<OrchestratorSettings> {
   const response = await http.put(trackerPath("/settings/orchestrator"), input);
   return unwrapData<OrchestratorSettings>(response);
+}
+
+export async function updateLabSettings(input: Partial<LabSettings>): Promise<LabSettings> {
+  const response = await http.put(trackerPath("/settings/lab"), input);
+  return unwrapData<LabSettings>(response);
 }
 
 export async function updateUiSettings(input: Partial<UiSettings>): Promise<UiSettings> {

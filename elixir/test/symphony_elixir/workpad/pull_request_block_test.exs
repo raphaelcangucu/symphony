@@ -59,6 +59,7 @@ defmodule SymphonyElixir.Workpad.PullRequestBlockTest do
 
     assert updated =~ "### Plan"
     assert updated =~ "symphony:prs"
+
     assert PullRequestBlock.parse(updated) == [
              %{
                repo: "GambaLabs/backend",

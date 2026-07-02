@@ -9,11 +9,47 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinatorTest do
       mode: "bundle",
       parent: "macro/app#1",
       units: [
-        %{id: "be", type: :child_run, issue: "macro/be#2", repo: "macro/be", produces: ["api"], consumes: [], depends_on: [], deliverable: "pr"},
-        %{id: "fe", type: :child_run, issue: "macro/fe#3", repo: "macro/fe", produces: [], consumes: ["api"], depends_on: ["be"], deliverable: "pr"},
-        %{id: "copy", type: :workpad_task, issue: nil, repo: "macro/app", produces: [], consumes: [], depends_on: [], deliverable: nil}
+        %{
+          id: "be",
+          type: :child_run,
+          issue: "macro/be#2",
+          repo: "macro/be",
+          produces: ["api"],
+          consumes: [],
+          depends_on: [],
+          deliverable: "pr"
+        },
+        %{
+          id: "fe",
+          type: :child_run,
+          issue: "macro/fe#3",
+          repo: "macro/fe",
+          produces: [],
+          consumes: ["api"],
+          depends_on: ["be"],
+          deliverable: "pr"
+        },
+        %{
+          id: "copy",
+          type: :workpad_task,
+          issue: nil,
+          repo: "macro/app",
+          produces: [],
+          consumes: [],
+          depends_on: [],
+          deliverable: nil
+        }
       ],
-      shared_contracts: [%{id: "api", owner_unit: "be", consumers: ["fe"], kind: "graphql", artifact: nil, status: :draft}]
+      shared_contracts: [
+        %{
+          id: "api",
+          owner_unit: "be",
+          consumers: ["fe"],
+          kind: "graphql",
+          artifact: nil,
+          status: :draft
+        }
+      ]
     }
   end
 
@@ -39,7 +75,20 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinatorTest do
   end
 
   test "child_dispatch_specs releases the consumer once its contract is ready and producer done" do
-    ready = %ExecutionBundle{bundle() | shared_contracts: [%{id: "api", owner_unit: "be", consumers: ["fe"], kind: "graphql", artifact: nil, status: :ready}]}
+    ready =
+      %ExecutionBundle{
+        bundle()
+        | shared_contracts: [
+            %{
+              id: "api",
+              owner_unit: "be",
+              consumers: ["fe"],
+              kind: "graphql",
+              artifact: nil,
+              status: :ready
+            }
+          ]
+      }
 
     specs = BundleCoordinator.child_dispatch_specs(ready, %{"be" => :done}, parent_identifier: "MAC-1")
 
@@ -57,7 +106,71 @@ defmodule SymphonyElixir.Orchestrator.BundleCoordinatorTest do
   end
 
   test "children_all_done? is true for a bundle with no child_run units" do
-    workpad_only = %ExecutionBundle{mode: "bundle", units: [%{id: "x", type: :workpad_task, issue: nil, repo: nil, produces: [], consumes: [], depends_on: [], deliverable: nil}]}
+    workpad_only = %ExecutionBundle{
+      mode: "bundle",
+      units: [
+        %{
+          id: "x",
+          type: :workpad_task,
+          issue: nil,
+          repo: nil,
+          produces: [],
+          consumes: [],
+          depends_on: [],
+          deliverable: nil
+        }
+      ]
+    }
+
     assert BundleCoordinator.children_all_done?(workpad_only, MapSet.new())
+  end
+
+  defp same_repo_child_bundle do
+    %ExecutionBundle{
+      mode: "bundle",
+      parent: "macro/app#1",
+      units: [
+        %{
+          id: "be",
+          type: :child_run,
+          issue: "macro/app#2",
+          repo: "macro/app",
+          produces: ["api"],
+          consumes: [],
+          depends_on: [],
+          deliverable: "pr"
+        },
+        %{
+          id: "fe",
+          type: :child_run,
+          issue: "macro/app#3",
+          repo: "macro/app",
+          produces: [],
+          consumes: ["api"],
+          depends_on: ["be"],
+          deliverable: "pr"
+        }
+      ],
+      shared_contracts: [
+        %{
+          id: "api",
+          owner_unit: "be",
+          consumers: ["fe"],
+          kind: "graphql",
+          artifact: nil,
+          status: :draft
+        }
+      ]
+    }
+  end
+
+  test "same-repo child_run bundles are coordinators and dispatch as children" do
+    assert BundleCoordinator.coordinator?(same_repo_child_bundle())
+
+    specs = BundleCoordinator.child_dispatch_specs(same_repo_child_bundle(), %{}, parent_identifier: "MAC-1")
+    assert Enum.map(specs, & &1.unit_id) == ["be"]
+
+    refute BundleCoordinator.children_all_done?(same_repo_child_bundle(), MapSet.new(["be"]))
+    assert BundleCoordinator.children_all_done?(same_repo_child_bundle(), MapSet.new(["be", "fe"]))
   end
 end

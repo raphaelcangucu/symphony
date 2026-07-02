@@ -31,8 +31,6 @@ function issueFixture(overrides: Partial<Issue>): Issue {
     createdAt: "",
     updatedAt: "",
     attachments: [],
-    groupLeadIdentifier: null,
-    groupMemberIdentifiers: [],
     ...overrides,
   };
 }

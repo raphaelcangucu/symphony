@@ -108,9 +108,7 @@ defmodule SymphonyElixir.KnowledgeBase.DailyPromoter do
         :ok
 
       other ->
-        Logger.debug(
-          "KB promoter skipped #{project_slug}/#{repo_slug} reason=#{inspect(other)}"
-        )
+        Logger.debug("KB promoter skipped #{project_slug}/#{repo_slug} reason=#{inspect(other)}")
 
         :skip
     end

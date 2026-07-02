@@ -8,8 +8,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   alias SymphonyElixir.Assistant.{
     BlockerTools,
-    DiscoveryTools,
     DevEnvTools,
+    DiscoveryTools,
     DispatchTools,
     EvidenceTools,
     GitHubTools,
@@ -29,12 +29,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     ToolText
   }
 
-  alias SymphonyElixir.Config
   alias SymphonyElixir.Codex.DynamicTool
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Config
+  alias SymphonyElixir.IssueDispatchPrep
+  alias SymphonyElixir.LocalTracker.{Context, IssueRelation}
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.SubagentRegistry
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
+  alias SymphonyElixir.Tracker.Sync.ParentLink
   alias SymphonyElixir.Tracker.Workpad
   alias SymphonyElixir.Workpad.ExecutionBundle
   alias SymphonyElixir.Workpad.ExecutionBundle.{Classifier, Store, Validator}
@@ -76,6 +79,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     preview_execution_plan
     define_shared_contract
     update_shared_contract
+    query_bundle_status
+    report_unit_status
   )
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
@@ -92,6 +97,20 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     preview_execution_plan
     define_shared_contract
     update_shared_contract
+    query_bundle_status
+    report_unit_status
+  )
+  # The bundle lives on the coordinator parent, so when a CHILD invokes these the
+  # `parent_identifier` must default to the child's parent (the bundle root), not
+  # the child itself. `create_subtask`/`set_issue_parent` intentionally bind to
+  # self (the bound issue becomes the new subtask's parent).
+  @bundle_root_parent_tools ~w(
+    get_execution_bundle
+    preview_execution_plan
+    define_shared_contract
+    update_shared_contract
+    query_bundle_status
+    report_unit_status
   )
   @issue_bound_supported_tools ~w(
     list_issues
@@ -116,6 +135,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     preview_execution_plan
     define_shared_contract
     update_shared_contract
+    query_bundle_status
+    report_unit_status
   )
   @in_progress_state "In Progress"
 
@@ -296,7 +317,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       }),
       tool_spec(
         "classify_execution_unit",
-        "Deterministically classify a planned subtask as workpad_task (inline) or child_run (own run/worktree/PR). Preview only; no writes.",
+        "Deterministically classify a planned subtask as workpad_task (inline in the parent's run/PR) or child_run (own run/worktree, PR into the parent's per-repo integration branch). Preview only; no writes.",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -312,7 +333,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       ),
       tool_spec(
         "create_subtask",
-        "Create a child issue under a parent and attach it to the parent's execution bundle. Omit unit_type to auto-classify (workpad_task inline vs child_run with its own PR/worktree). Use for breaking a task into subtasks.",
+        "Create a child issue under a parent and attach it to the parent's execution bundle. Omit unit_type to auto-classify (workpad_task inline in the parent's run, or child_run with its own worktree and a PR into the parent's per-repo integration branch). Use for breaking a task into subtasks.",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -396,6 +417,36 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
             "id" => string_schema("Contract id to update."),
             "body" => string_schema("Optional new contract body."),
             "status" => string_schema("Optional status: draft, ready, or changing.")
+          }
+        }
+      ),
+      tool_spec(
+        "query_bundle_status",
+        "Read the live status of every unit in the parent execution bundle tree: type, status (live/waiting/ready/done/idle/aborted), blockers, pending contracts, PR url, tokens and turns. Use to coordinate cadence between sibling units. Read-only.",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier"],
+          "properties" => %{
+            "parent_identifier" => string_schema("Parent (coordinator) issue identifier, e.g. MAC-42. As a child you may omit it; it defaults to your parent.")
+          }
+        }
+      ),
+      tool_spec(
+        "report_unit_status",
+        "Report a structured status update for your unit to the parent's workpad so the coordinator and siblings can read it. Replaces your prior status block. Use at each phase transition (started, contract_ready, pr_open, done, blocked).",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["parent_identifier", "unit", "phase"],
+          "properties" => %{
+            "parent_identifier" => string_schema("Parent (coordinator) issue identifier. As a child you may omit it; it defaults to your parent."),
+            "unit" => string_schema("Your unit id or issue identifier, e.g. MAC-43."),
+            "phase" => string_schema("Phase: started, contract_ready, pr_open, blocked, done."),
+            "summary" => string_schema("Optional one-line summary of progress."),
+            "blockers" => string_list_schema("Optional list of blockers (unit ids or short descriptions)."),
+            "contracts_ready" => %{"type" => "boolean", "description" => "Whether the contracts your unit owns are now ready for consumers."},
+            "pr_url" => string_schema("Optional PR url once opened.")
           }
         }
       )
@@ -527,12 +578,28 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       arguments = if is_map(arguments), do: stringify_keys(arguments), else: %{}
 
       executor_opts = Keyword.put(opts, :bound_issue_identifier, identifier)
+      root_fun = fn -> bundle_root(project_slug, identifier) end
 
-      case bind_issue_tool_arguments(tool_name, arguments, identifier) do
+      case bind_issue_tool_arguments(tool_name, arguments, identifier, root_fun) do
         {:ok, bound_arguments} -> execute_for_codex(project_slug, tool_name, bound_arguments, executor_opts)
         {:error, reason} -> codex_failure_response(reason)
       end
     end
+  end
+
+  # Resolves the coordinator parent (bundle root) for a bound issue: its parent
+  # when it is a child, otherwise itself. Defensive — any lookup failure falls
+  # back to the issue itself, preserving prior single-issue behavior.
+  defp bundle_root(project_slug, identifier) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, dto} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
+         parent when is_binary(parent) and parent != "" <- Map.get(dto, :parent_identifier) do
+      parent
+    else
+      _ -> identifier
+    end
+  rescue
+    _ -> identifier
   end
 
   @spec execute_for_codex(String.t(), String.t() | nil, term(), keyword()) :: map()
@@ -924,8 +991,15 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          :ok <- ensure_in_dispatch_queue(project, current),
          :ok <- ensure_status_available(project, @in_progress_state),
          {:ok, agent} <- resolve_dispatch_agent(project, identifier, Map.get(arguments, "agent")),
-         {:ok, _comment} <- IssueAdapter.dispatch(project, :add_comment, [identifier, codex_comment(instructions), %{"author" => "assistant"}]),
-         {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, dispatch_agent_attrs(agent, arguments)]) do
+         :ok <- IssueDispatchPrep.prepare_for_dispatch(project, identifier, agent),
+         {:ok, _comment} <-
+           IssueAdapter.dispatch(project, :add_comment, [
+             identifier,
+             codex_comment(instructions),
+             %{"author" => "assistant"}
+           ]),
+         {:ok, issue} <-
+           IssueAdapter.dispatch(project, :move_issue, [identifier, dispatch_agent_attrs(agent, arguments)]) do
       presented = TrackerPresenter.issue(issue)
 
       {:ok,
@@ -949,7 +1023,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     parent_repo = normalize_optional_string(Map.get(arguments, "parent_repo"))
 
     {classification, rule} =
-      case SymphonyElixir.Workpad.ExecutionBundle.Classifier.classify(unit, parent_repo: parent_repo) do
+      case Classifier.classify(unit, parent_repo: parent_repo) do
         {:ok, type, rule} -> {to_string(type), to_string(rule)}
         {:ambiguous, reason} -> {"ambiguous", to_string(reason)}
       end
@@ -1090,7 +1164,92 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
+  defp do_execute(_project, "query_bundle_status", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier) do
+      units = SubagentRegistry.unit_statuses(parent_id)
+
+      {:ok,
+       %{
+         tool: "query_bundle_status",
+         message: bundle_status_message(parent_id, units),
+         data: %{parent: parent_id, units: units}
+       }}
+    end
+  end
+
+  defp do_execute(project, "report_unit_status", arguments, _opts) do
+    with {:ok, parent_id} <- normalize_required_string(Map.get(arguments, "parent_identifier"), :parent_identifier),
+         {:ok, unit} <- normalize_required_string(Map.get(arguments, "unit"), :unit),
+         {:ok, phase} <- normalize_required_string(Map.get(arguments, "phase"), :phase),
+         {:ok, comment, body} <- read_parent_workpad(project, parent_id) do
+      summary = normalize_optional_string(Map.get(arguments, "summary"))
+      blockers = normalize_string_list(Map.get(arguments, "blockers"))
+      contracts_ready = Map.get(arguments, "contracts_ready") == true
+      pr_url = normalize_optional_string(Map.get(arguments, "pr_url"))
+
+      section = render_unit_status_section(unit, phase, summary, blockers, contracts_ready, pr_url)
+      updated = upsert_unit_status_section(body, unit, section)
+
+      with {:ok, _comment} <- write_parent_workpad(project, parent_id, comment, updated) do
+        {:ok,
+         %{
+           tool: "report_unit_status",
+           message: "Reported #{unit} status: #{phase}.",
+           data: %{
+             parent: parent_id,
+             unit: unit,
+             phase: phase,
+             blockers: blockers,
+             contracts_ready: contracts_ready,
+             pr_url: pr_url
+           }
+         }}
+      end
+    end
+  end
+
   defp do_execute(_project, tool, _arguments, _opts), do: {:error, {:unsupported_tool, tool}}
+
+  defp bundle_status_message(parent_id, units) do
+    counts = Enum.frequencies_by(units, & &1.status)
+
+    summary =
+      [:live, :waiting, :ready, :done]
+      |> Enum.map_join(", ", fn status -> "#{Map.get(counts, status, 0)} #{status}" end)
+
+    "Bundle #{parent_id}: #{length(units)} unit(s) (#{summary})."
+  end
+
+  # Durable, structured per-unit status block written to the coordinator parent's
+  # workpad so the parent (and siblings) can read the latest reported status of
+  # each child without a live channel. Replaces any prior block for the same unit.
+  defp render_unit_status_section(unit, phase, summary, blockers, contracts_ready, pr_url) do
+    lines =
+      [
+        "### Unit status: #{unit}",
+        "",
+        "- phase: #{phase}",
+        "- contracts_ready: #{contracts_ready}",
+        if(blockers != [], do: "- blockers: #{Enum.join(blockers, ", ")}"),
+        if(is_binary(pr_url), do: "- pr: #{pr_url}"),
+        if(is_binary(summary), do: "- summary: #{summary}"),
+        "- updated_at: #{DateTime.utc_now() |> DateTime.to_iso8601()}"
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    Enum.join(lines, "\n") <> "\n"
+  end
+
+  defp upsert_unit_status_section(workpad, unit, section) do
+    heading = "### Unit status: #{unit}"
+
+    if String.contains?(workpad, heading) do
+      pattern = ~r/###\s+Unit status:\s+#{Regex.escape(unit)}.*?(?=\n###\s|\z)/s
+      Regex.replace(pattern, workpad, section)
+    else
+      String.trim_trailing(workpad) <> "\n\n" <> section
+    end
+  end
 
   defp parsed_bundle(body) do
     case ExecutionBundle.parse(body) do
@@ -1170,11 +1329,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
     if old_parent do
       Context.delete_blocker(slug, identifier, old_parent, subtask_type)
+      ParentLink.enqueue_unlink(project, identifier, old_parent)
       remove_bundle_unit(project, old_parent, identifier)
     end
 
     if new_parent do
       Context.add_blocker(slug, identifier, new_parent, subtask_type)
+      ParentLink.enqueue_link(project, identifier, new_parent)
       {:ok, parent} = IssueAdapter.dispatch(project, :get_issue, [new_parent])
 
       type =
@@ -1212,8 +1373,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     |> maybe_put_attr("repository", repo)
   end
 
-  defp resolve_unit_type(%{"unit_type" => t}, _repo, _parent_repo) when t in ["workpad_task", "child_run"],
-    do: {:ok, String.to_existing_atom(t)}
+  # Legacy `subagent_unit` collapses into `:child_run` (own worktree, PR into the
+  # parent's per-repo integration branch).
+  defp resolve_unit_type(%{"unit_type" => "subagent_unit"}, _repo, _parent_repo), do: {:ok, :child_run}
+
+  defp resolve_unit_type(%{"unit_type" => t}, _repo, _parent_repo)
+       when t in ["workpad_task", "child_run"],
+       do: {:ok, String.to_existing_atom(t)}
 
   defp resolve_unit_type(arguments, repo, parent_repo) do
     unit = %{
@@ -1237,10 +1403,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
            project_slug(project),
            child.identifier,
            parent.identifier,
-           SymphonyElixir.LocalTracker.IssueRelation.subtask_type()
+           IssueRelation.subtask_type()
          ) do
-      {:ok, _relation} -> :ok
-      {:error, reason} -> {:error, reason}
+      {:ok, _relation} ->
+        ParentLink.enqueue_link(project, child.identifier, parent.identifier)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -1350,28 +1520,35 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp remove_bound_identifier_requirement(required), do: required
 
-  defp bind_issue_tool_arguments(tool_name, arguments, identifier)
-       when tool_name in @issue_bound_parent_tools do
-    bind_parent_identifier(tool_name, arguments, identifier)
+  defp bind_issue_tool_arguments(tool_name, arguments, _identifier, root_fun)
+       when tool_name in @bundle_root_parent_tools do
+    bind_parent_identifier(arguments, root_fun.())
   end
 
-  defp bind_issue_tool_arguments(tool_name, _arguments, _identifier) when tool_name not in @issue_bound_supported_tools do
+  defp bind_issue_tool_arguments(tool_name, arguments, identifier, _root_fun)
+       when tool_name in @issue_bound_parent_tools do
+    bind_parent_identifier(arguments, identifier)
+  end
+
+  defp bind_issue_tool_arguments(tool_name, _arguments, _identifier, _root_fun)
+       when tool_name not in @issue_bound_supported_tools do
     {:error, {:unsupported_issue_bound_tool, tool_name}}
   end
 
-  defp bind_issue_tool_arguments("get_issue", arguments, identifier) do
+  defp bind_issue_tool_arguments("get_issue", arguments, identifier, _root_fun) do
     bind_mutable_identifier("get_issue", arguments, identifier)
   end
 
-  defp bind_issue_tool_arguments("read_workspace_file", arguments, identifier) do
+  defp bind_issue_tool_arguments("read_workspace_file", arguments, identifier, _root_fun) do
     {:ok, Map.put(arguments, "issue_identifier", identifier)}
   end
 
-  defp bind_issue_tool_arguments(tool_name, arguments, identifier) when tool_name in @issue_bound_mutable_tools do
+  defp bind_issue_tool_arguments(tool_name, arguments, identifier, _root_fun)
+       when tool_name in @issue_bound_mutable_tools do
     bind_mutable_identifier(tool_name, arguments, identifier)
   end
 
-  defp bind_issue_tool_arguments(_tool_name, arguments, _identifier), do: {:ok, arguments}
+  defp bind_issue_tool_arguments(_tool_name, arguments, _identifier, _root_fun), do: {:ok, arguments}
 
   defp bind_mutable_identifier(_tool_name, arguments, identifier) do
     case normalize_optional_string(Map.get(arguments, "identifier")) do
@@ -1386,16 +1563,16 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     end
   end
 
-  defp bind_parent_identifier(_tool_name, arguments, identifier) do
+  defp bind_parent_identifier(arguments, default_parent) do
     case normalize_optional_string(Map.get(arguments, "parent_identifier")) do
       nil ->
-        {:ok, Map.put(arguments, "parent_identifier", identifier)}
+        {:ok, Map.put(arguments, "parent_identifier", default_parent)}
 
-      ^identifier ->
-        {:ok, Map.put(arguments, "parent_identifier", identifier)}
+      ^default_parent ->
+        {:ok, Map.put(arguments, "parent_identifier", default_parent)}
 
       actual ->
-        {:error, {:parent_identifier_mismatch, identifier, actual}}
+        {:error, {:parent_identifier_mismatch, default_parent, actual}}
     end
   end
 
@@ -1766,9 +1943,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     dispatch_states = MapSet.new(Config.dispatch_states(), &normalize_status_name/1)
 
     candidates =
-      statuses
-      |> Enum.reject(&terminal_status?/1)
-      |> Enum.reject(&MapSet.member?(dispatch_states, normalize_status_name(status_field(&1, :name))))
+      Enum.reject(statuses, fn status ->
+        terminal_status?(status) or
+          MapSet.member?(dispatch_states, normalize_status_name(status_field(status, :name)))
+      end)
 
     candidates
     |> fallback_candidates(statuses)

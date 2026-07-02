@@ -198,6 +198,84 @@ defmodule SymphonyElixir.AgentExecutionTest do
     end
   end
 
+  describe "subagent_executions/2" do
+    alias SymphonyElixir.Workpad.ExecutionBundle
+
+    defp coordinator_bundle do
+      %ExecutionBundle{
+        version: 1,
+        mode: "bundle",
+        parent: "MAC-1",
+        units: [
+          %{
+            id: "api",
+            type: :child_run,
+            issue: "MAC-12",
+            repo: "macro/be",
+            produces: ["schema"],
+            consumes: [],
+            depends_on: [],
+            deliverable: "pr"
+          },
+          %{
+            id: "ui",
+            type: :child_run,
+            issue: "MAC-13",
+            repo: "macro/fe",
+            produces: [],
+            consumes: ["schema"],
+            depends_on: ["api"],
+            deliverable: "pr"
+          }
+        ],
+        shared_contracts: [
+          %{
+            id: "schema",
+            kind: "openapi",
+            owner_unit: "api",
+            consumers: ["ui"],
+            artifact: "openapi.yaml",
+            status: :draft
+          }
+        ]
+      }
+    end
+
+    defp injected_resolvers do
+      [
+        bundle_loader: fn
+          "MAC-1" -> {:ok, coordinator_bundle()}
+          _ -> :error
+        end,
+        slug_resolver: fn _ -> "macro-markets" end,
+        terminal_resolver: fn _ -> false end,
+        state_resolver: fn _ -> "In Progress" end,
+        issue_id_resolver: fn id -> "id-" <> id end
+      ]
+    end
+
+    test "projects gated subagent units as :waiting executions nested under the parent" do
+      snapshot = %{
+        running: [
+          %{identifier: "MAC-1", parent_identifier: nil, unit_id: nil},
+          %{identifier: "MAC-12", parent_identifier: "MAC-1", unit_id: "MAC-12"}
+        ],
+        retrying: []
+      }
+
+      assert [waiting] = AgentExecution.subagent_executions(snapshot, injected_resolvers())
+
+      assert waiting.issue_identifier == "MAC-13"
+      assert waiting.status == :waiting
+      assert waiting.bundle_role == :subagent
+      assert waiting.parent_identifier == "MAC-1"
+      assert waiting.unit_id == "ui"
+      assert waiting.repo == "macro/fe"
+      assert waiting.tokens == nil
+      assert waiting.long_running == false
+    end
+  end
+
   describe "format_failure/1" do
     test "extracts turn_failed messages" do
       assert AgentExecution.format_failure({:turn_failed, "claude exited with code 1"}) ==
@@ -206,7 +284,10 @@ defmodule SymphonyElixir.AgentExecutionTest do
 
     test "strips runtime error stack traces" do
       error =
-        "{%RuntimeError{message: \"Agent run failed for issue_id=5 issue_identifier=1859: {:turn_failed, \\\"claude exited with code 1\\\"}\"}, [{SymphonyElixir.AgentRunner, :fail_run, 2, [file: ~c\"lib/symphony_elixir/agent_runner.ex\", line: 87]}]}"
+        "{%RuntimeError{message: \"Agent run failed for issue_id=5 issue_identifier=1859: " <>
+          "{:turn_failed, \\\"claude exited with code 1\\\"}\"}, " <>
+          "[{SymphonyElixir.AgentRunner, :fail_run, 2, " <>
+          "[file: ~c\"lib/symphony_elixir/agent_runner.ex\", line: 87]}]}"
 
       assert AgentExecution.format_failure("agent exited: " <> error) == "claude exited with code 1"
     end

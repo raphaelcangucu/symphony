@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, IssueRelation}
+  alias SymphonyElixir.LocalTracker.{Comment, Context, IssueRecord, IssueRelation}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.LocalStore
 
@@ -55,7 +55,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     assert hd(issues).title == "Renamed remotely"
   end
 
-  test "stores same GitHub issue number from different repositories with repo-scoped identifiers", %{project: project} do
+  test "stores same GitHub issue number from different repositories with repo-scoped identifiers",
+       %{project: project} do
     {:ok, ios_issue} =
       LocalStore.upsert_remote_issue(
         project,
@@ -113,10 +114,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
         })
       )
 
-    loaded_child = Repo.get!(IssueRecord, child.id)
+    _loaded_child = Repo.get!(IssueRecord, child.id)
     loaded_parent = Repo.get!(IssueRecord, parent.id) |> Repo.preload(target_relations: :source_issue)
-
-    assert loaded_child.group_lead_id == nil
 
     assert [
              %IssueRelation{
@@ -147,8 +146,20 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
 
   test "preserves the workpad kind of a synced comment", %{project: project} do
     comments = [
-      %{remote_id: "IC_pad", body: "## Codex Workpad", author: "bot", kind: "workpad", remote_updated_at: DateTime.utc_now()},
-      %{remote_id: "IC_msg", body: "thanks", author: "octocat", kind: "comment", remote_updated_at: DateTime.utc_now()}
+      %{
+        remote_id: "IC_pad",
+        body: "## Codex Workpad",
+        author: "bot",
+        kind: "workpad",
+        remote_updated_at: DateTime.utc_now()
+      },
+      %{
+        remote_id: "IC_msg",
+        body: "thanks",
+        author: "octocat",
+        kind: "comment",
+        remote_updated_at: DateTime.utc_now()
+      }
     ]
 
     {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{comments: comments}))
@@ -166,8 +177,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     # A locally authored comment that was pushed to the remote but never had its
     # remote_id recorded locally (the source of the post-sync duplicate).
     {:ok, _orphan} =
-      %SymphonyElixir.LocalTracker.Comment{}
-      |> SymphonyElixir.LocalTracker.Comment.changeset(%{
+      %Comment{}
+      |> Comment.changeset(%{
         issue_id: issue.id,
         kind: "comment",
         body: "Temos um problema aqui",
@@ -176,7 +187,13 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
       |> Repo.insert()
 
     comments = [
-      %{remote_id: "IC_remote", body: "Temos um problema aqui", author: "raphael", kind: "comment", remote_updated_at: DateTime.utc_now()}
+      %{
+        remote_id: "IC_remote",
+        body: "Temos um problema aqui",
+        author: "raphael",
+        kind: "comment",
+        remote_updated_at: DateTime.utc_now()
+      }
     ]
 
     {:ok, _} = LocalStore.upsert_remote_issue(project, remote_issue(%{comments: comments}))
@@ -192,8 +209,8 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
 
     {:ok, comment} =
-      %SymphonyElixir.LocalTracker.Comment{}
-      |> SymphonyElixir.LocalTracker.Comment.changeset(%{
+      %Comment{}
+      |> Comment.changeset(%{
         issue_id: issue.id,
         kind: "comment",
         body: "local note",
@@ -213,8 +230,13 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
 
     {:ok, comment} =
-      %SymphonyElixir.LocalTracker.Comment{}
-      |> SymphonyElixir.LocalTracker.Comment.changeset(%{issue_id: issue.id, kind: "comment", body: "x", author: "raphael"})
+      %Comment{}
+      |> Comment.changeset(%{
+        issue_id: issue.id,
+        kind: "comment",
+        body: "x",
+        author: "raphael"
+      })
       |> Repo.insert()
 
     assert :ok = LocalStore.link_comment_remote_id(nil, "ignored")
@@ -227,7 +249,13 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
 
   test "remote update overwrites fields with no pending local edit", %{project: project} do
     {:ok, _} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "v1"}))
-    {:ok, updated} = LocalStore.upsert_remote_issue(project, remote_issue(%{title: "v2", remote_updated_at: DateTime.utc_now()}))
+
+    {:ok, updated} =
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{title: "v2", remote_updated_at: DateTime.utc_now()})
+      )
+
     assert updated.title == "v2"
     assert updated.sync_status == "synced"
   end
@@ -264,66 +292,27 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStoreTest do
     |> Repo.update!()
 
     {:ok, after_pull} =
-      LocalStore.upsert_remote_issue(project, remote_issue(%{title: "remote-v2", remote_updated_at: DateTime.utc_now()}))
+      LocalStore.upsert_remote_issue(
+        project,
+        remote_issue(%{title: "remote-v2", remote_updated_at: DateTime.utc_now()})
+      )
 
     assert after_pull.title == "local-edit"
     assert Map.has_key?(after_pull.dirty_fields, "title")
   end
 
-  test "remote pull does not overwrite a group member's local status", %{project: project} do
-    {:ok, lead} = LocalStore.upsert_remote_issue(project, remote_issue(%{remote_id: "I_lead", identifier: "MM-1"}))
-    {:ok, member} = LocalStore.upsert_remote_issue(project, remote_issue(%{remote_id: "I_mem", identifier: "MM-2"}))
-
-    {:ok, _} = Context.set_issue_group(project.slug, "MM-2", "MM-1")
-    assert {:ok, _} = Context.move_issue(project.slug, "MM-1", %{status: "In Progress"})
-
-    lead = Repo.get!(IssueRecord, lead.id) |> Repo.preload(:status)
-    member = Repo.get!(IssueRecord, member.id) |> Repo.preload(:status)
-    assert lead.status.name == "In Progress"
-    assert member.status.name == "In Progress"
-
-    {:ok, after_pull} =
-      LocalStore.upsert_remote_issue(
-        project,
-        remote_issue(%{
-          remote_id: "I_mem",
-          identifier: "MM-2",
-          state: "Todo",
-          remote_updated_at: DateTime.utc_now()
-        })
-      )
-
-    reloaded = Repo.get!(IssueRecord, after_pull.id) |> Repo.preload(:status)
-    assert reloaded.status.name == "In Progress"
-    assert reloaded.group_lead_id == lead.id
-  end
-
-  test "remote pull on the lead propagates status to grouped members", %{project: project} do
-    {:ok, lead} = LocalStore.upsert_remote_issue(project, remote_issue(%{remote_id: "I_lead", identifier: "MM-1"}))
-    {:ok, member} = LocalStore.upsert_remote_issue(project, remote_issue(%{remote_id: "I_mem", identifier: "MM-2"}))
-    {:ok, _} = Context.set_issue_group(project.slug, "MM-2", "MM-1")
-    assert {:ok, _} = Context.move_issue(project.slug, "MM-1", %{status: "In Progress"})
-
-    {:ok, _} =
-      LocalStore.upsert_remote_issue(
-        project,
-        remote_issue(%{
-          remote_id: "I_lead",
-          identifier: "MM-1",
-          state: "Done",
-          remote_updated_at: DateTime.utc_now()
-        })
-      )
-
-    member = Repo.get!(IssueRecord, member.id) |> Repo.preload(:status)
-    assert member.status.name == "Done"
-  end
-
   test "upsert_pull_requests links and updates PR state", %{project: project} do
     {:ok, issue} = LocalStore.upsert_remote_issue(project, remote_issue(%{}))
 
-    :ok = LocalStore.upsert_pull_requests(issue, [%{remote_id: "PR_1", number: 9, url: "u", title: "t", state: "open"}])
-    :ok = LocalStore.upsert_pull_requests(issue, [%{remote_id: "PR_1", number: 9, url: "u", title: "t", state: "merged"}])
+    :ok =
+      LocalStore.upsert_pull_requests(issue, [
+        %{remote_id: "PR_1", number: 9, url: "u", title: "t", state: "open"}
+      ])
+
+    :ok =
+      LocalStore.upsert_pull_requests(issue, [
+        %{remote_id: "PR_1", number: 9, url: "u", title: "t", state: "merged"}
+      ])
 
     prs = Repo.all(SymphonyElixir.Tracker.Sync.PullRequestRecord)
     assert length(prs) == 1

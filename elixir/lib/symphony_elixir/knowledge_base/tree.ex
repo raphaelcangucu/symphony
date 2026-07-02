@@ -27,6 +27,13 @@ defmodule SymphonyElixir.KnowledgeBase.Tree do
     if File.dir?(docs_root), do: docs_root |> walk("") |> Enum.sort(), else: []
   end
 
+  @spec build_from_paths(Path.t(), [String.t()]) :: [tree_node()]
+  def build_from_paths(docs_root, paths) when is_binary(docs_root) and is_list(paths) do
+    full_tree = build(docs_root)
+    wanted = MapSet.new(paths)
+    filter_tree(full_tree, wanted)
+  end
+
   defp walk(abs_dir, rel_dir) do
     abs_dir
     |> File.ls!()
@@ -50,6 +57,20 @@ defmodule SymphonyElixir.KnowledgeBase.Tree do
     |> Enum.map(&entry(abs_dir, rel_dir, &1))
     |> Enum.reject(&is_nil/1)
     |> Enum.sort_by(&{&1.order || @no_order, String.downcase(&1.title)})
+  end
+
+  defp filter_tree(nodes, wanted) do
+    nodes
+    |> Enum.flat_map(fn
+      %{type: :folder, children: children} = node ->
+        case filter_tree(children, wanted) do
+          [] -> []
+          kept -> [%{node | children: kept}]
+        end
+
+      %{path: path} = node ->
+        if MapSet.member?(wanted, path), do: [node], else: []
+    end)
   end
 
   defp entry(abs_dir, rel_dir, name) do
@@ -122,6 +143,7 @@ defmodule SymphonyElixir.KnowledgeBase.Tree do
     |> String.downcase()
     |> then(&(&1 in @asset_extensions))
   end
+
   defp join_rel("", name), do: name
   defp join_rel(rel_dir, name), do: rel_dir <> "/" <> name
   defp default_title(name), do: name |> String.replace_suffix(".md", "") |> humanize()

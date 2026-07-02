@@ -37,4 +37,9 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.ValidatorTest do
     assert {:error, warnings} = Validator.validate(b, parent_repo: "r")
     assert Enum.any?(warnings, &(&1.code == :cross_repo_inline))
   end
+
+  test "child_run in a different repo passes (cross-repo is the expected child_run case)" do
+    b = bundle([unit("a", %{type: :child_run, repo: "other"})])
+    assert Validator.validate(b, parent_repo: "r") == :ok
+  end
 end

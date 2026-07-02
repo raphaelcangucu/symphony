@@ -34,13 +34,24 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
     assert %{
              "data" => %{
                "agents" => %{"default_agent_kind" => "codex"},
+               "lab" => %{"bundle_child_orchestration" => false},
                "orchestrator" => %{
                  "require_symphony_label" => true,
-                 "require_assignee_match" => true
+                 "require_assignee_match" => true,
+                 "agent_token_budget_enabled" => false,
+                 "agent_token_budget" => 4_000_000
                },
                "ui" => %{"locale" => "auto"}
              }
            } = json_response(conn, 200)
+  end
+
+  test "PUT /api/tracker/v1/settings/lab toggles bundle_child_orchestration" do
+    conn = put(authed_conn(), "/api/tracker/v1/settings/lab", %{"bundle_child_orchestration" => true})
+    assert %{"data" => %{"bundle_child_orchestration" => true}} = json_response(conn, 200)
+
+    conn = get(authed_conn(), "/api/tracker/v1/settings")
+    assert %{"data" => %{"lab" => %{"bundle_child_orchestration" => true}}} = json_response(conn, 200)
   end
 
   test "PUT /api/tracker/v1/settings/orchestrator toggles a boolean rule" do
@@ -49,6 +60,21 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
 
     conn = get(authed_conn(), "/api/tracker/v1/settings")
     assert %{"data" => %{"orchestrator" => %{"require_symphony_label" => false}}} = json_response(conn, 200)
+  end
+
+  test "PUT /api/tracker/v1/settings/orchestrator updates token budget settings" do
+    conn =
+      put(authed_conn(), "/api/tracker/v1/settings/orchestrator", %{
+        "agent_token_budget_enabled" => true,
+        "agent_token_budget" => 8_000_000
+      })
+
+    assert %{
+             "data" => %{
+               "agent_token_budget_enabled" => true,
+               "agent_token_budget" => 8_000_000
+             }
+           } = json_response(conn, 200)
   end
 
   test "GET /api/tracker/v1/settings/identities lists every provider's connection state" do

@@ -19,7 +19,6 @@ export const DEFAULT_WORKFLOW_STATUSES = [
 export type BoardState = Record<WorkflowStatusName, Issue[]>;
 
 export const ISSUE_DRAG_PREFIX = "issue:";
-export const GROUP_DRAG_PREFIX = "group:";
 export const PARENT_DRAG_PREFIX = "parent:";
 
 export function issueDragId(identifier: string): string {
@@ -30,11 +29,8 @@ export function issueDragId(identifier: string): string {
 export function parseDragIssueId(id: unknown): string | null {
   if (typeof id !== "string" || id.trim() === "") return null;
   if (id.startsWith(ISSUE_DRAG_PREFIX)) return id.slice(ISSUE_DRAG_PREFIX.length);
-  // A group's drag id encodes its lead, so dragging the group resolves to moving
-  // (and reordering against) the lead issue.
-  if (id.startsWith(GROUP_DRAG_PREFIX)) return id.slice(GROUP_DRAG_PREFIX.length);
-  // A parent card wraps its own issue card (like a group wraps its lead), so its
-  // drag id resolves to the parent issue for move/reorder/group intent.
+  // A parent card wraps its own issue card, so its drag id resolves to the parent
+  // issue for move/reorder/sub-issue intent.
   if (id.startsWith(PARENT_DRAG_PREFIX)) return id.slice(PARENT_DRAG_PREFIX.length);
   return id;
 }
@@ -170,69 +166,51 @@ export function moveIssueLocally(
   return next;
 }
 
-export function resolveGroupMoveLead(
-  issues: readonly Issue[],
-  identifier: string,
-): { leadIdentifier: string; memberIdentifiers: string[] } {
-  const issue = issues.find((candidate) => candidate.identifier === identifier);
-  const leadIdentifier = issue?.groupLeadIdentifier ?? identifier;
-  const lead = issues.find((candidate) => candidate.identifier === leadIdentifier) ?? issue;
-
-  return {
-    leadIdentifier,
-    memberIdentifiers: lead?.groupMemberIdentifiers ?? [],
-  };
-}
-
 /**
  * Resolves the anchor issue and the followers that travel with it on a board
- * move. A group moves as one unit (dragging a member resolves to its lead +
- * siblings); a parent additionally drags its direct sub-issues so the parent
- * card and its subtasks land in the same column together. Followers are
- * de-duplicated so an issue that is both a group member and a sub-issue is moved
- * only once. Mirrors the server cascade in `persist_group_move`.
+ * move. The anchor is the dragged issue itself; a parent drags its direct
+ * sub-issues so the parent card and its subtasks land in the same column
+ * together. Followers are de-duplicated.
  */
 export function resolveMoveUnit(
   issues: readonly Issue[],
   identifier: string,
 ): { anchorIdentifier: string; followerIdentifiers: string[] } {
-  const { leadIdentifier, memberIdentifiers } = resolveGroupMoveLead(issues, identifier);
-
   const subtaskIdentifiers = issues
-    .filter((issue) => issue.parentIdentifier === leadIdentifier)
+    .filter((issue) => issue.parentIdentifier === identifier)
     .map((issue) => issue.identifier);
 
-  const seen = new Set<string>([leadIdentifier]);
+  const seen = new Set<string>([identifier]);
   const followerIdentifiers: string[] = [];
-  for (const candidate of [...memberIdentifiers, ...subtaskIdentifiers]) {
+  for (const candidate of subtaskIdentifiers) {
     if (seen.has(candidate)) continue;
     seen.add(candidate);
     followerIdentifiers.push(candidate);
   }
 
-  return { anchorIdentifier: leadIdentifier, followerIdentifiers };
+  return { anchorIdentifier: identifier, followerIdentifiers };
 }
 
 /**
- * Moves an issue and, when it leads a group, drags its members into the same
- * column right behind the lead so the whole group travels as one unit. Pure
- * board transform used for optimistic updates; the server mirrors this through
- * `move_group_members`. Without it the lead would jump columns alone and its
- * members would be stranded (rendering as loose cards) until the next refetch.
+ * Moves an issue and, when it owns sub-issues, drags its followers into the same
+ * column right behind the anchor so the whole unit travels together. Pure board
+ * transform used for optimistic updates. Without it the parent would jump
+ * columns alone and its sub-issues would be stranded (rendering as loose cards)
+ * until the next refetch.
  */
-export function moveGroupLocally(
+export function moveUnitLocally(
   board: BoardState,
-  leadIdentifier: string,
-  memberIdentifiers: readonly string[],
+  anchorIdentifier: string,
+  followerIdentifiers: readonly string[],
   targetStatus: WorkflowStatusName,
   targetIndex: number,
   statuses?: readonly WorkflowStatusName[],
 ): BoardState {
-  let next = moveIssueLocally(board, leadIdentifier, targetStatus, targetIndex, statuses);
-  for (const memberIdentifier of memberIdentifiers) {
-    const leadIndex = (next[targetStatus] ?? []).findIndex((issue) => issue.identifier === leadIdentifier);
-    const insertAt = leadIndex >= 0 ? leadIndex + 1 : (next[targetStatus]?.length ?? 0);
-    next = moveIssueLocally(next, memberIdentifier, targetStatus, insertAt, statuses);
+  let next = moveIssueLocally(board, anchorIdentifier, targetStatus, targetIndex, statuses);
+  for (const followerIdentifier of followerIdentifiers) {
+    const anchorIndex = (next[targetStatus] ?? []).findIndex((issue) => issue.identifier === anchorIdentifier);
+    const insertAt = anchorIndex >= 0 ? anchorIndex + 1 : (next[targetStatus]?.length ?? 0);
+    next = moveIssueLocally(next, followerIdentifier, targetStatus, insertAt, statuses);
   }
   return next;
 }
@@ -255,7 +233,6 @@ export interface DropIndicator {
 
 export type BoardUnit =
   | { kind: "issue"; id: string; issue: Issue }
-  | { kind: "group"; id: string; lead: Issue; members: Issue[] }
   | { kind: "parent"; id: string; issue: Issue; subtasks: Issue[] };
 
 /** Children whose parentIdentifier points at this issue, ordered like the board. */
@@ -272,15 +249,7 @@ export function collectSubtasksForParent(parentIdentifier: string, issues: reado
     .sort((left, right) => left.position - right.position);
 }
 
-export function groupIssuesIntoUnits(issues: readonly Issue[], allIssues?: readonly Issue[]): BoardUnit[] {
-  const byIdentifier = new Map(issues.map((issue) => [issue.identifier, issue]));
-  const absorbed = new Set<string>();
-  for (const issue of issues) {
-    if (issue.groupMemberIdentifiers.length > 0) {
-      for (const memberId of issue.groupMemberIdentifiers) absorbed.add(memberId);
-    }
-  }
-
+export function buildBoardUnits(issues: readonly Issue[], allIssues?: readonly Issue[]): BoardUnit[] {
   const subtaskSource = allIssues ?? issues;
   const subtasksByParent = new Map<string, Issue[]>();
   for (const issue of subtaskSource) {
@@ -293,16 +262,6 @@ export function groupIssuesIntoUnits(issues: readonly Issue[], allIssues?: reado
 
   const units: BoardUnit[] = [];
   for (const issue of issues) {
-    if (issue.groupLeadIdentifier && absorbed.has(issue.identifier)) continue;
-
-    if (issue.groupMemberIdentifiers.length > 0) {
-      const members = issue.groupMemberIdentifiers
-        .map((id) => byIdentifier.get(id))
-        .filter((member): member is Issue => Boolean(member));
-      units.push({ kind: "group", id: `${GROUP_DRAG_PREFIX}${issue.identifier}`, lead: issue, members });
-      continue;
-    }
-
     const subtasks = subtasksByParent.get(normalizeIssueIdentifier(issue.identifier)) ?? [];
     const hasSubtasks = subtasks.length > 0 || (issue.subIssueSummary?.total ?? 0) > 0;
 
@@ -310,8 +269,7 @@ export function groupIssuesIntoUnits(issues: readonly Issue[], allIssues?: reado
       // Additive (not absorbing): the parent renders an expandable subtask list,
       // but each subtask still gets its own issue unit below (it may live in a
       // different column/repo). Its drag id uses the parent prefix so the wrapper
-      // card is the single draggable unit (the inner issue card is presentational),
-      // mirroring how a group wraps its lead.
+      // card is the single draggable unit (the inner issue card is presentational).
       units.push({ kind: "parent", id: `${PARENT_DRAG_PREFIX}${issue.identifier}`, issue, subtasks });
     } else {
       units.push({ kind: "issue", id: issueDragId(issue.identifier), issue });

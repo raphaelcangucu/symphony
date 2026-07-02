@@ -29,7 +29,12 @@ defmodule SymphonyElixir.KnowledgeBase.DailyPromoterTest do
 
     pid =
       start_supervised!(
-        {DailyPromoter, name: :kb_promoter_skip, promote: fn p, r -> send(parent, {:promoted, p, r}); :ok end}
+        {DailyPromoter,
+         name: :kb_promoter_skip,
+         promote: fn p, r ->
+           send(parent, {:promoted, p, r})
+           :ok
+         end}
       )
 
     assert {:ok, 0} = DailyPromoter.promote_now(pid)
@@ -45,7 +50,12 @@ defmodule SymphonyElixir.KnowledgeBase.DailyPromoterTest do
 
     pid =
       start_supervised!(
-        {DailyPromoter, name: :kb_promoter_run, promote: fn p, r -> send(parent, {:promoted, p, r}); :ok end}
+        {DailyPromoter,
+         name: :kb_promoter_run,
+         promote: fn p, r ->
+           send(parent, {:promoted, p, r})
+           :ok
+         end}
       )
 
     assert {:ok, 1} = DailyPromoter.promote_now(pid)

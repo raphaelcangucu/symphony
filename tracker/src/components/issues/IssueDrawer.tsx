@@ -36,6 +36,7 @@ import type { EditorReason } from "@/services/editor";
 import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
 import { useIssueEvidence } from "@/hooks/useIssueEvidence";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
+import { useLabSettings } from "@/hooks/useLabSettings";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { issueDisplayIdentifier } from "@/lib/issueIdentifiers";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
@@ -47,10 +48,9 @@ import type { Issue } from "@/types/issue";
 
 import { ActivityTab } from "./issue-detail/ActivityTab";
 import { AgentLongRunningBadge, AgentStatusBadge } from "./AgentStatusBadge";
+import { AgentResumeIconButton } from "./AgentResumeIconButton";
 import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { AgentTabs } from "./issue-detail/AgentTabs";
-import { IssueGroupBanner } from "./issue-detail/IssueGroupBanner";
-import type { ResolvedIssueGroup } from "./issue-detail/issueGroup";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { CommentsTab } from "./issue-detail/CommentsTab";
 import { EvidenceTab } from "./issue-detail/EvidenceTab";
@@ -80,7 +80,6 @@ interface IssueDrawerProps {
   subtasks?: Issue[];
   subtaskExecutions?: ReadonlyMap<string, AgentExecution>;
   parentCandidates?: Issue[];
-  groupLeadCandidates?: Issue[];
   workflowMarkdown?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -92,13 +91,10 @@ interface IssueDrawerProps {
   onForceSync?: (issue: Issue) => void | Promise<void>;
   onRemoveAttachment?: (attachmentId: string) => Promise<boolean>;
   onIssueUpdated?: (updated: Issue) => void;
-  group?: ResolvedIssueGroup | null;
   onOpenIssue?: (identifier: string) => void;
   onCreateSubtask?: (title: string) => Promise<boolean>;
   onSetParent?: (parentIdentifier: string) => Promise<boolean>;
   onClearParent?: () => Promise<boolean>;
-  onSetGroupLead?: (leadIdentifier: string) => Promise<boolean>;
-  onClearGroupLead?: () => Promise<boolean>;
 }
 
 export function IssueDrawer({
@@ -109,7 +105,6 @@ export function IssueDrawer({
   subtasks = [],
   subtaskExecutions,
   parentCandidates = [],
-  groupLeadCandidates = [],
   workflowMarkdown = null,
   open,
   onOpenChange,
@@ -120,17 +115,17 @@ export function IssueDrawer({
   onForceSync,
   onRemoveAttachment,
   onIssueUpdated,
-  group = null,
   onOpenIssue,
   onCreateSubtask,
   onSetParent,
   onClearParent,
-  onSetGroupLead,
-  onClearGroupLead,
 }: IssueDrawerProps) {
   const { t } = useTranslation();
   const meta = issue ? getStatusMeta(issue.status) : null;
   const StatusIcon = meta?.Icon;
+
+  const lab = useLabSettings(open && Boolean(issue));
+  const labBundleChildOrchestration = lab.bundle_child_orchestration;
 
   const pr = useIssuePullRequests({
     projectSlug,
@@ -244,7 +239,17 @@ export function IssueDrawer({
                       {t("issue.drawer.blocked")}
                     </span>
                   ) : null}
-                  {execution ? <AgentStatusBadge status={resolveDisplayStatus(execution)} /> : null}
+                  {execution ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      <AgentStatusBadge status={resolveDisplayStatus(execution)} />
+                      <AgentResumeIconButton
+                        projectSlug={projectSlug}
+                        issueIdentifier={issue.identifier}
+                        execution={execution}
+                        onIssueUpdated={onIssueUpdated}
+                      />
+                    </span>
+                  ) : null}
                   {execution ? <AgentLongRunningBadge execution={execution} /> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
@@ -370,9 +375,6 @@ export function IssueDrawer({
                   </span>
                 </div>
               </SheetDescription>
-              {group ? (
-                <IssueGroupBanner group={group} currentIdentifier={issue.identifier} onOpenIssue={onOpenIssue} />
-              ) : null}
             </SheetHeader>
             <Tabs
               value={tab}
@@ -418,18 +420,16 @@ export function IssueDrawer({
                     projectSlug={projectSlug}
                     pullRequests={pr.pullRequests}
                     pullRequestChildren={pr.children}
+                    labBundleChildOrchestration={labBundleChildOrchestration}
                     workpad={commentsState.workpad}
                     subtasks={subtasks}
                     subtaskExecutions={subtaskExecutions}
                     parentCandidates={parentCandidates}
-                    groupLeadCandidates={groupLeadCandidates}
                     saving={issueUpdater.saving}
                     onOpenIssue={onOpenIssue}
                     onCreateSubtask={onCreateSubtask}
                     onSetParent={onSetParent}
                     onClearParent={onClearParent}
-                    onSetGroupLead={onSetGroupLead}
-                    onClearGroupLead={onClearGroupLead}
                     onOpenPullRequest={() => onTabChange?.("pr")}
                     onOpenComments={() => onTabChange?.("comments")}
                     onSaveDescription={async (description) => {
@@ -465,6 +465,7 @@ export function IssueDrawer({
                     projectSlug={projectSlug}
                     pullRequests={pr.pullRequests}
                     pullRequestChildren={pr.children}
+                    labBundleChildOrchestration={labBundleChildOrchestration}
                     supported={pr.supported}
                     available={pr.available}
                     loading={pr.loading}

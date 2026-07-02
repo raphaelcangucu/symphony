@@ -564,6 +564,18 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     LocalStore.link_issue_remote_id(issue_id, remote_id)
   end
 
+  defp link_pushed_remote_id(
+         %{entity_type: "relation", operation: "link_parent", project_id: project_id, payload: payload},
+         _remote_id
+       )
+       when is_map(payload) do
+    with %Project{slug: slug} <- Repo.get(Project, project_id) do
+      LocalStore.mark_sub_issue_relation_synced!(slug, payload)
+    end
+
+    :ok
+  end
+
   defp link_pushed_remote_id(%{entity_type: "state", operation: "move", project_id: project_id, payload: payload}, _remote_id)
        when is_map(payload) do
     with %{"identifier" => identifier} <- payload,

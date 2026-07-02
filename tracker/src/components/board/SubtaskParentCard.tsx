@@ -11,7 +11,7 @@ import type { Issue } from "@/types/issue";
 import type { WorkflowStatusCategory, WorkflowStatusName } from "@/types/workflow-status";
 
 import { getStatusMeta } from "./status-meta";
-import { GroupDropOverlay, ReorderDropLine } from "./GroupDropOverlay";
+import { MergeDropOverlay, ReorderDropLine } from "./MergeDropOverlay";
 import { IssueCard } from "./IssueCard";
 
 interface SubtaskParentCardProps {
@@ -26,10 +26,10 @@ interface SubtaskParentCardProps {
 }
 
 /**
- * Board card for an issue that owns sub-issues. Mirrors `GroupCard`: a single
- * draggable wrapper holds a count/toggle header on top, the parent issue card
- * (rendered presentationally so the wrapper is the one draggable unit), and an
- * expandable list of sub-issues underneath.
+ * Board card for an issue that owns sub-issues. A single draggable wrapper holds
+ * a count/toggle header on top, the parent issue card (rendered presentationally
+ * so the wrapper is the one draggable unit), and an expandable list of sub-issues
+ * underneath.
  */
 export function SubtaskParentCard({
   id,
@@ -66,7 +66,7 @@ export function SubtaskParentCard({
       {...attributes}
       {...listeners}
     >
-      {mergeActive ? <GroupDropOverlay /> : null}
+      {mergeActive ? <MergeDropOverlay /> : null}
       {dropEdge && !mergeActive ? <ReorderDropLine edge={dropEdge} /> : null}
       <div className="mb-1 flex items-center justify-between px-1 pt-0.5">
         <button

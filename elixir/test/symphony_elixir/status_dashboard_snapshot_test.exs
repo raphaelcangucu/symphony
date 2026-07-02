@@ -138,6 +138,65 @@ defmodule SymphonyElixir.StatusDashboardSnapshotTest do
     Snapshot.assert_dashboard_snapshot!("backoff_queue", render_snapshot(snapshot_data, 15.4))
   end
 
+  test "waiting gated subagents render nested under their parent" do
+    snapshot_data =
+      {:ok,
+       %{
+         running: [
+           running_entry(%{
+             identifier: "MAC-12",
+             agent_total_tokens: 842_867,
+             runtime_seconds: 120,
+             turn_count: 1,
+             last_codex_event: "codex/event/task_started",
+             last_codex_message: exec_command_message("mix test")
+           })
+         ],
+         retrying: [],
+         waiting: [
+           %{issue_identifier: "MAC-13", parent_identifier: "510", blocked_by: ["MAC-12"], last_message: "Waiting on MAC-12"},
+           %{issue_identifier: "MAC-14", parent_identifier: "510", blocked_by: ["MAC-12"], last_message: "Waiting on MAC-12"},
+           %{
+             issue_identifier: "MAC-15",
+             parent_identifier: "510",
+             blocked_by: ["MAC-13"],
+             last_message: "Waiting on MAC-13 · contract market-pool-curation-schema"
+           }
+         ],
+         agent_totals: %{input_tokens: 800_000, output_tokens: 42_867, total_tokens: 842_867, seconds_running: 120},
+         rate_limits: nil
+       }}
+
+    rendered = render_snapshot(snapshot_data, 12.0)
+
+    assert rendered =~ "Waiting (gated subagents)"
+    assert rendered =~ "MAC-13"
+    assert rendered =~ "MAC-14"
+    assert rendered =~ "MAC-15"
+    assert rendered =~ "Waiting on MAC-12"
+    assert rendered =~ "contract market-pool-curation-schema"
+    assert rendered =~ "510"
+
+    # Exactly three gated subagents nested under parent 510 (one row each).
+    parent_rows = rendered |> String.split("\n") |> Enum.filter(&String.contains?(&1, "↳ 510"))
+    assert length(parent_rows) == 3
+  end
+
+  test "no waiting section is rendered when there are no gated subagents" do
+    snapshot_data =
+      {:ok,
+       %{
+         running: [],
+         retrying: [],
+         agent_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
+         rate_limits: nil
+       }}
+
+    rendered = render_snapshot(snapshot_data, 0.0)
+
+    refute rendered =~ "Waiting (gated subagents)"
+  end
+
   test "backoff queue row escapes escaped newline sequences" do
     snapshot_data =
       {:ok,

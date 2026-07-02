@@ -6,6 +6,7 @@ import type {
   PrMonitorTickStatus,
   RetryEntry,
   RunningSession,
+  RunningSessionStatus,
   RuntimeObservability,
   RuntimeStatus,
 } from "@/types/observability";
@@ -22,6 +23,7 @@ interface BackendTokensDto {
 interface BackendRunningDto {
   issue_identifier?: string | null;
   state?: string | null;
+  status?: string | null;
   session_id?: string | null;
   turn_count?: number | null;
   last_event?: string | null;
@@ -64,13 +66,18 @@ function normalizeStatus(status: string | null | undefined): RuntimeStatus {
 }
 
 function normalizeBundleRole(role: string | null | undefined): BundleRole {
-  return role === "parent" || role === "child" ? role : "standalone";
+  return role === "parent" || role === "parent_unified" || role === "child" || role === "subagent" ? role : "standalone";
+}
+
+function normalizeRunningStatus(status: string | null | undefined): RunningSessionStatus | null {
+  return status === "live" || status === "waiting" ? status : null;
 }
 
 function normalizeRunning(dto: BackendRunningDto): RunningSession {
   return {
     issueIdentifier: normalizeIssueIdentifier(dto.issue_identifier ?? ""),
     state: dto.state ?? null,
+    status: normalizeRunningStatus(dto.status),
     sessionId: dto.session_id ?? null,
     turnCount: dto.turn_count ?? 0,
     lastEvent: dto.last_event ?? null,

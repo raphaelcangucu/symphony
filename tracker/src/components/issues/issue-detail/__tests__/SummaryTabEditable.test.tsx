@@ -51,8 +51,6 @@ function issue(overrides: Partial<Issue> = {}): Issue {
     updatedAt: "2026-05-30T13:00:00Z",
     url: null,
     attachments: [],
-    groupLeadIdentifier: null,
-    groupMemberIdentifiers: [],
     ...overrides,
   };
 }

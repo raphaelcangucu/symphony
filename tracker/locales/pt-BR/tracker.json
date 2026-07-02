@@ -49,6 +49,9 @@
       },
       "gateways": {
         "label": "Gateways"
+      },
+      "lab": {
+        "label": "Lab"
       }
     },
     "loadFailed": "Falha ao carregar configurações — atualize para tentar novamente.",
@@ -84,6 +87,23 @@
           "title": "Exigir assignee para mim",
           "description": "Só auto-iniciar issues atribuídas à identidade conectada (login GitHub, conta Jira ou usuário Linear)."
         }
+      },
+      "tokenBudget": {
+        "title": "Budget de tokens por execução",
+        "description": "Interrompe a execução quando o total acumulado de tokens do agente ultrapassa o limite. Desativado por padrão; parents coordinator continuam isentos quando ativo.",
+        "amountLabel": "Limite de tokens",
+        "invalid": "Informe um número inteiro de tokens (mínimo 1)."
+      }
+    },
+    "lab": {
+      "title": "Recursos experimentais",
+      "description": "Modelos de orquestração opcionais em desenvolvimento. O padrão favorece o caminho unificado do parent.",
+      "pageDescription": "Alterne comportamentos experimentais do Symphony nesta instância.",
+      "loadFailed": "Falha ao carregar configurações do Lab — atualize para tentar novamente.",
+      "saveFailed": "Falha ao salvar configuração do Lab",
+      "bundleChildOrchestration": {
+        "title": "Orquestração bundle child",
+        "description": "Quando ativo, tarefas parent disparam execuções separadas do orquestrador por unidade child_run (worktrees, branches de integração). Quando desativado (padrão), uma execução parent usa subagentes nativos e um PR por repo."
       }
     },
     "push": {
@@ -370,12 +390,6 @@
       "issueTitleAria": "Título da issue",
       "untitledIssue": "Issue sem título",
       "unassigned": "Sem assignee",
-      "group": {
-        "title": "Grupo",
-        "lead": "Principal",
-        "current": "Esta issue",
-        "unavailable": "Fora da visão atual"
-      },
       "code": "Code",
       "editor": {
         "checking": "Verificando editor…",
@@ -763,10 +777,6 @@
         "parentTitle": "Definir issue pai",
         "noParent": "Sem pai",
         "clearParent": "Remover pai",
-        "groupLead": "Líder do grupo",
-        "groupLeadTitle": "Definir líder do grupo",
-        "noGroupLead": "Sem líder de grupo",
-        "clearGroupLead": "Remover do grupo",
         "searchPlaceholder": "Buscar issues…",
         "empty": "Nenhuma issue encontrada.",
         "unavailable": "Fora da visão atual",
@@ -945,11 +955,7 @@
       "parentSet": "Pai definido como {{identifier}}",
       "parentSetFailed": "Falha ao definir pai",
       "parentCleared": "Pai removido",
-      "parentClearFailed": "Falha ao remover pai",
-      "groupLeadSet": "Agrupada sob {{identifier}}",
-      "groupLeadSetFailed": "Falha ao definir líder do grupo",
-      "groupLeadCleared": "Removida do grupo",
-      "groupLeadClearFailed": "Falha ao remover do grupo"
+      "parentClearFailed": "Falha ao remover pai"
     },
     "attachments": {
       "imageUnavailable": "Upload de imagens não está disponível aqui.",
@@ -1648,6 +1654,10 @@
       "show": "Mostrar execuções filhas",
       "hide": "Ocultar execuções filhas"
     },
+    "subagent": {
+      "waiting": "Aguardando",
+      "waitingHint": "Subagente em espera: aguardando suas dependências. Nenhum agente está em execução e nenhum token é gasto até ser liberado."
+    },
     "tokens": {
       "breakdown": "Coordenador: {{coordinator}} · Filhos: {{children}} · Total: {{total}}"
     },
@@ -2158,15 +2168,9 @@
       "searchPlaceholder": "Buscar {{label}}…",
       "noPeopleFound": "Nenhuma pessoa encontrada."
     },
-    "group": {
-      "mergeHint": "Agrupar com {{identifier}}",
-      "dropToGroup": "Soltar para agrupar",
-      "count": "{{count}} agrupadas",
-      "expand": "Mostrar tarefas do grupo",
-      "collapse": "Ocultar tarefas do grupo",
-      "removeMember": "Remover {{identifier}} do grupo",
-      "disband": "Desfazer grupo",
-      "runningLocked": "Não dá para alterar o grupo enquanto ele está rodando"
+    "parent": {
+      "makeSubIssue": "Tornar sub-tarefa",
+      "mergeHint": "Tornar sub-tarefa de {{identifier}}"
     },
     "subtasks": {
       "count": "{{count}} subtarefas",
@@ -2304,6 +2308,7 @@
       "ariaLabel": "Documentos da base de conhecimento",
       "title": "Base de Conhecimento",
       "subtitle": "{{count}} citados no chat",
+      "changedSubtitle": "{{count}} docs alteradas nesta task",
       "cited": "Docs citadas",
       "all": "Todas as docs",
       "empty": "Nenhum documento da base de conhecimento encontrado.",

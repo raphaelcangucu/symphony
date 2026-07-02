@@ -33,8 +33,6 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
       assigned_to_worker: AgentRouting.routable?(label_names),
       created_at: record.inserted_at,
       updated_at: record.updated_at,
-      group_lead_identifier: group_lead_identifier(record.group_lead),
-      group_member_identifiers: group_member_identifiers(record.group_members),
       parent_identifier: subtask_parent_identifier(record.source_relations)
     }
   end
@@ -115,16 +113,4 @@ defmodule SymphonyElixir.LocalTracker.IssueMapper do
 
   defp project_slug(%IssueRecord{project: %Project{slug: slug}}), do: slug
   defp project_slug(_record), do: nil
-
-  defp group_lead_identifier(%IssueRecord{identifier: identifier}) when is_binary(identifier), do: identifier
-  defp group_lead_identifier(_), do: nil
-
-  defp group_member_identifiers(members) when is_list(members) do
-    Enum.flat_map(members, fn
-      %IssueRecord{identifier: identifier} when is_binary(identifier) -> [identifier]
-      _ -> []
-    end)
-  end
-
-  defp group_member_identifiers(_), do: []
 end

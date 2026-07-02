@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
 
   alias Plug.Conn
   alias SymphonyElixir.KnowledgeBase
+  alias SymphonyElixir.KnowledgeBase.IssueWorkspace
   alias SymphonyElixirWeb.TrackerErrors
 
   @spec project_overview(Conn.t(), map()) :: Conn.t()
@@ -23,9 +24,25 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
     end
   end
 
+  @spec issue_repo_tree(Conn.t(), map()) :: Conn.t()
+  def issue_repo_tree(conn, %{"project_slug" => project_slug, "identifier" => identifier, "repo" => repo_slug}) do
+    case IssueWorkspace.repo_tree(project_slug, identifier, repo_slug) do
+      {:ok, tree} -> json(conn, %{data: tree})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec show_page(Conn.t(), map()) :: Conn.t()
   def show_page(conn, %{"project_slug" => project_slug, "repo" => repo_slug, "path" => path}) do
     case KnowledgeBase.read_page(project_slug, repo_slug, path) do
+      {:ok, page} -> json(conn, %{data: page})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec issue_show_page(Conn.t(), map()) :: Conn.t()
+  def issue_show_page(conn, %{"project_slug" => project_slug, "identifier" => identifier, "repo" => repo_slug, "path" => path}) do
+    case IssueWorkspace.read_page(project_slug, identifier, repo_slug, path) do
       {:ok, page} -> json(conn, %{data: page})
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
@@ -39,6 +56,19 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
     }
 
     case KnowledgeBase.write_page(slug, repo, path, page) do
+      {:ok, result} -> json(conn, %{data: result})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec issue_save_page(Conn.t(), map()) :: Conn.t()
+  def issue_save_page(conn, %{"project_slug" => slug, "identifier" => identifier, "repo" => repo, "path" => path} = params) do
+    page = %{
+      frontmatter: Map.get(params, "frontmatter", %{}) || %{},
+      body: to_string(Map.get(params, "body", ""))
+    }
+
+    case IssueWorkspace.write_page(slug, identifier, repo, path, page) do
       {:ok, result} -> json(conn, %{data: result})
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
@@ -231,10 +261,8 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseController do
 
   @spec sync_status(Conn.t(), map()) :: Conn.t()
   def sync_status(conn, %{"project_slug" => slug, "repo" => repo}) do
-    case KnowledgeBase.sync_status(slug, repo) do
-      {:ok, status} -> json(conn, %{data: status})
-      {:error, reason} -> TrackerErrors.render(conn, reason)
-    end
+    {:ok, status} = KnowledgeBase.sync_status(slug, repo)
+    json(conn, %{data: status})
   end
 
   @spec request_sync(Conn.t(), map()) :: Conn.t()

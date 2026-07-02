@@ -121,6 +121,34 @@ describe("normalizeRuntime", () => {
     });
   });
 
+  it("maps the subagent role and waiting status on running sessions", () => {
+    const runtime = normalizeRuntime({
+      runtime_id: "r1",
+      running: [
+        {
+          issue_identifier: "513",
+          bundle_role: "subagent",
+          status: "waiting",
+          parent_identifier: "#510",
+          unit_id: "ui",
+          repo: "macro/fe",
+        },
+        { issue_identifier: "512", bundle_role: "child", status: "live" },
+        { issue_identifier: "999", status: "weird" },
+      ],
+    });
+
+    expect(runtime.running[0]).toMatchObject({
+      bundleRole: "subagent",
+      status: "waiting",
+      parentIdentifier: "510",
+      unitId: "ui",
+    });
+    expect(runtime.running[1]).toMatchObject({ bundleRole: "child", status: "live" });
+    // An unknown status normalizes to null (treated as a live row by the UI).
+    expect(runtime.running[2].status).toBeNull();
+  });
+
   it("tolerates null running/retrying and null nested tokens", () => {
     const nulled = normalizeRuntime({ runtime_id: "r1", running: null, retrying: null });
     expect(nulled.running).toEqual([]);

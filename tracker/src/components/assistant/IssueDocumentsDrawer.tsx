@@ -38,6 +38,7 @@ export function IssueDocumentsDrawer({ projectSlug, identifier }: IssueDocuments
         <div className="min-h-0 flex-1 overflow-hidden" aria-label={t("assistant.authoring.documentsAria")}>
           <AssistantKbDocumentsPanel
             projectSlug={projectSlug}
+            issueIdentifier={normalizedIdentifier}
             citedPaths={[]}
             className="rounded-none border-0 shadow-none"
           />

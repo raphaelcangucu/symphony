@@ -125,6 +125,10 @@ function repoBase(projectSlug: string, repoSlug: string): string {
   return `${base(projectSlug)}/repos/${repoSlug}`;
 }
 
+function issueRepoBase(projectSlug: string, identifier: string, repoSlug: string): string {
+  return `/projects/${encodeURIComponent(requireProjectSlug(projectSlug))}/issues/${encodeURIComponent(identifier)}/kb/repos/${repoSlug}`;
+}
+
 export async function getProjectOverview(projectSlug: string): Promise<KbProjectOverview> {
   const response = await http.get(trackerPath(base(projectSlug)));
   const data = unwrapData<{ project: { slug: string; name: string }; repositories: RepoDto[] }>(response);
@@ -138,8 +142,31 @@ export async function getRepoTree(projectSlug: string, repoSlug: string): Promis
   return { repository, docsPresent: data.docs_present, tree: (data.tree ?? []).map(mapTree) };
 }
 
+export async function getIssueRepoTree(
+  projectSlug: string,
+  identifier: string,
+  repoSlug: string,
+): Promise<KbRepoTree> {
+  const response = await http.get(trackerPath(issueRepoBase(projectSlug, identifier, repoSlug)));
+  const data = unwrapData<{ repository: RepoDto; docs_present: boolean; tree: TreeDto[] }>(response);
+  const repository = { ...mapRepo(data.repository), docsPresent: data.docs_present };
+  return { repository, docsPresent: data.docs_present, tree: (data.tree ?? []).map(mapTree) };
+}
+
 export async function getPage(projectSlug: string, repoSlug: string, path: string): Promise<KbPage> {
   const response = await http.get(trackerPath(`${repoBase(projectSlug, repoSlug)}/pages/${encodePagePath(path)}`));
+  return mapPage(unwrapData<PageDto>(response));
+}
+
+export async function getIssuePage(
+  projectSlug: string,
+  identifier: string,
+  repoSlug: string,
+  path: string,
+): Promise<KbPage> {
+  const response = await http.get(
+    trackerPath(`${issueRepoBase(projectSlug, identifier, repoSlug)}/pages/${encodePagePath(path)}`),
+  );
   return mapPage(unwrapData<PageDto>(response));
 }
 
@@ -153,6 +180,23 @@ export async function savePage(
     frontmatter: input.frontmatter ?? {},
     body: input.body,
   });
+  return unwrapData<SaveResultDto>(response);
+}
+
+export async function saveIssuePage(
+  projectSlug: string,
+  identifier: string,
+  repoSlug: string,
+  path: string,
+  input: KbSavePageInput,
+): Promise<KbSaveResult> {
+  const response = await http.put(
+    trackerPath(`${issueRepoBase(projectSlug, identifier, repoSlug)}/pages/${encodePagePath(path)}`),
+    {
+      frontmatter: input.frontmatter ?? {},
+      body: input.body,
+    },
+  );
   return unwrapData<SaveResultDto>(response);
 }
 

@@ -32,7 +32,7 @@ defmodule SymphonyElixir.Orchestrator.BundleGate do
 
   defp find_child_unit(bundle, issue_identifier) do
     bundle
-    |> ExecutionBundle.child_units()
+    |> ExecutionBundle.dispatchable_units()
     |> Enum.find(&(&1.issue == issue_identifier))
   end
 

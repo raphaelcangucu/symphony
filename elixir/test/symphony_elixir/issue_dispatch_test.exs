@@ -30,6 +30,25 @@ defmodule SymphonyElixir.IssueDispatchTest do
     {:ok, issue: issue}
   end
 
+  test "resume assigns viewer and symphony label when gates are missing", %{issue: issue} do
+    {:ok, _} = Context.update_issue("pref", issue.identifier, %{"labels" => []})
+    {:ok, project} = Context.get_project("pref")
+
+    unless Process.whereis(SymphonyElixir.LocalTracker.Viewer.Server) do
+      {:ok, _pid} = start_supervised(SymphonyElixir.LocalTracker.Viewer.Server)
+    end
+
+    SymphonyElixir.LocalTracker.Viewer.invalidate_cache()
+    SymphonyElixir.LocalTracker.Viewer.put_cached(%{login: "raphaelcangucu", name: nil, avatar_url: nil})
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{"instructions" => "pick up tests"})
+
+    {:ok, updated} = Context.get_issue("pref", issue.identifier)
+    assert updated.assignee_id == "raphaelcangucu"
+    assert Enum.any?(updated.labels, &(&1.name in ["symphony", "symphony:codex", "symphony:claude", "symphony:cursor"]))
+  end
+
   test "resume nudges the orchestrator for active issues", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
     {:ok, project} = Context.get_project("pref")

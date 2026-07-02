@@ -20,7 +20,7 @@ defmodule SymphonyElixir.Evidence.Store do
       run_id = Keyword.get(opts, :run_id, generate_run_id())
       destination = Path.join([evidence_root(opts), project_slug, safe(identifier), run_id])
 
-      with :ok <- copy_artifacts(Manifest.dir(workspace), destination) do
+      with :ok <- copy_artifacts(Manifest.resolve_dir(workspace), destination) do
         %Record{}
         |> Record.changeset(%{
           project_id: project.id,

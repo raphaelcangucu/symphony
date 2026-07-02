@@ -77,8 +77,8 @@ function normalizeAgentKind(kind: string | null | undefined): "codex" | "claude"
   return null;
 }
 
-function normalizeBundleRole(role: string | null | undefined): "parent" | "child" | "standalone" {
-  return role === "parent" || role === "child" ? role : "standalone";
+function normalizeBundleRole(role: string | null | undefined): "parent" | "parent_unified" | "child" | "subagent" | "standalone" {
+  return role === "parent" || role === "parent_unified" || role === "child" || role === "subagent" ? role : "standalone";
 }
 
 function normalizeGoalKind(kind: unknown): AgentExecutionGoalKind | null {

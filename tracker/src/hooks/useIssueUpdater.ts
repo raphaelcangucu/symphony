@@ -39,8 +39,7 @@ export function useIssueUpdater({ projectSlug, issue, onUpdated }: UseIssueUpdat
       if (status === issue.status) return issue;
       setSaving(true);
       try {
-        const leadIdentifier = issue.groupLeadIdentifier ?? issue.identifier;
-        const updated = await moveIssue(projectSlug, leadIdentifier, {
+        const updated = await moveIssue(projectSlug, issue.identifier, {
           status,
           position: issue.position,
         });

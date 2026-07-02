@@ -454,20 +454,6 @@ defmodule SymphonyElixir.PromptBuilderTest do
     end
   end
 
-  test "group_members_section lists each member with identifier and title" do
-    members = [
-      %Issue{identifier: "MAC-2", title: "Add API", description: "desc", agent_goal: nil},
-      %Issue{identifier: "MAC-3", title: "Add UI", description: nil, agent_goal: "ship it"}
-    ]
-
-    section = PromptBuilder.group_members_section(members)
-    assert section =~ "Grouped tasks"
-    assert section =~ "MAC-2: Add API"
-    assert section =~ "MAC-3: Add UI"
-    assert section =~ "Symphony-Issue:"
-    assert PromptBuilder.group_members_section([]) == ""
-  end
-
   defp seed_project_with_setup(slug, prompt) do
     {:ok, project} = Context.ensure_project(%{name: slug, slug: slug, tracker_kind: "local"})
 

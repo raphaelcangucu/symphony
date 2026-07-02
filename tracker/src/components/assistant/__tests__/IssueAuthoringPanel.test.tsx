@@ -23,10 +23,26 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
 }));
 
 vi.mock("@/components/assistant/AssistantKbDocumentsPanel", () => ({
-  AssistantKbDocumentsPanel: ({ projectSlug, citedPaths }: { projectSlug: string; citedPaths: string[] }) => (
+  AssistantKbDocumentsPanel: ({
+    projectSlug,
+    issueIdentifier,
+    citedPaths,
+  }: {
+    projectSlug: string;
+    issueIdentifier?: string;
+    citedPaths: string[];
+  }) => (
     <section aria-label="Knowledge base documents">
-      KB {projectSlug}:{citedPaths.join(",") || "none"}
+      KB {projectSlug}:{issueIdentifier ?? "none"}:{citedPaths.join(",") || "none"}
     </section>
+  ),
+}));
+
+vi.mock("@/components/issues/IssueEditorMenu", () => ({
+  IssueEditorMenu: ({ projectSlug, identifier }: { projectSlug: string; identifier: string }) => (
+    <button type="button" aria-label="Open in code">
+      Editor {projectSlug}:{identifier}
+    </button>
   ),
 }));
 
@@ -63,7 +79,7 @@ describe("IssueAuthoringPanel", () => {
       "Assistant macro-markets:MAC-1:board:page",
     );
     expect(screen.getByRole("region", { name: /knowledge base documents/i })).toHaveTextContent(
-      "KB macro-markets:none",
+      "KB macro-markets:MAC-1:none",
     );
   });
 
@@ -96,6 +112,19 @@ describe("IssueAuthoringPanel", () => {
     expect(screen.getByTestId("project-assistant-panel")).toBeInTheDocument();
   });
 
+  it("shows the issue editor menu next to the issue detail link", () => {
+    render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="board" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: /open in code/i })).toHaveTextContent(
+      "Editor macro-markets:MAC-1",
+    );
+    expect(screen.getByRole("link", { name: /open issue details/i })).toBeInTheDocument();
+  });
+
   it("shows the new-issue intro and empty documents state until an identifier exists", () => {
     render(
       <MemoryRouter>
@@ -106,7 +135,7 @@ describe("IssueAuthoringPanel", () => {
     expect(screen.getByText("New issue authoring")).toBeTruthy();
     expect(screen.getByText(/Start by asking the assistant to draft an issue/i)).toBeTruthy();
     expect(screen.getByRole("region", { name: /knowledge base documents/i })).toHaveTextContent(
-      "KB macro-markets:none",
+      "KB macro-markets:none:none",
     );
   });
 });

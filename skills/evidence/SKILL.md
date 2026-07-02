@@ -204,9 +204,12 @@ await page.screenshot({
 
 ## Manifest format
 
-Write `.symphony/evidence/manifest.json` in the workspace root, with all
-artifact paths RELATIVE to `.symphony/evidence/`. Each `e2e` run's `repo` must
-be the UI repo it exercises:
+Write `.symphony/evidence/manifest.json` in the **workspace root** (the parent
+of the repo checkouts), with all artifact paths RELATIVE to `.symphony/evidence/`.
+**Do NOT write it inside a repo's own `.symphony/`** (some repos — e.g.
+`clouapp/back` — ship their own `.symphony/` tooling; nesting evidence there gets
+it committed into the PR and hides it from Symphony's Evidence tab). Each `e2e`
+run's `repo` must be the UI repo it exercises:
 
 ```json
 {

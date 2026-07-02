@@ -16,11 +16,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     TurnManager
   }
 
-  alias SymphonyElixir.Config
+  alias SymphonyElixir.{AgentPreference, Config, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
   alias SymphonyElixirWeb.TrackerAuth
-  alias SymphonyElixir.{AgentPreference, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
 
-  @issue_modes ~w(triage simple complex)
   @issue_authoring_tools ~w(create_draft_issue create_issue)
 
   @impl true
@@ -40,7 +38,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
-        mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
         goal_objective: History.thread_goal_objective(thread),
         goal_running: GoalRun.running?(thread.id),
@@ -72,7 +69,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
-        mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
         goal_objective: History.thread_goal_objective(thread),
         last_turn: History.turn_payload(thread),
@@ -124,7 +120,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
-        mode: History.thread_mode(thread),
         goal_mode: History.thread_goal_mode(thread),
         goal_objective: History.thread_goal_objective(thread),
         last_turn: History.turn_payload(thread),
@@ -185,18 +180,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:reply, :ok, socket}
   end
 
-  def handle_in("set_mode", %{"mode" => mode}, socket) when is_binary(mode) do
-    with {:ok, normalized_mode} <- normalize_issue_mode(mode),
-         {:ok, thread} <- issue_thread(socket),
-         {:ok, updated_thread} <- History.set_mode(thread, normalized_mode) do
-      {:reply, {:ok, %{mode: normalized_mode}}, assign(socket, :thread, updated_thread)}
-    else
-      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-    end
-  end
-
-  def handle_in("set_mode", _payload, socket), do: {:reply, {:error, %{reason: "mode is required"}}, socket}
-
   def handle_in("set_goal_mode", %{"goal_mode" => false}, socket) do
     with {:ok, thread} <- issue_thread(socket),
          {:ok, _payload, updated_thread} <- AuthoringGoalControl.clear(thread) do
@@ -212,7 +195,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
     with {:ok, thread} <- issue_thread(socket),
          {:ok, updated_thread} <- History.set_goal_mode(thread, enabled, objective) do
-      {:reply, {:ok, %{goal_mode: enabled, goal_objective: History.thread_goal_objective(updated_thread)}}, assign(socket, :thread, updated_thread)}
+      payload = %{
+        goal_mode: enabled,
+        goal_objective: History.thread_goal_objective(updated_thread)
+      }
+
+      {:reply, {:ok, payload}, assign(socket, :thread, updated_thread)}
     else
       {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
     end
@@ -258,21 +246,19 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_in("goal_resume", _payload, socket) do
-    cond do
-      socket.assigns[:turn_status] == :running ->
-        {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+    if socket.assigns[:turn_status] == :running do
+      {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+    else
+      case authoring_goal_thread(socket) do
+        {:ok, thread} ->
+          # Flip the native goal back to active (best-effort; may not exist yet)
+          # then kick an autonomous continuation batch that streams into the chat.
+          _ = AuthoringGoalControl.resume(thread)
+          {:reply, :ok, start_goal_continuation(thread, socket)}
 
-      true ->
-        case authoring_goal_thread(socket) do
-          {:ok, thread} ->
-            # Flip the native goal back to active (best-effort; may not exist yet)
-            # then kick an autonomous continuation batch that streams into the chat.
-            _ = AuthoringGoalControl.resume(thread)
-            {:reply, :ok, start_goal_continuation(thread, socket)}
-
-          {:error, reason} ->
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-        end
+        {:error, reason} ->
+          {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+      end
     end
   end
 
@@ -364,6 +350,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("submit_user_input", _payload, socket),
     do: {:reply, {:error, %{reason: "answers are required"}}, socket}
 
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   def handle_in("btw", %{"message" => message}, socket) when is_binary(message) do
     case String.trim(message) do
       "" ->
@@ -704,6 +691,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp thread_id_from_socket(%Socket{assigns: %{thread: %{id: id}}}) when is_integer(id), do: id
   defp thread_id_from_socket(_socket), do: nil
 
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp do_send_message(message, payload, socket) do
     project_slug = socket.assigns[:project_slug]
     thread = socket.assigns[:thread]
@@ -1144,16 +1132,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     ArgumentError -> Map.get(map, key)
   end
 
-  defp normalize_issue_mode(mode) do
-    normalized = mode |> String.trim() |> String.downcase()
-
-    if normalized in @issue_modes do
-      {:ok, normalized}
-    else
-      {:error, {:unsupported_mode, mode}}
-    end
-  end
-
   defp issue_thread(%Socket{assigns: %{thread: %{scope: "issue"} = thread}}), do: {:ok, thread}
   defp issue_thread(_socket), do: {:error, :issue_thread_required}
 
@@ -1194,6 +1172,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   # Fetches the native goal off the channel process (a Codex port round-trip can
   # take seconds) and pushes the authoritative status to the client.
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp push_goal_status_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket, running) do
     if History.thread_goal_mode(thread) do
       elapsed = GoalRun.elapsed_seconds(id)
@@ -1217,6 +1196,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # process, then pushes the authoritative status. Skipped while a turn runs: a
   # competing `thread/goal/set` would block on (or clobber) the in-flight turn's
   # thread, and the metadata is already saved + echoed by the reply.
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp sync_native_objective_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket) do
     if History.thread_goal_mode(thread) and not goal_running?(socket) do
       Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
@@ -1480,10 +1460,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp error_reason(reason) when is_binary(reason), do: reason
   defp error_reason({:missing_required_field, field}), do: "#{field} is required"
   defp error_reason(:project_not_found), do: "project not found"
-  defp error_reason({:unsupported_mode, mode}), do: "unsupported mode: #{mode}. Expected one of: #{Enum.join(@issue_modes, ", ")}"
   defp error_reason(:issue_thread_required), do: "this action is only supported for issue assistant threads"
   defp error_reason(:message_required), do: "message is required"
   defp error_reason({:turn_crashed, reason}), do: "assistant turn crashed: #{inspect(reason)}"
-  defp error_reason(%Ecto.Changeset{}), do: "failed to persist mode"
+  defp error_reason(%Ecto.Changeset{}), do: "failed to persist thread metadata"
   defp error_reason(reason), do: inspect(reason)
 end

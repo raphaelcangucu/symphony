@@ -16,6 +16,8 @@ defmodule SymphonyElixir.AgentRunner do
     PromptBuilder,
     Repo,
     RunContract,
+    SessionEvents,
+    SessionLog,
     Tracker,
     Workspace
   }
@@ -59,33 +61,56 @@ defmodule SymphonyElixir.AgentRunner do
 
     Logger.info("Starting agent run for #{issue_context(issue)}")
 
-    outcome = do_run(issue, codex_update_recipient, opts)
-    report_outcome(codex_update_recipient, issue, outcome)
-    :ok
+    try do
+      outcome = do_run(issue, codex_update_recipient, opts)
+      report_outcome(codex_update_recipient, issue, outcome)
+      :ok
+    rescue
+      exception ->
+        record_worker_crash(issue, opts, exception, __STACKTRACE__)
+        reraise exception, __STACKTRACE__
+    catch
+      kind, reason ->
+        record_worker_crash(issue, opts, {kind, reason}, __STACKTRACE__)
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    end
   end
 
   @spec do_run(map(), pid() | nil, keyword()) :: run_outcome()
   defp do_run(issue, codex_update_recipient, opts) do
     case resolve_workspace(issue, opts) do
       {:ok, workspace} ->
-        try do
-          case Workspace.run_before_run_hook(workspace, issue) do
-            :ok ->
-              workspace
-              |> run_codex_turns(issue, codex_update_recipient, opts)
-              |> handle_turns_result(issue)
+        if reuse_parent_setup?(opts) do
+          # A same-repo bundle child reuses the parent's already-provisioned
+          # checkout, dependencies and preview, so the per-run setup/teardown
+          # hooks are skipped entirely (tests + evidence still run per child).
+          Logger.info("[bundle] reusing parent setup/preview for #{issue_context(issue)} (same-repo child)")
 
-            {:error, reason} ->
-              failed_run(issue, reason)
+          workspace
+          |> run_codex_turns(issue, codex_update_recipient, opts)
+          |> handle_turns_result(issue)
+        else
+          try do
+            case Workspace.run_before_run_hook(workspace, issue) do
+              :ok ->
+                workspace
+                |> run_codex_turns(issue, codex_update_recipient, opts)
+                |> handle_turns_result(issue)
+
+              {:error, reason} ->
+                failed_run(issue, reason)
+            end
+          after
+            Workspace.run_after_run_hook(workspace, issue)
           end
-        after
-          Workspace.run_after_run_hook(workspace, issue)
         end
 
       {:error, reason} ->
         failed_run(issue, reason)
     end
   end
+
+  defp reuse_parent_setup?(opts), do: Keyword.get(opts, :reuse_parent_setup) == true
 
   defp handle_turns_result(:completed, _issue), do: :completed
   defp handle_turns_result({:incomplete, _reason} = outcome, _issue), do: outcome
@@ -98,16 +123,51 @@ defmodule SymphonyElixir.AgentRunner do
   the standard per-issue workspace.
   """
   @spec resolve_workspace(map(), keyword()) :: {:ok, Path.t()} | {:error, term()}
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   def resolve_workspace(issue, opts) do
     if Keyword.get(opts, :worktree) == true do
       with {:ok, repo} <- fetch_worktree_repo(opts) do
         slug = worktree_slug(issue, opts)
         branch = Keyword.get(opts, :worktree_branch) || "feat/#{slug}"
-        Worktree.ensure(repo, slug, branch)
+        base_branch = Keyword.get(opts, :worktree_base_branch)
+
+        case Worktree.ensure(repo, slug, branch, base_branch) do
+          {:ok, path} ->
+            maybe_reuse_parent_dependencies(repo, path, opts)
+            {:ok, path}
+
+          {:error, _reason} = error ->
+            error
+        end
       end
     else
       Workspace.create_for_issue(issue)
     end
+  end
+
+  # Same-repo children reuse the parent checkout's installed dependencies instead
+  # of re-running setup. A git worktree shares history but not gitignored install
+  # output (node_modules, virtualenvs, vendored deps), so we link those from the
+  # base checkout when present. Best-effort: missing dirs and link errors are
+  # ignored so the run proceeds even when nothing needs linking.
+  @reusable_dependency_dirs ~w(node_modules .venv venv vendor .bundle)
+
+  defp maybe_reuse_parent_dependencies(base_repo, worktree_path, opts) do
+    if reuse_parent_setup?(opts) do
+      Enum.each(@reusable_dependency_dirs, fn dir ->
+        link_dependency_dir(Path.join(base_repo, dir), Path.join(worktree_path, dir))
+      end)
+    end
+
+    :ok
+  end
+
+  defp link_dependency_dir(source, dest) do
+    if File.exists?(source) and not File.exists?(dest) do
+      _ = File.ln_s(source, dest)
+    end
+
+    :ok
   end
 
   defp fetch_worktree_repo(opts) do
@@ -123,11 +183,51 @@ defmodule SymphonyElixir.AgentRunner do
     |> String.replace(~r/[^A-Za-z0-9_.-]+/, "-")
   end
 
+  @doc """
+  Resolves the workspace root that anchors the coding-agent cwd guard for a run.
+
+  The guard requires the run cwd to be strictly *under* the root (cwd == root is
+  rejected). A worktree-backed child run lives at `<repo>/.worktrees/<slug>`, so
+  its repo checkout (`worktree_repo`) is the natural root; anchoring the root to
+  the worktree itself would make cwd == root and trip the guard. Non-worktree
+  runs keep the standard per-issue workspace root.
+  """
+  @spec workspace_root_for_run(map(), Path.t(), keyword()) :: Path.t()
+  def workspace_root_for_run(issue, workspace, opts) when is_binary(workspace) and is_list(opts) do
+    if Keyword.get(opts, :worktree) == true do
+      worktree_cwd_root(opts, workspace)
+    else
+      Workspace.workspace_root_for(issue)
+    end
+  end
+
+  defp worktree_cwd_root(opts, workspace) do
+    case Keyword.get(opts, :worktree_repo) do
+      repo when is_binary(repo) and repo != "" -> repo
+      _ -> Path.dirname(workspace)
+    end
+  end
+
   @spec failed_run(map(), term()) :: {:error, term()}
   defp failed_run(issue, reason) do
     Logger.error("Agent run failed for #{issue_context(issue)}: #{inspect(reason)}")
     {:error, reason}
   end
+
+  defp record_worker_crash(issue, opts, reason, stacktrace) do
+    with workspace when is_binary(workspace) <- run_log_workspace(issue, opts),
+         true <- File.dir?(workspace) do
+      SessionEvents.append_worker_crash(workspace, reason, stacktrace)
+    else
+      _ -> :ok
+    end
+  rescue
+    _ -> :ok
+  end
+
+  @doc false
+  @spec run_log_workspace(map(), keyword()) :: String.t() | nil
+  def run_log_workspace(issue, opts \\ []), do: SessionLog.run_log_workspace(issue, opts)
 
   defp report_outcome(recipient, %Issue{id: id}, outcome)
        when is_pid(recipient) and is_binary(id) do
@@ -248,13 +348,7 @@ defmodule SymphonyElixir.AgentRunner do
 
     agent_kind = Keyword.fetch!(opts, :agent_kind)
 
-    # A worktree-backed child run lives under `<repo>/.worktrees/<slug>`, outside
-    # the configured workspace root, so the cwd guard is anchored to the worktree
-    # itself instead of the shared workspace root.
-    workspace_root =
-      if Keyword.get(opts, :worktree) == true,
-        do: workspace,
-        else: Workspace.workspace_root_for(issue)
+    workspace_root = workspace_root_for_run(issue, workspace, opts)
 
     session_opts =
       [workspace_root: workspace_root]
@@ -394,6 +488,7 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp do_apply_validate_gate(result, workspace, evaluator, run_turn, budget) do
     case evaluator.(workspace) do
       :satisfied ->
@@ -512,9 +607,16 @@ defmodule SymphonyElixir.AgentRunner do
       require_execution_contract? = goal_mode?(opts)
 
       case Context.latest_workpad(project_slug, identifier) do
-        {:error, :not_found} -> {:error, :not_found}
-        {:ok, %{body: body}} -> ExecutionContract.validate_workpad(body, require_execution_contract: require_execution_contract?)
-        _present_or_unresolvable -> :ok
+        {:error, :not_found} ->
+          {:error, :not_found}
+
+        {:ok, %{body: body}} ->
+          ExecutionContract.validate_workpad(body,
+            require_execution_contract: require_execution_contract?
+          )
+
+        _present_or_unresolvable ->
+          :ok
       end
     end
   end
@@ -621,6 +723,7 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.FunctionArity
   defp continue_or_stop_outer_turn_loop(
          app_session,
          workspace,
@@ -791,7 +894,7 @@ defmodule SymphonyElixir.AgentRunner do
     repo_states = RunContract.repo_states(workspace)
 
     if RunContract.work_present?(repo_states) do
-      base <> "\n\n" <> resume_section(repo_states)
+      base <> "\n\n" <> resume_section(repo_states, opts)
     else
       base
     end
@@ -803,7 +906,11 @@ defmodule SymphonyElixir.AgentRunner do
 
   @doc false
   @spec resume_section([RunContract.RepoState.t()]) :: String.t()
-  def resume_section(repo_states) do
+  def resume_section(repo_states), do: resume_section(repo_states, [])
+
+  @doc false
+  @spec resume_section([RunContract.RepoState.t()], keyword()) :: String.t()
+  def resume_section(repo_states, opts) do
     """
     ## Resume notice (Symphony)
 
@@ -813,13 +920,36 @@ defmodule SymphonyElixir.AgentRunner do
 
     Do NOT restart from scratch. Resume in this order:
 
-    1. Finish remaining ticket work (implementation, commits, push, PR) — follow the
-       `push` skill if publishing is missing.
+    1. #{resume_publish_step(opts)}
     2. Run VALIDATE/evidence only when the change set is ready for handoff — not before
        deliverables above are in place.
 
     Workpad validation notes from earlier runs are context, not the first action item.
     """
+  end
+
+  defp resume_publish_step(opts) do
+    case child_unit_parent(opts) do
+      parent when is_binary(parent) ->
+        "This run is a **bundle child unit** of parent **#{parent}**: finish your unit, commit, " <>
+          "and open exactly one focused PR for it **against the parent integration branch " <>
+          "`symphony/#{parent}/<repo>`** (never the repo default), call `report_unit_status` with " <>
+          "the handoff, then end the turn. Do not wait on, poll, rerun, or cancel CI — the parent " <>
+          "merges your PR into the integration branch and opens the final per-repo PR."
+
+      _ ->
+        "Finish remaining ticket work (implementation, commits, push, PR) — follow the " <>
+          "`push` skill if publishing is missing."
+    end
+  end
+
+  # A bundle child unit carries the parent identifier in its run opts. Used to
+  # route PR/CI ownership to the parent and keep the child inside its unit scope.
+  defp child_unit_parent(opts) do
+    case Keyword.get(opts, :parent_identifier) do
+      parent when is_binary(parent) and parent != "" -> parent
+      _ -> nil
+    end
   end
 
   @doc false
@@ -856,8 +986,22 @@ defmodule SymphonyElixir.AgentRunner do
 
     #{next_incomplete_task_section(execution_contract)}
 
-    Any repo with commits ahead must end with a pushed branch and an open pull request (follow the `push` skill). Run the `evidence` skill only when handoff is ready.
+    #{continuation_publish_guidance(opts)}
     """
+  end
+
+  defp continuation_publish_guidance(opts) do
+    case child_unit_parent(opts) do
+      parent when is_binary(parent) ->
+        "This run is a **bundle child unit** of parent **#{parent}**. If your unit has commits ahead and no PR yet, " <>
+          "open exactly one focused PR for your unit **against the parent integration branch " <>
+          "`symphony/#{parent}/<repo>`** (never the repo default), record it with `report_unit_status`, then end the turn. " <>
+          "**Do NOT wait on, poll, rerun, or cancel CI** and do not `sleep` for checks — the parent merges your PR " <>
+          "into the integration branch and owns the final per-repo PR."
+
+      _ ->
+        "Any repo with commits ahead must end with a pushed branch and an open pull request (follow the `push` skill). Run the `evidence` skill only when handoff is ready."
+    end
   end
 
   defp validate_mode_guidance(%ExecutionContract{scope_complete?: false}) do

@@ -21,10 +21,12 @@ defmodule SymphonyElixirWeb.Tracker.ProjectGatewayControllerTest do
     previous = System.get_env(@token_env)
     System.put_env(@token_env, "test-token")
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
     on_exit(fn ->
       cleanup()
       restore_env(previous)
     end)
+
     :ok
   end
 

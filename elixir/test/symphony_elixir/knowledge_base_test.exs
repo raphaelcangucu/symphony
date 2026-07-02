@@ -119,6 +119,13 @@ defmodule SymphonyElixir.KnowledgeBaseTest do
     assert {:ok, %{status: "idle"}} = KnowledgeBase.sync_status("acme", "web")
   end
 
+  test "sync helpers are inert no-ops for project KB base checkouts" do
+    assert :ok = KnowledgeBase.request_sync("acme", "web")
+
+    assert {:ok, %{status: "idle", last_error: nil, pr_number: nil, pr_url: nil}} =
+             KnowledgeBase.sync_status("acme", "web")
+  end
+
   describe "personal KB (@user scope)" do
     @general_repo_slug "@user~symphony-kb"
 
@@ -190,7 +197,7 @@ defmodule SymphonyElixir.KnowledgeBaseTest do
 
     test "sync helpers are inert no-ops for the personal KB" do
       assert :ok = KnowledgeBase.request_sync("@user", @general_repo_slug)
-      assert {:ok, %{status: :idle}} = KnowledgeBase.sync_status("@user", @general_repo_slug)
+      assert {:ok, %{status: "idle"}} = KnowledgeBase.sync_status("@user", @general_repo_slug)
     end
   end
 

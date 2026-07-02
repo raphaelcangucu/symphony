@@ -51,18 +51,16 @@ defmodule SymphonyElixir.LocalTracker.TrackerTest do
     assert Enum.find(issues, &(&1.identifier == "MAC-1")).labels == ["symphony:codex"]
   end
 
-  test "fetched candidate issues carry group identifiers" do
+  test "fetched candidate issues carry parent identifiers" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, _lead} = Context.create_issue("macro-markets", %{title: "Lead", status: "Todo"})
-    {:ok, _member} = Context.create_issue("macro-markets", %{title: "Member", status: "Todo"})
-    {:ok, _} = Context.set_issue_group("macro-markets", "MAC-2", "MAC-1")
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
 
     {:ok, issues} = Tracker.fetch_candidate_issues()
-    lead = Enum.find(issues, &(&1.identifier == "MAC-1"))
-    member = Enum.find(issues, &(&1.identifier == "MAC-2"))
+    child = Enum.find(issues, &(&1.identifier == "MAC-2"))
 
-    assert lead.group_member_identifiers == ["MAC-2"]
-    assert member.group_lead_identifier == "MAC-1"
+    assert child.parent_identifier == "MAC-1"
   end
 
   test "fetch_issues_by_states and fetch_issue_states_by_ids stay scoped to configured project" do
@@ -78,6 +76,19 @@ defmodule SymphonyElixir.LocalTracker.TrackerTest do
     assert {:ok, [state_issue]} = Tracker.fetch_issue_states_by_ids(["MAC-1"])
     assert state_issue.identifier == "MAC-1"
     assert state_issue.state == "Todo"
+  end
+
+  test "fetched candidate issues carry parent_identifier from sub_issue_of relations" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})
+    {:ok, _child} = Context.create_issue("macro-markets", %{title: "Child", status: "Todo"})
+    {:ok, _} = Context.set_issue_parent("macro-markets", "MAC-2", "MAC-1")
+
+    {:ok, issues} = Tracker.fetch_issues_by_states(["Todo"])
+    child = Enum.find(issues, &(&1.identifier == "MAC-2"))
+
+    assert child, "expected child issue MAC-2 to be returned"
+    assert child.parent_identifier == "MAC-1"
   end
 
   test "create_comment and update_issue_state write to configured project only" do

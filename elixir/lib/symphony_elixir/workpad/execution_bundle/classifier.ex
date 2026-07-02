@@ -15,7 +15,11 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.Classifier do
           optional(:consumes) => [String.t()],
           optional(:depends_on) => [String.t()]
         }
-  @type rule :: :different_repo | :independent_deliverable | :shared_contract | :same_repo_inline
+  @type rule ::
+          :different_repo
+          | :independent_deliverable
+          | :shared_contract
+          | :same_repo_inline
   @type result :: {:ok, :workpad_task | :child_run, rule()} | {:ambiguous, atom()}
 
   @spec classify(unit(), keyword()) :: result()

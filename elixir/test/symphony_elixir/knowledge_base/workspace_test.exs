@@ -25,12 +25,12 @@ defmodule SymphonyElixir.KnowledgeBase.WorkspaceTest do
     {:ok, checkout: checkout}
   end
 
-  test "ensure returns a docs working directory on the symphony-docs branch", %{checkout: checkout} do
-    assert {:ok, %{worktree: wt, docs_root: docs}} = Workspace.ensure(checkout)
-    assert File.dir?(wt)
-    assert docs == Path.join(wt, "docs")
+  test "ensure returns the base checkout docs directory", %{checkout: checkout} do
+    assert {:ok, %{worktree: wt, docs_root: docs, branch: "main"}} = Workspace.ensure(checkout)
+    assert wt == checkout
+    assert docs == Path.join(checkout, "docs")
     assert File.dir?(Path.join(docs, "assets"))
-    assert {:ok, "symphony-docs"} = SymphonyElixir.KnowledgeBase.Git.current_branch(wt)
+    assert {:ok, "main"} = SymphonyElixir.KnowledgeBase.Git.current_branch(wt)
   end
 
   test "ensure errors when the checkout is not a git repo" do
