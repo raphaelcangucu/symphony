@@ -11,7 +11,11 @@ defmodule SymphonyElixir.LocalTracker.ContextCascadeDragTest do
     end
 
     test "drags a backlog child behind the parent's target", %{target: target, wait_states: wait_states} do
-      child = %IssueRecord{id: 1, status_id: 1, status: %WorkflowStatus{id: 1, name: "Backlog", position: 0, is_terminal: false}}
+      child = %IssueRecord{
+        id: 1,
+        status_id: 1,
+        status: %WorkflowStatus{id: 1, name: "Backlog", position: 0, is_terminal: false}
+      }
 
       assert Context.cascade_drag_subtask?(child, target, wait_states)
     end

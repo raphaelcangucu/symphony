@@ -5,15 +5,36 @@ defmodule SymphonyElixir.Orchestrator.BundleRunContextTest do
   alias SymphonyElixir.Orchestrator
   alias SymphonyElixir.Workpad.ExecutionBundle
 
+  defp child_run_unit(overrides \\ []) do
+    Map.merge(
+      %{
+        type: :child_run,
+        produces: [],
+        consumes: [],
+        depends_on: [],
+        deliverable: "pr"
+      },
+      Map.new(overrides)
+    )
+  end
+
   test "a subtask carries its bundle unit and shared contracts so the child prompt is scoped" do
     issue = %Issue{identifier: "MAC-12", parent_identifier: "510"}
 
     bundle = %ExecutionBundle{
       mode: "bundle",
       units: [
-        %{id: "MAC-12", type: :child_run, issue: "MAC-12", repo: "clouapp/back", produces: ["schema"], consumes: [], depends_on: [], deliverable: "branch"}
+        child_run_unit(
+          id: "MAC-12",
+          issue: "MAC-12",
+          repo: "clouapp/back",
+          produces: ["schema"],
+          deliverable: "branch"
+        )
       ],
-      shared_contracts: [%{id: "schema", owner_unit: "MAC-12", consumers: [], kind: "db", artifact: nil, status: :draft}]
+      shared_contracts: [
+        %{id: "schema", owner_unit: "MAC-12", consumers: [], kind: "db", artifact: nil, status: :draft}
+      ]
     }
 
     ctx =
@@ -86,15 +107,27 @@ defmodule SymphonyElixir.Orchestrator.BundleRunContextTest do
     assert Keyword.get(ctx.run_opts, :pr_base) == "symphony/510/clouapp-front"
   end
 
-  test "a dependent same-repo subtask forks off its predecessor's branch as reference while still PRing into the integration branch" do
+  test "a dependent same-repo subtask forks off its predecessor's branch as reference " <>
+         "while still PRing into the integration branch" do
     issue = %Issue{identifier: "MAC-13", parent_identifier: "510"}
 
     bundle = %ExecutionBundle{
       mode: "bundle",
       parent: "510",
       units: [
-        %{id: "MAC-12", type: :child_run, issue: "MAC-12", repo: "clouapp/back", produces: ["schema"], consumes: [], depends_on: [], deliverable: "pr"},
-        %{id: "MAC-13", type: :child_run, issue: "MAC-13", repo: "clouapp/back", produces: [], consumes: ["schema"], depends_on: ["MAC-12"], deliverable: "pr"}
+        child_run_unit(
+          id: "MAC-12",
+          issue: "MAC-12",
+          repo: "clouapp/back",
+          produces: ["schema"]
+        ),
+        child_run_unit(
+          id: "MAC-13",
+          issue: "MAC-13",
+          repo: "clouapp/back",
+          consumes: ["schema"],
+          depends_on: ["MAC-12"]
+        )
       ],
       shared_contracts: []
     }
@@ -121,9 +154,27 @@ defmodule SymphonyElixir.Orchestrator.BundleRunContextTest do
       mode: "bundle",
       parent: "510",
       units: [
-        %{id: "MAC-12", type: :child_run, issue: "MAC-12", repo: "clouapp/back", produces: ["schema"], consumes: [], depends_on: [], deliverable: "pr"},
-        %{id: "MAC-13", type: :child_run, issue: "MAC-13", repo: "clouapp/back", produces: ["api"], consumes: ["schema"], depends_on: ["MAC-12"], deliverable: "pr"},
-        %{id: "MAC-14", type: :child_run, issue: "MAC-14", repo: "clouapp/back", produces: [], consumes: ["api"], depends_on: ["MAC-12", "MAC-13"], deliverable: "pr"}
+        child_run_unit(
+          id: "MAC-12",
+          issue: "MAC-12",
+          repo: "clouapp/back",
+          produces: ["schema"]
+        ),
+        child_run_unit(
+          id: "MAC-13",
+          issue: "MAC-13",
+          repo: "clouapp/back",
+          produces: ["api"],
+          consumes: ["schema"],
+          depends_on: ["MAC-12"]
+        ),
+        child_run_unit(
+          id: "MAC-14",
+          issue: "MAC-14",
+          repo: "clouapp/back",
+          consumes: ["api"],
+          depends_on: ["MAC-12", "MAC-13"]
+        )
       ],
       shared_contracts: []
     }
@@ -149,8 +200,19 @@ defmodule SymphonyElixir.Orchestrator.BundleRunContextTest do
       mode: "bundle",
       parent: "510",
       units: [
-        %{id: "MAC-12", type: :child_run, issue: "MAC-12", repo: "clouapp/front", produces: ["theme"], consumes: [], depends_on: [], deliverable: "pr"},
-        %{id: "MAC-13", type: :child_run, issue: "MAC-13", repo: "clouapp/back", produces: [], consumes: ["theme"], depends_on: ["MAC-12"], deliverable: "pr"}
+        child_run_unit(
+          id: "MAC-12",
+          issue: "MAC-12",
+          repo: "clouapp/front",
+          produces: ["theme"]
+        ),
+        child_run_unit(
+          id: "MAC-13",
+          issue: "MAC-13",
+          repo: "clouapp/back",
+          consumes: ["theme"],
+          depends_on: ["MAC-12"]
+        )
       ],
       shared_contracts: []
     }
@@ -175,7 +237,12 @@ defmodule SymphonyElixir.Orchestrator.BundleRunContextTest do
     bundle = %ExecutionBundle{
       mode: "bundle",
       units: [
-        %{id: "MAC-12", type: :child_run, issue: "MAC-12", repo: "clouapp/back", produces: [], consumes: [], depends_on: [], deliverable: "pr", pr_base: "release/next"}
+        child_run_unit(
+          id: "MAC-12",
+          issue: "MAC-12",
+          repo: "clouapp/back",
+          pr_base: "release/next"
+        )
       ],
       shared_contracts: []
     }
@@ -237,10 +304,23 @@ defmodule SymphonyElixir.Orchestrator.BundleRunContextTest do
       mode: "bundle",
       parent: "510",
       units: [
-        %{id: "MAC-12", type: :child_run, issue: "MAC-12", repo: "clouapp/back", produces: ["c"], consumes: [], depends_on: [], deliverable: "pr"},
-        %{id: "MAC-13", type: :child_run, issue: "MAC-13", repo: "clouapp/back", produces: [], consumes: ["c"], depends_on: ["MAC-12"], deliverable: "pr"}
+        child_run_unit(
+          id: "MAC-12",
+          issue: "MAC-12",
+          repo: "clouapp/back",
+          produces: ["c"]
+        ),
+        child_run_unit(
+          id: "MAC-13",
+          issue: "MAC-13",
+          repo: "clouapp/back",
+          consumes: ["c"],
+          depends_on: ["MAC-12"]
+        )
       ],
-      shared_contracts: [%{id: "c", owner_unit: "MAC-12", consumers: ["MAC-13"], kind: "db", artifact: nil, status: :ready}]
+      shared_contracts: [
+        %{id: "c", owner_unit: "MAC-12", consumers: ["MAC-13"], kind: "db", artifact: nil, status: :ready}
+      ]
     }
 
     ctx =
@@ -263,7 +343,16 @@ defmodule SymphonyElixir.Orchestrator.BundleRunContextTest do
       mode: "bundle",
       parent: "510",
       units: [
-        %{id: "t1", type: :workpad_task, issue: nil, repo: "clouapp/front", produces: [], consumes: [], depends_on: [], deliverable: "inline"}
+        %{
+          id: "t1",
+          type: :workpad_task,
+          issue: nil,
+          repo: "clouapp/front",
+          produces: [],
+          consumes: [],
+          depends_on: [],
+          deliverable: "inline"
+        }
       ],
       shared_contracts: []
     }

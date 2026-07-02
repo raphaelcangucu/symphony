@@ -1,9 +1,11 @@
 defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.Assistant.ToolExecutor
+  alias SymphonyElixir.Assistant.{ProjectBoardTools, ToolExecutor}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Tracker.Workpad
+  alias SymphonyElixir.Workpad.ExecutionBundle
 
   setup do
     migrate_repo()
@@ -36,7 +38,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
   end
 
   test "classify_execution_unit is exposed in the project board tool specs" do
-    names = Enum.map(SymphonyElixir.Assistant.ProjectBoardTools.tool_specs(), & &1["name"])
+    names = Enum.map(ProjectBoardTools.tool_specs(), & &1["name"])
     assert "classify_execution_unit" in names
   end
 
@@ -118,9 +120,9 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
         })
 
       {:ok, comments} = Context.list_comments("macro-markets", parent.identifier)
-      workpad = Enum.find(comments, &SymphonyElixir.Tracker.Workpad.workpad?(&1.body))
+      workpad = Enum.find(comments, &Workpad.workpad?(&1.body))
       assert workpad
-      {:ok, bundle} = SymphonyElixir.Workpad.ExecutionBundle.parse(workpad.body)
+      {:ok, bundle} = ExecutionBundle.parse(workpad.body)
       assert Enum.any?(bundle.units, &(&1.id == result.data.subtask))
     end
   end
@@ -322,7 +324,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
       assert result.data.contracts_ready == true
 
       {:ok, comments} = Context.list_comments("macro-markets", parent.identifier)
-      workpad = Enum.find(comments, &SymphonyElixir.Tracker.Workpad.workpad?(&1.body))
+      workpad = Enum.find(comments, &Workpad.workpad?(&1.body))
       assert workpad.body =~ "### Unit status: backend"
       assert workpad.body =~ "phase: pr_open"
       assert workpad.body =~ "contracts_ready: true"
@@ -343,7 +345,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
       })
 
       {:ok, comments} = Context.list_comments("macro-markets", parent.identifier)
-      workpad = Enum.find(comments, &SymphonyElixir.Tracker.Workpad.workpad?(&1.body))
+      workpad = Enum.find(comments, &Workpad.workpad?(&1.body))
 
       occurrences =
         workpad.body

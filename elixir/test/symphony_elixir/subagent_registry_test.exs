@@ -10,9 +10,36 @@ defmodule SymphonyElixir.SubagentRegistryTest do
       mode: "bundle",
       parent: "MAC-1",
       units: [
-        %{id: "api", type: :child_run, issue: "MAC-12", repo: "macro/be", produces: ["schema"], consumes: [], depends_on: [], deliverable: "pr"},
-        %{id: "ui", type: :child_run, issue: "MAC-13", repo: "macro/fe", produces: [], consumes: ["schema"], depends_on: ["api"], deliverable: "pr"},
-        %{id: "docs", type: :child_run, issue: "MAC-14", repo: "macro/fe", produces: [], consumes: [], depends_on: ["ui"], deliverable: "pr"}
+        %{
+          id: "api",
+          type: :child_run,
+          issue: "MAC-12",
+          repo: "macro/be",
+          produces: ["schema"],
+          consumes: [],
+          depends_on: [],
+          deliverable: "pr"
+        },
+        %{
+          id: "ui",
+          type: :child_run,
+          issue: "MAC-13",
+          repo: "macro/fe",
+          produces: [],
+          consumes: ["schema"],
+          depends_on: ["api"],
+          deliverable: "pr"
+        },
+        %{
+          id: "docs",
+          type: :child_run,
+          issue: "MAC-14",
+          repo: "macro/fe",
+          produces: [],
+          consumes: [],
+          depends_on: ["ui"],
+          deliverable: "pr"
+        }
       ],
       shared_contracts: [
         %{id: "schema", kind: "openapi", owner_unit: "api", consumers: ["ui"], artifact: "openapi.yaml", status: :draft}
@@ -88,7 +115,20 @@ defmodule SymphonyElixir.SubagentRegistryTest do
       end,
       bundle_loader: fn
         "MAC-1" ->
-          {:ok, %{bundle() | shared_contracts: [%{id: "schema", kind: "openapi", owner_unit: "api", consumers: ["ui"], artifact: "openapi.yaml", status: :ready}]}}
+          {:ok,
+           %{
+             bundle()
+             | shared_contracts: [
+                 %{
+                   id: "schema",
+                   kind: "openapi",
+                   owner_unit: "api",
+                   consumers: ["ui"],
+                   artifact: "openapi.yaml",
+                   status: :ready
+                 }
+               ]
+           }}
 
         _ ->
           :error

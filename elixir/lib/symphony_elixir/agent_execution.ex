@@ -9,10 +9,10 @@ defmodule SymphonyElixir.AgentExecution do
   it is doing.
   """
 
-  alias SymphonyElixir.{Orchestrator, StatusDashboard}
   alias SymphonyElixir.AgentRouting
   alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper}
+  alias SymphonyElixir.{Orchestrator, StatusDashboard}
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
   alias SymphonyElixir.SessionLog
@@ -468,6 +468,7 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp abort_entry_summary(_entry), do: nil
 
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp abort_entry_body(entry) do
     body = Map.get(entry, "body") || Map.get(entry, :body)
     reason = Map.get(entry, "abort_reason") || Map.get(entry, :abort_reason)

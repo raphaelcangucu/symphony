@@ -10,11 +10,47 @@ defmodule SymphonyElixir.Orchestrator.SubagentPlanTest do
       mode: "bundle",
       parent: "MAC-1",
       units: [
-        %{id: "api", type: :child_run, issue: "MAC-12", repo: "macro/be", produces: ["schema"], consumes: [], depends_on: [], deliverable: "pr"},
-        %{id: "ui", type: :child_run, issue: "MAC-13", repo: "macro/fe", produces: [], consumes: ["schema"], depends_on: ["api"], deliverable: "pr"},
-        %{id: "docs", type: :child_run, issue: "MAC-14", repo: "macro/fe", produces: [], consumes: [], depends_on: ["ui"], deliverable: "pr"},
+        %{
+          id: "api",
+          type: :child_run,
+          issue: "MAC-12",
+          repo: "macro/be",
+          produces: ["schema"],
+          consumes: [],
+          depends_on: [],
+          deliverable: "pr"
+        },
+        %{
+          id: "ui",
+          type: :child_run,
+          issue: "MAC-13",
+          repo: "macro/fe",
+          produces: [],
+          consumes: ["schema"],
+          depends_on: ["api"],
+          deliverable: "pr"
+        },
+        %{
+          id: "docs",
+          type: :child_run,
+          issue: "MAC-14",
+          repo: "macro/fe",
+          produces: [],
+          consumes: [],
+          depends_on: ["ui"],
+          deliverable: "pr"
+        },
         # A non-orchestrated inline unit must never appear in the subagent plan.
-        %{id: "inline", type: :workpad_task, issue: nil, repo: nil, produces: [], consumes: [], depends_on: [], deliverable: nil}
+        %{
+          id: "inline",
+          type: :workpad_task,
+          issue: nil,
+          repo: nil,
+          produces: [],
+          consumes: [],
+          depends_on: [],
+          deliverable: nil
+        }
       ],
       shared_contracts: [
         %{id: "schema", kind: "openapi", owner_unit: "api", consumers: ["ui"], artifact: "openapi.yaml", status: :draft}
@@ -112,7 +148,18 @@ defmodule SymphonyElixir.Orchestrator.SubagentPlanTest do
       version: 1,
       mode: "bundle",
       parent: "MAC-1",
-      units: [%{id: "only", type: :workpad_task, issue: nil, repo: nil, produces: [], consumes: [], depends_on: [], deliverable: nil}],
+      units: [
+        %{
+          id: "only",
+          type: :workpad_task,
+          issue: nil,
+          repo: nil,
+          produces: [],
+          consumes: [],
+          depends_on: [],
+          deliverable: nil
+        }
+      ],
       shared_contracts: []
     }
 

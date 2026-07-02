@@ -3,6 +3,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
 
   import Ecto.Query
 
+  alias Ecto.Adapters.SQL
   alias SymphonyElixir.Assistant.{ProjectExploreWorkspace, ToolExecutor}
   alias SymphonyElixir.LocalTracker.{Context, Templates, Viewer, WorkflowStatus}
   alias SymphonyElixir.Repo
@@ -729,7 +730,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
           "local_tracker_workspace_template_repositories",
           "local_tracker_workspace_templates"
         ] do
-      Ecto.Adapters.SQL.query!(Repo, "DELETE FROM #{table}", [])
+      SQL.query!(Repo, "DELETE FROM #{table}", [])
     end
   end
 

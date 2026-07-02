@@ -26,9 +26,9 @@ defmodule SymphonyElixir.LocalTracker.Context do
     WorkflowStatus
   }
 
-  alias SymphonyElixir.Repo
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.PushNotifications.MentionNotifier
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.LabelResolver
   alias SymphonyElixir.Tracker.Sync.UserRecord
   alias SymphonyElixir.Tracker.Workpad
@@ -676,9 +676,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
           {:ok, Comment.t()} | {:error, :comment_not_found | missing_error()}
   def delete_issue_comment(project_slug, identifier, comment_id)
       when is_binary(project_slug) and is_binary(identifier) and is_integer(comment_id) do
-    with {:ok, comment} <- fetch_issue_comment(project_slug, identifier, comment_id),
-         {:ok, deleted} <- Repo.delete(comment) do
-      {:ok, deleted}
+    with {:ok, comment} <- fetch_issue_comment(project_slug, identifier, comment_id) do
+      Repo.delete(comment)
     end
   end
 
@@ -846,6 +845,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   """
   @spec reconcile_parent_statuses(String.t()) ::
           {:ok, [{String.t(), String.t()}]} | {:error, missing_error()}
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   def reconcile_parent_statuses(project_slug) when is_binary(project_slug) do
     with {:ok, project} <- fetch_project(project_slug) do
       changed =
@@ -2078,9 +2078,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp maybe_replace_labels(%IssueRecord{} = issue, project_id, label_names)
        when is_integer(project_id) and is_list(label_names) do
     with :ok <- delete_all_issue_labels(issue.id),
-         :ok <- attach_labels(issue.id, project_id, label_names),
-         {:ok, reloaded} <- fetch_issue_by_id(issue.id) do
-      {:ok, reloaded}
+         :ok <- attach_labels(issue.id, project_id, label_names) do
+      fetch_issue_by_id(issue.id)
     end
   end
 

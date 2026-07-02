@@ -4,6 +4,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Issue
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Tracker.Workpad
 
   test "tool_specs advertises linear_graphql and github_graphql" do
     names = Enum.map(DynamicTool.tool_specs(), & &1["name"])
@@ -365,7 +366,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
       assert response["success"] == true
 
       {:ok, comments} = Context.list_comments("macro-markets", ctx.parent.identifier)
-      workpad = Enum.find(comments, &SymphonyElixir.Tracker.Workpad.workpad?(&1.body))
+      workpad = Enum.find(comments, &Workpad.workpad?(&1.body))
       assert workpad.body =~ "### Unit status: #{ctx.child_id}"
       assert workpad.body =~ "phase: started"
     end

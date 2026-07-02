@@ -64,29 +64,27 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     attachments = Map.get(payload, "attachments", [])
     trimmed = if is_binary(message), do: String.trim(message), else: ""
 
-    cond do
-      trimmed == "" and attachments == [] ->
-        {:reply, {:error, %{reason: "message is required"}}, socket}
+    if trimmed == "" and attachments == [] do
+      {:reply, {:error, %{reason: "message is required"}}, socket}
+    else
+      case Orchestrator.steer(
+             socket.assigns.issue_identifier,
+             message,
+             self(),
+             attachments: attachments,
+             project_slug: socket.assigns.project_slug
+           ) do
+        :ok ->
+          {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
 
-      true ->
-        case SymphonyElixir.Orchestrator.steer(
-               socket.assigns.issue_identifier,
-               message,
-               self(),
-               attachments: attachments,
-               project_slug: socket.assigns.project_slug
-             ) do
-          :ok ->
-            {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
+        {:error, reason} ->
+          push(socket, "steer_failed", %{
+            reason: steer_error_reason(reason),
+            message: trimmed
+          })
 
-          {:error, reason} ->
-            push(socket, "steer_failed", %{
-              reason: steer_error_reason(reason),
-              message: trimmed
-            })
-
-            {:reply, {:error, %{reason: steer_error_reason(reason)}}, socket}
-        end
+          {:reply, {:error, %{reason: steer_error_reason(reason)}}, socket}
+      end
     end
   end
 

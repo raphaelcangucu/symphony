@@ -11,8 +11,26 @@ defmodule SymphonyElixir.Orchestrator.ParentCompletionGateTest do
       mode: "bundle",
       parent: "MAC-1",
       units: [
-        %{id: "api", type: :child_run, issue: "MAC-2", repo: "macro/be", produces: [], consumes: [], depends_on: [], deliverable: nil},
-        %{id: "ui", type: :child_run, issue: "MAC-3", repo: "macro/fe", produces: [], consumes: [], depends_on: [], deliverable: nil}
+        %{
+          id: "api",
+          type: :child_run,
+          issue: "MAC-2",
+          repo: "macro/be",
+          produces: [],
+          consumes: [],
+          depends_on: [],
+          deliverable: nil
+        },
+        %{
+          id: "ui",
+          type: :child_run,
+          issue: "MAC-3",
+          repo: "macro/fe",
+          produces: [],
+          consumes: [],
+          depends_on: [],
+          deliverable: nil
+        }
       ],
       shared_contracts: []
     }
@@ -55,7 +73,18 @@ defmodule SymphonyElixir.Orchestrator.ParentCompletionGateTest do
   test "a bundle with only workpad tasks is not held" do
     workpad_only = %ExecutionBundle{
       mode: "bundle",
-      units: [%{id: "copy", type: :workpad_task, issue: nil, repo: nil, produces: [], consumes: [], depends_on: [], deliverable: nil}],
+      units: [
+        %{
+          id: "copy",
+          type: :workpad_task,
+          issue: nil,
+          repo: nil,
+          produces: [],
+          consumes: [],
+          depends_on: [],
+          deliverable: nil
+        }
+      ],
       shared_contracts: []
     }
 

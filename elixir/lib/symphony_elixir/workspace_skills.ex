@@ -30,9 +30,8 @@ defmodule SymphonyElixir.WorkspaceSkills do
     with :ok <- ensure_existing_directory(workspace, {:workspace_missing, workspace}),
          {:ok, skill_sources} <- skill_sources(),
          :ok <- prepare_mirror(workspace, skill_sources),
-         :ok <- prepare_agent_roots(workspace),
-         :ok <- prune_authoring_skills(workspace) do
-      :ok
+         :ok <- prepare_agent_roots(workspace) do
+      prune_authoring_skills(workspace)
     end
   end
 

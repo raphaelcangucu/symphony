@@ -1,6 +1,10 @@
 defmodule SymphonyElixir.AgentRunnerTest do
   use SymphonyElixir.TestSupport
 
+  alias SymphonyElixir.LocalTracker.{Context, ProjectSetup}
+  alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workflow
+
   setup do
     migrate_repo()
     clean_repo()
@@ -10,17 +14,17 @@ defmodule SymphonyElixir.AgentRunnerTest do
 
   defp seed_project_with_prompt(slug, prompt, workflow_config \\ %{}) do
     {:ok, project} =
-      SymphonyElixir.LocalTracker.Context.ensure_project(%{name: slug, slug: slug, tracker_kind: "local"})
+      Context.ensure_project(%{name: slug, slug: slug, tracker_kind: "local"})
 
     {:ok, _setup} =
-      %SymphonyElixir.LocalTracker.ProjectSetup{}
-      |> SymphonyElixir.LocalTracker.ProjectSetup.changeset(%{
+      %ProjectSetup{}
+      |> ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_markdown: SymphonyElixir.Workflow.to_markdown(workflow_config, prompt || ""),
+        workflow_markdown: Workflow.to_markdown(workflow_config, prompt || ""),
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })
-      |> SymphonyElixir.Repo.insert()
+      |> Repo.insert()
 
     project
   end

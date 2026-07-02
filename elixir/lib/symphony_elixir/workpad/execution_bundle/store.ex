@@ -38,6 +38,7 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.Store do
     end
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp normalize_unit(unit) do
     %{
       "id" => unit[:id] || unit["id"],

@@ -8,8 +8,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   alias SymphonyElixir.Assistant.{
     BlockerTools,
-    DiscoveryTools,
     DevEnvTools,
+    DiscoveryTools,
     DispatchTools,
     EvidenceTools,
     GitHubTools,
@@ -29,14 +29,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     ToolText
   }
 
-  alias SymphonyElixir.Config
   alias SymphonyElixir.Codex.DynamicTool
+  alias SymphonyElixir.Config
   alias SymphonyElixir.IssueDispatchPrep
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.{Context, IssueRelation}
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
-  alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
   alias SymphonyElixir.SubagentRegistry
+  alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
   alias SymphonyElixir.Tracker.Sync.ParentLink
   alias SymphonyElixir.Tracker.Workpad
   alias SymphonyElixir.Workpad.ExecutionBundle
@@ -992,8 +992,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          :ok <- ensure_status_available(project, @in_progress_state),
          {:ok, agent} <- resolve_dispatch_agent(project, identifier, Map.get(arguments, "agent")),
          :ok <- IssueDispatchPrep.prepare_for_dispatch(project, identifier, agent),
-         {:ok, _comment} <- IssueAdapter.dispatch(project, :add_comment, [identifier, codex_comment(instructions), %{"author" => "assistant"}]),
-         {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, dispatch_agent_attrs(agent, arguments)]) do
+         {:ok, _comment} <-
+           IssueAdapter.dispatch(project, :add_comment, [
+             identifier,
+             codex_comment(instructions),
+             %{"author" => "assistant"}
+           ]),
+         {:ok, issue} <-
+           IssueAdapter.dispatch(project, :move_issue, [identifier, dispatch_agent_attrs(agent, arguments)]) do
       presented = TrackerPresenter.issue(issue)
 
       {:ok,
@@ -1017,7 +1023,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     parent_repo = normalize_optional_string(Map.get(arguments, "parent_repo"))
 
     {classification, rule} =
-      case SymphonyElixir.Workpad.ExecutionBundle.Classifier.classify(unit, parent_repo: parent_repo) do
+      case Classifier.classify(unit, parent_repo: parent_repo) do
         {:ok, type, rule} -> {to_string(type), to_string(rule)}
         {:ambiguous, reason} -> {"ambiguous", to_string(reason)}
       end
@@ -1209,8 +1215,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
     summary =
       [:live, :waiting, :ready, :done]
-      |> Enum.map(fn status -> "#{Map.get(counts, status, 0)} #{status}" end)
-      |> Enum.join(", ")
+      |> Enum.map_join(", ", fn status -> "#{Map.get(counts, status, 0)} #{status}" end)
 
     "Bundle #{parent_id}: #{length(units)} unit(s) (#{summary})."
   end
@@ -1398,7 +1403,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
            project_slug(project),
            child.identifier,
            parent.identifier,
-           SymphonyElixir.LocalTracker.IssueRelation.subtask_type()
+           IssueRelation.subtask_type()
          ) do
       {:ok, _relation} ->
         ParentLink.enqueue_link(project, child.identifier, parent.identifier)
@@ -1938,9 +1943,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     dispatch_states = MapSet.new(Config.dispatch_states(), &normalize_status_name/1)
 
     candidates =
-      statuses
-      |> Enum.reject(&terminal_status?/1)
-      |> Enum.reject(&MapSet.member?(dispatch_states, normalize_status_name(status_field(&1, :name))))
+      Enum.reject(statuses, fn status ->
+        terminal_status?(status) or
+          MapSet.member?(dispatch_states, normalize_status_name(status_field(status, :name)))
+      end)
 
     candidates
     |> fallback_candidates(statuses)

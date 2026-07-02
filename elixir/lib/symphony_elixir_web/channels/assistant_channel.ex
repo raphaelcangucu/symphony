@@ -16,9 +16,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     TurnManager
   }
 
-  alias SymphonyElixir.Config
+  alias SymphonyElixir.{AgentPreference, Config, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
   alias SymphonyElixirWeb.TrackerAuth
-  alias SymphonyElixir.{AgentPreference, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
 
   @issue_authoring_tools ~w(create_draft_issue create_issue)
 
@@ -196,7 +195,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
     with {:ok, thread} <- issue_thread(socket),
          {:ok, updated_thread} <- History.set_goal_mode(thread, enabled, objective) do
-      {:reply, {:ok, %{goal_mode: enabled, goal_objective: History.thread_goal_objective(updated_thread)}}, assign(socket, :thread, updated_thread)}
+      payload = %{
+        goal_mode: enabled,
+        goal_objective: History.thread_goal_objective(updated_thread)
+      }
+
+      {:reply, {:ok, payload}, assign(socket, :thread, updated_thread)}
     else
       {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
     end
@@ -242,21 +246,19 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_in("goal_resume", _payload, socket) do
-    cond do
-      socket.assigns[:turn_status] == :running ->
-        {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+    if socket.assigns[:turn_status] == :running do
+      {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+    else
+      case authoring_goal_thread(socket) do
+        {:ok, thread} ->
+          # Flip the native goal back to active (best-effort; may not exist yet)
+          # then kick an autonomous continuation batch that streams into the chat.
+          _ = AuthoringGoalControl.resume(thread)
+          {:reply, :ok, start_goal_continuation(thread, socket)}
 
-      true ->
-        case authoring_goal_thread(socket) do
-          {:ok, thread} ->
-            # Flip the native goal back to active (best-effort; may not exist yet)
-            # then kick an autonomous continuation batch that streams into the chat.
-            _ = AuthoringGoalControl.resume(thread)
-            {:reply, :ok, start_goal_continuation(thread, socket)}
-
-          {:error, reason} ->
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-        end
+        {:error, reason} ->
+          {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+      end
     end
   end
 
@@ -348,6 +350,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("submit_user_input", _payload, socket),
     do: {:reply, {:error, %{reason: "answers are required"}}, socket}
 
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   def handle_in("btw", %{"message" => message}, socket) when is_binary(message) do
     case String.trim(message) do
       "" ->
@@ -688,6 +691,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp thread_id_from_socket(%Socket{assigns: %{thread: %{id: id}}}) when is_integer(id), do: id
   defp thread_id_from_socket(_socket), do: nil
 
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp do_send_message(message, payload, socket) do
     project_slug = socket.assigns[:project_slug]
     thread = socket.assigns[:thread]
@@ -1168,6 +1172,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   # Fetches the native goal off the channel process (a Codex port round-trip can
   # take seconds) and pushes the authoritative status to the client.
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp push_goal_status_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket, running) do
     if History.thread_goal_mode(thread) do
       elapsed = GoalRun.elapsed_seconds(id)
@@ -1191,6 +1196,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # process, then pushes the authoritative status. Skipped while a turn runs: a
   # competing `thread/goal/set` would block on (or clobber) the in-flight turn's
   # thread, and the metadata is already saved + echoed by the reply.
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp sync_native_objective_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket) do
     if History.thread_goal_mode(thread) and not goal_running?(socket) do
       Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->

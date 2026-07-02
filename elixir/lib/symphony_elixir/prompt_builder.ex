@@ -3,9 +3,9 @@ defmodule SymphonyElixir.PromptBuilder do
   Builds agent prompts from issue data.
   """
 
-  alias SymphonyElixir.{ProjectConfig, Repo, Skills}
   alias SymphonyElixir.DevServer
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.{ProjectConfig, Repo, Skills}
   alias SymphonyElixir.Workpad.UnifiedUnitPlan
 
   @render_opts [strict_filters: true]
@@ -56,6 +56,7 @@ defmodule SymphonyElixir.PromptBuilder do
   dispatches one child run per `child_run` unit. Returns "" for non-bundle runs.
   """
   @spec bundle_coordinator_section(SymphonyElixir.Workpad.ExecutionBundle.t() | nil) :: String.t()
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity, Credo.Check.Refactor.Nesting
   def bundle_coordinator_section(%SymphonyElixir.Workpad.ExecutionBundle{units: units} = bundle)
       when is_list(units) and units != [] do
     unit_lines =
@@ -124,6 +125,7 @@ defmodule SymphonyElixir.PromptBuilder do
           UnifiedUnitPlan.t(),
           keyword()
         ) :: String.t()
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity, Credo.Check.Refactor.Nesting
   def unified_parent_section(%SymphonyElixir.Workpad.ExecutionBundle{units: units} = bundle, %UnifiedUnitPlan{} = plan, opts)
       when is_list(units) and units != [] do
     feature_branch = Keyword.get(opts, :feature_branch, "feat/<parent>")
@@ -134,7 +136,7 @@ defmodule SymphonyElixir.PromptBuilder do
         flags =
           [
             if(unit.ad_hoc, do: "ad-hoc", else: nil),
-            unless(unit.eligible, do: "skipped: #{unit.skip_reason}", else: nil),
+            if(unit.eligible, do: nil, else: "skipped: #{unit.skip_reason}"),
             if(is_binary(unit.board_status), do: "board: #{unit.board_status}", else: nil)
           ]
           |> Enum.reject(&is_nil/1)
@@ -202,6 +204,7 @@ defmodule SymphonyElixir.PromptBuilder do
   Returns "" when there is no unit context.
   """
   @spec child_unit_section(map() | nil, String.t() | nil, [map()]) :: String.t()
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def child_unit_section(unit, parent_identifier, shared_contracts)
       when is_map(unit) do
     repo = if is_binary(unit[:repo]), do: " in `#{unit[:repo]}`", else: ""
@@ -686,6 +689,7 @@ defmodule SymphonyElixir.PromptBuilder do
       match?({:ok, %File.Stat{type: :regular}}, File.lstat(path))
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp render_artifacts(workspace, files) do
     file_count = length(files)
 
@@ -723,6 +727,7 @@ defmodule SymphonyElixir.PromptBuilder do
     end
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp do_render_artifact(file, prefix, updated_bytes_used, remaining_bytes) do
     case File.stat(file) do
       {:ok, %File.Stat{size: size}} when size > @artifact_max_bytes ->

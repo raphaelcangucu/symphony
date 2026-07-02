@@ -3,6 +3,7 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
 
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, ProjectSetup}
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Tracker.Sync.LocalStore
 
   setup do
     migrate_repo()
@@ -618,7 +619,7 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     {:ok, _issue} = Context.create_issue("assignee-edit", %{title: "Assign me", status: "Todo"})
 
     :ok =
-      SymphonyElixir.Tracker.Sync.LocalStore.upsert_users(project, [
+      LocalStore.upsert_users(project, [
         %{id: "U1", login: "alice", name: "Alice"}
       ])
 

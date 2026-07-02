@@ -5,8 +5,8 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
 
   alias Plug.Conn
   alias SymphonyElixir.Config
-  alias SymphonyElixir.LocalTracker.{Context, ProjectYamlSource, Projects}
   alias SymphonyElixir.GitHub.Gist
+  alias SymphonyElixir.LocalTracker.{Context, Projects, ProjectYamlSource}
   alias SymphonyElixir.Tracker.Sync.Engine, as: SyncEngine
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter

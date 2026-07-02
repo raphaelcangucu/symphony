@@ -20,9 +20,8 @@ defmodule SymphonyElixir.IssueDispatchPrep do
   @spec prepare_for_dispatch(Project.t() | map(), String.t(), String.t()) :: :ok | {:error, term()}
   def prepare_for_dispatch(project, identifier, agent_kind)
       when is_binary(identifier) and is_binary(agent_kind) do
-    with :ok <- ensure_dispatch_gates(project, identifier, agent_kind),
-         :ok <- ensure_bundle_child_gates(project, identifier, agent_kind) do
-      :ok
+    with :ok <- ensure_dispatch_gates(project, identifier, agent_kind) do
+      ensure_bundle_child_gates(project, identifier, agent_kind)
     end
   end
 
@@ -30,9 +29,8 @@ defmodule SymphonyElixir.IssueDispatchPrep do
   def ensure_dispatch_gates(project, identifier, agent_kind)
       when is_binary(identifier) and is_binary(agent_kind) do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
-         attrs <- missing_gate_attrs(issue, agent_kind),
-         :ok <- maybe_update_issue(project, identifier, attrs) do
-      :ok
+         attrs <- missing_gate_attrs(issue, agent_kind) do
+      maybe_update_issue(project, identifier, attrs)
     end
   end
 

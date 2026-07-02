@@ -6,11 +6,13 @@ defmodule SymphonyElixir.Codex.SessionLog do
   sidecar (`.symphony/codex-session.json`) holds the active `thread_id`.
   """
 
+  alias SymphonyElixir.Codex.Session
+
   @default_tail_bytes 65_536
 
   @spec resolve_rollout_path(Path.t(), keyword()) :: {:ok, Path.t()} | :error
   def resolve_rollout_path(workspace, opts \\ []) when is_binary(workspace) do
-    with {:ok, thread_id} <- SymphonyElixir.Codex.Session.resolve(workspace, opts),
+    with {:ok, thread_id} <- Session.resolve(workspace, opts),
          {:ok, path} <- rollout_path_for_thread(thread_id, opts) do
       {:ok, path}
     else
@@ -171,6 +173,7 @@ defmodule SymphonyElixir.Codex.SessionLog do
 
   defp parse_event_msg(_payload), do: nil
 
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp parse_response_item(%{"type" => "message", "role" => role, "content" => content}) when is_list(content) do
     body = content_text(content)
 

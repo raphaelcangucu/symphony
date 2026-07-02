@@ -8,10 +8,37 @@ defmodule SymphonyElixir.PromptBuilderBundleTest do
     %ExecutionBundle{
       mode: "bundle",
       units: [
-        %{id: "be", type: :child_run, issue: "p/be#1", repo: "p/be", produces: ["api"], consumes: [], depends_on: [], deliverable: "pr"},
-        %{id: "inline", type: :workpad_task, issue: nil, repo: "p/app", produces: [], consumes: [], depends_on: [], deliverable: nil}
+        %{
+          id: "be",
+          type: :child_run,
+          issue: "p/be#1",
+          repo: "p/be",
+          produces: ["api"],
+          consumes: [],
+          depends_on: [],
+          deliverable: "pr"
+        },
+        %{
+          id: "inline",
+          type: :workpad_task,
+          issue: nil,
+          repo: "p/app",
+          produces: [],
+          consumes: [],
+          depends_on: [],
+          deliverable: nil
+        }
       ],
-      shared_contracts: [%{id: "api", owner_unit: "be", consumers: ["fe"], kind: "graphql", artifact: nil, status: :draft}]
+      shared_contracts: [
+        %{
+          id: "api",
+          owner_unit: "be",
+          consumers: ["fe"],
+          kind: "graphql",
+          artifact: nil,
+          status: :draft
+        }
+      ]
     }
   end
 
@@ -60,7 +87,8 @@ defmodule SymphonyElixir.PromptBuilderBundleTest do
     assert text =~ "MAC-42"
   end
 
-  test "child unit section tells a dependent to build on its predecessor's branch and still PR into the integration branch" do
+  test "child unit section tells a dependent to build on its predecessor's branch " <>
+         "and still PR into the integration branch" do
     unit = %{id: "fe", type: :child_run, repo: "p/fe", produces: [], consumes: ["api"], depends_on: ["be"]}
 
     text = PromptBuilder.child_unit_section(unit, "MAC-42", [])
@@ -79,8 +107,26 @@ defmodule SymphonyElixir.PromptBuilderBundleTest do
     dependent_bundle = %ExecutionBundle{
       mode: "bundle",
       units: [
-        %{id: "be", type: :child_run, issue: "MAC-12", repo: "p/be", produces: ["api"], consumes: [], depends_on: [], deliverable: "pr"},
-        %{id: "fe", type: :child_run, issue: "MAC-13", repo: "p/be", produces: [], consumes: ["api"], depends_on: ["be"], deliverable: "pr"}
+        %{
+          id: "be",
+          type: :child_run,
+          issue: "MAC-12",
+          repo: "p/be",
+          produces: ["api"],
+          consumes: [],
+          depends_on: [],
+          deliverable: "pr"
+        },
+        %{
+          id: "fe",
+          type: :child_run,
+          issue: "MAC-13",
+          repo: "p/be",
+          produces: [],
+          consumes: ["api"],
+          depends_on: ["be"],
+          deliverable: "pr"
+        }
       ],
       shared_contracts: []
     }

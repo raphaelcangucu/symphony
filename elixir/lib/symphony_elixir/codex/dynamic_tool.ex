@@ -4,12 +4,22 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   """
 
   alias SymphonyElixir.AcceptanceCriteria
+  alias SymphonyElixir.AgentHandoffGate
+
+  alias SymphonyElixir.Assistant.{
+    DevEnvTools,
+    EvidenceTools,
+    GoalTools,
+    HandoffTools,
+    PreviewTools,
+    PullRequestTools,
+    ToolExecutor
+  }
+
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.Issue
-  alias SymphonyElixir.Assistant.{EvidenceTools, GoalTools, HandoffTools, DevEnvTools, PreviewTools, PullRequestTools, ToolExecutor}
   alias SymphonyElixir.Linear.Client, as: LinearClient
   alias SymphonyElixir.LocalTracker.Context
-  alias SymphonyElixir.AgentHandoffGate
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueAdapter
@@ -176,6 +186,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   """
 
   @spec execute(String.t() | nil, term(), keyword()) :: map()
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def execute(tool, arguments, opts \\ []) do
     case tool do
       @linear_graphql_tool ->

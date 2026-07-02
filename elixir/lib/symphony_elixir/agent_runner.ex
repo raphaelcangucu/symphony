@@ -121,6 +121,7 @@ defmodule SymphonyElixir.AgentRunner do
   the standard per-issue workspace.
   """
   @spec resolve_workspace(map(), keyword()) :: {:ok, Path.t()} | {:error, term()}
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   def resolve_workspace(issue, opts) do
     if Keyword.get(opts, :worktree) == true do
       with {:ok, repo} <- fetch_worktree_repo(opts) do
@@ -456,6 +457,7 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   defp do_apply_validate_gate(result, workspace, evaluator, run_turn, budget) do
     case evaluator.(workspace) do
       :satisfied ->
@@ -574,9 +576,16 @@ defmodule SymphonyElixir.AgentRunner do
       require_execution_contract? = goal_mode?(opts)
 
       case Context.latest_workpad(project_slug, identifier) do
-        {:error, :not_found} -> {:error, :not_found}
-        {:ok, %{body: body}} -> ExecutionContract.validate_workpad(body, require_execution_contract: require_execution_contract?)
-        _present_or_unresolvable -> :ok
+        {:error, :not_found} ->
+          {:error, :not_found}
+
+        {:ok, %{body: body}} ->
+          ExecutionContract.validate_workpad(body,
+            require_execution_contract: require_execution_contract?
+          )
+
+        _present_or_unresolvable ->
+          :ok
       end
     end
   end
@@ -683,6 +692,7 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.FunctionArity
   defp continue_or_stop_outer_turn_loop(
          app_session,
          workspace,

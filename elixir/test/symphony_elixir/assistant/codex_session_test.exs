@@ -106,7 +106,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
   end
 
   test "send_message_to_thread/4 runs a freeform turn with project-agnostic tools only" do
-    {:ok, thread} = SymphonyElixir.Assistant.History.create_freeform_thread(%{title: "F", workspace_path: tmp_dir()})
+    {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: tmp_dir()})
 
     runner = fn _workspace, _prompt, _issue, opts ->
       send(self(), {:opts, opts})
@@ -114,7 +114,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     end
 
     assert {:ok, result} =
-             SymphonyElixir.Assistant.CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
+             CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
 
     assert result.assistant_message == "ok"
     assert_received {:opts, opts}
@@ -154,7 +154,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
     Application.put_env(:symphony_elixir, :codex_approval_policy, "never")
 
-    {:ok, thread} = SymphonyElixir.Assistant.History.create_freeform_thread(%{title: "F", workspace_path: tmp_dir()})
+    {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: tmp_dir()})
 
     runner = fn _workspace, _prompt, _issue, opts ->
       send(self(), {:freeform_opts, opts})
@@ -162,7 +162,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     end
 
     assert {:ok, _result} =
-             SymphonyElixir.Assistant.CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
+             CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
 
     assert_receive {:freeform_opts, opts}
     assert Keyword.get(opts, :codex_config)["approval_policy"] == "never"
@@ -170,13 +170,13 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
 
   test "send_message_to_thread/4 ignores malformed Codex stream payloads without crashing", %{workspace_root: workspace_root} do
     {:ok, thread} =
-      SymphonyElixir.Assistant.History.create_freeform_thread(%{
+      History.create_freeform_thread(%{
         title: "F",
         workspace_path: Path.join(workspace_root, "raw-stream")
       })
 
     assert {:ok, result} =
-             SymphonyElixir.Assistant.CodexSession.send_message_to_thread(
+             CodexSession.send_message_to_thread(
                thread,
                "hi",
                %{"agent" => "codex"},

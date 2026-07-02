@@ -207,11 +207,36 @@ defmodule SymphonyElixir.AgentExecutionTest do
         mode: "bundle",
         parent: "MAC-1",
         units: [
-          %{id: "api", type: :child_run, issue: "MAC-12", repo: "macro/be", produces: ["schema"], consumes: [], depends_on: [], deliverable: "pr"},
-          %{id: "ui", type: :child_run, issue: "MAC-13", repo: "macro/fe", produces: [], consumes: ["schema"], depends_on: ["api"], deliverable: "pr"}
+          %{
+            id: "api",
+            type: :child_run,
+            issue: "MAC-12",
+            repo: "macro/be",
+            produces: ["schema"],
+            consumes: [],
+            depends_on: [],
+            deliverable: "pr"
+          },
+          %{
+            id: "ui",
+            type: :child_run,
+            issue: "MAC-13",
+            repo: "macro/fe",
+            produces: [],
+            consumes: ["schema"],
+            depends_on: ["api"],
+            deliverable: "pr"
+          }
         ],
         shared_contracts: [
-          %{id: "schema", kind: "openapi", owner_unit: "api", consumers: ["ui"], artifact: "openapi.yaml", status: :draft}
+          %{
+            id: "schema",
+            kind: "openapi",
+            owner_unit: "api",
+            consumers: ["ui"],
+            artifact: "openapi.yaml",
+            status: :draft
+          }
         ]
       }
     end
@@ -259,7 +284,10 @@ defmodule SymphonyElixir.AgentExecutionTest do
 
     test "strips runtime error stack traces" do
       error =
-        "{%RuntimeError{message: \"Agent run failed for issue_id=5 issue_identifier=1859: {:turn_failed, \\\"claude exited with code 1\\\"}\"}, [{SymphonyElixir.AgentRunner, :fail_run, 2, [file: ~c\"lib/symphony_elixir/agent_runner.ex\", line: 87]}]}"
+        "{%RuntimeError{message: \"Agent run failed for issue_id=5 issue_identifier=1859: " <>
+          "{:turn_failed, \\\"claude exited with code 1\\\"}\"}, " <>
+          "[{SymphonyElixir.AgentRunner, :fail_run, 2, " <>
+          "[file: ~c\"lib/symphony_elixir/agent_runner.ex\", line: 87]}]}"
 
       assert AgentExecution.format_failure("agent exited: " <> error) == "claude exited with code 1"
     end

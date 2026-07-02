@@ -23,6 +23,7 @@ defmodule SymphonyElixir.Settings do
   def groups, do: @groups
 
   @spec get(String.t(), String.t()) :: term()
+  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
   def get(group, name) when is_binary(group) and is_binary(name) do
     with {:ok, module} <- fetch_group(group),
          %{} = defaults <- module.defaults(),

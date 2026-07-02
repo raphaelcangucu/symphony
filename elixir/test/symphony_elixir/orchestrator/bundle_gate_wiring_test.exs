@@ -13,8 +13,26 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
       mode: "bundle",
       parent: "MAC-1",
       units: [
-        %{id: "api", type: :child_run, issue: "MAC-2", repo: "macro/be", produces: ["schema"], consumes: [], depends_on: [], deliverable: nil},
-        %{id: "ui", type: :child_run, issue: "MAC-3", repo: "macro/fe", produces: [], consumes: ["schema"], depends_on: ["api"], deliverable: nil}
+        %{
+          id: "api",
+          type: :child_run,
+          issue: "MAC-2",
+          repo: "macro/be",
+          produces: ["schema"],
+          consumes: [],
+          depends_on: [],
+          deliverable: nil
+        },
+        %{
+          id: "ui",
+          type: :child_run,
+          issue: "MAC-3",
+          repo: "macro/fe",
+          produces: [],
+          consumes: ["schema"],
+          depends_on: ["api"],
+          deliverable: nil
+        }
       ],
       shared_contracts: [
         %{id: "schema", kind: "openapi", owner_unit: "api", consumers: ["ui"], artifact: "openapi.yaml", status: :draft}
@@ -63,7 +81,8 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
     assert MapSet.size(held) == 0
   end
 
-  test "a released predecessor's produced contract counts as ready even if the bundle still records it draft/changing" do
+  test "a released predecessor's produced contract counts as ready even if the bundle " <>
+         "still records it draft/changing" do
     candidates = [child("id-3", "MAC-3")]
 
     held =
@@ -120,7 +139,8 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
   describe "released_record_state?/2 (dispatch-gate release cadence)" do
     @wait_states ["Human Review"]
 
-    test "a predecessor whose status NAME is a wait_state releases its dependents (even when the board category is 'started')" do
+    test "a predecessor whose status NAME is a wait_state releases its dependents " <>
+           "(even when the board category is 'started')" do
       assert Orchestrator.released_record_state?(
                %{status: %{is_terminal: false, category: "started", name: "Human Review"}},
                @wait_states
