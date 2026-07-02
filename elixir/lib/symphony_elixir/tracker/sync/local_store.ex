@@ -10,7 +10,17 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   import Ecto.Query
 
-  alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, IssueRelation, Label, Project, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{
+    Comment,
+    Context,
+    IssueLabel,
+    IssueRecord,
+    IssueRelation,
+    Label,
+    Project,
+    WorkflowStatus
+  }
+
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.PushNotifications.MentionNotifier
   alias SymphonyElixir.Repo

@@ -32,7 +32,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Config
   alias SymphonyElixir.IssueDispatchPrep
-  alias SymphonyElixir.LocalTracker.{Context, IssueRelation}
+  alias SymphonyElixir.LocalTracker.{Context, IssueRelation, Templates}
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
   alias SymphonyElixir.SubagentRegistry
@@ -1322,7 +1322,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp reparent_subtask(project, identifier, new_parent) do
     slug = project_slug(project)
-    subtask_type = SymphonyElixir.LocalTracker.IssueRelation.subtask_type()
+    subtask_type = IssueRelation.subtask_type()
 
     {:ok, child} = IssueAdapter.dispatch(project, :get_issue, [identifier])
     old_parent = child.parent_identifier
@@ -1707,7 +1707,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp codex_failure_response({:template_not_found, slug}) do
     slugs =
-      SymphonyElixir.LocalTracker.Templates.list_templates()
+      Templates.list_templates()
       |> Enum.map_join(", ", & &1.slug)
 
     codex_failure_response("Template #{inspect(slug)} not found. Available templates: #{slugs}. Call list_templates for details.")

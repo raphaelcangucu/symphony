@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.Assistant.CodexSessionTest do
   use ExUnit.Case, async: false
 
+  alias Ecto.Adapters.SQL
   alias SymphonyElixir.Assistant.{CodexSession, History, ToolExecutor}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -680,7 +681,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
           "local_tracker_repositories",
           "local_tracker_projects"
         ] do
-      Ecto.Adapters.SQL.query!(Repo, "DELETE FROM #{table}", [])
+      SQL.query!(Repo, "DELETE FROM #{table}", [])
     end
   end
 end
