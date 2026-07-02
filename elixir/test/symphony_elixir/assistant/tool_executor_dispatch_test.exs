@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.Assistant.ToolExecutorDispatchTest do
   use ExUnit.Case, async: false
 
+  alias Ecto.Adapters.SQL
   alias SymphonyElixir.Assistant.ToolExecutor
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -110,7 +111,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorDispatchTest do
           "local_tracker_workspace_template_repositories",
           "local_tracker_workspace_templates"
         ] do
-      Ecto.Adapters.SQL.query!(Repo, "DELETE FROM #{table}", [])
+      SQL.query!(Repo, "DELETE FROM #{table}", [])
     end
   end
 end

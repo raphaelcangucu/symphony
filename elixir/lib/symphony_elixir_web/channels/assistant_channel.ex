@@ -350,7 +350,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("submit_user_input", _payload, socket),
     do: {:reply, {:error, %{reason: "answers are required"}}, socket}
 
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:25 Credo.Check.Refactor.Nesting
   def handle_in("btw", %{"message" => message}, socket) when is_binary(message) do
     case String.trim(message) do
       "" ->
@@ -1172,7 +1172,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   # Fetches the native goal off the channel process (a Codex port round-trip can
   # take seconds) and pushes the authoritative status to the client.
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:20 Credo.Check.Refactor.Nesting
   defp push_goal_status_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket, running) do
     if History.thread_goal_mode(thread) do
       elapsed = GoalRun.elapsed_seconds(id)
@@ -1196,7 +1196,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # process, then pushes the authoritative status. Skipped while a turn runs: a
   # competing `thread/goal/set` would block on (or clobber) the in-flight turn's
   # thread, and the metadata is already saved + echoed by the reply.
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:20 Credo.Check.Refactor.Nesting
   defp sync_native_objective_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket) do
     if History.thread_goal_mode(thread) and not goal_running?(socket) do
       Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->

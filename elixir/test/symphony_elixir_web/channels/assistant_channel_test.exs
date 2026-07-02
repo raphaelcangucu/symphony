@@ -3,6 +3,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   import Phoenix.ChannelTest
 
+  alias Ecto.Adapters.SQL
   alias SymphonyElixir.Assistant.GoalRun
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
@@ -991,7 +992,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
           "local_tracker_repositories",
           "local_tracker_projects"
         ] do
-      Ecto.Adapters.SQL.query!(Repo, "DELETE FROM #{table}", [])
+      SQL.query!(Repo, "DELETE FROM #{table}", [])
     end
   end
 

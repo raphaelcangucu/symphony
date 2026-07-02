@@ -10,7 +10,17 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
   import Ecto.Query
 
-  alias SymphonyElixir.LocalTracker.{Comment, Context, IssueLabel, IssueRecord, IssueRelation, Label, Project, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{
+    Comment,
+    Context,
+    IssueLabel,
+    IssueRecord,
+    IssueRelation,
+    Label,
+    Project,
+    WorkflowStatus
+  }
+
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.PushNotifications.MentionNotifier
   alias SymphonyElixir.Repo
@@ -437,7 +447,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   """
   @spec mark_comment_sync_status(integer(), String.t()) ::
           {:ok, SymphonyElixir.LocalTracker.Comment.t()} | {:error, :not_found | Ecto.Changeset.t()}
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:25 Credo.Check.Refactor.Nesting
   def mark_comment_sync_status(comment_id, status)
       when is_integer(comment_id) and status in ["synced", "pending", "conflict", "error", "archived"] do
     case Repo.get(SymphonyElixir.LocalTracker.Comment, comment_id) do
@@ -698,7 +708,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   defp labels_dirty?(%IssueRecord{dirty_fields: %{} = dirty}), do: Map.has_key?(dirty, "labels")
   defp labels_dirty?(_issue), do: false
 
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:25 Credo.Check.Refactor.Nesting
   defp upsert_labels!(project, issue, labels) when is_list(labels) do
     desired_ids =
       labels

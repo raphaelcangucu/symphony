@@ -7,6 +7,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.PullRequestMonitor.MonitorState
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Tracker.Sync.LocalStore
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
@@ -199,7 +200,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
         })
 
       {:ok, _pr} =
-        SymphonyElixir.Tracker.Sync.LocalStore.link_manual_pull_request(project.id, "CDE-1132", %{
+        LocalStore.link_manual_pull_request(project.id, "CDE-1132", %{
           url: "https://github.com/civitaslearning/advising/pull/9540",
           repo: "civitaslearning/advising",
           number: 9540
@@ -368,7 +369,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
       {:ok, _} = Context.set_issue_parent("remote", child.identifier, parent.identifier)
 
       {:ok, _} =
-        SymphonyElixir.Tracker.Sync.LocalStore.link_manual_pull_request(project.id, child.identifier, %{
+        LocalStore.link_manual_pull_request(project.id, child.identifier, %{
           url: "https://github.com/clouapp/back/pull/289",
           repo: "clouapp/back",
           number: 289
@@ -398,7 +399,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestControllerTest do
       {:ok, _} = Context.set_issue_parent("remote", child.identifier, parent.identifier)
 
       {:ok, _} =
-        SymphonyElixir.Tracker.Sync.LocalStore.link_manual_pull_request(project.id, child.identifier, %{
+        LocalStore.link_manual_pull_request(project.id, child.identifier, %{
           url: "https://github.com/clouapp/back/pull/289",
           repo: "clouapp/back",
           number: 289

@@ -32,7 +32,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Config
   alias SymphonyElixir.IssueDispatchPrep
-  alias SymphonyElixir.LocalTracker.{Context, IssueRelation}
+  alias SymphonyElixir.LocalTracker.{Context, IssueRelation, Templates}
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
   alias SymphonyElixir.SubagentRegistry
@@ -1707,7 +1707,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp codex_failure_response({:template_not_found, slug}) do
     slugs =
-      SymphonyElixir.LocalTracker.Templates.list_templates()
+      Templates.list_templates()
       |> Enum.map_join(", ", & &1.slug)
 
     codex_failure_response("Template #{inspect(slug)} not found. Available templates: #{slugs}. Call list_templates for details.")
