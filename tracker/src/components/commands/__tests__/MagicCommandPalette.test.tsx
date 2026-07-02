@@ -230,8 +230,6 @@ function makeRunResult(): RunPromptTemplateResult {
       createdAt: "2026-06-30T00:00:00Z",
       updatedAt: "2026-06-30T00:00:00Z",
       attachments: [],
-      groupLeadIdentifier: null,
-      groupMemberIdentifiers: [],
     },
   };
 }

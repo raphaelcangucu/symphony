@@ -52,7 +52,9 @@ export interface AssistantComposerState {
   byAgent: Partial<Record<AgentKind, AssistantComposerSettings>>;
 }
 
-// v2 storage keys — old keys are ignored; composer falls to defaults on upgrade
+// v2 storage keys — old keys are ignored; composer falls to defaults on upgrade.
+// Composer choice is session-scoped so each browser/session can keep its own
+// last agent/model without leaking into other work.
 const COMPOSER_STATE_KEY = "symphony.assistant.composer.v2";
 const CATALOGS_STORAGE_KEY = "symphony.assistant.catalogs";
 
@@ -215,7 +217,7 @@ export function loadComposerState(bundle: AssistantCatalogBundle): AssistantComp
   if (typeof window === "undefined") return defaultState;
 
   try {
-    const raw = window.localStorage.getItem(COMPOSER_STATE_KEY);
+    const raw = window.sessionStorage.getItem(COMPOSER_STATE_KEY) ?? window.localStorage.getItem(COMPOSER_STATE_KEY);
     if (!raw) return defaultState;
 
     const parsed = JSON.parse(raw) as Partial<AssistantComposerState>;
@@ -234,7 +236,7 @@ export function loadComposerState(bundle: AssistantCatalogBundle): AssistantComp
 
 export function saveComposerState(state: AssistantComposerState): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(COMPOSER_STATE_KEY, JSON.stringify(state));
+  window.sessionStorage.setItem(COMPOSER_STATE_KEY, JSON.stringify(state));
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +247,7 @@ export function defaultComposerSettings(catalog: AssistantAgentCatalog): Assista
   const modelOption = pickDefaultModel(catalog);
   return {
     model: modelOption.model,
-    effort: modelOption.defaultEffort,
+    effort: normalizeEffort(modelOption, modelOption.defaultEffort),
   };
 }
 
@@ -318,7 +320,18 @@ export function effortsForModel(catalog: AssistantAgentCatalog, modelId: string)
 
 export function normalizeEffort(model: AssistantModelOption, effort?: string | null): AssistantEffort {
   if (effort && model.efforts.some((option) => option.id === effort)) return effort;
-  return model.defaultEffort;
+  if (model.defaultEffort) return model.defaultEffort;
+  return inferEffortFromModel(model);
+}
+
+function inferEffortFromModel(model: AssistantModelOption): AssistantEffort {
+  const text = `${model.model} ${model.label}`.toLowerCase();
+  if (/\b(max|ultra)\b/.test(text)) return "max";
+  if (/\b(extra[-_\s]?high|xhigh)\b/.test(text)) return "xhigh";
+  if (/\bhigh\b/.test(text)) return "high";
+  if (/\blow\b/.test(text)) return "low";
+  if (/\bminimal\b/.test(text)) return "minimal";
+  return "";
 }
 
 function fallbackModel(

@@ -1820,6 +1820,7 @@
       "remove": "Remover",
       "turnInterrupted": "O turno anterior foi interrompido.",
       "resume": "Retomar",
+      "scrollToBottom": "Ir para as mensagens mais recentes",
       "attachmentFallback": {
         "audio": "Veja o áudio anexado.",
         "image": "Veja a imagem anexada.",
@@ -1920,6 +1921,8 @@
       "removeAttachment": "Remover {{name}}",
       "agentMenu": "Agente",
       "reasoningEffort": "Esforço de raciocínio",
+      "autoThinking": "Auto",
+      "thinkingEffort": "Thinking {{effort}}",
       "stopRecording": "Parar gravação",
       "recordAudio": "Gravar áudio",
       "recording": "Gravando",

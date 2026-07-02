@@ -8,6 +8,7 @@ import type { Channel } from "phoenix";
 import {
   AudioLines,
   Bot,
+  ChevronDown,
   Clock,
   FileText,
   ImageIcon,
@@ -91,7 +92,7 @@ import { isVideoAttachmentSource, isVideoMediaType, projectAttachmentUrl } from 
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
-import { cn } from "@/lib/utils";
+import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 
 interface AuthoringGoalState {
@@ -167,12 +168,14 @@ function attachChatScrollStickiness(
   scroller: HTMLDivElement,
   stickToBottomRef: MutableRefObject<boolean>,
   pinnedScrollTopRef: MutableRefObject<number | null>,
+  onAtBottomChange?: (atBottom: boolean) => void,
 ): () => void {
   const updateStickiness = () => {
     const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     const atBottom = distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD_PX;
     stickToBottomRef.current = atBottom;
     pinnedScrollTopRef.current = atBottom ? null : scroller.scrollTop;
+    onAtBottomChange?.(atBottom);
   };
 
   const detachFromBottom = () => {
@@ -299,6 +302,7 @@ export function ProjectAssistantPanel({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const scrollBehaviorRef = useRef<"initial" | "smooth">("initial");
   const stickToBottomRef = useRef(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const pinnedScrollTopRef = useRef<number | null>(null);
   const scrollStickinessCleanupRef = useRef<(() => void) | null>(null);
   const onDocumentChangedRef = useRef(onDocumentChanged);
@@ -363,6 +367,7 @@ export function ProjectAssistantPanel({
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
   const isPanelMode = isPageMode || isEmbeddedMode;
+  const embeddedPanelInset = "pl-5 pr-4";
   const isFullPageProjectAssistant = isPageMode && Boolean(projectSlug) && !issueIdentifier;
   const active = isPanelMode || open;
   const resolvedAssistantMode: ProjectAssistantMode =
@@ -386,8 +391,22 @@ export function ProjectAssistantPanel({
     scrollStickinessCleanupRef.current = null;
     scrollRef.current = node;
     if (node) {
-      scrollStickinessCleanupRef.current = attachChatScrollStickiness(node, stickToBottomRef, pinnedScrollTopRef);
+      scrollStickinessCleanupRef.current = attachChatScrollStickiness(
+        node,
+        stickToBottomRef,
+        pinnedScrollTopRef,
+        setIsAtBottom,
+      );
     }
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    stickToBottomRef.current = true;
+    pinnedScrollTopRef.current = null;
+    setIsAtBottom(true);
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
   }, []);
 
   useEffect(() => () => scrollStickinessCleanupRef.current?.(), []);
@@ -405,6 +424,7 @@ export function ProjectAssistantPanel({
     scrollBehaviorRef.current = "initial";
     stickToBottomRef.current = true;
     pinnedScrollTopRef.current = null;
+    setIsAtBottom(true);
   }, [issueIdentifier, threadId]);
 
   useEffect(() => {
@@ -694,6 +714,7 @@ export function ProjectAssistantPanel({
 
       setConnectionError(null);
       stickToBottomRef.current = true;
+      setIsAtBottom(true);
       scrollBehaviorRef.current = "initial";
       setIsRunning(true);
       channel.push("send_message", payload).receive("error", (reason) => {
@@ -1103,7 +1124,7 @@ export function ProjectAssistantPanel({
       bundle={composerBundle}
       agentMenuDisabled={isRunning || catalogLoading}
       composerDisabled={catalogLoading}
-      floating={isPageMode}
+      floating={isPanelMode}
       hasQueued={queued.length > 0}
       seedMessage={composerSeedMessage}
       slashContext="authoring"
@@ -1130,6 +1151,27 @@ export function ProjectAssistantPanel({
       dropTargetRef={panelRef}
     />
   );
+
+  const scrollToBottomButton = !isAtBottom ? (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center",
+        isEmbeddedMode ? embeddedPanelInset : isPageMode ? "px-4" : "",
+      )}
+    >
+      <Button
+        type="button"
+        size="icon"
+        variant="secondary"
+        aria-label={t("assistant.panel.scrollToBottom")}
+        title={t("assistant.panel.scrollToBottom")}
+        onClick={scrollToBottom}
+        className="pointer-events-auto h-8 w-8 rounded-full border bg-background/95 shadow-md backdrop-blur-sm"
+      >
+        <ChevronDown className="h-4 w-4" />
+      </Button>
+    </div>
+  ) : null;
 
   if (isPanelMode) {
     return (
@@ -1167,16 +1209,19 @@ export function ProjectAssistantPanel({
             </div>
           )}
 
-          <div ref={setScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
-            <div
-              className={cn(
-                "flex w-full flex-col",
-                isPageMode ? "mx-auto max-w-4xl gap-6 px-4 pt-8" : "gap-4 px-4 py-4",
-              )}
-              style={isFullPageProjectAssistant ? { paddingBottom: composerHeight + 16 } : undefined}
-            >
-              {messageItems}
+          <div className="relative min-h-0 flex-1">
+            <div ref={setScrollContainerRef} className={cn("h-full overflow-y-auto", SCROLLBAR_THIN)}>
+              <div
+                className={cn(
+                  "flex w-full flex-col",
+                  isPageMode ? "mx-auto max-w-4xl gap-6 px-4 pt-8" : cn("gap-4 py-4", embeddedPanelInset),
+                )}
+                style={isFullPageProjectAssistant ? { paddingBottom: composerHeight + 16 } : undefined}
+              >
+                {messageItems}
+              </div>
             </div>
+            {scrollToBottomButton}
           </div>
 
           {isFullPageProjectAssistant ? (
@@ -1199,7 +1244,7 @@ export function ProjectAssistantPanel({
               </div>
             </div>
           ) : isPageMode ? (
-            <div ref={composerDockRef} className="shrink-0 bg-background">
+            <div ref={composerDockRef} className="shrink-0 bg-background pr-2.5">
               <div className="mx-auto w-full max-w-4xl px-4 py-2">
                 {resumeBanner}
                 {queuedChips}
@@ -1215,7 +1260,7 @@ export function ProjectAssistantPanel({
               </div>
             </div>
           ) : (
-            <div className="shrink-0 bg-background">
+            <div className={cn("shrink-0 bg-background pb-2 pt-2", embeddedPanelInset)}>
               {queuedChips}
               {questionsNode}
               {composerNode ?? (

@@ -94,17 +94,19 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
     assert args =~ "--approve-mcps"
   end
 
-  test "execution mode gates the --force flag (yolo only)" do
+  test "execution mode maps plan to native cursor plan mode and yolo to force" do
     refute CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil}) =~ "--force"
 
     refute CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "build"}) =~
              "--force"
 
-    refute CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "plan"}) =~
-             "--force"
+    plan_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "plan"})
+    assert plan_args =~ "--mode plan"
+    refute plan_args =~ "--force"
 
-    assert CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "yolo"}) =~
-             "--force"
+    yolo_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "yolo"})
+    assert yolo_args =~ "--force"
+    refute yolo_args =~ "--mode plan"
   end
 
   test "argv: model auto delegates to the CLI default (no --model flag)" do

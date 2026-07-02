@@ -36,14 +36,7 @@ export function executionModeMeta(id: ExecutionMode): ExecutionModeMeta {
   return EXECUTION_MODES.find((mode) => mode.id === id) ?? EXECUTION_MODES[1];
 }
 
-/**
- * Modes selectable for a given agent. Cursor's CLI has no read-only mode, so
- * `plan` is hidden there (it would silently fall back to build).
- */
 export function availableModesFor(agent: AgentKind): ExecutionMode[] {
-  if (agent === "cursor") {
-    return EXECUTION_MODE_IDS.filter((id) => id !== "plan");
-  }
   return [...EXECUTION_MODE_IDS];
 }
 
