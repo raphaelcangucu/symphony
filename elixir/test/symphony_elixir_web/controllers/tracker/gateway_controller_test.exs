@@ -16,10 +16,12 @@ defmodule SymphonyElixirWeb.Tracker.GatewayControllerTest do
     cleanup()
     previous = System.get_env(@token_env)
     System.put_env(@token_env, "test-token")
+
     on_exit(fn ->
       cleanup()
       restore_env(previous)
     end)
+
     :ok
   end
 

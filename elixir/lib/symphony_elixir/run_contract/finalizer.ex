@@ -55,9 +55,7 @@ defmodule SymphonyElixir.RunContract.Finalizer do
   end
 
   defp finalize_repo(%RepoState{} = repo, issue, runner, pr_base) do
-    Logger.warning(
-      "Finalizer publishing repo=#{repo.name} branch=#{repo.branch} base=#{inspect(pr_base || repo.default_branch)} issue_identifier=#{issue.identifier}"
-    )
+    Logger.warning("Finalizer publishing repo=#{repo.name} branch=#{repo.branch} base=#{inspect(pr_base || repo.default_branch)} issue_identifier=#{issue.identifier}")
 
     with :ok <- maybe_commit_dirty(repo, issue, runner),
          :ok <- maybe_branch_off_default(repo, issue, runner),

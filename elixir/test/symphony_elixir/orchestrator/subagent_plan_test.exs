@@ -57,9 +57,7 @@ defmodule SymphonyElixir.Orchestrator.SubagentPlanTest do
 
   test "a dependent unit is :waiting while a consumed contract is not ready, even if deps are done" do
     plan =
-      by_unit(
-        SubagentPlan.plan(bundle(), done_units: MapSet.new(["api"]), contract_status: %{"schema" => :draft})
-      )
+      by_unit(SubagentPlan.plan(bundle(), done_units: MapSet.new(["api"]), contract_status: %{"schema" => :draft}))
 
     assert plan["ui"].status == :waiting
     assert plan["ui"].blocked_by == []
@@ -68,9 +66,7 @@ defmodule SymphonyElixir.Orchestrator.SubagentPlanTest do
 
   test "a dependent unit becomes :ready once its dependency is done and its contract is ready" do
     plan =
-      by_unit(
-        SubagentPlan.plan(bundle(), done_units: MapSet.new(["api"]), contract_status: %{"schema" => :ready})
-      )
+      by_unit(SubagentPlan.plan(bundle(), done_units: MapSet.new(["api"]), contract_status: %{"schema" => :ready}))
 
     assert plan["ui"].status == :ready
     assert plan["ui"].blocked_by == []

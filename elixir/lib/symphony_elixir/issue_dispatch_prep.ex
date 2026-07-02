@@ -48,9 +48,7 @@ defmodule SymphonyElixir.IssueDispatchPrep do
           :ok
 
         {:error, reason} ->
-          Logger.debug(
-            "IssueDispatchPrep child gate skip parent=#{parent_identifier} child=#{child_identifier} reason=#{inspect(reason)}"
-          )
+          Logger.debug("IssueDispatchPrep child gate skip parent=#{parent_identifier} child=#{child_identifier} reason=#{inspect(reason)}")
 
           :ok
       end

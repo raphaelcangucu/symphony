@@ -166,7 +166,7 @@ defmodule SymphonyElixir.PromptBuilder do
     warnings =
       case plan.warnings do
         [] -> ""
-        list -> "\n\nPlan warnings:\n" <> Enum.map_join(list, "\n", &("- #{&1}"))
+        list -> "\n\nPlan warnings:\n" <> Enum.map_join(list, "\n", &"- #{&1}")
       end
 
     """

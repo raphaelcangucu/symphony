@@ -28,8 +28,7 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseGeneralControllerTest do
 
     deps = [
       ensure_repo: fn ->
-        {:ok,
-         %{full_name: "octocat/symphony-kb", clone_url: origin, default_branch: "main", created: false}}
+        {:ok, %{full_name: "octocat/symphony-kb", clone_url: origin, default_branch: "main", created: false}}
       end,
       clone: fn _clone_url, dest ->
         {_o, 0} = System.cmd("git", ["clone", "-q", origin, dest], stderr_to_stdout: true)

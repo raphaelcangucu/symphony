@@ -243,10 +243,11 @@ defmodule SymphonyElixir.Orchestrator.BundleRunContextTest do
       shared_contracts: [%{id: "c", owner_unit: "MAC-12", consumers: ["MAC-13"], kind: "db", artifact: nil, status: :ready}]
     }
 
-    ctx = Orchestrator.bundle_run_context(%Issue{identifier: "510"},
-      bundle_resolver: fn "510" -> {:ok, bundle} end,
-      lab_bundle_child_orchestration: true
-    )
+    ctx =
+      Orchestrator.bundle_run_context(%Issue{identifier: "510"},
+        bundle_resolver: fn "510" -> {:ok, bundle} end,
+        lab_bundle_child_orchestration: true
+      )
 
     assert ctx.role == :parent
     assert ctx.parent_identifier == nil

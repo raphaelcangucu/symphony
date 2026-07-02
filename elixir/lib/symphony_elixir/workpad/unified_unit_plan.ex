@@ -74,8 +74,7 @@ defmodule SymphonyElixir.Workpad.UnifiedUnitPlan do
             {entry_from_unit(unit, issue, ad_hoc: false, eligible: true, skip_reason: nil), []}
 
           true ->
-            {entry_from_unit(unit, nil, ad_hoc: false, eligible: false, skip_reason: "not on board or failed gates"),
-             ["Bundle unit #{unit.id} (#{issue_id}) has no matching gated board sub-issue"]}
+            {entry_from_unit(unit, nil, ad_hoc: false, eligible: false, skip_reason: "not on board or failed gates"), ["Bundle unit #{unit.id} (#{issue_id}) has no matching gated board sub-issue"]}
         end
       end)
 

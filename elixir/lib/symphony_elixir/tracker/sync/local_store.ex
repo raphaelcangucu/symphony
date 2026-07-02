@@ -389,8 +389,7 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
     Repo.delete_all(
       from(d in DismissedPullRequestRecord,
-        where:
-          d.project_id == ^project_id and d.issue_identifier == ^identifier and d.url == ^url
+        where: d.project_id == ^project_id and d.issue_identifier == ^identifier and d.url == ^url
       )
     )
 

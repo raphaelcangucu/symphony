@@ -240,7 +240,6 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
       repositories = Context.list_repositories(project.slug)
       setup = Context.get_project_setup(project.slug)
       json(conn, %{data: TrackerPresenter.project(project, statuses, repositories, setup)})
-
     else
       {:error, :invalid_yaml} ->
         TrackerErrors.validation_msg(conn, "Invalid YAML")

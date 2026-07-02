@@ -70,12 +70,14 @@ defmodule SymphonyElixir.Gateways.SessionResolver do
     })
   end
 
-  defp create_thread(%Binding{
-         binding_kind: "project_topic",
-         active_mode: "kb",
-         active_kb_repo_slug: repo_slug,
-         active_kb_page_path: page_path
-       } = binding)
+  defp create_thread(
+         %Binding{
+           binding_kind: "project_topic",
+           active_mode: "kb",
+           active_kb_repo_slug: repo_slug,
+           active_kb_page_path: page_path
+         } = binding
+       )
        when is_binary(repo_slug) and repo_slug != "" and is_binary(page_path) and page_path != "" do
     History.ensure_kb_thread(binding.project_slug, repo_slug, page_path, %{
       agent_kind: binding.default_agent_kind,

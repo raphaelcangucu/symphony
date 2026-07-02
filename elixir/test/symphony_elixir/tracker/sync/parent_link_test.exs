@@ -43,10 +43,10 @@ defmodule SymphonyElixir.Tracker.Sync.ParentLinkTest do
     assert Outbox.pending_count(project.id) >= 1
 
     assert Enum.any?(Outbox.claim_pending(project.id, 10), fn entry ->
-      entry.entity_type == "relation" and entry.operation == "link_parent" and
-        entry.payload["child_identifier"] == child.identifier and
-        entry.payload["parent_identifier"] == parent.identifier
-    end)
+             entry.entity_type == "relation" and entry.operation == "link_parent" and
+               entry.payload["child_identifier"] == child.identifier and
+               entry.payload["parent_identifier"] == parent.identifier
+           end)
   end
 
   defp migrate_repo do

@@ -28,7 +28,8 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
     candidates = [child("id-2", "MAC-2"), child("id-3", "MAC-3")]
 
     held =
-      Orchestrator.held_child_issue_ids_for_test(candidates,
+      Orchestrator.held_child_issue_ids_for_test(
+        candidates,
         Keyword.merge(
           [
             bundle_loader: fn "MAC-1" -> {:ok, bundle()} end,
@@ -48,7 +49,8 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
     ready_bundle = %{bundle() | shared_contracts: [%{(bundle().shared_contracts |> hd()) | status: :ready}]}
 
     held =
-      Orchestrator.held_child_issue_ids_for_test(candidates,
+      Orchestrator.held_child_issue_ids_for_test(
+        candidates,
         Keyword.merge(
           [
             bundle_loader: fn "MAC-1" -> {:ok, ready_bundle} end,
@@ -65,7 +67,8 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
     candidates = [child("id-3", "MAC-3")]
 
     held =
-      Orchestrator.held_child_issue_ids_for_test(candidates,
+      Orchestrator.held_child_issue_ids_for_test(
+        candidates,
         Keyword.merge(
           [
             bundle_loader: fn "MAC-1" -> {:ok, bundle()} end,
@@ -82,7 +85,8 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
     candidates = [%Issue{id: "id-9", identifier: "MAC-9"}]
 
     held =
-      Orchestrator.held_child_issue_ids_for_test(candidates,
+      Orchestrator.held_child_issue_ids_for_test(
+        candidates,
         Keyword.merge(
           [
             bundle_loader: fn _ -> {:ok, bundle()} end,
@@ -99,7 +103,8 @@ defmodule SymphonyElixir.Orchestrator.BundleGateWiringTest do
     candidates = [child("id-3", "MAC-3")]
 
     held =
-      Orchestrator.held_child_issue_ids_for_test(candidates,
+      Orchestrator.held_child_issue_ids_for_test(
+        candidates,
         Keyword.merge(
           [
             bundle_loader: fn _ -> :error end,
