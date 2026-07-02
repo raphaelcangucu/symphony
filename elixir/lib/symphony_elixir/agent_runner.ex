@@ -121,7 +121,7 @@ defmodule SymphonyElixir.AgentRunner do
   the standard per-issue workspace.
   """
   @spec resolve_workspace(map(), keyword()) :: {:ok, Path.t()} | {:error, term()}
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:20
   def resolve_workspace(issue, opts) do
     if Keyword.get(opts, :worktree) == true do
       with {:ok, repo} <- fetch_worktree_repo(opts) do
@@ -457,7 +457,7 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:30
   defp do_apply_validate_gate(result, workspace, evaluator, run_turn, budget) do
     case evaluator.(workspace) do
       :satisfied ->

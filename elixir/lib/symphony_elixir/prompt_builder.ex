@@ -56,7 +56,8 @@ defmodule SymphonyElixir.PromptBuilder do
   dispatches one child run per `child_run` unit. Returns "" for non-bundle runs.
   """
   @spec bundle_coordinator_section(SymphonyElixir.Workpad.ExecutionBundle.t() | nil) :: String.t()
-  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity, Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:50
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def bundle_coordinator_section(%SymphonyElixir.Workpad.ExecutionBundle{units: units} = bundle)
       when is_list(units) and units != [] do
     unit_lines =
@@ -125,7 +126,8 @@ defmodule SymphonyElixir.PromptBuilder do
           UnifiedUnitPlan.t(),
           keyword()
         ) :: String.t()
-  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity, Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:80
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def unified_parent_section(%SymphonyElixir.Workpad.ExecutionBundle{units: units} = bundle, %UnifiedUnitPlan{} = plan, opts)
       when is_list(units) and units != [] do
     feature_branch = Keyword.get(opts, :feature_branch, "feat/<parent>")
@@ -689,7 +691,7 @@ defmodule SymphonyElixir.PromptBuilder do
       match?({:ok, %File.Stat{type: :regular}}, File.lstat(path))
   end
 
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:45
   defp render_artifacts(workspace, files) do
     file_count = length(files)
 
@@ -727,7 +729,7 @@ defmodule SymphonyElixir.PromptBuilder do
     end
   end
 
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:35
   defp do_render_artifact(file, prefix, updated_bytes_used, remaining_bytes) do
     case File.stat(file) do
       {:ok, %File.Stat{size: size}} when size > @artifact_max_bytes ->
