@@ -2738,7 +2738,7 @@ defmodule SymphonyElixir.Orchestrator do
      }, state}
   end
 
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:40
   def handle_call({:request_dispatch, identifier}, _from, state) do
     normalized = String.trim(identifier)
 
@@ -2860,7 +2860,7 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:15
   defp find_retry_issue_id(retry_attempts, normalized) when is_map(retry_attempts) and is_binary(normalized) do
     Enum.find_value(retry_attempts, fn {issue_id, entry} ->
       case Map.get(entry, :identifier) do

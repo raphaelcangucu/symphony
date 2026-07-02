@@ -84,7 +84,7 @@ defmodule SymphonyElixir.SubagentRegistry do
 
   def unified_subagent_rows(_snapshot, _opts), do: []
 
-  # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:45
   defp do_unified_subagent_rows(running, opts) do
     ctx = resolvers(opts)
 
