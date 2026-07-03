@@ -19,6 +19,22 @@ describe("useContextMentions", () => {
     expect(result.current.mentionStart).toBe(4);
   });
 
+  it("opens the menu on a # token and tracks the query", () => {
+    const value = "load #MAC";
+    const { result } = renderHook(({ v }) => useContextMentions(v), {
+      initialProps: { v: value },
+    });
+
+    act(() => {
+      result.current.handleChange(value, value.length);
+    });
+
+    expect(result.current.open).toBe(true);
+    expect(result.current.trigger).toBe("#");
+    expect(result.current.query).toBe("MAC");
+    expect(result.current.mentionStart).toBe(5);
+  });
+
   it("splices a typed mention token into the value", () => {
     const value = "... @log";
     const { result } = renderHook(({ v }) => useContextMentions(v), {

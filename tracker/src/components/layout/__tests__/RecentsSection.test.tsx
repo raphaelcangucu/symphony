@@ -12,7 +12,7 @@ vi.mock("@/hooks/useRecents");
 vi.mock("@/hooks/useCreateFreeformChat");
 
 const session: RecentSession = {
-  id: "chat:7", kind: "chat", scope: "freeform", projectSlug: null, projectName: null,
+  id: "chat:7", kind: "chat", scope: "freeform", agentKind: null, projectSlug: null, projectName: null,
   title: "Brainstorm ideas", identifier: null, threadId: 7, status: "Active", statusKind: "active",
   preview: "let's", updatedAt: "2026-05-30T00:00:00Z",
 };

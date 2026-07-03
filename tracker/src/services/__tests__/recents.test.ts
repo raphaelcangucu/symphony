@@ -7,11 +7,11 @@ describe("normalizeRecentSession", () => {
     const item = normalizeRecentSession({
       id: "codex:ABC-1", kind: "codex", scope: null, project_slug: "demo",
       project_name: "Demo", title: "Fix bug", identifier: "ABC-1", thread_id: null,
-      status: "Running", status_kind: "running", preview: null, updated_at: "2026-05-30T00:00:00Z",
+      agent_kind: "cursor", status: "Running", status_kind: "running", preview: null, updated_at: "2026-05-30T00:00:00Z",
     });
     expect(item).toMatchObject({
       id: "codex:ABC-1", kind: "codex", projectSlug: "demo", projectName: "Demo",
-      identifier: "ABC-1", threadId: null, statusKind: "running", updatedAt: "2026-05-30T00:00:00Z",
+      agentKind: "cursor", identifier: "ABC-1", threadId: null, statusKind: "running", updatedAt: "2026-05-30T00:00:00Z",
     });
   });
 

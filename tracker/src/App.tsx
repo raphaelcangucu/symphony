@@ -25,6 +25,9 @@ import { ObservabilityPage } from "@/pages/ObservabilityPage";
 import { SettingsLayout } from "@/components/settings/SettingsLayout";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
+import { ProjectSessionsPage } from "@/pages/ProjectSessionsPage";
+import { ProjectSessionPage } from "@/pages/ProjectSessionPage";
+import { ProjectTerminalPage } from "@/pages/ProjectTerminalPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { GatewaysSettingsPage } from "@/pages/GatewaysSettingsPage";
 import { LabSettingsPage } from "@/pages/LabSettingsPage";
@@ -89,6 +92,9 @@ export function App() {
                 <Route path="assistant/explore" element={<ProjectExploreAssistantRoute />} />
                 <Route path="assistant/new-issue" element={<IssueAssistantRoute />} />
                 <Route path="assistant/issue/:issueId" element={<IssueAssistantRoute />} />
+                <Route path="sessions" element={<ProjectSessionsPage />} />
+                <Route path="sessions/:threadId" element={<ProjectSessionPage />} />
+                <Route path="terminal" element={<ProjectTerminalPage />} />
                 <Route path="settings" element={<ProjectSettingsPage />} />
                 <Route path="settings/:tab" element={<ProjectSettingsPage />} />
                 <Route path="kb/*" element={<KbProjectPage />} />

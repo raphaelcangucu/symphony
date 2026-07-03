@@ -638,7 +638,7 @@ describe("ExecutionControlComposer", () => {
     });
   });
 
-  it("@-mentions an issue and expands it into the dispatched instructions", async () => {
+  it("@-mentions an issue and submits it as a context chip", async () => {
     listIssuesMock.mockResolvedValue([
       { id: "12", identifier: "DEMO-12", title: "Login bug", status: "Open" },
     ]);
@@ -667,7 +667,8 @@ describe("ExecutionControlComposer", () => {
     const option = await screen.findByText("DEMO-12");
     await user.click(option);
 
-    expect((textarea as HTMLTextAreaElement).value).toContain("@issue:DEMO-12");
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
+    expect(screen.getByText("Login bug")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^resume$/i }));
 
@@ -677,14 +678,17 @@ describe("ExecutionControlComposer", () => {
         "CDE-1132",
         expect.objectContaining({
           action: "resume",
-          instructions: expect.stringContaining("## Context"),
+          contextRefs: [
+            expect.objectContaining({
+              type: "issue",
+              id: "DEMO-12",
+              label: "Login bug",
+              state: "draft",
+            }),
+          ],
         }),
       ),
     );
-
-    const lastCall = dispatchIssueAgentMock.mock.calls.at(-1);
-    expect(lastCall?.[2].instructions).toContain("DEMO-12");
-    expect(lastCall?.[2].instructions).toContain("Login bug");
   });
 
   it("renders the goal pill from execution.goal only, not issue.agentGoal", () => {

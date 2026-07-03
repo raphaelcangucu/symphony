@@ -10,6 +10,25 @@ export interface TerminalSession {
   message?: string | null;
 }
 
+export interface TerminalTab {
+  id: string;
+  projectSlug: string;
+  issueIdentifier: string;
+  title: string;
+  cwd: string | null;
+  command: string | null;
+  state: TerminalSessionState;
+  sessionName: string | null;
+  channelTopic: string;
+  output?: string;
+}
+
+export interface CreateTerminalTabInput {
+  title?: string;
+  cwd?: string;
+  command?: string;
+}
+
 export type TerminalClientEvent =
   | { type: "input"; data: string }
   | { type: "resize"; cols: number; rows: number };

@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 
 import { i18n } from "@/i18n";
-import { issueAssistantPath, issuePath, projectExploreAssistantPath, withAgentSection } from "@/lib/workspaceRoutes";
+import { issueAssistantPath, issuePath, projectExploreAssistantPath, projectSessionPath, withAgentSection } from "@/lib/workspaceRoutes";
 import type { RecentSession } from "@/types/recents";
 
 export function recentSessionSubtitle(
@@ -17,6 +17,10 @@ export function recentSessionSubtitle(
   }
 
   if (session.scope === "freeform") return t("layout.sessionSubtitle.freeform");
+  if (session.scope === "project_session") {
+    return [session.projectName ?? session.projectSlug, session.threadId ? `#${session.threadId}` : null].filter(Boolean).join(" · ");
+  }
+
   if (session.scope === "project_explore") {
     return session.projectName ?? session.projectSlug ?? t("layout.sessionSubtitle.explore");
   }
@@ -37,20 +41,35 @@ export function recentSessionPath(session: RecentSession): string {
   }
 
   if (session.scope === "issue" && session.projectSlug && session.identifier) {
-    return issueAssistantPath(session.projectSlug, session.identifier);
+    return withAssistantAgent(issueAssistantPath(session.projectSlug, session.identifier), session);
   }
 
   if (session.scope === "freeform") {
-    return session.threadId != null ? `/assistant/${session.threadId}` : "/assistant";
+    return withAssistantAgent(session.threadId != null ? `/assistant/${session.threadId}` : "/assistant", session);
   }
 
   if (session.scope === "project_explore" && session.projectSlug) {
-    return projectExploreAssistantPath(session.projectSlug);
+    return withAssistantAgent(projectExploreAssistantPath(session.projectSlug), session);
+  }
+
+  if (session.scope === "project_session" && session.projectSlug && session.threadId != null) {
+    return withAssistantAgent(projectSessionPath(session.projectSlug, session.threadId), session);
+  }
+
+  if (session.scope === "project" && session.projectSlug && session.threadId != null) {
+    return withAssistantAgent(projectSessionPath(session.projectSlug, session.threadId), session);
   }
 
   if (session.projectSlug) {
-    return `/projects/${session.projectSlug}/assistant`;
+    return withAssistantAgent(`/projects/${session.projectSlug}/assistant`, session);
   }
 
-  return "/assistant";
+  return withAssistantAgent("/assistant", session);
+}
+
+function withAssistantAgent(path: string, session: RecentSession): string {
+  const agent = session.agentKind;
+  if (agent !== "codex" && agent !== "claude" && agent !== "cursor") return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}assistant_agent=${encodeURIComponent(agent)}`;
 }

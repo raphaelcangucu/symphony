@@ -108,12 +108,13 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   @spec send_message_to_project_explore_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
           {:ok, turn_result()} | {:error, term()}
   def send_message_to_project_explore_thread(
-        %{scope: "project_explore", id: thread_id, project_slug: project_slug} = thread,
+        %{scope: scope, id: thread_id, project_slug: project_slug} = thread,
         message,
         context,
         opts \\ []
       )
-      when is_binary(message) and is_map(context) and is_list(opts) do
+      when scope in ["project_explore", "project_session"] and is_binary(message) and is_map(context) and
+             is_list(opts) do
     # Reload so that agent_thread_ids written by a prior turn are visible even
     # when the caller holds a frozen struct from an earlier socket assign.
     thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
@@ -950,6 +951,9 @@ defmodule SymphonyElixir.Assistant.CodexSession do
           questions: Map.get(message, :questions) || []
         })
 
+      Map.get(message, :event) == :approval_required ->
+        maybe_call(opts, :on_approval_required, approval_request_from_event(message, payload, method))
+
       match?(%{}, goal = goal_from_codex_event(message)) ->
         maybe_call(opts, :on_goal_updated, goal)
 
@@ -1034,6 +1038,29 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   end
 
   defp event_payload(_message), do: %{}
+
+  defp approval_request_from_event(message, payload, method) do
+    params = Map.get(payload, "params") || Map.get(payload, :params) || %{}
+
+    %{
+      request_id: Map.get(message, :request_id) || Map.get(payload, "id") || Map.get(payload, :id),
+      decision: Map.get(message, :decision),
+      command: approval_command(params),
+      cwd: Map.get(params, "cwd") || Map.get(params, :cwd),
+      reason: Map.get(params, "reason") || Map.get(params, :reason) || method
+    }
+  end
+
+  defp approval_command(params) when is_map(params) do
+    Map.get(params, "command") ||
+      Map.get(params, :command) ||
+      Map.get(params, "cmd") ||
+      Map.get(params, :cmd) ||
+      Map.get(params, "shellCommand") ||
+      Map.get(params, :shellCommand)
+  end
+
+  defp approval_command(_params), do: nil
 
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp goal_from_codex_event(message) when is_map(message) do

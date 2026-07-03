@@ -29,6 +29,43 @@ During Codex app-server sessions, Symphony also serves client-side dynamic tools
 If a claimed issue moves to a terminal state (`Done`, `Closed`, `Cancelled`, or `Duplicate`),
 Symphony stops the active agent for that issue and cleans up matching workspaces.
 
+## Session / Run Quick-Open Launcher
+
+Press **⌘J** / **Ctrl+J** anywhere in a project workspace to open the tabbed **New Session**
+launcher (mirrors Jean's worktree modal). v1 ships four source tabs:
+
+| Tab | Source | Action |
+|-----|--------|--------|
+| **Actions** | Curated quick commands (new issue, board, filters, assistant, KB) | Navigate |
+| **Issues** | Project issue list (fuzzy + exact-number search) | Jump to Agent → Execution |
+| **PRs** | Open PRs across configured repos | Deep-link via `Symphony-Issue:` marker, else open PR externally |
+| **Branches** | Repo branches via GitHub REST | Map to issue via `issue.branchName`, else open branch on GitHub |
+
+**Hold ⌥/Alt** while selecting an issue-linked row to **resume the run in the background**
+(`dispatchIssueAgent` with `action: "resume"`) without navigating away.
+
+Project-scoped read endpoints (cached 60s via `GitHub.ReadCache`):
+
+- `GET /api/tracker/v1/projects/:project_slug/pull_requests` — open PRs annotated with marker-derived `issue_identifier`
+- `GET /api/tracker/v1/projects/:project_slug/branches` — repo branches with protection metadata
+
+Both return `{ data, supported }`; projects without configured repos report `supported: false`.
+
+## In-App Workspace Diff
+
+The tracker composer exposes a **Diff** action with **⌘G** / **Ctrl+G**. It opens an in-app workspace
+diff viewer with `Branch`, `Uncommitted`, and issue-scoped `Commits` views. The viewer is multi-repo
+aware: backend responses are grouped per repo and the frontend prefixes file paths with the repo name
+before building the file tree.
+
+Local workspace diffs are exposed through:
+
+- `GET /api/tracker/v1/projects/:project_slug/issues/:identifier/diff?type=branch|uncommitted`
+- `GET /api/tracker/v1/assistant/threads/:thread_id/diff?type=branch|uncommitted`
+
+The `Commits` tab reuses the commit evidence endpoints for agent commits ahead of the integration
+branch.
+
 ## Installation
 
 Symphony does **not** use a global `WORKFLOW.md`. Process settings live in `elixir/.env`

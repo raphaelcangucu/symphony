@@ -53,6 +53,19 @@ export function projectExploreAssistantPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/assistant/explore`;
 }
 
+export function projectSessionsPath(projectSlug: string): string {
+  return `/projects/${requireSlug(projectSlug)}/sessions`;
+}
+
+export function projectTerminalPath(projectSlug: string): string {
+  return `/projects/${requireSlug(projectSlug)}/terminal`;
+}
+
+export function projectSessionPath(projectSlug: string, threadId: number | string): string {
+  const id = encodeURIComponent(requireNonBlank(String(threadId), "threadId"));
+  return `${projectSessionsPath(projectSlug)}/${id}`;
+}
+
 export function newIssueAssistantPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/assistant/new-issue`;
 }
@@ -119,7 +132,7 @@ export function issuePath(
 export const PROJECTS_PATH = "/projects";
 
 /** Top-level workspace sections reachable from the project header. */
-export const PROJECT_SECTIONS = ["board", "list", "assistant", "settings", "kb"] as const;
+export const PROJECT_SECTIONS = ["board", "list", "sessions", "terminal", "assistant", "settings", "kb"] as const;
 
 export type ProjectSection = (typeof PROJECT_SECTIONS)[number];
 

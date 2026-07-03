@@ -21,7 +21,7 @@ const createChat = vi.fn();
 
 function makeSession(overrides: Partial<RecentSession> = {}): RecentSession {
   return {
-    id: "chat:1", kind: "chat", scope: "freeform", projectSlug: null, projectName: null,
+    id: "chat:1", kind: "chat", scope: "freeform", agentKind: null, projectSlug: null, projectName: null,
     title: "Untitled", identifier: null, threadId: 1, status: "active", statusKind: "active",
     preview: null, updatedAt: "2026-05-30T12:00:00Z", ...overrides,
   };
@@ -53,9 +53,17 @@ describe("AssistantPage", () => {
   });
 
   it("lists chat sessions and excludes codex rows", async () => {
+    mockRecents([
+      makeSession({ id: "chat:7", threadId: 7, title: "Endereços em wallet", preview: "como derivar", agentKind: "cursor" }),
+      makeSession({ id: "codex:ABC-12", kind: "codex", scope: null, threadId: null, identifier: "ABC-12", title: "Fix login", projectSlug: "app" }),
+    ]);
     renderAt("/assistant");
 
-    expect(await screen.findByRole("link", { name: /Endereços em wallet/ })).toHaveAttribute("href", "/assistant/7");
+    expect(await screen.findByRole("link", { name: /Endereços em wallet/ })).toHaveAttribute(
+      "href",
+      "/assistant/7?assistant_agent=cursor",
+    );
+    expect(screen.getByText("Cursor Agent")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Fix login/ })).not.toBeInTheDocument();
   });
 

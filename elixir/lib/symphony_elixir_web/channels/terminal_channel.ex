@@ -28,6 +28,22 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     end
   end
 
+  def join("terminal:tab:" <> topic_rest, _payload, socket) do
+    with :ok <- authorize(socket),
+         {:ok, project_slug, tab_id} <- parse_tab_topic(topic_rest),
+         {:ok, session} <- Registry.open_tab_session(project_slug, tab_id) do
+      socket =
+        socket
+        |> assign(:project_slug, project_slug)
+        |> assign(:tab_id, tab_id)
+        |> assign(:tab, true)
+
+      {:ok, %{session: tab_session_payload(session)}, socket}
+    else
+      {:error, reason} -> {:error, %{reason: error_reason(socket, reason)}}
+    end
+  end
+
   def join("terminal:" <> topic_rest, %{"project_slug" => project_slug}, socket)
       when is_binary(project_slug) and project_slug != "" do
     with :ok <- authorize(socket),
@@ -61,6 +77,20 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     end
   end
 
+  def handle_in("input", %{"data" => data}, %{assigns: %{tab: true, project_slug: project_slug, tab_id: tab_id}} = socket)
+      when is_binary(data) do
+    case Registry.send_input_tab(project_slug, tab_id, data) do
+      :ok ->
+        push_tab_capture(socket, project_slug, tab_id)
+        schedule_followup_tab_captures(project_slug, tab_id)
+        {:noreply, socket}
+
+      {:error, message} ->
+        push(socket, "error", %{message: present_error(socket, message)})
+        {:noreply, socket}
+    end
+  end
+
   def handle_in("input", %{"data" => data}, socket) when is_binary(data) do
     issue_identifier = socket.assigns.issue_identifier
     project_slug = socket.assigns.project_slug
@@ -84,6 +114,19 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
   def handle_in("resize", _payload, %{assigns: %{devenv: true}} = socket) do
     {:noreply, socket}
+  end
+
+  def handle_in("resize", %{"cols" => cols, "rows" => rows}, %{assigns: %{tab: true, project_slug: project_slug, tab_id: tab_id}} = socket)
+      when is_integer(cols) and is_integer(rows) do
+    case Registry.resize_tab(project_slug, tab_id, cols, rows) do
+      :ok ->
+        push_tab_capture(socket, project_slug, tab_id)
+        {:noreply, socket}
+
+      {:error, message} ->
+        push(socket, "error", %{message: present_error(socket, message)})
+        {:noreply, socket}
+    end
   end
 
   def handle_in("resize", %{"cols" => cols, "rows" => rows}, socket) when is_integer(cols) and is_integer(rows) do
@@ -117,9 +160,20 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:capture_tab, project_slug, tab_id}, socket) do
+    push_tab_capture(socket, project_slug, tab_id)
+    {:noreply, socket}
+  end
+
   defp schedule_followup_captures(project_slug, issue_identifier) do
     Enum.each(@capture_delays_ms, fn delay_ms ->
       Process.send_after(self(), {:capture_terminal, project_slug, issue_identifier}, delay_ms)
+    end)
+  end
+
+  defp schedule_followup_tab_captures(project_slug, tab_id) do
+    Enum.each(@capture_delays_ms, fn delay_ms ->
+      Process.send_after(self(), {:capture_tab, project_slug, tab_id}, delay_ms)
     end)
   end
 
@@ -137,6 +191,13 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     end
   end
 
+  defp push_tab_capture(socket, project_slug, tab_id) do
+    case Registry.capture_tab(project_slug, tab_id) do
+      {:ok, output} -> push(socket, "output", %{data: output})
+      {:error, message} -> push(socket, "error", %{message: present_error(socket, message)})
+    end
+  end
+
   defp session_payload(session) do
     %{
       project_slug: session.project_slug,
@@ -144,6 +205,21 @@ defmodule SymphonyElixirWeb.TerminalChannel do
       session_name: session.session_name,
       cwd: session.cwd,
       state: session.state,
+      output: session.output
+    }
+  end
+
+  defp tab_session_payload(session) do
+    %{
+      id: session.id,
+      project_slug: session.project_slug,
+      issue_identifier: session.issue_identifier,
+      title: session.title,
+      cwd: session.cwd,
+      command: session.command,
+      session_name: session.session_name,
+      state: session.state,
+      channel_topic: session.channel_topic,
       output: session.output
     }
   end
@@ -176,6 +252,16 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
   defp authorize(socket) do
     if authorized?(socket), do: :ok, else: {:error, "unauthorized"}
+  end
+
+  defp parse_tab_topic(topic_rest) do
+    case String.split(topic_rest, ":", parts: 2) do
+      [project_slug, tab_id] when project_slug != "" and tab_id != "" ->
+        {:ok, project_slug, tab_id}
+
+      _ ->
+        {:error, "invalid_topic"}
+    end
   end
 
   defp parse_topic(topic_rest, project_slug) do

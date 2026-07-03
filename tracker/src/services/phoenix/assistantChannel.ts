@@ -13,7 +13,7 @@ import {
 } from "@/services/assistant";
 import { normalizeGoal } from "@/services/agentExecutions";
 import type { AgentExecutionGoal } from "@/types/agent-execution";
-import type { AgentKind } from "@/types/issue";
+import type { AgentKind, ExecutionMode } from "@/types/issue";
 
 export interface AssistantChannelHandlers {
   onHistoryLoaded: (messages: AssistantChatMessage[]) => void;
@@ -34,6 +34,7 @@ export interface AssistantChannelHandlers {
   onGoalRunning?: (running: boolean) => void;
   onTurnStatus?: (status: AssistantTurnStatus) => void;
   onHistorySynced?: (messages: AssistantChatMessage[]) => void;
+  onApprovalRequired?: (request: AssistantApprovalRequest) => void;
 }
 
 /**
@@ -80,6 +81,13 @@ export interface AssistantTurnStatus {
   startedAt: string | null;
   finishedAt: string | null;
   canResume: boolean;
+}
+
+export interface AssistantApprovalRequest {
+  requestId: string | number;
+  command: string | null;
+  cwd: string | null;
+  reason: string | null;
 }
 
 interface BackendTurnStatusPayload {
@@ -135,6 +143,14 @@ interface ToolCallPayload {
 
 interface ErrorPayload {
   message?: string | null;
+}
+
+interface ApprovalRequiredPayload {
+  request_id?: string | number | null;
+  requestId?: string | number | null;
+  command?: string | null;
+  cwd?: string | null;
+  reason?: string | null;
 }
 
 interface DocumentChangedPayload {
@@ -247,6 +263,11 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     if (request) handlers.onUserInputRequired?.(request);
   });
 
+  channel.on("approval_required", (payload) => {
+    const request = normalizeApprovalRequest(payload);
+    if (request) handlers.onApprovalRequired?.(request);
+  });
+
   channel.on("steer_failed", (payload) => {
     const data = payload as { reason?: string | null; message?: string | null };
     handlers.onSteerFailed?.({
@@ -323,13 +344,24 @@ export function submitUserInput(
   channel.push("submit_user_input", { request_id: requestId, answers });
 }
 
+export function submitApproval(
+  channel: Channel,
+  requestId: string | number,
+  action: "approve" | "cancel",
+): ReturnType<Channel["push"]> {
+  return channel.push("submit_approval", { request_id: requestId, action });
+}
+
 export function dispatchCodingAgent(
   channel: Channel,
-  options: { goalMode: boolean; agent?: AgentKind | null },
+  options: { goalMode: boolean; agent?: AgentKind | null; mode?: ExecutionMode | null },
 ): ReturnType<Channel["push"]> {
   const payload: Record<string, unknown> = { goal_mode: options.goalMode };
   if (options.agent != null) {
     payload.agent = options.agent;
+  }
+  if (options.mode != null) {
+    payload.mode = options.mode;
   }
   return channel.push("dispatch_coding_agent", payload);
 }
@@ -340,4 +372,21 @@ function normalizeThreadId(value: number | string | null | undefined): number | 
 
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) && String(parsed) === value.trim() && parsed > 0 ? parsed : null;
+}
+
+function normalizeApprovalRequest(payload: unknown): AssistantApprovalRequest | null {
+  const data = (payload ?? {}) as ApprovalRequiredPayload;
+  const requestId = data.requestId ?? data.request_id;
+  if (typeof requestId !== "string" && typeof requestId !== "number") return null;
+
+  return {
+    requestId,
+    command: nonEmptyString(data.command),
+    cwd: nonEmptyString(data.cwd),
+    reason: nonEmptyString(data.reason),
+  };
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }

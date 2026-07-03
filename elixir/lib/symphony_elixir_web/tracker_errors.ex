@@ -37,6 +37,9 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :comment_not_found),
     do: not_found(conn, "comment_not_found", dgettext("errors", "Comment not found"))
 
+  def render(conn, :context_not_found),
+    do: not_found(conn, "context_not_found", dgettext("errors", "Context not found"))
+
   def render(conn, :evidence_run_not_found),
     do: not_found(conn, "evidence_run_not_found", dgettext("errors", "Evidence run not found."))
 
@@ -51,6 +54,9 @@ defmodule SymphonyElixirWeb.TrackerErrors do
 
   def render(conn, :repo_not_found),
     do: not_found(conn, "repo_not_found", dgettext("errors", "Repository not found in workspace."))
+
+  def render(conn, :invalid_diff_type),
+    do: error(conn, 422, "invalid_diff_type", dgettext("errors", "Diff type must be branch or uncommitted."))
 
   def render(conn, :dev_server_not_found),
     do: not_found(conn, "dev_server_not_found", dgettext("errors", "Dev server not found"))
@@ -341,6 +347,9 @@ defmodule SymphonyElixirWeb.TrackerErrors do
 
   def render(conn, :tmux_unavailable),
     do: error(conn, 503, "tmux_unavailable", dgettext("errors", "tmux is not available"))
+
+  def render(conn, :terminal_tab_not_found),
+    do: not_found(conn, "terminal_tab_not_found", dgettext("errors", "terminal tab not found"))
 
   def render(conn, {:workspace_setup_failed, reason}),
     do:

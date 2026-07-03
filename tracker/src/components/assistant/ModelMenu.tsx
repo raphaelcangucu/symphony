@@ -206,7 +206,13 @@ function groupedModelOptions(catalog: AssistantAgentCatalog, selectedModel: stri
       label: variant.baseLabel,
       isDefault: variants.some((entry) => entry.variant?.baseKey === variant.baseKey && entry.option.isDefault),
     }];
-  });
+  }).sort(compareModelMenuOptions);
+}
+
+function compareModelMenuOptions(a: ModelMenuOption, b: ModelMenuOption): number {
+  if (a.model === "auto") return -1;
+  if (b.model === "auto") return 1;
+  return a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true });
 }
 
 function selectedModelKey(catalog: AssistantAgentCatalog, model: string): string {

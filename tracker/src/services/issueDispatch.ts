@@ -1,5 +1,6 @@
 import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import { i18n } from "@/i18n";
+import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import type { AgentKind, ExecutionMode, Issue } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
@@ -16,6 +17,7 @@ export interface IssueDispatchInput {
   model?: string | null;
   effort?: string | null;
   mode?: ExecutionMode | null;
+  contextRefs?: ComposerContextChipRef[];
 }
 
 export interface IssueDispatchResult {
@@ -46,6 +48,7 @@ export async function dispatchIssueAgent(
   if (input.model?.trim()) payload.model = input.model.trim();
   if (input.effort?.trim()) payload.effort = input.effort.trim();
   if (input.mode?.trim()) payload.mode = input.mode.trim();
+  if (input.contextRefs && input.contextRefs.length > 0) payload.context_refs = input.contextRefs;
 
   const response = await http.post(
     trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}/dispatch`),

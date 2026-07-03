@@ -15,6 +15,10 @@ defmodule SymphonyElixir.Terminal.ErrorMessages do
     with_locale(locale, fn -> dgettext("errors", "tmux is not available") end)
   end
 
+  def localize(:terminal_tab_not_found, locale) do
+    with_locale(locale, fn -> dgettext("errors", "terminal tab not found") end)
+  end
+
   def localize({:workspace_setup_failed, reason}, locale) do
     with_locale(locale, fn ->
       dgettext("errors", "workspace setup failed: %{reason}", reason: format_reason(reason))

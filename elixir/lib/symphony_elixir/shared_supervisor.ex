@@ -71,7 +71,8 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.GitHub.RequestGateway,
       SymphonyElixir.TelegramGateway.Poller,
       SymphonyElixir.Tracker.Sync.Engine,
-      SymphonyElixir.PublicRouting
+      SymphonyElixir.PublicRouting,
+      SymphonyElixir.Terminal.TabStore
     ] ++ public_tunnel_children()
   end
 

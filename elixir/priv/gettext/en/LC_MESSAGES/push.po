@@ -26,3 +26,24 @@ msgstr "Someone"
 
 msgid "New comment"
 msgstr "New comment"
+
+msgid "Needs your input"
+msgstr "Needs your input"
+
+msgid "%{identifier}: approval required"
+msgstr "%{identifier}: approval required"
+
+msgid "%{identifier}: answer needed"
+msgstr "%{identifier}: answer needed"
+
+msgid "%{identifier}: input needed"
+msgstr "%{identifier}: input needed"
+
+msgid "Approval required"
+msgstr "Approval required"
+
+msgid "Answer needed"
+msgstr "Answer needed"
+
+msgid "Input needed"
+msgstr "Input needed"

@@ -16,6 +16,7 @@ defmodule SymphonyElixir.IssueDispatch do
     Repo,
     Workspace
   }
+
   alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.{Context, Project}
@@ -93,6 +94,7 @@ defmodule SymphonyElixir.IssueDispatch do
        when action in [:resume, :restart, :hard_reset, :continue_work] do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
          agent_kind = effective_agent_kind(project, issue, opts),
+         opts = inject_context_refs(project, identifier, opts),
          :ok <- IssueDispatchPrep.prepare_for_dispatch(project, identifier, agent_kind),
          {:ok, _comment} <- maybe_add_comment(project, identifier, action, opts),
          {:ok, _} <- maybe_update_agent(project, identifier, opts, agent_kind),
@@ -111,6 +113,22 @@ defmodule SymphonyElixir.IssueDispatch do
          message: dispatch_message(action, reloaded),
          issue: TrackerPresenter.issue(reloaded)
        }}
+    end
+  end
+
+  defp inject_context_refs(%Project{} = project, identifier, opts) do
+    context_refs = Map.get(opts, :context_refs) || Map.get(opts, "context_refs") || []
+
+    if context_refs == [] do
+      opts
+    else
+      scope = SymphonyElixir.AttachedContexts.execution_scope(project.slug, identifier)
+      instructions = Map.get(opts, :instructions) || Map.get(opts, "instructions") || ""
+      injected = SymphonyElixir.AttachedContexts.append_to_instructions(scope, instructions, context_refs: context_refs)
+
+      opts
+      |> Map.delete("instructions")
+      |> Map.put(:instructions, injected)
     end
   end
 

@@ -7,6 +7,7 @@ import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
 import { FreeformAssistantPanel } from "@/components/assistant/FreeformAssistantPanel";
 import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
 import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -114,7 +115,14 @@ function ConversationsView({
               >
                 <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{session.title}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm font-medium">{session.title}</span>
+                    {session.agentKind ? (
+                      <span className="shrink-0 rounded-full border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {agentKindLabel(session.agentKind, t)}
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="block truncate text-xs text-muted-foreground">{recentSessionSubtitle(session, t)}</span>
                 </span>
               </Link>

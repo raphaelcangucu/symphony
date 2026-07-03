@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
@@ -39,6 +39,11 @@ vi.mock("@assistant-ui/react", () => ({
   useExternalStoreRuntime: () => ({}),
 }));
 
+vi.mock("react-router-dom", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router-dom")>()),
+  useLocation: () => ({ pathname: "/", search: "", hash: "", state: null, key: "test" }),
+}));
+
 vi.mock("@/services/assistant", async () => {
   const actual = await vi.importActual<typeof import("@/services/assistant")>("@/services/assistant");
   const mockCodexCatalog = {
@@ -73,6 +78,10 @@ vi.mock("@/services/phoenix/socket", () => ({
     disconnect,
     channel: socketChannel,
   }),
+}));
+
+vi.mock("@/hooks/useAssistantCommands", () => ({
+  useAssistantCommands: () => ({ commands: [], isLoading: false, error: null }),
 }));
 
 const listIssuesMock = vi.hoisted(() => vi.fn());
@@ -601,6 +610,125 @@ describe("ProjectAssistantPanel", () => {
     expect(onDispatchSucceeded).toHaveBeenCalledWith("Requested Codex work on MAC-1");
   });
 
+  it("renders plan approval actions in issue chat and dispatches the selected execution mode", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+
+    channelHandlers["history_loaded"]({
+      messages: [
+        {
+          id: 10,
+          role: "assistant",
+          content: "Planning complete.",
+          tool_calls: [
+            {
+              name: "update_plan",
+              status: "complete",
+              arguments: {
+                plan: [
+                  { step: "Write tests", status: "completed" },
+                  { step: "Implement", status: "pending" },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "YOLO" }));
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "dispatch_coding_agent",
+        expect.objectContaining({ goal_mode: false, mode: "yolo" }),
+      ),
+    );
+
+    push.mockClear();
+
+    channelHandlers["history_loaded"]({
+      messages: [
+        {
+          id: 11,
+          role: "assistant",
+          content: "Updated plan.",
+          tool_calls: [
+            {
+              name: "update_plan",
+              status: "complete",
+              arguments: { plan: [{ step: "Ship", status: "pending" }] },
+            },
+          ],
+        },
+      ],
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "dispatch_coding_agent",
+        expect.objectContaining({ goal_mode: false, mode: "build" }),
+      ),
+    );
+  });
+
+  it("hides stale plan approval actions once the user has followed up", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+
+    channelHandlers["history_loaded"]({
+      messages: [
+        {
+          id: 20,
+          role: "assistant",
+          content: "Plan ready.",
+          tool_calls: [
+            {
+              name: "update_plan",
+              status: "complete",
+              arguments: { plan: [{ step: "Implement", status: "pending" }] },
+            },
+          ],
+        },
+        { id: 21, role: "user", content: "Wait, change the scope.", tool_calls: [] },
+      ],
+    });
+
+    expect(await screen.findByText("Wait, change the scope.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "YOLO" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+  });
+
+  it("renders inline command approval requests and submits approval through the channel", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+
+    channelHandlers["approval_required"]({
+      request_id: "cmd-1",
+      command: "npm test -- --runInBand",
+      cwd: "/workspace/app",
+      reason: "unknown",
+    });
+
+    expect(await screen.findByText("Codex wants to run a command")).toBeInTheDocument();
+    expect(screen.getByText("npm test -- --runInBand")).toBeInTheDocument();
+    expect(screen.getByText("/workspace/app")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("submit_approval", {
+        request_id: "cmd-1",
+        action: "approve",
+      }),
+    );
+  });
+
   it("renders an embedded assistant without viewport height", () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="embedded" />);
 
@@ -617,6 +745,15 @@ describe("ProjectAssistantPanel", () => {
     const region = screen.getByRole("region", { name: "Project assistant" });
     expect(region).toHaveClass("h-full");
     expect(region).not.toHaveClass("h-[calc(100vh-4rem)]");
+  });
+
+  it("renders a thread assistant page without viewport height", () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={42} view="board" mode="page" />);
+
+    const region = screen.getByRole("region", { name: "Project assistant" });
+    expect(region).toHaveClass("h-full");
+    expect(region).not.toHaveClass("h-[calc(100vh-4rem)]");
+    expect(socketChannel).toHaveBeenCalledWith("assistant:thread:42");
   });
 
   it("keeps thread id topic priority over issue identifier", () => {
@@ -705,6 +842,41 @@ describe("ProjectAssistantPanel", () => {
     expect(screen.getByText("−3")).toBeInTheDocument();
     // Non-file tool call still uses the generic block.
     expect(screen.getByText("List issues")).toBeInTheDocument();
+  });
+
+  it("shows edited file badges and opens the clicked diff", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["assistant_completed"]).toEqual(expect.any(Function)));
+
+    channelHandlers["assistant_completed"]({
+      message: {
+        id: 43,
+        role: "assistant",
+        content: "Updated settings.",
+        tool_calls: [
+          {
+            name: "apply_patch",
+            status: "complete",
+            result: {
+              paths: ["tracker.json", "ProjectConfigEditor.tsx"],
+              additions: 25,
+              deletions: 8,
+              diff: "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(await screen.findByText("Edited 2 files:")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "View changes to tracker.json" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Edited file diff" });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getAllByText("tracker.json").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText(/diff --git a\/tracker\.json b\/tracker\.json/)).toBeInTheDocument();
   });
 
   it("replaces the transcript when history_synced arrives after a terminal turn_status", async () => {

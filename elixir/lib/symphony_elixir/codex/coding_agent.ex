@@ -955,6 +955,11 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         if is_pid(reply_to), do: send(reply_to, {:user_input_ok, request_id})
         receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
 
+      {:codex_approval, request_id, decision, reply_to} ->
+        send_message(port, %{"id" => request_id, "result" => %{"decision" => decision}})
+        if is_pid(reply_to), do: send(reply_to, {:approval_ok, request_id})
+        receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
+
       {:codex_interrupt} ->
         send_interrupt(port, turn_ctx)
         receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
@@ -1339,7 +1344,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          metadata,
          _tool_executor,
          auto_approve_requests,
-         _interactive_user_input
+         interactive_user_input
        ) do
     approve_or_require(
       port,
@@ -1349,7 +1354,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       payload_string,
       on_message,
       metadata,
-      auto_approve_requests
+      auto_approve_requests,
+      interactive_user_input
     )
   end
 
@@ -1397,7 +1403,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          metadata,
          _tool_executor,
          auto_approve_requests,
-         _interactive_user_input
+         interactive_user_input
        ) do
     approve_or_require(
       port,
@@ -1407,7 +1413,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       payload_string,
       on_message,
       metadata,
-      auto_approve_requests
+      auto_approve_requests,
+      interactive_user_input
     )
   end
 
@@ -1420,7 +1427,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          metadata,
          _tool_executor,
          auto_approve_requests,
-         _interactive_user_input
+         interactive_user_input
        ) do
     approve_or_require(
       port,
@@ -1430,7 +1437,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       payload_string,
       on_message,
       metadata,
-      auto_approve_requests
+      auto_approve_requests,
+      interactive_user_input
     )
   end
 
@@ -1443,7 +1451,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          metadata,
          _tool_executor,
          auto_approve_requests,
-         _interactive_user_input
+         interactive_user_input
        ) do
     approve_or_require(
       port,
@@ -1453,7 +1461,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       payload_string,
       on_message,
       metadata,
-      auto_approve_requests
+      auto_approve_requests,
+      interactive_user_input
     )
   end
 
@@ -1503,7 +1512,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          payload_string,
          on_message,
          metadata,
-         true
+         true,
+         _interactive_user_input
        ) do
     send_message(port, %{"id" => id, "result" => %{"decision" => decision}})
 
@@ -1525,9 +1535,31 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          _payload_string,
          _on_message,
          _metadata,
+         false,
          false
        ) do
     :approval_required
+  end
+
+  defp approve_or_require(
+         _port,
+         id,
+         decision,
+         payload,
+         payload_string,
+         on_message,
+         metadata,
+         false,
+         true
+       ) do
+    emit_message(
+      on_message,
+      :approval_required,
+      %{payload: payload, raw: payload_string, request_id: id, decision: decision},
+      metadata
+    )
+
+    :awaiting_user_input
   end
 
   defp maybe_auto_answer_tool_request_user_input(

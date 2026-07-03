@@ -6,6 +6,64 @@
     "save": "Save",
     "refresh": "Refresh"
   },
+  "launcher": {
+    "title": "New session",
+    "subtitle": "Jump into a run from an issue, PR, branch, or quick action.",
+    "tabsLabel": "Source",
+    "loading": "Loading…",
+    "empty": "No matching results.",
+    "modifierHint": "Hold ⌘/Ctrl to open in background · ⌘O preview · ⌘M investigate · ⌘1–4 switch tabs",
+    "preview": {
+      "loading": "Loading issue…",
+      "noIssueLinked": "No Symphony issue is linked yet.",
+      "openExternal": "Open on GitHub",
+      "openIssue": "Open issue"
+    },
+    "tabs": {
+      "actions": "Actions",
+      "issues": "Issues",
+      "prs": "PRs",
+      "branches": "Branches"
+    },
+    "placeholder": {
+      "actions": "Run a command…",
+      "issues": "Search issues or paste a number…",
+      "prs": "Search open pull requests…",
+      "branches": "Search branches…"
+    },
+    "actions": {
+      "newIssue": "New issue",
+      "goToBoard": "Go to board",
+      "openFilters": "Open filters",
+      "searchIssues": "Search issues",
+      "openAssistant": "Open assistant",
+      "openKb": "Open knowledge base",
+      "preview": "Preview",
+      "previewHint": "Preview (⌘O)",
+      "investigate": "Investigate",
+      "investigateHint": "Investigate (⌘M)",
+      "stack": "Stack",
+      "stackHint": "New worktree (orphan PR/branch only)"
+    },
+    "status": {
+      "live": "Running",
+      "retrying": "Retrying",
+      "waiting": "Waiting for review",
+      "idle": "Idle",
+      "saved": "Saved (resumable)",
+      "error": "Error",
+      "aborted": "Aborted"
+    },
+    "toast": {
+      "backgroundResume": "Resuming {{identifier}} in the background",
+      "backgroundInvestigate": "Investigating {{identifier}} in the background",
+      "standaloneStackPendingPr": "Worktree stack for PR #{{number}} ({{branch}}) is not wired yet — opened on GitHub",
+      "standaloneStackPendingBranch": "Worktree stack for branch {{branch}} is not wired yet — opened on GitHub",
+      "dispatchFailed": "Could not start {{identifier}}",
+      "investigateFailed": "Could not investigate {{identifier}}",
+      "noLinkedIssue": "No Symphony issue is linked to this branch yet"
+    }
+  },
   "ui": {
     "dialog": {
       "close": "Close"
@@ -589,6 +647,32 @@
         "loadFailed": "Could not load commit evidence."
       }
     },
+    "diff": {
+      "button": "Diff",
+      "shortcutHint": "View workspace diff (⌘G)",
+      "title": "Workspace diff",
+      "branch": "Branch",
+      "uncommitted": "Uncommitted",
+      "commits": "Commits",
+      "refresh": "Refresh",
+      "viewMode": {
+        "split": "Split",
+        "unified": "Unified"
+      },
+      "list": {
+        "tree": "Tree",
+        "flat": "Flat"
+      },
+      "files": "{{count}} files",
+      "filterPlaceholder": "Filter files...",
+      "workspaceUnavailable": "Workspace unavailable",
+      "loading": "Loading diff…",
+      "noFiles": "No changed files.",
+      "selectFile": "Select a file to view its diff.",
+      "errors": {
+        "loadFailed": "Could not load workspace diff."
+      }
+    },
     "preview": {
       "cannotLoadTitle": "Preview cannot load",
       "cannotLoadBody": "Project and issue identifiers are required to load preview status.",
@@ -1010,6 +1094,8 @@
       "addToStatus": "Add issue to {{status}}",
       "optionsAria": "New issue options",
       "withAssistant": "New issue with assistant",
+      "newProjectSession": "New project session",
+      "newProjectTerminal": "New project terminal",
       "quickCreate": "Quick create"
     },
     "pullRequest": {
@@ -1821,6 +1907,19 @@
       "turnInterrupted": "The previous turn was interrupted.",
       "resume": "Resume",
       "scrollToBottom": "Scroll to latest messages",
+      "planApproval": {
+        "yolo": "YOLO",
+        "yoloTitle": "Approve the plan and execute in YOLO mode",
+        "approve": "Approve",
+        "approveTitle": "Approve the plan and execute in build mode"
+      },
+      "commandApproval": {
+        "title": "Codex wants to run a command",
+        "cwd": "Working directory",
+        "reason": "Detected action",
+        "approve": "Approve",
+        "cancel": "Cancel turn"
+      },
       "attachmentFallback": {
         "audio": "See the attached audio.",
         "image": "See the attached image.",
@@ -2064,6 +2163,71 @@
       "noContent": "No content to display."
     }
   },
+  "sessions": {
+    "eyebrow": "Project sessions",
+    "title": "Sessions",
+    "description": "All assistant chats and agent runs related to this project.",
+    "refresh": "Refresh",
+    "newSession": "New session",
+    "newSessionTitle": "Project session",
+    "creating": "Creating…",
+    "createFailed": "Could not create a project session.",
+    "loading": "Loading sessions…",
+    "empty": "No sessions for this project yet.",
+    "resume": "Resume",
+    "resuming": "Resuming…",
+    "resumeStarted": "Resuming {{identifier}}",
+    "resumeFailed": "Could not resume {{identifier}}",
+    "openExecutionAria": "Open execution session {{identifier}}",
+    "turns": "{{count}} turns",
+    "runtime": "Runtime {{value}}",
+    "related": {
+      "title": "Related sessions",
+      "chat": "Chat",
+      "agent": "Agent"
+    },
+    "buckets": {
+      "active": "Active",
+      "waiting": "Waiting review",
+      "saved": "Saved",
+      "recent": "Recent"
+    },
+    "status": {
+      "live": "Running",
+      "retrying": "Retrying",
+      "waiting": "Waiting",
+      "idle": "Idle",
+      "saved": "Saved",
+      "error": "Error",
+      "aborted": "Aborted"
+    }
+  },
+  "workspace": {
+    "terminal": {
+      "title": "Terminal",
+      "description": "Interactive shells for this issue and the project dev environment.",
+      "tabsAria": "Terminal tabs",
+      "issueShell": "Issue",
+      "projectShell": "Project",
+      "projectAriaLabel": "Project terminal for {{project}}",
+      "missingIssue": "Issue identifier is required for the issue terminal.",
+      "missingTab": "Terminal tab id is required.",
+      "newTab": "New tab",
+      "newTabTitle": "Shell",
+      "creatingTab": "Creating…",
+      "createTabFailed": "Could not create a terminal tab.",
+      "closeTabFailed": "Could not close the terminal tab.",
+      "loadTabsFailed": "Could not load terminal tabs.",
+      "dynamicTabsUnavailable": "Dynamic terminal tabs require a backend update. Restart Symphony to enable Nova aba.",
+      "dynamicAriaLabel": "Terminal tab {{title}}",
+      "projectDockEyebrow": "Project workspace",
+      "projectDockTitle": "Terminal",
+      "projectDockDescription": "Interactive shells for the project dev environment. Stays open while you work on the board."
+    },
+    "sessions": {
+      "tabsAria": "Project session tabs"
+    }
+  },
   "layout": {
     "projectHeader": {
       "pollingActive": "Polling active",
@@ -2083,6 +2247,8 @@
       "openProjectWorkspaceCode": "Open project workspace in Code",
       "board": "Board",
       "list": "List",
+      "sessions": "Sessions",
+      "terminal": "Terminal",
       "knowledgeBase": "Knowledge Base",
       "switchProject": "Switch project",
       "loadingProjects": "Loading projects…",

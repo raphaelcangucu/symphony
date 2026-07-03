@@ -3,12 +3,18 @@ import {
   Bot,
   Brain,
   ChevronDown,
+  CircleDot,
   Feather,
   FileText,
   Flame,
+  FolderOpen,
+  GitPullRequest,
+  MessageSquare,
   Mic,
   Plus,
   Send,
+  Shield,
+  ShieldAlert,
   Sparkles,
   Square,
   X,
@@ -38,7 +44,7 @@ import {
   ContextMentionPopover,
   orderMentionOptions,
 } from "@/components/assistant/ContextMentionPopover";
-import type { MentionRef, ResolvedMention } from "@/components/assistant/contextMentions";
+import type { ComposerContextChipRef, MentionRef, ResolvedMention } from "@/components/assistant/contextMentions";
 import { useContextMentions } from "@/components/assistant/useContextMentions";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
 import {
@@ -86,6 +92,22 @@ function eventHasFiles(event: DragEvent<HTMLElement>): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
 }
 
+function addContextRef(current: ComposerContextChipRef[], mention: ResolvedMention): ComposerContextChipRef[] {
+  if (!mention.id) return current;
+  if (current.some((ref) => ref.type === mention.type && ref.id === mention.id)) return current;
+  return [...current, { ...mention, state: "draft" }];
+}
+
+function contextIconFor(type: ComposerContextChipRef["type"]) {
+  if (type === "issue") return CircleDot;
+  if (type === "pr") return GitPullRequest;
+  if (type === "saved") return FolderOpen;
+  if (type === "session") return MessageSquare;
+  if (type === "security" || type === "security_alert") return Shield;
+  if (type === "advisory") return ShieldAlert;
+  return FileText;
+}
+
 export type AssistantComposerSubmitKind = "message" | "infer" | "btw" | "goal";
 
 export interface AssistantComposerSubmit {
@@ -94,6 +116,7 @@ export interface AssistantComposerSubmit {
   agent: AgentKind;
   settings: AssistantComposerSettings;
   attachments: ReturnType<typeof serializeAttachments>;
+  contextRefs: ComposerContextChipRef[];
 }
 
 export interface ComposerSnapshot {
@@ -147,6 +170,8 @@ interface AssistantComposerProps {
   onAgentChange?: (agent: AgentKind) => void;
   /** Reports the selected agent's model/effort settings (on mount and change). */
   onSettingsChange?: (agent: AgentKind, settings: AssistantComposerSettings) => void;
+  /** Initial/server-resolved agent for reopening a persisted session. */
+  agentSeed?: AgentKind | null;
   /**
    * Optional element that acts as the file drop zone. When provided, dropping
    * files anywhere inside it (e.g. the whole assistant panel) attaches them,
@@ -185,11 +210,13 @@ export function AssistantComposer({
   onComposerSnapshot,
   onAgentChange,
   onSettingsChange,
+  agentSeed = null,
   dropTargetRef,
 }: AssistantComposerProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
+  const [contextRefs, setContextRefs] = useState<ComposerContextChipRef[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [nativeDropZoneActive, setNativeDropZoneActive] = useState(false);
@@ -214,6 +241,23 @@ export function AssistantComposer({
     composerState.byAgent[composerState.agent] ?? defaultComposerSettings(catalog);
 
   const effortOptions = effortsForModel(catalog, settings.model);
+
+  useEffect(() => {
+    if (!agentSeed) return;
+    setComposerState((current) => {
+      if (current.agent === agentSeed) return current;
+      const nextCatalog = catalogFor(bundle, agentSeed);
+      const nextSettings = current.byAgent[agentSeed] ?? defaultComposerSettings(nextCatalog);
+      return {
+        ...current,
+        agent: agentSeed,
+        byAgent: {
+          ...current.byAgent,
+          [agentSeed]: nextSettings,
+        },
+      };
+    });
+  }, [agentSeed, bundle]);
 
   // Persist on every state change
   useEffect(() => {
@@ -280,6 +324,7 @@ export function AssistantComposer({
     if (resetToken === undefined) return;
     setInput("");
     setAttachments([]);
+    setContextRefs([]);
     mentions.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetToken]);
@@ -293,7 +338,7 @@ export function AssistantComposer({
 
   const parsedInput = parseSlashCommand(input, t, slashContext);
   const hasComposerContent =
-    parsedInput.kind === "goal" || input.trim().length > 0 || attachments.length > 0;
+    parsedInput.kind === "goal" || input.trim().length > 0 || attachments.length > 0 || contextRefs.length > 0;
   const canSend =
     !recording &&
     !uploadingImage &&
@@ -335,9 +380,15 @@ export function AssistantComposer({
     const resolved = (mentionOptions ?? []).find(
       (option) => option.type === ref.type && option.id === ref.id,
     );
-    const next = mentions.selectMention(ref);
-    if (next !== null) setInput(next);
-    if (resolved) onMentionSelect?.(resolved);
+    if (resolved) {
+      const next = mentions.removeMentionText();
+      if (next !== null) setInput(next);
+      setContextRefs((current) => addContextRef(current, resolved));
+      onMentionSelect?.(resolved);
+    } else {
+      const next = mentions.selectMention(ref);
+      if (next !== null) setInput(next);
+    }
     setMentionActiveIndex(0);
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
@@ -521,6 +572,10 @@ export function AssistantComposer({
     });
   }
 
+  function removeContextRef(type: ComposerContextChipRef["type"], id: string) {
+    setContextRefs((current) => current.filter((ref) => ref.type !== type || ref.id !== id));
+  }
+
   function submitCurrent() {
     if (!canSend) return;
 
@@ -535,11 +590,13 @@ export function AssistantComposer({
       agent: composerState.agent,
       settings,
       attachments: serializeAttachments(attachments),
+      contextRefs,
     });
 
     revokeAttachmentPreviews(attachments);
     setInput("");
     setAttachments([]);
+    setContextRefs([]);
     mentions.close();
     recordingRef.current = false;
     stopSpeechRecognition();
@@ -587,7 +644,7 @@ export function AssistantComposer({
     event.preventDefault();
 
     if (input.trim().length === 0) {
-      if (attachments.length > 0) {
+      if (attachments.length > 0 || contextRefs.length > 0) {
         submitCurrent();
         return;
       }
@@ -652,6 +709,32 @@ export function AssistantComposer({
         )}
       >
         {header ?? null}
+
+        {contextRefs.length > 0 ? (
+          <div className="flex flex-wrap gap-2 border-b px-3 py-2">
+            {contextRefs.map((ref) => {
+              const Icon = contextIconFor(ref.type);
+              return (
+                <div
+                  key={`${ref.type}:${ref.id}`}
+                  className="flex items-center gap-2 rounded-lg border bg-muted/40 px-2 py-1.5 text-xs"
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="max-w-[8rem] truncate font-medium">{ref.id}</span>
+                  {ref.label ? <span className="max-w-[12rem] truncate text-muted-foreground">{ref.label}</span> : null}
+                  <button
+                    type="button"
+                    aria-label={`Remove context ${ref.id}`}
+                    onClick={() => removeContextRef(ref.type, ref.id)}
+                    className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
 
         {attachments.length > 0 ? (
           <div className="flex flex-wrap gap-2 border-b px-3 py-2">

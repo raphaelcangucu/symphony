@@ -30,6 +30,24 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   @pr_merge_conflict_kind "pr_merge_conflict"
   @issue_assigned_kind "issue_assigned"
   @comment_mention_kind "comment_mention"
+  @assistant_input_kind "assistant_input_needed"
+
+  @spec assistant_input_needed(map()) :: :ok
+  def assistant_input_needed(%{project_slug: slug} = metadata) when is_binary(slug) and slug != "" do
+    identifier = normalize_identifier(Map.get(metadata, :issue_identifier))
+    request_kind = normalize_request_kind(Map.get(metadata, :request_kind))
+
+    with_push_locale(fn ->
+      notify(@assistant_input_kind, %{
+        title: dgettext("push", "Needs your input"),
+        body: assistant_input_body(identifier, request_kind),
+        url: assistant_input_url(slug, identifier),
+        tag: assistant_input_tag(slug, identifier, request_kind)
+      })
+    end)
+  end
+
+  def assistant_input_needed(_metadata), do: :ok
 
   @spec human_review_needed(IssueRecord.t(), String.t()) :: :ok
   def human_review_needed(%IssueRecord{} = issue, status_name) when is_binary(status_name) do
@@ -295,6 +313,40 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
       _ -> base
     end
   end
+
+  defp assistant_input_url(slug, identifier) when is_binary(identifier),
+    do: issue_url(slug, identifier, "authoring")
+
+  defp assistant_input_url(slug, _identifier), do: "/tracker/projects/#{slug}/assistant"
+
+  defp assistant_input_body(identifier, "approval") when is_binary(identifier),
+    do: dgettext("push", "%{identifier}: approval required", identifier: identifier)
+
+  defp assistant_input_body(identifier, "question") when is_binary(identifier),
+    do: dgettext("push", "%{identifier}: answer needed", identifier: identifier)
+
+  defp assistant_input_body(identifier, _kind) when is_binary(identifier),
+    do: dgettext("push", "%{identifier}: input needed", identifier: identifier)
+
+  defp assistant_input_body(_identifier, "approval"), do: dgettext("push", "Approval required")
+  defp assistant_input_body(_identifier, "question"), do: dgettext("push", "Answer needed")
+  defp assistant_input_body(_identifier, _kind), do: dgettext("push", "Input needed")
+
+  defp assistant_input_tag(slug, identifier, request_kind) when is_binary(identifier),
+    do: "assistant_input:#{slug}:#{identifier}:#{request_kind}"
+
+  defp assistant_input_tag(slug, _identifier, request_kind), do: "assistant_input:#{slug}:#{request_kind}"
+
+  defp normalize_identifier(value) when is_binary(value) do
+    trimmed = String.trim(value)
+    if trimmed == "", do: nil, else: trimmed
+  end
+
+  defp normalize_identifier(_value), do: nil
+
+  defp normalize_request_kind(kind) when kind in ["approval", "question"], do: kind
+  defp normalize_request_kind(kind) when kind in [:approval, :question], do: Atom.to_string(kind)
+  defp normalize_request_kind(_kind), do: "input"
 
   defp retry_error_text(error) when is_binary(error) and error != "" do
     snippet = String.slice(error, 0, 120)

@@ -297,8 +297,11 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_in("dispatch_codex", payload, socket), do: do_dispatch(payload, socket)
 
-  def handle_in("steer_turn", %{"message" => message}, socket) when is_binary(message) do
-    trimmed = String.trim(message)
+  def handle_in("steer_turn", %{"message" => message} = payload, socket) when is_binary(message) do
+    trimmed =
+      socket
+      |> inject_assistant_context_refs(message, socket.assigns[:thread], Map.get(payload, "context_refs", []))
+      |> String.trim()
 
     case {trimmed, steer_target(socket)} do
       {"", _} ->
@@ -350,6 +353,27 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("submit_user_input", _payload, socket),
     do: {:reply, {:error, %{reason: "answers are required"}}, socket}
 
+  def handle_in("submit_approval", %{"request_id" => request_id, "action" => action}, socket)
+      when action in ["approve", "cancel"] do
+    if socket.assigns[:turn_status] != :running or not is_pid(socket.assigns[:turn_pid]) do
+      {:reply, {:error, %{reason: "ActiveTurnNotAwaitingApproval"}}, socket}
+    else
+      pending = socket.assigns[:pending_approvals] || %{}
+
+      case Map.pop(pending, request_id) do
+        {nil, _rest} ->
+          {:reply, {:error, %{reason: "approval request not found"}}, socket}
+
+        {request, rest} ->
+          deliver_approval(socket.assigns.turn_pid, request_id, action, request)
+          {:reply, :ok, assign(socket, :pending_approvals, rest)}
+      end
+    end
+  end
+
+  def handle_in("submit_approval", _payload, socket),
+    do: {:reply, {:error, %{reason: "approval action is required"}}, socket}
+
   # credo:disable-for-lines:25 Credo.Check.Refactor.Nesting
   def handle_in("btw", %{"message" => message}, socket) when is_binary(message) do
     case String.trim(message) do
@@ -384,7 +408,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       {:ok, %{issue_identifier: identifier, project_slug: project_slug} = thread} ->
         goal_mode = dispatch_goal_mode(payload, thread)
         agent = agent_from_payload(payload)
-        arguments = dispatch_arguments(identifier, goal_mode, agent)
+        mode = dispatch_mode_from_payload(payload)
+        arguments = dispatch_arguments(identifier, goal_mode, agent, mode)
 
         case ToolExecutor.execute(project_slug, "dispatch_coding_agent", arguments) do
           {:ok, result} ->
@@ -448,10 +473,27 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_info({:assistant_user_input_required, %{request_id: request_id, questions: questions}}, socket) do
     pending = Map.put(socket.assigns[:pending_user_inputs] || %{}, request_id, questions)
     push(socket, "user_input_required", %{request_id: request_id, questions: questions})
+    notify_assistant_input_needed(socket, :question)
     {:noreply, assign(socket, :pending_user_inputs, pending)}
   end
 
   def handle_info({:user_input_ok, _request_id}, socket), do: {:noreply, socket}
+
+  def handle_info({:assistant_approval_required, %{request_id: request_id} = request}, socket) do
+    pending = Map.put(socket.assigns[:pending_approvals] || %{}, request_id, request)
+
+    push(socket, "approval_required", %{
+      request_id: request_id,
+      command: Map.get(request, :command),
+      cwd: Map.get(request, :cwd),
+      reason: Map.get(request, :reason)
+    })
+
+    notify_assistant_input_needed(socket, :approval)
+    {:noreply, assign(socket, :pending_approvals, pending)}
+  end
+
+  def handle_info({:approval_ok, _request_id}, socket), do: {:noreply, socket}
 
   def handle_info({:steer_ok, _result}, socket), do: {:noreply, socket}
 
@@ -601,6 +643,31 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     Map.new(answers, fn {question_id, value} -> {question_id, %{"answers" => [to_string(value)]}} end)
   end
 
+  defp notify_assistant_input_needed(socket, request_kind) do
+    dispatcher = Application.get_env(:symphony_elixir, :push_dispatcher, SymphonyElixir.PushNotifications.Dispatcher)
+
+    metadata = %{
+      project_slug: socket.assigns[:project_slug],
+      issue_identifier: socket.assigns[:issue_identifier],
+      request_kind: request_kind
+    }
+
+    try do
+      dispatcher.assistant_input_needed(metadata)
+    rescue
+      _ -> :ok
+    end
+  end
+
+  defp deliver_approval(turn_pid, request_id, "approve", request) when is_pid(turn_pid) do
+    decision = Map.get(request, :decision) || Map.get(request, "decision") || "acceptForSession"
+    send(turn_pid, {:codex_approval, request_id, decision, self()})
+  end
+
+  defp deliver_approval(turn_pid, _request_id, "cancel", _request) when is_pid(turn_pid) do
+    send(turn_pid, {:codex_interrupt})
+  end
+
   defp maybe_persist_user_questions(socket, questions, answers) do
     case resolve_user_questions_thread(socket) do
       %{id: id} = thread when is_integer(id) ->
@@ -697,7 +764,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     thread = socket.assigns[:thread]
     context = normalize_context(Map.get(payload, "context", %{}))
     {raw_attachments, attachments} = resolve_attachments(payload, thread, project_slug)
-    trimmed = message |> Payload.enrich_message(attachments) |> String.trim()
+    context_refs = Map.get(payload, "context_refs", [])
+
+    trimmed =
+      message
+      |> Payload.enrich_message(attachments)
+      |> then(&inject_assistant_context_refs(socket, &1, thread, context_refs))
+      |> String.trim()
 
     cond do
       trimmed == "" ->
@@ -727,6 +800,28 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         end
     end
   end
+
+  defp inject_assistant_context_refs(_socket, message, _thread, []), do: message
+
+  defp inject_assistant_context_refs(socket, message, thread, context_refs) when is_list(context_refs) do
+    project_slug =
+      case thread do
+        %{project_slug: slug} when is_binary(slug) and slug != "" -> slug
+        _ -> socket.assigns[:project_slug]
+      end
+
+    case thread do
+      %{id: thread_id} when is_integer(thread_id) and is_binary(project_slug) and project_slug != "" ->
+        project_slug
+        |> SymphonyElixir.AttachedContexts.assistant_scope(thread_id)
+        |> SymphonyElixir.AttachedContexts.append_to_instructions(message, context_refs: context_refs)
+
+      _ ->
+        message
+    end
+  end
+
+  defp inject_assistant_context_refs(_socket, message, _thread, _context_refs), do: message
 
   # Re-dispatches a thread's interrupted current turn as a brand-new turn that
   # re-uses the saved prompt + codex_thread_id. Codex continuity is automatic:
@@ -898,7 +993,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     CodexSession.send_message_to_thread(thread, trimmed, context, opts)
   end
 
-  defp run_send_turn(%{scope: "project_explore"} = thread, _project_slug, trimmed, context, opts) do
+  defp run_send_turn(%{scope: scope} = thread, _project_slug, trimmed, context, opts)
+       when scope in ["project_explore", "project_session"] do
     CodexSession.send_message_to_project_explore_thread(thread, trimmed, context, opts)
   end
 
@@ -1289,6 +1385,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       |> Keyword.put(:on_user_input_required, fn request ->
         send(channel_pid, {:assistant_user_input_required, request})
       end)
+      |> Keyword.put(:on_approval_required, fn request ->
+        send(channel_pid, {:assistant_approval_required, request})
+      end)
 
     if goal_thread and match?(%{scope: "issue"}, thread) do
       Keyword.put(opts, :on_goal_updated, fn native_goal ->
@@ -1418,7 +1517,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp normalize_goal_objective(_), do: nil
 
-  defp dispatch_arguments(identifier, goal_mode, agent) do
+  defp dispatch_mode_from_payload(payload) when is_map(payload) do
+    case Map.get(payload, "mode") do
+      mode when is_binary(mode) -> mode
+      _ -> nil
+    end
+  end
+
+  defp dispatch_mode_from_payload(_payload), do: nil
+
+  defp dispatch_arguments(identifier, goal_mode, agent, mode) do
     base = %{"identifier" => identifier, "instructions" => dispatch_instructions(identifier)}
 
     base =
@@ -1428,12 +1536,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         base
       end
 
-    if is_binary(agent) do
-      Map.put(base, "agent", agent)
-    else
-      base
-    end
+    base
+    |> maybe_put_dispatch_arg("agent", agent)
+    |> maybe_put_dispatch_arg("mode", mode)
   end
+
+  defp maybe_put_dispatch_arg(arguments, key, value) when is_binary(value), do: Map.put(arguments, key, value)
+  defp maybe_put_dispatch_arg(arguments, _key, _value), do: arguments
 
   defp dispatch_instructions(identifier) do
     "Implement issue #{identifier} by following the spec, plan, and handoff under " <>

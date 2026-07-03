@@ -8,17 +8,21 @@ import type { Channel } from "phoenix";
 import {
   AudioLines,
   Bot,
+  Check,
   ChevronDown,
   Clock,
   FileText,
   ImageIcon,
   SendHorizontal,
+  ShieldAlert,
   X,
+  Zap,
 } from "lucide-react";
 import type { TFunction } from "i18next";
 import { i18n } from "@/i18n";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 
 import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
@@ -38,6 +42,7 @@ import {
   updateStreamingToolCall,
 } from "@/components/assistant/assistantStream";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
+import { EditedFilesSummary } from "@/components/assistant/EditedFilesSummary";
 import { AgentTaskPinnedPanel } from "@/components/agent-activity";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
@@ -45,6 +50,7 @@ import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
+import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
@@ -81,7 +87,9 @@ import {
   resumeTurn,
   isTerminalTurnStatus,
   setAuthoringGoalObjective,
+  submitApproval,
   submitUserInput,
+  type AssistantApprovalRequest,
   type AssistantDocumentChangedPayload,
   type AssistantTurnStatus,
   type AuthoringGoalStatus,
@@ -126,6 +134,7 @@ export interface DraftIssueCreated {
 }
 
 export type ProjectAssistantMode = "project" | "explore" | "freeform" | "kb";
+type ProjectAssistantContentMaxWidth = "default" | "wide";
 
 interface ProjectAssistantPanelProps {
   projectSlug?: string;
@@ -160,6 +169,7 @@ interface ProjectAssistantPanelProps {
   onOpenDocumentPath?: (path: string) => void;
   onKbDocumentReferencesChanged?: (paths: string[]) => void;
   composerSeedMessage?: string | null;
+  contentMaxWidth?: ProjectAssistantContentMaxWidth;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD_PX = 48;
@@ -242,6 +252,14 @@ interface QueuedMessage {
   payload: AssistantComposerSubmit;
 }
 
+type PlanApprovalMode = Extract<ExecutionMode, "build" | "yolo">;
+
+interface PlanApprovalAction {
+  messageId: string;
+  disabled: boolean;
+  onApprove: (messageId: string, mode: PlanApprovalMode) => void;
+}
+
 const convertMessage = (message: AssistantChatMessage): ThreadMessageLike => ({
   id: message.id,
   role: message.role === "user" ? "user" : "assistant",
@@ -274,8 +292,10 @@ export function ProjectAssistantPanel({
   onOpenDocumentPath,
   onKbDocumentReferencesChanged,
   composerSeedMessage = null,
+  contentMaxWidth = "default",
 }: ProjectAssistantPanelProps) {
   const { t } = useTranslation();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
@@ -284,6 +304,7 @@ export function ProjectAssistantPanel({
     null,
   );
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
+  const [approvedPlanMessageIds, setApprovedPlanMessageIds] = useState<Set<string>>(() => new Set());
   // Tab-scoped Authoring goal: a native Codex goal running directly in this chat (no orchestrator).
   // It is independent from the issue's Execution goal owned by the Execution tab. `native` reflects
   // whether a native Codex goal exists yet (established by a turn); `status`/`timeUsedSeconds` come
@@ -292,6 +313,7 @@ export function ProjectAssistantPanel({
   // The thread's last turn lifecycle state; an interrupted turn surfaces a Resume affordance.
   const [lastTurn, setLastTurn] = useState<AssistantTurnStatus | null>(null);
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<AssistantApprovalRequest | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -318,6 +340,18 @@ export function ProjectAssistantPanel({
   // panel can follow the live choice. A ref keeps the dispatch effect stable.
   const composerAgentRef = useRef<AgentKind | null>(null);
   const [composerAgent, setComposerAgent] = useState<AgentKind>("codex");
+  const routeAgentSeed = useMemo(
+    () => normalizeAgentSeed(new URLSearchParams(location.search).get("assistant_agent")),
+    [location.search],
+  );
+  const [serverAgentSeed, setServerAgentSeed] = useState<AgentKind | null>(routeAgentSeed);
+
+  useEffect(() => {
+    if (!routeAgentSeed) return;
+    composerAgentRef.current = routeAgentSeed;
+    setComposerAgent(routeAgentSeed);
+    setServerAgentSeed(routeAgentSeed);
+  }, [routeAgentSeed]);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>(DEFAULT_EXECUTION_MODE);
   const executionModeRef = useRef<ExecutionMode>(DEFAULT_EXECUTION_MODE);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -368,7 +402,8 @@ export function ProjectAssistantPanel({
   const isEmbeddedMode = mode === "embedded";
   const isPanelMode = isPageMode || isEmbeddedMode;
   const embeddedPanelInset = "pl-5 pr-4";
-  const isFullPageProjectAssistant = isPageMode && Boolean(projectSlug) && !issueIdentifier;
+  const isFullPageProjectAssistant = isPageMode && Boolean(projectSlug) && !issueIdentifier && threadId == null;
+  const widePageContent = contentMaxWidth === "wide";
   const active = isPanelMode || open;
   const resolvedAssistantMode: ProjectAssistantMode =
     assistantMode ?? (projectSlug ? (issueIdentifier ? "project" : "project") : "freeform");
@@ -505,6 +540,7 @@ export function ProjectAssistantPanel({
         setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages);
         setIsRunning(false);
         setPendingQuestions(null);
+        setPendingApproval(null);
       },
       onMessageCreated: (message) => setMessages((current) => appendMessage(current, message)),
       onAssistantDelta: (delta) => {
@@ -517,6 +553,7 @@ export function ProjectAssistantPanel({
         setMessages((current) => replaceStreamingMessage(current, message));
         setIsRunning(false);
         setPendingQuestions(null);
+        setPendingApproval(null);
         const createdIssue = draftIssueCreatedFromMessage(message);
         if (createdIssue) onDraftIssueCreatedRef.current?.(createdIssue);
       },
@@ -525,8 +562,10 @@ export function ProjectAssistantPanel({
         setConnectionError(message);
         setIsRunning(false);
         setPendingQuestions(null);
+        setPendingApproval(null);
       },
       onUserInputRequired: (request) => setPendingQuestions(request),
+      onApprovalRequired: (request) => setPendingApproval(request),
       onAssistantDocumentChanged: (payload) => onDocumentChangedRef.current?.(payload),
       onAssistantIssueCreated: (payload) => onIssueCreatedRef.current?.(payload),
       onSteerFailed: ({ message }) => {
@@ -543,6 +582,7 @@ export function ProjectAssistantPanel({
               agent: activeBundle.defaultAgent,
               settings: defaultComposerSettings(activeCatalog),
               attachments: [],
+              contextRefs: [],
             },
           },
         ]);
@@ -617,7 +657,12 @@ export function ProjectAssistantPanel({
       }
 
       const agent = effectiveAgentFromResponse(response);
-      if (agent) onEffectiveAgentResolvedRef.current?.(agent);
+      if (agent) {
+        composerAgentRef.current = agent;
+        setComposerAgent(agent);
+        setServerAgentSeed(agent);
+        onEffectiveAgentResolvedRef.current?.(agent);
+      }
     });
     joinPush.receive("error", (reason) => {
       setConnectionError(errorMessage(reason));
@@ -685,11 +730,53 @@ export function ProjectAssistantPanel({
     });
   }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError]);
 
+  const dispatchApprovedPlan = useCallback(
+    (messageId: string, mode: PlanApprovalMode) => {
+      if (!issueIdentifier) return;
+
+      const channel = channelRef.current;
+      if (!channel) {
+        setConnectionError(t("assistant.panel.channelNotConnected"));
+        return;
+      }
+
+      setConnectionError(null);
+      setExecutionMode(mode);
+      executionModeRef.current = mode;
+      setApprovedPlanMessageIds((current) => new Set(current).add(messageId));
+
+      const agent = composerAgentRef.current;
+      const agentName = agentDisplayName(agent);
+      const pushResult = dispatchCodingAgent(channel, { goalMode: issueGoalMode === true, agent, mode });
+      pushResult.receive("ok", (response) => {
+        onDispatchSucceeded?.(messageFromResponse(response) ?? t("assistant.panel.dispatchedTo", { agent: agentName }));
+      });
+      pushResult.receive("error", (reason) => {
+        setApprovedPlanMessageIds((current) => {
+          const next = new Set(current);
+          next.delete(messageId);
+          return next;
+        });
+        onDispatchError?.(errorMessage(reason));
+      });
+      pushResult.receive("timeout", () => {
+        setApprovedPlanMessageIds((current) => {
+          const next = new Set(current);
+          next.delete(messageId);
+          return next;
+        });
+        onDispatchError?.(t("assistant.panel.dispatchTimeout", { agent: agentName }));
+      });
+    },
+    [issueGoalMode, issueIdentifier, onDispatchError, onDispatchSucceeded, t],
+  );
+
   const dispatchSend = useCallback(
     (submit: AssistantComposerSubmit) => {
       const trimmed = submit.message.trim();
       const hasAttachments = submit.attachments.length > 0;
-      if (!trimmed && !hasAttachments) return;
+      const hasContextRefs = submit.contextRefs.length > 0;
+      if (!trimmed && !hasAttachments && !hasContextRefs) return;
 
       const channel = channelRef.current;
       if (!channel) {
@@ -710,6 +797,7 @@ export function ProjectAssistantPanel({
           ...extraContext,
         },
         attachments: submit.attachments,
+        ...(hasContextRefs ? { context_refs: submit.contextRefs } : {}),
       };
 
       setConnectionError(null);
@@ -729,8 +817,11 @@ export function ProjectAssistantPanel({
     (submit: AssistantComposerSubmit) => {
       const channel = channelRef.current;
       const text = expandMentions(submit.message.trim());
-      if (!channel || !text) return;
-      channel.push("steer_turn", { message: text });
+      if (!channel || (!text && submit.contextRefs.length === 0)) return;
+      channel.push("steer_turn", {
+        message: text,
+        ...(submit.contextRefs.length > 0 ? { context_refs: submit.contextRefs } : {}),
+      });
     },
     [expandMentions],
   );
@@ -936,12 +1027,17 @@ export function ProjectAssistantPanel({
         agent: activeBundle.defaultAgent,
         settings: defaultComposerSettings(activeCatalog),
         attachments: [],
+        contextRefs: [],
       });
     },
     [sendMessage],
   );
 
   const visibleMessages = useMemo(() => displayMessages(messages, t), [messages, t]);
+  const planApprovalMessageId = useMemo(
+    () => latestPendingPlanMessageId(visibleMessages, approvedPlanMessageIds),
+    [visibleMessages, approvedPlanMessageIds],
+  );
   const taskSnapshot = useMemo(
     () => deriveAgentTasksFromAssistantMessages(visibleMessages),
     [visibleMessages],
@@ -1020,6 +1116,11 @@ export function ProjectAssistantPanel({
           projectSlug={projectSlug}
           onOpenDocumentPath={onOpenDocumentPath}
           taskSnapshot={taskSnapshot}
+          planApprovalAction={
+            issueIdentifier && !isRunning && message.id === planApprovalMessageId
+              ? { messageId: message.id, disabled: !channelReady, onApprove: dispatchApprovedPlan }
+              : undefined
+          }
         />
       ))}
       {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
@@ -1075,6 +1176,24 @@ export function ProjectAssistantPanel({
   const questionsNode = pendingQuestions ? (
     <div className="px-4 pb-2">
       <UserQuestionsCard request={pendingQuestions} onSubmit={submitQuestions} disabled={!channelReady} />
+    </div>
+  ) : null;
+
+  const submitCommandApproval = useCallback(
+    (requestId: string | number, action: "approve" | "cancel") => {
+      const channel = channelRef.current;
+      if (!channel) return;
+
+      submitApproval(channel, requestId, action)
+        .receive("ok", () => setPendingApproval((current) => (current?.requestId === requestId ? null : current)))
+        .receive("error", (reason) => setConnectionError(errorMessage(reason)));
+    },
+    [],
+  );
+
+  const approvalNode = pendingApproval ? (
+    <div className="px-4 pb-2">
+      <CommandApprovalCard request={pendingApproval} onSubmit={submitCommandApproval} disabled={!channelReady} />
     </div>
   ) : null;
 
@@ -1135,14 +1254,25 @@ export function ProjectAssistantPanel({
       mentionOptions={mentionOptions}
       onMentionQueryChange={setMentionQuery}
       onMentionSelect={rememberMention}
+      agentSeed={serverAgentSeed}
       toolbarAfterAttach={
-        issueIdentifier ? (
-          <ExecutionModeMenu
-            agent={composerAgent}
-            mode={executionMode}
-            disabled={isRunning || catalogLoading}
-            onChange={setExecutionMode}
-          />
+        issueIdentifier || threadId ? (
+          <>
+            <GitDiffLauncher
+              projectSlug={projectSlug ?? undefined}
+              identifier={issueIdentifier ?? null}
+              threadId={threadId ?? null}
+              disabled={catalogLoading}
+            />
+            {issueIdentifier ? (
+              <ExecutionModeMenu
+                agent={composerAgent}
+                mode={executionMode}
+                disabled={isRunning || catalogLoading}
+                onChange={setExecutionMode}
+              />
+            ) : null}
+          </>
         ) : undefined
       }
       onForceQueued={forceSendOldestQueued}
@@ -1214,7 +1344,11 @@ export function ProjectAssistantPanel({
               <div
                 className={cn(
                   "flex w-full flex-col",
-                  isPageMode ? "mx-auto max-w-4xl gap-6 px-4 pt-8" : cn("gap-4 py-4", embeddedPanelInset),
+                  isPageMode
+                    ? widePageContent
+                      ? "mx-auto max-w-[min(100%,80rem)] gap-4 px-4 pt-4 lg:px-6"
+                      : "mx-auto max-w-4xl gap-6 px-4 pt-8"
+                    : cn("gap-4 py-4", embeddedPanelInset),
                 )}
                 style={isFullPageProjectAssistant ? { paddingBottom: composerHeight + 16 } : undefined}
               >
@@ -1228,10 +1362,16 @@ export function ProjectAssistantPanel({
             <div ref={composerDockRef} className="pointer-events-none absolute inset-x-0 bottom-0">
               <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
               <div className="pointer-events-auto bg-background">
-                <div className="mx-auto w-full max-w-4xl px-4 pb-2 pt-1">
+                <div
+                  className={cn(
+                    "mx-auto w-full px-4 pb-2 pt-1",
+                    widePageContent ? "max-w-[min(100%,80rem)] lg:px-6" : "max-w-4xl",
+                  )}
+                >
                   {resumeBanner}
                   {queuedChips}
                   {questionsNode}
+                  {approvalNode}
                   {composerNode ?? (
                     <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
                       {t("assistant.panel.loadingModels")}
@@ -1245,10 +1385,16 @@ export function ProjectAssistantPanel({
             </div>
           ) : isPageMode ? (
             <div ref={composerDockRef} className="shrink-0 bg-background pr-2.5">
-              <div className="mx-auto w-full max-w-4xl px-4 py-2">
+              <div
+                className={cn(
+                  "mx-auto w-full px-4 py-2",
+                  widePageContent ? "max-w-[min(100%,80rem)] lg:px-6" : "max-w-4xl",
+                )}
+              >
                 {resumeBanner}
                 {queuedChips}
                 {questionsNode}
+                {approvalNode}
                 {composerNode ?? (
                   <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
                     {t("assistant.panel.loadingModels")}
@@ -1263,6 +1409,7 @@ export function ProjectAssistantPanel({
             <div className={cn("shrink-0 bg-background pb-2 pt-2", embeddedPanelInset)}>
               {queuedChips}
               {questionsNode}
+              {approvalNode}
               {composerNode ?? (
                 <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
               )}
@@ -1346,11 +1493,13 @@ function AssistantBubble({
   projectSlug,
   onOpenDocumentPath,
   taskSnapshot = null,
+  planApprovalAction,
 }: {
   message: AssistantChatMessage;
   projectSlug?: string;
   onOpenDocumentPath?: (path: string) => void;
   taskSnapshot?: AgentTaskSnapshot | null;
+  planApprovalAction?: PlanApprovalAction;
 }) {
   const isUser = message.role === "user";
   const attachments = Array.isArray(message.metadata.attachments) ? message.metadata.attachments : [];
@@ -1389,9 +1538,104 @@ function AssistantBubble({
         {message.toolCalls.length ? (
           <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
             <ToolActivityTimeline toolCalls={message.toolCalls} taskSnapshot={taskSnapshot} />
+            {!isUser ? <EditedFilesSummary toolCalls={message.toolCalls} /> : null}
           </div>
         ) : null}
+        {planApprovalAction ? <PlanApprovalButtons action={planApprovalAction} /> : null}
       </article>
+    </div>
+  );
+}
+
+function PlanApprovalButtons({ action }: { action: PlanApprovalAction }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        size="sm"
+        className="h-8 gap-1.5 text-xs"
+        disabled={action.disabled}
+        title={t("assistant.panel.planApproval.yoloTitle")}
+        onClick={() => action.onApprove(action.messageId, "yolo")}
+      >
+        <Zap className="h-3.5 w-3.5" />
+        {t("assistant.panel.planApproval.yolo")}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-8 gap-1.5 text-xs"
+        disabled={action.disabled}
+        title={t("assistant.panel.planApproval.approveTitle")}
+        onClick={() => action.onApprove(action.messageId, "build")}
+      >
+        <Check className="h-3.5 w-3.5" />
+        {t("assistant.panel.planApproval.approve")}
+      </Button>
+    </div>
+  );
+}
+
+function CommandApprovalCard({
+  request,
+  disabled,
+  onSubmit,
+}: {
+  request: AssistantApprovalRequest;
+  disabled?: boolean;
+  onSubmit: (requestId: string | number, action: "approve" | "cancel") => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="rounded-2xl border border-amber-300/60 bg-amber-50/70 p-3 text-sm shadow-sm dark:border-amber-400/30 dark:bg-amber-950/30">
+      <div className="mb-2 flex items-center gap-2 font-semibold text-amber-950 dark:text-amber-100">
+        <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+        <span>{t("assistant.panel.commandApproval.title")}</span>
+      </div>
+      {request.command ? (
+        <pre className="mb-2 max-h-32 overflow-auto rounded-lg bg-background/80 px-3 py-2 font-mono text-xs text-foreground">
+          {request.command}
+        </pre>
+      ) : null}
+      <dl className="mb-3 space-y-1 text-xs text-muted-foreground">
+        {request.cwd ? (
+          <div>
+            <dt className="font-medium text-foreground">{t("assistant.panel.commandApproval.cwd")}</dt>
+            <dd className="break-all font-mono">{request.cwd}</dd>
+          </div>
+        ) : null}
+        {request.reason ? (
+          <div>
+            <dt className="font-medium text-foreground">{t("assistant.panel.commandApproval.reason")}</dt>
+            <dd>{request.reason}</dd>
+          </div>
+        ) : null}
+      </dl>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 px-3 text-xs"
+          disabled={disabled}
+          onClick={() => onSubmit(request.requestId, "approve")}
+        >
+          {t("assistant.panel.commandApproval.approve")}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-8 px-3 text-xs"
+          disabled={disabled}
+          onClick={() => onSubmit(request.requestId, "cancel")}
+        >
+          {t("assistant.panel.commandApproval.cancel")}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1562,6 +1806,46 @@ function displayMessages(messages: AssistantChatMessage[], t: TFunction): Assist
   return [assistantMessage("assistant-welcome", t("assistant.panel.welcome"))];
 }
 
+function latestPendingPlanMessageId(messages: AssistantChatMessage[], approvedIds: ReadonlySet<string>): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "user") return null;
+    if (message.role !== "assistant" || approvedIds.has(message.id)) continue;
+    if (message.toolCalls.some(isPendingPlanToolCall)) return message.id;
+  }
+
+  return null;
+}
+
+function isPendingPlanToolCall(toolCall: AssistantToolCall): boolean {
+  if (toolCall.name !== "update_plan") return false;
+
+  const plan = planItemsFromToolCall(toolCall);
+  if (plan.length === 0) return true;
+
+  return plan.some((item) => itemStatus(item) !== "completed");
+}
+
+function planItemsFromToolCall(toolCall: AssistantToolCall): Record<string, unknown>[] {
+  const sources = [toolCall.arguments, toolCall.result].filter(
+    (source): source is Record<string, unknown> => source != null && typeof source === "object" && !Array.isArray(source),
+  );
+
+  for (const source of sources) {
+    if (Array.isArray(source.plan)) {
+      return source.plan.filter(
+        (item): item is Record<string, unknown> => item != null && typeof item === "object" && !Array.isArray(item),
+      );
+    }
+  }
+
+  return [];
+}
+
+function itemStatus(item: Record<string, unknown>): string {
+  return typeof item.status === "string" ? item.status.toLowerCase() : "";
+}
+
 function extractKbDocumentReferencesFromMessage(message: AssistantChatMessage): string[] {
   const references = new Set(extractKbDocumentReferencesFromMarkdown(message.content));
 
@@ -1663,6 +1947,10 @@ function goalRunElapsedFromResponse(response: unknown): number | null {
 function effectiveAgentFromResponse(response: unknown): AgentKind | null {
   if (!response || typeof response !== "object") return null;
   const value = (response as Record<string, unknown>).effective_agent;
+  return normalizeAgentSeed(value);
+}
+
+function normalizeAgentSeed(value: unknown): AgentKind | null {
   if (value === "claude" || value === "codex" || value === "cursor") return value;
   return null;
 }

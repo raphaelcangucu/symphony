@@ -408,8 +408,8 @@ export function IssueDrawer({
               </TabsList>
               <div
                 className={cn(
-                  "min-h-0 flex-1",
-                  tab === "agent"
+                  "relative min-h-0 flex-1",
+                  tab === "agent" || tab === "terminal"
                     ? "flex flex-col overflow-hidden px-4 py-3 sm:px-6"
                     : cn("overflow-auto px-6 py-5", SCROLLBAR_THIN),
                 )}
@@ -525,7 +525,9 @@ export function IssueDrawer({
                 <TabsContent value="activity">
                   <ActivityTab projectSlug={projectSlug} issue={issue} execution={execution} />
                 </TabsContent>
-                <TabsContent value="terminal"><TerminalTab issue={issue} /></TabsContent>
+                <TabsContent value="terminal" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <TerminalTab issue={issue} />
+                </TabsContent>
               </div>
             </Tabs>
           </>

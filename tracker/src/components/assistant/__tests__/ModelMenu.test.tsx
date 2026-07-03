@@ -69,6 +69,7 @@ describe("ModelMenu", () => {
         { id: "gpt-5.3-codex-low", model: "gpt-5.3-codex-low", label: "Codex 5.3 Low", isDefault: false, defaultEffort: "", efforts: [] },
         { id: "gpt-5.3-codex-high", model: "gpt-5.3-codex-high", label: "Codex 5.3 High", isDefault: false, defaultEffort: "", efforts: [] },
         { id: "gpt-5.2-codex-low", model: "gpt-5.2-codex-low", label: "Codex 5.2 Low", isDefault: false, defaultEffort: "", efforts: [] },
+        { id: "claude-opus-4-8-low", model: "claude-opus-4-8-low", label: "Opus 4.8 Low", isDefault: false, defaultEffort: "", efforts: [] },
       ],
     };
 
@@ -79,6 +80,9 @@ describe("ModelMenu", () => {
     expect(screen.getByRole("menuitemradio", { name: "Codex 5.3" })).toBeTruthy();
     expect(screen.getByRole("menuitemradio", { name: "Codex 5.2" })).toBeTruthy();
     expect(screen.queryByRole("menuitemradio", { name: "Codex 5.3 Low" })).toBeNull();
+
+    const labels = screen.getAllByRole("menuitemradio").map((item) => item.textContent?.trim());
+    expect(labels).toEqual(["Auto", "Codex 5.2", "Codex 5.3", "Opus 4.8"]);
 
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Codex 5.2" }));
     expect(onChange).toHaveBeenCalledWith("gpt-5.2-codex-low");

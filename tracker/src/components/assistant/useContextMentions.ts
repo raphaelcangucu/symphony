@@ -2,20 +2,23 @@ import { useCallback, useState } from "react";
 
 import { mentionToken, type MentionRef } from "@/components/assistant/contextMentions";
 
-const MENTION_PATTERN = /(^|\s)@([\w./-]*)$/;
+const MENTION_PATTERN = /(^|\s)([@#])([\w./-]*)$/;
 
 export interface ContextMentionState {
   open: boolean;
   query: string;
+  trigger: "@" | "#";
   mentionStart: number;
   handleChange: (value: string, cursor: number) => void;
   selectMention: (entity: MentionRef) => string | null;
+  removeMentionText: () => string | null;
   close: () => void;
 }
 
 export function useContextMentions(value: string): ContextMentionState {
   const [mentionStart, setMentionStart] = useState(-1);
   const [query, setQuery] = useState("");
+  const [trigger, setTrigger] = useState<"@" | "#">("@");
 
   const open = mentionStart >= 0;
 
@@ -30,8 +33,9 @@ export function useContextMentions(value: string): ContextMentionState {
       return;
     }
 
-    setMentionStart(safeCursor - match[2].length - 1);
-    setQuery(match[2]);
+    setMentionStart(safeCursor - match[3].length - 1);
+    setTrigger(match[2] === "#" ? "#" : "@");
+    setQuery(match[3]);
   }, []);
 
   const selectMention = useCallback(
@@ -50,10 +54,22 @@ export function useContextMentions(value: string): ContextMentionState {
     [value, mentionStart, query],
   );
 
+  const removeMentionText = useCallback(() => {
+    if (mentionStart < 0) return null;
+
+    const before = value.slice(0, mentionStart);
+    const afterStart = mentionStart + 1 + query.length;
+    const after = value.slice(afterStart);
+
+    setMentionStart(-1);
+    setQuery("");
+    return `${before}${after}`.trimStart();
+  }, [value, mentionStart, query]);
+
   const close = useCallback(() => {
     setMentionStart(-1);
     setQuery("");
   }, []);
 
-  return { open, query, mentionStart, handleChange, selectMention, close };
+  return { open, query, trigger, mentionStart, handleChange, selectMention, removeMentionText, close };
 }

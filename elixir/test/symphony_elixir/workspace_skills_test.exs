@@ -118,6 +118,20 @@ defmodule SymphonyElixir.WorkspaceSkillsTest do
     assert {:error, {:blocked_path, ^blocked_path}} = WorkspaceSkills.prepare(workspace)
   end
 
+  test "repairs stale skill symlinks when the skills root changes", %{workspace: workspace, skills_root: skills_root} do
+    stale_root = Path.join(Path.dirname(skills_root), "stale-skills")
+    write_skill!(stale_root, "commit", "# Stale commit\n")
+
+    mirror = Path.join([workspace, ".symphony", "skills"])
+    File.mkdir_p!(mirror)
+    :ok = File.ln_s(Path.join(stale_root, "commit"), Path.join(mirror, "commit"))
+
+    assert :ok = WorkspaceSkills.prepare(workspace)
+
+    assert File.read_link!(Path.join(mirror, "commit")) == Path.join(skills_root, "commit")
+    assert File.read!(Path.join([mirror, "commit", "SKILL.md"])) == "# Commit\n"
+  end
+
   defp tmp_dir! do
     dir = Path.join(System.tmp_dir!(), "workspace-skills-test-#{System.unique_integer([:positive])}")
     File.rm_rf!(dir)

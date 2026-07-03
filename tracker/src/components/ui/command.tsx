@@ -25,19 +25,39 @@ type CommandDialogProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.
   label: string;
   /** Optional accessible description; falls back to the label when omitted. */
   description?: string;
+  /** Passed through to the inner cmdk root (default true). */
+  shouldFilter?: boolean;
+  /** `lg` widens the palette and list — used by the session launcher. */
+  size?: "default" | "lg";
 };
 
-function CommandDialog({ label, description, children, ...props }: CommandDialogProps) {
+function CommandDialog({
+  label,
+  description,
+  shouldFilter = true,
+  size = "default",
+  children,
+  ...props
+}: CommandDialogProps) {
   return (
     <DialogPrimitive.Root {...props}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40" />
         <DialogPrimitive.Content
-          className="fixed left-1/2 top-[18%] z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-lg border bg-popover p-0 shadow-lg"
+          className={cn(
+            "fixed left-1/2 top-[15%] z-50 w-[calc(100%-2rem)] -translate-x-1/2 overflow-hidden rounded-xl border bg-popover p-0 shadow-2xl",
+            size === "lg" ? "max-w-2xl" : "max-w-lg",
+          )}
         >
           <DialogPrimitive.Title className="sr-only">{label}</DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">{description ?? label}</DialogPrimitive.Description>
-          <Command className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]]:pb-2">
+          <Command
+            shouldFilter={shouldFilter}
+            className={cn(
+              "[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]]:pb-2",
+              size === "lg" && "[&_[cmdk-list]]:max-h-[min(50vh,420px)]",
+            )}
+          >
             {children}
           </Command>
         </DialogPrimitive.Content>

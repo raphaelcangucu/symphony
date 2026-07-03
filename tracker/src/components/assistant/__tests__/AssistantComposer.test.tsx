@@ -470,4 +470,44 @@ describe("AssistantComposer", () => {
     expect(listbox.className).not.toContain("absolute");
     expect(screen.getByText("SYM-1")).toBeInTheDocument();
   });
+
+  it("turns selected @ mention options into context chips submitted as contextRefs", () => {
+    const onSubmit = vi.fn();
+    const mentionOptions = [{ type: "issue" as const, id: "SYM-1", label: "Test issue", detail: "Todo" }];
+
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        mentionsEnabled
+        mentionOptions={mentionOptions}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "@sym" } });
+    fireEvent.mouseDown(screen.getByRole("option", { name: /SYM-1/i }));
+
+    expect(textarea).toHaveValue("");
+    expect(screen.getByText("SYM-1")).toBeInTheDocument();
+    expect(screen.getByText("Test issue")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "",
+        contextRefs: [
+          expect.objectContaining({
+            type: "issue",
+            id: "SYM-1",
+            label: "Test issue",
+            detail: "Todo",
+            state: "draft",
+          }),
+        ],
+      }),
+    );
+  });
 });

@@ -18,6 +18,7 @@ import {
   newIssueAssistantPath,
   projectExploreAssistantPath,
   projectSettingsPath,
+  projectTerminalPath,
   newIssuePath,
   projectsFiltersPath,
   projectsNewPath,
@@ -115,9 +116,14 @@ describe("workspaceRoutes", () => {
     expect(isProjectSection("board")).toBe(true);
     expect(isProjectSection("kb")).toBe(true);
     expect(isProjectSection("assistant")).toBe(true);
+    expect(isProjectSection("terminal")).toBe(true);
     expect(isProjectSection("settings")).toBe(true);
     expect(isProjectSection("new-issue")).toBe(false);
     expect(isProjectSection(undefined)).toBe(false);
+  });
+
+  it("builds the project terminal path", () => {
+    expect(projectTerminalPath("acme")).toBe("/projects/acme/terminal");
   });
 
   it("derives the workspace section from a pathname", () => {
@@ -125,6 +131,7 @@ describe("workspaceRoutes", () => {
     expect(projectSectionFromPathname("/projects/acme/list/filters")).toBe("list");
     expect(projectSectionFromPathname("/projects/acme/kb/repo/page")).toBe("kb");
     expect(projectSectionFromPathname("/projects/acme/assistant/explore")).toBe("assistant");
+    expect(projectSectionFromPathname("/projects/acme/terminal")).toBe("terminal");
     expect(projectSectionFromPathname("/projects/acme/settings/workflow")).toBe("settings");
     expect(projectSectionFromPathname("/projects/acme")).toBe("board");
     expect(projectSectionFromPathname("/kb/page")).toBe("board");

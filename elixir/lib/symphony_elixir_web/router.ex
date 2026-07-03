@@ -107,12 +107,20 @@ defmodule SymphonyElixirWeb.Router do
     get("/assistant/threads", AssistantThreadController, :index)
     post("/assistant/threads", AssistantThreadController, :create)
     post("/assistant/threads/:thread_id/archive", AssistantThreadController, :archive)
+    get("/assistant/threads/:thread_id/contexts", AttachedContextController, :index_assistant)
+    post("/assistant/threads/:thread_id/contexts", AttachedContextController, :create_assistant)
+    delete("/assistant/threads/:thread_id/contexts/:id", AttachedContextController, :delete_assistant)
+    get("/assistant/threads/:thread_id/diff", WorkspaceDiffController, :thread)
     get("/assistant/threads/:thread_id/documents", AssistantThreadDocumentController, :index)
     get("/assistant/threads/:thread_id/documents/*path", AssistantThreadDocumentController, :show)
     get("/recents", RecentsController, :index)
     get("/projects/:project_slug/assistant/config", AssistantController, :config)
     get("/projects/:project_slug/prompt-templates", PromptTemplateController, :project_index)
     get("/projects/:project_slug/assistant/commands", AssistantCommandController, :project_index)
+    get("/projects/:project_slug/saved-contexts", SavedContextController, :index)
+    post("/projects/:project_slug/saved-contexts", SavedContextController, :create)
+    get("/projects/:project_slug/security-advisories", SecurityAdvisoryController, :index)
+    get("/projects/:project_slug/github-issues", GitHubIssueContextController, :index)
     post("/projects/:project_slug/assistant/attachments", AssistantController, :upload_attachment)
     get("/projects/:project_slug/assistant/attachments/*path", AssistantController, :show_attachment)
     get("/projects/:project_slug/jira/attachments/:id", JiraAttachmentController, :show)
@@ -124,16 +132,21 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/:identifier/documents/*path", IssueDocumentController, :show)
     post("/projects/:project_slug/issues/:identifier/move", IssueController, :move)
     post("/projects/:project_slug/issues/:identifier/dispatch", IssueController, :dispatch_agent)
+
     post(
       "/projects/:project_slug/issues/:identifier/run-prompt-template",
       RunPromptTemplateController,
       :create
     )
+
     post("/projects/:project_slug/issues/:identifier/goal", IssueController, :goal_control)
     post("/projects/:project_slug/issues/:identifier/sync", IssueController, :sync)
     post("/projects/:project_slug/issues/:identifier/archive", IssueController, :archive)
     post("/projects/:project_slug/issues/:identifier/restore", IssueController, :restore)
     delete("/projects/:project_slug/issues/:identifier", IssueController, :delete)
+    get("/projects/:project_slug/issues/:identifier/contexts", AttachedContextController, :index_execution)
+    post("/projects/:project_slug/issues/:identifier/contexts", AttachedContextController, :create_execution)
+    delete("/projects/:project_slug/issues/:identifier/contexts/:id", AttachedContextController, :delete_execution)
     get("/projects/:project_slug/issues/:identifier/comments", CommentController, :index)
     post("/projects/:project_slug/issues/:identifier/comments", CommentController, :create)
     patch("/projects/:project_slug/issues/:identifier/comments/:comment_id", CommentController, :update)
@@ -144,6 +157,7 @@ defmodule SymphonyElixirWeb.Router do
     delete("/projects/:project_slug/issues/:identifier/evidence", EvidenceController, :clear)
     post("/projects/:project_slug/issues/:identifier/evidence/clear-failed", EvidenceController, :clear_failed)
     delete("/projects/:project_slug/issues/:identifier/evidence/:run_id", EvidenceController, :delete)
+    get("/projects/:project_slug/issues/:identifier/diff", WorkspaceDiffController, :show)
     get("/projects/:project_slug/issues/:identifier/commit_evidence", CommitEvidenceController, :index)
 
     get(
@@ -158,6 +172,8 @@ defmodule SymphonyElixirWeb.Router do
       :artifact
     )
 
+    get("/projects/:project_slug/pull_requests", ProjectPullRequestController, :index)
+    get("/projects/:project_slug/branches", BranchController, :index)
     get("/projects/:project_slug/issues/:identifier/pull_requests", PullRequestController, :index)
     post("/projects/:project_slug/issues/:identifier/pull_requests/link", PullRequestController, :link)
     delete("/projects/:project_slug/issues/:identifier/pull_requests/link", PullRequestController, :unlink)
@@ -189,6 +205,10 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/issues/:identifier/parent", IssueController, :set_parent)
     delete("/projects/:project_slug/issues/:identifier/parent", IssueController, :clear_parent)
     post("/projects/:project_slug/issues/:identifier/terminal", TerminalController, :create)
+    get("/projects/:project_slug/issues/:identifier/terminal-tabs", TerminalTabController, :index)
+    post("/projects/:project_slug/issues/:identifier/terminal-tabs", TerminalTabController, :create)
+    patch("/projects/:project_slug/issues/:identifier/terminal-tabs/:tab_id", TerminalTabController, :update)
+    delete("/projects/:project_slug/issues/:identifier/terminal-tabs/:tab_id", TerminalTabController, :delete)
     get("/projects/:project_slug/issues/:identifier/dev_servers", DevServerController, :index)
     get("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/output", DevServerController, :output)
     post("/projects/:project_slug/issues/:identifier/dev_servers/start", DevServerController, :start)

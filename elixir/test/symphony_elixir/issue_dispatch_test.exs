@@ -68,6 +68,25 @@ defmodule SymphonyElixir.IssueDispatchTest do
     assert resume_comment.body =~ "slice evidence"
   end
 
+  test "resume injects draft context refs into dispatch guidance", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, context_issue} = Context.create_issue("pref", %{"title" => "Context source", "status" => "Todo"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{
+               instructions: "Use the selected context",
+               context_refs: [%{"type" => "issue", "id" => context_issue.identifier}]
+             })
+
+    {:ok, comments} = Context.list_comments("pref", issue.identifier)
+    resume_comment = Enum.find(comments, &String.contains?(&1.body, "## Resume agent run"))
+
+    assert resume_comment.body =~ "Use the selected context"
+    assert resume_comment.body =~ "## Loaded Context"
+    assert resume_comment.body =~ "### Board issue #{context_issue.identifier}"
+  end
+
   test "Codex resume routes the goal natively and never caches agent_goal", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
     {:ok, project} = Context.get_project("pref")

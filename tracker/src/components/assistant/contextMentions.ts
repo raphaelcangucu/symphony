@@ -1,4 +1,13 @@
 export type MentionType = "issue" | "file" | "pr";
+export type ComposerContextChipType =
+  | MentionType
+  | "doc"
+  | "saved"
+  | "session"
+  | "security"
+  | "security_alert"
+  | "advisory";
+export type ComposerContextChipState = "draft" | "loaded";
 
 export interface MentionRef {
   type: MentionType;
@@ -8,6 +17,14 @@ export interface MentionRef {
 export interface ResolvedMention extends MentionRef {
   label?: string;
   detail?: string;
+}
+
+export interface ComposerContextChipRef {
+  type: ComposerContextChipType;
+  id: string;
+  label?: string;
+  detail?: string;
+  state: ComposerContextChipState;
 }
 
 const MENTION_TYPES: readonly MentionType[] = ["issue", "file", "pr"];

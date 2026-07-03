@@ -62,11 +62,14 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   def handle_in("steer_turn", payload, socket) when is_map(payload) do
     message = Map.get(payload, "message", "")
     attachments = Map.get(payload, "attachments", [])
+    context_refs = Map.get(payload, "context_refs", [])
     trimmed = if is_binary(message), do: String.trim(message), else: ""
 
     if trimmed == "" and attachments == [] do
       {:reply, {:error, %{reason: "message is required"}}, socket}
     else
+      message = inject_context_refs(socket, message, context_refs)
+
       case Orchestrator.steer(
              socket.assigns.issue_identifier,
              message,
@@ -90,6 +93,20 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
 
   def handle_in("steer_turn", _payload, socket),
     do: {:reply, {:error, %{reason: "message is required"}}, socket}
+
+  defp inject_context_refs(_socket, message, []), do: message
+
+  defp inject_context_refs(socket, message, context_refs) when is_list(context_refs) do
+    scope =
+      SymphonyElixir.AttachedContexts.execution_scope(
+        socket.assigns.project_slug,
+        socket.assigns.issue_identifier
+      )
+
+    SymphonyElixir.AttachedContexts.append_to_instructions(scope, message, context_refs: context_refs)
+  end
+
+  defp inject_context_refs(_socket, message, _context_refs), do: message
 
   @impl true
   def handle_info({:steer_ok, _result}, socket), do: {:noreply, push(socket, "steer_ok", %{})}

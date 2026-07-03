@@ -10,6 +10,8 @@ export interface BackendRecentItemDto {
   projectSlug?: string | null;
   project_name?: string | null;
   projectName?: string | null;
+  agent_kind?: string | null;
+  agentKind?: string | null;
   title: string;
   identifier?: string | null;
   thread_id?: number | null;
@@ -34,8 +36,12 @@ function normalizeKind(value: string): RecentKind {
   return value === "codex" ? "codex" : "chat";
 }
 
+function normalizeAgentKind(value: string | null | undefined): RecentSession["agentKind"] {
+  return value === "codex" || value === "claude" || value === "cursor" ? value : null;
+}
+
 function normalizeScope(value: string | null | undefined): RecentScope {
-  if (value === "project" || value === "project_explore" || value === "freeform" || value === "issue") return value;
+  if (value === "project" || value === "project_session" || value === "project_explore" || value === "freeform" || value === "issue") return value;
   return null;
 }
 
@@ -44,6 +50,7 @@ export function normalizeRecentSession(dto: BackendRecentItemDto): RecentSession
     id: dto.id,
     kind: normalizeKind(dto.kind),
     scope: normalizeScope(dto.scope),
+    agentKind: normalizeAgentKind(dto.agentKind ?? dto.agent_kind),
     projectSlug: dto.projectSlug ?? dto.project_slug ?? null,
     projectName: dto.projectName ?? dto.project_name ?? null,
     title: dto.title,

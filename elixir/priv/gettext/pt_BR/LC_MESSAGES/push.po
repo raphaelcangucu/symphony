@@ -83,3 +83,24 @@ msgstr "Alguém"
 
 msgid "New comment"
 msgstr "Novo comentário"
+
+msgid "Needs your input"
+msgstr "Precisa da sua resposta"
+
+msgid "%{identifier}: approval required"
+msgstr "%{identifier}: aprovação necessária"
+
+msgid "%{identifier}: answer needed"
+msgstr "%{identifier}: resposta necessária"
+
+msgid "%{identifier}: input needed"
+msgstr "%{identifier}: input necessário"
+
+msgid "Approval required"
+msgstr "Aprovação necessária"
+
+msgid "Answer needed"
+msgstr "Resposta necessária"
+
+msgid "Input needed"
+msgstr "Input necessário"

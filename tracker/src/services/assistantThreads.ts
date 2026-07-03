@@ -10,6 +10,8 @@ export interface BackendAssistantThreadDto {
   projectSlug?: string | null;
   project_name?: string | null;
   projectName?: string | null;
+  agent_kind?: string | null;
+  agentKind?: string | null;
   issue_identifier?: string | null;
   issueIdentifier?: string | null;
   title?: string | null;
@@ -23,6 +25,7 @@ export function normalizeAssistantThread(dto: BackendAssistantThreadDto): Assist
   return {
     id: dto.id,
     scope: dto.scope,
+    agentKind: normalizeAgentKind(dto.agentKind ?? dto.agent_kind),
     projectSlug: dto.projectSlug ?? dto.project_slug ?? null,
     projectName: dto.projectName ?? dto.project_name ?? null,
     issueIdentifier: dto.issueIdentifier ?? dto.issue_identifier ?? null,
@@ -33,6 +36,10 @@ export function normalizeAssistantThread(dto: BackendAssistantThreadDto): Assist
   };
 }
 
+function normalizeAgentKind(value: string | null | undefined): AssistantThread["agentKind"] {
+  return value === "codex" || value === "claude" || value === "cursor" ? value : null;
+}
+
 export async function listAssistantThreads(scope = "freeform"): Promise<AssistantThread[]> {
   const response = await http.get(trackerPath(`/assistant/threads?scope=${encodeURIComponent(scope)}`));
   return unwrapData<BackendAssistantThreadDto[]>(response).map(normalizeAssistantThread);
@@ -40,6 +47,19 @@ export async function listAssistantThreads(scope = "freeform"): Promise<Assistan
 
 export async function createFreeformThread(title?: string): Promise<AssistantThread> {
   const response = await http.post(trackerPath("/assistant/threads"), { scope: "freeform", title });
+  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+}
+
+export async function createProjectSessionThread(
+  projectSlug: string,
+  input: { title?: string; agentKind?: "codex" | "claude" | "cursor" | null } = {},
+): Promise<AssistantThread> {
+  const response = await http.post(trackerPath("/assistant/threads"), {
+    scope: "project_session",
+    project_slug: projectSlug,
+    title: input.title,
+    agent_kind: input.agentKind ?? undefined,
+  });
   return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
 }
 

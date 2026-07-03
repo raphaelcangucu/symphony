@@ -20,6 +20,7 @@ import { defaultSkillCommands, parseSlashCommand } from "@/components/assistant/
 import { MagicCommandPalette } from "@/components/commands/MagicCommandPalette";
 import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
+import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { useExecutionShortcuts } from "@/hooks/useExecutionShortcuts";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
@@ -217,7 +218,7 @@ export function ExecutionControlComposer({
 
   async function runDispatch(
     action: "resume" | "restart" | "hard_reset" | "stop",
-    overrides?: { goal?: string | null; instructions?: string | null },
+    overrides?: { goal?: string | null; instructions?: string | null; contextRefs?: AssistantComposerSubmit["contextRefs"] },
   ) {
     setDispatchPending(action);
     setDispatchError(null);
@@ -239,6 +240,7 @@ export function ExecutionControlComposer({
         model: composerSettingsRef.current.model,
         effort: composerSettingsRef.current.effort,
         mode: modeRef.current,
+        contextRefs: overrides?.contextRefs,
       });
       onIssueUpdated?.(result.issue);
       setDispatchStatus(result.message);
@@ -323,15 +325,20 @@ export function ExecutionControlComposer({
       const text = submit.message.trim();
       const expanded = expandMentions(text);
       const hasAttachments = submit.attachments.length > 0;
+      const hasContextRefs = submit.contextRefs.length > 0;
 
       if (canSteer) {
-        if (!text && !hasAttachments) return;
-        onSteer({ message: expanded, attachments: submit.attachments });
+        if (!text && !hasAttachments && !hasContextRefs) return;
+        onSteer({
+          message: expanded,
+          attachments: submit.attachments,
+          ...(hasContextRefs ? { contextRefs: submit.contextRefs } : {}),
+        });
         return;
       }
 
       if (control.isActive) {
-        if (!text && !hasAttachments) return;
+        if (!text && !hasAttachments && !hasContextRefs) return;
         setQueued((current) => [
           ...current,
           {
@@ -345,7 +352,7 @@ export function ExecutionControlComposer({
 
       if (!dispatchPending) {
         const instructions = enrichGuidanceWithAttachments(expanded, submit.attachments, projectSlug, {});
-        void runDispatch("resume", { instructions });
+        void runDispatch("resume", { instructions, contextRefs: submit.contextRefs });
       }
     },
     [canSteer, control.isActive, dispatchPending, expandMentions, onSteer, projectSlug, submitExecutionGoal],
@@ -591,6 +598,7 @@ export function ExecutionControlComposer({
           }}
           toolbarAfterAttach={
             <>
+              <GitDiffLauncher projectSlug={projectSlug} identifier={issue.identifier} disabled={controlsDisabled} />
               <ExecutionModeMenu
                 agent={agent}
                 mode={mode}

@@ -53,6 +53,25 @@ export function agentKindLabel(
   return t(AGENT_LABEL_KEYS[kind]);
 }
 
+export function AgentIconBadge({ kind, label, className }: { kind: AgentKind; label?: string; className?: string }) {
+  const Icon = AGENT_ICONS[kind];
+  const accessibleLabel = label ?? agentKindLabel(kind);
+
+  return (
+    <span
+      role="img"
+      aria-label={accessibleLabel}
+      title={accessibleLabel}
+      className={cn(
+        "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground",
+        className,
+      )}
+    >
+      <Icon className="h-3 w-3" />
+    </span>
+  );
+}
+
 export interface AgentChipProps {
   label: string;
   active: boolean;

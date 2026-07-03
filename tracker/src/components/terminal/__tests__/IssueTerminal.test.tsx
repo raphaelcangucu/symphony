@@ -57,6 +57,8 @@ vi.mock("@xterm/xterm", () => ({
       reset,
       write,
       dispose,
+      cols: 80,
+      rows: 24,
     };
   }),
 }));
@@ -68,6 +70,15 @@ vi.mock("@xterm/addon-fit", () => ({
 }));
 
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, params?: Record<string, string>) => {
+      if (key === "issue.terminal.ariaLabel") return `Terminal for ${params?.identifier ?? ""}`;
+      return key;
+    },
+  }),
+}));
 
 describe("IssueTerminal", () => {
   beforeEach(() => {

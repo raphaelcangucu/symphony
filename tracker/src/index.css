@@ -588,3 +588,24 @@ textarea {
 .scrollbar-discrete:hover::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--muted-foreground) / 0.55);
 }
+
+.symphony-terminal-host {
+  position: relative;
+  overflow: hidden;
+  contain: layout paint;
+}
+
+.symphony-terminal-host .xterm {
+  height: 100%;
+  width: 100%;
+}
+
+.symphony-terminal-host .xterm-viewport {
+  overflow-y: auto;
+}
+
+.symphony-terminal-host .xterm-helper-textarea {
+  position: absolute !important;
+  opacity: 0 !important;
+  z-index: 10;
+}

@@ -1,6 +1,4 @@
-import { useTranslation } from "react-i18next";
-
-import { IssueTerminal } from "./IssueTerminal";
+import { TerminalWorkspacePanel } from "./TerminalWorkspacePanel";
 
 interface TerminalPanelProps {
   projectSlug: string;
@@ -8,15 +6,13 @@ interface TerminalPanelProps {
 }
 
 export function TerminalPanel({ projectSlug, issueIdentifier }: TerminalPanelProps) {
-  const { t } = useTranslation();
-
   return (
-    <section className="space-y-3">
-      <div>
-        <h3 className="text-sm font-medium">{t("issue.terminal.title")}</h3>
-        <p className="text-xs text-muted-foreground">{t("issue.terminal.description")}</p>
-      </div>
-      <IssueTerminal projectSlug={projectSlug} issueIdentifier={issueIdentifier} />
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <TerminalWorkspacePanel
+        key={`${projectSlug}:${issueIdentifier}`}
+        projectSlug={projectSlug}
+        issueIdentifier={issueIdentifier}
+      />
     </section>
   );
 }
