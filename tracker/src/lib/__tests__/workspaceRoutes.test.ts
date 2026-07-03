@@ -17,6 +17,7 @@ import {
   issuePath,
   newIssueAssistantPath,
   projectExploreAssistantPath,
+  projectTerminalPath,
   projectSettingsPath,
   newIssuePath,
   projectsFiltersPath,
@@ -50,6 +51,7 @@ describe("workspaceRoutes", () => {
     expect(newIssueAssistantPath("acme")).toBe("/projects/acme/assistant/new-issue");
     expect(issueAssistantPath("acme", "ABC-1")).toBe("/projects/acme/assistant/issue/ABC-1");
     expect(projectExploreAssistantPath("acme")).toBe("/projects/acme/assistant/explore");
+    expect(projectTerminalPath("acme")).toBe("/projects/acme/assistant/terminal");
   });
 
   it("encodes assistant issue authoring path parameters", () => {

@@ -826,7 +826,10 @@
       "joinTimeout": "Timeout ao entrar no canal do terminal",
       "openFailed": "Falha ao abrir sessão do terminal",
       "joinFailed": "Falha ao entrar no canal do terminal: {{reason}}",
-      "ariaLabel": "Terminal para {{identifier}}"
+      "ariaLabel": "Terminal para {{identifier}}",
+      "projectTitle": "Terminal do projeto",
+      "projectDescription": "Executa no workspace base do projeto via tmux.",
+      "projectAriaLabel": "Terminal do projeto para {{projectSlug}}"
     },
     "blockers": {
       "addTitle": "Adicionar bloqueio",
@@ -951,6 +954,8 @@
       "addToStatus": "Adicionar issue em {{status}}",
       "optionsAria": "Opções de nova issue",
       "withAssistant": "Nova issue com assistente",
+      "newProjectSession": "Nova sessão do projeto",
+      "newProjectTerminal": "Novo terminal do projeto",
       "quickCreate": "Criação rápida"
     },
     "pullRequest": {

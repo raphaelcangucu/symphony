@@ -4,23 +4,65 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 
 import { i18n } from "@/i18n";
+import { cn } from "@/lib/utils";
 import { createTrackerSocket } from "@/services/phoenix/socket";
-import { openTerminalSession, terminalTopic } from "@/services/terminal";
+import { openTerminalSession, projectTerminalTopic, terminalTopic } from "@/services/terminal";
 
 interface IssueTerminalProps {
   projectSlug: string;
   issueIdentifier: string;
 }
 
+interface ProjectTerminalProps {
+  projectSlug: string;
+  className?: string;
+}
+
 export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalProps) {
+  return (
+    <TerminalSessionView
+      projectSlug={projectSlug}
+      issueIdentifier={issueIdentifier}
+      ariaLabel={i18n.t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
+    />
+  );
+}
+
+export function ProjectTerminal({ projectSlug, className }: ProjectTerminalProps) {
+  return (
+    <TerminalSessionView
+      projectSlug={projectSlug}
+      ariaLabel={i18n.t("issue.terminal.projectAriaLabel", { projectSlug })}
+      className={className}
+      fillHeight
+    />
+  );
+}
+
+interface TerminalSessionViewProps {
+  projectSlug: string;
+  issueIdentifier?: string;
+  ariaLabel: string;
+  className?: string;
+  fillHeight?: boolean;
+}
+
+function TerminalSessionView({
+  projectSlug,
+  issueIdentifier,
+  ariaLabel,
+  className,
+  fillHeight = false,
+}: TerminalSessionViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const project = projectSlug.trim();
-    const identifier = issueIdentifier.trim();
+    const identifier = issueIdentifier?.trim() ?? "";
     const container = containerRef.current;
-    if (!project || !identifier || !container) return undefined;
+    const projectScoped = issueIdentifier == null;
+    if (!project || (!projectScoped && !identifier) || !container) return undefined;
 
     const terminal = new Terminal({
       cursorBlink: true,
@@ -42,12 +84,17 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
     let channel: ReturnType<typeof socket.channel> | null = null;
     let cancelled = false;
     let lastSnapshot = "";
+    const fallbackTopic = projectScoped ? projectTerminalTopic(project) : terminalTopic(project, identifier);
 
-    openTerminalSession(project, identifier)
-      .then((session) => {
+    const topicPromise = projectScoped
+      ? Promise.resolve(fallbackTopic)
+      : openTerminalSession(project, identifier).then((session) => session.channelTopic || fallbackTopic);
+
+    topicPromise
+      .then((channelTopic) => {
         if (cancelled) return;
 
-        channel = socket.channel(session.channelTopic || terminalTopic(project, identifier), { project_slug: project });
+        channel = socket.channel(channelTopic, { project_slug: project });
 
         channel.on("output", (payload) => {
           const data = payloadValue(payload, "data");
@@ -104,15 +151,18 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
   }, [issueIdentifier, projectSlug]);
 
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", fillHeight && "flex h-full min-h-0 flex-col", className)}>
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       ) : null}
       <div
-        aria-label={i18n.t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
-        className="h-[480px] overflow-hidden rounded-lg border bg-slate-950 p-2"
+        aria-label={ariaLabel}
+        className={cn(
+          "overflow-hidden rounded-lg border bg-slate-950 p-2",
+          fillHeight ? "min-h-[480px] flex-1" : "h-[480px]",
+        )}
         ref={containerRef}
       />
     </div>

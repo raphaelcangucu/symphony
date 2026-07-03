@@ -53,6 +53,10 @@ export function projectExploreAssistantPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/assistant/explore`;
 }
 
+export function projectTerminalPath(projectSlug: string): string {
+  return `/projects/${requireSlug(projectSlug)}/assistant/terminal`;
+}
+
 export function newIssueAssistantPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/assistant/new-issue`;
 }

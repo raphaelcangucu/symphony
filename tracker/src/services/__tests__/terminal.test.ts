@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { openTerminalSession, terminalTopic } from "@/services/terminal";
+import { openTerminalSession, projectTerminalTopic, terminalTopic } from "@/services/terminal";
 import { http } from "@/services/http";
 
 describe("terminal service", () => {
@@ -34,7 +34,9 @@ describe("terminal service", () => {
 
   it("builds terminal topics with validation", () => {
     expect(terminalTopic("macro-markets", "MAC-1")).toBe("terminal:macro-markets:MAC-1");
+    expect(projectTerminalTopic("macro-markets")).toBe("terminal:devenv:macro-markets");
     expect(() => terminalTopic(" ", "MAC-1")).toThrow(/projectSlug/);
     expect(() => terminalTopic("macro-markets", " ")).toThrow(/issueIdentifier/);
+    expect(() => projectTerminalTopic(" ")).toThrow(/projectSlug/);
   });
 });

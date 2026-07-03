@@ -1,4 +1,4 @@
-import { ChevronDown, Plus, Sparkles } from "lucide-react";
+import { Bot, ChevronDown, Plus, Sparkles, TerminalSquare } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { newIssueAssistantPath } from "@/lib/workspaceRoutes";
+import { assistantPath, newIssueAssistantPath, projectTerminalPath } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
@@ -41,15 +41,31 @@ export function NewIssueMenu({
   const { t } = useTranslation();
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
-  const assistantPath = newIssueAssistantPath(projectSlug);
+  const issueAssistantPath = newIssueAssistantPath(projectSlug);
+  const projectAssistantPath = assistantPath(projectSlug);
+  const terminalPath = projectTerminalPath(projectSlug);
   const addLabel = status ? t("issue.create.addToStatus", { status }) : t("issue.create.add");
 
-  const menuItems = (
+  const renderMenuItems = (includeIssueAssistant: boolean) => (
     <DropdownMenuContent align="end" className="w-56">
+      {includeIssueAssistant ? (
+        <DropdownMenuItem asChild>
+          <Link to={issueAssistantPath}>
+            <Sparkles className="mr-2 h-4 w-4" />
+            {t("issue.create.withAssistant")}
+          </Link>
+        </DropdownMenuItem>
+      ) : null}
       <DropdownMenuItem asChild>
-        <Link to={assistantPath}>
-          <Sparkles className="mr-2 h-4 w-4" />
-          {t("issue.create.withAssistant")}
+        <Link to={projectAssistantPath}>
+          <Bot className="mr-2 h-4 w-4" />
+          {t("issue.create.newProjectSession")}
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem asChild>
+        <Link to={terminalPath}>
+          <TerminalSquare className="mr-2 h-4 w-4" />
+          {t("issue.create.newProjectTerminal")}
         </Link>
       </DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setQuickCreateOpen(true)}>
@@ -87,7 +103,7 @@ export function NewIssueMenu({
               <Plus className="h-4 w-4" />
             </button>
           </DropdownMenuTrigger>
-          {menuItems}
+          {renderMenuItems(true)}
         </DropdownMenu>
         {dialog}
       </>
@@ -111,7 +127,7 @@ export function NewIssueMenu({
               {t("issue.create.add")}
             </button>
           </DropdownMenuTrigger>
-          {menuItems}
+          {renderMenuItems(true)}
         </DropdownMenu>
         {dialog}
       </>
@@ -122,7 +138,7 @@ export function NewIssueMenu({
     <>
       <div className={cn("inline-flex items-center", className)}>
         <Button size={size} className="rounded-r-none border-r border-primary-foreground/20" asChild>
-          <Link to={assistantPath}>
+          <Link to={issueAssistantPath}>
             <Plus className="h-4 w-4" />
             {t("issue.create.trigger")}
           </Link>
@@ -138,12 +154,7 @@ export function NewIssueMenu({
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onSelect={() => setQuickCreateOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t("issue.create.quickCreate")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
+          {renderMenuItems(false)}
         </DropdownMenu>
       </div>
       {dialog}

@@ -22,7 +22,6 @@ defmodule SymphonyElixir.WorkspaceSkills do
           {:workspace_missing, Path.t()}
           | {:skills_root_missing, Path.t()}
           | {:blocked_path, Path.t()}
-          | {:link_conflict, Path.t()}
           | {:file_error, Path.t(), File.posix()}
 
   @spec prepare(Path.t()) :: :ok | {:error, error()}
@@ -265,11 +264,18 @@ defmodule SymphonyElixir.WorkspaceSkills do
         if same_target?(path, existing_target, target) do
           :ok
         else
-          {:error, {:link_conflict, path}}
+          replace_symlink(path, target)
         end
 
       {:error, reason} ->
         {:error, {:file_error, path, reason}}
+    end
+  end
+
+  defp replace_symlink(path, target) do
+    with :ok <- normalize_file_result(File.rm(path), path),
+         :ok <- normalize_file_result(File.ln_s(target, path), path) do
+      :ok
     end
   end
 
