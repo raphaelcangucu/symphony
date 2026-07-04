@@ -9,6 +9,7 @@ defmodule SymphonyElixir.AgentRunner do
     AgentPreference,
     CodingAgent,
     Config,
+    ExecutionMode,
     InstanceConfig,
     Issue,
     ProjectConfig,
@@ -56,6 +57,7 @@ defmodule SymphonyElixir.AgentRunner do
       |> issue_goal_opts(issue, agent_kind)
       |> Keyword.put(:agent_kind, agent_kind)
       |> Keyword.put_new_lazy(:project_config, fn -> resolve_project_config(issue) end)
+      |> merge_agent_settings_opts(issue)
 
     Logger.info("Starting agent run for #{issue_context(issue)}")
 
@@ -275,6 +277,34 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp resolve_project_config(_issue), do: nil
 
+  # Fold the operator's persisted per-issue overrides (model/effort/execution
+  # mode) into the run opts. `Keyword.put_new` so explicit caller opts (tests,
+  # child runs) win over operator selections, which in turn win over project
+  # defaults resolved later in the adapters.
+  defp merge_agent_settings_opts(opts, issue) do
+    Enum.reduce(agent_settings_opts(issue), opts, fn {key, value}, acc ->
+      Keyword.put_new(acc, key, value)
+    end)
+  end
+
+  @doc false
+  @spec agent_settings_opts(map()) :: keyword()
+  def agent_settings_opts(issue) do
+    with slug when is_binary(slug) <- Map.get(issue, :project_slug),
+         identifier when is_binary(identifier) <- Map.get(issue, :identifier),
+         {:ok, settings} <- Context.get_agent_settings(slug, identifier) do
+      []
+      |> put_if_present(:model, settings.model)
+      |> put_if_present(:effort, settings.effort)
+      |> put_if_present(:execution_mode, settings.mode)
+    else
+      _no_overrides -> []
+    end
+  end
+
+  defp put_if_present(opts, _key, nil), do: opts
+  defp put_if_present(opts, key, value), do: Keyword.put(opts, key, value)
+
   # Goal mode is driven by the durable native Codex goal thread, not by a cached
   # objective. A Codex issue that owns a goal thread (`agent_session_id`) runs in
   # goal mode so the run resumes that thread and pursues its native goal; an
@@ -326,6 +356,7 @@ defmodule SymphonyElixir.AgentRunner do
       |> maybe_put_claude_tools(agent_kind, issue)
       |> maybe_put_resume_thread_id(opts, agent_kind, issue)
       |> maybe_put_goal_mode(opts, agent_kind)
+      |> put_execution_mode(opts)
 
     with {:ok, session} <- CodingAgent.start_session(workspace, agent_kind, session_opts) do
       maybe_persist_goal_thread(session, issue, agent_kind, opts)
@@ -1154,6 +1185,24 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp maybe_put_goal_mode(session_opts, _opts, _agent_kind), do: session_opts
+
+  # Carry the normalized execution mode (plan/build/yolo) into the session so the
+  # adapter can map it onto its sandbox / permission ceiling. Applies to every
+  # agent kind and defaults to the build mode when unset.
+  @doc false
+  @spec put_execution_mode(keyword(), keyword()) :: keyword()
+  def put_execution_mode(session_opts, opts) do
+    # Execution mode is an operator override. When none was selected, leave the
+    # session opts untouched so the project/workflow config governs sandbox and
+    # approval exactly as before (no implicit "build" override on every run).
+    case Keyword.get(opts, :execution_mode) do
+      mode when is_binary(mode) ->
+        Keyword.put(session_opts, :execution_mode, ExecutionMode.normalize(mode))
+
+      _absent ->
+        session_opts
+    end
+  end
 
   defp issue_session_thread_id(%Issue{agent_session_id: id}) when is_binary(id) and id != "", do: id
   defp issue_session_thread_id(_issue), do: nil

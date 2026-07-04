@@ -114,6 +114,51 @@ defmodule SymphonyElixir.Claude.SessionLogTest do
       result = SessionLog.parse_line(line)
       assert result["kind"] == "event"
     end
+
+    test "TodoWrite tool use keeps the todos JSON in the entry body" do
+      line =
+        Jason.encode!(%{
+          "type" => "assistant",
+          "message" => %{
+            "content" => [
+              %{
+                "type" => "tool_use",
+                "id" => "toolu_1",
+                "name" => "TodoWrite",
+                "input" => %{
+                  "todos" => [
+                    %{"content" => "Set up DB", "status" => "completed", "activeForm" => "Setting up DB"},
+                    %{"content" => "Wire API", "status" => "in_progress", "activeForm" => "Wiring API"}
+                  ]
+                }
+              }
+            ]
+          }
+        })
+
+      result = SessionLog.parse_line(line)
+      assert result["kind"] == "tool_call"
+      assert result["title"] == "TodoWrite"
+      assert result["body"] =~ "\"todos\""
+      assert result["body"] =~ "Wire API"
+    end
+
+    test "TaskCreate tool use keeps the subject JSON in the entry body" do
+      line =
+        Jason.encode!(%{
+          "type" => "assistant",
+          "message" => %{
+            "content" => [
+              %{"type" => "tool_use", "id" => "toolu_2", "name" => "TaskCreate", "input" => %{"subject" => "Set up DB"}}
+            ]
+          }
+        })
+
+      result = SessionLog.parse_line(line)
+      assert result["kind"] == "tool_call"
+      assert result["title"] == "TaskCreate"
+      assert result["body"] =~ "Set up DB"
+    end
   end
 
   describe "tail/2 and read_from/2" do

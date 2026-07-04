@@ -12,6 +12,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Codex.Session
   alias SymphonyElixir.Config
+  alias SymphonyElixir.ExecutionMode
 
   @initialize_id 1
   @thread_start_id 2
@@ -62,7 +63,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
       goals_section = goals_section(opts)
 
-      with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section),
+      with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section, opts),
            {:ok, thread_id, origin} <-
              do_start_session(port, expanded_workspace, session_policies, opts, goals_section) do
         {goal_state, goal_map} = establish_goal(port, thread_id, origin, opts, goals_section)
@@ -122,7 +123,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          {:ok, thread_id} <- control_thread_id(workspace, opts),
          {:ok, port} <- start_port(workspace, codex_section) do
       try do
-        with {:ok, session_policies} <- session_policies(Path.expand(workspace), codex_section),
+        with {:ok, session_policies} <- session_policies(Path.expand(workspace), codex_section, opts),
              :ok <- send_initialize(port),
              {:ok, _resumed_id} <- resume_thread(port, thread_id, session_policies, opts) do
           mirror_command_result(
@@ -161,7 +162,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         expanded_workspace = Path.expand(workspace)
 
         try do
-          with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section),
+          with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section, opts),
                :ok <- send_initialize(port),
                {:ok, thread_id, origin} <-
                  ensure_control_thread(port, expanded_workspace, session_policies, opts),
@@ -546,9 +547,28 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp session_policies(workspace, codex_section) do
-    CodexConfig.runtime_settings(codex_section, workspace)
+  defp session_policies(workspace, codex_section, opts) do
+    codex_section
+    |> apply_execution_mode_section(Keyword.get(opts, :execution_mode))
+    |> CodexConfig.runtime_settings(workspace)
   end
+
+  # When the operator picks an execution mode, force the codex sandbox onto the
+  # mode's ceiling (plan→read-only, build→workspace-write, yolo→danger-full-access)
+  # and drop any per-project `turn_sandbox_policy` so the per-turn policy is
+  # recomputed from the new sandbox. yolo also pins approval to "never". Without a
+  # mode the project/instance section is honored unchanged.
+  defp apply_execution_mode_section(section, mode) when is_binary(mode) do
+    section
+    |> Map.put("thread_sandbox", ExecutionMode.codex_policy(mode).sandbox)
+    |> Map.delete("turn_sandbox_policy")
+    |> maybe_force_never_approval(mode)
+  end
+
+  defp apply_execution_mode_section(section, _mode), do: section
+
+  defp maybe_force_never_approval(section, "yolo"), do: Map.put(section, "approval_policy", "never")
+  defp maybe_force_never_approval(section, _mode), do: section
 
   # The per-project `codex:` section is threaded via opts at dispatch
   # (`agent_runner`). Fall back to the process-global codex section when absent
@@ -988,6 +1008,11 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         if is_pid(reply_to), do: send(reply_to, {:user_input_ok, request_id})
         receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
 
+      {:codex_approval, request_id, decision, reply_to} ->
+        send_message(port, %{"id" => request_id, "result" => %{"decision" => decision}})
+        if is_pid(reply_to), do: send(reply_to, {:approval_ok, request_id})
+        receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
+
       {:codex_interrupt} ->
         send_interrupt(port, turn_ctx)
         receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
@@ -1412,7 +1437,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          metadata,
          _tool_executor,
          auto_approve_requests,
-         _interactive_user_input
+         interactive_user_input
        ) do
     approve_or_require(
       port,
@@ -1422,7 +1447,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       payload_string,
       on_message,
       metadata,
-      auto_approve_requests
+      auto_approve_requests,
+      interactive_user_input
     )
   end
 
@@ -1470,7 +1496,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          metadata,
          _tool_executor,
          auto_approve_requests,
-         _interactive_user_input
+         interactive_user_input
        ) do
     approve_or_require(
       port,
@@ -1480,7 +1506,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       payload_string,
       on_message,
       metadata,
-      auto_approve_requests
+      auto_approve_requests,
+      interactive_user_input
     )
   end
 
@@ -1493,7 +1520,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          metadata,
          _tool_executor,
          auto_approve_requests,
-         _interactive_user_input
+         interactive_user_input
        ) do
     approve_or_require(
       port,
@@ -1503,7 +1530,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       payload_string,
       on_message,
       metadata,
-      auto_approve_requests
+      auto_approve_requests,
+      interactive_user_input
     )
   end
 
@@ -1516,7 +1544,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          metadata,
          _tool_executor,
          auto_approve_requests,
-         _interactive_user_input
+         interactive_user_input
        ) do
     approve_or_require(
       port,
@@ -1526,7 +1554,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       payload_string,
       on_message,
       metadata,
-      auto_approve_requests
+      auto_approve_requests,
+      interactive_user_input
     )
   end
 
@@ -1576,7 +1605,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          payload_string,
          on_message,
          metadata,
-         true
+         true,
+         _interactive_user_input
        ) do
     send_message(port, %{"id" => id, "result" => %{"decision" => decision}})
 
@@ -1598,9 +1628,31 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          _payload_string,
          _on_message,
          _metadata,
+         false,
          false
        ) do
     :approval_required
+  end
+
+  defp approve_or_require(
+         _port,
+         id,
+         decision,
+         payload,
+         payload_string,
+         on_message,
+         metadata,
+         false,
+         true
+       ) do
+    emit_message(
+      on_message,
+      :approval_required,
+      %{payload: payload, raw: payload_string, request_id: id, decision: decision},
+      metadata
+    )
+
+    :awaiting_user_input
   end
 
   defp maybe_auto_answer_tool_request_user_input(

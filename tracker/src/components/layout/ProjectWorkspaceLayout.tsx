@@ -6,6 +6,7 @@ import { upsertIssue } from "@/components/board/board-utils";
 import { BoardFiltersTrigger } from "@/components/board/BoardFiltersTrigger";
 import { BoardPaletteShortcuts } from "@/components/board/BoardPaletteShortcuts";
 import { BoardQuickFilters } from "@/components/board/BoardQuickFilters";
+import { SessionQuickOpenLauncher } from "@/components/launcher/SessionQuickOpenLauncher";
 import { ProjectAssistantMenu } from "@/components/layout/ProjectAssistantMenu";
 import { ProjectEditorMenu } from "@/components/layout/ProjectEditorMenu";
 import { ProjectHeader } from "@/components/layout/ProjectHeader";
@@ -65,6 +66,7 @@ function WorkspaceChrome() {
         pollingActive={pollingActive}
         onIssueCreated={(issue) => setIssues((current) => upsertIssue(current, issue))}
       />
+      <SessionQuickOpenLauncher />
       {showBoardFilters ? <BoardPaletteShortcuts /> : null}
       {showBoardFilters ? <BoardQuickFilters /> : null}
       <Outlet />

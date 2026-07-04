@@ -80,6 +80,33 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
     refute File.exists?(session.mcp_config_path)
   end
 
+  test "execution_mode maps onto the claude permission mode" do
+    for {mode, expected} <- [{"plan", "plan"}, {"build", "acceptEdits"}, {"yolo", "bypassPermissions"}] do
+      {root, ws} = workspace()
+
+      assert {:ok, session} =
+               CodingAgent.start_session(ws,
+                 workspace_root: root,
+                 claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}",
+                 execution_mode: mode
+               )
+
+      assert session.permission_mode == expected
+    end
+  end
+
+  test "missing execution_mode defaults to the build permission mode" do
+    {root, ws} = workspace()
+
+    assert {:ok, session} =
+             CodingAgent.start_session(ws,
+               workspace_root: root,
+               claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
+             )
+
+    assert session.permission_mode == "acceptEdits"
+  end
+
   test "workspace guard still rejects the workspace root itself" do
     {root, _ws} = workspace()
     assert {:error, {:invalid_workspace_cwd, :workspace_root, _}} = CodingAgent.start_session(root, workspace_root: root)

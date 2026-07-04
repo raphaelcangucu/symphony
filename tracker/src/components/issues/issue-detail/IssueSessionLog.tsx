@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SessionLogEntryCard } from "@/components/issues/issue-detail/SessionLogEntryCard";
-import { pairSessionLogItems, sessionPairToView } from "@/components/issues/issue-detail/sessionToolCall";
+import {
+  AgentTaskPinnedPanel,
+  SessionLogTranscript,
+} from "@/components/agent-activity";
 import { agentKindLabel } from "@/components/shared/AgentChip";
-import { ToolCallBlock } from "@/components/shared/ToolCallBlock";
+import { deriveAgentTasks } from "@/lib/agentTasks";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { SessionLogEntry } from "@/types/session-log";
 
@@ -17,6 +19,8 @@ interface IssueSessionLogProps {
   error: string | null;
   logAgentKind?: string | null;
   preferredAgentKind?: string | null;
+  /** Grow to fill the available height (chat layout) instead of a fixed max. */
+  fill?: boolean;
 }
 
 function resolveAgentLabel(kind: string, t: ReturnType<typeof useTranslation>["t"]): string {
@@ -31,11 +35,12 @@ export function IssueSessionLog({
   error,
   logAgentKind = null,
   preferredAgentKind = null,
+  fill = false,
 }: IssueSessionLogProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
-  const items = pairSessionLogItems(entries);
+  const taskSnapshot = deriveAgentTasks(entries);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -58,7 +63,7 @@ export function IssueSessionLog({
   }, [entries]);
 
   return (
-    <section className="rounded-xl border p-4">
+    <section className={cn("rounded-xl border p-4", fill && "flex min-h-0 flex-1 flex-col")}>
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t("issue.sessionLog.title")}
@@ -79,22 +84,21 @@ export function IssueSessionLog({
           {t("issue.sessionLog.source", { agent: resolveAgentLabel(logAgentKind, t) })}
         </p>
       ) : null}
+      <AgentTaskPinnedPanel snapshot={taskSnapshot} />
       {error ? (
         <p className="mt-3 text-sm text-destructive">{error}</p>
       ) : (
         <div
           ref={containerRef}
           aria-label={t("issue.sessionLog.ariaLabel", { identifier: issueIdentifier })}
-          className={cn("mt-3 max-h-[520px] space-y-3 overflow-auto rounded-lg bg-muted/20 p-3", SCROLLBAR_THIN)}
+          className={cn(
+            "mt-3 space-y-3 overflow-auto rounded-lg bg-muted/20 p-3",
+            SCROLLBAR_THIN,
+            fill ? "min-h-0 flex-1" : "max-h-[520px]",
+          )}
         >
-          {items.length > 0 ? (
-            items.map((item, index) =>
-              item.type === "toolCall" ? (
-                <ToolCallBlock view={sessionPairToView(item.call, item.result)} key={`tool-${item.call.callId}-${index}`} />
-              ) : (
-                <SessionLogEntryCard entry={item.entry} key={`${item.entry.kind}-${item.entry.title}-${index}`} />
-              ),
-            )
+          {entries.length > 0 ? (
+            <SessionLogTranscript entries={entries} taskSnapshot={taskSnapshot} />
           ) : (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">{t("issue.sessionLog.waiting")}</p>
           )}

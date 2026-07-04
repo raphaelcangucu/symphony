@@ -1,4 +1,4 @@
-import { AlertTriangle, BookOpen, LayoutDashboard, List, RefreshCw } from "lucide-react";
+import { AlertTriangle, BookOpen, History, LayoutDashboard, List, RefreshCw, TerminalSquare } from "lucide-react";
 import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,7 +11,7 @@ import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
 import { ProjectSwitcher } from "@/components/layout/ProjectSwitcher";
 import { cn } from "@/lib/utils";
 import { kbProjectPath } from "@/lib/kbRoutes";
-import { workspaceBasePath } from "@/lib/workspaceRoutes";
+import { projectSessionsPath, projectTerminalPath, workspaceBasePath } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 import type { ProjectSyncState, TrackerKind } from "@/types/project";
 
@@ -187,6 +187,24 @@ export function ProjectHeader({
           >
             <List className="h-4 w-4" />
             {t("layout.projectHeader.list")}
+          </NavLink>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <NavLink
+            to={projectSessionsPath(projectSlug)}
+            className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+          >
+            <History className="h-4 w-4" />
+            {t("layout.projectHeader.sessions")}
+          </NavLink>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <NavLink
+            to={projectTerminalPath(projectSlug)}
+            className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+          >
+            <TerminalSquare className="h-4 w-4" />
+            {t("layout.projectHeader.terminal")}
           </NavLink>
         </Button>
         <Button variant="ghost" size="sm" asChild>

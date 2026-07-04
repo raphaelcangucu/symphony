@@ -2,6 +2,7 @@ import type { Channel } from "phoenix";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
+import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import { i18n } from "@/i18n";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import { sessionLogTopic } from "@/services/session-log";
@@ -10,6 +11,7 @@ import { payloadEntries, type SessionLogEntry } from "@/types/session-log";
 export interface AgentSteerPayload {
   message: string;
   attachments: AssistantOutgoingAttachment[];
+  contextRefs?: ComposerContextChipRef[];
 }
 
 interface UseSessionLogChannelArgs {
@@ -136,12 +138,12 @@ export function useSessionLogChannel({
   const steerTurn = useCallback((payload: AgentSteerPayload) => {
     const channel = channelRef.current;
     const trimmed = payload.message.trim();
-    if (!channel || (trimmed.length === 0 && payload.attachments.length === 0)) return;
+    if (!channel || (trimmed.length === 0 && payload.attachments.length === 0 && (payload.contextRefs ?? []).length === 0)) return;
 
     setSteerPending(true);
     setSteerError(null);
     channel
-      .push("steer_turn", { message: trimmed, attachments: payload.attachments })
+      .push("steer_turn", { message: trimmed, attachments: payload.attachments, context_refs: payload.contextRefs ?? [] })
       .receive("error", (reason) => {
         setSteerPending(false);
         const record = reason as Record<string, unknown>;

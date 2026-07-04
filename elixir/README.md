@@ -29,6 +29,43 @@ During Codex app-server sessions, Symphony also serves client-side dynamic tools
 If a claimed issue moves to a terminal state (`Done`, `Closed`, `Cancelled`, or `Duplicate`),
 Symphony stops the active agent for that issue and cleans up matching workspaces.
 
+## Session / Run Quick-Open Launcher
+
+Press **⌘J** / **Ctrl+J** anywhere in a project workspace to open the tabbed **New Session**
+launcher (mirrors Jean's worktree modal). v1 ships four source tabs:
+
+| Tab | Source | Action |
+|-----|--------|--------|
+| **Actions** | Curated quick commands (new issue, board, filters, assistant, KB) | Navigate |
+| **Issues** | Project issue list (fuzzy + exact-number search) | Jump to Agent → Execution |
+| **PRs** | Open PRs across configured repos | Deep-link via `Symphony-Issue:` marker, else open PR externally |
+| **Branches** | Repo branches via GitHub REST | Map to issue via `issue.branchName`, else open branch on GitHub |
+
+**Hold ⌥/Alt** while selecting an issue-linked row to **resume the run in the background**
+(`dispatchIssueAgent` with `action: "resume"`) without navigating away.
+
+Project-scoped read endpoints (cached 60s via `GitHub.ReadCache`):
+
+- `GET /api/tracker/v1/projects/:project_slug/pull_requests` — open PRs annotated with marker-derived `issue_identifier`
+- `GET /api/tracker/v1/projects/:project_slug/branches` — repo branches with protection metadata
+
+Both return `{ data, supported }`; projects without configured repos report `supported: false`.
+
+## In-App Workspace Diff
+
+The tracker composer exposes a **Diff** action with **⌘G** / **Ctrl+G**. It opens an in-app workspace
+diff viewer with `Branch`, `Uncommitted`, and issue-scoped `Commits` views. The viewer is multi-repo
+aware: backend responses are grouped per repo and the frontend prefixes file paths with the repo name
+before building the file tree.
+
+Local workspace diffs are exposed through:
+
+- `GET /api/tracker/v1/projects/:project_slug/issues/:identifier/diff?type=branch|uncommitted`
+- `GET /api/tracker/v1/assistant/threads/:thread_id/diff?type=branch|uncommitted`
+
+The `Commits` tab reuses the commit evidence endpoints for agent commits ahead of the integration
+branch.
+
 ## Installation
 
 Symphony does **not** use a global `WORKFLOW.md`. Process settings live in `elixir/.env`
@@ -700,8 +737,9 @@ policy) are Codex-only and have no equivalent in the Claude/Cursor backends.
 #### Cursor Agent backend
 
 The `cursor` agent runs the [Cursor CLI](https://cursor.com/docs/cli) (`cursor-agent`) per turn in
-headless mode (`--print --output-format stream-json --stream-partial-output --force`), resuming the
-chat across turns via `--resume <chat id>`. Configure it with:
+headless mode (`--print --output-format stream-json --stream-partial-output`), resuming the
+chat across turns via `--resume <chat id>`. The `--force` flag (bypass approvals) is added only when
+the operator selects the **Yolo** execution mode (see _Execution control_ below). Configure it with:
 
 - `SYMPHONY_CURSOR_COMMAND` — instance-wide CLI command (default `cursor-agent`).
 - A `cursor:` section (`command:` key) in a project's `workflow_markdown` for per-project overrides.
@@ -710,6 +748,37 @@ chat across turns via `--resume <chat id>`. Configure it with:
 Symphony's dynamic tools (`set_issue_status`, `github_graphql`, ...) are exposed through the shared
 MCP gateway: the session merges a `symphony` server entry into `<workspace>/.cursor/mcp.json`
 (restored on session stop) and the run passes `--approve-mcps`.
+
+### Execution control (model / effort / mode)
+
+The execution composer (issue → Agent tab) lets the operator pick the **model**, **reasoning
+effort**, and an **execution mode** that actually drive the orchestrator run — not just the
+assistant chat. These are sent on the dispatch endpoint and persisted per issue.
+
+- **Dispatch params.** `POST /api/tracker/projects/:slug/issues/:id/dispatch` accepts, in addition
+  to `action`/`agent`/`goal`/`instructions`/`target_status`, the optional `model`, `effort`, and
+  `mode` fields. Blank values are ignored.
+- **Persistence.** Selections are written to the `local_tracker_issue_agent_settings` table (keyed
+  by `project_slug` + `identifier`, so it works for GitHub/Jira/Linear/local issues alike) and read
+  back by `AgentRunner` when building the run. Explicit caller opts win over persisted settings,
+  which win over project/workflow defaults.
+- **Execution mode is an operator override.** When no mode is selected, the run behaves exactly as
+  before — the project/workflow `codex:` config governs sandbox and approval. A selected mode maps
+  to per-agent policy knobs (`SymphonyElixir.ExecutionMode`):
+
+  | mode  | Codex sandbox / approval                     | Claude `permission_mode` | Cursor          |
+  | ----- | -------------------------------------------- | ------------------------ | --------------- |
+  | plan  | `read-only` (approval unchanged)             | `plan`                   | n/a (hidden)\*  |
+  | build | `workspace-write` (approval unchanged)       | `acceptEdits`            | default         |
+  | yolo  | `danger-full-access`, approval pinned `never`| `bypassPermissions`      | adds `--force`  |
+
+  \*Cursor's CLI has no read-only mode, so **Plan** is hidden for Cursor; if a `plan` mode reaches
+  the Cursor adapter it is treated as `build` (no `--force`) and logged.
+
+- **UI.** The composer's `ExecutionModeMenu` shows Plan/Build/Yolo with icons and a one-line
+  description; `Shift+Tab` while typing cycles through the modes available for the active agent.
+  The model picker marks the catalog default with a ★ and shows a thinking-intensity icon per
+  reasoning-effort level.
 
 ### Assistant turn tracking & Resume
 
@@ -965,6 +1034,14 @@ Assistant tool calls record IN/OUT arguments and output for debugging in the cha
   file reads come from the existing MCP read-tool calls, while Codex's native
   edits and shell commands are surfaced by relaying its item events through the
   tool-call pipeline.
+- Tool calls are keyed by their stable id (Claude `tool_use_id` / Codex id), so
+  repeated same-name calls no longer overwrite each other and arrival order is
+  preserved during streaming (`tracker` `assistantStream.ts`).
+- Consecutive **same-kind** tool calls collapse into a single expandable group
+  ("Read N files", "Ran N commands", etc.) via `lib/toolCallGroups.ts` and the
+  `ToolActivityTimeline` / `ToolActivityGroup` components. A lone call still
+  renders as a single row; a group shows a live spinner while any child runs and
+  a red badge if any child failed. Groups update in real time as calls stream in.
 
 Issue authoring uses the same assistant surface as the primary **New issue** path. The assistant
 creates a draft issue in `assistant.draft_status`, redirects to

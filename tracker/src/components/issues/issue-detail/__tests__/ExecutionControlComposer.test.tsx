@@ -3,12 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
+import type { AssistantCommand } from "@/types/assistant-command";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
 const fetchAssistantCatalogBundleMock = vi.hoisted(() => vi.fn());
 const controlIssueGoalMock = vi.hoisted(() => vi.fn());
+const useMagicCommandsMock = vi.hoisted(() => vi.fn());
+const useAssistantCommandsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issueDispatch", () => ({
   dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
@@ -18,11 +21,37 @@ vi.mock("@/services/goalControl", () => ({
   controlIssueGoal: (...args: unknown[]) => controlIssueGoalMock(...args),
 }));
 
+vi.mock("@/components/commands/useMagicCommands", () => ({
+  useMagicCommands: (...args: unknown[]) => useMagicCommandsMock(...args),
+}));
+
+vi.mock("@/hooks/useAssistantCommands", () => ({
+  useAssistantCommands: (...args: unknown[]) => useAssistantCommandsMock(...args),
+}));
+
 const uploadAssistantAttachmentMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/assistant", () => ({
   fetchAssistantCatalogBundle: (...args: unknown[]) => fetchAssistantCatalogBundleMock(...args),
   uploadAssistantAttachment: (...args: unknown[]) => uploadAssistantAttachmentMock(...args),
+}));
+
+const listIssuesMock = vi.hoisted(() => vi.fn());
+const searchWorkspaceFilesMock = vi.hoisted(() => vi.fn());
+const listPullRequestsMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/issues", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/issues")>()),
+  listIssues: (...args: unknown[]) => listIssuesMock(...args),
+}));
+
+vi.mock("@/services/workspaceFiles", () => ({
+  searchWorkspaceFiles: (...args: unknown[]) => searchWorkspaceFilesMock(...args),
+}));
+
+vi.mock("@/services/pullRequests", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/pullRequests")>()),
+  listPullRequests: (...args: unknown[]) => listPullRequestsMock(...args),
 }));
 
 const issue = {
@@ -75,6 +104,12 @@ describe("ExecutionControlComposer", () => {
     dispatchIssueAgentMock.mockReset();
     controlIssueGoalMock.mockReset();
     uploadAssistantAttachmentMock.mockReset();
+    listIssuesMock.mockReset();
+    listIssuesMock.mockResolvedValue([]);
+    searchWorkspaceFilesMock.mockReset();
+    searchWorkspaceFilesMock.mockResolvedValue([]);
+    listPullRequestsMock.mockReset();
+    listPullRequestsMock.mockResolvedValue({ data: [], supported: false, available: false });
     fetchAssistantCatalogBundleMock.mockResolvedValue({
       agents: [
         {
@@ -93,6 +128,55 @@ describe("ExecutionControlComposer", () => {
         },
       ],
     });
+    useMagicCommandsMock.mockReturnValue({
+      commands: [],
+      isLoading: false,
+      error: null,
+      isRunning: false,
+      run: vi.fn(),
+    });
+    useAssistantCommandsMock.mockReturnValue({
+      commands: [],
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+  });
+
+  it("shows API-provided slash command suggestions in execution composer", async () => {
+    const commands: AssistantCommand[] = [
+      {
+        slug: "release",
+        name: "Release",
+        description: "Prepare and publish release",
+        kind: "skill",
+        category: "automation",
+        submitKind: null,
+        source: "skills-dir",
+      },
+    ];
+    useAssistantCommandsMock.mockReturnValue({
+      commands,
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText(/optional guidance/i);
+    await user.click(textarea);
+    await user.type(textarea, "/rel");
+
+    expect(await screen.findByText("/release")).toBeInTheDocument();
   });
 
   it("steers a live run with /infer", () => {
@@ -117,6 +201,44 @@ describe("ExecutionControlComposer", () => {
       message: "prefer the simpler fix",
       attachments: [],
     });
+  });
+
+  it("steers a live run on a plain message, without requiring /infer", () => {
+    const onSteer = vi.fn();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "live" })}
+        sessionConnected
+        canSteer
+        onSteer={onSteer}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/focus on the failing test/i), {
+      target: { value: "focus on the migration path" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^steer$/i }));
+
+    expect(onSteer).toHaveBeenCalledWith({
+      message: "focus on the migration path",
+      attachments: [],
+    });
+  });
+
+  it("disables steer while the session channel is not connected", () => {
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "live" })}
+        canSteer
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^steer$/i })).toBeDisabled();
   });
 
   it("resumes a stalled run", async () => {
@@ -153,6 +275,109 @@ describe("ExecutionControlComposer", () => {
       ),
     );
     expect(onIssueUpdated).toHaveBeenCalledWith(issue);
+  });
+
+  it("forwards the selected model and effort on resume", async () => {
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resuming agent work on CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    // Let the remote catalog load so the composer resolves codex → gpt-5/high.
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({
+          action: "resume",
+          model: "gpt-5",
+          effort: "high",
+        }),
+      ),
+    );
+  });
+
+  it("forwards the execution mode on resume (defaults to build)", async () => {
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resuming agent work on CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({ action: "resume", mode: "build" }),
+      ),
+    );
+  });
+
+  it("cycles the execution mode with Shift+Tab and forwards it", async () => {
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resuming agent work on CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+
+    // codex order is plan → build → yolo, so one Shift+Tab moves build → yolo.
+    fireEvent.keyDown(screen.getByPlaceholderText(/optional guidance/i), {
+      key: "Tab",
+      shiftKey: true,
+    });
+
+    expect(screen.getByRole("button", { name: /yolo/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({ action: "resume", mode: "yolo" }),
+      ),
+    );
   });
 
   it("enables resume when the run was interrupted but reported as idle", () => {
@@ -208,6 +433,27 @@ describe("ExecutionControlComposer", () => {
 
     expect(screen.queryByRole("button", { name: /^pause$/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^start$/i })).toBeInTheDocument();
+  });
+
+  it("opens the magic palette from the toolbar button", async () => {
+    const user = userEvent.setup();
+    render(<ExecutionControlComposer projectSlug="advising" issue={issue} onSteer={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /^magic$/i }));
+
+    expect(await screen.findByPlaceholderText(/search magic commands/i)).toBeInTheDocument();
+  });
+
+  it("toggles the magic palette with mod+p", async () => {
+    render(<ExecutionControlComposer projectSlug="advising" issue={issue} onSteer={vi.fn()} />);
+
+    fireEvent.keyDown(document.body, { key: "p", ctrlKey: true });
+    expect(await screen.findByPlaceholderText(/search magic commands/i)).toBeInTheDocument();
+
+    fireEvent.keyDown(document.body, { key: "p", ctrlKey: true });
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText(/search magic commands/i)).not.toBeInTheDocument();
+    });
   });
 
   it("queues guidance for a busy, non-steerable run", async () => {
@@ -428,6 +674,59 @@ describe("ExecutionControlComposer", () => {
         }),
       );
     });
+  });
+
+  it("@-mentions an issue and submits it as a context chip", async () => {
+    listIssuesMock.mockResolvedValue([
+      { id: "12", identifier: "DEMO-12", title: "Login bug", status: "Open" },
+    ]);
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "resume",
+      message: "Resuming agent work on CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+
+    const textarea = screen.getByPlaceholderText(/optional guidance/i);
+    await user.click(textarea);
+    await user.type(textarea, "@DEMO");
+
+    const option = await screen.findByText("DEMO-12");
+    await user.click(option);
+
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
+    expect(screen.getByText("Login bug")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({
+          action: "resume",
+          contextRefs: [
+            expect.objectContaining({
+              type: "issue",
+              id: "DEMO-12",
+              label: "Login bug",
+              state: "draft",
+            }),
+          ],
+        }),
+      ),
+    );
   });
 
   it("renders the goal pill from execution.goal only, not issue.agentGoal", () => {

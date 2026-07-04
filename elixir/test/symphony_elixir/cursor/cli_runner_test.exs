@@ -83,7 +83,7 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
 
   test "argv: first turn omits --resume, resumed turn includes it; model and mcp flags included" do
     args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil})
-    assert args =~ "--print --output-format stream-json --stream-partial-output --force"
+    assert args =~ "--print --output-format stream-json --stream-partial-output"
     refute args =~ "--resume"
     refute args =~ "--model"
     refute args =~ "--approve-mcps"
@@ -92,6 +92,21 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
     assert args =~ "--resume chat-9"
     assert args =~ "--model composer-1"
     assert args =~ "--approve-mcps"
+  end
+
+  test "execution mode maps plan to native cursor plan mode and yolo to force" do
+    refute CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil}) =~ "--force"
+
+    refute CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "build"}) =~
+             "--force"
+
+    plan_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "plan"})
+    assert plan_args =~ "--mode plan"
+    refute plan_args =~ "--force"
+
+    yolo_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "yolo"})
+    assert yolo_args =~ "--force"
+    refute yolo_args =~ "--mode plan"
   end
 
   test "argv: model auto delegates to the CLI default (no --model flag)" do

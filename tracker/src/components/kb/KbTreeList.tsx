@@ -45,6 +45,10 @@ interface Props {
   pageHref: (repoSlug: string, pagePath: string) => string;
   /** Optional in-place selection for embedded KB surfaces that should not route away. */
   onSelectPath?: (repoSlug: string, pagePath: string) => void;
+  /** Optional per-node action used by embedded KB surfaces, e.g. composer context insertion. */
+  onInsertContext?: (repoSlug: string, node: KbTreeNodeType) => void;
+  /** Render navigation only, hiding editing and reorder controls. */
+  readOnly?: boolean;
 }
 
 export function KbTreeList({
@@ -58,6 +62,8 @@ export function KbTreeList({
   inlineEdit,
   pageHref,
   onSelectPath,
+  onInsertContext,
+  readOnly = false,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -96,6 +102,8 @@ export function KbTreeList({
               inlineEdit={inlineEdit}
               pageHref={pageHref}
               onSelectPath={onSelectPath}
+              onInsertContext={onInsertContext}
+              readOnly={readOnly}
             />
             {listDraft?.insertAfterPath === node.path ? (
               <KbInlineNameInput

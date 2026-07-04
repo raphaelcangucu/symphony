@@ -1,9 +1,12 @@
 defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
   use ExUnit.Case, async: false
 
+  alias Ecto.Adapters.SQL
   alias SymphonyElixir.Assistant.{ProjectBoardTools, ToolExecutor}
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Codex.DynamicTool
+  alias SymphonyElixir.LocalTracker.{Context, IssueAdapter, Label}
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Settings.Setting
   alias SymphonyElixir.Tracker.Workpad
   alias SymphonyElixir.Workpad.ExecutionBundle
 
@@ -106,7 +109,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
         })
 
       {:ok, child} = Context.get_issue("macro-markets", result.data.subtask)
-      child_dto = SymphonyElixir.LocalTracker.IssueAdapter.to_dto(child)
+      child_dto = IssueAdapter.to_dto(child)
       assert child_dto.parent_identifier == parent.identifier
     end
 
@@ -156,7 +159,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
       assert result.data.parent == c.identifier
 
       {:ok, child} = Context.get_issue("macro-markets", b.identifier)
-      assert SymphonyElixir.LocalTracker.IssueAdapter.to_dto(child).parent_identifier == c.identifier
+      assert IssueAdapter.to_dto(child).parent_identifier == c.identifier
     end
 
     test "detaches a subtask when parent_identifier is null", %{b: b} do
@@ -169,7 +172,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
       assert result.data.parent == nil
 
       {:ok, child} = Context.get_issue("macro-markets", b.identifier)
-      assert SymphonyElixir.LocalTracker.IssueAdapter.to_dto(child).parent_identifier == nil
+      assert IssueAdapter.to_dto(child).parent_identifier == nil
     end
   end
 
@@ -373,7 +376,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
     end
 
     test "comms tools are advertised on the coding-agent surface" do
-      names = Enum.map(SymphonyElixir.Codex.DynamicTool.coding_agent_tool_specs(), & &1["name"])
+      names = Enum.map(DynamicTool.coding_agent_tool_specs(), & &1["name"])
       assert "query_bundle_status" in names
       assert "report_unit_status" in names
       assert "update_shared_contract" in names
@@ -386,7 +389,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
   end
 
   defp clean_repo do
-    Repo.delete_all(SymphonyElixir.Settings.Setting)
+    Repo.delete_all(Setting)
 
     for table <- [
           "local_tracker_issue_relations",
@@ -399,7 +402,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
           "local_tracker_repositories",
           "local_tracker_projects"
         ] do
-      Ecto.Adapters.SQL.query!(Repo, "DELETE FROM #{table}", [])
+      SQL.query!(Repo, "DELETE FROM #{table}", [])
     end
   end
 end

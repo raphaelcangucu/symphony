@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.LocalTracker.ContextTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.LocalTracker.{Context, IssueMapper, ProjectSetup}
+  alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Label, ProjectSetup}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.LocalStore
 
@@ -645,8 +645,8 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
   test "update_issue resolves remote label ids to stored names" do
     {:ok, project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
-    %SymphonyElixir.LocalTracker.Label{}
-    |> SymphonyElixir.LocalTracker.Label.changeset(%{
+    %Label{}
+    |> Label.changeset(%{
       project_id: project.id,
       name: "bug",
       remote_id: "LA_kwDOJHngx88AAAACmEYycw"

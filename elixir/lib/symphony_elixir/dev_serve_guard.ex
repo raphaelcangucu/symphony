@@ -49,7 +49,12 @@ defmodule SymphonyElixir.DevServeGuard do
   end
 
   @spec default_lock_path() :: Path.t()
-  def default_lock_path, do: Path.join(System.tmp_dir!(), @lock_name)
+  def default_lock_path do
+    case System.get_env("SYMPHONY_SERVE_LOCK_PATH") do
+      path when is_binary(path) and path != "" -> path
+      _ -> Path.join(System.tmp_dir!(), @lock_name)
+    end
+  end
 
   @doc """
   Reads the current lock contents, if any. Used by `mix symphony.ctl` to discover

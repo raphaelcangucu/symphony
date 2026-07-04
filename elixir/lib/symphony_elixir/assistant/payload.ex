@@ -57,6 +57,7 @@ defmodule SymphonyElixir.Assistant.Payload do
     []
     |> maybe_put(:model, pick_string(context, ["model", :model]))
     |> maybe_put(:effort, pick_string(context, ["effort", :effort]))
+    |> maybe_put(:execution_mode, pick_string(context, ["execution_mode", :execution_mode]))
   end
 
   defp normalize_attachment(%{"type" => "image", "path" => path} = attachment, project_slug)

@@ -9,9 +9,11 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
   errors, or reports no parseable models, we fall back to a small static
   catalog so the picker always offers at least `auto`.
 
-  The CLI has no reasoning-effort flag, so every model exposes `efforts: []`
-  and the composer hides the effort menu. `auto` delegates model selection to
-  the CLI itself (the runner omits `--model` for it).
+  Cursor model slugs encode reasoning variants themselves (for example
+  `*-low`, `*-high`, `*-fast`), so every model exposes `efforts: []` and the
+  composer infers the effective effort from the selected model. `auto`
+  delegates model selection to the CLI itself (the runner omits `--model` for
+  it).
 
   ### `--list-models` output shape
 
@@ -37,7 +39,6 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
     %{id: "sonnet-4", label: "Claude Sonnet 4", default: false},
     %{id: "sonnet-4-thinking", label: "Claude Sonnet 4 Thinking", default: false}
   ]
-
   @type model_option :: %{
           id: String.t(),
           model: String.t(),

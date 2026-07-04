@@ -19,10 +19,12 @@ export function terminalTopic(projectSlug: string, issueIdentifier: string): str
   return `terminal:${slug}:${identifier}`;
 }
 
-export function projectTerminalTopic(projectSlug: string): string {
+export function devenvTerminalTopic(projectSlug: string): string {
   const slug = requireProjectSlug(projectSlug);
   return `terminal:devenv:${slug}`;
 }
+
+export const projectTerminalTopic = devenvTerminalTopic;
 
 export async function openTerminalSession(projectSlug: string, issueIdentifier: string): Promise<TerminalSession> {
   const slug = requireProjectSlug(projectSlug);

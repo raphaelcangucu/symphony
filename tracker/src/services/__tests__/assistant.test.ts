@@ -208,3 +208,22 @@ describe("normalizeToolCall file activity", () => {
     expect(cmd.result.exit_code).toBe(0);
   });
 });
+
+describe("normalizeToolCall id", () => {
+  it("reads a string id", () => {
+    expect(normalizeToolCall({ name: "read_file", id: "call_1" }).id).toBe("call_1");
+  });
+
+  it("falls back to call_id then tool_use_id", () => {
+    expect(normalizeToolCall({ name: "shell", call_id: "c2" }).id).toBe("c2");
+    expect(normalizeToolCall({ name: "shell", tool_use_id: "tu3" }).id).toBe("tu3");
+  });
+
+  it("coerces a numeric id to string", () => {
+    expect(normalizeToolCall({ name: "shell", id: 7 }).id).toBe("7");
+  });
+
+  it("is null when no id is present", () => {
+    expect(normalizeToolCall({ name: "shell" }).id).toBeNull();
+  });
+});

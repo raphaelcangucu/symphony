@@ -7,7 +7,16 @@ defmodule SymphonyElixir.IssueDispatch do
   pick the issue up again.
   """
 
-  alias SymphonyElixir.{AgentPreference, IssueDispatchPrep, Orchestrator, ProjectConfig, Repo, Workspace}
+  alias SymphonyElixir.{
+    AgentPreference,
+    ExecutionMode,
+    IssueDispatchPrep,
+    Orchestrator,
+    ProjectConfig,
+    Repo,
+    Workspace
+  }
+
   alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.{Context, Project}
@@ -23,7 +32,10 @@ defmodule SymphonyElixir.IssueDispatch do
           optional(:agent) => String.t() | nil,
           optional(:goal) => String.t() | nil,
           optional(:instructions) => String.t() | nil,
-          optional(:target_status) => String.t() | nil
+          optional(:target_status) => String.t() | nil,
+          optional(:model) => String.t() | nil,
+          optional(:effort) => String.t() | nil,
+          optional(:mode) => String.t() | nil
         }
 
   @spec resume(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
@@ -82,9 +94,11 @@ defmodule SymphonyElixir.IssueDispatch do
        when action in [:resume, :restart, :hard_reset, :continue_work] do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
          agent_kind = effective_agent_kind(project, issue, opts),
+         opts = inject_context_refs(project, identifier, opts),
          :ok <- IssueDispatchPrep.prepare_for_dispatch(project, identifier, agent_kind),
          {:ok, _comment} <- maybe_add_comment(project, identifier, action, opts),
          {:ok, _} <- maybe_update_agent(project, identifier, opts, agent_kind),
+         :ok <- maybe_persist_agent_settings(project, identifier, opts, agent_kind),
          :ok <- maybe_route_codex_goal(project, identifier, opts, agent_kind),
          :ok <- maybe_hard_reset(project, identifier, issue, action),
          {:ok, _} <- maybe_move_for_action(project, issue, action, opts),
@@ -99,6 +113,22 @@ defmodule SymphonyElixir.IssueDispatch do
          message: dispatch_message(action, reloaded),
          issue: TrackerPresenter.issue(reloaded)
        }}
+    end
+  end
+
+  defp inject_context_refs(%Project{} = project, identifier, opts) do
+    context_refs = Map.get(opts, :context_refs) || Map.get(opts, "context_refs") || []
+
+    if context_refs == [] do
+      opts
+    else
+      scope = SymphonyElixir.AttachedContexts.execution_scope(project.slug, identifier)
+      instructions = Map.get(opts, :instructions) || Map.get(opts, "instructions") || ""
+      injected = SymphonyElixir.AttachedContexts.append_to_instructions(scope, instructions, context_refs: context_refs)
+
+      opts
+      |> Map.delete("instructions")
+      |> Map.put(:instructions, injected)
     end
   end
 
@@ -206,6 +236,35 @@ defmodule SymphonyElixir.IssueDispatch do
       {:ok, nil}
     else
       IssueAdapter.dispatch(project, :update_issue, [identifier, attrs])
+    end
+  end
+
+  # Persist the operator's per-issue model/effort/mode selection so the
+  # orchestrator (AgentRunner) can apply it on the autonomous run. Best-effort:
+  # a persistence failure logs and continues, never blocking the dispatch.
+  defp maybe_persist_agent_settings(%Project{} = project, identifier, opts, agent_kind) do
+    attrs =
+      %{agent_kind: agent_kind}
+      |> maybe_put(:model, normalize_optional_string(Map.get(opts, :model)))
+      |> maybe_put(:effort, normalize_optional_string(Map.get(opts, :effort)))
+      |> maybe_put(:mode, normalize_dispatch_mode(Map.get(opts, :mode)))
+
+    case Context.put_agent_settings(project.slug, identifier, attrs) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.debug("Skipping agent-settings persist identifier=#{identifier} reason=#{inspect(reason)}")
+        :ok
+    end
+  end
+
+  # nil/blank mode is left unset (AgentRunner falls back to the default at
+  # runtime); a provided-but-invalid mode is coerced to the default.
+  defp normalize_dispatch_mode(value) do
+    case normalize_optional_string(value) do
+      nil -> nil
+      mode -> ExecutionMode.normalize(mode)
     end
   end
 

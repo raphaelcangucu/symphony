@@ -6,6 +6,64 @@
     "save": "Salvar",
     "refresh": "Atualizar"
   },
+  "launcher": {
+    "title": "Nova sessão",
+    "subtitle": "Entre numa execução por issue, PR, branch ou ação rápida.",
+    "tabsLabel": "Origem",
+    "loading": "Carregando…",
+    "empty": "Nenhum resultado correspondente.",
+    "modifierHint": "Segure ⌘/Ctrl para abrir em segundo plano · ⌘O preview · ⌘M investigar · ⌘1–4 trocar abas",
+    "preview": {
+      "loading": "Carregando issue…",
+      "noIssueLinked": "Nenhuma issue do Symphony vinculada ainda.",
+      "openExternal": "Abrir no GitHub",
+      "openIssue": "Abrir issue"
+    },
+    "tabs": {
+      "actions": "Ações",
+      "issues": "Issues",
+      "prs": "PRs",
+      "branches": "Branches"
+    },
+    "placeholder": {
+      "actions": "Executar um comando…",
+      "issues": "Buscar issues ou colar um número…",
+      "prs": "Buscar pull requests abertos…",
+      "branches": "Buscar branches…"
+    },
+    "actions": {
+      "newIssue": "Nova issue",
+      "goToBoard": "Ir para o board",
+      "openFilters": "Abrir filtros",
+      "searchIssues": "Buscar issues",
+      "openAssistant": "Abrir assistente",
+      "openKb": "Abrir base de conhecimento",
+      "preview": "Preview",
+      "previewHint": "Preview (⌘O)",
+      "investigate": "Investigar",
+      "investigateHint": "Investigar (⌘M)",
+      "stack": "Stack",
+      "stackHint": "Nova worktree (só PR/branch órfã)"
+    },
+    "status": {
+      "live": "Em execução",
+      "retrying": "Tentando novamente",
+      "waiting": "Aguardando revisão",
+      "idle": "Ocioso",
+      "saved": "Salvo (retomável)",
+      "error": "Erro",
+      "aborted": "Abortado"
+    },
+    "toast": {
+      "backgroundResume": "Retomando {{identifier}} em segundo plano",
+      "backgroundInvestigate": "Investigando {{identifier}} em segundo plano",
+      "standaloneStackPendingPr": "Stack com worktree para PR #{{number}} ({{branch}}) ainda não está disponível — aberto no GitHub",
+      "standaloneStackPendingBranch": "Stack com worktree para branch {{branch}} ainda não está disponível — aberto no GitHub",
+      "dispatchFailed": "Não foi possível iniciar {{identifier}}",
+      "investigateFailed": "Não foi possível investigar {{identifier}}",
+      "noLinkedIssue": "Nenhuma issue do Symphony está vinculada a esta branch ainda"
+    }
+  },
   "ui": {
     "dialog": {
       "close": "Fechar"
@@ -299,6 +357,32 @@
       }
     }
   },
+  "commands": {
+    "magic": {
+      "title": "Comandos mágicos",
+      "button": "Mágico",
+      "open": "Abrir comandos mágicos",
+      "searchPlaceholder": "Buscar comandos mágicos…",
+      "searchRunning": "Executando comando mágico…",
+      "loading": "Carregando comandos mágicos…",
+      "empty": "Nenhum comando mágico encontrado.",
+      "uncategorized": "Sem categoria",
+      "close": "Fechar",
+      "categories": {
+        "builtin": "Escrever",
+        "workflow": "Fluxo de trabalho",
+        "superpowers": "Superpoderes"
+      },
+      "running": "Executando…",
+      "runFailed": "Falha ao executar comando mágico",
+      "badges": {
+        "agent": "Agente",
+        "model": "Modelo",
+        "effort": "Esforço",
+        "mode": "Modo"
+      }
+    }
+  },
   "issue": {
     "bundle": {
       "title": "Pacote de execução",
@@ -344,6 +428,33 @@
       "dispatchHardReset": "Resetando sessão…",
       "dispatchStop": "Pausando agente…",
       "dispatchFailed": "Falha no dispatch",
+      "executionMode": {
+        "title": "Modo de execução",
+        "plan": { "label": "Plan", "desc": "Somente leitura — analisa e planeja, sem editar" },
+        "build": { "label": "Build", "desc": "Edita o workspace (padrão)" },
+        "yolo": { "label": "Yolo", "desc": "Acesso total, aprovações ignoradas" }
+      },
+      "mentions": {
+        "listLabel": "Menções de contexto",
+        "empty": "Nenhum resultado",
+        "groups": {
+          "issues": "Issues",
+          "files": "Arquivos",
+          "pull_requests": "Pull requests"
+        }
+      },
+      "shortcuts": {
+        "title": "Ações de execução",
+        "open": "Paleta de comandos",
+        "placeholder": "Buscar ações…",
+        "empty": "Nenhuma ação",
+        "resume": "Retomar",
+        "restart": "Reiniciar",
+        "stop": "Parar",
+        "hardReset": "Reset completo",
+        "cycleMode": "Alternar modo de execução",
+        "focusComposer": "Focar no compositor"
+      },
       "hardResetDialogTitle": "Reset completo da sessão?",
       "hardResetDialogDescription": "Isso para qualquer execução ativa, descarta a sessão atual do agente e limpa contadores de turnos e tokens, depois inicia uma sessão nova. O workspace e o estado git são preservados.",
       "cancel": "Cancelar",
@@ -393,6 +504,7 @@
       },
       "tab": {
         "runStatus": "Status da execução",
+        "details": "Detalhes da execução",
         "noActiveAgent": "Nenhum agente ativo",
         "session": "Sessão",
         "turn": "Turno",
@@ -652,6 +764,48 @@
         "loadFailed": "Não foi possível carregar a evidência de commits."
       }
     },
+    "diff": {
+      "button": "Diff",
+      "shortcutHint": "Ver diff do workspace (⌘G)",
+      "title": "Diff do workspace",
+      "branch": "Branch",
+      "uncommitted": "Não commitado",
+      "commits": "Commits",
+      "refresh": "Atualizar",
+      "viewMode": {
+        "split": "Lado a lado",
+        "unified": "Unificado"
+      },
+      "list": {
+        "tree": "Árvore",
+        "flat": "Lista"
+      },
+      "repos": {
+        "all": "Todos os repos"
+      },
+      "commit": {
+        "button": "Commit",
+        "title": "Criar commit das alterações do workspace",
+        "dialogTitle": "Criar commit das alterações",
+        "dialogDescription": "Cria um commit git local em cada repositório com alterações pendentes.",
+        "messageLabel": "Mensagem do commit",
+        "messagePlaceholder": "feat: descreva a alteração",
+        "submit": "Commitar alterações",
+        "committing": "Commitando...",
+        "success_one": "{{count}} repo commitado.",
+        "success_other": "{{count}} repos commitados.",
+        "failed": "Não foi possível commitar as alterações do workspace."
+      },
+      "files": "{{count}} arquivos",
+      "filterPlaceholder": "Filtrar arquivos...",
+      "workspaceUnavailable": "Workspace indisponível",
+      "loading": "Carregando diff…",
+      "noFiles": "Nenhum arquivo alterado.",
+      "selectFile": "Selecione um arquivo para ver o diff.",
+      "errors": {
+        "loadFailed": "Não foi possível carregar o diff do workspace."
+      }
+    },
     "preview": {
       "cannotLoadTitle": "Preview não pode carregar",
       "cannotLoadBody": "Identificadores de projeto e issue são necessários para carregar o status do preview.",
@@ -881,6 +1035,18 @@
         "restartFailed": "Não foi possível reiniciar o dev server.",
         "tunnelFailed": "Não foi possível iniciar o túnel Cloudflare."
       }
+    },
+    "tasks": {
+      "title": "Tarefas",
+      "progress": "{{done}}/{{total}} concluídas",
+      "collapse": "Recolher tarefas",
+      "expand": "Expandir tarefas",
+      "status": {
+        "pending": "Pendente",
+        "in_progress": "Em progresso",
+        "completed": "Concluída"
+      },
+      "inline": "{{label}} · {{done}}/{{total}} concluídas"
     },
     "sessionLog": {
       "title": "Log da sessão",
@@ -1855,6 +2021,16 @@
       "modelsFrom": " Modelos de `{{command}}`.",
       "openButton": "Assistente",
       "openAria": "Abrir assistente do projeto",
+      "openKnowledgeBase": "KB",
+      "openKnowledgeBaseShortcut": "Abrir base de conhecimento (⌘⇧K)",
+      "knowledgeBaseTitle": "Base de conhecimento",
+      "knowledgeBaseDescription": "Navegue pelos docs de `{{slug}}` sem sair do composer.",
+      "knowledgeBaseOpenPage": "Abrir",
+      "knowledgeBaseShowTree": "Mostrar árvore",
+      "knowledgeBaseSelectPage": "Selecione um documento na árvore da base de conhecimento.",
+      "knowledgeBaseEmpty": "Nenhum repositório de base de conhecimento está configurado.",
+      "knowledgeBaseLoadFailed": "Falha ao carregar a base de conhecimento.",
+      "addToContext": "Adicionar ao contexto",
       "loadingModels": "Carregando modelos do assistente...",
       "catalogLoadFailed": "Falha ao carregar modelos do assistente.",
       "noConnectionTarget": "Assistente não tem thread ou projeto para conectar.",
@@ -1876,6 +2052,20 @@
       "remove": "Remover",
       "turnInterrupted": "O turno anterior foi interrompido.",
       "resume": "Retomar",
+      "scrollToBottom": "Ir para as mensagens mais recentes",
+      "planApproval": {
+        "yolo": "YOLO",
+        "yoloTitle": "Aprovar o plano e executar em modo YOLO",
+        "approve": "Aprovar",
+        "approveTitle": "Aprovar o plano e executar em modo build"
+      },
+      "commandApproval": {
+        "title": "Codex quer executar um comando",
+        "cwd": "Diretório de trabalho",
+        "reason": "Ação detectada",
+        "approve": "Aprovar",
+        "cancel": "Cancelar turno"
+      },
       "attachmentFallback": {
         "audio": "Veja o áudio anexado.",
         "image": "Veja a imagem anexada.",
@@ -1921,7 +2111,18 @@
       "goal": "Rode um goal de authoring direto neste chat (sem despachar o orquestrador)",
       "goalExecution": "Defina um goal de execução e despache via o orquestrador",
       "infer": "Direcione o agente em execução sem esperar",
-      "btw": "Faça uma pergunta rápida (somente leitura, não salva)"
+      "btw": "Faça uma pergunta rápida (somente leitura, não salva)",
+      "skillDirective": "Use a skill {{skill}}: ",
+      "skills": {
+        "plan": "Esboce um plano de implementação antes de codar",
+        "push": "Faça push da branch e abra/atualize o PR",
+        "pull": "Sincronize a branch com origin/main e resolva conflitos",
+        "land": "Faça o land do PR: resolve conflitos, espera checks, faz merge",
+        "evidence": "Rode os testes e escreva o manifesto de evidências",
+        "workpad": "Atualize o Codex Workpad da issue (plano, critérios, resultados)",
+        "commit": "Crie um commit bem formado a partir das mudanças atuais",
+        "debug": "Investigue uma run travada ou falha usando os logs"
+      }
     },
     "effort": {
       "low": "Baixo",
@@ -1965,6 +2166,8 @@
       "removeAttachment": "Remover {{name}}",
       "agentMenu": "Agente",
       "reasoningEffort": "Esforço de raciocínio",
+      "autoThinking": "Auto",
+      "thinkingEffort": "Thinking {{effort}}",
       "stopRecording": "Parar gravação",
       "recordAudio": "Gravar áudio",
       "recording": "Gravando",
@@ -2017,6 +2220,17 @@
       "closeAria": "Fechar pergunta paralela",
       "thinking": "Pensando…",
       "footer": "Esc para fechar · não salvo na conversa"
+    },
+    "toolGroup": {
+      "read": "Leu {{n}} arquivos",
+      "edit": "Editou {{n}} arquivos",
+      "editStats": "Editou {{n}} arquivos (+{{additions}} −{{deletions}})",
+      "command": "Executou {{n}} comandos",
+      "query": "Consultou {{n}} itens",
+      "action": "{{n}} ações",
+      "other": "{{n}} chamadas de ferramenta",
+      "running": "em execução",
+      "failed": "falhou"
     },
     "working": {
       "runningTool": "Executando {{tool}}",
@@ -2095,6 +2309,72 @@
       "noContent": "Nenhum conteúdo para exibir."
     }
   },
+  "sessions": {
+    "eyebrow": "Sessões do projeto",
+    "title": "Sessões",
+    "description": "Todos os chats do assistente e execuções de agentes relacionados a este projeto.",
+    "refresh": "Atualizar",
+    "newSession": "Nova sessão",
+    "newSessionTitle": "Sessão do projeto",
+    "creating": "Criando…",
+    "createFailed": "Não foi possível criar a sessão do projeto.",
+    "loading": "Carregando sessões…",
+    "empty": "Ainda não há sessões neste projeto.",
+    "resume": "Retomar",
+    "resuming": "Retomando…",
+    "resumeStarted": "Retomando {{identifier}}",
+    "resumeFailed": "Não foi possível retomar {{identifier}}",
+    "openExecutionAria": "Abrir sessão de execução {{identifier}}",
+    "executionUnavailable": "Os detalhes da execução de {{identifier}} não estão disponíveis agora.",
+    "turns": "{{count}} turnos",
+    "runtime": "Duração {{value}}",
+    "related": {
+      "title": "Sessões relacionadas",
+      "chat": "Chat",
+      "agent": "Agente"
+    },
+    "buckets": {
+      "active": "Ativas",
+      "waiting": "Aguardando revisão",
+      "saved": "Salvas",
+      "recent": "Recentes"
+    },
+    "status": {
+      "live": "Em execução",
+      "retrying": "Repetindo",
+      "waiting": "Aguardando",
+      "idle": "Ocioso",
+      "saved": "Salva",
+      "error": "Erro",
+      "aborted": "Abortada"
+    }
+  },
+  "workspace": {
+    "terminal": {
+      "title": "Terminal",
+      "description": "Shells interativos para esta issue e para o ambiente de dev do projeto.",
+      "tabsAria": "Abas do terminal",
+      "issueShell": "Issue",
+      "projectShell": "Projeto",
+      "projectAriaLabel": "Terminal do projeto {{project}}",
+      "missingIssue": "O identificador da issue é obrigatório para o terminal da issue.",
+      "missingTab": "O id da aba do terminal é obrigatório.",
+      "newTab": "Nova aba",
+      "newTabTitle": "Shell",
+      "creatingTab": "Criando…",
+      "createTabFailed": "Não foi possível criar uma aba de terminal.",
+      "closeTabFailed": "Não foi possível fechar a aba de terminal.",
+      "loadTabsFailed": "Não foi possível carregar as abas de terminal.",
+      "dynamicTabsUnavailable": "Abas dinâmicas exigem atualização do backend. Reinicie o Symphony para habilitar Nova aba.",
+      "dynamicAriaLabel": "Aba de terminal {{title}}",
+      "projectDockEyebrow": "Workspace do projeto",
+      "projectDockTitle": "Terminal",
+      "projectDockDescription": "Shells interativos do ambiente de dev do projeto. Permanece aberto enquanto você trabalha no board."
+    },
+    "sessions": {
+      "tabsAria": "Abas de sessões do projeto"
+    }
+  },
   "layout": {
     "projectHeader": {
       "pollingActive": "Polling ativo",
@@ -2114,6 +2394,8 @@
       "openProjectWorkspaceCode": "Abrir workspace do projeto no Code",
       "board": "Board",
       "list": "Lista",
+      "sessions": "Sessões",
+      "terminal": "Terminal",
       "knowledgeBase": "Base de Conhecimento",
       "switchProject": "Trocar de projeto",
       "loadingProjects": "Carregando projetos…",

@@ -5,7 +5,7 @@ defmodule SymphonyElixir.Terminal.Registry do
 
   alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.LocalTracker.Context
-  alias SymphonyElixir.Terminal.Tmux
+  alias SymphonyElixir.Terminal.{TabStore, Tmux}
   alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixir.Workspace
 
@@ -203,6 +203,141 @@ defmodule SymphonyElixir.Terminal.Registry do
     tmux.capture_pane(session_name(project_slug, issue_identifier))
   end
 
+  @spec tab_session_name(String.t(), String.t()) :: String.t()
+  def tab_session_name(project_slug, tab_id) when is_binary(project_slug) and is_binary(tab_id) do
+    "sym-tab-#{safe_segment(project_slug, "project")}-#{safe_segment(tab_id, "tab")}"
+  end
+
+  @spec tab_channel_topic(String.t(), String.t()) :: String.t()
+  def tab_channel_topic(project_slug, tab_id) when is_binary(project_slug) and is_binary(tab_id) do
+    "terminal:tab:#{project_slug}:#{tab_id}"
+  end
+
+  @spec list_tabs(String.t(), String.t()) :: {:ok, [map()]} | {:error, term()}
+  def list_tabs(project_slug, issue_identifier)
+      when is_binary(project_slug) and is_binary(issue_identifier) do
+    tabs =
+      project_slug
+      |> TabStore.list(issue_identifier)
+      |> Enum.map(&tab_payload/1)
+
+    {:ok, tabs}
+  end
+
+  @spec create_tab(String.t(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def create_tab(project_slug, issue_identifier, attrs, opts \\ [])
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_map(attrs) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tab_id = generate_tab_id()
+    title = tab_title(attrs)
+    command = tab_command(attrs)
+
+    with :ok <- ensure_tmux_available(tmux),
+         {:ok, cwd} <- resolve_tab_cwd(project_slug, issue_identifier, attrs, opts),
+         session_name = tab_session_name(project_slug, tab_id),
+         {:ok, _session_state} <- ensure_session(tmux, session_name, cwd),
+         :ok <- maybe_run_command(tmux, session_name, command),
+         {:ok, output} <- capture_output(tmux, session_name) do
+      tab = %{
+        id: tab_id,
+        project_slug: project_slug,
+        issue_identifier: issue_identifier,
+        title: title,
+        cwd: cwd,
+        command: command,
+        session_name: session_name,
+        state: "running"
+      }
+
+      :ok = TabStore.put(tab)
+      {:ok, tab_payload(Map.put(tab, :output, output))}
+    end
+  end
+
+  @spec rename_tab(String.t(), String.t(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def rename_tab(project_slug, issue_identifier, tab_id, title)
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(tab_id) and is_binary(title) do
+    trimmed = String.trim(title)
+
+    if trimmed == "" do
+      {:error, "terminal tab title is required"}
+    else
+      case TabStore.rename(project_slug, issue_identifier, tab_id, trimmed) do
+        {:ok, tab} -> {:ok, tab_payload(tab)}
+        {:error, :not_found} -> {:error, :terminal_tab_not_found}
+      end
+    end
+  end
+
+  @spec close_tab(String.t(), String.t(), String.t(), keyword()) :: :ok | {:error, term()}
+  def close_tab(project_slug, issue_identifier, tab_id, opts \\ [])
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(tab_id) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+
+    with {:ok, tab} <- TabStore.get(project_slug, tab_id),
+         true <- tab.issue_identifier == issue_identifier,
+         :ok <- tmux.kill_session(tab.session_name),
+         :ok <- TabStore.delete(project_slug, issue_identifier, tab_id) do
+      :ok
+    else
+      false -> {:error, :terminal_tab_not_found}
+      {:error, :not_found} -> {:error, :terminal_tab_not_found}
+      {:error, message} when is_binary(message) -> {:error, message}
+      other -> other
+    end
+  end
+
+  @spec open_tab_session(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def open_tab_session(project_slug, tab_id, opts \\ []) when is_binary(project_slug) and is_binary(tab_id) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+
+    with :ok <- ensure_tmux_available(tmux),
+         {:ok, tab} <- TabStore.get(project_slug, tab_id),
+         {:ok, _session_state} <- ensure_session(tmux, tab.session_name, tab.cwd),
+         {:ok, output} <- capture_output(tmux, tab.session_name) do
+      {:ok, tab_payload(Map.put(tab, :output, output))}
+    else
+      {:error, :not_found} -> {:error, :terminal_tab_not_found}
+      other -> other
+    end
+  end
+
+  @spec send_input_tab(String.t(), String.t(), String.t(), keyword()) :: :ok | {:error, String.t()}
+  def send_input_tab(project_slug, tab_id, data, opts \\ [])
+      when is_binary(project_slug) and is_binary(tab_id) and is_binary(data) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+
+    with {:ok, tab} <- TabStore.get(project_slug, tab_id) do
+      tmux.send_keys(tab.session_name, data)
+    else
+      {:error, :not_found} -> {:error, "terminal tab not found"}
+    end
+  end
+
+  @spec resize_tab(String.t(), String.t(), pos_integer(), pos_integer(), keyword()) :: :ok | {:error, String.t()}
+  def resize_tab(project_slug, tab_id, cols, rows, opts \\ [])
+      when is_binary(project_slug) and is_binary(tab_id) and is_integer(cols) and is_integer(rows) and cols > 0 and
+             rows > 0 do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+
+    with {:ok, tab} <- TabStore.get(project_slug, tab_id) do
+      tmux.resize(tab.session_name, cols, rows)
+    else
+      {:error, :not_found} -> {:error, "terminal tab not found"}
+    end
+  end
+
+  @spec capture_tab(String.t(), String.t(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
+  def capture_tab(project_slug, tab_id, opts \\ []) when is_binary(project_slug) and is_binary(tab_id) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+
+    with {:ok, tab} <- TabStore.get(project_slug, tab_id) do
+      tmux.capture_pane(tab.session_name)
+    else
+      {:error, :not_found} -> {:error, "terminal tab not found"}
+    end
+  end
+
   @spec project_session_name(String.t()) :: String.t()
   def project_session_name(project_slug) when is_binary(project_slug) do
     "sym-devenv-#{safe_segment(project_slug, "project")}"
@@ -301,5 +436,62 @@ defmodule SymphonyElixir.Terminal.Registry do
       "" -> fallback
       value -> if Regex.match?(~r/[a-zA-Z0-9]/, value), do: value, else: fallback
     end
+  end
+
+  defp generate_tab_id do
+    "tab-" <> Base.url_encode64(:crypto.strong_rand_bytes(6), padding: false)
+  end
+
+  defp tab_title(%{"title" => title}) when is_binary(title) do
+    trimmed = String.trim(title)
+    if trimmed == "", do: "Shell", else: trimmed
+  end
+
+  defp tab_title(_attrs), do: "Shell"
+
+  defp tab_command(%{"command" => command}) when is_binary(command) do
+    trimmed = String.trim(command)
+    if trimmed == "", do: nil, else: trimmed
+  end
+
+  defp tab_command(_attrs), do: nil
+
+  defp resolve_tab_cwd(project_slug, issue_identifier, attrs, opts) do
+    case Map.get(attrs, "cwd") do
+      cwd when is_binary(cwd) and cwd != "" ->
+        File.mkdir_p(cwd)
+        {:ok, cwd}
+
+      _ when issue_identifier == "__project__" ->
+        cwd = default_project_cwd(project_slug)
+        File.mkdir_p(cwd)
+        {:ok, cwd}
+
+      _ ->
+        with {:ok, issue} <- fetch_issue(project_slug, issue_identifier, opts) do
+          create_workspace(dependency(opts, :workspace, :terminal_workspace, Workspace), issue)
+        end
+    end
+  end
+
+  defp maybe_run_command(_tmux, _session_name, nil), do: :ok
+
+  defp maybe_run_command(tmux, session_name, command) when is_binary(command) do
+    tmux.send_keys(session_name, command <> "\n")
+  end
+
+  defp tab_payload(tab) do
+    %{
+      id: tab.id,
+      project_slug: tab.project_slug,
+      issue_identifier: tab.issue_identifier,
+      title: tab.title,
+      cwd: tab.cwd,
+      command: Map.get(tab, :command),
+      session_name: tab.session_name,
+      state: tab.state,
+      channel_topic: tab_channel_topic(tab.project_slug, tab.id),
+      output: Map.get(tab, :output, "")
+    }
   end
 end

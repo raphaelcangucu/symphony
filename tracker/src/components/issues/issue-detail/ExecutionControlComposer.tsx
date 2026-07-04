@@ -1,5 +1,5 @@
-import { Eraser, Pause, Play, RotateCcw, Send, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eraser, Pause, Play, RotateCcw, Send, Sparkles, X } from "lucide-react";
+import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -8,9 +8,22 @@ import {
   type AssistantComposerSubmit,
   type ComposerSnapshot,
 } from "@/components/assistant/AssistantComposer";
+import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
-import { parseSlashCommand } from "@/components/assistant/slashCommands";
+import {
+  expandComposerMentions,
+  parseMentionTokens,
+  type ResolvedMention,
+} from "@/components/assistant/contextMentions";
+import { useContextMentionData } from "@/components/assistant/useContextMentionData";
+import { defaultSkillCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
+import { MagicCommandPalette } from "@/components/commands/MagicCommandPalette";
+import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
+import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
+import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
+import { useExecutionShortcuts } from "@/hooks/useExecutionShortcuts";
+import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,10 +39,12 @@ import { enrichGuidanceWithAttachments } from "@/lib/enrichComposerGuidance";
 import { catalogFor, fallbackCatalogBundle } from "@/lib/assistantSettings";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
+import type { RunPromptTemplateResult } from "@/services/magicCommands";
 import { controlIssueGoal } from "@/services/goalControl";
+import { availableModesFor, cycleMode, DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
 import type { AgentSteerPayload } from "@/hooks/useSessionLogChannel";
 import type { AgentExecution } from "@/types/agent-execution";
-import type { AgentKind, Issue } from "@/types/issue";
+import type { AgentKind, ExecutionMode, Issue } from "@/types/issue";
 
 interface QueuedGuidanceItem {
   text: string;
@@ -66,13 +81,52 @@ export function ExecutionControlComposer({
   const [queued, setQueued] = useState<QueuedGuidanceItem[]>([]);
   const [bundle, setBundle] = useState(fallbackCatalogBundle());
   const [agent, setAgent] = useState<AgentKind>(issue.agentKind ?? bundle.defaultAgent);
+  const [mode, setMode] = useState<ExecutionMode>(DEFAULT_EXECUTION_MODE);
+  // Memoized submit handlers may close over a stale render; read mode from a ref
+  // so dispatch always forwards the operator's current selection.
+  const modeRef = useRef<ExecutionMode>(DEFAULT_EXECUTION_MODE);
   const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | "hard_reset" | "stop" | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [hardResetOpen, setHardResetOpen] = useState(false);
+  const [magicOpen, setMagicOpen] = useState(false);
   const [goalDismissed, setGoalDismissed] = useState(false);
   const [composerResetToken, setComposerResetToken] = useState(0);
+  const sectionRef = useRef<HTMLElement>(null);
   const composerSnapshotRef = useRef<ComposerSnapshot>({ input: "", attachments: [] });
+  const composerSettingsRef = useRef<{ model: string | null; effort: string | null }>({
+    model: null,
+    effort: null,
+  });
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const mentionOptions = useContextMentionData(projectSlug, issue.identifier, mentionQuery);
+  const {
+    commands: assistantCommands,
+    isLoading: assistantCommandsLoading,
+    error: assistantCommandsError,
+  } = useAssistantCommands({ projectSlug, context: "execution" });
+  const slashCommandExtras = useMemo(() => {
+    if (assistantCommandsLoading || assistantCommandsError) {
+      return defaultSkillCommands(t, "execution");
+    }
+    return assistantCommandsToSlashDefs(assistantCommands, t);
+  }, [assistantCommands, assistantCommandsError, assistantCommandsLoading, t]);
+  // Cache resolved entities by token so dispatched instructions can expand the
+  // inline `@type:id` tokens into a `## Context` block, even across re-renders.
+  const resolvedMentionsRef = useRef<Map<string, ResolvedMention>>(new Map());
+
+  const rememberMention = useCallback((entity: ResolvedMention) => {
+    resolvedMentionsRef.current.set(`${entity.type}:${entity.id}`, entity);
+  }, []);
+
+  const expandMentions = useCallback((text: string): string => {
+    const tokens = parseMentionTokens(text);
+    if (tokens.length === 0) return text;
+    const resolved = tokens.map(
+      (token) => resolvedMentionsRef.current.get(`${token.type}:${token.id}`) ?? token,
+    );
+    return expandComposerMentions(text, resolved);
+  }, []);
 
   // Codex goals are sourced solely from the live execution snapshot (the native
   // Codex thread), never from the cached issue.agentGoal column.
@@ -122,6 +176,16 @@ export function ExecutionControlComposer({
     if (issue.agentKind) setAgent(issue.agentKind);
   }, [issue.agentKind]);
 
+  // Keep the selected mode valid for the active agent (cursor has no plan mode).
+  useEffect(() => {
+    const available = availableModesFor(agent);
+    setMode((current) => (available.includes(current) ? current : available[0]));
+  }, [agent]);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
   const dispatchProgressLabel: Record<"resume" | "restart" | "hard_reset" | "stop", string> = {
     resume: t("issue.agent.dispatchResume"),
     restart: t("issue.agent.dispatchRestart"),
@@ -137,7 +201,7 @@ export function ExecutionControlComposer({
     const parsed = parseSlashCommand(snapshot.input, t, "execution");
     const typed =
       parsed.kind === "infer" || parsed.kind === "goal" ? parsed.argument.trim() : snapshot.input.trim();
-    return enrichGuidanceWithAttachments(typed, snapshot.attachments, projectSlug, {});
+    return enrichGuidanceWithAttachments(expandMentions(typed), snapshot.attachments, projectSlug, {});
   }
 
   function combinedGuidance(): string {
@@ -154,7 +218,7 @@ export function ExecutionControlComposer({
 
   async function runDispatch(
     action: "resume" | "restart" | "hard_reset" | "stop",
-    overrides?: { goal?: string | null; instructions?: string | null },
+    overrides?: { goal?: string | null; instructions?: string | null; contextRefs?: AssistantComposerSubmit["contextRefs"] },
   ) {
     setDispatchPending(action);
     setDispatchError(null);
@@ -173,6 +237,10 @@ export function ExecutionControlComposer({
         agent,
         goal: dispatchGoal,
         instructions: guidance || null,
+        model: composerSettingsRef.current.model,
+        effort: composerSettingsRef.current.effort,
+        mode: modeRef.current,
+        contextRefs: overrides?.contextRefs,
       });
       onIssueUpdated?.(result.issue);
       setDispatchStatus(result.message);
@@ -255,20 +323,26 @@ export function ExecutionControlComposer({
       if (submit.kind === "btw") return;
 
       const text = submit.message.trim();
+      const expanded = expandMentions(text);
       const hasAttachments = submit.attachments.length > 0;
+      const hasContextRefs = submit.contextRefs.length > 0;
 
       if (canSteer) {
-        if (!text && !hasAttachments) return;
-        onSteer({ message: text, attachments: submit.attachments });
+        if (!text && !hasAttachments && !hasContextRefs) return;
+        onSteer({
+          message: expanded,
+          attachments: submit.attachments,
+          ...(hasContextRefs ? { contextRefs: submit.contextRefs } : {}),
+        });
         return;
       }
 
       if (control.isActive) {
-        if (!text && !hasAttachments) return;
+        if (!text && !hasAttachments && !hasContextRefs) return;
         setQueued((current) => [
           ...current,
           {
-            text,
+            text: expanded,
             attachments: submit.attachments,
             fileTexts: {},
           },
@@ -277,11 +351,11 @@ export function ExecutionControlComposer({
       }
 
       if (!dispatchPending) {
-        const instructions = enrichGuidanceWithAttachments(text, submit.attachments, projectSlug, {});
-        void runDispatch("resume", { instructions });
+        const instructions = enrichGuidanceWithAttachments(expanded, submit.attachments, projectSlug, {});
+        void runDispatch("resume", { instructions, contextRefs: submit.contextRefs });
       }
     },
-    [canSteer, control.isActive, dispatchPending, onSteer, projectSlug, submitExecutionGoal],
+    [canSteer, control.isActive, dispatchPending, expandMentions, onSteer, projectSlug, submitExecutionGoal],
   );
 
   const handleEmptySubmit = useCallback(() => {
@@ -349,6 +423,56 @@ export function ExecutionControlComposer({
         ? t("issue.agent.placeholderResume")
         : t("issue.agent.placeholderStart");
 
+  function handleModeShortcut(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== "Tab" || !event.shiftKey) return;
+    // Only cycle when typing in the composer textarea; never hijack global
+    // Shift+Tab focus traversal from buttons/menus.
+    const target = event.target as HTMLElement | null;
+    if (!target || target.tagName !== "TEXTAREA") return;
+    if (controlsDisabled || agentRunActive) return;
+    event.preventDefault();
+    setMode((current) => cycleMode(current, availableModesFor(agent)));
+  }
+
+  function focusComposer() {
+    sectionRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+  }
+
+  function cycleExecutionMode() {
+    if (controlsDisabled || agentRunActive) return;
+    setMode((current) => cycleMode(current, availableModesFor(agent)));
+  }
+
+  function toggleMagicPalette() {
+    if (controlsDisabled) return;
+    setMagicOpen((current) => !current);
+  }
+
+  function handleMagicRan(result: RunPromptTemplateResult) {
+    onIssueUpdated?.(result.issue);
+    setDispatchError(null);
+    setDispatchStatus(result.message);
+  }
+
+  useExecutionShortcuts({
+    onResume: () => {
+      if (!controlsDisabled && !agentRunActive) void runDispatch("resume");
+    },
+    onRestart: () => {
+      if (!controlsDisabled && canRestart) void runDispatch("restart");
+    },
+    onStop: () => {
+      if (!controlsDisabled && agentRunActive) void runDispatch("stop");
+    },
+    onHardReset: () => {
+      if (!controlsDisabled) setHardResetOpen(true);
+    },
+    onCycleMode: cycleExecutionMode,
+    onFocusComposer: focusComposer,
+    onMagicOpen: toggleMagicPalette,
+    enabled: !controlsDisabled,
+  });
+
   const goalPill = showGoalPill ? (
     <GoalPill
       phase={goalPhase}
@@ -363,7 +487,34 @@ export function ExecutionControlComposer({
   ) : null;
 
   return (
-    <section className="rounded-xl border border-border/70 bg-card/40 p-4">
+    <section
+      ref={sectionRef}
+      className="rounded-xl border border-border/70 bg-card/40 p-4"
+      onKeyDown={handleModeShortcut}
+    >
+      <ExecutionCommandPalette
+        disabled={controlsDisabled}
+        onResume={() => {
+          if (!agentRunActive) void runDispatch("resume");
+        }}
+        onRestart={() => {
+          if (canRestart) void runDispatch("restart");
+        }}
+        onStop={() => {
+          if (agentRunActive) void runDispatch("stop");
+        }}
+        onHardReset={() => setHardResetOpen(true)}
+        onCycleMode={cycleExecutionMode}
+        onFocusComposer={focusComposer}
+        onMagicOpen={toggleMagicPalette}
+      />
+      <MagicCommandPalette
+        open={magicOpen}
+        onOpenChange={setMagicOpen}
+        projectSlug={projectSlug}
+        identifier={issue.identifier}
+        onRan={handleMagicRan}
+      />
       <div className="min-w-0">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t("issue.agent.controlTitle")}
@@ -422,6 +573,7 @@ export function ExecutionControlComposer({
           bundle={bundle}
           floating
           slashContext="execution"
+          slashCommandExtras={slashCommandExtras}
           placeholder={composerPlaceholder}
           hint={null}
           seedMessage={seedMessage}
@@ -430,6 +582,10 @@ export function ExecutionControlComposer({
           agentMenuDisabled={controlsDisabled || agentRunActive}
           allowEmptySubmit={!canSteer && !agentRunActive && canResume}
           canSubmit={sendDisabled ? false : undefined}
+          mentionsEnabled
+          mentionOptions={mentionOptions}
+          onMentionQueryChange={setMentionQuery}
+          onMentionSelect={rememberMention}
           header={goalPill}
           onComposerSnapshot={(snapshot) => {
             composerSnapshotRef.current = snapshot;
@@ -437,8 +593,30 @@ export function ExecutionControlComposer({
           onEmptySubmit={handleEmptySubmit}
           onSubmit={handleComposerSubmit}
           onAgentChange={setAgent}
+          onSettingsChange={(_agent, next) => {
+            composerSettingsRef.current = { model: next.model, effort: next.effort };
+          }}
           toolbarAfterAttach={
             <>
+              <GitDiffLauncher projectSlug={projectSlug} identifier={issue.identifier} disabled={controlsDisabled} />
+              <ExecutionModeMenu
+                agent={agent}
+                mode={mode}
+                disabled={controlsDisabled || agentRunActive}
+                onChange={setMode}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 px-2 text-xs"
+                disabled={controlsDisabled}
+                title={t("commands.magic.open")}
+                onClick={toggleMagicPalette}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("commands.magic.button")}</span>
+              </Button>
               <Button
                 type="button"
                 variant="ghost"

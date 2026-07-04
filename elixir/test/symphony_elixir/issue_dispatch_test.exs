@@ -68,6 +68,25 @@ defmodule SymphonyElixir.IssueDispatchTest do
     assert resume_comment.body =~ "slice evidence"
   end
 
+  test "resume injects draft context refs into dispatch guidance", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, context_issue} = Context.create_issue("pref", %{"title" => "Context source", "status" => "Todo"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{
+               instructions: "Use the selected context",
+               context_refs: [%{"type" => "issue", "id" => context_issue.identifier}]
+             })
+
+    {:ok, comments} = Context.list_comments("pref", issue.identifier)
+    resume_comment = Enum.find(comments, &String.contains?(&1.body, "## Resume agent run"))
+
+    assert resume_comment.body =~ "Use the selected context"
+    assert resume_comment.body =~ "## Loaded Context"
+    assert resume_comment.body =~ "### Board issue #{context_issue.identifier}"
+  end
+
   test "Codex resume routes the goal natively and never caches agent_goal", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
     {:ok, project} = Context.get_project("pref")
@@ -177,6 +196,36 @@ defmodule SymphonyElixir.IssueDispatchTest do
     refute updated.status.is_terminal
   end
 
+  test "resume persists the operator's model/effort/mode overrides", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{
+               agent: "codex",
+               model: "gpt-5.4",
+               effort: "high",
+               mode: "plan"
+             })
+
+    assert {:ok, settings} = Context.get_agent_settings("pref", issue.identifier)
+    assert settings.agent_kind == "codex"
+    assert settings.model == "gpt-5.4"
+    assert settings.effort == "high"
+    assert settings.mode == "plan"
+  end
+
+  test "resume coerces an invalid mode to the default", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{agent: "codex", mode: "turbo"})
+
+    assert {:ok, settings} = Context.get_agent_settings("pref", issue.identifier)
+    assert settings.mode == "build"
+  end
+
   test "continue_work moves wait-state issues to in-progress and nudges dispatch", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "Human Review"})
     {:ok, project} = Context.get_project("pref")
@@ -208,6 +257,7 @@ defmodule SymphonyElixir.IssueDispatchTest do
 
   defp clean_repo do
     for table <- [
+          "local_tracker_issue_agent_settings",
           "local_tracker_activity_events",
           "local_tracker_issue_relations",
           "local_tracker_comments",

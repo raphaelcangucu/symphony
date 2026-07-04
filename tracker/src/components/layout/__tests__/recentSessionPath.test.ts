@@ -4,7 +4,7 @@ import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/re
 import type { RecentSession } from "@/types/recents";
 
 const base: RecentSession = {
-  id: "x", kind: "chat", scope: "freeform", projectSlug: null, projectName: null,
+  id: "x", kind: "chat", scope: "freeform", agentKind: null, projectSlug: null, projectName: null,
   title: "t", identifier: null, threadId: null, status: "", statusKind: "active",
   preview: null, updatedAt: "",
 };
@@ -13,8 +13,8 @@ describe("recentSessionPath", () => {
   it("freeform chat → /assistant/:threadId", () => {
     expect(recentSessionPath({ ...base, kind: "chat", scope: "freeform", threadId: 7 })).toBe("/assistant/7");
   });
-  it("project chat → /projects/:slug/assistant", () => {
-    expect(recentSessionPath({ ...base, kind: "chat", scope: "project", projectSlug: "demo", threadId: 3 })).toBe("/projects/demo/assistant");
+  it("project chat with thread id → /projects/:slug/sessions/:threadId", () => {
+    expect(recentSessionPath({ ...base, kind: "chat", scope: "project", projectSlug: "demo", threadId: 3 })).toBe("/projects/demo/sessions/3");
   });
 
   it("project explore chat → /projects/:slug/assistant/explore", () => {
@@ -31,6 +31,19 @@ describe("recentSessionPath", () => {
     expect(
       recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: "ABC-1", threadId: 9 }),
     ).toBe("/projects/demo/assistant/issue/ABC-1");
+  });
+  it("chat session links preserve the stored agent", () => {
+    expect(
+      recentSessionPath({
+        ...base,
+        kind: "chat",
+        scope: "issue",
+        agentKind: "cursor",
+        projectSlug: "demo",
+        identifier: "ABC-1",
+        threadId: 9,
+      }),
+    ).toBe("/projects/demo/assistant/issue/ABC-1?assistant_agent=cursor");
   });
   it("issue chat without identifier → project assistant fallback", () => {
     expect(

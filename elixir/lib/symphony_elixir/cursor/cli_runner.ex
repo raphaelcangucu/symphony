@@ -138,7 +138,10 @@ defmodule SymphonyElixir.Cursor.CliRunner do
 
   @spec build_args(map()) :: String.t()
   def build_args(%{cli_session_id: cli_session_id, model: model} = args) do
-    base = "--print --output-format stream-json --stream-partial-output --force"
+    base = "--print --output-format stream-json --stream-partial-output"
+
+    mode_flag = mode_flag(Map.get(args, :execution_mode))
+    force_flag = force_flag(Map.get(args, :execution_mode))
 
     model_flag = model_flag(model)
 
@@ -157,8 +160,18 @@ defmodule SymphonyElixir.Cursor.CliRunner do
         ""
       end
 
-    base <> model_flag <> mcp_flag <> session_flag
+    base <> mode_flag <> force_flag <> model_flag <> mcp_flag <> session_flag
   end
+
+  # Cursor Agent supports a native read-only planning mode via `--mode plan`.
+  # Kept inline (not via ExecutionMode) to honor this component's stdlib-only
+  # boundary.
+  defp mode_flag("plan"), do: " --mode plan"
+  defp mode_flag(_execution_mode), do: ""
+
+  # Only `yolo` enables --force (Run Everything / bypass command confirmation).
+  defp force_flag("yolo"), do: " --force"
+  defp force_flag(_execution_mode), do: ""
 
   # "auto" delegates to the CLI's own default model selection; passing it as a
   # --model value is not supported, so we omit the flag entirely.

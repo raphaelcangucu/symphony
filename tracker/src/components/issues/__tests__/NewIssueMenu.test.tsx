@@ -104,7 +104,7 @@ describe("NewIssueMenu", () => {
     expect(screen.getByText("status:In Progress")).toBeInTheDocument();
   });
 
-  it("opens project session and project terminal from the menu", async () => {
+  it("opens the project sessions page from the menu", async () => {
     const user = userEvent.setup();
 
     render(
@@ -114,8 +114,7 @@ describe("NewIssueMenu", () => {
             path="/projects/macro-markets/board"
             element={<NewIssueMenu projectSlug="macro-markets" />}
           />
-          <Route path="/projects/macro-markets/assistant" element={<div>Project assistant session</div>} />
-          <Route path="/projects/macro-markets/assistant/terminal" element={<div>Project terminal session</div>} />
+          <Route path="/projects/macro-markets/sessions" element={<div>Project sessions</div>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -123,7 +122,7 @@ describe("NewIssueMenu", () => {
     await user.click(screen.getByRole("button", { name: "New issue options" }));
     await user.click(await screen.findByRole("menuitem", { name: "New project session" }));
 
-    expect(await screen.findByText("Project assistant session")).toBeInTheDocument();
+    expect(await screen.findByText("Project sessions")).toBeInTheDocument();
   });
 
   it("opens the project terminal from the menu", async () => {
@@ -136,7 +135,7 @@ describe("NewIssueMenu", () => {
             path="/projects/macro-markets/board"
             element={<NewIssueMenu projectSlug="macro-markets" />}
           />
-          <Route path="/projects/macro-markets/assistant/terminal" element={<div>Project terminal session</div>} />
+          <Route path="/projects/macro-markets/terminal" element={<div>Project terminal</div>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -144,7 +143,7 @@ describe("NewIssueMenu", () => {
     await user.click(screen.getByRole("button", { name: "New issue options" }));
     await user.click(await screen.findByRole("menuitem", { name: "New project terminal" }));
 
-    expect(await screen.findByText("Project terminal session")).toBeInTheDocument();
+    expect(await screen.findByText("Project terminal")).toBeInTheDocument();
   });
 
   it("exposes assistant and quick create from the icon variant", async () => {

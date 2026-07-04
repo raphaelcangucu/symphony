@@ -351,8 +351,8 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert_receive {:runner_opts, opts}
 
       tool_names = opts |> Keyword.fetch!(:dynamic_tools) |> Enum.map(& &1["name"])
-      refute "create_issue" in tool_names
-      refute "create_draft_issue" in tool_names
+      assert "create_issue" in tool_names
+      assert "create_draft_issue" in tool_names
       assert "update_issue" in tool_names
 
       tool_executor = Keyword.fetch!(opts, :tool_executor)
@@ -389,8 +389,8 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert_receive {:runner_opts, opts}
 
       tool_names = opts |> Keyword.fetch!(:dynamic_tools) |> Enum.map(& &1["name"])
-      refute "create_issue" in tool_names
-      refute "create_draft_issue" in tool_names
+      assert "create_issue" in tool_names
+      assert "create_draft_issue" in tool_names
 
       tool_executor = Keyword.fetch!(opts, :tool_executor)
 

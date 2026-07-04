@@ -11,6 +11,7 @@ const sample: RecentSession = {
   id: "chat:1",
   kind: "chat",
   scope: "freeform",
+  agentKind: null,
   projectSlug: null,
   projectName: null,
   title: "Ideas",

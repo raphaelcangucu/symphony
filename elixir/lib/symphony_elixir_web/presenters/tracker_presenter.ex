@@ -13,6 +13,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   }
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.PromptTemplates.Template
   alias SymphonyElixir.AgentRouting
   alias SymphonyElixir.Tracker.DisplayIdentifier
   alias SymphonyElixir.Tracker.ExternalUrl
@@ -268,6 +269,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       project_slug: thread.project_slug,
       project_name: Map.get(thread, :project_name),
       issue_identifier: thread.issue_identifier,
+      agent_kind: Map.get(thread, :agent_kind),
       title: thread.title,
       status: thread.status,
       preview: Map.get(thread, :preview),
@@ -286,10 +288,46 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       title: item.title,
       identifier: item.identifier,
       thread_id: item.thread_id,
+      agent_kind: Map.get(item, :agent_kind),
       status: item.status,
       status_kind: to_string(item.status_kind),
       preview: item.preview,
       updated_at: iso8601(item.updated_at)
+    }
+  end
+
+  @spec prompt_template(Template.t()) :: map()
+  def prompt_template(%Template{} = template) do
+    %{
+      id: template.id,
+      slug: template.slug,
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      body: template.body,
+      agentKind: template.agent_kind,
+      model: template.model,
+      effort: template.effort,
+      mode: template.mode,
+      scope: template.scope,
+      builtIn: template.built_in,
+      enabled: template.enabled,
+      position: template.position,
+      insertedAt: iso8601(template.inserted_at),
+      updatedAt: iso8601(template.updated_at)
+    }
+  end
+
+  @spec assistant_command(map()) :: map()
+  def assistant_command(command) when is_map(command) do
+    %{
+      slug: Map.get(command, :slug),
+      name: Map.get(command, :name),
+      description: Map.get(command, :description),
+      kind: Map.get(command, :kind),
+      category: Map.get(command, :category),
+      submitKind: Map.get(command, :submit_kind),
+      source: Map.get(command, :source)
     }
   end
 

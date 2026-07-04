@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { assistantPath, newIssueAssistantPath, projectTerminalPath } from "@/lib/workspaceRoutes";
+import { newIssueAssistantPath, projectSessionsPath, projectTerminalPath } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
@@ -41,8 +41,8 @@ export function NewIssueMenu({
   const { t } = useTranslation();
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
-  const issueAssistantPath = newIssueAssistantPath(projectSlug);
-  const projectAssistantPath = assistantPath(projectSlug);
+  const assistantPath = newIssueAssistantPath(projectSlug);
+  const sessionsPath = projectSessionsPath(projectSlug);
   const terminalPath = projectTerminalPath(projectSlug);
   const addLabel = status ? t("issue.create.addToStatus", { status }) : t("issue.create.add");
 
@@ -50,14 +50,14 @@ export function NewIssueMenu({
     <DropdownMenuContent align="end" className="w-56">
       {includeIssueAssistant ? (
         <DropdownMenuItem asChild>
-          <Link to={issueAssistantPath}>
+          <Link to={assistantPath}>
             <Sparkles className="mr-2 h-4 w-4" />
             {t("issue.create.withAssistant")}
           </Link>
         </DropdownMenuItem>
       ) : null}
       <DropdownMenuItem asChild>
-        <Link to={projectAssistantPath}>
+        <Link to={sessionsPath}>
           <Bot className="mr-2 h-4 w-4" />
           {t("issue.create.newProjectSession")}
         </Link>
@@ -138,7 +138,7 @@ export function NewIssueMenu({
     <>
       <div className={cn("inline-flex items-center", className)}>
         <Button size={size} className="rounded-r-none border-r border-primary-foreground/20" asChild>
-          <Link to={issueAssistantPath}>
+          <Link to={assistantPath}>
             <Plus className="h-4 w-4" />
             {t("issue.create.trigger")}
           </Link>

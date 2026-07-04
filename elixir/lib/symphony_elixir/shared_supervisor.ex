@@ -9,6 +9,7 @@ defmodule SymphonyElixir.SharedSupervisor do
   use Supervisor
 
   alias SymphonyElixir.LocalTracker.Templates
+  alias SymphonyElixir.PromptTemplates
 
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do
@@ -46,6 +47,21 @@ defmodule SymphonyElixir.SharedSupervisor do
            ]},
         restart: :temporary
       },
+      %{
+        id: :seed_builtin_prompt_templates,
+        start:
+          {Task, :start_link,
+           [
+             fn ->
+               try do
+                 PromptTemplates.ensure_builtins()
+               rescue
+                 _ -> :ok
+               end
+             end
+           ]},
+        restart: :temporary
+      },
       SymphonyElixir.LocalTracker.Viewer.Server,
       SymphonyElixir.Tracker.Identity.Cache,
       {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
@@ -55,7 +71,8 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.GitHub.RequestGateway,
       SymphonyElixir.TelegramGateway.Poller,
       SymphonyElixir.Tracker.Sync.Engine,
-      SymphonyElixir.PublicRouting
+      SymphonyElixir.PublicRouting,
+      SymphonyElixir.Terminal.TabStore
     ] ++ public_tunnel_children()
   end
 

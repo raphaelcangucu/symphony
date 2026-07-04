@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { matchingSlashCommands, parseSlashCommand, SLASH_COMMAND_NAMES } from "../slashCommands";
+import {
+  defaultSkillCommands,
+  matchingSlashCommands,
+  parseSlashCommand,
+  SLASH_COMMAND_NAMES,
+} from "../slashCommands";
 
 describe("parseSlashCommand", () => {
   it("parses /goal with its objective", () => {
@@ -47,5 +52,46 @@ describe("matchingSlashCommands", () => {
 
   it("returns nothing when input does not start with a slash", () => {
     expect(matchingSlashCommands("hello")).toEqual([]);
+  });
+});
+
+describe("execution skill commands", () => {
+  it("includes skill commands like /plan via fuzzy match in execution context", () => {
+    const names = matchingSlashCommands("/pl", undefined, "execution").map((c) => c.name);
+    expect(names).toContain("/plan");
+  });
+
+  it("uses provided extras instead of static execution skill fallback", () => {
+    const names = matchingSlashCommands("/rel", undefined, "execution", [
+      {
+        name: "/release",
+        kind: "message",
+        description: "Prepare a release",
+        insertText: "Use /release skill",
+      },
+    ]).map((c) => c.name);
+    expect(names).toEqual(["/release"]);
+    expect(names).not.toContain("/plan");
+  });
+
+  it("still resolves built-ins in execution context", () => {
+    const names = matchingSlashCommands("/inf", undefined, "execution").map((c) => c.name);
+    expect(names).toContain("/infer");
+  });
+
+  it("ranks exact-prefix matches first", () => {
+    const names = matchingSlashCommands("/p", undefined, "execution").map((c) => c.name);
+    expect(names[0]?.startsWith("/p")).toBe(true);
+  });
+
+  it("omits skill commands in the authoring context", () => {
+    const names = matchingSlashCommands("/pl", undefined, "authoring").map((c) => c.name);
+    expect(names).not.toContain("/plan");
+  });
+
+  it("skill commands carry insert text and a message kind", () => {
+    const plan = defaultSkillCommands(undefined, "execution").find((c) => c.name === "/plan");
+    expect(plan?.kind).toBe("message");
+    expect(plan?.insertText).toBeTruthy();
   });
 });

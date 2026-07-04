@@ -1,7 +1,7 @@
 # Load Context — Composer Integration (Jean parity)
 
-**Date:** 2026-07-03  
-**Worktree:** `combined-preview`  
+**Date:** 2026-07-03
+**Worktree:** `combined-preview`
 **Status:** Approved (brainstorm)
 
 ## Summary

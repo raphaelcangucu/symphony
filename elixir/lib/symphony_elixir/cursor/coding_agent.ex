@@ -133,6 +133,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
       cli_session_id: session.cli_session_id,
       model: Keyword.get(opts, :model, session.model),
       mcp_config_path: session.mcp_config_path,
+      execution_mode: Keyword.get(opts, :execution_mode),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
   end

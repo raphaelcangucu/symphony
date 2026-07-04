@@ -38,6 +38,7 @@ defmodule SymphonyElixir.Recents do
         title: chat_title(thread, preview),
         identifier: thread.issue_identifier,
         thread_id: thread.id,
+        agent_kind: thread.agent_kind,
         status: humanize_thread_status(thread.status),
         status_kind: thread_status_kind(thread.status),
         preview: preview,
@@ -75,6 +76,7 @@ defmodule SymphonyElixir.Recents do
     |> Map.merge(%{
       status: humanize_exec_status(exec.status),
       status_kind: exec_status_kind(exec.status),
+      agent_kind: exec.agent_kind,
       updated_at: exec.last_event_at || issue.updated_at
     })
   end
@@ -89,6 +91,7 @@ defmodule SymphonyElixir.Recents do
       title: issue.title,
       identifier: issue.identifier,
       thread_id: nil,
+      agent_kind: Map.get(issue, :agent_kind),
       preview: nil,
       updated_at: issue.updated_at
     }

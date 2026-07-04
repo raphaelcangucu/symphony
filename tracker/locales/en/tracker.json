@@ -6,6 +6,64 @@
     "save": "Save",
     "refresh": "Refresh"
   },
+  "launcher": {
+    "title": "New session",
+    "subtitle": "Jump into a run from an issue, PR, branch, or quick action.",
+    "tabsLabel": "Source",
+    "loading": "Loading…",
+    "empty": "No matching results.",
+    "modifierHint": "Hold ⌘/Ctrl to open in background · ⌘O preview · ⌘M investigate · ⌘1–4 switch tabs",
+    "preview": {
+      "loading": "Loading issue…",
+      "noIssueLinked": "No Symphony issue is linked yet.",
+      "openExternal": "Open on GitHub",
+      "openIssue": "Open issue"
+    },
+    "tabs": {
+      "actions": "Actions",
+      "issues": "Issues",
+      "prs": "PRs",
+      "branches": "Branches"
+    },
+    "placeholder": {
+      "actions": "Run a command…",
+      "issues": "Search issues or paste a number…",
+      "prs": "Search open pull requests…",
+      "branches": "Search branches…"
+    },
+    "actions": {
+      "newIssue": "New issue",
+      "goToBoard": "Go to board",
+      "openFilters": "Open filters",
+      "searchIssues": "Search issues",
+      "openAssistant": "Open assistant",
+      "openKb": "Open knowledge base",
+      "preview": "Preview",
+      "previewHint": "Preview (⌘O)",
+      "investigate": "Investigate",
+      "investigateHint": "Investigate (⌘M)",
+      "stack": "Stack",
+      "stackHint": "New worktree (orphan PR/branch only)"
+    },
+    "status": {
+      "live": "Running",
+      "retrying": "Retrying",
+      "waiting": "Waiting for review",
+      "idle": "Idle",
+      "saved": "Saved (resumable)",
+      "error": "Error",
+      "aborted": "Aborted"
+    },
+    "toast": {
+      "backgroundResume": "Resuming {{identifier}} in the background",
+      "backgroundInvestigate": "Investigating {{identifier}} in the background",
+      "standaloneStackPendingPr": "Worktree stack for PR #{{number}} ({{branch}}) is not wired yet — opened on GitHub",
+      "standaloneStackPendingBranch": "Worktree stack for branch {{branch}} is not wired yet — opened on GitHub",
+      "dispatchFailed": "Could not start {{identifier}}",
+      "investigateFailed": "Could not investigate {{identifier}}",
+      "noLinkedIssue": "No Symphony issue is linked to this branch yet"
+    }
+  },
   "ui": {
     "dialog": {
       "close": "Close"
@@ -299,6 +357,32 @@
       }
     }
   },
+  "commands": {
+    "magic": {
+      "title": "Magic commands",
+      "button": "Magic",
+      "open": "Open magic commands",
+      "searchPlaceholder": "Search magic commands…",
+      "searchRunning": "Running magic command…",
+      "loading": "Loading magic commands…",
+      "empty": "No magic commands found.",
+      "uncategorized": "Uncategorized",
+      "close": "Close",
+      "categories": {
+        "builtin": "Compose",
+        "workflow": "Workflow",
+        "superpowers": "Superpowers"
+      },
+      "running": "Running…",
+      "runFailed": "Failed to run magic command",
+      "badges": {
+        "agent": "Agent",
+        "model": "Model",
+        "effort": "Effort",
+        "mode": "Mode"
+      }
+    }
+  },
   "issue": {
     "bundle": {
       "title": "Execution bundle",
@@ -344,6 +428,33 @@
       "dispatchHardReset": "Hard resetting session…",
       "dispatchStop": "Pausing agent…",
       "dispatchFailed": "Dispatch failed",
+      "executionMode": {
+        "title": "Execution mode",
+        "plan": { "label": "Plan", "desc": "Read-only — analyze and plan, no edits" },
+        "build": { "label": "Build", "desc": "Edit the workspace (default)" },
+        "yolo": { "label": "Yolo", "desc": "Full access, approvals bypassed" }
+      },
+      "mentions": {
+        "listLabel": "Context mentions",
+        "empty": "No matches",
+        "groups": {
+          "issues": "Issues",
+          "files": "Files",
+          "pull_requests": "Pull requests"
+        }
+      },
+      "shortcuts": {
+        "title": "Execution actions",
+        "open": "Command palette",
+        "placeholder": "Search actions…",
+        "empty": "No actions",
+        "resume": "Resume",
+        "restart": "Restart",
+        "stop": "Stop",
+        "hardReset": "Hard reset",
+        "cycleMode": "Cycle execution mode",
+        "focusComposer": "Focus composer"
+      },
       "hardResetDialogTitle": "Hard reset session?",
       "hardResetDialogDescription": "This stops any active run, discards the current agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and its git state are preserved.",
       "cancel": "Cancel",
@@ -393,6 +504,7 @@
       },
       "tab": {
         "runStatus": "Run status",
+        "details": "Run details",
         "noActiveAgent": "No active agent",
         "session": "Session",
         "turn": "Turn",
@@ -652,6 +764,48 @@
         "loadFailed": "Could not load commit evidence."
       }
     },
+    "diff": {
+      "button": "Diff",
+      "shortcutHint": "View workspace diff (⌘G)",
+      "title": "Workspace diff",
+      "branch": "Branch",
+      "uncommitted": "Uncommitted",
+      "commits": "Commits",
+      "refresh": "Refresh",
+      "viewMode": {
+        "split": "Split",
+        "unified": "Unified"
+      },
+      "list": {
+        "tree": "Tree",
+        "flat": "Flat"
+      },
+      "repos": {
+        "all": "All repos"
+      },
+      "commit": {
+        "button": "Commit",
+        "title": "Commit workspace changes",
+        "dialogTitle": "Commit workspace changes",
+        "dialogDescription": "Create a local git commit in each repository with pending changes.",
+        "messageLabel": "Commit message",
+        "messagePlaceholder": "feat: describe the change",
+        "submit": "Commit changes",
+        "committing": "Committing...",
+        "success_one": "Committed {{count}} repo.",
+        "success_other": "Committed {{count}} repos.",
+        "failed": "Could not commit workspace changes."
+      },
+      "files": "{{count}} files",
+      "filterPlaceholder": "Filter files...",
+      "workspaceUnavailable": "Workspace unavailable",
+      "loading": "Loading diff…",
+      "noFiles": "No changed files.",
+      "selectFile": "Select a file to view its diff.",
+      "errors": {
+        "loadFailed": "Could not load workspace diff."
+      }
+    },
     "preview": {
       "cannotLoadTitle": "Preview cannot load",
       "cannotLoadBody": "Project and issue identifiers are required to load preview status.",
@@ -881,6 +1035,18 @@
         "restartFailed": "Could not restart the dev server.",
         "tunnelFailed": "Could not start the Cloudflare tunnel."
       }
+    },
+    "tasks": {
+      "title": "Tasks",
+      "progress": "{{done}}/{{total}} done",
+      "collapse": "Collapse tasks",
+      "expand": "Expand tasks",
+      "status": {
+        "pending": "Pending",
+        "in_progress": "In progress",
+        "completed": "Completed"
+      },
+      "inline": "{{label}} · {{done}}/{{total}} done"
     },
     "sessionLog": {
       "title": "Session log",
@@ -1855,6 +2021,16 @@
       "modelsFrom": " Models from `{{command}}`.",
       "openButton": "Assistant",
       "openAria": "Open project assistant",
+      "openKnowledgeBase": "KB",
+      "openKnowledgeBaseShortcut": "Open knowledge base (⌘⇧K)",
+      "knowledgeBaseTitle": "Knowledge Base",
+      "knowledgeBaseDescription": "Browse docs for `{{slug}}` without leaving the composer.",
+      "knowledgeBaseOpenPage": "Open",
+      "knowledgeBaseShowTree": "Show tree",
+      "knowledgeBaseSelectPage": "Select a document from the knowledge base tree.",
+      "knowledgeBaseEmpty": "No knowledge base repositories are configured.",
+      "knowledgeBaseLoadFailed": "Failed to load the knowledge base.",
+      "addToContext": "Add to context",
       "loadingModels": "Loading assistant models...",
       "catalogLoadFailed": "Failed to load assistant models.",
       "noConnectionTarget": "Assistant has no thread or project to connect to.",
@@ -1876,6 +2052,20 @@
       "remove": "Remove",
       "turnInterrupted": "The previous turn was interrupted.",
       "resume": "Resume",
+      "scrollToBottom": "Scroll to latest messages",
+      "planApproval": {
+        "yolo": "YOLO",
+        "yoloTitle": "Approve the plan and execute in YOLO mode",
+        "approve": "Approve",
+        "approveTitle": "Approve the plan and execute in build mode"
+      },
+      "commandApproval": {
+        "title": "Codex wants to run a command",
+        "cwd": "Working directory",
+        "reason": "Detected action",
+        "approve": "Approve",
+        "cancel": "Cancel turn"
+      },
       "attachmentFallback": {
         "audio": "See the attached audio.",
         "image": "See the attached image.",
@@ -1896,7 +2086,18 @@
       "goal": "Run an authoring goal directly in this chat (no orchestrator dispatch)",
       "goalExecution": "Set an execution goal and dispatch via the orchestrator",
       "infer": "Steer the running agent without waiting",
-      "btw": "Ask a quick side question (read-only, not saved)"
+      "btw": "Ask a quick side question (read-only, not saved)",
+      "skillDirective": "Use the {{skill}} skill: ",
+      "skills": {
+        "plan": "Draft an implementation plan before coding",
+        "push": "Push the branch and open/update the PR",
+        "pull": "Sync the branch with origin/main and resolve conflicts",
+        "land": "Land the PR: resolve conflicts, wait for checks, merge",
+        "evidence": "Run tests and write the evidence manifest",
+        "workpad": "Update the issue's Codex Workpad (plan, criteria, results)",
+        "commit": "Create a well-formed git commit from current changes",
+        "debug": "Investigate a stuck run or failure with the logs"
+      }
     },
     "effort": {
       "low": "Low",
@@ -1965,6 +2166,8 @@
       "removeAttachment": "Remove {{name}}",
       "agentMenu": "Agent",
       "reasoningEffort": "Reasoning effort",
+      "autoThinking": "Auto",
+      "thinkingEffort": "Thinking {{effort}}",
       "stopRecording": "Stop recording",
       "recordAudio": "Record audio",
       "recording": "Recording",
@@ -2017,6 +2220,17 @@
       "closeAria": "Close side question",
       "thinking": "Thinking…",
       "footer": "Esc to dismiss · not saved to the conversation"
+    },
+    "toolGroup": {
+      "read": "Read {{n}} files",
+      "edit": "Edited {{n}} files",
+      "editStats": "Edited {{n}} files (+{{additions}} −{{deletions}})",
+      "command": "Ran {{n}} commands",
+      "query": "Looked up {{n}} items",
+      "action": "{{n}} actions",
+      "other": "{{n}} tool calls",
+      "running": "running",
+      "failed": "failed"
     },
     "working": {
       "runningTool": "Running {{tool}}",
@@ -2095,6 +2309,72 @@
       "noContent": "No content to display."
     }
   },
+  "sessions": {
+    "eyebrow": "Project sessions",
+    "title": "Sessions",
+    "description": "All assistant chats and agent runs related to this project.",
+    "refresh": "Refresh",
+    "newSession": "New session",
+    "newSessionTitle": "Project session",
+    "creating": "Creating…",
+    "createFailed": "Could not create a project session.",
+    "loading": "Loading sessions…",
+    "empty": "No sessions for this project yet.",
+    "resume": "Resume",
+    "resuming": "Resuming…",
+    "resumeStarted": "Resuming {{identifier}}",
+    "resumeFailed": "Could not resume {{identifier}}",
+    "openExecutionAria": "Open execution session {{identifier}}",
+    "executionUnavailable": "Execution details for {{identifier}} are not available right now.",
+    "turns": "{{count}} turns",
+    "runtime": "Runtime {{value}}",
+    "related": {
+      "title": "Related sessions",
+      "chat": "Chat",
+      "agent": "Agent"
+    },
+    "buckets": {
+      "active": "Active",
+      "waiting": "Waiting review",
+      "saved": "Saved",
+      "recent": "Recent"
+    },
+    "status": {
+      "live": "Running",
+      "retrying": "Retrying",
+      "waiting": "Waiting",
+      "idle": "Idle",
+      "saved": "Saved",
+      "error": "Error",
+      "aborted": "Aborted"
+    }
+  },
+  "workspace": {
+    "terminal": {
+      "title": "Terminal",
+      "description": "Interactive shells for this issue and the project dev environment.",
+      "tabsAria": "Terminal tabs",
+      "issueShell": "Issue",
+      "projectShell": "Project",
+      "projectAriaLabel": "Project terminal for {{project}}",
+      "missingIssue": "Issue identifier is required for the issue terminal.",
+      "missingTab": "Terminal tab id is required.",
+      "newTab": "New tab",
+      "newTabTitle": "Shell",
+      "creatingTab": "Creating…",
+      "createTabFailed": "Could not create a terminal tab.",
+      "closeTabFailed": "Could not close the terminal tab.",
+      "loadTabsFailed": "Could not load terminal tabs.",
+      "dynamicTabsUnavailable": "Dynamic terminal tabs require a backend update. Restart Symphony to enable Nova aba.",
+      "dynamicAriaLabel": "Terminal tab {{title}}",
+      "projectDockEyebrow": "Project workspace",
+      "projectDockTitle": "Terminal",
+      "projectDockDescription": "Interactive shells for the project dev environment. Stays open while you work on the board."
+    },
+    "sessions": {
+      "tabsAria": "Project session tabs"
+    }
+  },
   "layout": {
     "projectHeader": {
       "pollingActive": "Polling active",
@@ -2114,6 +2394,8 @@
       "openProjectWorkspaceCode": "Open project workspace in Code",
       "board": "Board",
       "list": "List",
+      "sessions": "Sessions",
+      "terminal": "Terminal",
       "knowledgeBase": "Knowledge Base",
       "switchProject": "Switch project",
       "loadingProjects": "Loading projects…",

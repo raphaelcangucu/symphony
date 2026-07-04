@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronRight, FileText, Folder, GripVertical, Image, Star } from "lucide-react";
+import { ChevronRight, FileText, Folder, GripVertical, Image, Plus, Star } from "lucide-react";
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
@@ -28,6 +28,10 @@ interface Props {
   pageHref: (repoSlug: string, pagePath: string) => string;
   /** Optional in-place selection for embedded KB surfaces that should not route away. */
   onSelectPath?: (repoSlug: string, pagePath: string) => void;
+  /** Optional per-node action used by embedded KB surfaces, e.g. composer context insertion. */
+  onInsertContext?: (repoSlug: string, node: KbTreeNodeType) => void;
+  /** Render navigation only, hiding editing and reorder controls. */
+  readOnly?: boolean;
 }
 
 export function KbTreeNode({
@@ -40,6 +44,8 @@ export function KbTreeNode({
   inlineEdit,
   pageHref,
   onSelectPath,
+  onInsertContext,
+  readOnly = false,
 }: Props) {
   const [open, setOpen] = useState(true);
   const indent = depth * 12 + 4;
@@ -68,17 +74,21 @@ export function KbTreeNode({
           >
             {node.title || node.name}
           </button>
-          <KbAddNodeButton
-            onAddPage={() => handlers.onStartAddPage(repoSlug, node.path, null)}
-            onCreateFolder={() => handlers.onCreateFolder(repoSlug, node.path)}
-          />
-          <KbNodeActionsMenu
-            title={node.title || node.name}
-            variant="folder"
-            onCreateFolder={() => handlers.onCreateFolder(repoSlug, node.path)}
-            onAddPage={() => handlers.onStartAddPage(repoSlug, node.path, null)}
-            onDelete={() => handlers.onDelete(repoSlug, node.path, node.title || node.name, "folder")}
-          />
+          {readOnly ? null : (
+            <>
+              <KbAddNodeButton
+                onAddPage={() => handlers.onStartAddPage(repoSlug, node.path, null)}
+                onCreateFolder={() => handlers.onCreateFolder(repoSlug, node.path)}
+              />
+              <KbNodeActionsMenu
+                title={node.title || node.name}
+                variant="folder"
+                onCreateFolder={() => handlers.onCreateFolder(repoSlug, node.path)}
+                onAddPage={() => handlers.onStartAddPage(repoSlug, node.path, null)}
+                onDelete={() => handlers.onDelete(repoSlug, node.path, node.title || node.name, "folder")}
+              />
+            </>
+          )}
         </div>
         {open ? (
           node.children.length > 0 || folderHasDraft ? (
@@ -93,6 +103,8 @@ export function KbTreeNode({
               inlineEdit={inlineEdit}
               pageHref={pageHref}
               onSelectPath={onSelectPath}
+              onInsertContext={onInsertContext}
+              readOnly={readOnly}
             />
           ) : (
             <p
@@ -118,6 +130,8 @@ export function KbTreeNode({
         inlineEdit={inlineEdit}
         pageHref={pageHref}
         onSelectPath={onSelectPath}
+        onInsertContext={onInsertContext}
+        readOnly={readOnly}
       />
     );
   }
@@ -132,6 +146,8 @@ export function KbTreeNode({
       inlineEdit={inlineEdit}
       pageHref={pageHref}
       onSelectPath={onSelectPath}
+      onInsertContext={onInsertContext}
+      readOnly={readOnly}
     />
   );
 }
@@ -145,7 +161,9 @@ function KbTreeAssetRow({
   inlineEdit,
   pageHref,
   onSelectPath,
-}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref" | "onSelectPath">) {
+  onInsertContext,
+  readOnly,
+}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref" | "onSelectPath" | "onInsertContext" | "readOnly">) {
   const indent = depth * 12 + 4;
   const startRename = () => handlers.onRename(repoSlug, node.path, assetBaseName(node.path));
 
@@ -187,18 +205,36 @@ function KbTreeAssetRow({
         }}
         onDoubleClick={(event) => {
           event.preventDefault();
+          if (readOnly) return;
           startRename();
         }}
       >
         <Image className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{node.title || node.name}</span>
       </NavLink>
-      <KbNodeActionsMenu
-        title={node.title || node.name}
-        variant="asset"
-        onRename={startRename}
-        onDelete={() => handlers.onDelete(repoSlug, node.path, assetBaseName(node.path), "asset")}
-      />
+      {readOnly ? null : (
+        <KbNodeActionsMenu
+          title={node.title || node.name}
+          variant="asset"
+          onRename={startRename}
+          onDelete={() => handlers.onDelete(repoSlug, node.path, assetBaseName(node.path), "asset")}
+        />
+      )}
+      {onInsertContext ? (
+        <button
+          type="button"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover/kb-row:opacity-100 focus:opacity-100"
+          aria-label={`Add ${node.title || node.name} to context`}
+          title={`Add ${node.title || node.name} to context`}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onInsertContext(repoSlug, node);
+          }}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -212,7 +248,9 @@ function KbTreePageRow({
   inlineEdit,
   pageHref,
   onSelectPath,
-}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref" | "onSelectPath">) {
+  onInsertContext,
+  readOnly,
+}: Pick<Props, "repoSlug" | "node" | "depth" | "activePath" | "handlers" | "inlineEdit" | "pageHref" | "onSelectPath" | "onInsertContext" | "readOnly">) {
   const indent = depth * 12 + 4;
   const parentPath = parentPathOf(node.path);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -242,16 +280,20 @@ function KbTreePageRow({
       style={style}
       className={cn("group/kb-row flex min-w-0 items-center rounded-md hover:bg-accent/50", isDragging && "opacity-50")}
     >
-      <button
-        type="button"
-        className="flex h-6 w-5 shrink-0 cursor-grab items-center justify-center text-muted-foreground/40 opacity-0 active:cursor-grabbing group-hover/kb-row:opacity-100"
-        aria-label="Drag to reorder"
-        {...attributes}
-        {...listeners}
-        onClick={(event) => event.preventDefault()}
-      >
-        <GripVertical className="h-3.5 w-3.5" />
-      </button>
+      {readOnly ? (
+        <span className="h-6 w-5 shrink-0" />
+      ) : (
+        <button
+          type="button"
+          className="flex h-6 w-5 shrink-0 cursor-grab items-center justify-center text-muted-foreground/40 opacity-0 active:cursor-grabbing group-hover/kb-row:opacity-100"
+          aria-label="Drag to reorder"
+          {...attributes}
+          {...listeners}
+          onClick={(event) => event.preventDefault()}
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+      )}
       <NavLink
         to={pageHref(repoSlug, node.path)}
         className={({ isActive }) =>
@@ -264,6 +306,7 @@ function KbTreePageRow({
         }
         onDoubleClick={(event) => {
           event.preventDefault();
+          if (readOnly) return;
           handlers.onRename(repoSlug, node.path, node.title || node.name);
         }}
         onClick={(event) => {
@@ -279,20 +322,39 @@ function KbTreePageRow({
         )}
         <span className="truncate">{node.title || node.name}</span>
       </NavLink>
-      <KbAddNodeButton
-        onAddPage={() => handlers.onStartAddPage(repoSlug, parentPath, node.path)}
-        onCreateFolder={() => handlers.onCreateFolder(repoSlug, parentPath)}
-      />
-      <KbNodeActionsMenu
-        title={node.title || node.name}
-        favorite={node.favorite}
-        variant="page"
-        onRename={() => handlers.onRename(repoSlug, node.path, node.title || node.name)}
-        onToggleFavorite={() => handlers.onToggleFavorite(repoSlug, node.path, node.favorite)}
-        onDelete={() => handlers.onDelete(repoSlug, node.path, node.title || node.name, "page")}
-        onCreateFolder={() => handlers.onCreateFolder(repoSlug, parentPath)}
-        onAddPage={() => handlers.onStartAddPage(repoSlug, parentPath, node.path)}
-      />
+      {readOnly ? null : (
+        <>
+          <KbAddNodeButton
+            onAddPage={() => handlers.onStartAddPage(repoSlug, parentPath, node.path)}
+            onCreateFolder={() => handlers.onCreateFolder(repoSlug, parentPath)}
+          />
+          <KbNodeActionsMenu
+            title={node.title || node.name}
+            favorite={node.favorite}
+            variant="page"
+            onRename={() => handlers.onRename(repoSlug, node.path, node.title || node.name)}
+            onToggleFavorite={() => handlers.onToggleFavorite(repoSlug, node.path, node.favorite)}
+            onDelete={() => handlers.onDelete(repoSlug, node.path, node.title || node.name, "page")}
+            onCreateFolder={() => handlers.onCreateFolder(repoSlug, parentPath)}
+            onAddPage={() => handlers.onStartAddPage(repoSlug, parentPath, node.path)}
+          />
+        </>
+      )}
+      {onInsertContext ? (
+        <button
+          type="button"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover/kb-row:opacity-100 focus:opacity-100"
+          aria-label={`Add ${node.title || node.name} to context`}
+          title={`Add ${node.title || node.name} to context`}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onInsertContext(repoSlug, node);
+          }}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
     </div>
   );
 }

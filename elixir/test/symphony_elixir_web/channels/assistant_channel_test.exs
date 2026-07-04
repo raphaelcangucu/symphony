@@ -3,6 +3,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   import Phoenix.ChannelTest
 
+  alias Ecto.Adapters.SQL
   alias SymphonyElixir.Assistant.GoalRun
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
@@ -15,6 +16,16 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
 
+  defmodule PushDispatcher do
+    def assistant_input_needed(metadata) do
+      if pid = Application.get_env(:symphony_elixir, :push_test_pid) do
+        send(pid, {:assistant_input_push, metadata})
+      end
+
+      :ok
+    end
+  end
+
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
     migrate_repo()
@@ -23,11 +34,15 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     previous_token = System.get_env(@token_env)
     previous_runner = Application.get_env(:symphony_elixir, :assistant_runner)
+    previous_push_dispatcher = Application.get_env(:symphony_elixir, :push_dispatcher)
+    previous_push_test_pid = Application.get_env(:symphony_elixir, :push_test_pid)
     System.put_env(@token_env, "secret")
 
     on_exit(fn ->
       restore_env(@token_env, previous_token)
       restore_app_env(:assistant_runner, previous_runner)
+      restore_app_env(:push_dispatcher, previous_push_dispatcher)
+      restore_app_env(:push_test_pid, previous_push_test_pid)
     end)
 
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
@@ -298,6 +313,8 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   test "submit_user_input forwards normalized answers to the running turn and persists the Q&A" do
     test_pid = self()
+    Application.put_env(:symphony_elixir, :push_dispatcher, PushDispatcher)
+    Application.put_env(:symphony_elixir, :push_test_pid, test_pid)
 
     runner = fn _workspace, _prompt, _issue, opts ->
       Keyword.fetch!(opts, :on_turn_started).("turn-q")
@@ -343,12 +360,64 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_receive {:runner, _pid}, 2_000
 
     assert_push("user_input_required", %{request_id: 112, questions: [%{"id" => "q1"}]})
+    assert_receive {:assistant_input_push, %{project_slug: "macro-markets", issue_identifier: "MAC-1", request_kind: :question}}, 2_000
 
     sref = push(socket, "submit_user_input", %{"request_id" => 112, "answers" => %{"q1" => "Use default"}})
     assert_reply(sref, :ok, %{})
 
     assert_receive {:answered, 112, %{"q1" => %{"answers" => ["Use default"]}}}, 2_000
     assert_push("message_created", %{message: %{metadata: %{"kind" => "user_questions"}}})
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
+  end
+
+  test "submit_approval forwards command approval to the running turn" do
+    test_pid = self()
+    Application.put_env(:symphony_elixir, :push_dispatcher, PushDispatcher)
+    Application.put_env(:symphony_elixir, :push_test_pid, test_pid)
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-approval")
+
+      Keyword.fetch!(opts, :on_approval_required).(%{
+        request_id: "cmd-1",
+        decision: "acceptForSession",
+        command: "npm test",
+        cwd: "/workspace/app",
+        reason: "unknown"
+      })
+
+      send(test_pid, {:runner, self()})
+
+      receive do
+        {:codex_approval, request_id, decision, reply_to} ->
+          send(test_pid, {:approved, request_id, decision})
+          send(reply_to, {:approval_ok, request_id})
+      after
+        2_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "done", turn_id: "turn-approval", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-1")
+
+    assert_push("history_loaded", %{})
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{"view" => "board"}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner, _pid}, 2_000
+
+    assert_push("approval_required", %{request_id: "cmd-1", command: "npm test"})
+    assert_receive {:assistant_input_push, %{project_slug: "macro-markets", issue_identifier: "MAC-1", request_kind: :approval}}, 2_000
+
+    sref = push(socket, "submit_approval", %{"request_id" => "cmd-1", "action" => "approve"})
+    assert_reply(sref, :ok, %{})
+
+    assert_receive {:approved, "cmd-1", "acceptForSession"}, 2_000
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
   end
 
@@ -755,6 +824,17 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert issue.agent_goal =~ "MAC-1"
   end
 
+  test "dispatch_codex forwards the selected execution mode", %{socket: socket} do
+    {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Dispatch me", "status" => "Todo"})
+    {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
+
+    ref = push(socket, "dispatch_codex", %{"mode" => "yolo"})
+    assert_reply(ref, :ok, %{goal_mode: false})
+
+    assert {:ok, settings} = Context.get_agent_settings("macro-markets", "MAC-1")
+    assert settings.mode == "yolo"
+  end
+
   test "dispatch_codex does not carry an execution goal just because the authoring goal is enabled",
        %{socket: socket} do
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Dispatch me", "status" => "Todo"})
@@ -991,7 +1071,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
           "local_tracker_repositories",
           "local_tracker_projects"
         ] do
-      Ecto.Adapters.SQL.query!(Repo, "DELETE FROM #{table}", [])
+      SQL.query!(Repo, "DELETE FROM #{table}", [])
     end
   end
 

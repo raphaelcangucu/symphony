@@ -302,6 +302,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           "identifier" => string_schema("Issue identifier to dispatch, for example MAC-1."),
           "instructions" => string_schema("Concrete coding instructions for the agent."),
           "agent" => string_schema("Optional agent override: codex, claude, or cursor. Omit to follow task > project > user preference."),
+          "mode" => string_schema("Optional execution mode override: plan, build, or yolo."),
           "goal" => string_schema("Optional long-running objective to persist for the orchestrator (Codex goal or Claude/Cursor workflow).")
         }
       }),
@@ -312,6 +313,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         "properties" => %{
           "identifier" => string_schema("Issue identifier to dispatch, for example MAC-1."),
           "instructions" => string_schema("Concrete coding instructions for Codex."),
+          "mode" => string_schema("Optional execution mode override: plan, build, or yolo."),
           "goal" => string_schema("Optional long-running Codex goal to persist for the orchestrator.")
         }
       }),
@@ -991,6 +993,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          :ok <- ensure_in_dispatch_queue(project, current),
          :ok <- ensure_status_available(project, @in_progress_state),
          {:ok, agent} <- resolve_dispatch_agent(project, identifier, Map.get(arguments, "agent")),
+         :ok <- persist_dispatch_agent_settings(project, identifier, arguments),
          :ok <- IssueDispatchPrep.prepare_for_dispatch(project, identifier, agent),
          {:ok, _comment} <-
            IssueAdapter.dispatch(project, :add_comment, [
@@ -2026,6 +2029,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       "agent_goal" => normalize_optional_string(Map.get(arguments, "goal"))
     }
   end
+
+  defp persist_dispatch_agent_settings(project, identifier, arguments) do
+    attrs =
+      %{}
+      |> maybe_put_settings_attr("agent_kind", normalize_optional_string(Map.get(arguments, "agent")))
+      |> maybe_put_settings_attr("mode", normalize_optional_string(Map.get(arguments, "mode")))
+
+    if map_size(attrs) == 0 do
+      :ok
+    else
+      Context.put_agent_settings(project_slug(project), identifier, attrs)
+    end
+  end
+
+  defp maybe_put_settings_attr(attrs, _key, nil), do: attrs
+  defp maybe_put_settings_attr(attrs, key, value), do: Map.put(attrs, key, value)
 
   defp normalize_required_string(value, field) when is_binary(value) do
     case String.trim(value) do

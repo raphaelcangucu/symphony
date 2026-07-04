@@ -57,6 +57,8 @@ vi.mock("@xterm/xterm", () => ({
       reset,
       write,
       dispose,
+      cols: 80,
+      rows: 24,
     };
   }),
 }));
@@ -68,6 +70,16 @@ vi.mock("@xterm/addon-fit", () => ({
 }));
 
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, params?: Record<string, string>) => {
+      if (key === "issue.terminal.ariaLabel") return `Terminal for ${params?.identifier ?? ""}`;
+      if (key === "issue.terminal.projectAriaLabel") return `Project terminal for ${params?.projectSlug ?? ""}`;
+      return key;
+    },
+  }),
+}));
 
 describe("IssueTerminal", () => {
   beforeEach(() => {
@@ -113,7 +125,7 @@ describe("IssueTerminal", () => {
 
     expect(openTerminalSession).not.toHaveBeenCalled();
     await waitFor(() =>
-      expect(channel).toHaveBeenCalledWith("terminal:devenv:macro-markets", { project_slug: "macro-markets" }),
+      expect(channel).toHaveBeenCalledWith("terminal:devenv:macro-markets", {}),
     );
     expect(screen.getByLabelText("Project terminal for macro-markets")).toBeTruthy();
   });

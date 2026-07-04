@@ -78,6 +78,17 @@ describe("AssistantComposer", () => {
     );
   });
 
+  it("renders a thinking/effort icon for each reasoning-effort option", () => {
+    render(
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+    );
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: i18n.t("assistant.effort.low") }));
+
+    expect(screen.getByTestId("effort-icon-low")).toBeTruthy();
+    expect(screen.getByTestId("effort-icon-high")).toBeTruthy();
+  });
+
   it("sends with the send button", () => {
     const onSubmit = vi.fn();
 
@@ -436,5 +447,109 @@ describe("AssistantComposer", () => {
     expect(container.querySelector(".motion-safe\\:animate-ping")).toBeTruthy();
     expect(container.querySelector(".motion-safe\\:animate-pulse")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Record audio" })).toBeNull();
+  });
+
+  it("renders mention options in document flow so they are not clipped by overflow-hidden cards", () => {
+    const mentionOptions = [{ type: "issue" as const, id: "SYM-1", label: "Test issue" }];
+
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        mentionsEnabled
+        mentionOptions={mentionOptions}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "@sym" } });
+
+    const listbox = screen.getByRole("listbox");
+    expect(listbox).toBeInTheDocument();
+    expect(listbox.className).not.toContain("absolute");
+    expect(screen.getByText("SYM-1")).toBeInTheDocument();
+  });
+
+  it("turns selected @ mention options into context chips submitted as contextRefs", () => {
+    const onSubmit = vi.fn();
+    const mentionOptions = [{ type: "issue" as const, id: "SYM-1", label: "Test issue", detail: "Todo" }];
+
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        mentionsEnabled
+        mentionOptions={mentionOptions}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "@sym" } });
+    fireEvent.mouseDown(screen.getByRole("option", { name: /SYM-1/i }));
+
+    expect(textarea).toHaveValue("");
+    expect(screen.getByText("SYM-1")).toBeInTheDocument();
+    expect(screen.getByText("Test issue")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "",
+        contextRefs: [
+          expect.objectContaining({
+            type: "issue",
+            id: "SYM-1",
+            label: "Test issue",
+            detail: "Todo",
+            state: "draft",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("adds externally requested context chips to the next submit", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        contextInsertRequest={{
+          id: 1,
+          ref: {
+            type: "file",
+            id: "tracker/src/App.tsx",
+            label: "App.tsx",
+            detail: "Edited by agent",
+            content: "### Agent edited file\n\n- Path: tracker/src/App.tsx",
+            state: "draft",
+          },
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.getByText("tracker/src/App.tsx")).toBeInTheDocument();
+    expect(screen.getByText("App.tsx")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "",
+        contextRefs: [
+          expect.objectContaining({
+            type: "file",
+            id: "tracker/src/App.tsx",
+            content: "### Agent edited file\n\n- Path: tracker/src/App.tsx",
+            state: "draft",
+          }),
+        ],
+      }),
+    );
   });
 });

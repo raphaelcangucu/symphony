@@ -17,8 +17,11 @@ import {
   issuePath,
   newIssueAssistantPath,
   projectExploreAssistantPath,
-  projectTerminalPath,
   projectSettingsPath,
+  projectSessionPath,
+  projectExecutionSessionPath,
+  projectSessionsPath,
+  projectTerminalPath,
   newIssuePath,
   projectsFiltersPath,
   projectsNewPath,
@@ -51,7 +54,6 @@ describe("workspaceRoutes", () => {
     expect(newIssueAssistantPath("acme")).toBe("/projects/acme/assistant/new-issue");
     expect(issueAssistantPath("acme", "ABC-1")).toBe("/projects/acme/assistant/issue/ABC-1");
     expect(projectExploreAssistantPath("acme")).toBe("/projects/acme/assistant/explore");
-    expect(projectTerminalPath("acme")).toBe("/projects/acme/assistant/terminal");
   });
 
   it("encodes assistant issue authoring path parameters", () => {
@@ -117,9 +119,25 @@ describe("workspaceRoutes", () => {
     expect(isProjectSection("board")).toBe(true);
     expect(isProjectSection("kb")).toBe(true);
     expect(isProjectSection("assistant")).toBe(true);
+    expect(isProjectSection("terminal")).toBe(true);
     expect(isProjectSection("settings")).toBe(true);
     expect(isProjectSection("new-issue")).toBe(false);
     expect(isProjectSection(undefined)).toBe(false);
+  });
+
+  it("builds the project terminal path", () => {
+    expect(projectTerminalPath("acme")).toBe("/projects/acme/terminal");
+  });
+
+  it("builds project session paths", () => {
+    expect(projectSessionsPath("acme")).toBe("/projects/acme/sessions");
+    expect(projectSessionPath("acme", "thread/1")).toBe("/projects/acme/sessions/thread%2F1");
+  });
+
+  it("builds a deep-linkable execution session path with the issue identifier", () => {
+    expect(projectExecutionSessionPath("acme", "MAC-13")).toBe(
+      "/projects/acme/sessions?exec=MAC-13&agent=execution",
+    );
   });
 
   it("derives the workspace section from a pathname", () => {
@@ -127,6 +145,7 @@ describe("workspaceRoutes", () => {
     expect(projectSectionFromPathname("/projects/acme/list/filters")).toBe("list");
     expect(projectSectionFromPathname("/projects/acme/kb/repo/page")).toBe("kb");
     expect(projectSectionFromPathname("/projects/acme/assistant/explore")).toBe("assistant");
+    expect(projectSectionFromPathname("/projects/acme/terminal")).toBe("terminal");
     expect(projectSectionFromPathname("/projects/acme/settings/workflow")).toBe("settings");
     expect(projectSectionFromPathname("/projects/acme")).toBe("board");
     expect(projectSectionFromPathname("/kb/page")).toBe("board");

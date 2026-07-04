@@ -489,6 +489,22 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
+  @spec create_project_session_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
+  def create_project_session_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
+    with {:ok, normalized_slug} <- normalize_required_string(project_slug, :project_slug),
+         {:ok, _project} <- Context.get_project(normalized_slug),
+         {:ok, workspace} <- ProjectExploreWorkspace.ensure(normalized_slug, explore_workspace_opts(attrs)) do
+      attrs
+      |> Map.put(:scope, "project_session")
+      |> Map.put(:project_slug, normalized_slug)
+      |> Map.put_new(:title, "Project session")
+      |> Map.put_new(:workspace_path, workspace)
+      |> Map.put_new(:status, "active")
+      |> then(&Thread.changeset(%Thread{}, &1))
+      |> Repo.insert()
+    end
+  end
+
   @spec get_thread(integer()) :: {:ok, Thread.t()} | {:error, :not_found}
   def get_thread(id) when is_integer(id) do
     case Repo.get(Thread, id) do

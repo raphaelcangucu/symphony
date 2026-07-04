@@ -45,4 +45,9 @@ defmodule SymphonyElixir.Assistant.PayloadTest do
     assert Keyword.get(opts, :model) == "gpt-5.3-codex"
     assert Keyword.get(opts, :effort) == "high"
   end
+
+  test "model_opts extracts execution_mode from context" do
+    opts = Payload.model_opts(%{"execution_mode" => "plan"})
+    assert Keyword.get(opts, :execution_mode) == "plan"
+  end
 end
